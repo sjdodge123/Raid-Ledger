@@ -1,39 +1,35 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
-
-/** Minimum voice presence (seconds) to count as "showed up". */
-const PRESENCE_THRESHOLD_SEC = 120;
-
-/** Phase 1 fires at startTime + 5 minutes. */
-const PHASE1_OFFSET_MS = 5 * 60 * 1000;
-
-/** Phase 2 fires at startTime + 15 minutes. */
-const PHASE2_OFFSET_MS = 15 * 60 * 1000;
+import {
+  PRESENCE_THRESHOLD_SEC,
+  PHASE1_OFFSET_MS,
+  PHASE2_OFFSET_MS,
+  type LiveEvent,
+  findLiveEventsInNoShowWindow,
+  getAbsentSignedUpPlayers,
+  getPhase1RemindedUserIds,
+  getPlayerDisplayInfo,
+  fetchPhase2Data,
+} from './live-noshow.helpers';
 
 /**
  * Live no-show detection service (ROK-588).
- *
- * During a live scheduled event, monitors voice channel presence for registered
- * attendees. Two phases:
- *
  * Phase 1 (startTime + 5 min): DM absent players a reminder to join voice.
- * Phase 2 (startTime + 15 min): DM the event creator listing absent players
- *   whose slots are available to PUG.
+ * Phase 2 (startTime + 15 min): DM the event creator listing absent players.
  */
 @Injectable()
 export class LiveNoShowService {
   private readonly logger = new Logger(LiveNoShowService.name);
 
   constructor(
-    @Inject(DrizzleAsyncProvider)
-    private db: PostgresJsDatabase<typeof schema>,
+    @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly cronJobService: CronJobService,
     @Optional()
@@ -41,124 +37,43 @@ export class LiveNoShowService {
     private readonly voiceAttendance: VoiceAttendanceService | null,
   ) {}
 
-  /**
-   * Cron: runs every 60 seconds at second 40.
-   * Stagger: second 40 avoids collision with GameActivityService_sweepStaleSessions (second 30).
-   */
+  /** Cron: runs every 60 seconds at second 40. */
   @Cron('40 */1 * * * *', { name: 'LiveNoShowService_checkNoShows' })
   async checkNoShows(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'LiveNoShowService_checkNoShows',
       async () => {
-        if (!this.voiceAttendance) {
-          return;
-        }
-
+        if (!this.voiceAttendance) return;
         const now = new Date();
-        const liveEvents = await this.findLiveEventsInNoShowWindow(now);
-
+        const liveEvents = await findLiveEventsInNoShowWindow(this.db, now);
         if (liveEvents.length === 0) return;
-
         for (const event of liveEvents) {
-          const startTime = event.startTime;
-          const msSinceStart = now.getTime() - startTime.getTime();
-
-          // Phase 2: >= 15 min after start
-          if (msSinceStart >= PHASE2_OFFSET_MS) {
-            await this.checkPhase2(event);
-          }
-
-          // Phase 1: >= 5 min after start (always run — sends reminder to anyone not yet reminded)
-          if (msSinceStart >= PHASE1_OFFSET_MS) {
-            await this.checkPhase1(event);
-          }
+          const msSinceStart = now.getTime() - event.startTime.getTime();
+          if (msSinceStart >= PHASE2_OFFSET_MS) await this.checkPhase2(event);
+          if (msSinceStart >= PHASE1_OFFSET_MS) await this.checkPhase1(event);
         }
       },
     );
   }
 
-  /**
-   * Find live scheduled events where now >= startTime + 5 min and the event
-   * has not ended or been cancelled. Excludes ad-hoc events.
-   */
-  private async findLiveEventsInNoShowWindow(now: Date): Promise<
-    Array<{
-      id: number;
-      title: string;
-      creatorId: number;
-      startTime: Date;
-      endTime: Date;
-      gameId: number | null;
-      recurrenceGroupId: string | null;
-    }>
-  > {
-    // Events where: not ad-hoc, not cancelled, started at least 5 min ago,
-    // effective end (or extendedUntil) is still in the future
-    const phase1Threshold = new Date(now.getTime() - PHASE1_OFFSET_MS);
-
-    const rows = await this.db
-      .select({
-        id: schema.events.id,
-        title: schema.events.title,
-        creatorId: schema.events.creatorId,
-        gameId: schema.events.gameId,
-        recurrenceGroupId: schema.events.recurrenceGroupId,
-        duration: schema.events.duration,
-      })
-      .from(schema.events)
-      .where(
-        and(
-          eq(schema.events.isAdHoc, false),
-          sql`${schema.events.cancelledAt} IS NULL`,
-          // Event started at least 5 min ago
-          sql`lower(${schema.events.duration}) <= ${phase1Threshold.toISOString()}::timestamptz`,
-          // Event hasn't ended yet (effective end is still in the future)
-          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
-        ),
-      );
-
-    return rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      creatorId: r.creatorId,
-      gameId: r.gameId,
-      recurrenceGroupId: r.recurrenceGroupId,
-      startTime: r.duration[0],
-      endTime: r.duration[1],
-    }));
-  }
-
-  /**
-   * Phase 1: For each signed_up player who hasn't been in voice for >= threshold,
-   * send them a reminder DM. Uses event_reminders_sent for dedup.
-   */
-  private async checkPhase1(event: {
-    id: number;
-    title: string;
-    creatorId: number;
-    startTime: Date;
-    endTime: Date;
-    gameId: number | null;
-    recurrenceGroupId: string | null;
-  }): Promise<void> {
-    const absentPlayers = await this.getAbsentSignedUpPlayers(event.id);
+  /** Phase 1: Send reminder DM to absent signed-up players. */
+  private async checkPhase1(event: LiveEvent): Promise<void> {
+    const absentPlayers = await getAbsentSignedUpPlayers(
+      this.db,
+      event.id,
+      (eid, did) => this.voiceAttendance!.isUserActive(eid, did),
+    );
     if (absentPlayers.length === 0) return;
-
-    // Resolve voice channel using 3-tier fallback (series → game → default) (ROK-693)
     const voiceChannelId =
       await this.notificationService.resolveVoiceChannelForEvent(event.id);
-
     for (const player of absentPlayers) {
-      if (!player.userId) continue; // Skip anonymous signups for Phase 1 DMs
-
-      // Dedup: insert reminder tracking row
+      if (!player.userId) continue;
       const inserted = await this.insertReminderDedup(
         event.id,
         player.userId,
         'noshow_reminder',
       );
-      if (!inserted) continue; // Already sent
-
+      if (!inserted) continue;
       await this.notificationService.create({
         userId: player.userId,
         type: 'event_reminder',
@@ -171,116 +86,33 @@ export class LiveNoShowService {
           noshowReminder: true,
         },
       });
-
       this.logger.debug(
         `Phase 1: Sent no-show reminder to user ${player.userId} for event ${event.id}`,
       );
     }
   }
 
-  /**
-   * Phase 2: For players who were reminded in Phase 1 and still have no voice
-   * activity, batch a single DM to the event creator listing absent players
-   * and their roles.
-   */
-  private async checkPhase2(event: {
-    id: number;
-    title: string;
-    creatorId: number;
-    startTime: Date;
-    endTime: Date;
-    gameId: number | null;
-    recurrenceGroupId: string | null;
-  }): Promise<void> {
-    // Check if we already sent the creator escalation for this event
+  /** Phase 2: Batch DM the creator about still-absent players. */
+  private async checkPhase2(event: LiveEvent): Promise<void> {
     const alreadyEscalated = await this.hasReminderBeenSent(
       event.id,
       event.creatorId,
       'noshow_escalation',
     );
     if (alreadyEscalated) return;
-
-    // Find players who were reminded in Phase 1
-    const phase1Reminded = await this.getPhase1RemindedUserIds(event.id);
+    const phase1Reminded = await getPhase1RemindedUserIds(this.db, event.id);
     if (phase1Reminded.length === 0) return;
-
-    // Batch-fetch discord IDs for all reminded users
-    const usersWithDiscord = await this.db
-      .select({
-        id: schema.users.id,
-        discordId: schema.users.discordId,
-      })
-      .from(schema.users)
-      .where(inArray(schema.users.id, phase1Reminded));
-
-    const discordIdByUserId = new Map(
-      usersWithDiscord
-        .filter((u) => u.discordId !== null)
-        .map((u) => [u.id, u.discordId!]),
+    const stillAbsent = await this.findStillAbsentPlayers(
+      event,
+      phase1Reminded,
     );
-
-    // Batch-fetch all voice sessions for this event in a single query
-    const allVoiceSessions = await this.db
-      .select({
-        discordUserId: schema.eventVoiceSessions.discordUserId,
-        totalDurationSec: schema.eventVoiceSessions.totalDurationSec,
-      })
-      .from(schema.eventVoiceSessions)
-      .where(eq(schema.eventVoiceSessions.eventId, event.id));
-
-    const voiceSessionByDiscordId = new Map(
-      allVoiceSessions.map((s) => [s.discordUserId, s.totalDurationSec]),
-    );
-
-    // Re-check voice presence for these players using in-memory lookups
-    const stillAbsent: Array<{
-      userId: number;
-      displayName: string;
-      role: string | null;
-    }> = [];
-
-    for (const userId of phase1Reminded) {
-      const discordId = discordIdByUserId.get(userId);
-
-      if (discordId) {
-        // Check in-memory active session
-        if (this.voiceAttendance!.isUserActive(event.id, discordId)) continue;
-
-        // Check batched voice session for sufficient duration
-        const totalDuration = voiceSessionByDiscordId.get(discordId) ?? 0;
-        if (totalDuration >= PRESENCE_THRESHOLD_SEC) continue;
-      }
-      // No discordId → can't verify voice presence, treat as absent
-
-      // Look up display name and role
-      const playerInfo = await this.getPlayerDisplayInfo(event.id, userId);
-      stillAbsent.push({
-        userId,
-        displayName: playerInfo.displayName,
-        role: playerInfo.role,
-      });
-    }
-
     if (stillAbsent.length === 0) return;
-
-    // Build batched message for the creator
-    const playerLines = stillAbsent.map((p) => {
-      const roleLabel = p.role ? ` (${p.role})` : '';
-      return `- **${p.displayName}**${roleLabel}`;
-    });
-
-    const message =
-      stillAbsent.length === 1
-        ? `${stillAbsent[0].displayName} hasn't shown up for **${event.title}** \u2014 their${stillAbsent[0].role ? ` ${stillAbsent[0].role}` : ''} slot is available to PUG.`
-        : `${stillAbsent.length} players haven't shown up for **${event.title}**:\n${playerLines.join('\n')}\n\nTheir slots are available to PUG.`;
-
-    // Insert dedup for the escalation
     await this.insertReminderDedup(
       event.id,
       event.creatorId,
       'noshow_escalation',
     );
-
+    const message = this.buildEscalationMessage(event.title, stillAbsent);
     await this.notificationService.create({
       userId: event.creatorId,
       type: 'missed_event_nudge',
@@ -296,193 +128,58 @@ export class LiveNoShowService {
         })),
       },
     });
-
     this.logger.log(
       `Phase 2: Notified creator (user ${event.creatorId}) about ${stillAbsent.length} no-show(s) for event ${event.id}`,
     );
   }
 
-  /**
-   * Get signed_up players for the event who have no meaningful voice presence.
-   */
-  private async getAbsentSignedUpPlayers(eventId: number): Promise<
-    Array<{
-      userId: number | null;
-      discordUserId: string | null;
-      discordUsername: string | null;
-    }>
+  /** Find players who were reminded in Phase 1 but still have no voice presence. */
+  private async findStillAbsentPlayers(
+    event: LiveEvent,
+    phase1Reminded: number[],
+  ): Promise<
+    Array<{ userId: number; displayName: string; role: string | null }>
   > {
-    // Get all signups with status = 'signed_up' (exclude tentative, declined, roached_out, departed)
-    // ROK-695/ROK-696: Exclude benched players via NOT EXISTS subquery
-    const signups = await this.db
-      .select({
-        userId: schema.eventSignups.userId,
-        discordUserId: schema.eventSignups.discordUserId,
-        discordUsername: schema.eventSignups.discordUsername,
-      })
-      .from(schema.eventSignups)
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.status, 'signed_up'),
-          sql`NOT EXISTS (
-            SELECT 1 FROM ${schema.rosterAssignments}
-            WHERE ${schema.rosterAssignments.eventId} = ${schema.eventSignups.eventId}
-              AND ${schema.rosterAssignments.signupId} = ${schema.eventSignups.id}
-              AND ${schema.rosterAssignments.role} = 'bench'
-          )`,
-        ),
-      );
-
-    const absent: Array<{
-      userId: number | null;
-      discordUserId: string | null;
-      discordUsername: string | null;
+    const { discordIdByUserId, voiceSessionByDiscordId } =
+      await fetchPhase2Data(this.db, event.id, phase1Reminded);
+    const stillAbsent: Array<{
+      userId: number;
+      displayName: string;
+      role: string | null;
     }> = [];
-
-    for (const signup of signups) {
-      // Fall back to users.discordId when signup doesn't have a discordUserId
-      let discordUserId = signup.discordUserId;
-      if (!discordUserId && signup.userId) {
-        const [user] = await this.db
-          .select({ discordId: schema.users.discordId })
-          .from(schema.users)
-          .where(eq(schema.users.id, signup.userId))
-          .limit(1);
-        discordUserId = user?.discordId ?? null;
+    for (const userId of phase1Reminded) {
+      const discordId = discordIdByUserId.get(userId);
+      if (discordId) {
+        if (this.voiceAttendance!.isUserActive(event.id, discordId)) continue;
+        const totalDuration = voiceSessionByDiscordId.get(discordId) ?? 0;
+        if (totalDuration >= PRESENCE_THRESHOLD_SEC) continue;
       }
-      if (!discordUserId) continue; // No Discord ID anywhere — can't check voice
-
-      // Check voice presence via in-memory sessions
-      const hasPresence = this.voiceAttendance!.isUserActive(
-        eventId,
-        discordUserId,
-      );
-      if (hasPresence) continue;
-
-      // Also check DB voice sessions for total duration (handles brief join/leave)
-      const [voiceSession] = await this.db
-        .select({
-          totalDurationSec: schema.eventVoiceSessions.totalDurationSec,
-        })
-        .from(schema.eventVoiceSessions)
-        .where(
-          and(
-            eq(schema.eventVoiceSessions.eventId, eventId),
-            eq(schema.eventVoiceSessions.discordUserId, discordUserId),
-          ),
-        )
-        .limit(1);
-
-      if (
-        voiceSession &&
-        voiceSession.totalDurationSec >= PRESENCE_THRESHOLD_SEC
-      ) {
-        continue; // Has sufficient voice presence
-      }
-
-      absent.push({ ...signup, discordUserId });
+      const playerInfo = await getPlayerDisplayInfo(this.db, event.id, userId);
+      stillAbsent.push({
+        userId,
+        displayName: playerInfo.displayName,
+        role: playerInfo.role,
+      });
     }
-
-    return absent;
+    return stillAbsent;
   }
 
-  /**
-   * Check if a user (by RL userId) has meaningful voice presence for an event.
-   */
-  private async checkVoicePresence(
-    eventId: number,
-    userId: number,
-  ): Promise<boolean> {
-    // Resolve discordUserId from the user record
-    const [user] = await this.db
-      .select({ discordId: schema.users.discordId })
-      .from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
-
-    if (!user?.discordId) return false;
-
-    // Check in-memory active session
-    if (this.voiceAttendance!.isUserActive(eventId, user.discordId)) {
-      return true;
+  /** Build escalation message for the creator. */
+  private buildEscalationMessage(
+    eventTitle: string,
+    stillAbsent: Array<{ displayName: string; role: string | null }>,
+  ): string {
+    if (stillAbsent.length === 1) {
+      const p = stillAbsent[0];
+      return `${p.displayName} hasn't shown up for **${eventTitle}** \u2014 their${p.role ? ` ${p.role}` : ''} slot is available to PUG.`;
     }
-
-    // Check DB for total duration
-    const [voiceSession] = await this.db
-      .select({ totalDurationSec: schema.eventVoiceSessions.totalDurationSec })
-      .from(schema.eventVoiceSessions)
-      .where(
-        and(
-          eq(schema.eventVoiceSessions.eventId, eventId),
-          eq(schema.eventVoiceSessions.discordUserId, user.discordId),
-        ),
-      )
-      .limit(1);
-
-    return (
-      !!voiceSession && voiceSession.totalDurationSec >= PRESENCE_THRESHOLD_SEC
+    const lines = stillAbsent.map(
+      (p) => `- **${p.displayName}**${p.role ? ` (${p.role})` : ''}`,
     );
+    return `${stillAbsent.length} players haven't shown up for **${eventTitle}**:\n${lines.join('\n')}\n\nTheir slots are available to PUG.`;
   }
 
-  /**
-   * Get display name and roster role for a player in an event.
-   */
-  private async getPlayerDisplayInfo(
-    eventId: number,
-    userId: number,
-  ): Promise<{ displayName: string; role: string | null }> {
-    // Get user display name
-    const [user] = await this.db
-      .select({
-        username: schema.users.username,
-        displayName: schema.users.displayName,
-      })
-      .from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
-
-    const displayName = user?.displayName ?? user?.username ?? 'Unknown';
-
-    // Get roster assignment role
-    const [assignment] = await this.db
-      .select({ role: schema.rosterAssignments.role })
-      .from(schema.rosterAssignments)
-      .innerJoin(
-        schema.eventSignups,
-        eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
-      )
-      .where(
-        and(
-          eq(schema.rosterAssignments.eventId, eventId),
-          eq(schema.eventSignups.userId, userId),
-        ),
-      )
-      .limit(1);
-
-    return { displayName, role: assignment?.role ?? null };
-  }
-
-  /**
-   * Get user IDs that received Phase 1 (noshow_reminder) for an event.
-   */
-  private async getPhase1RemindedUserIds(eventId: number): Promise<number[]> {
-    const rows = await this.db
-      .select({ userId: schema.eventRemindersSent.userId })
-      .from(schema.eventRemindersSent)
-      .where(
-        and(
-          eq(schema.eventRemindersSent.eventId, eventId),
-          eq(schema.eventRemindersSent.reminderType, 'noshow_reminder'),
-        ),
-      );
-
-    return rows.map((r) => r.userId);
-  }
-
-  /**
-   * Check if a specific reminder has already been sent.
-   */
+  /** Check if a specific reminder has already been sent. */
   private async hasReminderBeenSent(
     eventId: number,
     userId: number,
@@ -499,14 +196,10 @@ export class LiveNoShowService {
         ),
       )
       .limit(1);
-
     return !!row;
   }
 
-  /**
-   * Insert a dedup record into event_reminders_sent.
-   * Returns true if inserted (first time), false if already exists (duplicate).
-   */
+  /** Insert a dedup record. Returns true if inserted (first time). */
   private async insertReminderDedup(
     eventId: number,
     userId: number,
@@ -523,7 +216,6 @@ export class LiveNoShowService {
         ],
       })
       .returning();
-
     return result.length > 0;
   }
 }

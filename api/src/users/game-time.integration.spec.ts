@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 /**
  * Game-Time Integration Tests (ROK-526)
  *
@@ -182,9 +181,10 @@ describe('Game-Time (integration)', () => {
         .get('/users/me/game-time')
         .set('Authorization', `Bearer ${token}`);
 
-      const templateSlots = getRes.body.data.slots.filter(
-        (s: any) => s.fromTemplate === true,
-      );
+      const slots = (
+        getRes.body as { data: { slots: Array<Record<string, unknown>> } }
+      ).data.slots;
+      const templateSlots = slots.filter((s) => s.fromTemplate === true);
       expect(templateSlots.length).toBe(1);
       expect(templateSlots[0]).toMatchObject({ dayOfWeek: 5, hour: 18 });
     });
@@ -457,11 +457,14 @@ describe('Game-Time (integration)', () => {
       expect(getRes.status).toBe(200);
 
       // The template slot on Tue should be blocked due to absence
-      const tueSlot = getRes.body.data.slots.find(
-        (s: any) => s.dayOfWeek === 2 && s.hour === 14 && s.fromTemplate,
+      const absSlots = (
+        getRes.body as { data: { slots: Array<Record<string, unknown>> } }
+      ).data.slots;
+      const tueSlot = absSlots.find(
+        (s) => s.dayOfWeek === 2 && s.hour === 14 && s.fromTemplate,
       );
       expect(tueSlot).toBeDefined();
-      expect(tueSlot.status).toBe('blocked');
+      expect(tueSlot!.status).toBe('blocked');
     });
   });
 
@@ -519,16 +522,20 @@ describe('Game-Time (integration)', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(getRes.status).toBe(200);
-      expect(getRes.body.data.events.length).toBeGreaterThanOrEqual(1);
+      const evtData = (
+        getRes.body as { data: { events: Array<Record<string, unknown>> } }
+      ).data;
+      expect(evtData.events.length).toBeGreaterThanOrEqual(1);
 
-      const eventBlock = getRes.body.data.events.find(
-        (e: any) => e.eventId === eventId,
-      );
+      const eventBlock = evtData.events.find((e) => e.eventId === eventId);
       expect(eventBlock).toBeDefined();
       // Window function limits preview to 6 users max
-      expect(eventBlock.signupsPreview.length).toBeLessThanOrEqual(6);
+      expect(
+        (eventBlock! as Record<string, unknown> & { signupsPreview: unknown[] })
+          .signupsPreview.length,
+      ).toBeLessThanOrEqual(6);
       // Total count should reflect all signups (admin + user + 5 others = 7)
-      expect(eventBlock.signupCount).toBeGreaterThanOrEqual(7);
+      expect(eventBlock!.signupCount).toBeGreaterThanOrEqual(7);
     });
 
     it('should return committed slots for events outside template', async () => {
@@ -575,8 +582,11 @@ describe('Game-Time (integration)', () => {
       expect(getRes.status).toBe(200);
 
       // Should have committed slots NOT from template
-      const committedNonTemplate = getRes.body.data.slots.filter(
-        (s: any) => s.status === 'committed' && s.fromTemplate === false,
+      const cmtSlots = (
+        getRes.body as { data: { slots: Array<Record<string, unknown>> } }
+      ).data.slots;
+      const committedNonTemplate = cmtSlots.filter(
+        (s) => s.status === 'committed' && s.fromTemplate === false,
       );
       expect(committedNonTemplate.length).toBeGreaterThanOrEqual(1);
     });

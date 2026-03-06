@@ -7,6 +7,7 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { EmbedPosterService } from './embed-poster.service';
+import type { EmbedEventData } from './discord-embed.factory';
 import {
   shouldPostEmbed,
   getLeadTimeFromRecurrence,
@@ -47,16 +48,28 @@ export class EmbedSchedulerService {
     );
   }
 
-  /**
-   * Find future non-cancelled events without discord_event_messages rows
-   * and post embeds for those within their lead-time window.
-   */
+  /** Find future non-cancelled events without discord_event_messages rows. */
   private async postDeferredEmbeds(): Promise<void> {
     const timezone = (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-
-    // Find future events without embeds
     const now = new Date();
-    const eventsWithoutEmbeds = await this.db
+    const events = await this.queryEventsWithoutEmbeds(now);
+    if (events.length === 0) {
+      this.logger.debug('No deferred embeds to post');
+      return;
+    }
+    let posted = 0;
+    for (const event of events) {
+      const ok = await this.tryPostDeferredEmbed(event, timezone, now);
+      if (ok) posted++;
+    }
+    if (posted > 0) {
+      this.logger.log(`Scheduler posted ${posted} deferred embed(s)`);
+    }
+  }
+
+  /** Query future events that have no embed row yet. */
+  private async queryEventsWithoutEmbeds(now: Date): Promise<DeferredEvent[]> {
+    return this.db
       .select({
         id: schema.events.id,
         duration: schema.events.duration,
@@ -76,88 +89,84 @@ export class EmbedSchedulerService {
       )
       .where(
         and(
-          // Future events only
           sql`upper(${schema.events.duration}) > ${now.toISOString()}::timestamp`,
-          // Not cancelled
           isNull(schema.events.cancelledAt),
-          // No embed row yet
           isNull(schema.discordEventMessages.id),
         ),
       );
-
-    if (eventsWithoutEmbeds.length === 0) {
-      this.logger.debug('No deferred embeds to post');
-      return;
-    }
-
-    let posted = 0;
-    for (const event of eventsWithoutEmbeds) {
-      const startTime = event.duration[0].toISOString();
-      const endTime = event.duration[1].toISOString();
-
-      // Determine lead time based on recurrence rule
-      const recurrenceRule = event.recurrenceRule as {
-        frequency: 'weekly' | 'biweekly' | 'monthly';
-      } | null;
-      const leadTimeMs =
-        getLeadTimeFromRecurrence(recurrenceRule) ?? STANDALONE_LEAD_TIME_MS;
-
-      if (!shouldPostEmbed(startTime, leadTimeMs, timezone, now)) {
-        continue;
-      }
-
-      // Fetch game data if gameId is set
-      let gameData: { name: string; coverUrl: string | null } | null = null;
-      if (event.gameId) {
-        const [game] = await this.db
-          .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
-          .from(schema.games)
-          .where(eq(schema.games.id, event.gameId))
-          .limit(1);
-        if (game) {
-          gameData = { name: game.name, coverUrl: game.coverUrl };
-        }
-      }
-
-      // Build minimal event data for the embed
-      const eventData = {
-        id: event.id,
-        title: event.title,
-        description: event.description,
-        startTime,
-        endTime,
-        signupCount: 0,
-        maxAttendees: event.maxAttendees,
-        slotConfig: event.slotConfig as {
-          type?: string;
-          tank?: number;
-          healer?: number;
-          dps?: number;
-          flex?: number;
-          player?: number;
-          bench?: number;
-        } | null,
-        game: gameData,
-      };
-
-      const success = await this.embedPosterService.postEmbed(
-        event.id,
-        eventData,
-        event.gameId,
-        event.recurrenceGroupId,
-        event.notificationChannelOverride,
-      );
-
-      if (success) {
-        posted++;
-        this.logger.log(
-          `Scheduler posted deferred embed for event ${event.id} ("${event.title}")`,
-        );
-      }
-    }
-
-    if (posted > 0) {
-      this.logger.log(`Scheduler posted ${posted} deferred embed(s)`);
-    }
   }
+
+  /** Attempt to post a deferred embed for one event. */
+  private async tryPostDeferredEmbed(
+    event: DeferredEvent,
+    timezone: string,
+    now: Date,
+  ): Promise<boolean> {
+    const startTime = event.duration[0].toISOString();
+    const recRule = event.recurrenceRule as RecurrenceFreq | null;
+    const leadTimeMs =
+      getLeadTimeFromRecurrence(recRule) ?? STANDALONE_LEAD_TIME_MS;
+    if (!shouldPostEmbed(startTime, leadTimeMs, timezone, now)) return false;
+    const gameData = await this.fetchGameData(event.gameId);
+    const eventData = buildDeferredEventData(event, gameData);
+    const success = await this.embedPosterService.postEmbed(
+      event.id,
+      eventData,
+      event.gameId,
+      event.recurrenceGroupId,
+      event.notificationChannelOverride,
+    );
+    if (success) {
+      this.logger.log(
+        `Scheduler posted deferred embed for event ${event.id} ("${event.title}")`,
+      );
+    }
+    return success;
+  }
+
+  /** Fetch game name/cover data for an event. */
+  private async fetchGameData(
+    gameId: number | null,
+  ): Promise<{ name: string; coverUrl: string | null } | null> {
+    if (!gameId) return null;
+    const [game] = await this.db
+      .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
+      .from(schema.games)
+      .where(eq(schema.games.id, gameId))
+      .limit(1);
+    return game ? { name: game.name, coverUrl: game.coverUrl } : null;
+  }
+}
+
+type RecurrenceFreq = { frequency: 'weekly' | 'biweekly' | 'monthly' };
+
+interface DeferredEvent {
+  id: number;
+  duration: Date[];
+  title: string;
+  description: string | null;
+  gameId: number | null;
+  recurrenceRule: unknown;
+  recurrenceGroupId: string | null;
+  notificationChannelOverride: string | null;
+  maxAttendees: number | null;
+  slotConfig: unknown;
+}
+
+/** Build embed event data from a deferred event row. */
+function buildDeferredEventData(
+  event: DeferredEvent,
+  gameData: { name: string; coverUrl: string | null } | null,
+): EmbedEventData {
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    startTime: event.duration[0].toISOString(),
+    endTime: event.duration[1].toISOString(),
+    signupCount: 0,
+    maxAttendees: event.maxAttendees,
+    slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
+    game: gameData,
+  };
 }

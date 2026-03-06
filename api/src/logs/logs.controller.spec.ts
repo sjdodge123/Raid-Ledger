@@ -1,6 +1,9 @@
-/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-call */
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { LogsController } from './logs.controller';
 import { LogsService } from './logs.service';
 import { AdminGuard } from '../auth/admin.guard';
@@ -322,7 +325,6 @@ describe('LogsController', () => {
     });
 
     it('propagates NotFoundException from service when file not found', () => {
-      const { NotFoundException } = jest.requireActual('@nestjs/common');
       mockLogsService.getValidatedPath.mockImplementation(() => {
         throw new NotFoundException('Log file not found: missing.log');
       });
@@ -334,7 +336,6 @@ describe('LogsController', () => {
     });
 
     it('propagates BadRequestException from service for invalid filename', () => {
-      const { BadRequestException } = jest.requireActual('@nestjs/common');
       mockLogsService.getValidatedPath.mockImplementation(() => {
         throw new BadRequestException('Invalid filename');
       });

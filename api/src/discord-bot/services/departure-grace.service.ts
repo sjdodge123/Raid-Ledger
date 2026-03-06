@@ -18,12 +18,6 @@ import {
  *
  * Manages grace timers when members leave voice during live scheduled events.
  * Handles priority rejoin when a departed member returns.
- *
- * Flow:
- * 1. Member leaves voice → `onMemberLeave()` → enqueue grace timer
- * 2. Member returns within grace → `onMemberRejoin()` → cancel timer
- * 3. Grace expires → DepartureGraceProcessor handles slot freeing
- * 4. Member returns after departure → `onMemberRejoin()` → priority rejoin
  */
 @Injectable()
 export class DepartureGraceService {
@@ -43,45 +37,23 @@ export class DepartureGraceService {
    */
   async onMemberLeave(eventId: number, discordUserId: string): Promise<void> {
     try {
-      // Check if event is scheduled (not ad-hoc)
-      const [event] = await this.db
-        .select({ isAdHoc: schema.events.isAdHoc })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
+      const shouldSkip = await this.isAdHocEvent(eventId);
+      if (shouldSkip) return;
 
-      if (!event || event.isAdHoc) return;
-
-      // Find the user's signup for this event
       const signup = await this.findActiveSignup(eventId, discordUserId);
       if (!signup) return;
 
-      // Skip if already departed or cancelled
-      if (
-        signup.status === 'departed' ||
-        signup.status === 'declined' ||
-        signup.status === 'roached_out'
-      ) {
-        return;
-      }
+      if (this.isTerminalStatus(signup.status)) return;
 
-      // Enqueue grace timer
       await this.graceQueue.enqueue(
-        {
-          eventId,
-          discordUserId,
-          signupId: signup.id,
-        },
+        { eventId, discordUserId, signupId: signup.id },
         DEPARTURE_GRACE_DELAY_MS,
       );
-
       this.logger.debug(
         `Started departure grace timer for user ${discordUserId} on event ${eventId}`,
       );
     } catch (error) {
-      this.logger.error(
-        `Failed to handle member leave for ${discordUserId} on event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      this.logError('leave', discordUserId, eventId, error);
     }
   }
 
@@ -91,48 +63,56 @@ export class DepartureGraceService {
    */
   async onMemberRejoin(eventId: number, discordUserId: string): Promise<void> {
     try {
-      // Cancel any pending grace timer
       await this.graceQueue.cancel(eventId, discordUserId);
 
-      // Check if the member was already marked as departed (priority rejoin)
       const signup = await this.findSignupByStatus(
         eventId,
         discordUserId,
         'departed',
       );
-
       if (signup) {
         await this.handlePriorityRejoin(eventId, discordUserId, signup);
       }
     } catch (error) {
-      this.logger.error(
-        `Failed to handle member rejoin for ${discordUserId} on event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      this.logError('rejoin', discordUserId, eventId, error);
     }
   }
 
+  // ─── Priority Rejoin ───────────────────────────────────
+
   /**
-   * Handle priority rejoin for a member who was marked as departed and returned.
-   * Restores their signup status and attempts to reassign their roster slot.
+   * Restore a departed member's signup and try to reassign their roster slot.
    */
   private async handlePriorityRejoin(
     eventId: number,
     discordUserId: string,
     signup: typeof schema.eventSignups.$inferSelect,
   ): Promise<void> {
-    // 1. Reset signup status from 'departed' back to 'signed_up'
+    await this.restoreSignup(signup.id);
+
+    const assignedSlot = await this.tryRosterReassignment(eventId, signup.id);
+    const displayName = await this.resolveDisplayName(signup);
+
+    await this.notifyRejoin(eventId, displayName, assignedSlot);
+    this.emitRejoinEvent(eventId, signup);
+
+    this.logger.log(
+      `Priority rejoin: user ${discordUserId} reassigned to roster for event ${eventId}`,
+    );
+  }
+
+  private async restoreSignup(signupId: number): Promise<void> {
     await this.db
       .update(schema.eventSignups)
       .set({ status: 'signed_up' })
-      .where(eq(schema.eventSignups.id, signup.id));
+      .where(eq(schema.eventSignups.id, signupId));
+  }
 
-    // 2. Try to find an empty roster slot to reassign them
-    const assignedSlot = await this.tryRosterReassignment(eventId, signup.id);
-
-    // 3. Resolve display name for notification
-    const displayName = await this.resolveDisplayName(signup);
-
-    // 4. Notify the event organizer
+  private async notifyRejoin(
+    eventId: number,
+    displayName: string,
+    assignedSlot: { role: string; position: number } | null,
+  ): Promise<void> {
     const [event] = await this.db
       .select({
         creatorId: schema.events.creatorId,
@@ -142,53 +122,76 @@ export class DepartureGraceService {
       .where(eq(schema.events.id, eventId))
       .limit(1);
 
-    if (event?.creatorId) {
-      const slotInfo = assignedSlot
-        ? ` (${assignedSlot.role}:${assignedSlot.position})`
-        : ' (bench/unassigned)';
-      const discordUrl =
-        await this.notificationService.getDiscordEmbedUrl(eventId);
-      const voiceChannelId =
-        await this.notificationService.resolveVoiceChannelForEvent(eventId);
+    if (!event?.creatorId) return;
 
-      await this.notificationService.create({
-        userId: event.creatorId,
-        type: 'member_returned',
-        title: 'Member Returned',
-        message: `${displayName} returned — reassigned to roster${slotInfo} for "${event.title}"`,
-        payload: {
-          eventId,
-          ...(discordUrl ? { discordUrl } : {}),
-          ...(voiceChannelId ? { voiceChannelId } : {}),
-        },
-      });
-    }
+    const slotInfo = assignedSlot
+      ? ` (${assignedSlot.role}:${assignedSlot.position})`
+      : ' (bench/unassigned)';
 
-    // 5. Emit signup event for Discord embed sync
+    const payload = await this.buildNotificationPayload(eventId);
+
+    await this.notificationService.create({
+      userId: event.creatorId,
+      type: 'member_returned',
+      title: 'Member Returned',
+      message: `${displayName} returned — reassigned to roster${slotInfo} for "${event.title}"`,
+      payload,
+    });
+  }
+
+  private async buildNotificationPayload(
+    eventId: number,
+  ): Promise<Record<string, unknown>> {
+    const discordUrl =
+      await this.notificationService.getDiscordEmbedUrl(eventId);
+    const voiceChannelId =
+      await this.notificationService.resolveVoiceChannelForEvent(eventId);
+    return {
+      eventId,
+      ...(discordUrl ? { discordUrl } : {}),
+      ...(voiceChannelId ? { voiceChannelId } : {}),
+    };
+  }
+
+  private emitRejoinEvent(
+    eventId: number,
+    signup: typeof schema.eventSignups.$inferSelect,
+  ): void {
     this.eventEmitter.emit(SIGNUP_EVENTS.UPDATED, {
       eventId,
       userId: signup.userId,
       signupId: signup.id,
       action: 'priority_rejoin',
     } satisfies SignupEventPayload);
-
-    this.logger.log(
-      `Priority rejoin: user ${discordUserId} reassigned to roster for event ${eventId}`,
-    );
   }
+
+  // ─── Roster Reassignment ──────────────────────────────
 
   /**
    * Attempt to reassign a returning member from bench back to a roster slot.
-   * Does NOT displace anyone who was promoted or assigned after departure.
-   * If no slot available, they stay on bench.
    */
   private async tryRosterReassignment(
     eventId: number,
     signupId: number,
   ): Promise<{ role: string; position: number } | null> {
-    // Find the member's current bench assignment
-    const [benchAssignment] = await this.db
-      .select()
+    const benchAssignment = await this.findBenchAssignment(signupId);
+    if (!benchAssignment) return null;
+
+    const availableSlot = await this.findAvailableSlot(
+      eventId,
+      benchAssignment.id,
+    );
+    if (!availableSlot) return null;
+
+    await this.reassignSlot(benchAssignment.id, availableSlot);
+    return availableSlot;
+  }
+
+  private async findBenchAssignment(
+    signupId: number,
+  ): Promise<{ id: number } | null> {
+    const [row] = await this.db
+      .select({ id: schema.rosterAssignments.id })
       .from(schema.rosterAssignments)
       .where(
         and(
@@ -197,19 +200,20 @@ export class DepartureGraceService {
         ),
       )
       .limit(1);
+    return row ?? null;
+  }
 
-    if (!benchAssignment) return null;
-
-    // Get the event's slot config to understand what slots exist
+  private async findAvailableSlot(
+    eventId: number,
+    excludeAssignmentId: number,
+  ): Promise<{ role: string; position: number } | null> {
     const [event] = await this.db
       .select({ slotConfig: schema.events.slotConfig })
       .from(schema.events)
       .where(eq(schema.events.id, eventId))
       .limit(1);
-
     if (!event) return null;
 
-    // Get all current roster assignments for this event (excluding this member's bench slot)
     const currentAssignments = await this.db
       .select()
       .from(schema.rosterAssignments)
@@ -217,73 +221,37 @@ export class DepartureGraceService {
 
     const occupiedSlots = new Set(
       currentAssignments
-        .filter((a) => a.id !== benchAssignment.id)
+        .filter((a) => a.id !== excludeAssignmentId)
         .map((a) => `${a.role}:${a.position}`),
     );
 
     const slotConfig = event.slotConfig as Record<string, unknown> | null;
-    const availableSlot = findFirstAvailableSlot(slotConfig, occupiedSlots);
-
-    if (availableSlot) {
-      // Move from bench back to the available slot
-      await this.db
-        .update(schema.rosterAssignments)
-        .set({ role: availableSlot.role, position: availableSlot.position })
-        .where(eq(schema.rosterAssignments.id, benchAssignment.id));
-
-      this.logger.debug(
-        `Reassigned signup ${signupId} from bench to ${availableSlot.role}:${availableSlot.position} for event ${eventId}`,
-      );
-    }
-    // If no slot available, they stay on bench — no action needed
-
-    return availableSlot;
+    return findFirstAvailableSlot(slotConfig, occupiedSlots);
   }
 
-  // ─── Helpers ──────────────────────────────────────────────
+  private async reassignSlot(
+    assignmentId: number,
+    slot: { role: string; position: number },
+  ): Promise<void> {
+    await this.db
+      .update(schema.rosterAssignments)
+      .set({ role: slot.role, position: slot.position })
+      .where(eq(schema.rosterAssignments.id, assignmentId));
+  }
+
+  // ─── Signup Lookups ───────────────────────────────────
 
   /**
-   * Find a user's active signup for an event (by discord user ID or linked RL user).
+   * Find a user's active signup for an event.
    */
   private async findActiveSignup(
     eventId: number,
     discordUserId: string,
   ): Promise<typeof schema.eventSignups.$inferSelect | undefined> {
-    // First try direct discord user ID match
-    const [directMatch] = await this.db
-      .select()
-      .from(schema.eventSignups)
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.discordUserId, discordUserId),
-        ),
-      )
-      .limit(1);
+    const direct = await this.findSignupByDiscordId(eventId, discordUserId);
+    if (direct) return direct;
 
-    if (directMatch) return directMatch;
-
-    // Try via linked RL user
-    const [user] = await this.db
-      .select({ id: schema.users.id })
-      .from(schema.users)
-      .where(eq(schema.users.discordId, discordUserId))
-      .limit(1);
-
-    if (!user) return undefined;
-
-    const [userMatch] = await this.db
-      .select()
-      .from(schema.eventSignups)
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.userId, user.id),
-        ),
-      )
-      .limit(1);
-
-    return userMatch;
+    return this.findSignupViaLinkedUser(eventId, discordUserId);
   }
 
   /**
@@ -294,43 +262,81 @@ export class DepartureGraceService {
     discordUserId: string,
     status: string,
   ): Promise<typeof schema.eventSignups.$inferSelect | undefined> {
-    // Direct discord user ID match
-    const [directMatch] = await this.db
+    const direct = await this.findSignupByDiscordId(
+      eventId,
+      discordUserId,
+      status,
+    );
+    if (direct) return direct;
+
+    return this.findSignupViaLinkedUser(eventId, discordUserId, status);
+  }
+
+  private async findSignupByDiscordId(
+    eventId: number,
+    discordUserId: string,
+    status?: string,
+  ): Promise<typeof schema.eventSignups.$inferSelect | undefined> {
+    const conditions = [
+      eq(schema.eventSignups.eventId, eventId),
+      eq(schema.eventSignups.discordUserId, discordUserId),
+    ];
+    if (status) conditions.push(eq(schema.eventSignups.status, status));
+
+    const [match] = await this.db
       .select()
       .from(schema.eventSignups)
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.discordUserId, discordUserId),
-          eq(schema.eventSignups.status, status),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
+    return match;
+  }
 
-    if (directMatch) return directMatch;
+  private async findSignupViaLinkedUser(
+    eventId: number,
+    discordUserId: string,
+    status?: string,
+  ): Promise<typeof schema.eventSignups.$inferSelect | undefined> {
+    const userId = await this.resolveUserId(discordUserId);
+    if (!userId) return undefined;
 
-    // Via linked RL user
+    const conditions = [
+      eq(schema.eventSignups.eventId, eventId),
+      eq(schema.eventSignups.userId, userId),
+    ];
+    if (status) conditions.push(eq(schema.eventSignups.status, status));
+
+    const [match] = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .where(and(...conditions))
+      .limit(1);
+    return match;
+  }
+
+  // ─── Utilities ────────────────────────────────────────
+
+  private async isAdHocEvent(eventId: number): Promise<boolean> {
+    const [event] = await this.db
+      .select({ isAdHoc: schema.events.isAdHoc })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    return !event || event.isAdHoc;
+  }
+
+  private isTerminalStatus(status: string): boolean {
+    return (
+      status === 'departed' || status === 'declined' || status === 'roached_out'
+    );
+  }
+
+  private async resolveUserId(discordUserId: string): Promise<number | null> {
     const [user] = await this.db
       .select({ id: schema.users.id })
       .from(schema.users)
       .where(eq(schema.users.discordId, discordUserId))
       .limit(1);
-
-    if (!user) return undefined;
-
-    const [userMatch] = await this.db
-      .select()
-      .from(schema.eventSignups)
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.userId, user.id),
-          eq(schema.eventSignups.status, status),
-        ),
-      )
-      .limit(1);
-
-    return userMatch;
+    return user?.id ?? null;
   }
 
   private async resolveDisplayName(
@@ -346,5 +352,17 @@ export class DepartureGraceService {
       if (user) return user.username;
     }
     return signup.discordUserId ?? 'Unknown';
+  }
+
+  private logError(
+    action: string,
+    discordUserId: string,
+    eventId: number,
+    error: unknown,
+  ): void {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    this.logger.error(
+      `Failed to handle member ${action} for ${discordUserId} on event ${eventId}: ${msg}`,
+    );
   }
 }

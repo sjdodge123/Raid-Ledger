@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 /**
  * ROK-375: Unit tests for IGDB game search enrichment, zero-results cache guard,
  * Redis re-query with filters, and adult filter on local fallback.
@@ -20,10 +19,19 @@ global.fetch = mockFetch;
 /**
  * Creates a thenable mock that also exposes query-builder methods (.limit(), .orderBy(), .where()).
  */
-function thenableResult(data: unknown[]) {
-  const obj: any = {
-    then: (resolve: any, reject?: any) =>
-      Promise.resolve(data).then(resolve, reject),
+interface ThenableQuery {
+  then: (
+    resolve: (v: unknown[]) => void,
+    reject?: (e: unknown) => void,
+  ) => Promise<void>;
+  limit: jest.Mock;
+  orderBy: jest.Mock;
+  where: jest.Mock;
+}
+
+function thenableResult(data: unknown[]): ThenableQuery {
+  const obj: ThenableQuery = {
+    then: (resolve, reject?) => Promise.resolve(data).then(resolve, reject),
     limit: jest.fn().mockImplementation(() => thenableResult(data)),
     orderBy: jest.fn().mockImplementation(() => thenableResult(data)),
     where: jest.fn().mockImplementation(() => thenableResult(data)),

@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
 import {
@@ -17,42 +16,29 @@ import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import {
+  type EligibleEvent,
+  findEligibleEvents,
+  findRecipients,
+  findAbsentUsers,
+  buildSignupSummary,
+  buildDiscordUrl,
+} from './recruitment-reminder.helpers';
 
 /** TTL for recruitment-reminder dedup keys: 48 hours in seconds */
 const DEDUP_TTL_SECONDS = 48 * 60 * 60;
 
-interface EligibleEvent {
-  id: number;
-  title: string;
-  gameId: number;
-  gameName: string;
-  creatorId: number;
-  startTime: string;
-  maxAttendees: number | null;
-  signupCount: number;
-  channelId: string;
-  guildId: string;
-  messageId: string;
-}
-
 /**
  * Sends recruitment reminder DMs and bumps the embed ~24 hours before
  * an event that still has open spots (ROK-535).
- *
- * Own cron on a 15-minute cycle (staggered to second 45).
- * Recipients: users with game affinity (hearted or past attendees) who
- * have no signup record for the event, are not the creator, and don't
- * have an active absence.
  */
 @Injectable()
 export class RecruitmentReminderService {
   private readonly logger = new Logger(RecruitmentReminderService.name);
 
   constructor(
-    @Inject(DrizzleAsyncProvider)
-    private db: PostgresJsDatabase<typeof schema>,
-    @Inject(REDIS_CLIENT)
-    private redis: Redis,
+    @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
+    @Inject(REDIS_CLIENT) private redis: Redis,
     private readonly notificationService: NotificationService,
     private readonly settingsService: SettingsService,
     private readonly discordBotClient: DiscordBotClientService,
@@ -71,227 +57,84 @@ export class RecruitmentReminderService {
     );
   }
 
+  /** Check and send recruitment reminders for eligible events. */
   async checkAndSendReminders(): Promise<void> {
-    const events = await this.findEligibleEvents();
+    const events = await findEligibleEvents(this.db);
     if (events.length === 0) return;
-
     this.logger.log(
       `Found ${events.length} eligible events for recruitment reminders`,
     );
 
-    const now = Date.now();
-
     for (const event of events) {
-      const eventStart = new Date(event.startTime).getTime();
-      const hoursUntilStart = (eventStart - now) / (1000 * 60 * 60);
-
-      // Channel bump: fires at 48h mark
-      const bumpKey = `recruitment-bump:event:${event.id}`;
-      const alreadyBumped = await this.redis.get(bumpKey);
-      if (!alreadyBumped) {
-        await this.redis.set(bumpKey, '1', 'EX', DEDUP_TTL_SECONDS);
-        await this.postChannelBump(event);
-      }
-
-      // DMs: only fire at the 24h mark
-      if (hoursUntilStart > 24) {
-        this.logger.debug(
-          `Event ${event.id} starts in ${hoursUntilStart.toFixed(1)}h — bump sent, DMs deferred until 24h mark`,
-        );
-        continue;
-      }
-
-      const dmKey = `recruitment-dm:event:${event.id}`;
-      const alreadyDMd = await this.redis.get(dmKey);
-      if (alreadyDMd) {
-        this.logger.debug(
-          `Recruitment DMs already sent for event ${event.id}, skipping`,
-        );
-        continue;
-      }
-
-      // Find recipients and send DMs
-      let recipientIds = await this.findRecipients(
-        event.gameId,
-        event.creatorId,
-        event.id,
-      );
-
-      if (recipientIds.length > 0) {
-        // Exclude users with active absences covering the event date
-        const absentUserIds = await this.findAbsentUsers(
-          recipientIds,
-          event.startTime,
-        );
-        if (absentUserIds.size > 0) {
-          recipientIds = recipientIds.filter((id) => !absentUserIds.has(id));
-          this.logger.debug(
-            `Excluded ${absentUserIds.size} absent users from recruitment reminder for event ${event.id}`,
-          );
-        }
-      }
-
-      // Set dedup key before dispatching to prevent duplicates on retries
-      await this.redis.set(dmKey, '1', 'EX', DEDUP_TTL_SECONDS);
-
-      // Send DMs to recipients
-      if (recipientIds.length > 0) {
-        await this.sendRecruitmentDMs(event, recipientIds);
-      } else {
-        this.logger.debug(
-          `No recruitment reminder recipients for event ${event.id}`,
-        );
-      }
+      await this.processEvent(event);
     }
   }
 
-  /**
-   * Find future, non-cancelled events starting within [now, now + 48h]
-   * that have a Discord embed, are NOT full, and have a game.
-   * Channel bumps fire at 48h; DMs fire at 24h (filtered in caller).
-   */
-  private async findEligibleEvents(): Promise<EligibleEvent[]> {
-    const now = new Date();
-    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  /** Process a single eligible event for bumps and DMs. */
+  private async processEvent(event: EligibleEvent): Promise<void> {
+    const hoursUntilStart =
+      (new Date(event.startTime).getTime() - Date.now()) / (1000 * 60 * 60);
 
-    const rows = await this.db.execute<{
-      id: number;
-      title: string;
-      game_id: number;
-      game_name: string;
-      creator_id: number;
-      start_time: string;
-      max_attendees: number | null;
-      signup_count: string;
-      channel_id: string;
-      guild_id: string;
-      message_id: string;
-    }>(sql`
-      SELECT
-        e.id,
-        e.title,
-        e.game_id,
-        g.name AS game_name,
-        e.creator_id,
-        lower(e.duration)::text AS start_time,
-        e.max_attendees,
-        (
-          SELECT count(*)
-          FROM event_signups es
-          WHERE es.event_id = e.id
-            AND es.status NOT IN ('roached_out', 'departed', 'declined')
-        )::text AS signup_count,
-        dem.channel_id,
-        dem.guild_id,
-        dem.message_id
-      FROM events e
-      INNER JOIN games g ON g.id = e.game_id
-      INNER JOIN discord_event_messages dem ON dem.event_id = e.id
-      WHERE e.cancelled_at IS NULL
-        AND lower(e.duration) >= ${now.toISOString()}::timestamptz
-        AND lower(e.duration) <= ${in48h.toISOString()}::timestamptz
-        AND dem.embed_state != 'full'
-        AND e.game_id IS NOT NULL
-        -- ROK-682: Safety net — exclude events where signups >= slot capacity
-        AND (
-          SELECT count(*)
-          FROM event_signups es2
-          WHERE es2.event_id = e.id
-            AND es2.status NOT IN ('roached_out', 'departed', 'declined')
-        ) < COALESCE(
-          CASE
-            WHEN e.slot_config->>'type' = 'mmo' THEN
-              COALESCE((e.slot_config->>'tank')::int, 0) +
-              COALESCE((e.slot_config->>'healer')::int, 0) +
-              COALESCE((e.slot_config->>'dps')::int, 0) +
-              COALESCE((e.slot_config->>'flex')::int, 0)
-            WHEN e.slot_config->>'player' IS NOT NULL THEN
-              (e.slot_config->>'player')::int
-            ELSE NULL
-          END,
-          e.max_attendees,
-          2147483647  -- no cap → always eligible
-        )
-    `);
+    const bumpKey = `recruitment-bump:event:${event.id}`;
+    if (!(await this.redis.get(bumpKey))) {
+      await this.redis.set(bumpKey, '1', 'EX', DEDUP_TTL_SECONDS);
+      await this.postChannelBump(event);
+    }
 
-    return rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      gameId: r.game_id,
-      gameName: r.game_name,
-      creatorId: r.creator_id,
-      startTime: r.start_time,
-      maxAttendees: r.max_attendees,
-      signupCount: parseInt(r.signup_count, 10),
-      channelId: r.channel_id,
-      guildId: r.guild_id,
-      messageId: r.message_id,
-    }));
+    if (hoursUntilStart > 24) {
+      this.logger.debug(
+        `Event ${event.id} starts in ${hoursUntilStart.toFixed(1)}h — bump sent, DMs deferred`,
+      );
+      return;
+    }
+
+    const dmKey = `recruitment-dm:event:${event.id}`;
+    if (await this.redis.get(dmKey)) {
+      this.logger.debug(
+        `Recruitment DMs already sent for event ${event.id}, skipping`,
+      );
+      return;
+    }
+
+    let recipientIds = await findRecipients(
+      this.db,
+      event.gameId,
+      event.creatorId,
+      event.id,
+    );
+    recipientIds = await this.filterAbsentUsers(recipientIds, event);
+    await this.redis.set(dmKey, '1', 'EX', DEDUP_TTL_SECONDS);
+
+    if (recipientIds.length > 0) {
+      await this.sendRecruitmentDMs(event, recipientIds);
+    } else {
+      this.logger.debug(
+        `No recruitment reminder recipients for event ${event.id}`,
+      );
+    }
   }
 
-  /**
-   * Find users with game affinity who have no signup record for this event.
-   * Union of: hearted the game + signed up for past events of that game.
-   * Excludes: event creator, users who already have ANY signup record.
-   */
-  private async findRecipients(
-    gameId: number,
-    creatorId: number,
-    eventId: number,
+  /** Filter out users with active absences covering the event date. */
+  private async filterAbsentUsers(
+    recipientIds: number[],
+    event: EligibleEvent,
   ): Promise<number[]> {
-    const rows = await this.db.execute<{ id: number }>(sql`
-      SELECT DISTINCT u.id FROM users u
-      WHERE u.id != ${creatorId}
-        AND (
-          u.id IN (
-            SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId}
-          )
-          OR
-          u.id IN (
-            SELECT es.user_id FROM event_signups es
-            INNER JOIN events e ON e.id = es.event_id
-            WHERE e.game_id = ${gameId}
-              AND upper(e.duration) < NOW()::timestamp
-              AND es.status = 'signed_up'
-              AND e.cancelled_at IS NULL
-              AND es.user_id IS NOT NULL
-          )
-        )
-        AND u.id NOT IN (
-          SELECT es.user_id FROM event_signups es
-          WHERE es.event_id = ${eventId}
-            AND es.user_id IS NOT NULL
-        )
-    `);
-
-    return rows.map((r) => r.id);
+    if (recipientIds.length === 0) return recipientIds;
+    const absentUserIds = await findAbsentUsers(
+      this.db,
+      recipientIds,
+      event.startTime,
+    );
+    if (absentUserIds.size > 0) {
+      this.logger.debug(
+        `Excluded ${absentUserIds.size} absent users from recruitment reminder for event ${event.id}`,
+      );
+      return recipientIds.filter((id) => !absentUserIds.has(id));
+    }
+    return recipientIds;
   }
 
-  /**
-   * Find users from the candidate list who have an absence covering the event date.
-   * Reuses the same pattern as GameAffinityNotificationService.
-   */
-  private async findAbsentUsers(
-    userIds: number[],
-    startTime: string,
-  ): Promise<Set<number>> {
-    if (userIds.length === 0) return new Set();
-
-    const eventDate = new Date(startTime).toISOString().split('T')[0];
-    const rows = await this.db.execute<{ user_id: number }>(sql`
-      SELECT DISTINCT a.user_id
-      FROM game_time_absences a
-      WHERE a.user_id IN (${sql.join(userIds, sql`, `)})
-        AND ${eventDate} >= a.start_date
-        AND ${eventDate} <= a.end_date
-    `);
-
-    return new Set(rows.map((r) => r.user_id));
-  }
-
-  /**
-   * Send recruitment reminder DMs to all eligible recipients.
-   */
+  /** Send recruitment reminder DMs to all eligible recipients. */
   private async sendRecruitmentDMs(
     event: EligibleEvent,
     recipientIds: number[],
@@ -300,22 +143,15 @@ export class RecruitmentReminderService {
       (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
     const clientUrl =
       (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
-
     const eventDate = new Date(event.startTime).toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       timeZone: defaultTimezone,
     });
-
-    const signupSummary = event.maxAttendees
-      ? `${event.signupCount}/${event.maxAttendees} spots filled`
-      : `${event.signupCount} signed up`;
-
+    const signupSummary = buildSignupSummary(event);
     const message = `Spots available for ${event.gameName}: ${event.title} on ${eventDate}. ${signupSummary} — sign up now!`;
-
-    const discordUrl = `https://discord.com/channels/${event.guildId}/${event.channelId}/${event.messageId}`;
-
+    const discordUrl = buildDiscordUrl(event);
     const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
       event.gameId,
     );
@@ -344,15 +180,12 @@ export class RecruitmentReminderService {
 
     const succeeded = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.filter((r) => r.status === 'rejected').length;
-
     this.logger.log(
       `Recruitment reminders for event ${event.id}: ${succeeded} sent, ${failed} failed (${recipientIds.length} recipients)`,
     );
   }
 
-  /**
-   * Post a bump message in the event's Discord channel linking to the original embed.
-   */
+  /** Post a bump message in the event's Discord channel. */
   private async postChannelBump(event: EligibleEvent): Promise<void> {
     if (!this.discordBotClient.isConnected()) {
       this.logger.warn(
@@ -360,53 +193,21 @@ export class RecruitmentReminderService {
       );
       return;
     }
-
-    // Re-check capacity: the event may have filled between query and bump
     if (
       event.maxAttendees !== null &&
       event.signupCount >= event.maxAttendees
     ) {
       this.logger.debug(
-        `Event ${event.id} is now full (${event.signupCount}/${event.maxAttendees}) — skipping channel bump`,
+        `Event ${event.id} is now full — skipping channel bump`,
       );
       return;
     }
 
     try {
-      const signupSummary = event.maxAttendees
-        ? `${event.signupCount}/${event.maxAttendees} spots filled`
-        : `${event.signupCount} signed up`;
-
-      const embedUrl = `https://discord.com/channels/${event.guildId}/${event.channelId}/${event.messageId}`;
       const clientUrl =
         (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
-
-      const hoursUntil = Math.round(
-        (new Date(event.startTime).getTime() - Date.now()) / (1000 * 60 * 60),
-      );
-      const timeLabel = hoursUntil <= 24 ? 'tomorrow' : `in ${hoursUntil}h`;
-
-      const embed = new EmbedBuilder()
-        .setTitle(`📢 Spots still available — event ${timeLabel}!`)
-        .setDescription(
-          `**${event.title}** — ${event.gameName}\n${signupSummary}`,
-        )
-        .setColor(EMBED_COLORS.ANNOUNCEMENT)
-        .setTimestamp(new Date(event.startTime));
-
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setLabel('View Event')
-          .setStyle(ButtonStyle.Link)
-          .setURL(`${clientUrl}/events/${event.id}`),
-        new ButtonBuilder()
-          .setLabel('View in Discord')
-          .setStyle(ButtonStyle.Link)
-          .setURL(embedUrl),
-      );
-
+      const { embed, row } = this.buildBumpEmbed(event, clientUrl);
       await this.discordBotClient.sendEmbed(event.channelId, embed, row);
-
       this.logger.log(
         `Posted recruitment bump for event ${event.id} in channel ${event.channelId}`,
       );
@@ -415,5 +216,38 @@ export class RecruitmentReminderService {
         `Failed to post channel bump for event ${event.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  /** Build the bump embed and action row. */
+  private buildBumpEmbed(
+    event: EligibleEvent,
+    clientUrl: string,
+  ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
+    const signupSummary = buildSignupSummary(event);
+    const embedUrl = buildDiscordUrl(event);
+    const hoursUntil = Math.round(
+      (new Date(event.startTime).getTime() - Date.now()) / (1000 * 60 * 60),
+    );
+    const timeLabel = hoursUntil <= 24 ? 'tomorrow' : `in ${hoursUntil}h`;
+
+    const embed = new EmbedBuilder()
+      .setTitle(`\uD83D\uDCE2 Spots still available — event ${timeLabel}!`)
+      .setDescription(
+        `**${event.title}** — ${event.gameName}\n${signupSummary}`,
+      )
+      .setColor(EMBED_COLORS.ANNOUNCEMENT)
+      .setTimestamp(new Date(event.startTime));
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('View Event')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${clientUrl}/events/${event.id}`),
+      new ButtonBuilder()
+        .setLabel('View in Discord')
+        .setStyle(ButtonStyle.Link)
+        .setURL(embedUrl),
+    );
+    return { embed, row };
   }
 }

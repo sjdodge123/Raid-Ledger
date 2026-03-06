@@ -30,8 +30,17 @@ export class AdHocParticipantService {
     eventId: number,
     member: VoiceMemberInfo,
   ): Promise<void> {
-    const now = new Date();
+    await this.upsertParticipant(eventId, member);
+    this.logger.debug(
+      `Participant ${member.discordUsername} added to event ${eventId}`,
+    );
+  }
 
+  /** Upsert participant row, incrementing session count on conflict. */
+  private async upsertParticipant(
+    eventId: number,
+    member: VoiceMemberInfo,
+  ): Promise<void> {
     await this.db
       .insert(schema.adHocParticipants)
       .values({
@@ -40,7 +49,7 @@ export class AdHocParticipantService {
         discordUserId: member.discordUserId,
         discordUsername: member.discordUsername,
         discordAvatarHash: member.discordAvatarHash,
-        joinedAt: now,
+        joinedAt: new Date(),
         sessionCount: 1,
       })
       .onConflictDoUpdate({
@@ -50,17 +59,12 @@ export class AdHocParticipantService {
         ],
         set: {
           leftAt: null,
-          // joinedAt intentionally omitted — preserve original first-join time
           discordUsername: member.discordUsername,
           discordAvatarHash: member.discordAvatarHash,
           userId: member.userId,
           sessionCount: sql`${schema.adHocParticipants.sessionCount} + 1`,
         },
       });
-
-    this.logger.debug(
-      `Participant ${member.discordUsername} added to ad-hoc event ${eventId}`,
-    );
   }
 
   /**

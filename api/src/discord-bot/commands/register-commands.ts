@@ -72,46 +72,36 @@ export class RegisterCommandsService {
   async registerCommands(): Promise<void> {
     const config = await this.settingsService.getDiscordBotConfig();
     if (!config) {
-      this.logger.warn(
-        'No bot config found, skipping slash command registration',
-      );
+      this.logger.warn('No bot config found, skipping command registration');
       return;
     }
-
-    const handlers = this.getCommandHandlers();
-    const commands = handlers.map((h) => h.getDefinition());
-
+    const clientId = this.clientService.getClientId();
+    if (!clientId) {
+      this.logger.warn('No client ID, skipping command registration');
+      return;
+    }
+    const commands = this.getCommandHandlers().map((h) => h.getDefinition());
     try {
       const rest = new REST({ version: '10' }).setToken(config.token);
-
-      const clientId = this.clientService.getClientId();
-      if (!clientId) {
-        this.logger.warn(
-          'Cannot determine bot client ID, skipping command registration',
-        );
-        return;
-      }
-
-      // Register globally so commands work in both guild channels and DMs
-      await rest.put(Routes.applicationCommands(clientId), {
-        body: commands,
-      });
-
-      // Clear any stale guild-scoped commands from previous registrations
-      const guildId = this.clientService.getGuildId();
-      if (guildId) {
-        await rest
-          .put(Routes.applicationGuildCommands(clientId, guildId), {
-            body: [],
-          })
-          .catch(() => {
-            /* ignore — guild cleanup is best-effort */
-          });
-      }
-
+      await rest.put(Routes.applicationCommands(clientId), { body: commands });
+      await this.clearStaleGuildCommands(rest, clientId);
       this.logger.log(`Registered ${commands.length} global slash command(s)`);
     } catch (error) {
       this.logger.error('Failed to register slash commands:', error);
     }
+  }
+
+  /** Remove stale guild-scoped commands from previous registrations. */
+  private async clearStaleGuildCommands(
+    rest: REST,
+    clientId: string,
+  ): Promise<void> {
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return;
+    await rest
+      .put(Routes.applicationGuildCommands(clientId, guildId), { body: [] })
+      .catch(() => {
+        /* guild cleanup is best-effort */
+      });
   }
 }

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Event Reminders & Notification Lifecycle Integration Tests (ROK-524)
  *
@@ -281,9 +280,10 @@ describe('Event Reminders & Notifications (integration)', () => {
       expect(res.status).toBe(200);
       expect(res.body.length).toBeGreaterThanOrEqual(1);
 
-      const notification = res.body.find((n: any) => n.title === 'New Event!');
+      const notifications = res.body as Array<Record<string, unknown>>;
+      const notification = notifications.find((n) => n.title === 'New Event!');
       expect(notification).toBeDefined();
-      expect(notification.type).toBe('new_event');
+      expect(notification!.type).toBe('new_event');
     });
 
     it('should mark notification as read', async () => {

@@ -5,7 +5,6 @@
  * Verifies the scheduler does not drop the per-event override field when
  * building deferred embeds for future events.
  */
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmbedSchedulerService } from './embed-scheduler.service';
 import { EmbedPosterService } from './embed-poster.service';

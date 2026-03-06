@@ -5,14 +5,17 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
-import {
-  EMBED_COLORS,
-  RESCHEDULE_BUTTON_IDS,
-  ROACH_OUT_BUTTON_IDS,
-  SIGNUP_BUTTON_IDS,
-} from '../discord-bot/discord-bot.constants';
+import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { SettingsService } from '../settings/settings.service';
+import {
+  getColorForType,
+  getEmojiForType,
+  getTypeLabel,
+  addTypeSpecificFields,
+  buildExtraRows,
+  buildPrimaryButton,
+} from './notification-embed.helpers';
 
 interface NotificationEmbedInput {
   notificationId: string;
@@ -22,40 +25,27 @@ interface NotificationEmbedInput {
   payload?: Record<string, unknown>;
 }
 
-/** Safely convert an unknown payload value to a string. */
-function toStr(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean')
-    return `${value}`;
-  return '';
-}
-
 interface EmbedResult {
   embed: EmbedBuilder;
   row: ActionRowBuilder<ButtonBuilder>;
-  /** Additional action rows (e.g., Roach Out button on reminders). */
   rows?: ActionRowBuilder<ButtonBuilder>[];
 }
 
 /**
  * Builds Discord embed messages for each notification type (ROK-180 AC-3, AC-8).
- * Uses color coding per type and includes action row buttons.
  */
 @Injectable()
 export class DiscordNotificationEmbedService {
   constructor(private readonly settingsService: SettingsService) {}
 
-  /**
-   * Build a notification embed with action buttons.
-   */
+  /** Build a notification embed with action buttons. */
   async buildNotificationEmbed(
     input: NotificationEmbedInput,
     communityName: string,
   ): Promise<EmbedResult> {
-    const color = this.getColorForType(input.type);
-    const emoji = this.getEmojiForType(input.type);
-    const categoryLabel = this.getTypeLabel(input.type);
-
+    const color = getColorForType(input.type);
+    const emoji = getEmojiForType(input.type);
+    const categoryLabel = getTypeLabel(input.type);
     const embed = new EmbedBuilder()
       .setAuthor({ name: communityName || 'Raid Ledger' })
       .setTitle(`${emoji} ${input.title}`)
@@ -65,23 +55,14 @@ export class DiscordNotificationEmbedService {
         text: `${communityName || 'Raid Ledger'} \u00B7 ${categoryLabel}`,
       })
       .setTimestamp(this.resolveTimestamp(input));
-
-    // Add type-specific fields
-    this.addTypeSpecificFields(embed, input);
-
-    // Build action row with primary action + "Adjust Notifications" button
+    addTypeSpecificFields(embed, input.type, input.payload);
     const clientUrl = await this.resolveClientUrl();
     const row = this.buildActionRow(input, clientUrl);
-
-    // ROK-378: Add extra button rows for specific notification types
-    const rows = this.buildExtraRows(input, clientUrl);
-
+    const rows = buildExtraRows(input.type, input.payload, clientUrl);
     return { embed, row, rows };
   }
 
-  /**
-   * Build a welcome DM embed (AC-1).
-   */
+  /** Build a welcome DM embed (AC-1). */
   async buildWelcomeEmbed(
     communityName: string,
     accentColor?: string | null,
@@ -89,16 +70,13 @@ export class DiscordNotificationEmbedService {
     const color = accentColor
       ? parseInt(accentColor.replace('#', ''), 16)
       : EMBED_COLORS.ANNOUNCEMENT;
-
     const name = communityName || 'Raid Ledger';
     const clientUrl = await this.resolveClientUrl();
-
     const embed = new EmbedBuilder()
       .setAuthor({ name })
       .setTitle(`Welcome to ${name}!`)
       .setDescription(
-        `Hosted by **Raid Ledger** — your Discord account is now linked and you're officially part of the community! ` +
-          `Here's what you can do:`,
+        `Hosted by **Raid Ledger** — your Discord account is now linked and you're officially part of the community! Here's what you can do:`,
       )
       .setColor(color)
       .addFields(
@@ -110,8 +88,7 @@ export class DiscordNotificationEmbedService {
         {
           name: 'Stay in the loop',
           value:
-            "You'll get DMs for event reminders, roster changes, and new events for games you follow. " +
-            'Customize what you receive anytime in your notification settings.',
+            "You'll get DMs for event reminders, roster changes, and new events for games you follow. Customize what you receive anytime in your notification settings.",
         },
         {
           name: 'Set up your profile',
@@ -121,7 +98,6 @@ export class DiscordNotificationEmbedService {
       )
       .setFooter({ text: name })
       .setTimestamp();
-
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setLabel('View Events')
@@ -136,23 +112,19 @@ export class DiscordNotificationEmbedService {
         .setStyle(ButtonStyle.Link)
         .setURL(`${clientUrl}/profile/preferences/notifications`),
     );
-
     return { embed, row };
   }
 
-  /**
-   * Build embed for batched/summary notifications.
-   */
+  /** Build embed for batched/summary notifications. */
   async buildBatchSummaryEmbed(
     type: NotificationType,
     count: number,
     communityName: string,
   ): Promise<EmbedResult> {
-    const color = this.getColorForType(type);
-    const emoji = this.getEmojiForType(type);
-    const typeLabel = this.getTypeLabel(type);
+    const color = getColorForType(type);
+    const emoji = getEmojiForType(type);
+    const typeLabel = getTypeLabel(type);
     const clientUrl = await this.resolveClientUrl();
-
     const embed = new EmbedBuilder()
       .setAuthor({ name: communityName || 'Raid Ledger' })
       .setTitle(`${emoji} ${count} ${typeLabel} Notifications`)
@@ -162,7 +134,6 @@ export class DiscordNotificationEmbedService {
       .setColor(color)
       .setFooter({ text: communityName || 'Raid Ledger' })
       .setTimestamp();
-
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setLabel('View All')
@@ -173,423 +144,26 @@ export class DiscordNotificationEmbedService {
         .setStyle(ButtonStyle.Link)
         .setURL(`${clientUrl}/profile/preferences/notifications`),
     );
-
     return { embed, row };
   }
 
-  /**
-   * Build embed for Discord unreachable in-app notification.
-   */
-  buildUnreachableNotificationMessage(): {
-    title: string;
-    message: string;
-  } {
+  /** Build embed for Discord unreachable in-app notification. */
+  buildUnreachableNotificationMessage(): { title: string; message: string } {
     return {
       title: 'Discord DMs Unreachable',
       message:
-        "We couldn't reach you on Discord — your DMs may be disabled or the bot may be blocked. " +
-        'Discord notifications have been paused. Check your DM settings and re-enable in your notification preferences.',
+        "We couldn't reach you on Discord — your DMs may be disabled or the bot may be blocked. Discord notifications have been paused. Check your DM settings and re-enable in your notification preferences.",
     };
   }
 
-  /**
-   * Build extra action rows for specific notification types (ROK-378, ROK-536).
-   * Event reminders get a "Roach Out" interactive button.
-   * Role gap alerts get Cancel Event and Reschedule deep-link buttons.
-   */
-  private buildExtraRows(
-    input: NotificationEmbedInput,
-    clientUrl: string,
-  ): ActionRowBuilder<ButtonBuilder>[] | undefined {
-    const eventId = input.payload?.eventId;
-    if (eventId == null) return undefined;
-
-    if (input.type === 'role_gap_alert') {
-      return this.buildRoleGapExtraRows(input, clientUrl, toStr(eventId));
-    }
-
-    if (input.type === 'event_reminder') {
-      const roachOutRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:${toStr(eventId)}`)
-          .setLabel('Roach Out')
-          .setStyle(ButtonStyle.Danger)
-          .setEmoji('\uD83E\uDEB3'),
-      );
-
-      return [roachOutRow];
-    }
-
-    if (input.type === 'event_rescheduled') {
-      const rescheduleRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${RESCHEDULE_BUTTON_IDS.CONFIRM}:${toStr(eventId)}`)
-          .setLabel('Confirm')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`${RESCHEDULE_BUTTON_IDS.TENTATIVE}:${toStr(eventId)}`)
-          .setLabel('Tentative')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`${RESCHEDULE_BUTTON_IDS.DECLINE}:${toStr(eventId)}`)
-          .setLabel('Decline')
-          .setStyle(ButtonStyle.Danger),
-      );
-
-      return [rescheduleRow];
-    }
-
-    if (input.type === 'recruitment_reminder') {
-      const signupRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${SIGNUP_BUTTON_IDS.SIGNUP}:${toStr(eventId)}`)
-          .setLabel('Sign Up')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`${SIGNUP_BUTTON_IDS.TENTATIVE}:${toStr(eventId)}`)
-          .setLabel('Tentative')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`${SIGNUP_BUTTON_IDS.DECLINE}:${toStr(eventId)}`)
-          .setLabel('Decline')
-          .setStyle(ButtonStyle.Danger),
-      );
-
-      return [signupRow];
-    }
-
-    return undefined;
-  }
-
-  /**
-   * ROK-536: Build Cancel Event and Reschedule deep-link buttons for role gap alerts.
-   */
-  private buildRoleGapExtraRows(
-    input: NotificationEmbedInput,
-    clientUrl: string,
-    eventId: string,
-  ): ActionRowBuilder<ButtonBuilder>[] {
-    const reason = input.payload?.suggestedReason
-      ? encodeURIComponent(toStr(input.payload.suggestedReason).slice(0, 200))
-      : '';
-    const reasonParam = reason ? `&reason=${reason}` : '';
-
-    return [
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setLabel('Cancel Event')
-          .setStyle(ButtonStyle.Link)
-          .setURL(`${clientUrl}/events/${eventId}?action=cancel${reasonParam}`),
-        new ButtonBuilder()
-          .setLabel('Reschedule')
-          .setStyle(ButtonStyle.Link)
-          .setURL(
-            `${clientUrl}/events/${eventId}?action=reschedule${reasonParam}`,
-          ),
-      ),
-    ];
-  }
-
-  private getColorForType(type: NotificationType): number {
-    switch (type) {
-      case 'event_reminder':
-        return EMBED_COLORS.REMINDER;
-      case 'new_event':
-      case 'subscribed_game':
-        return EMBED_COLORS.ANNOUNCEMENT;
-      case 'slot_vacated':
-      case 'member_returned':
-      case 'bench_promoted':
-      case 'roster_reassigned':
-      case 'tentative_displaced':
-        return EMBED_COLORS.ROSTER_UPDATE;
-      case 'event_rescheduled':
-        return EMBED_COLORS.REMINDER;
-      case 'event_cancelled':
-        return EMBED_COLORS.ERROR;
-      case 'achievement_unlocked':
-      case 'level_up':
-        return EMBED_COLORS.SIGNUP_CONFIRMATION;
-      case 'missed_event_nudge':
-      case 'role_gap_alert':
-        return EMBED_COLORS.REMINDER;
-      case 'recruitment_reminder':
-        return EMBED_COLORS.ANNOUNCEMENT;
-      default:
-        return EMBED_COLORS.SYSTEM;
-    }
-  }
-
-  private getEmojiForType(type: NotificationType): string {
-    switch (type) {
-      case 'event_reminder':
-        return '⏰';
-      case 'new_event':
-        return '📅';
-      case 'subscribed_game':
-        return '🎮';
-      case 'slot_vacated':
-        return '🚪';
-      case 'member_returned':
-        return '🔙';
-      case 'bench_promoted':
-        return '🎉';
-      case 'roster_reassigned':
-        return '🔄';
-      case 'tentative_displaced':
-        return '⏳';
-      case 'event_rescheduled':
-        return '📆';
-      case 'event_cancelled':
-        return '❌';
-      case 'achievement_unlocked':
-        return '🏆';
-      case 'level_up':
-        return '⬆️';
-      case 'missed_event_nudge':
-        return '👋';
-      case 'recruitment_reminder':
-        return '📢';
-      case 'role_gap_alert':
-        return '\u26A0\uFE0F';
-      default:
-        return '🔔';
-    }
-  }
-
-  private getTypeLabel(type: NotificationType): string {
-    switch (type) {
-      case 'event_reminder':
-        return 'Event Reminder';
-      case 'new_event':
-        return 'New Event';
-      case 'subscribed_game':
-        return 'Game Activity';
-      case 'slot_vacated':
-        return 'Slot Vacated';
-      case 'member_returned':
-        return 'Member Returned';
-      case 'bench_promoted':
-        return 'Bench Promoted';
-      case 'roster_reassigned':
-        return 'Roster Reassigned';
-      case 'tentative_displaced':
-        return 'Tentative Displaced';
-      case 'event_rescheduled':
-        return 'Event Rescheduled';
-      case 'event_cancelled':
-        return 'Event Cancelled';
-      case 'achievement_unlocked':
-        return 'Achievement';
-      case 'level_up':
-        return 'Level Up';
-      case 'missed_event_nudge':
-        return 'Missed Event';
-      case 'recruitment_reminder':
-        return 'Recruitment Reminder';
-      case 'role_gap_alert':
-        return 'Role Gap Alert';
-      default:
-        return 'Notification';
-    }
-  }
-
-  private addTypeSpecificFields(
-    embed: EmbedBuilder,
-    input: NotificationEmbedInput,
-  ): void {
-    const payload = input.payload;
-    if (!payload) return;
-
-    switch (input.type) {
-      case 'event_reminder':
-        if (payload.eventTitle) {
-          embed.addFields({
-            name: 'Event',
-            value: toStr(payload.eventTitle),
-            inline: true,
-          });
-        }
-        if (payload.voiceChannelId) {
-          embed.addFields({
-            name: 'Voice Channel',
-            value: `<#${toStr(payload.voiceChannelId)}>`,
-            inline: true,
-          });
-        }
-        break;
-      case 'new_event':
-        if (payload.gameName) {
-          embed.addFields({
-            name: 'Game',
-            value: toStr(payload.gameName),
-            inline: true,
-          });
-        }
-        if (payload.voiceChannelId) {
-          embed.addFields({
-            name: 'Voice Channel',
-            value: `<#${toStr(payload.voiceChannelId)}>`,
-            inline: true,
-          });
-        }
-        break;
-      case 'subscribed_game':
-        if (payload.voiceChannelId) {
-          embed.addFields({
-            name: 'Voice Channel',
-            value: `<#${toStr(payload.voiceChannelId)}>`,
-            inline: true,
-          });
-        }
-        break;
-      case 'slot_vacated':
-      case 'member_returned':
-        if (payload.slotName) {
-          embed.addFields({
-            name: 'Slot',
-            value: toStr(payload.slotName),
-            inline: true,
-          });
-        }
-        if (payload.voiceChannelId) {
-          embed.addFields({
-            name: 'Voice Channel',
-            value: `<#${toStr(payload.voiceChannelId)}>`,
-            inline: true,
-          });
-        }
-        break;
-      case 'event_cancelled':
-        if (payload.eventTitle) {
-          embed.addFields({
-            name: 'Event',
-            value: toStr(payload.eventTitle),
-            inline: true,
-          });
-        }
-        break;
-      case 'event_rescheduled':
-        if (payload.voiceChannelId) {
-          embed.addFields({
-            name: 'Voice Channel',
-            value: `<#${toStr(payload.voiceChannelId)}>`,
-            inline: true,
-          });
-        }
-        break;
-      case 'roster_reassigned':
-        if (payload.oldRole) {
-          embed.addFields({
-            name: 'Previous Role',
-            value: toStr(payload.oldRole),
-            inline: true,
-          });
-        }
-        if (payload.newRole && payload.newRole !== 'player') {
-          embed.addFields({
-            name: 'New Role',
-            value: toStr(payload.newRole),
-            inline: true,
-          });
-        }
-        if (payload.voiceChannelId) {
-          embed.addFields({
-            name: 'Voice Channel',
-            value: `<#${toStr(payload.voiceChannelId)}>`,
-            inline: true,
-          });
-        }
-        break;
-      case 'bench_promoted':
-      case 'tentative_displaced':
-        if (payload.voiceChannelId) {
-          embed.addFields({
-            name: 'Voice Channel',
-            value: `<#${toStr(payload.voiceChannelId)}>`,
-            inline: true,
-          });
-        }
-        break;
-      case 'missed_event_nudge':
-        if (payload.eventTitle) {
-          embed.addFields({
-            name: 'Event',
-            value: toStr(payload.eventTitle),
-            inline: true,
-          });
-        }
-        break;
-      case 'role_gap_alert':
-        if (payload.eventTitle) {
-          embed.addFields({
-            name: 'Event',
-            value: toStr(payload.eventTitle),
-            inline: true,
-          });
-        }
-        if (payload.gapSummary) {
-          embed.addFields({
-            name: 'Missing Roles',
-            value: toStr(payload.gapSummary),
-            inline: true,
-          });
-        }
-        if (payload.rosterSummary) {
-          embed.addFields({
-            name: 'Roster',
-            value: toStr(payload.rosterSummary),
-            inline: true,
-          });
-        }
-        break;
-      case 'recruitment_reminder':
-        if (payload.eventTitle) {
-          embed.addFields({
-            name: 'Event',
-            value: toStr(payload.eventTitle),
-            inline: true,
-          });
-        }
-        if (payload.signupSummary) {
-          embed.addFields({
-            name: 'Signups',
-            value: toStr(payload.signupSummary),
-            inline: true,
-          });
-        }
-        if (payload.gameName) {
-          embed.addFields({
-            name: 'Game',
-            value: toStr(payload.gameName),
-            inline: true,
-          });
-        }
-        if (payload.voiceChannelId) {
-          embed.addFields({
-            name: 'Voice Channel',
-            value: `<#${toStr(payload.voiceChannelId)}>`,
-            inline: true,
-          });
-        }
-        break;
-    }
-  }
-
-  /**
-   * Resolve the client URL from settings with fallback (ROK-408).
-   */
+  /** Resolve the client URL from settings with fallback (ROK-408). */
   private async resolveClientUrl(): Promise<string> {
     return (
       (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173'
     );
   }
 
-  /**
-   * Resolve the timestamp for the embed footer (ROK-545).
-   * Event-related notifications use the event start time from the payload;
-   * all other types fall back to the current time.
-   */
+  /** Resolve the timestamp for the embed footer (ROK-545). */
   private resolveTimestamp(input: NotificationEmbedInput): Date {
     const eventTypes: NotificationType[] = [
       'event_reminder',
@@ -600,111 +174,43 @@ export class DiscordNotificationEmbedService {
       'recruitment_reminder',
       'role_gap_alert',
     ];
-
-    if (eventTypes.includes(input.type) && input.payload?.startTime) {
+    if (eventTypes.includes(input.type) && input.payload?.startTime)
       return new Date(input.payload.startTime as string);
-    }
-
-    // event_rescheduled may store the new time as newStartTime instead
-    if (input.type === 'event_rescheduled' && input.payload?.newStartTime) {
+    if (input.type === 'event_rescheduled' && input.payload?.newStartTime)
       return new Date(input.payload.newStartTime as string);
-    }
-
     return new Date();
   }
 
+  /** Build the main action row with primary + adjust buttons. */
   private buildActionRow(
     input: NotificationEmbedInput,
     clientUrl: string,
   ): ActionRowBuilder<ButtonBuilder> {
     const buttons: ButtonBuilder[] = [];
-
-    // Primary action button based on type
-    const primaryButton = this.buildPrimaryButton(input, clientUrl);
-    if (primaryButton) {
-      buttons.push(primaryButton);
-    }
-
-    // ROK-504: "View in Discord" button when Discord channel link is available
+    const primaryButton = buildPrimaryButton(
+      input.type,
+      input.notificationId,
+      input.payload,
+      clientUrl,
+    );
+    if (primaryButton) buttons.push(primaryButton);
     const discordButton = this.buildDiscordLinkButton(input);
-    if (discordButton) {
-      buttons.push(discordButton);
-    }
-
-    // "Adjust Notifications" button on every DM (AC-8)
+    if (discordButton) buttons.push(discordButton);
     buttons.push(
       new ButtonBuilder()
         .setLabel('Adjust Notifications')
         .setStyle(ButtonStyle.Link)
         .setURL(`${clientUrl}/profile/preferences/notifications`),
     );
-
     return new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
   }
 
-  private buildPrimaryButton(
-    input: NotificationEmbedInput,
-    clientUrl: string,
-  ): ButtonBuilder | null {
-    const payload = input.payload;
-    const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
-
-    switch (input.type) {
-      case 'event_reminder':
-      case 'new_event':
-      case 'subscribed_game':
-      case 'event_rescheduled':
-      case 'event_cancelled':
-      case 'recruitment_reminder':
-      case 'role_gap_alert':
-        if (eventId) {
-          return new ButtonBuilder()
-            .setLabel(input.type === 'new_event' ? 'Sign Up' : 'View Event')
-            .setStyle(ButtonStyle.Link)
-            .setURL(
-              `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,
-            );
-        }
-        break;
-      case 'slot_vacated':
-      case 'member_returned':
-      case 'bench_promoted':
-      case 'roster_reassigned':
-      case 'tentative_displaced':
-        if (eventId) {
-          return new ButtonBuilder()
-            .setLabel('View Roster')
-            .setStyle(ButtonStyle.Link)
-            .setURL(
-              `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,
-            );
-        }
-        break;
-      case 'missed_event_nudge':
-        if (eventId) {
-          return new ButtonBuilder()
-            .setLabel('View Event')
-            .setStyle(ButtonStyle.Link)
-            .setURL(
-              `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,
-            );
-        }
-        break;
-    }
-
-    return null;
-  }
-
-  /**
-   * ROK-504: Build an optional "View in Discord" button when the payload
-   * contains a Discord channel URL.
-   */
+  /** Build an optional "View in Discord" button (ROK-504). */
   private buildDiscordLinkButton(
     input: NotificationEmbedInput,
   ): ButtonBuilder | null {
     const discordUrl = input.payload?.discordUrl;
     if (typeof discordUrl !== 'string' || !discordUrl) return null;
-
     return new ButtonBuilder()
       .setLabel('View in Discord')
       .setStyle(ButtonStyle.Link)

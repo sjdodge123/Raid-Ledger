@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, inArray, sql } from 'drizzle-orm';
@@ -190,7 +189,9 @@ export class DemoDataService {
         rng,
         generatedUsernames,
       );
-      const allIgdbIds = allGames.map((g) => g.igdbId).filter((id): id is number => id !== null);
+      const allIgdbIds = allGames
+        .map((g) => g.igdbId)
+        .filter((id): id is number => id !== null);
       const generatedInterests = generateGameInterests(
         rng,
         generatedUsernames,
@@ -302,9 +303,7 @@ export class DemoDataService {
         const selected = shuffled.slice(0, numSignups);
 
         for (const user of selected) {
-          const charKey = event.gameId
-            ? `${user.id}:${event.gameId}`
-            : null;
+          const charKey = event.gameId ? `${user.id}:${event.gameId}` : null;
           const characterId = charKey
             ? (charByUserGame.get(charKey) ?? null)
             : null;
@@ -325,9 +324,7 @@ export class DemoDataService {
         const user = userByName.get(signup.username);
         if (!event || !user) continue;
 
-        const charKey = event.gameId
-          ? `${user.id}:${event.gameId}`
-          : null;
+        const charKey = event.gameId ? `${user.id}:${event.gameId}` : null;
         const characterId = charKey
           ? (charByUserGame.get(charKey) ?? null)
           : null;
@@ -345,7 +342,7 @@ export class DemoDataService {
       // Dedupe signups by eventId+userId (generator may produce duplicates)
       const signupDeduped = new Map<string, Record<string, unknown>>();
       for (const s of allSignupValues) {
-        const key = `${s.eventId}:${s.userId}`;
+        const key = `${String(s.eventId)}:${String(s.userId)}`;
         if (!signupDeduped.has(key)) {
           signupDeduped.set(key, s);
         }

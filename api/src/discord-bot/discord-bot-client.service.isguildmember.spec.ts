@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventEmitter } from 'events';
+import { Client } from 'discord.js';
 import { DiscordBotClientService } from './discord-bot-client.service';
 
 /**
@@ -73,11 +74,9 @@ jest.mock('discord.js', () => {
 });
 
 function createMockClient(): MockDiscordClient {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Client } = require('discord.js') as {
-    Client: new (opts: unknown) => MockDiscordClient;
-  };
-  return new Client({});
+  return new (Client as unknown as new (opts: unknown) => MockDiscordClient)(
+    {},
+  );
 }
 
 describe('DiscordBotClientService.isGuildMember (ROK-403)', () => {

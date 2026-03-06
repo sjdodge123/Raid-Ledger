@@ -137,21 +137,20 @@ function getTimezoneOffsetMs(utcDate: Date, timezone: string): number {
   return tzMs - utcMs;
 }
 
-/**
- * Extract numeric date parts from a Date using Intl.DateTimeFormat.
- * This avoids any system-timezone dependency.
- */
-function getDateParts(
-  date: Date,
-  timezone: string,
-): {
+interface DateParts {
   year: number;
   month: number;
   day: number;
   hour: number;
   minute: number;
   second: number;
-} {
+}
+
+/**
+ * Extract numeric date parts from a Date using Intl.DateTimeFormat.
+ * This avoids any system-timezone dependency.
+ */
+function getDateParts(date: Date, timezone: string): DateParts {
   const f = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     year: 'numeric',

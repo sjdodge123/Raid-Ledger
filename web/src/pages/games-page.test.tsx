@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -94,15 +93,15 @@ function mockDiscover(data: typeof mockDiscoverData | null = mockDiscoverData) {
         data,
         isLoading: false,
         error: null,
-    } as any);
+    } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
 }
 
-function mockSearch(data: any = null, isLoading = false) {
+function mockSearch(data: Record<string, unknown> | null = null, isLoading = false) {
     vi.spyOn(useGameSearchModule, 'useGameSearch').mockReturnValue({
         data,
         isLoading,
         error: null,
-    } as any);
+    } as unknown as ReturnType<typeof useGameSearchModule.useGameSearch>);
 }
 
 describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
@@ -334,7 +333,7 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
                 },
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
 
             renderPage();
 

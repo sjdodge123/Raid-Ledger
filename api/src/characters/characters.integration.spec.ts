@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Characters & User Management Integration Tests (ROK-525)
  *
@@ -128,8 +127,11 @@ describe('Characters & User Management (integration)', () => {
         .get('/users/me/characters')
         .set('Authorization', `Bearer ${token}`);
 
-      const oldMain = listRes.body.data.find((c: any) => c.name === 'OldMain');
-      expect(oldMain.isMain).toBe(false);
+      const chars = (
+        listRes.body as { data: Array<{ name: string; isMain: boolean }> }
+      ).data;
+      const oldMain = chars.find((c) => c.name === 'OldMain');
+      expect(oldMain?.isMain).toBe(false);
     });
 
     it('should block duplicate-claim for same realm+name by different user', async () => {
@@ -309,14 +311,15 @@ describe('Characters & User Management (integration)', () => {
         .get('/users/me/characters')
         .set('Authorization', `Bearer ${token}`);
 
-      const oldMain = listRes.body.data.find(
-        (c: any) => c.id === char1.body.id,
-      );
-      const newMain = listRes.body.data.find(
-        (c: any) => c.id === char2.body.id,
-      );
-      expect(oldMain.isMain).toBe(false);
-      expect(newMain.isMain).toBe(true);
+      const chars = (
+        listRes.body as { data: Array<{ id: string; isMain: boolean }> }
+      ).data;
+      const c1Id = (char1.body as { id: string }).id;
+      const c2Id = (char2.body as { id: string }).id;
+      const oldMain = chars.find((c) => c.id === c1Id);
+      const newMain = chars.find((c) => c.id === c2Id);
+      expect(oldMain?.isMain).toBe(false);
+      expect(newMain?.isMain).toBe(true);
     });
   });
 

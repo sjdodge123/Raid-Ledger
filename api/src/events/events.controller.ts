@@ -128,8 +128,8 @@ export class EventsController {
       );
 
       // Strip internal allEventIds before returning
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { allEventIds, ...event } = result;
+      const { allEventIds: _, ...event } = result;
+      void _;
       return event;
     } catch (error) {
       handleValidationError(error);

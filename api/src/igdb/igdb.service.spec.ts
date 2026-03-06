@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bullmq';
@@ -17,10 +16,19 @@ global.fetch = mockFetch;
  * Creates a thenable mock that also exposes query-builder methods (.limit(), .orderBy(), .groupBy()).
  * This mirrors Drizzle's pattern where the query builder is itself a PromiseLike.
  */
-function thenableResult(data: unknown[]) {
-  const obj: any = {
-    then: (resolve: any, reject?: any) =>
-      Promise.resolve(data).then(resolve, reject),
+interface ThenableQuery {
+  then: (
+    resolve: (v: unknown[]) => void,
+    reject?: (e: unknown) => void,
+  ) => Promise<void>;
+  limit: jest.Mock;
+  orderBy: jest.Mock;
+  groupBy: jest.Mock;
+}
+
+function thenableResult(data: unknown[]): ThenableQuery {
+  const obj: ThenableQuery = {
+    then: (resolve, reject?) => Promise.resolve(data).then(resolve, reject),
     limit: jest.fn().mockImplementation(() => thenableResult(data)),
     orderBy: jest.fn().mockImplementation(() => thenableResult(data)),
     groupBy: jest.fn().mockImplementation(() => thenableResult(data)),

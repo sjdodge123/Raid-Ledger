@@ -9,7 +9,7 @@ import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import {
+import type {
   AvailabilityDto,
   AvailabilityListResponseDto,
   AvailabilityWithConflicts,
@@ -17,6 +17,12 @@ import {
   CreateAvailabilityInput,
   UpdateAvailabilityDto,
 } from '@raid-ledger/contract';
+import {
+  mapAvailabilityToDto,
+  buildRangeStr,
+  mapConflicts,
+  buildUpdateData,
+} from './availability.helpers';
 
 /**
  * Service for managing user availability windows (ROK-112).
@@ -31,64 +37,36 @@ export class AvailabilityService {
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
 
-  /**
-   * Get all availability windows for a user.
-   * @param userId - User ID
-   * @param options - Optional filters (from, to, gameId, status)
-   * @returns List of availability windows
-   */
+  /** Get all availability windows for a user with optional filters. */
   async findAllForUser(
     userId: number,
-    options?: {
-      from?: string;
-      to?: string;
-      gameId?: number;
-      status?: string;
-    },
+    options?: { from?: string; to?: string; gameId?: number; status?: string },
   ): Promise<AvailabilityListResponseDto> {
-    // Build dynamic conditions array
     const conditions = [eq(schema.availability.userId, userId)];
-
-    // Apply time range filter if provided
     if (options?.from && options?.to) {
-      const fromDate = new Date(options.from);
-      const toDate = new Date(options.to);
-      const rangeStr = `[${fromDate.toISOString()},${toDate.toISOString()})`;
+      const rangeStr = buildRangeStr(options.from, options.to);
       conditions.push(
         sql`${schema.availability.timeRange} && ${rangeStr}::tsrange`,
       );
     }
-
-    // Apply gameId filter if provided
     if (options?.gameId) {
       conditions.push(eq(schema.availability.gameId, options.gameId));
     }
-
-    // Apply status filter if provided
     if (options?.status) {
       conditions.push(sql`${schema.availability.status} = ${options.status}`);
     }
-
     const windows = await this.db
       .select()
       .from(schema.availability)
       .where(and(...conditions))
       .orderBy(asc(schema.availability.createdAt));
-
     return {
-      data: windows.map((row) => this.mapToDto(row)),
+      data: windows.map((row) => mapAvailabilityToDto(row)),
       meta: { total: windows.length },
     };
   }
 
-  /**
-   * Get a single availability window by ID.
-   * @param userId - User ID (for ownership check)
-   * @param availabilityId - Availability window ID
-   * @returns Availability DTO
-   * @throws NotFoundException if not found
-   * @throws ForbiddenException if not owned by user
-   */
+  /** Get a single availability window by ID with ownership check. */
   async findOne(
     userId: number,
     availabilityId: string,
@@ -98,43 +76,32 @@ export class AvailabilityService {
       .from(schema.availability)
       .where(eq(schema.availability.id, availabilityId))
       .limit(1);
-
     if (!window) {
       throw new NotFoundException(
         `Availability window ${availabilityId} not found`,
       );
     }
-
     if (window.userId !== userId) {
       throw new ForbiddenException('You do not own this availability window');
     }
-
-    return this.mapToDto(window);
+    return mapAvailabilityToDto(window);
   }
 
-  /**
-   * Create a new availability window.
-   * Checks for conflicts with existing committed/blocked slots.
-   * @param userId - User ID
-   * @param dto - Creation data
-   * @returns Created availability with any detected conflicts
-   */
+  /** Create a new availability window with conflict detection. */
   async create(
     userId: number,
     dto: CreateAvailabilityInput,
   ): Promise<AvailabilityWithConflicts> {
-    const startTime = new Date(dto.startTime);
-    const endTime = new Date(dto.endTime);
-    const timeRange: [Date, Date] = [startTime, endTime];
-
-    // Check for conflicts before creating
+    const timeRange: [Date, Date] = [
+      new Date(dto.startTime),
+      new Date(dto.endTime),
+    ];
     const conflicts = await this.checkConflicts(
       userId,
       dto.startTime,
       dto.endTime,
       dto.gameId,
     );
-
     const [created] = await this.db
       .insert(schema.availability)
       .values({
@@ -144,114 +111,57 @@ export class AvailabilityService {
         gameId: dto.gameId ?? null,
       })
       .returning();
-
-    this.logger.log(
-      `User ${userId} created availability window ${created.id} (${dto.status ?? 'available'})`,
-    );
-
-    const result = this.mapToDto(created);
+    this.logger.log(`User ${userId} created availability window ${created.id}`);
     return {
-      ...result,
+      ...mapAvailabilityToDto(created),
       conflicts: conflicts.length > 0 ? conflicts : undefined,
     };
   }
 
-  /**
-   * Update an existing availability window.
-   * @param userId - User ID (for ownership check)
-   * @param availabilityId - Availability window ID
-   * @param dto - Update data
-   * @returns Updated availability with any new conflicts
-   */
+  /** Update an existing availability window with conflict detection. */
   async update(
     userId: number,
     availabilityId: string,
     dto: UpdateAvailabilityDto,
   ): Promise<AvailabilityWithConflicts> {
-    // Verify ownership
     const existing = await this.findOne(userId, availabilityId);
-
-    // Build update object
-    const updateData: Partial<typeof schema.availability.$inferInsert> = {
-      updatedAt: new Date(),
-    };
-
-    // Handle time range update
-    let newStartTime = existing.timeRange.start;
-    let newEndTime = existing.timeRange.end;
-
-    if (dto.startTime) {
-      newStartTime = dto.startTime;
-    }
-    if (dto.endTime) {
-      newEndTime = dto.endTime;
-    }
-
-    if (dto.startTime || dto.endTime) {
-      updateData.timeRange = [new Date(newStartTime), new Date(newEndTime)];
-    }
-
-    if (dto.status) {
-      updateData.status = dto.status;
-    }
-
-    if (dto.gameId !== undefined) {
-      updateData.gameId = dto.gameId;
-    }
-
-    // Check for conflicts with new time range
+    const { updateData, newStartTime, newEndTime } = buildUpdateData(
+      existing,
+      dto,
+    );
     const conflicts = await this.checkConflicts(
       userId,
       newStartTime,
       newEndTime,
       dto.gameId ?? existing.gameId ?? undefined,
-      availabilityId, // Exclude self from conflict check
+      availabilityId,
     );
-
     const [updated] = await this.db
       .update(schema.availability)
       .set(updateData)
       .where(eq(schema.availability.id, availabilityId))
       .returning();
-
     this.logger.log(
       `User ${userId} updated availability window ${availabilityId}`,
     );
-
-    const result = this.mapToDto(updated);
     return {
-      ...result,
+      ...mapAvailabilityToDto(updated),
       conflicts: conflicts.length > 0 ? conflicts : undefined,
     };
   }
 
-  /**
-   * Delete an availability window.
-   * @param userId - User ID (for ownership check)
-   * @param availabilityId - Availability window ID
-   */
+  /** Delete an availability window after ownership check. */
   async delete(userId: number, availabilityId: string): Promise<void> {
-    // Verify ownership
     await this.findOne(userId, availabilityId);
-
     await this.db
       .delete(schema.availability)
       .where(eq(schema.availability.id, availabilityId));
-
     this.logger.log(
       `User ${userId} deleted availability window ${availabilityId}`,
     );
   }
 
-  /**
-   * Check for overlapping availability windows with committed/blocked status.
-   * @param userId - User ID
-   * @param startTime - Start of time range to check
-   * @param endTime - End of time range to check
-   * @param excludeGameId - Optional: exclude conflicts for a specific game
-   * @param excludeId - Optional: exclude a specific window (for updates)
-   * @returns List of conflicting windows
-   */
+  /** Check for overlapping committed/blocked availability windows. */
   async checkConflicts(
     userId: number,
     startTime: string,
@@ -259,10 +169,8 @@ export class AvailabilityService {
     excludeGameId?: number,
     excludeId?: string,
   ): Promise<AvailabilityConflict[]> {
-    const rangeStr = `[${new Date(startTime).toISOString()},${new Date(endTime).toISOString()})`;
-
-    // Find overlapping windows that are committed or blocked
-    const conflictQuery = this.db
+    const rangeStr = buildRangeStr(startTime, endTime);
+    const conflicts = await this.db
       .select()
       .from(schema.availability)
       .where(
@@ -272,48 +180,17 @@ export class AvailabilityService {
           sql`${schema.availability.status} IN ('committed', 'blocked')`,
         ),
       );
-
-    const conflicts = await conflictQuery;
-
-    // Filter out excluded window and game-specific conflicts
-    return conflicts
-      .filter((c) => {
-        if (excludeId && c.id === excludeId) return false;
-        // If excludeGameId is set, exclude conflicts for that specific game
-        // (allows game-specific availability to overlap with other games)
-        if (excludeGameId && c.gameId === excludeGameId) return false;
-        return true;
-      })
-      .map((c) => ({
-        conflictingId: c.id,
-        timeRange: {
-          start: c.timeRange[0].toISOString(),
-          end: c.timeRange[1].toISOString(),
-        },
-        status: c.status,
-        gameId: c.gameId,
-      }));
+    return mapConflicts(conflicts, excludeId, excludeGameId);
   }
 
-  /**
-   * Find availability windows for multiple users in a time range.
-   * Used by heatmap component (ROK-113).
-   * @param userIds - List of user IDs
-   * @param startTime - Start of time range
-   * @param endTime - End of time range
-   * @returns Map of userId to their availability windows
-   */
+  /** Find availability windows for multiple users in a time range. */
   async findForUsersInRange(
     userIds: number[],
     startTime: string,
     endTime: string,
   ): Promise<Map<number, AvailabilityDto[]>> {
-    if (userIds.length === 0) {
-      return new Map();
-    }
-
-    const rangeStr = `[${new Date(startTime).toISOString()},${new Date(endTime).toISOString()})`;
-
+    if (userIds.length === 0) return new Map();
+    const rangeStr = buildRangeStr(startTime, endTime);
     const windows = await this.db
       .select()
       .from(schema.availability)
@@ -323,35 +200,12 @@ export class AvailabilityService {
           sql`${schema.availability.timeRange} && ${rangeStr}::tsrange`,
         ),
       );
-
     const result = new Map<number, AvailabilityDto[]>();
     for (const window of windows) {
       const existing = result.get(window.userId) || [];
-      existing.push(this.mapToDto(window));
+      existing.push(mapAvailabilityToDto(window));
       result.set(window.userId, existing);
     }
-
     return result;
-  }
-
-  /**
-   * Map database row to DTO.
-   */
-  private mapToDto(
-    row: typeof schema.availability.$inferSelect,
-  ): AvailabilityDto {
-    return {
-      id: row.id,
-      userId: row.userId,
-      timeRange: {
-        start: row.timeRange[0].toISOString(),
-        end: row.timeRange[1].toISOString(),
-      },
-      status: row.status,
-      gameId: row.gameId,
-      sourceEventId: row.sourceEventId,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    };
   }
 }

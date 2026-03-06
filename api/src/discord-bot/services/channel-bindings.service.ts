@@ -22,6 +22,16 @@ export interface BindingRecord {
   updatedAt: Date;
 }
 
+interface UpsertBindingOpts {
+  guildId: string;
+  channelId: string;
+  channelType: ChannelType;
+  bindingPurpose: BindingPurpose;
+  gameId: number | null;
+  config?: ChannelBindingConfig;
+  recurrenceGroupId?: string | null;
+}
+
 @Injectable()
 export class ChannelBindingsService {
   private readonly logger = new Logger(ChannelBindingsService.name);
@@ -45,38 +55,59 @@ export class ChannelBindingsService {
     config?: ChannelBindingConfig,
     recurrenceGroupId?: string | null,
   ): Promise<{ binding: BindingRecord; replacedChannelIds: string[] }> {
-    // ROK-435: If binding a series, remove any existing binding for the same
-    // series in this guild (regardless of channel) so a series has at most one
-    // channel binding. Return old channel IDs so the caller can warn the user.
-    let replacedChannelIds: string[] = [];
-    if (recurrenceGroupId) {
-      const deleted = await this.db
-        .delete(schema.channelBindings)
-        .where(
-          and(
-            eq(schema.channelBindings.guildId, guildId),
-            eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
-            isNotNull(schema.channelBindings.recurrenceGroupId),
-          ),
-        )
-        .returning({ channelId: schema.channelBindings.channelId });
+    const replacedChannelIds = await this.cleanupSeriesBindings(
+      guildId,
+      channelId,
+      recurrenceGroupId,
+    );
+    const binding = await this.upsertBinding({
+      guildId,
+      channelId,
+      channelType,
+      bindingPurpose,
+      gameId,
+      config,
+      recurrenceGroupId,
+    });
+    this.logger.log(
+      `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +
+        (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
+    );
+    return { binding, replacedChannelIds };
+  }
 
-      // Only flag channels that differ from the new target
-      replacedChannelIds = deleted
-        .map((d) => d.channelId)
-        .filter((id) => id !== channelId);
-    }
+  /** Remove existing series bindings, returning replaced channel IDs. */
+  private async cleanupSeriesBindings(
+    guildId: string,
+    channelId: string,
+    recurrenceGroupId?: string | null,
+  ): Promise<string[]> {
+    if (!recurrenceGroupId) return [];
+    const deleted = await this.db
+      .delete(schema.channelBindings)
+      .where(
+        and(
+          eq(schema.channelBindings.guildId, guildId),
+          eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
+          isNotNull(schema.channelBindings.recurrenceGroupId),
+        ),
+      )
+      .returning({ channelId: schema.channelBindings.channelId });
+    return deleted.map((d) => d.channelId).filter((id) => id !== channelId);
+  }
 
+  /** Insert or update the channel binding row. */
+  private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
     const [result] = await this.db
       .insert(schema.channelBindings)
       .values({
-        guildId,
-        channelId,
-        channelType,
-        bindingPurpose,
-        gameId,
-        recurrenceGroupId: recurrenceGroupId ?? null,
-        config: config ?? {},
+        guildId: opts.guildId,
+        channelId: opts.channelId,
+        channelType: opts.channelType,
+        bindingPurpose: opts.bindingPurpose,
+        gameId: opts.gameId,
+        recurrenceGroupId: opts.recurrenceGroupId ?? null,
+        config: opts.config ?? {},
       })
       .onConflictDoUpdate({
         target: [
@@ -85,21 +116,15 @@ export class ChannelBindingsService {
           schema.channelBindings.recurrenceGroupId,
         ],
         set: {
-          channelType,
-          bindingPurpose,
-          gameId,
-          config: config ?? {},
+          channelType: opts.channelType,
+          bindingPurpose: opts.bindingPurpose,
+          gameId: opts.gameId,
+          config: opts.config ?? {},
           updatedAt: new Date(),
         },
       })
       .returning();
-
-    this.logger.log(
-      `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +
-        (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
-    );
-
-    return { binding: result as BindingRecord, replacedChannelIds };
+    return result as BindingRecord;
   }
 
   /**

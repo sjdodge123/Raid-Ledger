@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Boss Encounters Integration Tests (ROK-569)
  *
@@ -97,7 +96,8 @@ describe('Boss Encounters (integration)', () => {
         ]),
       );
       // TBC boss should be excluded in classic_era
-      const names = res.body.map((b: { name: string }) => b.name);
+      const bosses = res.body as Array<{ name: string }>;
+      const names = bosses.map((b) => b.name);
       expect(names).not.toContain('TBC Boss');
     });
 
@@ -121,7 +121,8 @@ describe('Boss Encounters (integration)', () => {
       );
 
       expect(res.status).toBe(200);
-      const names = res.body.map((b: { name: string }) => b.name);
+      const bosses = res.body as Array<{ name: string }>;
+      const names = bosses.map((b) => b.name);
       expect(names).toContain('Classic Boss');
       expect(names).toContain('TBC Boss');
     });
@@ -149,7 +150,8 @@ describe('Boss Encounters (integration)', () => {
       );
 
       expect(res.status).toBe(200);
-      const names = res.body.map((b: { name: string }) => b.name);
+      const bosses = res.body as Array<{ name: string }>;
+      const names = bosses.map((b) => b.name);
       expect(names).toContain('Herod');
       expect(names).not.toContain('Arcanist Doan');
     });
@@ -205,7 +207,8 @@ describe('Boss Encounters (integration)', () => {
       );
 
       expect(res.status).toBe(200);
-      const itemNames = res.body.map((l: { itemName: string }) => l.itemName);
+      const loot = res.body as Array<{ itemName: string }>;
+      const itemNames = loot.map((l) => l.itemName);
       expect(itemNames).toContain('Classic Sword');
       expect(itemNames).not.toContain('TBC Sword');
     });
@@ -238,7 +241,8 @@ describe('Boss Encounters (integration)', () => {
       );
 
       expect(res.status).toBe(200);
-      const itemNames = res.body.map((l: { itemName: string }) => l.itemName);
+      const loot = res.body as Array<{ itemName: string }>;
+      const itemNames = loot.map((l) => l.itemName);
       expect(itemNames).toContain('Classic Ring');
       expect(itemNames).toContain('TBC Ring');
     });

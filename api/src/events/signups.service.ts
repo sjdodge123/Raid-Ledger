@@ -1,4 +1,3 @@
-/* eslint-disable */
 import {
   Inject,
   Injectable,
@@ -6,7 +5,6 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and, or, sql, isNull, ne, inArray } from 'drizzle-orm';
@@ -163,7 +161,11 @@ export class SignupsService {
           .limit(1);
 
         // ROK-421/ROK-562/ROK-596: Reactivate cancelled/departed signup (re-signup after cancel/decline/depart)
-        if (existing.status === 'roached_out' || existing.status === 'declined' || existing.status === 'departed') {
+        if (
+          existing.status === 'roached_out' ||
+          existing.status === 'declined' ||
+          existing.status === 'departed'
+        ) {
           const reactivated = hasCharacter ? 'confirmed' : 'pending';
           await tx
             .update(schema.eventSignups)
@@ -189,7 +191,13 @@ export class SignupsService {
         }
 
         // ROK-452: Update preferred roles on existing signup if provided
-        if (existing.status !== 'roached_out' && existing.status !== 'declined' && existing.status !== 'departed' && dto?.preferredRoles && dto.preferredRoles.length > 0) {
+        if (
+          existing.status !== 'roached_out' &&
+          existing.status !== 'declined' &&
+          existing.status !== 'departed' &&
+          dto?.preferredRoles &&
+          dto.preferredRoles.length > 0
+        ) {
           await tx
             .update(schema.eventSignups)
             .set({ preferredRoles: dto.preferredRoles })
@@ -206,39 +214,55 @@ export class SignupsService {
 
         if (existingAssignment.length === 0) {
           // ROK-452: For MMO events, always use auto-allocation
-          const slotConfigDup = event[0].slotConfig as Record<string, unknown> | null;
+          const slotConfigDup = event[0].slotConfig as Record<
+            string,
+            unknown
+          > | null;
           const isMMODup = slotConfigDup?.type === 'mmo';
           const hasPreferredRolesDup =
             existing.preferredRoles && existing.preferredRoles.length > 0;
-          const hasSingleSlotRoleDup = !hasPreferredRolesDup && dto?.slotRole && !autoBench;
+          const hasSingleSlotRoleDup =
+            !hasPreferredRolesDup && dto?.slotRole && !autoBench;
 
           // ROK-596: Bench is always a direct assignment — skip auto-allocation
-          if (isMMODup && (hasPreferredRolesDup || hasSingleSlotRoleDup) && !autoBench && dto?.slotRole !== 'bench') {
+          if (
+            isMMODup &&
+            (hasPreferredRolesDup || hasSingleSlotRoleDup) &&
+            !autoBench &&
+            dto?.slotRole !== 'bench'
+          ) {
             if (hasSingleSlotRoleDup && dto?.slotRole) {
               await tx
                 .update(schema.eventSignups)
                 .set({ preferredRoles: [dto.slotRole] })
                 .where(eq(schema.eventSignups.id, existing.id));
             }
-            await this.autoAllocateSignup(tx, eventId, existing.id, slotConfigDup);
+            await this.autoAllocateSignup(
+              tx,
+              eventId,
+              existing.id,
+              slotConfigDup,
+            );
             // ROK-598: Sync in-memory object after autoAllocateSignup may have confirmed it
             const [refreshedExisting] = await tx
-              .select({ confirmationStatus: schema.eventSignups.confirmationStatus })
+              .select({
+                confirmationStatus: schema.eventSignups.confirmationStatus,
+              })
               .from(schema.eventSignups)
               .where(eq(schema.eventSignups.id, existing.id))
               .limit(1);
             if (refreshedExisting) {
-              existing.confirmationStatus = refreshedExisting.confirmationStatus;
+              existing.confirmationStatus =
+                refreshedExisting.confirmationStatus;
             }
           } else {
             // ROK-353: If caller requested a slot but the signup has no roster
             // assignment (e.g. after self-unassign), create one now.
             // ROK-451: Also auto-slot for generic events with open player slots.
-            const slotRole =
-              autoBench
-                ? 'bench'
-                : (dto?.slotRole ??
-                  (await this.resolveGenericSlotRole(tx, event[0], eventId)));
+            const slotRole = autoBench
+              ? 'bench'
+              : (dto?.slotRole ??
+                (await this.resolveGenericSlotRole(tx, event[0], eventId)));
             if (slotRole) {
               let position = dto?.slotPosition ?? 0;
               if (autoBench || !position) {
@@ -307,10 +331,16 @@ export class SignupsService {
       const isMMO = slotConfig?.type === 'mmo';
       const hasPreferredRoles =
         dto?.preferredRoles && dto.preferredRoles.length > 0;
-      const hasSingleSlotRole = !hasPreferredRoles && dto?.slotRole && !autoBench;
+      const hasSingleSlotRole =
+        !hasPreferredRoles && dto?.slotRole && !autoBench;
 
       // ROK-596: Bench is always a direct assignment — skip auto-allocation
-      if (isMMO && (hasPreferredRoles || hasSingleSlotRole) && !autoBench && dto?.slotRole !== 'bench') {
+      if (
+        isMMO &&
+        (hasPreferredRoles || hasSingleSlotRole) &&
+        !autoBench &&
+        dto?.slotRole !== 'bench'
+      ) {
         // Ensure the signup has preferred roles stored for the algorithm
         if (hasSingleSlotRole && dto?.slotRole) {
           await tx
@@ -321,7 +351,9 @@ export class SignupsService {
         await this.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
         // ROK-598: Sync in-memory object after autoAllocateSignup may have confirmed it
         const [refreshed] = await tx
-          .select({ confirmationStatus: schema.eventSignups.confirmationStatus })
+          .select({
+            confirmationStatus: schema.eventSignups.confirmationStatus,
+          })
           .from(schema.eventSignups)
           .where(eq(schema.eventSignups.id, inserted.id))
           .limit(1);
@@ -331,11 +363,10 @@ export class SignupsService {
       } else {
         // ROK-183: Create roster assignment — explicit slot, auto-bench, or
         // ROK-451: auto-slot for generic events with open player slots
-        const slotRole =
-          autoBench
-            ? 'bench'
-            : (dto?.slotRole ??
-              (await this.resolveGenericSlotRole(tx, event[0], eventId)));
+        const slotRole = autoBench
+          ? 'bench'
+          : (dto?.slotRole ??
+            (await this.resolveGenericSlotRole(tx, event[0], eventId)));
         if (slotRole) {
           // Determine position: use provided or find next available
           let position = dto?.slotPosition ?? 0;
@@ -536,8 +567,9 @@ export class SignupsService {
 
       // Determine role: for non-MMO or non-preferred-role signups only
       const assignRole =
-        (!isMMO || (!hasPreferredRoles && !hasSingleRole))
-          ? (dto.role ?? (await this.resolveGenericSlotRole(tx, event, eventId)))
+        !isMMO || (!hasPreferredRoles && !hasSingleRole)
+          ? (dto.role ??
+            (await this.resolveGenericSlotRole(tx, event, eventId)))
           : null;
 
       if (assignRole) {
@@ -591,15 +623,10 @@ export class SignupsService {
     const conditions = [eq(schema.eventSignups.eventId, eventId)];
 
     if (signupIdentifier.userId) {
-      conditions.push(
-        eq(schema.eventSignups.userId, signupIdentifier.userId),
-      );
+      conditions.push(eq(schema.eventSignups.userId, signupIdentifier.userId));
     } else if (signupIdentifier.discordUserId) {
       conditions.push(
-        eq(
-          schema.eventSignups.discordUserId,
-          signupIdentifier.discordUserId,
-        ),
+        eq(schema.eventSignups.discordUserId, signupIdentifier.discordUserId),
       );
     } else {
       throw new BadRequestException(
@@ -637,11 +664,13 @@ export class SignupsService {
     // ROK-459: When a slotted player goes tentative, check if any confirmed
     // unassigned player wants the same role — if so, displace the tentative player.
     if (dto.status === 'tentative') {
-      this.checkTentativeDisplacement(eventId, signup.id).catch((err: unknown) => {
-        this.logger.warn(
-          `ROK-459: Failed tentative displacement check: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
-      });
+      this.checkTentativeDisplacement(eventId, signup.id).catch(
+        (err: unknown) => {
+          this.logger.warn(
+            `ROK-459: Failed tentative displacement check: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        },
+      );
     }
 
     if (updated.userId) {
@@ -1030,7 +1059,9 @@ export class SignupsService {
       })
       .where(eq(schema.eventSignups.id, signup.id));
 
-    this.logger.log(`User ${userId} canceled signup for event ${eventId} (${cancelStatus})`);
+    this.logger.log(
+      `User ${userId} canceled signup for event ${eventId} (${cancelStatus})`,
+    );
 
     this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
       eventId,
@@ -1068,13 +1099,15 @@ export class SignupsService {
       // ROK-459: When a slot vacates, check for tentative unassigned players
       // who want that role and re-slot them immediately.
       if (assignment && assignment.role && assignment.role !== 'bench') {
-        this.reslotTentativePlayer(eventId, assignment.role, assignment.position).catch(
-          (err: unknown) => {
-            this.logger.warn(
-              `ROK-459: Failed tentative reslot check: ${err instanceof Error ? err.message : 'Unknown error'}`,
-            );
-          },
-        );
+        this.reslotTentativePlayer(
+          eventId,
+          assignment.role,
+          assignment.position,
+        ).catch((err: unknown) => {
+          this.logger.warn(
+            `ROK-459: Failed tentative reslot check: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
       }
     }
   }
@@ -1142,9 +1175,14 @@ export class SignupsService {
         confirmationStatus: row.event_signups
           .confirmationStatus as ConfirmationStatus,
         status: (row.event_signups.status as SignupStatus) ?? 'signed_up',
-        preferredRoles: (row.event_signups.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
-        attendanceStatus: (row.event_signups.attendanceStatus as AttendanceStatus) ?? null,
-        attendanceRecordedAt: row.event_signups.attendanceRecordedAt?.toISOString() ?? null,
+        preferredRoles:
+          (row.event_signups.preferredRoles as
+            | ('tank' | 'healer' | 'dps')[]
+            | null) ?? null,
+        attendanceStatus:
+          (row.event_signups.attendanceStatus as AttendanceStatus) ?? null,
+        attendanceRecordedAt:
+          row.event_signups.attendanceRecordedAt?.toISOString() ?? null,
       };
     });
 
@@ -1221,7 +1259,8 @@ export class SignupsService {
       character: character ? this.buildCharacterDto(character) : null,
       confirmationStatus: signup.confirmationStatus as ConfirmationStatus,
       status: (signup.status as SignupStatus) ?? 'signed_up',
-      preferredRoles: (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
+      preferredRoles:
+        (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
       attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
       attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
     };
@@ -1252,7 +1291,8 @@ export class SignupsService {
       discordUserId: signup.discordUserId,
       discordUsername: signup.discordUsername,
       discordAvatarHash: signup.discordAvatarHash,
-      preferredRoles: (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
+      preferredRoles:
+        (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
       attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
       attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
     };
@@ -1486,13 +1526,15 @@ export class SignupsService {
 
     // ROK-459: When a slot vacates, check for tentative unassigned players
     if (assignment && assignment.role && assignment.role !== 'bench') {
-      this.reslotTentativePlayer(eventId, assignment.role, assignment.position).catch(
-        (err: unknown) => {
-          this.logger.warn(
-            `ROK-459: Failed tentative reslot check (admin remove): ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        },
-      );
+      this.reslotTentativePlayer(
+        eventId,
+        assignment.role,
+        assignment.position,
+      ).catch((err: unknown) => {
+        this.logger.warn(
+          `ROK-459: Failed tentative reslot check (admin remove): ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
     }
   }
 
@@ -1689,10 +1731,7 @@ export class SignupsService {
       this.db
         .select()
         .from(schema.eventSignups)
-        .leftJoin(
-          schema.users,
-          eq(schema.eventSignups.userId, schema.users.id),
-        )
+        .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
         .leftJoin(
           schema.characters,
           eq(schema.eventSignups.characterId, schema.characters.id),
@@ -1700,10 +1739,7 @@ export class SignupsService {
         .leftJoin(
           schema.rosterAssignments,
           and(
-            eq(
-              schema.rosterAssignments.signupId,
-              schema.eventSignups.id,
-            ),
+            eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
             eq(schema.rosterAssignments.eventId, eventId),
           ),
         )
@@ -1922,8 +1958,7 @@ export class SignupsService {
       // No new role (moved to unassigned pool) → not a reassign notification
       if (newRole === null) continue;
 
-      const formatLabel = (r: string) =>
-        r.charAt(0).toUpperCase() + r.slice(1);
+      const formatLabel = (r: string) => r.charAt(0).toUpperCase() + r.slice(1);
 
       if (oldRole === 'bench' && newRole !== 'bench') {
         // Promoted from bench → use existing bench_promoted type
@@ -1995,8 +2030,7 @@ export class SignupsService {
       if (newRole === null) continue;
 
       const isGeneric = newRole === 'player';
-      const formatLabel = (r: string) =>
-        r.charAt(0).toUpperCase() + r.slice(1);
+      const formatLabel = (r: string) => r.charAt(0).toUpperCase() + r.slice(1);
 
       await this.notificationService.create({
         userId: assignment.userId,
@@ -2068,7 +2102,13 @@ export class SignupsService {
 
       if (slotConfig.type !== 'mmo') {
         // Generic games: direct assign to first open 'player' slot
-        return this.promoteGenericSlot(tx, eventId, signupId, slotConfig, username);
+        return this.promoteGenericSlot(
+          tx,
+          eventId,
+          signupId,
+          slotConfig,
+          username,
+        );
       }
 
       // 3. Snapshot roster assignments before allocation to detect chain moves
@@ -2278,15 +2318,41 @@ export class SignupsService {
    */
   private async detectChainMoves(
     tx: PostgresJsDatabase<typeof schema>,
-    before: Array<{ id: number; signupId: number; role: string | null; position: number }>,
-    after: Array<{ id: number; signupId: number; role: string | null; position: number }>,
+    before: Array<{
+      id: number;
+      signupId: number;
+      role: string | null;
+      position: number;
+    }>,
+    after: Array<{
+      id: number;
+      signupId: number;
+      role: string | null;
+      position: number;
+    }>,
     excludeSignupId: number,
-  ): Promise<Array<{ signupId: number; username: string; fromRole: string; toRole: string }>> {
-    const moves: Array<{ signupId: number; username: string; fromRole: string; toRole: string }> = [];
+  ): Promise<
+    Array<{
+      signupId: number;
+      username: string;
+      fromRole: string;
+      toRole: string;
+    }>
+  > {
+    const moves: Array<{
+      signupId: number;
+      username: string;
+      fromRole: string;
+      toRole: string;
+    }> = [];
     const beforeMap = new Map(before.map((a) => [a.signupId, a]));
 
     // Collect signupIds that actually changed roles
-    const movedEntries: Array<{ signupId: number; fromRole: string; toRole: string }> = [];
+    const movedEntries: Array<{
+      signupId: number;
+      fromRole: string;
+      toRole: string;
+    }> = [];
     for (const afterEntry of after) {
       if (afterEntry.signupId === excludeSignupId) continue;
       const beforeEntry = beforeMap.get(afterEntry.signupId);
@@ -2305,7 +2371,11 @@ export class SignupsService {
     // Batch-fetch signups for all moved players
     const movedSignupIds = movedEntries.map((m) => m.signupId);
     const signups = await tx
-      .select({ id: schema.eventSignups.id, userId: schema.eventSignups.userId, discordUsername: schema.eventSignups.discordUsername })
+      .select({
+        id: schema.eventSignups.id,
+        userId: schema.eventSignups.userId,
+        discordUsername: schema.eventSignups.discordUsername,
+      })
       .from(schema.eventSignups)
       .where(inArray(schema.eventSignups.id, movedSignupIds));
     const signupMap = new Map(signups.map((s) => [s.id, s]));
@@ -2392,10 +2462,12 @@ export class SignupsService {
       .from(schema.rosterAssignments)
       .where(eq(schema.rosterAssignments.eventId, eventId));
 
-
-
     // Count filled slots per role
-    const filledPerRole: Record<string, number> = { tank: 0, healer: 0, dps: 0 };
+    const filledPerRole: Record<string, number> = {
+      tank: 0,
+      healer: 0,
+      dps: 0,
+    };
     for (const a of currentAssignments) {
       if (a.role && a.role in filledPerRole) {
         filledPerRole[a.role]++;
@@ -2409,12 +2481,16 @@ export class SignupsService {
     }
     // ROK-539: Sort preferred roles so tank/healer are tried before DPS
     const rolePriority: Record<string, number> = { tank: 0, healer: 1, dps: 2 };
-    const newPrefs = [...(newSignup.preferredRoles as string[])].sort(
+    const newPrefs = [...(newSignup.preferredRoles ?? [])].sort(
       (a, b) => (rolePriority[a] ?? 99) - (rolePriority[b] ?? 99),
     );
 
     // Build occupied positions per role for gap-finding
-    const occupiedPositions: Record<string, Set<number>> = { tank: new Set(), healer: new Set(), dps: new Set() };
+    const occupiedPositions: Record<string, Set<number>> = {
+      tank: new Set(),
+      healer: new Set(),
+      dps: new Set(),
+    };
     for (const a of currentAssignments) {
       if (a.role && a.role in occupiedPositions) {
         occupiedPositions[a.role].add(a.position);
@@ -2431,10 +2507,7 @@ export class SignupsService {
 
     // Try direct assignment: find an open slot matching one of the new player's prefs
     for (const role of newPrefs) {
-      if (
-        role in roleCapacity &&
-        filledPerRole[role] < roleCapacity[role]
-      ) {
+      if (role in roleCapacity && filledPerRole[role] < roleCapacity[role]) {
         // Open slot found — assign to first available position (fills gaps)
         const position = findFirstAvailablePosition(role);
         await tx.insert(schema.rosterAssignments).values({
@@ -2452,7 +2525,11 @@ export class SignupsService {
         this.logger.log(
           `Auto-allocated signup ${newSignupId} to ${role} slot ${position} (direct match)`,
         );
-        await this.benchPromotionService.cancelPromotion(eventId, role, position);
+        await this.benchPromotionService.cancelPromotion(
+          eventId,
+          role,
+          position,
+        );
         return;
       }
     }
@@ -2477,9 +2554,10 @@ export class SignupsService {
         const move = chain.moves[i];
         // If there's a subsequent move in the chain that freed a position in this role, take it
         const nextMove = i < chain.moves.length - 1 ? chain.moves[i + 1] : null;
-        const newPos = (nextMove && nextMove.fromRole === move.toRole)
-          ? nextMove.position
-          : findFirstAvailablePosition(move.toRole);
+        const newPos =
+          nextMove && nextMove.fromRole === move.toRole
+            ? nextMove.position
+            : findFirstAvailablePosition(move.toRole);
         await tx
           .update(schema.rosterAssignments)
           .set({ role: move.toRole, position: newPos })
@@ -2514,14 +2592,20 @@ export class SignupsService {
       this.logger.log(
         `Auto-allocated signup ${newSignupId} to ${freedRole} slot ${freedPosition} (${chain.moves.length}-step chain rearrangement)`,
       );
-      await this.benchPromotionService.cancelPromotion(eventId, freedRole, freedPosition);
+      await this.benchPromotionService.cancelPromotion(
+        eventId,
+        freedRole,
+        freedPosition,
+      );
       return;
     }
 
     // ROK-459: No rearrangement possible among confirmed players — try tentative displacement.
     // If a tentative player occupies a slot in one of the new player's preferred roles,
     // displace the longest-tentative to unassigned pool and give their slot to the new player.
-    const newSignupStatus = allSignups.find((s) => s.id === newSignupId)?.status;
+    const newSignupStatus = allSignups.find(
+      (s) => s.id === newSignupId,
+    )?.status;
     if (newSignupStatus !== 'tentative') {
       const displaced = await this.displaceTentativeForSlot(
         tx,
@@ -2577,7 +2661,7 @@ export class SignupsService {
 
       // Find first candidate who prefers the vacated role
       const candidate = candidates.find((c) => {
-        const prefs = (c.preferredRoles as string[] | null) ?? [];
+        const prefs = c.preferredRoles ?? [];
         return prefs.includes(vacatedRole);
       });
 
@@ -2671,7 +2755,7 @@ export class SignupsService {
 
     // Find one that wants this role
     const candidate = unassignedConfirmed.find((s) => {
-      const prefs = (s.preferredRoles as string[] | null) ?? [];
+      const prefs = s.preferredRoles ?? [];
       return prefs.includes(role);
     });
 
@@ -2715,8 +2799,18 @@ export class SignupsService {
     eventId: number,
     newSignupId: number,
     newPrefs: string[],
-    currentAssignments: Array<{ id: number; signupId: number; role: string | null; position: number }>,
-    allSignups: Array<{ id: number; preferredRoles: string[] | null; status: string; signedUpAt: Date | null }>,
+    currentAssignments: Array<{
+      id: number;
+      signupId: number;
+      role: string | null;
+      position: number;
+    }>,
+    allSignups: Array<{
+      id: number;
+      preferredRoles: string[] | null;
+      status: string;
+      signedUpAt: Date | null;
+    }>,
     roleCapacity: Record<string, number>,
     occupiedPositions: Record<string, Set<number>>,
     findFirstAvailablePosition: (role: string) => number,
@@ -2744,14 +2838,19 @@ export class SignupsService {
 
       const victim = tentativeOccupants[0];
       const victimSignup = signupById.get(victim.signupId);
-      const victimPrefs = (victimSignup?.preferredRoles as string[] | null) ?? [];
+      const victimPrefs =
+        (victimSignup?.preferredRoles as string[] | null) ?? [];
 
       // Try to rearrange the tentative player to another preferred role (not the displaced role)
-      const alternativeRoles = victimPrefs.filter((r) => r !== role && r in roleCapacity);
+      const alternativeRoles = victimPrefs.filter(
+        (r) => r !== role && r in roleCapacity,
+      );
       let rearrangedToRole: string | undefined;
 
       for (const altRole of alternativeRoles) {
-        const filledInAlt = currentAssignments.filter((a) => a.role === altRole).length;
+        const filledInAlt = currentAssignments.filter(
+          (a) => a.role === altRole,
+        ).length;
         if (filledInAlt < roleCapacity[altRole]) {
           // Open slot in alternative role — move tentative player there
           const newPos = findFirstAvailablePosition(altRole);
@@ -2781,7 +2880,9 @@ export class SignupsService {
       }
 
       // Assign new confirmed player to the freed slot
-      const freedPosition = rearrangedToRole ? findFirstAvailablePosition(role) : victim.position;
+      const freedPosition = rearrangedToRole
+        ? findFirstAvailablePosition(role)
+        : victim.position;
       await tx.insert(schema.rosterAssignments).values({
         eventId,
         signupId: newSignupId,
@@ -2799,7 +2900,11 @@ export class SignupsService {
       this.logger.log(
         `ROK-459: Auto-allocated confirmed signup ${newSignupId} to ${role} slot ${freedPosition} (tentative displacement)`,
       );
-      await this.benchPromotionService.cancelPromotion(eventId, role, freedPosition);
+      await this.benchPromotionService.cancelPromotion(
+        eventId,
+        role,
+        freedPosition,
+      );
 
       // Send notification to displaced player
       if (victimSignup) {
@@ -2864,16 +2969,36 @@ export class SignupsService {
    */
   private findRearrangementChain(
     newPrefs: string[],
-    currentAssignments: Array<{ id: number; signupId: number; role: string | null; position: number }>,
+    currentAssignments: Array<{
+      id: number;
+      signupId: number;
+      role: string | null;
+      position: number;
+    }>,
     allSignups: Array<{ id: number; preferredRoles: string[] | null }>,
     roleCapacity: Record<string, number>,
     filledPerRole: Record<string, number>,
-  ): { freedRole: string; moves: Array<{ assignmentId: number; signupId: number; fromRole: string; toRole: string; position: number }> } | null {
+  ): {
+    freedRole: string;
+    moves: Array<{
+      assignmentId: number;
+      signupId: number;
+      fromRole: string;
+      toRole: string;
+      position: number;
+    }>;
+  } | null {
     const MAX_DEPTH = 3;
 
     interface QueueEntry {
       roleToFree: string;
-      moves: Array<{ assignmentId: number; signupId: number; fromRole: string; toRole: string; position: number }>;
+      moves: Array<{
+        assignmentId: number;
+        signupId: number;
+        fromRole: string;
+        toRole: string;
+        position: number;
+      }>;
       usedSignupIds: Set<number>;
     }
 
@@ -2892,16 +3017,21 @@ export class SignupsService {
 
       // Find flexible occupants in the role we need to free
       const occupants = currentAssignments.filter(
-        (a) => a.role === entry.roleToFree && !entry.usedSignupIds.has(a.signupId),
+        (a) =>
+          a.role === entry.roleToFree && !entry.usedSignupIds.has(a.signupId),
       );
 
       for (const occupant of occupants) {
-        const occupantSignup = allSignups.find((s) => s.id === occupant.signupId);
-        const occupantPrefs = (occupantSignup?.preferredRoles as string[] | null) ?? [];
+        const occupantSignup = allSignups.find(
+          (s) => s.id === occupant.signupId,
+        );
+        const occupantPrefs =
+          (occupantSignup?.preferredRoles as string[] | null) ?? [];
         if (occupantPrefs.length <= 1) continue;
 
         for (const altRole of occupantPrefs) {
-          if (altRole === entry.roleToFree || !(altRole in roleCapacity)) continue;
+          if (altRole === entry.roleToFree || !(altRole in roleCapacity))
+            continue;
 
           const move = {
             assignmentId: occupant.id,
@@ -2913,21 +3043,35 @@ export class SignupsService {
           const newMoves = [...entry.moves, move];
 
           // Count how many moves are already targeting this altRole
-          const movesIntoAltRole = newMoves.filter((m) => m.toRole === altRole).length;
+          const movesIntoAltRole = newMoves.filter(
+            (m) => m.toRole === altRole,
+          ).length;
           const effectiveFilled = filledPerRole[altRole] + movesIntoAltRole;
           // Also subtract any moves OUT of altRole in the chain
-          const movesOutOfAltRole = newMoves.filter((m) => m.fromRole === altRole).length;
+          const movesOutOfAltRole = newMoves.filter(
+            (m) => m.fromRole === altRole,
+          ).length;
           const netFilled = effectiveFilled - movesOutOfAltRole;
 
           if (netFilled <= roleCapacity[altRole]) {
             // This role has space — chain complete
-            return { freedRole: entry.moves.length === 0 ? entry.roleToFree : entry.moves[0].fromRole, moves: newMoves };
+            return {
+              freedRole:
+                entry.moves.length === 0
+                  ? entry.roleToFree
+                  : entry.moves[0].fromRole,
+              moves: newMoves,
+            };
           }
 
           // altRole is also full — continue BFS
           const newUsed = new Set(entry.usedSignupIds);
           newUsed.add(occupant.signupId);
-          queue.push({ roleToFree: altRole, moves: newMoves, usedSignupIds: newUsed });
+          queue.push({
+            roleToFree: altRole,
+            moves: newMoves,
+            usedSignupIds: newUsed,
+          });
         }
       }
     }
@@ -2993,7 +3137,10 @@ export class SignupsService {
    * Emit a signup lifecycle event for Discord embed sync (ROK-119).
    * Fires asynchronously — failures are logged but do not block the caller.
    */
-  private emitSignupEvent(eventName: string, payload: SignupEventPayload): void {
+  private emitSignupEvent(
+    eventName: string,
+    payload: SignupEventPayload,
+  ): void {
     this.eventEmitter.emit(eventName, payload);
   }
 
@@ -3036,8 +3183,14 @@ export class SignupsService {
             avatarUrl: row.characters.avatarUrl,
           }
         : null,
-      preferredRoles: (row.event_signups.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
-      signupStatus: row.event_signups.status as 'signed_up' | 'tentative' | 'declined',
+      preferredRoles:
+        (row.event_signups.preferredRoles as
+          | ('tank' | 'healer' | 'dps')[]
+          | null) ?? null,
+      signupStatus: row.event_signups.status as
+        | 'signed_up'
+        | 'tentative'
+        | 'declined',
     };
   }
 }

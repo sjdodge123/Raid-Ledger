@@ -3,7 +3,6 @@
  * Covers the handleEventUnbind path: event lookup, permission checks,
  * clearing the override, emitting event.updated, and autocomplete.
  */
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UnbindCommand } from './unbind.command';

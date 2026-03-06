@@ -22,7 +22,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
 import { DemoDataService } from './demo-data.service';
-import {
+import type {
   IgdbSyncStatusDto,
   IgdbHealthStatusDto,
   AdminGameListResponseDto,
@@ -30,43 +30,45 @@ import {
   DemoDataResultDto,
   SteamConfigStatusDto,
 } from '@raid-ledger/contract';
-import { and, eq, sql } from 'drizzle-orm';
-import * as schema from '../drizzle/schema';
-import { buildWordMatchFilters } from '../common/search.util';
+import { testDiscordOAuth } from './settings-oauth.helpers';
+import { queryGameList } from './settings-games.helpers';
+import {
+  testIgdbCredentials,
+  testBlizzardCredentials,
+  testSteamApiKey,
+} from './settings-api-test.helpers';
 
 export interface OAuthStatusResponse {
   configured: boolean;
   callbackUrl: string | null;
 }
-
 export interface IgdbStatusResponse {
   configured: boolean;
   health?: IgdbHealthStatusDto;
 }
-
 export interface BlizzardStatusResponse {
   configured: boolean;
+}
+export interface OAuthTestResponse {
+  success: boolean;
+  message: string;
 }
 
 export class BlizzardConfigDto {
   @IsString()
   @IsNotEmpty({ message: 'Client ID is required' })
   clientId!: string;
-
   @IsString()
   @IsNotEmpty({ message: 'Client Secret is required' })
   clientSecret!: string;
 }
-
 export class OAuthConfigDto {
   @IsString()
   @IsNotEmpty({ message: 'Client ID is required' })
   clientId!: string;
-
   @IsString()
   @IsNotEmpty({ message: 'Client Secret is required' })
   clientSecret!: string;
-
   @IsOptional()
   @IsUrl(
     { require_tld: false },
@@ -74,26 +76,16 @@ export class OAuthConfigDto {
   )
   callbackUrl?: string;
 }
-
 export class IgdbConfigDto {
   @IsString()
   @IsNotEmpty({ message: 'Client ID is required' })
   clientId!: string;
-
   @IsString()
   @IsNotEmpty({ message: 'Client Secret is required' })
   clientSecret!: string;
 }
-
 export class SteamConfigDto {
-  @IsString()
-  @IsNotEmpty({ message: 'API key is required' })
-  apiKey!: string;
-}
-
-export interface OAuthTestResponse {
-  success: boolean;
-  message: string;
+  @IsString() @IsNotEmpty({ message: 'API key is required' }) apiKey!: string;
 }
 
 /**
@@ -112,39 +104,28 @@ export class AdminSettingsController {
     private readonly demoDataService: DemoDataService,
   ) {}
 
-  /**
-   * GET /admin/settings/oauth
-   * Returns current OAuth configuration status (not credentials).
-   */
+  // ── OAuth ───────────────────────────────────────────────
   @Get('oauth')
   async getOAuthStatus(): Promise<OAuthStatusResponse> {
     const config = await this.settingsService.getDiscordOAuthConfig();
-
     return {
       configured: config !== null,
       callbackUrl: config?.callbackUrl ?? null,
     };
   }
 
-  /**
-   * PUT /admin/settings/oauth
-   * Update Discord OAuth credentials.
-   */
   @Put('oauth')
   @HttpCode(HttpStatus.OK)
   async updateOAuthConfig(
     @Body() body: OAuthConfigDto,
   ): Promise<{ success: boolean; message: string }> {
-    const { clientId, clientSecret, callbackUrl } = body;
-
     await this.settingsService.setDiscordOAuthConfig({
-      clientId,
-      clientSecret,
-      callbackUrl: callbackUrl || 'http://localhost:3000/auth/discord/callback',
+      clientId: body.clientId,
+      clientSecret: body.clientSecret,
+      callbackUrl:
+        body.callbackUrl || 'http://localhost:3000/auth/discord/callback',
     });
-
     this.logger.log('Discord OAuth configuration updated via admin UI');
-
     return {
       success: true,
       message:
@@ -152,133 +133,15 @@ export class AdminSettingsController {
     };
   }
 
-  /**
-   * POST /admin/settings/oauth/test
-   * Test Discord OAuth credentials by making a token request.
-   */
   @Post('oauth/test')
   @HttpCode(HttpStatus.OK)
   async testOAuthConfig(): Promise<OAuthTestResponse> {
     const config = await this.settingsService.getDiscordOAuthConfig();
-
-    if (!config) {
-      return {
-        success: false,
-        message: 'Discord OAuth is not configured',
-      };
-    }
-
-    const headers = {
-      'User-Agent':
-        'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
-    };
-
-    try {
-      // Step 1: Try token endpoint to fully validate credentials.
-      const basicAuth = Buffer.from(
-        `${config.clientId}:${config.clientSecret}`,
-      ).toString('base64');
-
-      const tokenResponse = await fetch(
-        'https://discord.com/api/v10/oauth2/token',
-        {
-          method: 'POST',
-          headers: {
-            ...headers,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Authorization: `Basic ${basicAuth}`,
-          },
-          body: new URLSearchParams({
-            grant_type: 'client_credentials',
-            scope: 'identify',
-          }),
-        },
-      );
-
-      const tokenText = await tokenResponse.text();
-      let tokenData: { error?: string } | null = null;
-      try {
-        tokenData = JSON.parse(tokenText) as { error?: string };
-      } catch {
-        // Non-JSON response — likely Cloudflare HTML block, handled below
-      }
-
-      // If we got a proper JSON response, we can validate credentials directly
-      if (tokenData) {
-        if (
-          tokenResponse.status === 401 ||
-          tokenData.error === 'invalid_client'
-        ) {
-          return {
-            success: false,
-            message: 'Invalid Client ID or Client Secret',
-          };
-        }
-
-        if (
-          tokenResponse.status === 400 &&
-          tokenData.error === 'unsupported_grant_type'
-        ) {
-          return {
-            success: true,
-            message: 'Credentials are valid! Discord OAuth is ready to use.',
-          };
-        }
-
-        if (tokenResponse.ok) {
-          return {
-            success: true,
-            message: 'Credentials verified successfully!',
-          };
-        }
-
-        if (tokenResponse.status === 429) {
-          // JSON 429 — real Discord rate limit, fall through to gateway check
-        } else {
-          return {
-            success: false,
-            message: `Discord returned an error: ${tokenData.error || tokenResponse.status}`,
-          };
-        }
-      }
-
-      // Step 2: Token endpoint blocked (Cloudflare HTML 429 or JSON 429).
-      // Fall back to a lightweight GET to confirm Discord API is reachable.
-      // The actual credential validation will happen on first OAuth login.
-      this.logger.warn(
-        `Token endpoint blocked (${tokenResponse.status}), falling back to gateway check`,
-      );
-
-      const gatewayResponse = await fetch(
-        'https://discord.com/api/v10/gateway',
-        { headers },
-      );
-
-      if (gatewayResponse.ok) {
-        return {
-          success: true,
-          message:
-            'Discord API is reachable. Credentials are saved — they will be validated on first login.',
-        };
-      }
-
-      return {
-        success: false,
-        message: `Discord API is unreachable (HTTP ${gatewayResponse.status}). The server's IP may be blocked by Cloudflare.`,
-      };
-    } catch (error) {
-      this.logger.error('Failed to test Discord OAuth:', error);
-      return {
-        success: false,
-        message: 'Failed to connect to Discord API. Please check your network.',
-      };
-    }
+    if (!config)
+      return { success: false, message: 'Discord OAuth is not configured' };
+    return testDiscordOAuth(config);
   }
 
-  /**
-   * POST /admin/settings/oauth/clear
-   * Remove Discord OAuth configuration.
-   */
   @Post('oauth/clear')
   @HttpCode(HttpStatus.OK)
   async clearOAuthConfig(): Promise<{ success: boolean; message: string }> {
@@ -287,23 +150,11 @@ export class AdminSettingsController {
       this.settingsService.delete(SETTING_KEYS.DISCORD_CLIENT_SECRET),
       this.settingsService.delete(SETTING_KEYS.DISCORD_CALLBACK_URL),
     ]);
-
     this.logger.log('Discord OAuth configuration cleared via admin UI');
-
-    return {
-      success: true,
-      message: 'Discord OAuth configuration cleared.',
-    };
+    return { success: true, message: 'Discord OAuth configuration cleared.' };
   }
 
-  // ============================================================
-  // IGDB Configuration (ROK-229)
-  // ============================================================
-
-  /**
-   * GET /admin/settings/igdb
-   * Returns current IGDB configuration status.
-   */
+  // ── IGDB ────────────────────────────────────────────────
   @Get('igdb')
   async getIgdbStatus(): Promise<IgdbStatusResponse> {
     const configured = await this.settingsService.isIgdbConfigured();
@@ -311,10 +162,6 @@ export class AdminSettingsController {
     return { configured, health };
   }
 
-  /**
-   * PUT /admin/settings/igdb
-   * Update IGDB credentials.
-   */
   @Put('igdb')
   @HttpCode(HttpStatus.OK)
   async updateIgdbConfig(
@@ -324,70 +171,21 @@ export class AdminSettingsController {
       clientId: body.clientId,
       clientSecret: body.clientSecret,
     });
-
     this.logger.log('IGDB configuration updated via admin UI');
-
     return {
       success: true,
       message: 'IGDB configuration saved. Game discovery is now enabled.',
     };
   }
 
-  /**
-   * POST /admin/settings/igdb/test
-   * Test IGDB credentials by fetching a real Twitch OAuth token.
-   */
   @Post('igdb/test')
   @HttpCode(HttpStatus.OK)
   async testIgdbConfig(): Promise<OAuthTestResponse> {
     const config = await this.settingsService.getIgdbConfig();
-
-    if (!config) {
-      return {
-        success: false,
-        message: 'IGDB is not configured',
-      };
-    }
-
-    try {
-      const response = await fetch('https://id.twitch.tv/oauth2/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          grant_type: 'client_credentials',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        this.logger.warn(`IGDB test failed: ${response.status} ${errorText}`);
-        return {
-          success: false,
-          message: 'Invalid Client ID or Client Secret',
-        };
-      }
-
-      return {
-        success: true,
-        message: 'Credentials verified! IGDB / Twitch API is ready.',
-      };
-    } catch (error) {
-      this.logger.error('Failed to test IGDB credentials:', error);
-      return {
-        success: false,
-        message: 'Failed to connect to Twitch API. Please check your network.',
-      };
-    }
+    if (!config) return { success: false, message: 'IGDB is not configured' };
+    return testIgdbCredentials(config);
   }
 
-  /**
-   * POST /admin/settings/igdb/clear
-   * Remove IGDB configuration.
-   */
   @Post('igdb/clear')
   @HttpCode(HttpStatus.OK)
   async clearIgdbConfig(): Promise<{ success: boolean; message: string }> {
@@ -395,36 +193,17 @@ export class AdminSettingsController {
       this.settingsService.delete(SETTING_KEYS.IGDB_CLIENT_ID),
       this.settingsService.delete(SETTING_KEYS.IGDB_CLIENT_SECRET),
     ]);
-
-    // Emit event to clear cached token in IgdbService
     this.settingsService['eventEmitter'].emit('settings.igdb.updated', null);
-
     this.logger.log('IGDB configuration cleared via admin UI');
-
-    return {
-      success: true,
-      message: 'IGDB configuration cleared.',
-    };
+    return { success: true, message: 'IGDB configuration cleared.' };
   }
 
-  // ============================================================
-  // Blizzard API Configuration (ROK-234)
-  // ============================================================
-
-  /**
-   * GET /admin/settings/blizzard
-   * Returns current Blizzard API configuration status.
-   */
+  // ── Blizzard ────────────────────────────────────────────
   @Get('blizzard')
   async getBlizzardStatus(): Promise<BlizzardStatusResponse> {
-    const configured = await this.settingsService.isBlizzardConfigured();
-    return { configured };
+    return { configured: await this.settingsService.isBlizzardConfigured() };
   }
 
-  /**
-   * PUT /admin/settings/blizzard
-   * Update Blizzard API credentials.
-   */
   @Put('blizzard')
   @HttpCode(HttpStatus.OK)
   async updateBlizzardConfig(
@@ -434,9 +213,7 @@ export class AdminSettingsController {
       clientId: body.clientId,
       clientSecret: body.clientSecret,
     });
-
     this.logger.log('Blizzard API configuration updated via admin UI');
-
     return {
       success: true,
       message:
@@ -444,113 +221,42 @@ export class AdminSettingsController {
     };
   }
 
-  /**
-   * POST /admin/settings/blizzard/test
-   * Test Blizzard credentials by fetching a real OAuth token.
-   */
   @Post('blizzard/test')
   @HttpCode(HttpStatus.OK)
   async testBlizzardConfig(): Promise<OAuthTestResponse> {
     const config = await this.settingsService.getBlizzardConfig();
-
-    if (!config) {
-      return {
-        success: false,
-        message: 'Blizzard API is not configured',
-      };
-    }
-
-    try {
-      const response = await fetch('https://us.battle.net/oauth/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64')}`,
-        },
-        body: new URLSearchParams({
-          grant_type: 'client_credentials',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        this.logger.warn(
-          `Blizzard test failed: ${response.status} ${errorText}`,
-        );
-        return {
-          success: false,
-          message: 'Invalid Client ID or Client Secret',
-        };
-      }
-
-      return {
-        success: true,
-        message: 'Credentials verified! Blizzard API is ready.',
-      };
-    } catch (error) {
-      this.logger.error('Failed to test Blizzard credentials:', error);
-      return {
-        success: false,
-        message:
-          'Failed to connect to Blizzard API. Please check your network.',
-      };
-    }
+    if (!config)
+      return { success: false, message: 'Blizzard API is not configured' };
+    return testBlizzardCredentials(config);
   }
 
-  /**
-   * POST /admin/settings/blizzard/clear
-   * Remove Blizzard API configuration.
-   */
   @Post('blizzard/clear')
   @HttpCode(HttpStatus.OK)
-  async clearBlizzardConfig(): Promise<{
-    success: boolean;
-    message: string;
-  }> {
+  async clearBlizzardConfig(): Promise<{ success: boolean; message: string }> {
     await Promise.all([
       this.settingsService.delete(SETTING_KEYS.BLIZZARD_CLIENT_ID),
       this.settingsService.delete(SETTING_KEYS.BLIZZARD_CLIENT_SECRET),
     ]);
-
     this.settingsService['eventEmitter'].emit(
       'settings.blizzard.updated',
       null,
     );
-
     this.logger.log('Blizzard API configuration cleared via admin UI');
-
-    return {
-      success: true,
-      message: 'Blizzard API configuration cleared.',
-    };
+    return { success: true, message: 'Blizzard API configuration cleared.' };
   }
 
-  // ============================================================
-  // Default Timezone (ROK-431)
-  // ============================================================
-
-  /**
-   * GET /admin/settings/timezone
-   * Returns the configured default timezone.
-   */
+  // ── Timezone ────────────────────────────────────────────
   @Get('timezone')
   async getTimezone(): Promise<{ timezone: string | null }> {
-    const timezone = await this.settingsService.getDefaultTimezone();
-    return { timezone };
+    return { timezone: await this.settingsService.getDefaultTimezone() };
   }
 
-  /**
-   * PUT /admin/settings/timezone
-   * Update the default timezone.
-   */
   @Put('timezone')
   @HttpCode(HttpStatus.OK)
   async updateTimezone(
     @Body() body: { timezone?: string | null },
   ): Promise<{ success: boolean; message: string }> {
     const { timezone } = body;
-
-    // Empty/null/undefined clears the setting (falls back to UTC)
     if (!timezone) {
       await this.settingsService.delete(SETTING_KEYS.DEFAULT_TIMEZONE);
       this.logger.log('Default timezone cleared (UTC fallback) via admin UI');
@@ -559,40 +265,22 @@ export class AdminSettingsController {
         message: 'Default timezone cleared (UTC fallback).',
       };
     }
-
-    // Validate the timezone is a valid IANA timezone
     try {
       Intl.DateTimeFormat(undefined, { timeZone: timezone });
     } catch {
       throw new BadRequestException(`Invalid timezone: ${timezone}`);
     }
-
     await this.settingsService.setDefaultTimezone(timezone);
     this.logger.log(`Default timezone updated to ${timezone} via admin UI`);
-
-    return {
-      success: true,
-      message: `Default timezone set to ${timezone}.`,
-    };
+    return { success: true, message: `Default timezone set to ${timezone}.` };
   }
 
-  // ============================================================
-  // ROK-173: IGDB Sync & Game Library
-  // ============================================================
-
-  /**
-   * GET /admin/settings/igdb/sync-status
-   * Returns sync status (last sync time, game count, sync in progress).
-   */
+  // ── IGDB Sync & Game Library ────────────────────────────
   @Get('igdb/sync-status')
   async getIgdbSyncStatus(): Promise<IgdbSyncStatusDto> {
     return this.igdbService.getSyncStatus();
   }
 
-  /**
-   * POST /admin/settings/igdb/sync
-   * Trigger a manual IGDB sync.
-   */
   @Post('igdb/sync')
   @HttpCode(HttpStatus.OK)
   async triggerIgdbSync(): Promise<{
@@ -622,10 +310,6 @@ export class AdminSettingsController {
     }
   }
 
-  /**
-   * GET /admin/settings/games
-   * Paginated game library for admin management.
-   */
   @Get('games')
   async listGames(
     @Query('search') search?: string,
@@ -633,327 +317,139 @@ export class AdminSettingsController {
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 20,
   ): Promise<AdminGameListResponseDto> {
-    const db = this.igdbService.database;
-
-    const safePage = Math.max(1, page);
-    const safeLimit = Math.min(100, Math.max(1, limit));
-    const offset = (safePage - 1) * safeLimit;
-
-    const conditions = [];
-    if (search) {
-      conditions.push(...buildWordMatchFilters(schema.games.name, search));
-    }
-    // When showHidden is 'only', show hidden and banned games
-    // When showHidden is 'true', show all games (no hidden/banned filter)
-    // Otherwise, show only visible, non-banned games
-    if (showHidden === 'only') {
-      conditions.push(
-        sql`(${schema.games.hidden} = true OR ${schema.games.banned} = true)`,
-      );
-    } else if (showHidden !== 'true') {
-      conditions.push(eq(schema.games.hidden, false));
-      conditions.push(eq(schema.games.banned, false));
-    }
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-    const [countResult, rows] = await Promise.all([
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(schema.games)
-        .where(whereClause),
-      db
-        .select({
-          id: schema.games.id,
-          igdbId: schema.games.igdbId,
-          name: schema.games.name,
-          slug: schema.games.slug,
-          coverUrl: schema.games.coverUrl,
-          cachedAt: schema.games.cachedAt,
-          hidden: schema.games.hidden,
-          banned: schema.games.banned,
-        })
-        .from(schema.games)
-        .where(whereClause)
-        .orderBy(schema.games.name)
-        .limit(safeLimit)
-        .offset(offset),
-    ]);
-
-    const total = countResult[0]?.count ?? 0;
-
-    return {
-      data: rows.map((r) => ({
-        ...r,
-        cachedAt: r.cachedAt.toISOString(),
-      })),
-      meta: {
-        total,
-        page: safePage,
-        limit: safeLimit,
-        totalPages: Math.ceil(total / safeLimit),
-        hasMore: safePage * safeLimit < total,
-      },
-    };
+    return queryGameList(this.igdbService.database, {
+      search,
+      showHidden,
+      page,
+      limit,
+    });
   }
 
-  /**
-   * POST /admin/settings/games/:id/ban
-   * Ban a game — tombstones it so IGDB sync won't re-import it.
-   */
   @Post('games/:id/ban')
   @HttpCode(HttpStatus.OK)
   async banGame(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ success: boolean; message: string }> {
     const result = await this.igdbService.banGame(id);
-    if (!result.success) {
-      throw new BadRequestException(result.message);
-    }
+    if (!result.success) throw new BadRequestException(result.message);
     return { success: result.success, message: result.message };
   }
 
-  /**
-   * POST /admin/settings/games/:id/unban
-   * Unban a game and trigger a fresh IGDB import to restore it.
-   */
   @Post('games/:id/unban')
   @HttpCode(HttpStatus.OK)
   async unbanGame(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ success: boolean; message: string }> {
     const result = await this.igdbService.unbanGame(id);
-    if (!result.success) {
-      throw new BadRequestException(result.message);
-    }
+    if (!result.success) throw new BadRequestException(result.message);
     return { success: result.success, message: result.message };
   }
 
-  /**
-   * POST /admin/settings/games/:id/hide
-   * Hide a game from user-facing search/discovery.
-   */
   @Post('games/:id/hide')
   @HttpCode(HttpStatus.OK)
   async hideGame(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ success: boolean; message: string }> {
     const result = await this.igdbService.hideGame(id);
-    if (!result.success) {
-      throw new BadRequestException(result.message);
-    }
+    if (!result.success) throw new BadRequestException(result.message);
     return { success: result.success, message: result.message };
   }
 
-  /**
-   * POST /admin/settings/games/:id/unhide
-   * Unhide a previously hidden game.
-   */
   @Post('games/:id/unhide')
   @HttpCode(HttpStatus.OK)
   async unhideGame(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ success: boolean; message: string }> {
     const result = await this.igdbService.unhideGame(id);
-    if (!result.success) {
-      throw new BadRequestException(result.message);
-    }
+    if (!result.success) throw new BadRequestException(result.message);
     return { success: result.success, message: result.message };
   }
 
-  /**
-   * GET /admin/settings/igdb/adult-filter
-   * Get the current adult content filter status.
-   */
   @Get('igdb/adult-filter')
   async getAdultFilter(): Promise<{ enabled: boolean }> {
-    const enabled = await this.igdbService.isAdultFilterEnabled();
-    return { enabled };
+    return { enabled: await this.igdbService.isAdultFilterEnabled() };
   }
 
-  /**
-   * PUT /admin/settings/igdb/adult-filter
-   * Toggle the adult content filter.
-   * When enabled, auto-hides existing games with adult themes.
-   */
   @Put('igdb/adult-filter')
   @HttpCode(HttpStatus.OK)
   async setAdultFilter(
     @Body() body: { enabled: boolean },
   ): Promise<{ success: boolean; message: string; hiddenCount?: number }> {
     const enabled = body.enabled === true;
-
     await this.settingsService.set(
       SETTING_KEYS.IGDB_FILTER_ADULT,
       String(enabled),
     );
-
     let hiddenCount = 0;
-    if (enabled) {
-      // Auto-hide existing games with adult themes
-      hiddenCount = await this.igdbService.hideAdultGames();
-    }
-
+    if (enabled) hiddenCount = await this.igdbService.hideAdultGames();
     this.logger.log(
-      `Adult content filter ${enabled ? 'enabled' : 'disabled'} via admin UI` +
-        (hiddenCount > 0 ? ` (${hiddenCount} games auto-hidden)` : ''),
+      `Adult content filter ${enabled ? 'enabled' : 'disabled'} via admin UI${hiddenCount > 0 ? ` (${hiddenCount} games auto-hidden)` : ''}`,
     );
-
     return {
       success: true,
+      hiddenCount: enabled ? hiddenCount : undefined,
       message: enabled
         ? `Adult content filter enabled.${hiddenCount > 0 ? ` ${hiddenCount} games with adult themes were hidden.` : ''}`
         : 'Adult content filter disabled.',
-      hiddenCount: enabled ? hiddenCount : undefined,
     };
   }
 
-  // ============================================================
-  // ROK-193: Demo Data Management
-  // ============================================================
-
-  /**
-   * GET /admin/settings/demo/status
-   * Returns demo data entity counts and demoMode flag.
-   */
+  // ── Demo Data ───────────────────────────────────────────
   @Get('demo/status')
   async getDemoStatus(): Promise<DemoDataStatusDto> {
     return this.demoDataService.getStatus();
   }
-
-  /**
-   * POST /admin/settings/demo/install
-   * Install all demo data (users, events, characters, etc.).
-   */
   @Post('demo/install')
   @HttpCode(HttpStatus.OK)
   async installDemoData(): Promise<DemoDataResultDto> {
     return this.demoDataService.installDemoData();
   }
-
-  /**
-   * POST /admin/settings/demo/clear
-   * Delete all demo data in FK-safe order.
-   */
   @Post('demo/clear')
   @HttpCode(HttpStatus.OK)
   async clearDemoData(): Promise<DemoDataResultDto> {
     return this.demoDataService.clearDemoData();
   }
 
-  // ============================================================
-  // Steam API Key (ROK-417)
-  // ============================================================
-
-  /**
-   * GET /admin/settings/steam
-   * Returns current Steam API key configuration status.
-   */
+  // ── Steam ───────────────────────────────────────────────
   @Get('steam')
   async getSteamStatus(): Promise<SteamConfigStatusDto> {
-    const configured = await this.settingsService.isSteamConfigured();
-    return { configured };
+    return { configured: await this.settingsService.isSteamConfigured() };
   }
 
-  /**
-   * PUT /admin/settings/steam
-   * Update Steam API key.
-   */
   @Put('steam')
   @HttpCode(HttpStatus.OK)
   async updateSteamConfig(
     @Body() body: SteamConfigDto,
   ): Promise<{ success: boolean; message: string }> {
     await this.settingsService.setSteamApiKey(body.apiKey.trim());
-
     this.logger.log('Steam API key updated via admin UI');
-
     return {
       success: true,
       message: 'Steam API key saved. Steam library sync is now enabled.',
     };
   }
 
-  /**
-   * POST /admin/settings/steam/test
-   * Test Steam API key by calling GetSupportedAPIList.
-   */
   @Post('steam/test')
   @HttpCode(HttpStatus.OK)
   async testSteamConfig(): Promise<OAuthTestResponse> {
     const apiKey = await this.settingsService.getSteamApiKey();
-
-    if (!apiKey) {
-      return {
-        success: false,
-        message: 'Steam API key is not configured',
-      };
-    }
-
-    try {
-      const response = await fetch(
-        `https://api.steampowered.com/ISteamWebAPIUtil/GetSupportedAPIList/v1/?key=${encodeURIComponent(apiKey)}`,
-      );
-
-      if (!response.ok) {
-        if (response.status === 403) {
-          return {
-            success: false,
-            message: 'Invalid Steam API key',
-          };
-        }
-        return {
-          success: false,
-          message: `Steam API returned HTTP ${response.status}`,
-        };
-      }
-
-      return {
-        success: true,
-        message: 'Steam API key is valid!',
-      };
-    } catch (error) {
-      this.logger.error('Failed to test Steam API key:', error);
-      return {
-        success: false,
-        message: 'Failed to connect to Steam API. Please check your network.',
-      };
-    }
+    if (!apiKey)
+      return { success: false, message: 'Steam API key is not configured' };
+    return testSteamApiKey(apiKey);
   }
 
-  /**
-   * POST /admin/settings/steam/clear
-   * Remove Steam API key.
-   */
   @Post('steam/clear')
   @HttpCode(HttpStatus.OK)
   async clearSteamConfig(): Promise<{ success: boolean; message: string }> {
     await this.settingsService.clearSteamConfig();
-
     this.logger.log('Steam API key cleared via admin UI');
-
-    return {
-      success: true,
-      message: 'Steam API key cleared.',
-    };
+    return { success: true, message: 'Steam API key cleared.' };
   }
 
-  // ============================================================
-  // ROK-186: GitHub Feedback Integration
-  // @deprecated ROK-306 — Replaced by Sentry error tracking.
-  // These endpoints return deprecation notices; GitHub issue creation
-  // is now handled automatically via Sentry alert rules.
-  // ============================================================
-
-  /**
-   * @deprecated ROK-306 — GitHub PAT replaced by Sentry.
-   */
+  // ── GitHub (deprecated ROK-306) ─────────────────────────
+  /** @deprecated ROK-306 — GitHub PAT replaced by Sentry. */
   @Get('github')
-  getGitHubStatus(): {
-    configured: boolean;
-    deprecated: boolean;
-    message: string;
-  } {
+  getGitHubStatus() {
     return {
       configured: false,
       deprecated: true,
@@ -961,23 +457,17 @@ export class AdminSettingsController {
         'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306).',
     };
   }
-
-  /**
-   * @deprecated ROK-306 — GitHub PAT no longer supported.
-   */
+  /** @deprecated ROK-306 */
   @Put('github')
   @HttpCode(HttpStatus.OK)
-  updateGitHubConfig(): { success: boolean; message: string } {
+  updateGitHubConfig() {
     return {
       success: false,
       message:
         'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306). No configuration needed.',
     };
   }
-
-  /**
-   * @deprecated ROK-306 — GitHub PAT test no longer supported.
-   */
+  /** @deprecated ROK-306 */
   @Post('github/test')
   @HttpCode(HttpStatus.OK)
   testGitHubConfig(): OAuthTestResponse {
@@ -987,14 +477,10 @@ export class AdminSettingsController {
         'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306).',
     };
   }
-
-  /**
-   * @deprecated ROK-306 — GitHub PAT clear no longer needed.
-   */
+  /** @deprecated ROK-306 */
   @Post('github/clear')
   @HttpCode(HttpStatus.OK)
   async clearGitHubConfig(): Promise<{ success: boolean; message: string }> {
-    // Still clear any existing PAT for cleanup purposes
     await this.settingsService.delete(SETTING_KEYS.GITHUB_PAT);
     return {
       success: true,

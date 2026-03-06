@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Adversarial unit tests for IdentityPanel — ROK-352
  * Focus: query invalidation after updatePreference, error handling,
@@ -38,20 +37,22 @@ vi.mock('../../lib/avatar', () => ({
         }
         return null;
     },
-    resolveAvatar: (user: any) => {
+    resolveAvatar: (user: Record<string, unknown> | null) => {
         if (!user) return { url: null, type: 'initials' };
-        if (user.avatarPreference?.type === 'character' && user.avatarPreference.characterName) {
-            const char = user.characters?.find((c: any) => c.name === user.avatarPreference.characterName);
+        const pref = user.avatarPreference as Record<string, unknown> | null;
+        if (pref?.type === 'character' && pref.characterName) {
+            const chars = user.characters as Array<Record<string, unknown>> | undefined;
+            const char = chars?.find((c) => c.name === pref.characterName);
             if (char?.avatarUrl) return { url: char.avatarUrl, type: 'character' };
         }
-        if (user.avatarPreference?.type === 'discord' && user.avatar) {
+        if (pref?.type === 'discord' && user.avatar) {
             return { url: user.avatar, type: 'discord' };
         }
         if (user.customAvatarUrl) return { url: `http://localhost:3000${user.customAvatarUrl}`, type: 'custom' };
         if (user.avatar) return { url: user.avatar, type: 'discord' };
         return { url: null, type: 'initials' };
     },
-    toAvatarUser: (user: any) => ({
+    toAvatarUser: (user: Record<string, unknown>) => ({
         avatar: user.discordId && !user.discordId.startsWith('local:') && user.avatar
             ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
             : null,
@@ -144,24 +145,24 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             user: mockUser,
             isAuthenticated: true,
             refetch: mockRefetch,
-        } as any);
+        } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
         vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
             data: { data: [] },
             isLoading: false,
-        } as any);
+        } as unknown as ReturnType<typeof useCharactersHook.useMyCharacters>);
 
         vi.spyOn(useAvatarUploadHook, 'useAvatarUpload').mockReturnValue({
             upload: mockUpload,
             deleteAvatar: mockDeleteAvatar,
             isUploading: false,
             uploadProgress: 0,
-        } as any);
+        } as unknown as ReturnType<typeof useAvatarUploadHook.useAvatarUpload>);
 
         vi.spyOn(useSystemStatusHook, 'useSystemStatus').mockReturnValue({
             data: { isFirstRun: false, discordConfigured: true, blizzardConfigured: false },
             isLoading: false,
-        } as any);
+        } as unknown as ReturnType<typeof useSystemStatusHook.useSystemStatus>);
     });
 
     // ── Null user ────────────────────────────────────────────────────────────
@@ -172,7 +173,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 user: null,
                 isAuthenticated: false,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             const { container } = render(<IdentityPanel />, { wrapper: createWrapper() });
             expect(container.firstChild).toBeNull();
@@ -202,7 +203,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 user: { ...mockUser, discordId: 'local:xyz' },
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(<IdentityPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Local account')).toBeInTheDocument();
@@ -242,7 +243,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 user: { ...mockUser, discordId: '123456789', avatar: 'abc123' },
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
             vi.mocked(apiClient.updatePreference).mockResolvedValueOnce(undefined);
 
             const queryClient = new QueryClient({
@@ -295,7 +296,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 user: { ...mockUser, discordId: '123456789', avatar: 'abc123' },
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(
                 <QueryClientProvider client={queryClient}>
@@ -324,7 +325,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 user: { ...mockUser, discordId: '123456789', avatar: 'abc123' },
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(<IdentityPanel />, { wrapper: createWrapper() });
 
@@ -335,7 +336,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             }
 
             await waitFor(() => {
-                expect((toast.toast as any).error).toHaveBeenCalledWith('Failed to save avatar preference');
+                expect(vi.mocked(toast.toast.error)).toHaveBeenCalledWith('Failed to save avatar preference');
             });
         });
 
@@ -351,7 +352,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 user: { ...mockUser, discordId: '123456789', avatar: 'abc123' },
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(
                 <QueryClientProvider client={queryClient}>
@@ -382,7 +383,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 user: { ...mockUser, discordId: 'local:xyz', avatar: null, customAvatarUrl: null },
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             // No avatar options → modal opens but no clickable avatar buttons
             render(<IdentityPanel />, { wrapper: createWrapper() });
@@ -403,7 +404,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                     ],
                 },
                 isLoading: false,
-            } as any);
+            } as unknown as ReturnType<typeof useCharactersHook.useMyCharacters>);
 
             render(<IdentityPanel />, { wrapper: createWrapper() });
             fireEvent.click(screen.getByRole('button', { name: /change avatar/i }));
@@ -425,7 +426,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 user: { ...mockUser, discordId: '123456789', avatar: 'abc123' },
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(<IdentityPanel />, { wrapper: createWrapper() });
             fireEvent.click(screen.getByRole('button', { name: /change avatar/i }));
@@ -438,7 +439,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                         'avatarPreference',
                         { type: 'discord' },
                     );
-                    const callArg = vi.mocked(apiClient.updatePreference).mock.calls[0][1] as any;
+                    const callArg = vi.mocked(apiClient.updatePreference).mock.calls[0][1] as Record<string, unknown>;
                     expect(callArg.characterName).toBeUndefined();
                 });
             }

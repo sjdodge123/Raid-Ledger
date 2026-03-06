@@ -53,126 +53,11 @@ export class RosterViewCommand
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
     await interaction.deferReply({ ephemeral: true });
-
     const eventInput = interaction.options.getString('event', true);
-
     try {
-      // Try to parse as event ID first, otherwise search by title
-      const eventId = parseInt(eventInput, 10);
-      let resolvedEventId: number;
-
-      if (!isNaN(eventId)) {
-        resolvedEventId = eventId;
-      } else {
-        // Search by title
-        const events = await this.db
-          .select({ id: schema.events.id })
-          .from(schema.events)
-          .where(ilike(schema.events.title, eventInput))
-          .limit(1);
-
-        if (events.length === 0) {
-          await interaction.editReply(
-            `No event found matching "${eventInput}".`,
-          );
-          return;
-        }
-        resolvedEventId = events[0].id;
-      }
-
-      const roster =
-        await this.signupsService.getRosterWithAssignments(resolvedEventId);
-
-      // Get event details for the title
-      const [event] = await this.db
-        .select({
-          title: schema.events.title,
-          maxAttendees: schema.events.maxAttendees,
-        })
-        .from(schema.events)
-        .where(sql`${schema.events.id} = ${resolvedEventId}`)
-        .limit(1);
-
-      if (!event) {
-        await interaction.editReply('Event not found.');
-        return;
-      }
-
-      // Build role breakdown
-      const roleGroups = new Map<string, string[]>();
-      for (const assignment of roster.assignments) {
-        const role = assignment.slot ?? 'unassigned';
-        if (!roleGroups.has(role)) {
-          roleGroups.set(role, []);
-        }
-        roleGroups.get(role)!.push(assignment.username);
-      }
-
-      const lines: string[] = [];
-      const roleOrder = ['tank', 'healer', 'dps', 'flex', 'player', 'bench'];
-      const staticEmojis: Record<string, string> = {
-        flex: '\uD83D\uDD00',
-        player: '\uD83C\uDFAE',
-        bench: '\uD83E\uDE91',
-      };
-
-      for (const role of roleOrder) {
-        const members = roleGroups.get(role);
-        if (!members || members.length === 0) continue;
-
-        const emoji =
-          this.emojiService.getRoleEmoji(role) || staticEmojis[role] || '';
-        const slotCount = roster.slots
-          ? ((roster.slots as Record<string, number>)[role] ?? 0)
-          : 0;
-        const header = slotCount
-          ? `${emoji} **${role.charAt(0).toUpperCase() + role.slice(1)}** (${members.length}/${slotCount})`
-          : `${emoji} **${role.charAt(0).toUpperCase() + role.slice(1)}** (${members.length})`;
-
-        lines.push(header);
-        for (const name of members) {
-          lines.push(`  \u2022 ${name}`);
-        }
-        lines.push('');
-      }
-
-      // Unassigned pool
-      if (roster.pool.length > 0) {
-        lines.push(`**Unassigned** (${roster.pool.length})`);
-        for (const member of roster.pool) {
-          lines.push(`  \u2022 ${member.username}`);
-        }
-      }
-
-      const totalAssigned = roster.assignments.length;
-      const totalPool = roster.pool.length;
-      const total = totalAssigned + totalPool;
-
-      const embed = new EmbedBuilder()
-        .setColor(EMBED_COLORS.ROSTER_UPDATE)
-        .setTitle(`Roster: ${event.title}`)
-        .setDescription(lines.length > 0 ? lines.join('\n') : 'No signups yet.')
-        .setFooter({
-          text: `${total} total signups${event.maxAttendees ? ` / ${event.maxAttendees} slots` : ''}`,
-        })
-        .setTimestamp();
-
-      const clientUrl = process.env.CLIENT_URL ?? null;
-      const components: ActionRowBuilder<ButtonBuilder>[] = [];
-      if (clientUrl) {
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setLabel('View Full Roster')
-            .setStyle(ButtonStyle.Link)
-            .setURL(`${clientUrl}/events/${resolvedEventId}`),
-        );
-        components.push(row);
-      }
-
-      await interaction.editReply({
-        embeds: [embed],
-        components,
-      });
+      const eventId = await this.resolveEventId(interaction, eventInput);
+      if (eventId === null) return;
+      await this.showRoster(interaction, eventId);
     } catch (error) {
       this.logger.error('Failed to show roster:', error);
       await interaction.editReply(
@@ -181,6 +66,86 @@ export class RosterViewCommand
     }
   }
 
+  /** Resolve event input to an ID. Returns null if not found. */
+  private async resolveEventId(
+    interaction: ChatInputCommandInteraction,
+    input: string,
+  ): Promise<number | null> {
+    const parsed = parseInt(input, 10);
+    if (!isNaN(parsed)) return parsed;
+    const events = await this.db
+      .select({ id: schema.events.id })
+      .from(schema.events)
+      .where(ilike(schema.events.title, input))
+      .limit(1);
+    if (events.length === 0) {
+      await interaction.editReply(`No event found matching "${input}".`);
+      return null;
+    }
+    return events[0].id;
+  }
+
+  /** Build and display the roster embed for an event. */
+  private async showRoster(
+    interaction: ChatInputCommandInteraction,
+    eventId: number,
+  ): Promise<void> {
+    const roster = await this.signupsService.getRosterWithAssignments(eventId);
+    const [event] = await this.db
+      .select({
+        title: schema.events.title,
+        maxAttendees: schema.events.maxAttendees,
+      })
+      .from(schema.events)
+      .where(sql`${schema.events.id} = ${eventId}`)
+      .limit(1);
+    if (!event) {
+      await interaction.editReply('Event not found.');
+      return;
+    }
+    const lines = this.buildRosterLines(roster);
+    const total = roster.assignments.length + roster.pool.length;
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.ROSTER_UPDATE)
+      .setTitle(`Roster: ${event.title}`)
+      .setDescription(lines.length > 0 ? lines.join('\n') : 'No signups yet.')
+      .setFooter({
+        text: `${total} total signups${event.maxAttendees ? ` / ${event.maxAttendees} slots` : ''}`,
+      })
+      .setTimestamp();
+    const components = buildViewRosterRow(eventId);
+    await interaction.editReply({ embeds: [embed], components });
+  }
+
+  /** Build roster display lines grouped by role. */
+  private buildRosterLines(
+    roster: Awaited<ReturnType<SignupsService['getRosterWithAssignments']>>,
+  ): string[] {
+    const groups = groupAssignmentsByRole(roster.assignments);
+    const lines: string[] = [];
+    for (const role of ROLE_ORDER) {
+      const members = groups.get(role);
+      if (!members || members.length === 0) continue;
+      const emoji =
+        this.emojiService.getRoleEmoji(role) || STATIC_EMOJIS[role] || '';
+      const slots = roster.slots as Record<string, number> | null;
+      const slotCount = slots ? (slots[role] ?? 0) : 0;
+      const cap = role.charAt(0).toUpperCase() + role.slice(1);
+      const header = slotCount
+        ? `${emoji} **${cap}** (${members.length}/${slotCount})`
+        : `${emoji} **${cap}** (${members.length})`;
+      lines.push(header);
+      for (const name of members) lines.push(`  \u2022 ${name}`);
+      lines.push('');
+    }
+    if (roster.pool.length > 0) {
+      lines.push(`**Unassigned** (${roster.pool.length})`);
+      for (const m of roster.pool) lines.push(`  \u2022 ${m.username}`);
+    }
+    return lines;
+  }
+
+  /** Autocomplete handler for event search. */
   async handleAutocomplete(
     interaction: AutocompleteInteraction,
   ): Promise<void> {
@@ -211,4 +176,37 @@ export class RosterViewCommand
       })),
     );
   }
+}
+
+function groupAssignmentsByRole(
+  assignments: { slot: string | null; username: string }[],
+): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const a of assignments) {
+    const role = a.slot ?? 'unassigned';
+    if (!groups.has(role)) groups.set(role, []);
+    groups.get(role)!.push(a.username);
+  }
+  return groups;
+}
+
+const ROLE_ORDER = ['tank', 'healer', 'dps', 'flex', 'player', 'bench'];
+const STATIC_EMOJIS: Record<string, string> = {
+  flex: '\uD83D\uDD00',
+  player: '\uD83C\uDFAE',
+  bench: '\uD83E\uDE91',
+};
+
+function buildViewRosterRow(
+  eventId: number,
+): ActionRowBuilder<ButtonBuilder>[] {
+  const clientUrl = process.env.CLIENT_URL ?? null;
+  if (!clientUrl) return [];
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setLabel('View Full Roster')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/events/${eventId}`),
+  );
+  return [row];
 }

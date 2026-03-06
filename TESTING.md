@@ -255,6 +255,43 @@ Prefer **HTTP endpoints** (`testApp.request.get/post/put/delete`) for tests that
 
 Use **direct DB operations** (`testApp.db.insert/select/delete`) only when the controller is not directly testable (e.g., Discord bot endpoints that require a live bot connection) or when verifying DB-level behavior like FK cascades, unique constraints, and JOINs.
 
+## Test File Size Limits
+
+Test files have a **750-line limit** (enforced by ESLint `max-lines` with `skipBlankLines + skipComments`). Functions within test files are still limited to **30 lines**.
+
+### Splitting large test files
+
+When a test file exceeds 750 lines, split by top-level `describe` block:
+
+```
+signups.service.spec.ts (2400 lines)
+  → signups.service.signup.spec.ts
+  → signups.service.cancel.spec.ts
+  → signups.service.promotion-mmo.spec.ts
+  → signups.service.roster.spec.ts
+  → signups.spec-helpers.ts (shared setup)
+```
+
+**Naming convention:** `{original-name}.{concern}.spec.ts`
+
+### Shared test setup
+
+Extract common `beforeEach` setup, mock factories, and module creation into `{name}.spec-helpers.ts`:
+
+```ts
+// signups.spec-helpers.ts
+export function createSignupsTestModule() {
+    return Test.createTestingModule({
+        providers: [SignupsService, ...mocks],
+    }).compile();
+}
+```
+
+Import in sibling spec files:
+```ts
+import { createSignupsTestModule } from './signups.spec-helpers';
+```
+
 ## Anti-Patterns to Avoid
 
 ### 1. "Should be defined" boilerplate

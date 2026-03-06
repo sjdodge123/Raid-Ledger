@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventEmitter } from 'events';
@@ -662,9 +661,9 @@ describe('DiscordBotClientService', () => {
  * This avoids needing to import the real Client while keeping typed access.
  */
 function createMockClient(): MockDiscordClient {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Client } = require('discord.js') as {
+  // Use jest.requireMock to access the mocked module without require()
+  const { Client } = jest.requireMock<{
     Client: new (opts: unknown) => MockDiscordClient;
-  };
+  }>('discord.js');
   return new Client({});
 }

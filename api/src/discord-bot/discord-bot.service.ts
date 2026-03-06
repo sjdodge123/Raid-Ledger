@@ -148,48 +148,20 @@ export class DiscordBotService
    * ROK-430: Aggregated setup status for the Discord Overview dashboard.
    */
   async getSetupStatus(): Promise<DiscordSetupStatus> {
-    const oauthConfigured = await this.settingsService.isDiscordConfigured();
-    const botConfigured = await this.settingsService.isDiscordBotConfigured();
-    const botConnected = this.clientService.isConnected();
-    const defaultChannel =
-      await this.settingsService.getDiscordBotDefaultChannel();
-    const timezone = await this.settingsService.getDiscordBotTimezone();
-
-    const steps = [
-      {
-        key: 'oauth',
-        label: 'Configure Discord OAuth',
-        completed: oauthConfigured,
-        settingsPath: '/admin/settings/discord/auth',
-      },
-      {
-        key: 'bot-token',
-        label: 'Set bot token',
-        completed: botConfigured,
-        settingsPath: '/admin/settings/discord/connection',
-      },
-      {
-        key: 'bot-connected',
-        label: 'Bot connected to server',
-        completed: botConnected,
-        settingsPath: '/admin/settings/discord/connection',
-      },
-      {
-        key: 'default-channel',
-        label: 'Set default notification channel',
-        completed: defaultChannel !== null,
-        settingsPath: '/admin/settings/discord/channels',
-      },
-      {
-        key: 'timezone',
-        label: 'Configure timezone',
-        completed: timezone !== null,
-        settingsPath: '/admin/settings/general',
-      },
-    ];
-
+    const [oauthOk, botOk, defaultCh, tz] = await Promise.all([
+      this.settingsService.isDiscordConfigured(),
+      this.settingsService.isDiscordBotConfigured(),
+      this.settingsService.getDiscordBotDefaultChannel(),
+      this.settingsService.getDiscordBotTimezone(),
+    ]);
+    const steps = buildSetupSteps([
+      oauthOk,
+      botOk,
+      this.clientService.isConnected(),
+      defaultCh !== null,
+      tz !== null,
+    ]);
     const completedCount = steps.filter((s) => s.completed).length;
-
     return {
       steps,
       overallComplete: completedCount === steps.length,
@@ -240,4 +212,36 @@ export class DiscordBotService
       return { success: false, message: friendlyDiscordErrorMessage(error) };
     }
   }
+}
+
+type SetupStep = {
+  key: string;
+  label: string;
+  completed: boolean;
+  settingsPath: string;
+};
+
+const SETUP_STEP_DEFS: [string, string, string][] = [
+  ['oauth', 'Configure Discord OAuth', '/admin/settings/discord/auth'],
+  ['bot-token', 'Set bot token', '/admin/settings/discord/connection'],
+  [
+    'bot-connected',
+    'Bot connected to server',
+    '/admin/settings/discord/connection',
+  ],
+  [
+    'default-channel',
+    'Set default notification channel',
+    '/admin/settings/discord/channels',
+  ],
+  ['timezone', 'Configure timezone', '/admin/settings/general'],
+];
+
+function buildSetupSteps(completions: boolean[]): SetupStep[] {
+  return SETUP_STEP_DEFS.map(([key, label, path], i) => ({
+    key,
+    label,
+    completed: completions[i],
+    settingsPath: path,
+  }));
 }

@@ -12,10 +12,9 @@
  * - We drive interactions against the listener using the same mocking pattern as
  *   signup-interaction.listener.spec.ts.
  */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { SignupInteractionListener } from './signup-interaction.listener';
+import type { TestableSignupInteractionListener } from './signup-interaction.spec-helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
 import { EventsService } from '../../events/events.service';
@@ -66,7 +65,7 @@ function makeChain(result: unknown[] = []) {
 
 describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', () => {
   let module: TestingModule;
-  let listener: any;
+  let listener: TestableSignupInteractionListener;
   let mockSignupsService: {
     findByDiscordUser: jest.Mock;
     signup: jest.Mock;
@@ -183,7 +182,8 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
       ],
     }).compile();
 
-    listener = module.get(SignupInteractionListener);
+    const instance: unknown = module.get(SignupInteractionListener);
+    listener = instance as TestableSignupInteractionListener;
   });
 
   afterEach(async () => {

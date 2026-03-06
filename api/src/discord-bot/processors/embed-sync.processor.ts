@@ -2,7 +2,7 @@ import { Inject, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { isPerfEnabled, perfLog } from '../../common/perf-logger';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -20,9 +20,11 @@ import {
   EMBED_SYNC_QUEUE,
   type EmbedSyncJobData,
 } from '../queues/embed-sync.queue';
-
-/** Two hours in milliseconds — threshold for IMMINENT state. */
-const IMMINENT_THRESHOLD_MS = 2 * 60 * 60 * 1000;
+import {
+  findTrackedMessage,
+  buildEventData,
+  computeEmbedState,
+} from './embed-sync.helpers';
 
 /**
  * BullMQ processor for the discord-embed-sync queue (ROK-119).
@@ -55,333 +57,147 @@ export class EmbedSyncProcessor extends WorkerHost {
       `Processing embed sync for event ${eventId} (reason: ${reason})`,
     );
 
+    const guildId = this.requireConnection();
+    if (!guildId) return;
+
+    const record = await findTrackedMessage(this.db, eventId, guildId);
+    if (!record) return;
+    if (record.embedState === EMBED_STATES.CANCELLED) return;
+
+    const event = await this.fetchEvent(eventId);
+    if (!event || event.cancelledAt) return;
+
+    const eventData = await buildEventData(
+      this.db,
+      event,
+      this.channelResolver,
+    );
+    const newState = computeEmbedState(event, eventData);
+    await this.editAndSync(record, eventData, newState, eventId, reason, start);
+  }
+
+  /** Validate bot connection, return guildId or null. */
+  private requireConnection(): string | null {
     if (!this.clientService.isConnected()) {
       this.logger.warn('Discord bot not connected, failing job for retry');
       throw new Error('Discord bot not connected');
     }
-
     const guildId = this.clientService.getGuildId();
     if (!guildId) {
       this.logger.warn('Bot not in any guild, skipping embed sync');
-      return;
     }
+    return guildId;
+  }
 
-    // Find the tracked Discord message for this event
-    const [record] = await this.db
-      .select()
-      .from(schema.discordEventMessages)
-      .where(
-        and(
-          eq(schema.discordEventMessages.eventId, eventId),
-          eq(schema.discordEventMessages.guildId, guildId),
-        ),
-      )
-      .limit(1);
-
-    if (!record) {
-      this.logger.debug(
-        `No Discord message found for event ${eventId}, skipping`,
-      );
-      return;
-    }
-
-    // Don't update cancelled embeds
-    if (record.embedState === EMBED_STATES.CANCELLED) {
-      this.logger.debug(`Event ${eventId} embed is cancelled, skipping sync`);
-      return;
-    }
-
-    // Fetch the event
+  /** Fetch an event by ID, returning null if not found. */
+  private async fetchEvent(
+    eventId: number,
+  ): Promise<typeof schema.events.$inferSelect | null> {
     const [event] = await this.db
       .select()
       .from(schema.events)
       .where(eq(schema.events.id, eventId))
       .limit(1);
-
     if (!event) {
       this.logger.warn(`Event ${eventId} not found, skipping embed sync`);
-      return;
     }
-
-    // If event was cancelled, let the event.cancelled handler deal with it
-    if (event.cancelledAt) {
-      return;
-    }
-
-    // Build embed event data with live roster information
-    const eventData = await this.buildEventData(event);
-
-    // Compute the new embed state
-    const previousState = record.embedState as EmbedState;
-    const newState = this.computeEmbedState(event, eventData);
-
-    // Build and edit the embed
-    try {
-      const context = await this.buildContext();
-      const { embed, row } = this.embedFactory.buildEventUpdate(
-        eventData,
-        context,
-        newState,
-      );
-
-      await this.clientService.editEmbed(
-        record.channelId,
-        record.messageId,
-        embed,
-        row,
-      );
-
-      // Update the embed state in the database
-      await this.db
-        .update(schema.discordEventMessages)
-        .set({
-          embedState: newState,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.discordEventMessages.id, record.id));
-
-      if (newState !== previousState) {
-        this.logger.log(
-          `Embed state transition for event ${eventId}: ${previousState} -> ${newState}`,
-        );
-      }
-
-      this.logger.log(
-        `Synced embed for event ${eventId} (state: ${newState}, reason: ${reason})`,
-      );
-      if (start)
-        perfLog('QUEUE', 'embed-sync', performance.now() - start, {
-          eventId,
-          reason,
-        });
-
-      // ROK-577: Complete Discord Scheduled Event when embed transitions to COMPLETED
-      if (newState === EMBED_STATES.COMPLETED) {
-        this.scheduledEventService
-          .completeScheduledEvent(eventId)
-          .catch((err: unknown) => {
-            this.logger.warn(
-              `Failed to complete scheduled event for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-            );
-          });
-      } else {
-        // ROK-471: Update Discord Scheduled Event description with new signup count
-        this.scheduledEventService
-          .updateDescription(eventId, eventData)
-          .catch((err: unknown) => {
-            this.logger.warn(
-              `Failed to update scheduled event description for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-            );
-          });
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to sync embed for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-      throw error;
-    }
+    return event ?? null;
   }
 
-  /**
-   * Build EmbedEventData with live roster/signup information.
-   */
-  private async buildEventData(
-    event: typeof schema.events.$inferSelect,
-  ): Promise<EmbedEventData> {
-    // Get active signup count (exclude declined)
-    const signupRows = await this.db
-      .select({
-        discordId: sql<
-          string | null
-        >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
-        username: schema.users.username,
-        role: schema.rosterAssignments.role,
-        status: schema.eventSignups.status,
-        preferredRoles: schema.eventSignups.preferredRoles,
-        className: schema.characters.class,
-      })
-      .from(schema.eventSignups)
-      .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
-      .leftJoin(
-        schema.rosterAssignments,
-        eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
-      )
-      .leftJoin(
-        schema.characters,
-        eq(schema.eventSignups.characterId, schema.characters.id),
-      )
-      .where(eq(schema.eventSignups.eventId, event.id));
-
-    const activeSignups = signupRows.filter(
-      (r) =>
-        r.status !== 'declined' &&
-        r.status !== 'roached_out' &&
-        r.status !== 'departed',
-    );
-    const signupCount = activeSignups.length;
-
-    // Build role counts from roster assignments (exclude declined signups)
-    const roleRows = await this.db
-      .select({
-        role: schema.rosterAssignments.role,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(schema.rosterAssignments)
-      .innerJoin(
-        schema.eventSignups,
-        eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
-      )
-      .where(
-        and(
-          eq(schema.rosterAssignments.eventId, event.id),
-          sql`${schema.eventSignups.status} != 'declined'`,
-        ),
-      )
-      .groupBy(schema.rosterAssignments.role);
-
-    const roleCounts: Record<string, number> = {};
-    for (const row of roleRows) {
-      if (row.role) roleCounts[row.role] = row.count;
-    }
-
-    const signupMentions = activeSignups
-      .filter((r) => r.discordId !== null || r.username !== null)
-      .map((r) => ({
-        discordId: r.discordId,
-        username: r.username,
-        role: r.role ?? null,
-        preferredRoles: r.preferredRoles,
-        status: r.status ?? null,
-        className: r.className ?? null,
-      }));
-
-    const eventData: EmbedEventData = {
-      id: event.id,
-      title: event.title,
-      description: event.description,
-      startTime: event.duration[0].toISOString(),
-      endTime: event.duration[1].toISOString(),
-      signupCount,
-      maxAttendees: event.maxAttendees,
-      slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
-      roleCounts,
-      signupMentions,
-    };
-
-    // Resolve game info
-    if (event.gameId) {
-      const [game] = await this.db
-        .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
-        .from(schema.games)
-        .where(eq(schema.games.id, event.gameId))
-        .limit(1);
-      if (game) {
-        eventData.game = { name: game.name, coverUrl: game.coverUrl };
-      }
-    }
-
-    // ROK-507/ROK-599: Resolve voice channel — per-event override takes priority
-    const voiceChannelId =
-      event.notificationChannelOverride ??
-      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-        event.gameId,
-        event.recurrenceGroupId,
-      ));
-    if (voiceChannelId) {
-      eventData.voiceChannelId = voiceChannelId;
-    }
-
-    return eventData;
-  }
-
-  /**
-   * Compute the correct embed state based on event timing and roster fill.
-   *
-   * State transitions:
-   * - POSTED/FILLING -> FULL: when signup count reaches maxAttendees
-   * - FULL -> FILLING: when someone withdraws and count drops below max
-   * - Any -> IMMINENT: when event is < 2 hours away
-   * - IMMINENT -> LIVE: when event start time is reached
-   * - LIVE -> COMPLETED: when event end time is reached
-   */
-  private computeEmbedState(
-    event: typeof schema.events.$inferSelect,
+  /** Build embed, edit Discord message, update state, trigger side effects. */
+  private async editAndSync(
+    record: typeof schema.discordEventMessages.$inferSelect,
     eventData: EmbedEventData,
-  ): EmbedState {
-    const now = Date.now();
-    const startTime = event.duration[0].getTime();
-    // ROK-576: Use extendedUntil as effective end time when present
-    const endTime = event.extendedUntil
-      ? event.extendedUntil.getTime()
-      : event.duration[1].getTime();
-
-    // Time-based states take priority (irreversible progression)
-    if (now >= endTime) {
-      return EMBED_STATES.COMPLETED;
-    }
-
-    if (now >= startTime) {
-      return EMBED_STATES.LIVE;
-    }
-
-    if (startTime - now <= IMMINENT_THRESHOLD_MS) {
-      return EMBED_STATES.IMMINENT;
-    }
-
-    // Capacity-based states — check both maxAttendees and slot config capacity
-    if (event.maxAttendees && eventData.signupCount >= event.maxAttendees) {
-      return EMBED_STATES.FULL;
-    }
-
-    // ROK-682: Also check slot config capacity (roster slots define true capacity)
-    const totalSlots = this.getTotalSlotsFromConfig(eventData.slotConfig);
-    if (totalSlots > 0 && eventData.signupCount >= totalSlots) {
-      return EMBED_STATES.FULL;
-    }
-
-    // If event has signups, it's FILLING; otherwise POSTED
-    if (eventData.signupCount > 0) {
-      return EMBED_STATES.FILLING;
-    }
-
-    return EMBED_STATES.POSTED;
+    newState: EmbedState,
+    eventId: number,
+    reason: string,
+    perfStart: number,
+  ): Promise<void> {
+    const previousState = record.embedState as EmbedState;
+    const context = await this.buildContext();
+    const { embed, row } = this.embedFactory.buildEventUpdate(
+      eventData,
+      context,
+      newState,
+    );
+    await this.clientService.editEmbed(
+      record.channelId,
+      record.messageId,
+      embed,
+      row,
+    );
+    await this.persistState(record.id, newState);
+    this.logTransition(previousState, newState, eventId, reason, perfStart);
+    this.triggerSideEffects(newState, eventId, eventData);
   }
 
-  /**
-   * ROK-682: Compute total player slots from slotConfig.
-   * Returns 0 if no slot config is present.
-   */
-  private getTotalSlotsFromConfig(
-    slotConfig: EmbedEventData['slotConfig'],
-  ): number {
-    if (!slotConfig) return 0;
+  /** Persist the new embed state in the database. */
+  private async persistState(
+    recordId: string,
+    newState: EmbedState,
+  ): Promise<void> {
+    await this.db
+      .update(schema.discordEventMessages)
+      .set({ embedState: newState, updatedAt: new Date() })
+      .where(eq(schema.discordEventMessages.id, recordId));
+  }
 
-    if (slotConfig.type === 'mmo') {
-      return (
-        (slotConfig.tank ?? 0) +
-        (slotConfig.healer ?? 0) +
-        (slotConfig.dps ?? 0) +
-        (slotConfig.flex ?? 0)
+  /** Log state transition and performance data. */
+  private logTransition(
+    prev: EmbedState,
+    next: EmbedState,
+    eventId: number,
+    reason: string,
+    perfStart: number,
+  ): void {
+    if (next !== prev) {
+      this.logger.log(
+        `Embed state transition for event ${eventId}: ${prev} -> ${next}`,
       );
     }
-
-    // Generic slot config: player count
-    return slotConfig.player ?? 0;
+    this.logger.log(
+      `Synced embed for event ${eventId} (state: ${next}, reason: ${reason})`,
+    );
+    if (perfStart) {
+      perfLog('QUEUE', 'embed-sync', performance.now() - perfStart, {
+        eventId,
+        reason,
+      });
+    }
   }
 
-  /**
-   * Build shared embed context from settings.
-   */
+  /** Trigger scheduled event side effects based on new state. */
+  private triggerSideEffects(
+    newState: EmbedState,
+    eventId: number,
+    eventData: EmbedEventData,
+  ): void {
+    if (newState === EMBED_STATES.COMPLETED) {
+      this.scheduledEventService
+        .completeScheduledEvent(eventId)
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to complete scheduled event for ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+          );
+        });
+    } else {
+      this.scheduledEventService
+        .updateDescription(eventId, eventData)
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to update scheduled event for ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+          );
+        });
+    }
+  }
+
+  /** Build shared embed context from settings. */
   private async buildContext(): Promise<EmbedContext> {
     const [branding, clientUrl, timezone] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
       this.settingsService.getDefaultTimezone(),
     ]);
-    return {
-      communityName: branding.communityName,
-      clientUrl,
-      timezone,
-    };
+    return { communityName: branding.communityName, clientUrl, timezone };
   }
 }

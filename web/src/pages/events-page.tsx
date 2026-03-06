@@ -1,5 +1,6 @@
+import type { JSX } from 'react';
 import { useMemo, useState } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useInfiniteEvents } from "../hooks/use-events";
 import { useAuth } from "../hooks/use-auth";
 import { useGameTime } from "../hooks/use-game-time";
@@ -13,146 +14,78 @@ import { InfiniteScrollSentinel } from "../components/ui/infinite-scroll-sentine
 import { PullToRefresh } from "../components/ui/pull-to-refresh";
 import { FAB } from "../components/ui/fab";
 import type { EventResponseDto, GameTimeSlot } from "@raid-ledger/contract";
-
-/**
- * Convert JS Date.getDay() (0=Sunday) to game-time dayOfWeek (0=Monday).
- */
-function toGameTimeDow(jsDay: number): number {
-  return jsDay === 0 ? 6 : jsDay - 1;
-}
-
-/**
- * Check if an event overlaps with any game time slot.
- * Checks every hour the event spans, not just the start hour.
- */
-function eventOverlapsGameTime(
-  event: EventResponseDto,
-  slotSet: Set<string>,
-): boolean {
-  const start = new Date(event.startTime);
-  const end = new Date(event.endTime);
-  // Walk hour-by-hour through the event duration
-  const cursor = new Date(start);
-  cursor.setMinutes(0, 0, 0); // snap to hour boundary
-  if (cursor < start) cursor.setHours(cursor.getHours() + 1);
-
-  while (cursor < end) {
-    const key = `${toGameTimeDow(cursor.getDay())}-${cursor.getHours()}`;
-    if (slotSet.has(key)) return true;
-    cursor.setHours(cursor.getHours() + 1);
-  }
-  return false;
-}
+import { eventOverlapsGameTime } from "./events/events-helpers";
+import { EventsPageHeader } from "./events/EventsPageHeader";
 
 /**
  * Events List Page - displays upcoming events in a responsive grid
  */
+// eslint-disable-next-line max-lines-per-function
 export function EventsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const gameIdFilter = searchParams.get("gameId") || undefined;
-
-  // Filter state — shared between mobile toolbar and desktop tabs
-  // Initialize from ?tab= URL param so deep links like /events?tab=plans work
   const tabParam = searchParams.get('tab') as EventsTab | null;
   const [activeTab, setActiveTab] = useState<EventsTab>(
     tabParam && ['upcoming', 'past', 'mine', 'plans'].includes(tabParam) ? tabParam : 'upcoming',
   );
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Build query params based on the active mobile tab (ROK-329)
   const eventQueryParams = useMemo(() => {
     const params: import('../lib/api-client').EventListParams = {
       ...(gameIdFilter ? { gameId: gameIdFilter } : {}),
     };
     switch (activeTab) {
-      case 'past':
-        params.upcoming = false;
-        break;
-      case 'mine':
-        params.upcoming = true;
-        params.signedUpAs = 'me';
-        break;
-      case 'upcoming':
-      default:
-        params.upcoming = true;
-        break;
+      case 'past': params.upcoming = false; break;
+      case 'mine': params.upcoming = true; params.signedUpAs = 'me'; break;
+      default: params.upcoming = true; break;
     }
     return params;
   }, [activeTab, gameIdFilter]);
 
-  const {
-    items,
-    isLoading,
-    error,
-    isFetchingNextPage,
-    hasNextPage,
-    sentinelRef,
-    refetch,
-  } = useInfiniteEvents(eventQueryParams);
+  const { items, isLoading, error, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfiniteEvents(eventQueryParams);
   const { isAuthenticated } = useAuth();
   const { data: gameTime } = useGameTime({ enabled: isAuthenticated });
   const { games: registryGames } = useGameRegistry();
-
   const gameTimeSlots = gameTime?.slots;
 
-  // Derive game name from the first loaded event when filtering by game
   const filteredGameName = useMemo(() => {
     if (!gameIdFilter || !items.length) return null;
     return items[0]?.game?.name ?? null;
   }, [gameIdFilter, items]);
 
-  // Build a Set of "dow-hour" keys for O(1) lookup
   const slotSet = useMemo(() => {
     if (!gameTimeSlots?.length) return null;
     const set = new Set<string>();
-    for (const slot of gameTimeSlots as GameTimeSlot[]) {
-      set.add(`${slot.dayOfWeek}-${slot.hour}`);
-    }
+    for (const slot of gameTimeSlots as GameTimeSlot[]) set.add(`${slot.dayOfWeek}-${slot.hour}`);
     return set;
   }, [gameTimeSlots]);
 
   const [filterGameTime, setFilterGameTime] = useState(false);
 
-  // Pre-compute which events overlap with game time
   const overlapSet = useMemo(() => {
     if (!items.length || !slotSet) return null;
     const set = new Set<number>();
-    for (const event of items) {
-      if (eventOverlapsGameTime(event, slotSet)) {
-        set.add(event.id);
-      }
-    }
+    for (const event of items) { if (eventOverlapsGameTime(event, slotSet)) set.add(event.id); }
     return set;
   }, [items, slotSet]);
 
-  // Sort events: game-time overlaps first (stable by startTime), then filter if toggle is on + mobile search
   const displayEvents = useMemo(() => {
     if (!items.length) return items;
     let result = items;
-    // Client-side search filter (ROK-329)
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      result = result.filter((e) =>
-        e.title.toLowerCase().includes(q) ||
-        e.game?.name?.toLowerCase().includes(q)
-      );
+      result = result.filter((e) => e.title.toLowerCase().includes(q) || e.game?.name?.toLowerCase().includes(q));
     }
     if (overlapSet && activeTab !== 'past') {
-      // ROK-603: Stable sort — game-time overlaps first, then preserve
-      // chronological startTime order (ASC for upcoming/mine).
-      // Past events skip this sort to preserve the backend's DESC order
-      // since game-time relevance doesn't apply to completed events (ROK-613).
       result = [...result].sort((a, b) => {
-        const aOverlaps = overlapSet.has(a.id) ? 0 : 1;
-        const bOverlaps = overlapSet.has(b.id) ? 0 : 1;
-        if (aOverlaps !== bOverlaps) return aOverlaps - bOverlaps;
+        const aO = overlapSet.has(a.id) ? 0 : 1;
+        const bO = overlapSet.has(b.id) ? 0 : 1;
+        if (aO !== bO) return aO - bO;
         return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
       });
     }
-    if (filterGameTime && overlapSet) {
-      result = result.filter((e) => overlapSet.has(e.id));
-    }
+    if (filterGameTime && overlapSet) result = result.filter((e) => overlapSet.has(e.id));
     return result;
   }, [items, overlapSet, filterGameTime, searchQuery, activeTab]);
 
@@ -160,326 +93,156 @@ export function EventsPage() {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-xl font-semibold text-red-400 mb-2">
-            Failed to load events
-          </h2>
+          <h2 className="text-xl font-semibold text-red-400 mb-2">Failed to load events</h2>
           <p className="text-muted">{error.message}</p>
         </div>
       </div>
     );
   }
 
+  const handleGameChange = (gameId: string | undefined): void => {
+    const next = new URLSearchParams(searchParams);
+    if (gameId) { next.set('gameId', gameId); } else { next.delete('gameId'); }
+    setSearchParams(next);
+  };
+
   return (
     <PullToRefresh onRefresh={refetch}>
       <div className="pb-20 md:pb-0">
-        <EventsMobileToolbar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          games={registryGames}
-          selectedGameId={gameIdFilter}
-          onGameChange={(gameId) => {
-            const next = new URLSearchParams(searchParams);
-            if (gameId) {
-              next.set('gameId', gameId);
-            } else {
-              next.delete('gameId');
-            }
-            setSearchParams(next);
-          }}
-        />
+        <EventsMobileToolbar activeTab={activeTab} onTabChange={setActiveTab} searchQuery={searchQuery} onSearchChange={setSearchQuery}
+          games={registryGames} selectedGameId={gameIdFilter} onGameChange={handleGameChange} />
 
         <div className="py-8 px-4">
           <div className="max-w-7xl mx-auto">
-            {/* Page Header */}
-            <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-foreground mb-2">
-                  {filteredGameName
-                    ? `${filteredGameName} Events`
-                    : activeTab === 'plans'
-                      ? 'Event Plans'
-                      : activeTab === 'past'
-                        ? 'Past Events'
-                        : activeTab === 'mine'
-                          ? 'My Events'
-                          : 'Upcoming Events'}
-                </h1>
-                <p className="text-muted">
-                  {filteredGameName
-                    ? `Showing events for ${filteredGameName}`
-                    : activeTab === 'plans'
-                      ? 'Community event planning polls'
-                      : activeTab === 'past'
-                        ? 'Browse completed gaming sessions'
-                        : activeTab === 'mine'
-                          ? 'Events you\'ve signed up for'
-                          : 'Discover and sign up for gaming sessions'}
-                </p>
-              </div>
-              {isAuthenticated && (
-                <div className="flex items-center gap-3">
-                  <Link
-                    to="/events/plan"
-                    className="inline-flex items-center gap-2 px-5 py-3 bg-violet-600 hover:bg-violet-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-violet-600/25"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                      />
-                    </svg>
-                    Plan Event
-                  </Link>
-                  <Link
-                    to="/events/new"
-                    className="inline-flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4v16m8-8H4"
-                      />
-                    </svg>
-                    Create Event
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {/* Desktop Filter Tabs — hidden on mobile where the sticky toolbar handles this */}
-            {isAuthenticated && (
-              <div className="hidden md:flex items-center gap-4 mb-6">
-                <div className="flex gap-1 bg-panel rounded-lg p-1">
-                  {([['upcoming', 'Upcoming'], ['past', 'Past'], ['mine', 'My Events'], ['plans', 'Plans']] as const).map(([key, label]) => (
-                    <button
-                      key={key}
-                      onClick={() => setActiveTab(key)}
-                      className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === key
-                        ? 'bg-surface text-foreground shadow-sm'
-                        : 'text-muted hover:text-foreground'
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {/* Desktop search */}
-                <div className="relative flex-1 max-w-xs">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search events..."
-                    aria-label="Search events"
-                    className="w-full pl-10 pr-4 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-                {/* Game filter dropdown */}
-                {registryGames.length > 1 && (
-                  <select
-                    value={gameIdFilter ?? ''}
-                    onChange={(e) => {
-                      const next = new URLSearchParams(searchParams);
-                      if (e.target.value) {
-                        next.set('gameId', e.target.value);
-                      } else {
-                        next.delete('gameId');
-                      }
-                      setSearchParams(next);
-                    }}
-                    aria-label="Filter by game"
-                    className="px-3 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none appearance-none pr-8 bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%239ca3af%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%20011.06.02L10%2011.168l3.71-3.938a.75.75%200%20111.08%201.04l-4.25%204.5a.75.75%200%2001-1.08%200l-4.25-4.5a.75.75%200%2001.02-1.06z%22%20clip-rule%3D%22evenodd%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_0.5rem_center] bg-[length:1.25rem]"
-                  >
-                    <option value="">All Games</option>
-                    {registryGames.map((game) => (
-                      <option key={game.id} value={String(game.id)}>
-                        {game.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
+            <EventsPageHeader activeTab={activeTab} filteredGameName={filteredGameName} isAuthenticated={isAuthenticated} />
+            <DesktopFilterTabs isAuthenticated={isAuthenticated} activeTab={activeTab} onTabChange={setActiveTab}
+              searchQuery={searchQuery} onSearchChange={setSearchQuery} registryGames={registryGames}
+              gameIdFilter={gameIdFilter} searchParams={searchParams} setSearchParams={setSearchParams} />
 
             {activeTab === 'plans' ? (
-              /* Plans View */
               <EventPlansList />
             ) : (
               <>
-                {/* Game Filter Chip */}
-                {gameIdFilter && (
-                  <div className="mb-4">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
-                      {filteredGameName ?? "Loading..."}
-                      <button
-                        onClick={() => {
-                          const next = new URLSearchParams(searchParams);
-                          next.delete("gameId");
-                          setSearchParams(next);
-                        }}
-                        className="flex items-center justify-center min-w-[44px] min-h-[44px] -mr-3 rounded-full hover:bg-violet-500/30 transition-colors"
-                        aria-label="Clear game filter"
-                      >
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                      </button>
-                    </span>
-                  </div>
-                )}
-
-                {/* Game Time Filter */}
-                {slotSet && (
-                  <div className="mb-6">
-                    <button
-                      onClick={() => setFilterGameTime((v) => !v)}
-                      className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${filterGameTime
-                        ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/40"
-                        : "bg-surface text-muted border-edge hover:text-foreground hover:border-dim"
-                        }`}
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                      Inside Game Time
-                      {overlapSet && (
-                        <span
-                          className={`px-1.5 py-0.5 text-xs rounded-full ${filterGameTime ? "bg-cyan-500/30" : "bg-panel"
-                            }`}
-                        >
-                          {overlapSet.size}
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                )}
-
-                {/* Events Grid — Desktop (>=md) */}
-                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {isLoading ? (
-                    Array.from({ length: 8 }).map((_, i) => (
-                      <EventCardSkeleton key={i} />
-                    ))
-                  ) : displayEvents.length === 0 ? (
-                    filterGameTime ? (
-                      <div className="col-span-full text-center py-12">
-                        <p className="text-muted">
-                          No events match your game time schedule.
-                        </p>
-                        <button
-                          onClick={() => setFilterGameTime(false)}
-                          className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-                        >
-                          Clear filter
-                        </button>
-                      </div>
-                    ) : (
-                      <EventsEmptyState />
-                    )
-                  ) : (
-                    displayEvents.map((event) => (
-                      <EventCard
-                        key={event.id}
-                        event={event}
-                        signupCount={event.signupCount}
-                        matchesGameTime={overlapSet?.has(event.id)}
-                        onClick={() => navigate(`/events/${event.id}`)}
-                      />
-                    ))
-                  )}
-                </div>
-
-                {/* Events List — Mobile (<md) */}
-                <div className="md:hidden space-y-3">
-                  {isLoading ? (
-                    Array.from({ length: 4 }).map((_, i) => (
-                      <MobileEventCardSkeleton key={i} />
-                    ))
-                  ) : displayEvents.length === 0 ? (
-                    filterGameTime ? (
-                      <div className="text-center py-12">
-                        <p className="text-muted">
-                          No events match your game time schedule.
-                        </p>
-                        <button
-                          onClick={() => setFilterGameTime(false)}
-                          className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-                        >
-                          Clear filter
-                        </button>
-                      </div>
-                    ) : (
-                      <EventsEmptyState />
-                    )
-                  ) : (
-                    displayEvents.map((event) => (
-                      <MobileEventCard
-                        key={event.id}
-                        event={event}
-                        signupCount={event.signupCount}
-                        matchesGameTime={overlapSet?.has(event.id)}
-                        onClick={() => navigate(`/events/${event.id}`)}
-                      />
-                    ))
-                  )}
-                </div>
-
-                {/* Infinite Scroll Sentinel */}
+                <GameFilterChip gameIdFilter={gameIdFilter} filteredGameName={filteredGameName} searchParams={searchParams} setSearchParams={setSearchParams} />
+                <GameTimeFilter slotSet={slotSet} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} />
+                <EventsGrid isLoading={isLoading} displayEvents={displayEvents} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} navigate={navigate} />
                 {!isLoading && displayEvents.length > 0 && (
-                  <InfiniteScrollSentinel
-                    sentinelRef={sentinelRef}
-                    isFetchingNextPage={isFetchingNextPage}
-                    hasNextPage={hasNextPage}
-                  />
+                  <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />
                 )}
               </>
             )}
           </div>
         </div>
-
-        {isAuthenticated && (
-          <FAB onClick={() => navigate('/events/new')} label="Create Event" />
-        )}
+        {isAuthenticated && <FAB onClick={() => navigate('/events/new')} label="Create Event" />}
       </div>
     </PullToRefresh>
+  );
+}
+
+function DesktopFilterTabs({ isAuthenticated, activeTab, onTabChange, searchQuery, onSearchChange, registryGames, gameIdFilter, searchParams, setSearchParams }: {
+  isAuthenticated: boolean; activeTab: EventsTab; onTabChange: (t: EventsTab) => void; searchQuery: string; onSearchChange: (q: string) => void;
+  registryGames: { id: number; name: string }[]; gameIdFilter: string | undefined; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
+}): JSX.Element | null {
+  if (!isAuthenticated) return null;
+  return (
+    <div className="hidden md:flex items-center gap-4 mb-6">
+      <div className="flex gap-1 bg-panel rounded-lg p-1">
+        {([['upcoming', 'Upcoming'], ['past', 'Past'], ['mine', 'My Events'], ['plans', 'Plans']] as const).map(([key, label]) => (
+          <button key={key} onClick={() => onTabChange(key)}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === key ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="relative flex-1 max-w-xs">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search events..." aria-label="Search events"
+          className="w-full pl-10 pr-4 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+      </div>
+      {registryGames.length > 1 && (
+        <select value={gameIdFilter ?? ''} onChange={(e) => {
+          const next = new URLSearchParams(searchParams);
+          if (e.target.value) { next.set('gameId', e.target.value); } else { next.delete('gameId'); }
+          setSearchParams(next);
+        }} aria-label="Filter by game"
+          className="px-3 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none appearance-none pr-8">
+          <option value="">All Games</option>
+          {registryGames.map((game) => (<option key={game.id} value={String(game.id)}>{game.name}</option>))}
+        </select>
+      )}
+    </div>
+  );
+}
+
+function GameFilterChip({ gameIdFilter, filteredGameName, searchParams, setSearchParams }: {
+  gameIdFilter: string | undefined; filteredGameName: string | null; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
+}): JSX.Element | null {
+  if (!gameIdFilter) return null;
+  return (
+    <div className="mb-4">
+      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
+        {filteredGameName ?? "Loading..."}
+        <button onClick={() => { const next = new URLSearchParams(searchParams); next.delete("gameId"); setSearchParams(next); }}
+          className="flex items-center justify-center min-w-[44px] min-h-[44px] -mr-3 rounded-full hover:bg-violet-500/30 transition-colors" aria-label="Clear game filter">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function GameTimeFilter({ slotSet, filterGameTime, setFilterGameTime, overlapSet }: {
+  slotSet: Set<string> | null; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void; overlapSet: Set<number> | null;
+}): JSX.Element | null {
+  if (!slotSet) return null;
+  return (
+    <div className="mb-6">
+      <button onClick={() => setFilterGameTime(!filterGameTime)}
+        className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${filterGameTime ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/40" : "bg-surface text-muted border-edge hover:text-foreground hover:border-dim"}`}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Inside Game Time
+        {overlapSet && (<span className={`px-1.5 py-0.5 text-xs rounded-full ${filterGameTime ? "bg-cyan-500/30" : "bg-panel"}`}>{overlapSet.size}</span>)}
+      </button>
+    </div>
+  );
+}
+
+// eslint-disable-next-line max-lines-per-function
+function EventsGrid({ isLoading, displayEvents, filterGameTime, setFilterGameTime, overlapSet, navigate }: {
+  isLoading: boolean; displayEvents: EventResponseDto[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
+  overlapSet: Set<number> | null; navigate: (path: string) => void;
+}): JSX.Element {
+  const emptyFilterMsg = filterGameTime ? (
+    <div className="col-span-full text-center py-12">
+      <p className="text-muted">No events match your game time schedule.</p>
+      <button onClick={() => setFilterGameTime(false)} className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors">Clear filter</button>
+    </div>
+  ) : (<EventsEmptyState />);
+
+  return (
+    <>
+      <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {isLoading ? (
+          Array.from({ length: 8 }).map((_, i) => <EventCardSkeleton key={i} />)
+        ) : displayEvents.length === 0 ? emptyFilterMsg : (
+          displayEvents.map((event) => (
+            <EventCard key={event.id} event={event} signupCount={event.signupCount} matchesGameTime={overlapSet?.has(event.id)} onClick={() => navigate(`/events/${event.id}`)} />
+          ))
+        )}
+      </div>
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => <MobileEventCardSkeleton key={i} />)
+        ) : displayEvents.length === 0 ? emptyFilterMsg : (
+          displayEvents.map((event) => (
+            <MobileEventCard key={event.id} event={event} signupCount={event.signupCount} matchesGameTime={overlapSet?.has(event.id)} onClick={() => navigate(`/events/${event.id}`)} />
+          ))
+        )}
+      </div>
+    </>
   );
 }

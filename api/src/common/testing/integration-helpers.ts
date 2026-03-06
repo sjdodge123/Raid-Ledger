@@ -102,6 +102,6 @@ export async function loginAsAdmin(
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-  return res.body.access_token as string;
+  const body = res.body as { access_token: string };
+  return body.access_token;
 }

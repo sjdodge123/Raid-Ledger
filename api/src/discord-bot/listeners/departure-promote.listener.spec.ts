@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/unbound-method */
 import { DeparturePromoteListener } from './departure-promote.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { NotificationService } from '../../notifications/notification.service';
@@ -13,6 +12,20 @@ import {
   type MockDb,
 } from '../../common/testing/drizzle-mock';
 import type { ButtonInteraction, Message } from 'discord.js';
+
+/** Test-friendly interface exposing private members needed by specs */
+interface TestableDeparturePromoteListener {
+  handlePromote: (
+    interaction: ButtonInteraction,
+    eventId: number,
+  ) => Promise<void>;
+  handleDismiss: (
+    interaction: ButtonInteraction,
+    role: string,
+    signupId: number,
+  ) => Promise<void>;
+  handleButtonInteraction: (interaction: ButtonInteraction) => Promise<void>;
+}
 
 function makeMockInteraction(
   customId: string,
@@ -36,7 +49,7 @@ function makeMockInteraction(
 }
 
 describe('DeparturePromoteListener', () => {
-  let listener: DeparturePromoteListener;
+  let listener: TestableDeparturePromoteListener;
   let mockDb: MockDb;
   let mockClientService: { getClient: jest.Mock; isConnected: jest.Mock };
   let mockNotificationService: {
@@ -69,7 +82,7 @@ describe('DeparturePromoteListener', () => {
       mockNotificationService as unknown as NotificationService,
       mockSignupsService as unknown as SignupsService,
       mockEventEmitter as unknown as EventEmitter2,
-    );
+    ) as unknown as TestableDeparturePromoteListener;
   });
 
   afterEach(() => {
@@ -95,7 +108,7 @@ describe('DeparturePromoteListener', () => {
       // Event title for notification
       mockDb.limit.mockResolvedValueOnce([{ title: 'Test Raid' }]);
 
-      await (listener as any).handlePromote(interaction, 1);
+      await listener.handlePromote(interaction, 1);
 
       // Should call role calculation engine
       expect(mockSignupsService.promoteFromBench).toHaveBeenCalledWith(1, 20);
@@ -142,7 +155,7 @@ describe('DeparturePromoteListener', () => {
       // Event title for notification
       mockDb.limit.mockResolvedValueOnce([{ title: 'Test Raid' }]);
 
-      await (listener as any).handlePromote(interaction, 1);
+      await listener.handlePromote(interaction, 1);
 
       expect(mockSignupsService.promoteFromBench).toHaveBeenCalledWith(1, 20);
       expect(interaction.message.edit).toHaveBeenCalled();
@@ -165,7 +178,7 @@ describe('DeparturePromoteListener', () => {
           'Could not find a suitable roster slot for BenchPlayer based on their preferred roles.',
       });
 
-      await (listener as any).handlePromote(interaction, 1);
+      await listener.handlePromote(interaction, 1);
 
       expect(mockNotificationService.create).not.toHaveBeenCalled();
       expect(mockEventEmitter.emit).not.toHaveBeenCalled();
@@ -180,7 +193,7 @@ describe('DeparturePromoteListener', () => {
       // No bench players
       mockDb.limit.mockResolvedValueOnce([]);
 
-      await (listener as any).handlePromote(interaction, 1);
+      await listener.handlePromote(interaction, 1);
 
       expect(mockSignupsService.promoteFromBench).not.toHaveBeenCalled();
       expect(interaction.message.edit).toHaveBeenCalled();
@@ -193,7 +206,7 @@ describe('DeparturePromoteListener', () => {
         `${DEPARTURE_PROMOTE_BUTTON_IDS.DISMISS}:1:healer:2`,
       );
 
-      await (listener as any).handleDismiss(interaction, 'healer', 2);
+      await listener.handleDismiss(interaction, 'healer', 2);
 
       expect(interaction.message.edit).toHaveBeenCalled();
     });
@@ -203,7 +216,7 @@ describe('DeparturePromoteListener', () => {
     it('ignores interactions with wrong prefix', async () => {
       const interaction = makeMockInteraction('signup:42');
 
-      await (listener as any).handleButtonInteraction(interaction);
+      await listener.handleButtonInteraction(interaction);
 
       expect(interaction.deferUpdate).not.toHaveBeenCalled();
     });
@@ -213,7 +226,7 @@ describe('DeparturePromoteListener', () => {
         `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1`,
       );
 
-      await (listener as any).handleButtonInteraction(interaction);
+      await listener.handleButtonInteraction(interaction);
 
       expect(interaction.deferUpdate).not.toHaveBeenCalled();
     });

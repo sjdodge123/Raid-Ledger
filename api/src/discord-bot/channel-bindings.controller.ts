@@ -23,18 +23,7 @@ import {
   type ChannelBindingDto,
   type ChannelBindingListDto,
 } from '@raid-ledger/contract';
-import { ZodError } from 'zod';
-
-function handleValidationError(error: unknown): never {
-  if (error instanceof Error && error.name === 'ZodError') {
-    const zodError = error as ZodError;
-    throw new BadRequestException({
-      message: 'Validation failed',
-      errors: zodError.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
-    });
-  }
-  throw error;
-}
+import { handleValidationError } from './validation.util';
 
 @Controller('admin/discord/bindings')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
@@ -88,10 +77,8 @@ export class ChannelBindingsController {
     if (!guildId) {
       throw new BadRequestException('Discord bot is not connected to a guild');
     }
-
     try {
       const dto = CreateChannelBindingSchema.parse(body);
-
       const { binding: result } = await this.channelBindingsService.bind(
         guildId,
         dto.channelId,
@@ -100,21 +87,7 @@ export class ChannelBindingsController {
         dto.gameId ?? null,
         dto.config,
       );
-
-      return {
-        data: {
-          id: result.id,
-          guildId: result.guildId,
-          channelId: result.channelId,
-          channelType: result.channelType as 'text' | 'voice',
-          bindingPurpose:
-            result.bindingPurpose as ChannelBindingDto['bindingPurpose'],
-          gameId: result.gameId,
-          config: result.config,
-          createdAt: result.createdAt.toISOString(),
-          updatedAt: result.updatedAt.toISOString(),
-        },
-      };
+      return { data: toBindingDto(result) };
     } catch (error) {
       handleValidationError(error);
     }
@@ -128,31 +101,13 @@ export class ChannelBindingsController {
   ): Promise<{ data: ChannelBindingDto }> {
     try {
       const dto = UpdateChannelBindingSchema.parse(body);
-
       const result = await this.channelBindingsService.updateConfig(
         id,
         dto.config ?? {},
         dto.bindingPurpose,
       );
-
-      if (!result) {
-        throw new NotFoundException('Binding not found');
-      }
-
-      return {
-        data: {
-          id: result.id,
-          guildId: result.guildId,
-          channelId: result.channelId,
-          channelType: result.channelType as 'text' | 'voice',
-          bindingPurpose:
-            result.bindingPurpose as ChannelBindingDto['bindingPurpose'],
-          gameId: result.gameId,
-          config: result.config,
-          createdAt: result.createdAt.toISOString(),
-          updatedAt: result.updatedAt.toISOString(),
-        },
-      };
+      if (!result) throw new NotFoundException('Binding not found');
+      return { data: toBindingDto(result) };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       handleValidationError(error);
@@ -173,4 +128,30 @@ export class ChannelBindingsController {
       binding.recurrenceGroupId,
     );
   }
+}
+
+/** Map a binding DB record to the API DTO shape. */
+function toBindingDto(result: {
+  id: string;
+  guildId: string;
+  channelId: string;
+  channelType: string;
+  bindingPurpose: string;
+  gameId: number | null;
+  config: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}): ChannelBindingDto {
+  return {
+    id: result.id,
+    guildId: result.guildId,
+    channelId: result.channelId,
+    channelType: result.channelType as 'text' | 'voice',
+    bindingPurpose:
+      result.bindingPurpose as ChannelBindingDto['bindingPurpose'],
+    gameId: result.gameId,
+    config: result.config as ChannelBindingDto['config'],
+    createdAt: result.createdAt.toISOString(),
+    updatedAt: result.updatedAt.toISOString(),
+  };
 }

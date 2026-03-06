@@ -66,38 +66,15 @@ export class InviteCommand
     const eventId = interaction.options.getInteger('event', true);
     const targetUser = interaction.options.getUser('user', false);
 
-    // Fetch event data
-    let event;
-    try {
-      event = await this.eventsService.findOne(eventId);
-    } catch {
-      await interaction.editReply('Event not found');
-      return;
-    }
+    const event = await this.resolveEvent(interaction, eventId);
+    if (!event) return;
 
-    if (event.cancelledAt) {
-      await interaction.editReply('Event not found');
-      return;
-    }
-
-    // Look up the invoking Discord user's RL account for PUG creation
-    const [invoker] = await this.db
-      .select({ id: schema.users.id, role: schema.users.role })
-      .from(schema.users)
-      .where(eq(schema.users.discordId, interaction.user.id))
-      .limit(1);
-
-    if (!invoker) {
-      await interaction.editReply(
-        'You need a linked Raid Ledger account to use this command.',
-      );
-      return;
-    }
+    const invoker = await this.resolveInvoker(interaction);
+    if (!invoker) return;
 
     const isAdmin = invoker.role === 'admin' || invoker.role === 'operator';
 
     if (targetUser) {
-      // Mode 2: Named PUG — create PUG slot for specific user, triggers DM flow
       await this.handleNamedInvite(
         interaction,
         eventId,
@@ -107,7 +84,6 @@ export class InviteCommand
         isAdmin,
       );
     } else {
-      // Mode 1: Anonymous invite link — generate tiny URL
       await this.handleAnonymousInvite(
         interaction,
         eventId,
@@ -116,6 +92,42 @@ export class InviteCommand
         isAdmin,
       );
     }
+  }
+
+  /** Fetch and validate the event. Returns null if invalid. */
+  private async resolveEvent(
+    interaction: ChatInputCommandInteraction,
+    eventId: number,
+  ): Promise<{ title: string; cancelledAt: string | null } | null> {
+    try {
+      const event = await this.eventsService.findOne(eventId);
+      if (event.cancelledAt) {
+        await interaction.editReply('Event not found');
+        return null;
+      }
+      return { title: event.title, cancelledAt: event.cancelledAt ?? null };
+    } catch {
+      await interaction.editReply('Event not found');
+      return null;
+    }
+  }
+
+  /** Look up invoking user's RL account. Returns null if unlinked. */
+  private async resolveInvoker(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<{ id: number; role: string } | null> {
+    const [invoker] = await this.db
+      .select({ id: schema.users.id, role: schema.users.role })
+      .from(schema.users)
+      .where(eq(schema.users.discordId, interaction.user.id))
+      .limit(1);
+    if (!invoker) {
+      await interaction.editReply(
+        'You need a linked Raid Ledger account to use this command.',
+      );
+      return null;
+    }
+    return invoker;
   }
 
   /**
@@ -190,42 +202,16 @@ export class InviteCommand
     interaction: AutocompleteInteraction,
   ): Promise<void> {
     const query = interaction.options.getFocused();
-
     try {
       const [result, defaultTimezone] = await Promise.all([
-        this.eventsService.findAll({
-          page: 1,
-          upcoming: 'true',
-          limit: 25,
-        }),
+        this.eventsService.findAll({ page: 1, upcoming: 'true', limit: 25 }),
         this.settingsService.getDefaultTimezone(),
       ]);
-      const timezone = defaultTimezone ?? 'UTC';
-
+      const tz = defaultTimezone ?? 'UTC';
       const filtered = result.data
-        .filter((event) =>
-          event.title.toLowerCase().includes(query.toLowerCase()),
-        )
+        .filter((e) => e.title.toLowerCase().includes(query.toLowerCase()))
         .slice(0, 25)
-        .map((event) => {
-          const date = new Date(event.startTime);
-          const formatted = date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            timeZone: timezone,
-          });
-          const time = date.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            timeZone: timezone,
-          });
-          const label = `${event.title} — ${formatted} at ${time}`;
-          return {
-            name: label.length > 100 ? label.slice(0, 97) + '...' : label,
-            value: event.id,
-          };
-        });
-
+        .map((e) => formatEventChoice(e, tz));
       await interaction.respond(filtered);
     } catch {
       await interaction.respond([]);
@@ -243,4 +229,27 @@ export class InviteCommand
       timezone,
     };
   }
+}
+
+/** Format an event as a Discord autocomplete choice. */
+function formatEventChoice(
+  event: { id: number; title: string; startTime: string },
+  timezone: string,
+): { name: string; value: number } {
+  const date = new Date(event.startTime);
+  const formatted = date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: timezone,
+  });
+  const time = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: timezone,
+  });
+  const label = `${event.title} \u2014 ${formatted} at ${time}`;
+  return {
+    name: label.length > 100 ? label.slice(0, 97) + '...' : label,
+    value: event.id,
+  };
 }

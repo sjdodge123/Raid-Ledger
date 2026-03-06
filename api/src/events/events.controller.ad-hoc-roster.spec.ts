@@ -1,7 +1,7 @@
 /**
  * events.controller.ad-hoc-roster.spec.ts
  *
- * Adversarial tests for ROK-530: EventsController.getAdHocRoster()
+ * Adversarial tests for ROK-530: EventsAttendanceController.getAdHocRoster()
  *
  * Focus areas:
  *  1. Ad-hoc events delegate to AdHocEventService.getAdHocRoster()
@@ -10,12 +10,9 @@
  *  4. VoiceAttendanceService.getActiveRoster() result is returned directly for planned events
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { EventsController } from './events.controller';
+import { EventsAttendanceController } from './events-attendance.controller';
 import { EventsService } from './events.service';
-import { SignupsService } from './signups.service';
 import { AttendanceService } from './attendance.service';
-import { PugsService } from './pugs.service';
-import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { AnalyticsService } from './analytics.service';
@@ -60,8 +57,8 @@ const voiceRosterResponse = {
   activeCount: 1,
 };
 
-describe('EventsController.getAdHocRoster (ROK-530)', () => {
-  let controller: EventsController;
+describe('EventsAttendanceController.getAdHocRoster (ROK-530)', () => {
+  let controller: EventsAttendanceController;
   let mockEventsService: { findOne: jest.Mock };
   let mockAdHocEventService: { getAdHocRoster: jest.Mock };
   let mockVoiceAttendanceService: { getActiveRoster: jest.Mock };
@@ -98,28 +95,15 @@ describe('EventsController.getAdHocRoster (ROK-530)', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [EventsController],
+      controllers: [EventsAttendanceController],
       providers: [
         { provide: EventsService, useValue: mockEventsService },
-        {
-          provide: SignupsService,
-          useValue: {
-            signup: jest.fn(),
-            cancel: jest.fn(),
-            getRoster: jest.fn(),
-          },
-        },
         {
           provide: AttendanceService,
           useValue: {
             recordAttendance: jest.fn(),
             getAttendanceSummary: jest.fn(),
           },
-        },
-        { provide: PugsService, useValue: {} },
-        {
-          provide: ShareService,
-          useValue: { shareToDiscordChannels: jest.fn() },
         },
         { provide: AdHocEventService, useValue: mockAdHocEventService },
         {
@@ -138,7 +122,9 @@ describe('EventsController.getAdHocRoster (ROK-530)', () => {
       ],
     }).compile();
 
-    controller = module.get<EventsController>(EventsController);
+    controller = module.get<EventsAttendanceController>(
+      EventsAttendanceController,
+    );
   });
 
   // ── Ad-hoc event delegation ──────────────────────────────────────────────

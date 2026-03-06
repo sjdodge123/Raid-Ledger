@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * IGDB / Games Integration Tests (ROK-528)
  *
@@ -65,7 +64,8 @@ describe('Games / IGDB (integration)', () => {
       expect(res.body.data.length).toBeGreaterThanOrEqual(2);
       expect(res.body.meta.total).toBeGreaterThanOrEqual(2);
 
-      const names = res.body.data.map((g: { name: string }) => g.name);
+      const games = (res.body as { data: Array<{ name: string }> }).data;
+      const names = games.map((g) => g.name);
       expect(names).toContain('Halo Infinite');
       expect(names).toContain('Halo Reach');
     });
@@ -80,7 +80,8 @@ describe('Games / IGDB (integration)', () => {
       const res = await testApp.request.get('/games/search?q=Game');
 
       expect(res.status).toBe(200);
-      const names = res.body.data.map((g: { name: string }) => g.name);
+      const games = (res.body as { data: Array<{ name: string }> }).data;
+      const names = games.map((g) => g.name);
       expect(names).toContain('Visible Game');
       expect(names).not.toContain('Hidden Game');
     });
@@ -95,7 +96,8 @@ describe('Games / IGDB (integration)', () => {
       const res = await testApp.request.get('/games/search?q=Game');
 
       expect(res.status).toBe(200);
-      const names = res.body.data.map((g: { name: string }) => g.name);
+      const games = (res.body as { data: Array<{ name: string }> }).data;
+      const names = games.map((g) => g.name);
       expect(names).toContain('Normal Game');
       expect(names).not.toContain('Banned Game');
     });
@@ -161,16 +163,18 @@ describe('Games / IGDB (integration)', () => {
 
       expect(res.status).toBe(200);
 
-      const names = res.body.data.map((g: { name: string }) => g.name);
+      const games = (res.body as { data: Array<{ name: string }> }).data;
+      const names = games.map((g) => g.name);
       expect(names).toContain('Enabled Game');
       expect(names).not.toContain('Disabled Game');
 
       // The seeded 'Test Game' is also enabled by default
       expect(res.body.meta.total).toBeGreaterThanOrEqual(1);
 
-      const enabledGame = res.body.data.find(
-        (g: { name: string }) => g.name === 'Enabled Game',
-      );
+      const cfgGames = (
+        res.body as { data: Array<Record<string, unknown> & { name: string }> }
+      ).data;
+      const enabledGame = cfgGames.find((g) => g.name === 'Enabled Game');
       expect(enabledGame).toMatchObject({
         hasRoles: true,
         colorHex: '#FF0000',
@@ -213,9 +217,10 @@ describe('Games / IGDB (integration)', () => {
       expect(res.body.data.length).toBe(2);
       expect(res.body.meta.gameName).toBe('Event Type Game');
 
-      const mythic = res.body.data.find(
-        (t: { slug: string }) => t.slug === 'mythic-raid',
-      );
+      const eventTypes = (
+        res.body as { data: Array<Record<string, unknown> & { slug: string }> }
+      ).data;
+      const mythic = eventTypes.find((t) => t.slug === 'mythic-raid');
       expect(mythic).toMatchObject({
         name: 'Mythic Raid',
         defaultPlayerCap: 20,
@@ -497,9 +502,8 @@ describe('Games / IGDB (integration)', () => {
 
       expect(res.status).toBe(200);
       // Verify at least one row has games (seed + our new game)
-      const nonEmptyRows = res.body.rows.filter(
-        (r: { games: unknown[] }) => r.games.length > 0,
-      );
+      const rows = (res.body as { rows: Array<{ games: unknown[] }> }).rows;
+      const nonEmptyRows = rows.filter((r) => r.games.length > 0);
       expect(nonEmptyRows.length).toBeGreaterThanOrEqual(1);
 
       // Each row should have category and slug

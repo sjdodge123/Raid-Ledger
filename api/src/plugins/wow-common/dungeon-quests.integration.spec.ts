@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Dungeon Quests Integration Tests (ROK-569)
  *
@@ -73,7 +72,8 @@ describe('Dungeon Quests (integration)', () => {
       );
 
       expect(res.status).toBe(200);
-      const names = res.body.map((q: { name: string }) => q.name);
+      const quests = res.body as Array<{ name: string }>;
+      const names = quests.map((q) => q.name);
       expect(names).toContain('Classic Quest');
       expect(names).not.toContain('TBC Quest');
     });
@@ -102,7 +102,8 @@ describe('Dungeon Quests (integration)', () => {
       );
 
       expect(res.status).toBe(200);
-      const names = res.body.map((q: { name: string }) => q.name);
+      const quests = res.body as Array<{ name: string }>;
+      const names = quests.map((q) => q.name);
       expect(names).toContain('Complex-wide Quest');
       expect(names).toContain('Wing-specific Quest');
     });
@@ -161,7 +162,8 @@ describe('Dungeon Quests (integration)', () => {
       expect(res.status).toBe(200);
       expect(res.body.length).toBe(3);
 
-      const names = res.body.map((q: { name: string }) => q.name);
+      const quests = res.body as Array<{ name: string }>;
+      const names = quests.map((q) => q.name);
       expect(names).toEqual(['Quest A', 'Quest B', 'Quest C']);
     });
 
@@ -229,18 +231,18 @@ describe('Dungeon Quests (integration)', () => {
       expect(res.body.length).toBe(2);
 
       // The quest with a prevQuestId should have a prerequisiteChain
-      const mainQuest = res.body.find(
-        (q: { questId: number }) => q.questId === 5002,
-      );
+      const questList = res.body as Array<{
+        questId: number;
+        prerequisiteChain: unknown[] | null;
+      }>;
+      const mainQuest = questList.find((q) => q.questId === 5002);
       expect(mainQuest).toBeDefined();
-      expect(mainQuest.prerequisiteChain).not.toBeNull();
-      expect(mainQuest.prerequisiteChain.length).toBe(2);
+      expect(mainQuest?.prerequisiteChain).not.toBeNull();
+      expect(mainQuest?.prerequisiteChain?.length).toBe(2);
 
       // The quest without a prevQuestId should have null prerequisiteChain
-      const prereqQuest = res.body.find(
-        (q: { questId: number }) => q.questId === 5001,
-      );
-      expect(prereqQuest.prerequisiteChain).toBeNull();
+      const prereqQuest = questList.find((q) => q.questId === 5001);
+      expect(prereqQuest!.prerequisiteChain).toBeNull();
     });
 
     it('should return 400 for invalid variant', async () => {

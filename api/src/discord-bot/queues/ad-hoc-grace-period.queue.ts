@@ -27,17 +27,8 @@ export class AdHocGracePeriodQueueService {
    */
   async enqueue(eventId: number, delayMs: number): Promise<void> {
     const jobId = `grace-${eventId}`;
-
     try {
-      // Remove any existing delayed/waiting job
-      const existingJob = await this.queue.getJob(jobId);
-      if (existingJob) {
-        const state = await existingJob.getState();
-        if (state === 'delayed' || state === 'waiting') {
-          await existingJob.remove();
-        }
-      }
-
+      await removeDelayedJob(this.queue, jobId);
       await this.queue.add(
         'grace-expire',
         { eventId } satisfies AdHocGracePeriodJobData,
@@ -50,7 +41,6 @@ export class AdHocGracePeriodQueueService {
           removeOnFail: 50,
         },
       );
-
       this.logger.debug(
         `Enqueued grace period for event ${eventId} (delay: ${Math.round(delayMs / 1000)}s)`,
       );
@@ -83,4 +73,12 @@ export class AdHocGracePeriodQueueService {
       );
     }
   }
+}
+
+/** Remove an existing delayed/waiting job by ID (idempotent). */
+async function removeDelayedJob(queue: Queue, jobId: string): Promise<void> {
+  const job = await queue.getJob(jobId);
+  if (!job) return;
+  const state = await job.getState();
+  if (state === 'delayed' || state === 'waiting') await job.remove();
 }

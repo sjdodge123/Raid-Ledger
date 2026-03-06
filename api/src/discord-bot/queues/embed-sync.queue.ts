@@ -35,33 +35,9 @@ export class EmbedSyncQueueService {
    */
   async enqueue(eventId: number, reason: string): Promise<void> {
     const jobId = `embed-sync-${eventId}`;
-
     try {
-      const existingJob = await this.queue.getJob(jobId);
-
-      if (existingJob) {
-        const state = await existingJob.getState();
-
-        if (state === 'delayed') {
-          // Reset the coalescing window — only the final state matters
-          await existingJob.updateData({ eventId, reason });
-          await existingJob.changeDelay(COALESCE_DELAY_MS);
-          this.logger.debug(
-            `Coalesced embed sync for event ${eventId} (reason: ${reason})`,
-          );
-          return;
-        }
-
-        if (state === 'active' || state === 'waiting') {
-          // Job is already processing or about to — processor reads
-          // latest state from DB, so this trigger is a no-op.
-          this.logger.debug(
-            `Embed sync already ${state} for event ${eventId}, skipping (reason: ${reason})`,
-          );
-          return;
-        }
-      }
-
+      const coalesced = await this.tryCoalesce(jobId, eventId, reason);
+      if (coalesced) return;
       await this.queue.add(
         'sync-embed',
         { eventId, reason } satisfies EmbedSyncJobData,
@@ -74,7 +50,6 @@ export class EmbedSyncQueueService {
           removeOnFail: 50,
         },
       );
-
       this.logger.debug(
         `Enqueued embed sync for event ${eventId} (reason: ${reason})`,
       );
@@ -83,5 +58,31 @@ export class EmbedSyncQueueService {
         `Failed to enqueue embed sync for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  /** Try to coalesce with an existing job. Returns true if handled. */
+  private async tryCoalesce(
+    jobId: string,
+    eventId: number,
+    reason: string,
+  ): Promise<boolean> {
+    const job = await this.queue.getJob(jobId);
+    if (!job) return false;
+    const state = await job.getState();
+    if (state === 'delayed') {
+      await job.updateData({ eventId, reason });
+      await job.changeDelay(COALESCE_DELAY_MS);
+      this.logger.debug(
+        `Coalesced embed sync for event ${eventId} (reason: ${reason})`,
+      );
+      return true;
+    }
+    if (state === 'active' || state === 'waiting') {
+      this.logger.debug(
+        `Embed sync already ${state} for event ${eventId}, skip`,
+      );
+      return true;
+    }
+    return false;
   }
 }
