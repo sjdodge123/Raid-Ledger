@@ -1,19 +1,13 @@
-import {
-  Injectable,
-  Inject,
-  Logger,
-  BadRequestException,
-  NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Inject, Logger, BadRequestException, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { plugins, appSettings } from '../../drizzle/schema';
+import { plugins } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
-import { PluginInfoDto, PluginIntegrationInfoDto } from '@raid-ledger/contract';
+import { PluginInfoDto } from '@raid-ledger/contract';
+import { resolveIntegrationInfo, cleanupPluginSettings, validateDependencies } from './plugin-registry.helpers';
 
 @Injectable()
 export class PluginRegistryService implements OnModuleInit {
@@ -21,240 +15,111 @@ export class PluginRegistryService implements OnModuleInit {
   private manifests = new Map<string, PluginManifest>();
   private activeSlugs = new Set<string>();
   private adapters = new Map<string, Map<string, unknown>>();
-  /** Multi-adapter registry: extension point -> game slug -> adapter[] */
   private multiAdapters = new Map<string, Map<string, unknown[]>>();
 
-  constructor(
-    @Inject(DrizzleAsyncProvider)
-    private db: PostgresJsDatabase<typeof schema>,
-    private eventEmitter: EventEmitter2,
-  ) {}
+  constructor(@Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>, private eventEmitter: EventEmitter2) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.refreshActiveCache();
-  }
+  async onModuleInit(): Promise<void> { await this.refreshActiveCache(); }
 
   registerManifest(manifest: PluginManifest): void {
     this.manifests.set(manifest.id, manifest);
-    this.logger.debug(
-      `Registered plugin manifest: ${manifest.id} v${manifest.version}`,
-    );
+    this.logger.debug(`Registered plugin manifest: ${manifest.id} v${manifest.version}`);
   }
 
-  /**
-   * Ensure a plugin is installed in the DB. If not present, inserts it as
-   * installed + active. If already present, preserves current state (no-op).
-   * Used by built-in plugin modules to self-register on first boot.
-   */
+  /** Ensure a plugin is installed in the DB. No-op if already present. */
   async ensureInstalled(slug: string): Promise<void> {
     const manifest = this.manifests.get(slug);
     if (!manifest) return;
-
-    const existing = await this.db
-      .select()
-      .from(plugins)
-      .where(eq(plugins.slug, slug))
-      .limit(1);
-
+    const existing = await this.db.select().from(plugins).where(eq(plugins.slug, slug)).limit(1);
     if (existing.length > 0) return;
-
     const now = new Date();
-    await this.db.insert(plugins).values({
-      slug,
-      name: manifest.name,
-      version: manifest.version,
-      active: true,
-      installedAt: now,
-      updatedAt: now,
-    });
-
+    await this.db.insert(plugins).values({ slug, name: manifest.name, version: manifest.version, active: true, installedAt: now, updatedAt: now });
     await this.refreshActiveCache();
     this.logger.debug(`Auto-installed built-in plugin: ${slug}`);
   }
 
-  getManifest(slug: string): PluginManifest | undefined {
-    return this.manifests.get(slug);
-  }
+  getManifest(slug: string): PluginManifest | undefined { return this.manifests.get(slug); }
 
+  /** List all registered plugins with their DB state and integration info. */
   async listPlugins(): Promise<PluginInfoDto[]> {
     const dbRecords = await this.db.select().from(plugins);
     const recordMap = new Map(dbRecords.map((r) => [r.slug, r]));
-
     const result: PluginInfoDto[] = [];
-
     for (const [slug, manifest] of this.manifests) {
       const record = recordMap.get(slug);
-      const integrations = await this.resolveIntegrationInfo(manifest);
-
+      const integrations = await resolveIntegrationInfo(this.db, manifest);
       result.push({
-        slug,
-        name: manifest.name,
-        version: manifest.version,
-        description: manifest.description,
-        author: manifest.author,
-        gameSlugs: manifest.gameSlugs ?? [],
-        capabilities: manifest.capabilities,
-        integrations,
-        status: record
-          ? record.active
-            ? 'active'
-            : 'inactive'
-          : 'not_installed',
+        slug, name: manifest.name, version: manifest.version, description: manifest.description,
+        author: manifest.author, gameSlugs: manifest.gameSlugs ?? [], capabilities: manifest.capabilities,
+        integrations, status: record ? (record.active ? 'active' : 'inactive') : 'not_installed',
         installedAt: record?.installedAt?.toISOString() ?? null,
       });
     }
-
     return result;
   }
 
+  /** Install a plugin, validating manifest and dependencies. */
   async install(slug: string): Promise<typeof plugins.$inferSelect> {
     const manifest = this.manifests.get(slug);
-    if (!manifest) {
-      throw new NotFoundException(`Plugin manifest "${slug}" not found`);
-    }
-
-    const existing = await this.db
-      .select()
-      .from(plugins)
-      .where(eq(plugins.slug, slug))
-      .limit(1);
-
-    if (existing.length > 0) {
-      throw new BadRequestException(`Plugin "${slug}" is already installed`);
-    }
-
-    if (manifest.dependencies?.length) {
-      for (const dep of manifest.dependencies) {
-        const depRecord = await this.db
-          .select()
-          .from(plugins)
-          .where(eq(plugins.slug, dep))
-          .limit(1);
-        if (depRecord.length === 0) {
-          throw new BadRequestException(
-            `Dependency "${dep}" must be installed before "${slug}"`,
-          );
-        }
-      }
-    }
+    if (!manifest) throw new NotFoundException(`Plugin manifest "${slug}" not found`);
+    const existing = await this.db.select().from(plugins).where(eq(plugins.slug, slug)).limit(1);
+    if (existing.length > 0) throw new BadRequestException(`Plugin "${slug}" is already installed`);
+    await validateDependencies(this.db, manifest, slug);
 
     const now = new Date();
-    const [record] = await this.db
-      .insert(plugins)
-      .values({
-        slug,
-        name: manifest.name,
-        version: manifest.version,
-        active: true,
-        installedAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
+    const [record] = await this.db.insert(plugins).values({ slug, name: manifest.name, version: manifest.version, active: true, installedAt: now, updatedAt: now }).returning();
     await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.INSTALLED, { slug, manifest });
     this.logger.log(`Plugin installed and activated: ${slug}`);
-
     return record;
   }
 
+  /** Uninstall a plugin (must be deactivated first). */
   async uninstall(slug: string): Promise<void> {
-    const existing = await this.db
-      .select()
-      .from(plugins)
-      .where(eq(plugins.slug, slug))
-      .limit(1);
-
-    if (existing.length === 0) {
-      throw new NotFoundException(`Plugin "${slug}" is not installed`);
-    }
-
-    if (existing[0].active) {
-      throw new BadRequestException(
-        `Plugin "${slug}" must be deactivated before uninstalling`,
-      );
-    }
+    const existing = await this.db.select().from(plugins).where(eq(plugins.slug, slug)).limit(1);
+    if (existing.length === 0) throw new NotFoundException(`Plugin "${slug}" is not installed`);
+    if (existing[0].active) throw new BadRequestException(`Plugin "${slug}" must be deactivated before uninstalling`);
 
     const manifest = this.manifests.get(slug);
     if (manifest) {
-      await this.cleanupSettings(manifest);
+      const count = await cleanupPluginSettings(this.db, manifest);
+      if (count > 0) this.logger.debug(`Cleaned up ${count} setting(s) for plugin "${manifest.id}"`);
     }
-
     await this.db.delete(plugins).where(eq(plugins.slug, slug));
     await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.UNINSTALLED, { slug });
     this.logger.log(`Plugin uninstalled: ${slug}`);
   }
 
+  /** Activate an installed plugin. */
   async activate(slug: string): Promise<void> {
-    const existing = await this.db
-      .select()
-      .from(plugins)
-      .where(eq(plugins.slug, slug))
-      .limit(1);
-
-    if (existing.length === 0) {
-      throw new NotFoundException(`Plugin "${slug}" is not installed`);
-    }
-
-    if (existing[0].active) {
-      return;
-    }
-
-    await this.db
-      .update(plugins)
-      .set({ active: true, updatedAt: new Date() })
-      .where(eq(plugins.slug, slug));
-
+    const existing = await this.db.select().from(plugins).where(eq(plugins.slug, slug)).limit(1);
+    if (existing.length === 0) throw new NotFoundException(`Plugin "${slug}" is not installed`);
+    if (existing[0].active) return;
+    await this.db.update(plugins).set({ active: true, updatedAt: new Date() }).where(eq(plugins.slug, slug));
     await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.ACTIVATED, { slug });
     this.logger.log(`Plugin activated: ${slug}`);
   }
 
+  /** Deactivate an installed plugin. */
   async deactivate(slug: string): Promise<void> {
-    const existing = await this.db
-      .select()
-      .from(plugins)
-      .where(eq(plugins.slug, slug))
-      .limit(1);
-
-    if (existing.length === 0) {
-      throw new NotFoundException(`Plugin "${slug}" is not installed`);
-    }
-
-    if (!existing[0].active) {
-      return;
-    }
-
-    await this.db
-      .update(plugins)
-      .set({ active: false, updatedAt: new Date() })
-      .where(eq(plugins.slug, slug));
-
+    const existing = await this.db.select().from(plugins).where(eq(plugins.slug, slug)).limit(1);
+    if (existing.length === 0) throw new NotFoundException(`Plugin "${slug}" is not installed`);
+    if (!existing[0].active) return;
+    await this.db.update(plugins).set({ active: false, updatedAt: new Date() }).where(eq(plugins.slug, slug));
     const manifest = this.manifests.get(slug);
-    if (manifest) {
-      this.removeAdaptersForPlugin(manifest.gameSlugs ?? []);
-    }
-
+    if (manifest) this.removeAdaptersForPlugin(manifest.gameSlugs ?? []);
     await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.DEACTIVATED, { slug });
     this.logger.log(`Plugin deactivated: ${slug}`);
   }
 
-  registerAdapter<T>(
-    extensionPoint: string,
-    gameSlug: string,
-    adapter: T,
-  ): void {
+  registerAdapter<T>(extensionPoint: string, gameSlug: string, adapter: T): void {
     let slugMap = this.adapters.get(extensionPoint);
-    if (!slugMap) {
-      slugMap = new Map<string, unknown>();
-      this.adapters.set(extensionPoint, slugMap);
-    }
+    if (!slugMap) { slugMap = new Map<string, unknown>(); this.adapters.set(extensionPoint, slugMap); }
     slugMap.set(gameSlug, adapter);
-    this.logger.debug(
-      `Registered adapter: ${extensionPoint} for game slug "${gameSlug}"`,
-    );
+    this.logger.debug(`Registered adapter: ${extensionPoint} for game slug "${gameSlug}"`);
   }
 
   getAdapter<T>(extensionPoint: string, gameSlug: string): T | undefined {
@@ -267,34 +132,15 @@ export class PluginRegistryService implements OnModuleInit {
     return new Map(slugMap) as Map<string, T>;
   }
 
-  /**
-   * Register a multi-adapter: multiple adapters can register for the same
-   * extension point + game slug (e.g., multiple DataEnrichers for 'world-of-warcraft').
-   */
-  registerMultiAdapter<T>(
-    extensionPoint: string,
-    gameSlug: string,
-    adapter: T,
-  ): void {
+  registerMultiAdapter<T>(extensionPoint: string, gameSlug: string, adapter: T): void {
     let slugMap = this.multiAdapters.get(extensionPoint);
-    if (!slugMap) {
-      slugMap = new Map<string, unknown[]>();
-      this.multiAdapters.set(extensionPoint, slugMap);
-    }
+    if (!slugMap) { slugMap = new Map<string, unknown[]>(); this.multiAdapters.set(extensionPoint, slugMap); }
     let adapters = slugMap.get(gameSlug);
-    if (!adapters) {
-      adapters = [];
-      slugMap.set(gameSlug, adapters);
-    }
+    if (!adapters) { adapters = []; slugMap.set(gameSlug, adapters); }
     adapters.push(adapter);
-    this.logger.debug(
-      `Registered multi-adapter: ${extensionPoint} for game slug "${gameSlug}" (${adapters.length} total)`,
-    );
+    this.logger.debug(`Registered multi-adapter: ${extensionPoint} for game slug "${gameSlug}" (${adapters.length} total)`);
   }
 
-  /**
-   * Get all multi-adapters for an extension point and game slug.
-   */
   getMultiAdapters<T>(extensionPoint: string, gameSlug: string): T[] {
     const slugMap = this.multiAdapters.get(extensionPoint);
     if (!slugMap) return [];
@@ -302,104 +148,22 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   removeAdaptersForPlugin(gameSlugs: string[] = []): void {
-    for (const [, slugMap] of this.adapters) {
-      for (const slug of gameSlugs) {
-        slugMap.delete(slug);
-      }
-    }
-    for (const [, slugMap] of this.multiAdapters) {
-      for (const slug of gameSlugs) {
-        slugMap.delete(slug);
-      }
-    }
-    this.logger.debug(
-      `Removed adapters for game slugs: ${gameSlugs.join(', ')}`,
-    );
+    for (const [, slugMap] of this.adapters) { for (const slug of gameSlugs) slugMap.delete(slug); }
+    for (const [, slugMap] of this.multiAdapters) { for (const slug of gameSlugs) slugMap.delete(slug); }
+    this.logger.debug(`Removed adapters for game slugs: ${gameSlugs.join(', ')}`);
   }
 
-  isActive(slug: string): boolean {
-    return this.activeSlugs.has(slug);
-  }
-
-  getActiveSlugsSync(): ReadonlySet<string> {
-    return this.activeSlugs;
-  }
+  isActive(slug: string): boolean { return this.activeSlugs.has(slug); }
+  getActiveSlugsSync(): ReadonlySet<string> { return this.activeSlugs; }
 
   private async refreshActiveCache(): Promise<void> {
     try {
-      const activeRecords = await this.db
-        .select({ slug: plugins.slug })
-        .from(plugins)
-        .where(eq(plugins.active, true));
-
+      const activeRecords = await this.db.select({ slug: plugins.slug }).from(plugins).where(eq(plugins.active, true));
       this.activeSlugs = new Set(activeRecords.map((r) => r.slug));
     } catch (error: unknown) {
-      const isTableMissing =
-        error instanceof Error &&
-        'code' in error &&
-        (error as Error & { code: string }).code === '42P01';
-
-      if (isTableMissing) {
-        this.logger.warn(
-          'plugins table not found — plugin system disabled until migration is applied',
-        );
-        this.activeSlugs = new Set<string>();
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  private async resolveIntegrationInfo(
-    manifest: PluginManifest,
-  ): Promise<PluginIntegrationInfoDto[]> {
-    if (!manifest.integrations?.length) {
-      return [];
-    }
-
-    // Batch-fetch all credential keys in a single query
-    const allCredentialKeys = manifest.integrations.flatMap(
-      (i) => i.credentialKeys,
-    );
-
-    const existingKeys = new Set<string>();
-    if (allCredentialKeys.length > 0) {
-      const rows = await this.db
-        .select({ key: appSettings.key })
-        .from(appSettings)
-        .where(inArray(appSettings.key, allCredentialKeys));
-      for (const row of rows) {
-        existingKeys.add(row.key);
-      }
-    }
-
-    return manifest.integrations.map((integration) => ({
-      key: integration.key,
-      name: integration.name,
-      description: integration.description,
-      icon: integration.icon,
-      configured: integration.credentialKeys.every((k) => existingKeys.has(k)),
-      credentialLabels: integration.credentialLabels,
-    }));
-  }
-
-  private async cleanupSettings(manifest: PluginManifest): Promise<void> {
-    const keysToDelete: string[] = [...(manifest.settingKeys ?? [])];
-
-    if (manifest.integrations) {
-      for (const integration of manifest.integrations) {
-        keysToDelete.push(...integration.credentialKeys);
-      }
-    }
-
-    for (const key of keysToDelete) {
-      await this.db.delete(appSettings).where(eq(appSettings.key, key));
-    }
-
-    if (keysToDelete.length > 0) {
-      this.logger.debug(
-        `Cleaned up ${keysToDelete.length} setting(s) for plugin "${manifest.id}"`,
-      );
+      const isTableMissing = error instanceof Error && 'code' in error && (error as Error & { code: string }).code === '42P01';
+      if (isTableMissing) { this.logger.warn('plugins table not found — plugin system disabled until migration is applied'); this.activeSlugs = new Set<string>(); }
+      else throw error;
     }
   }
 }

@@ -1,17 +1,4 @@
-import {
-  Controller,
-  Get,
-  UseGuards,
-  Req,
-  Res,
-  Query,
-  HttpStatus,
-  Logger,
-  Optional,
-  Inject,
-  ExecutionContext,
-} from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { Controller, Get, UseGuards, Req, Res, Query, HttpStatus, Logger, Optional, Inject } from '@nestjs/common';
 import { AuthService } from '../../auth/auth.service';
 import { UsersService } from '../../users/users.service';
 import { ConfigService } from '@nestjs/config';
@@ -26,55 +13,14 @@ import * as crypto from 'crypto';
 import type Redis from 'ioredis';
 import type { Response, Request } from 'express';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
-
-/**
- * Custom DiscordAuthGuard that catches OAuth errors (e.g. InternalOAuthError
- * from passport-oauth2) and redirects to the login page instead of returning
- * a raw JSON 401 response. (ROK-668)
- */
-class DiscordAuthGuard extends AuthGuard('discord') {
-  private readonly guardLogger = new Logger('DiscordAuthGuard');
-
-  handleRequest<TUser>(
-    err: Error | null,
-    user: TUser | false,
-    info: unknown,
-    context: ExecutionContext,
-  ): TUser {
-    if (err || !user) {
-      const errorMessage = err?.message || 'Unknown OAuth error';
-      const errorName = err?.constructor?.name || 'UnknownError';
-      this.guardLogger.warn(
-        `Discord OAuth callback failed: [${errorName}] ${errorMessage}`,
-      );
-
-      const httpCtx = context.switchToHttp();
-      const req = httpCtx.getRequest<Request>();
-      const res = httpCtx.getResponse<Response>();
-
-      const clientUrl =
-        process.env.CLIENT_URL ||
-        `${(req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol || 'http'}://${req.headers.host || 'localhost'}`;
-
-      res.redirect(`${clientUrl}/login?error=oauth_failed`);
-
-      // Return a dummy value — the redirect has already been sent so the
-      // route handler won't execute, but TypeScript requires a return.
-      return undefined as unknown as TUser;
-    }
-    return user;
-  }
-}
-
 import type { UserRole } from '@raid-ledger/contract';
+import {
+  DiscordAuthGuard, signOAuthState, verifyOAuthState, getOriginUrl,
+  exchangeCodeForToken, fetchDiscordProfile,
+} from './discord-auth.helpers';
 
 interface RequestWithUser extends Request {
-  user: {
-    id: number;
-    username: string;
-    role: UserRole;
-    impersonatedBy?: number | null;
-  };
+  user: { id: number; username: string; role: UserRole; impersonatedBy?: number | null };
 }
 
 @Controller('auth')
@@ -82,91 +28,22 @@ export class DiscordAuthController {
   private readonly logger = new Logger(DiscordAuthController.name);
 
   constructor(
-    private authService: AuthService,
-    private usersService: UsersService,
-    private configService: ConfigService,
-    private jwtService: JwtService,
+    private authService: AuthService, private usersService: UsersService,
+    private configService: ConfigService, private jwtService: JwtService,
     private settingsService: SettingsService,
-    @Optional()
-    @Inject(DiscordNotificationService)
-    private discordNotificationService: DiscordNotificationService | null,
+    @Optional() @Inject(DiscordNotificationService) private discordNotificationService: DiscordNotificationService | null,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  /**
-   * Sign OAuth state parameter to prevent tampering
-   */
-  private signState(payload: object): string {
-    const data = JSON.stringify(payload);
-    const secret = this.configService.get<string>('JWT_SECRET')!;
-    const signature = crypto
-      .createHmac('sha256', secret)
-      .update(data)
-      .digest('hex');
-    return Buffer.from(JSON.stringify({ data, signature })).toString('base64');
-  }
-
-  /**
-   * Verify and decode signed OAuth state parameter.
-   * Returns a generic record so callers can read action-specific fields.
-   */
-  private verifyState(state: string): Record<string, unknown> | null {
-    try {
-      const { data, signature } = JSON.parse(
-        Buffer.from(state, 'base64').toString(),
-      ) as { data: string; signature: string };
-      const secret = this.configService.get<string>('JWT_SECRET')!;
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(data)
-        .digest('hex');
-
-      if (
-        !crypto.timingSafeEqual(
-          Buffer.from(signature),
-          Buffer.from(expectedSignature),
-        )
-      ) {
-        return null; // Signature mismatch - state was tampered with
-      }
-
-      const parsed = JSON.parse(data) as Record<string, unknown>;
-
-      // Enforce 10-minute expiry on state parameter to prevent replay attacks
-      const MAX_STATE_AGE_MS = 10 * 60 * 1000;
-      const timestamp = parsed.timestamp as number | undefined;
-      if (!timestamp || Date.now() - timestamp > MAX_STATE_AGE_MS) {
-        this.logger.warn('OAuth state parameter expired');
-        return null;
-      }
-
-      return parsed;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Derive the external origin from request headers (proto + host).
-   */
-  private getOriginUrl(req: Request): string {
-    const proto =
-      (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ||
-      req.protocol ||
-      'http';
-    const host = req.headers.host || 'localhost';
-    return `${proto}://${host}`;
-  }
-
-  /**
-   * Get the frontend client URL for post-auth redirects.
-   * Uses CLIENT_URL env var if set, otherwise auto-detects from the request.
-   */
+  /** Get the frontend client URL for post-auth redirects. */
   private getClientUrl(req: Request): string {
-    return (
-      this.configService.get<string>('CLIENT_URL') || this.getOriginUrl(req)
-    );
+    return this.configService.get<string>('CLIENT_URL') || getOriginUrl(req);
+  }
+
+  /** Get JWT secret for state signing. */
+  private getSecret(): string {
+    return this.configService.get<string>('JWT_SECRET')!;
   }
 
   @RateLimit('auth')
@@ -179,280 +56,103 @@ export class DiscordAuthController {
   @RateLimit('auth')
   @Get('discord/callback')
   @UseGuards(DiscordAuthGuard)
-  async discordLoginCallback(
-    @Req() req: RequestWithUser,
-    @Res() res: Response,
-  ) {
-    // Guard already redirected on OAuth failure (ROK-668)
+  async discordLoginCallback(@Req() req: RequestWithUser, @Res() res: Response) {
     if (res.headersSent) return;
-
-    // User is validated and attached to req.user by DiscordStrategy
     const { access_token } = this.authService.login(req.user);
-
-    // Generate a one-time auth code and store it in Redis (30s TTL)
-    // This prevents JWT leakage through browser history, proxies, and Referer headers
     const authCode = crypto.randomBytes(32).toString('hex');
     await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
-
     const clientUrl = this.getClientUrl(req);
 
-    // Check if this callback originated from the invite flow (ROK-394).
-    // The invite flow uses a signed state param with action: 'invite' and the
-    // invite code. If present, redirect to /auth/success with the invite code
-    // so the frontend can navigate to the invite claim page.
     const stateParam = (req.query as Record<string, string>).state;
     if (stateParam) {
-      const stateData = this.verifyState(stateParam);
+      const stateData = verifyOAuthState(stateParam, this.getSecret(), this.logger);
       if (stateData?.action === 'invite' && stateData.inviteCode) {
-        const inviteCode = stateData.inviteCode as string;
-        res.redirect(
-          `${clientUrl}/auth/success?code=${authCode}&invite=${encodeURIComponent(inviteCode)}`,
-        );
+        res.redirect(`${clientUrl}/auth/success?code=${authCode}&invite=${encodeURIComponent(stateData.inviteCode as string)}`);
         return;
       }
     }
-
-    // Normal login flow — redirect to frontend with one-time code
     res.redirect(`${clientUrl}/auth/success?code=${authCode}`);
   }
 
-  /**
-   * GET /auth/discord/invite
-   * Initiates Discord OAuth with invite code preserved in signed state (ROK-394).
-   * After OAuth callback, redirects to /i/:code for reliable auto-claim.
-   */
+  /** GET /auth/discord/invite — initiate Discord OAuth with invite code in signed state (ROK-394). */
   @RateLimit('auth')
   @Get('discord/invite')
-  async discordInviteLogin(
-    @Query('code') inviteCode: string,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
+  async discordInviteLogin(@Query('code') inviteCode: string, @Req() req: Request, @Res() res: Response) {
     const clientUrl = this.getClientUrl(req);
-
-    if (!inviteCode) {
-      res.redirect(`${clientUrl}/calendar`);
-      return;
-    }
+    if (!inviteCode) { res.redirect(`${clientUrl}/calendar`); return; }
 
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
-    if (!oauthConfig) {
-      res.redirect(
-        `${clientUrl}/i/${encodeURIComponent(inviteCode)}?error=discord_not_configured`,
-      );
-      return;
-    }
+    if (!oauthConfig) { res.redirect(`${clientUrl}/i/${encodeURIComponent(inviteCode)}?error=discord_not_configured`); return; }
 
-    // Build signed state with invite code
-    const state = this.signState({
-      action: 'invite',
-      inviteCode,
-      timestamp: Date.now(),
-    });
-
-    // Reuse the existing registered callback URL — differentiate via state param
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(oauthConfig.callbackUrl)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
-
-    res.redirect(discordAuthUrl);
+    const state = signOAuthState({ action: 'invite', inviteCode, timestamp: Date.now() }, this.getSecret());
+    res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(oauthConfig.callbackUrl)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`);
   }
 
-  /**
-   * GET /auth/discord/link
-   * Initiates Discord OAuth with signed state containing user ID for linking.
-   * Note: Uses token query param since browser redirects can't send Authorization headers.
-   */
+  /** GET /auth/discord/link — initiate Discord OAuth for account linking. */
   @RateLimit('auth')
   @Get('discord/link')
-  async discordLink(
-    @Query('token') token: string,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
+  async discordLink(@Query('token') token: string, @Req() req: Request, @Res() res: Response) {
     const clientUrl = this.getClientUrl(req);
-
-    // Verify JWT from query param (browser redirects can't send headers)
-    // NOTE: Must handle errors with res.status() instead of throwing HttpException
-    // because @Res() bypasses NestJS exception filters (isHeadersSent crash).
-    if (!token) {
-      res
-        .status(HttpStatus.UNAUTHORIZED)
-        .json({ message: 'Authentication token required' });
-      return;
-    }
+    if (!token) { res.status(HttpStatus.UNAUTHORIZED).json({ message: 'Authentication token required' }); return; }
 
     let userId: number;
-    try {
-      userId = this.jwtService.verify<{ sub: number }>(token).sub;
-    } catch {
-      res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
-      );
+    try { userId = this.jwtService.verify<{ sub: number }>(token).sub; } catch {
+      res.redirect(`${clientUrl}/profile?linked=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`);
       return;
     }
 
-    // Get OAuth config from database settings (ROK-146)
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) {
-      res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
-      );
+      res.redirect(`${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`);
       return;
     }
 
-    // Create SIGNED state with user ID and action for linking
-    const state = this.signState({
-      userId,
-      action: 'link',
-      timestamp: Date.now(), // Prevent replay attacks
-    });
-
-    // Derive link callback URL from the stored login callback URL (single source of truth)
-    const redirectUri = oauthConfig.callbackUrl.replace(
-      '/callback',
-      '/link/callback',
-    );
-
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
-
-    res.redirect(discordAuthUrl);
+    const state = signOAuthState({ userId, action: 'link', timestamp: Date.now() }, this.getSecret());
+    const redirectUri = oauthConfig.callbackUrl.replace('/callback', '/link/callback');
+    res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`);
   }
 
-  /**
-   * GET /auth/discord/link/callback
-   * Handles Discord OAuth callback for linking (not login)
-   */
+  /** GET /auth/discord/link/callback — handle Discord OAuth callback for linking. */
   @RateLimit('auth')
   @Get('discord/link/callback')
-  async discordLinkCallback(
-    @Query('code') code: string,
-    @Query('state') state: string,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
+  async discordLinkCallback(@Query('code') code: string, @Query('state') state: string, @Req() req: Request, @Res() res: Response) {
     const clientUrl = this.getClientUrl(req);
-
     try {
-      // Get OAuth config from database settings (ROK-146)
-      const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
-      if (!oauthConfig) {
-        throw new Error('Discord OAuth is not configured');
-      }
-
-      // Verify signed state to get user ID
-      const stateData = this.verifyState(state);
-      if (!stateData) {
-        throw new Error('Invalid or tampered state parameter');
-      }
-
-      const userId = stateData.userId as number;
-      const action = stateData.action as string;
-
-      if (action !== 'link') {
-        throw new Error('Invalid state action');
-      }
-
-      // Derive link callback URL from stored login callback URL (single source of truth)
-      const redirectUri = oauthConfig.callbackUrl.replace(
-        '/callback',
-        '/link/callback',
-      );
-
-      // Exchange code for access token
-      const tokenResponse = await discordFetch(
-        'https://discord.com/api/oauth2/token',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent':
-              'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
-          },
-          body: new URLSearchParams({
-            client_id: oauthConfig.clientId,
-            client_secret: oauthConfig.clientSecret,
-            grant_type: 'authorization_code',
-            code,
-            redirect_uri: redirectUri,
-          }),
-        },
-      );
-
-      if (!tokenResponse.ok) {
-        const errorBody = await tokenResponse.text();
-        this.logger.error(
-          `Discord token exchange failed: ${tokenResponse.status} ${errorBody}`,
-        );
-        throw new Error('Failed to exchange code for token');
-      }
-
-      const tokens = (await tokenResponse.json()) as { access_token: string };
-
-      // Get Discord user profile
-      const userResponse = await discordFetch(
-        'https://discord.com/api/users/@me',
-        {
-          headers: {
-            Authorization: `Bearer ${tokens.access_token}`,
-            'User-Agent':
-              'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
-          },
-        },
-      );
-
-      if (!userResponse.ok) {
-        throw new Error('Failed to fetch Discord profile');
-      }
-
-      const discordProfile = (await userResponse.json()) as {
-        id: string;
-        username: string;
-        avatar?: string;
-      };
-
-      // Check if this Discord account is already linked (including unlinked) to a different user
-      const existingUser =
-        await this.usersService.findByDiscordIdIncludingUnlinked(
-          discordProfile.id,
-        );
-
-      if (existingUser && existingUser.id !== userId) {
-        throw new Error(
-          'This Discord account is already linked to another user',
-        );
-      }
-
-      // Link Discord account to user
-      await this.usersService.linkDiscord(
-        userId,
-        discordProfile.id,
-        discordProfile.username,
-        discordProfile.avatar,
-      );
-
-      // Auto-claim PUG slots matching this Discord account (ROK-292)
-      this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
-        userId,
-        discordId: discordProfile.id,
-      } satisfies DiscordLoginPayload);
-
-      // Send welcome DM now that Discord is linked (ROK-180 AC-1)
-      if (this.discordNotificationService) {
-        this.discordNotificationService
-          .sendWelcomeDM(userId)
-          .catch((err: unknown) => {
-            this.logger.warn(
-              `Failed to send welcome DM after link: ${err instanceof Error ? err.message : 'Unknown error'}`,
-            );
-          });
-      }
-
-      // Redirect to profile with success
+      const { userId, discordProfile } = await this.performLinkExchange(code, state);
+      await this.usersService.linkDiscord(userId, discordProfile.id, discordProfile.username, discordProfile.avatar);
+      this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, { userId, discordId: discordProfile.id } satisfies DiscordLoginPayload);
+      this.sendWelcomeDMSafe(userId);
       res.redirect(`${clientUrl}/profile?linked=success`);
     } catch (error) {
       this.logger.error('Discord link error:', error);
-      res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Link failed')}`,
-      );
+      res.redirect(`${clientUrl}/profile?linked=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Link failed')}`);
     }
+  }
+
+  /** Perform the link OAuth exchange: verify state, exchange code, fetch profile. */
+  private async performLinkExchange(code: string, state: string): Promise<{ userId: number; discordProfile: { id: string; username: string; avatar?: string } }> {
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (!oauthConfig) throw new Error('Discord OAuth is not configured');
+
+    const stateData = verifyOAuthState(state, this.getSecret(), this.logger);
+    if (!stateData || stateData.action !== 'link') throw new Error('Invalid or tampered state parameter');
+
+    const userId = stateData.userId as number;
+    const redirectUri = oauthConfig.callbackUrl.replace('/callback', '/link/callback');
+    const tokens = await exchangeCodeForToken(code, redirectUri, oauthConfig.clientId, oauthConfig.clientSecret, discordFetch);
+    const discordProfile = await fetchDiscordProfile(tokens.access_token, discordFetch);
+
+    const existingUser = await this.usersService.findByDiscordIdIncludingUnlinked(discordProfile.id);
+    if (existingUser && existingUser.id !== userId) throw new Error('This Discord account is already linked to another user');
+
+    return { userId, discordProfile };
+  }
+
+  /** Send welcome DM safely (fire-and-forget). */
+  private sendWelcomeDMSafe(userId: number): void {
+    if (!this.discordNotificationService) return;
+    this.discordNotificationService.sendWelcomeDM(userId).catch((err: unknown) => {
+      this.logger.warn(`Failed to send welcome DM after link: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    });
   }
 }
