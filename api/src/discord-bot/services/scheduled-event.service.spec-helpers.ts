@@ -1,9 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  GuildScheduledEventStatus,
-  DiscordAPIError,
-} from 'discord.js';
+import { GuildScheduledEventStatus, DiscordAPIError } from 'discord.js';
 import { ScheduledEventService } from './scheduled-event.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
@@ -13,7 +9,10 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { ScheduledEventData } from './scheduled-event.service';
 
 /** Build a DiscordAPIError mock that satisfies `instanceof DiscordAPIError` checks. */
-export function makeDiscordApiError(code: number, message = 'Discord API error'): DiscordAPIError {
+export function makeDiscordApiError(
+  code: number,
+  message = 'Discord API error',
+): DiscordAPIError {
   const err = Object.create(DiscordAPIError.prototype) as DiscordAPIError;
   Object.defineProperty(err, 'code', {
     value: code,
@@ -62,7 +61,9 @@ export interface ScheduledEventMocks {
 }
 
 /** Helper to build a chainable Drizzle select mock. */
-export function createSelectChain(rows: unknown[] = []): Record<string, jest.Mock> {
+export function createSelectChain(
+  rows: unknown[] = [],
+): Record<string, jest.Mock> {
   const chain: Record<string, jest.Mock> = {};
   chain.select = jest.fn().mockReturnValue(chain);
   chain.from = jest.fn().mockReturnValue(chain);

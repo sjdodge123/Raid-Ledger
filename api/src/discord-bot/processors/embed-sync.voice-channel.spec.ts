@@ -1,7 +1,6 @@
 /**
  * Tests that EmbedSyncProcessor resolves and passes voiceChannelId to embeds (ROK-507).
  */
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmbedSyncProcessor } from './embed-sync.processor';
 import { DiscordBotClientService } from '../discord-bot-client.service';

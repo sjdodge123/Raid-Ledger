@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { DiscordEventListener } from './event.listener';
 import type { EventPayload } from './event.listener';

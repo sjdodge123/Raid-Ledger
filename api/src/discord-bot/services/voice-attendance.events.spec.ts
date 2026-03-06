@@ -12,20 +12,10 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException } from '@nestjs/common';
-import {
-  VoiceAttendanceService,
-  classifyVoiceSession,
-} from './voice-attendance.service';
+import { VoiceAttendanceService } from './voice-attendance.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
-import { SettingsService } from '../../settings/settings.service';
-import { CronJobService } from '../../cron-jobs/cron-job.service';
-import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../../common/testing/drizzle-mock';
 import { VoiceStateListener } from '../listeners/voice-state.listener';
 import { AdHocEventService } from './ad-hoc-event.service';
 import { PresenceGameDetectorService } from './presence-game-detector.service';
@@ -45,14 +35,6 @@ import { AnalyticsService } from '../../events/analytics.service';
 import type { UserRole } from '@raid-ledger/contract';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function eventWindow(durationHours: number) {
-  const start = new Date('2026-02-28T20:00:00Z');
-  const end = new Date(start.getTime() + durationHours * 3600_000);
-  const durationSec = durationHours * 3600;
-  const graceMs = 5 * 60 * 1000; // 5 minutes
-  return { start, end, durationSec, graceMs };
-}
 
 function makeCollection<K, V>(entries: [K, V][] = []): Collection<K, V> {
   const col = new Collection<K, V>();

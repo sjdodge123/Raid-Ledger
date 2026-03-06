@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { RoachOutInteractionListener } from './roach-out-interaction.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -9,6 +7,22 @@ import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { ROACH_OUT_BUTTON_IDS } from '../discord-bot.constants';
+
+/** Test-friendly interface exposing private members needed by specs */
+interface TestableRoachOutInteractionListener {
+  onBotConnected: () => void;
+  handleButtonInteraction: (interaction: unknown) => Promise<void>;
+  handleRoachOutClick: (interaction: unknown, eventId: number) => Promise<void>;
+  handleConfirm: (interaction: unknown, eventId: number) => Promise<void>;
+  handleCancel: (interaction: unknown) => Promise<void>;
+  safeEditReply: (interaction: unknown, payload: unknown) => Promise<void>;
+  editReminderEmbed: (
+    interaction: unknown,
+    eventTitle: string,
+  ) => Promise<void>;
+  updateChannelEmbeds: (eventId: number) => Promise<void>;
+  isDiscordInteractionError: (error: unknown) => boolean;
+}
 
 /** Create a minimal ButtonInteraction mock */
 function makeButtonInteraction(
@@ -52,7 +66,7 @@ function makeButtonInteraction(
 
 describe('RoachOutInteractionListener', () => {
   let module: TestingModule;
-  let listener: any; // Use any to access private methods directly
+  let listener: TestableRoachOutInteractionListener;
   let mockClientService: {
     getClient: jest.Mock;
     getGuildId: jest.Mock;
@@ -98,7 +112,7 @@ describe('RoachOutInteractionListener', () => {
       limit: jest.fn().mockResolvedValue([]),
     };
 
-    mockDb = mockChain as any;
+    mockDb = mockChain as typeof mockDb;
 
     module = await Test.createTestingModule({
       providers: [
@@ -112,7 +126,8 @@ describe('RoachOutInteractionListener', () => {
       ],
     }).compile();
 
-    listener = module.get(RoachOutInteractionListener);
+    const instance: unknown = module.get(RoachOutInteractionListener);
+    listener = instance as TestableRoachOutInteractionListener;
   });
 
   afterEach(async () => {
@@ -347,7 +362,6 @@ describe('RoachOutInteractionListener', () => {
       mockClientService.getClient.mockReturnValue(null);
 
       // Should not throw
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       expect(() => listener.onBotConnected()).not.toThrow();
     });
   });

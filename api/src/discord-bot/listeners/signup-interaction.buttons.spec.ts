@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-enable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-enable @typescript-eslint/no-unsafe-return */
-
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
   type SignupInteractionMocks,

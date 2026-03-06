@@ -407,5 +407,4 @@ describe('SignupsService — confirm', () => {
       expect(result.confirmationStatus).toBe('changed');
     });
   });
-
 });

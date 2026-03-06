@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SignupsService } from './signups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -29,13 +25,6 @@ describe('SignupsService — cancel', () => {
     isEligible: jest.Mock;
   };
 
-  const mockUser = {
-    id: 1,
-    username: 'testuser',
-    avatar: 'avatar.png',
-    discordId: '123',
-    role: 'member',
-  };
   const mockEvent = { id: 1, title: 'Test Event', creatorId: 99 };
   const mockSignup = {
     id: 1,
@@ -46,24 +35,6 @@ describe('SignupsService — cancel', () => {
     characterId: null,
     confirmationStatus: 'pending',
   };
-  const mockCharacter = {
-    id: 'char-uuid-1',
-    userId: 1,
-    gameId: 'game-uuid-1',
-    name: 'Frostweaver',
-    realm: 'Area52',
-    class: 'Mage',
-    spec: 'Arcane',
-    role: 'dps',
-    isMain: true,
-    itemLevel: 485,
-    avatarUrl: null,
-    externalId: null,
-    displayOrder: 0,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
   beforeEach(async () => {
     mockNotificationService = {
       create: jest.fn().mockResolvedValue(null),
@@ -511,5 +482,4 @@ describe('SignupsService — cancel', () => {
       expect(mockDb.delete).toHaveBeenCalledTimes(1);
     });
   });
-
 });

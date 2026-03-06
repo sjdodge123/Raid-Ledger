@@ -697,5 +697,4 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
   });
 
   // ─── Edge cases ────────────────────────────────────────────────────────────
-
 });

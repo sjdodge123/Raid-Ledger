@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Event Plans Integration Tests (ROK-523)
  *
@@ -248,7 +247,8 @@ describe('Event Plans (integration)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.length).toBe(2);
-      const titles = res.body.map((p: any) => p.title as string);
+      const plans = res.body as Array<{ title: string }>;
+      const titles = plans.map((p) => p.title);
       expect(titles).toContain('Plan Alpha');
       expect(titles).toContain('Plan Beta');
     });

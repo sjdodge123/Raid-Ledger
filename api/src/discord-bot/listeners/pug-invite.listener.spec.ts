@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { PugInviteListener } from './pug-invite.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';

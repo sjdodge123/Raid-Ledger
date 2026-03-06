@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 /**
  * Cron-Job Integration Tests (ROK-526)
  *
@@ -182,7 +181,9 @@ describe('Cron-Job (integration)', () => {
       // executeWithTracking call triggers pruning (pruning is periodic,
       // not on every tick — ROK-607)
       const cronJobService = testApp.app.get(CronJobService);
-      (cronJobService as any).executionCounts.set(jobId, 49);
+      (
+        cronJobService as unknown as { executionCounts: Map<string, number> }
+      ).executionCounts.set(jobId, 49);
 
       await cronJobService.executeWithTracking(
         'test:prunable-job',
@@ -334,7 +335,8 @@ describe('Cron-Job (integration)', () => {
       expect(listRes.status).toBe(200);
       expect(listRes.body.length).toBeGreaterThanOrEqual(2);
 
-      const names = listRes.body.map((j: any) => j.name);
+      const jobs = listRes.body as Array<{ name: string }>;
+      const names = jobs.map((j) => j.name);
       expect(names).toContain('test:listable-1');
       expect(names).toContain('test:listable-2');
     });

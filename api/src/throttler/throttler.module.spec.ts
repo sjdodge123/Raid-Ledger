@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from '@nestjs/testing';
 import { Controller, Get, INestApplication } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -33,7 +32,9 @@ describe('RateLimitModule', () => {
   });
 
   it('should allow normal requests through', async () => {
-    const res = await supertest.default(app.getHttpServer()).get('/test');
+    const res = await supertest
+      .default(app.getHttpServer() as import('http').Server)
+      .get('/test');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
   });
@@ -50,7 +51,10 @@ describe('ThrottlerExceptionFilter', () => {
       }),
     };
 
-    filter.catch(new (jest.fn())(), mockHost as any);
+    filter.catch(
+      new (jest.fn<new () => Error>())(),
+      mockHost as unknown as import('@nestjs/common').ArgumentsHost,
+    );
 
     expect(mockStatus).toHaveBeenCalledWith(429);
     expect(mockJson).toHaveBeenCalledWith({

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import {
   GuildScheduledEventPrivacyLevel,
   GuildScheduledEventEntityType,
@@ -70,7 +69,9 @@ describe('ScheduledEventService — CRUD operations', () => {
     });
 
     it('skips when no voice channel is resolved (AC-10)', async () => {
-      mocks.channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(null);
+      mocks.channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+        null,
+      );
       await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
       expect(mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
     });
@@ -102,7 +103,9 @@ describe('ScheduledEventService — CRUD operations', () => {
         scheduledStartTime: Date;
       };
       expect(call.scheduledEndTime).toEqual(new Date(baseEventData.endTime));
-      expect(call.scheduledStartTime).toEqual(new Date(baseEventData.startTime));
+      expect(call.scheduledStartTime).toEqual(
+        new Date(baseEventData.startTime),
+      );
     });
 
     it('uses gameId to resolve the voice channel', async () => {
@@ -121,7 +124,13 @@ describe('ScheduledEventService — CRUD operations', () => {
     });
 
     it('uses voiceChannelOverride instead of resolver when provided (ROK-599)', async () => {
-      await mocks.service.createScheduledEvent(42, baseEventData, 99, false, 'override-vc-456');
+      await mocks.service.createScheduledEvent(
+        42,
+        baseEventData,
+        99,
+        false,
+        'override-vc-456',
+      );
       expect(
         mocks.channelResolver.resolveVoiceChannelForScheduledEvent,
       ).not.toHaveBeenCalled();
@@ -159,7 +168,9 @@ describe('ScheduledEventService — CRUD operations', () => {
     });
 
     it('creates a new scheduled event when none exists in DB', async () => {
-      const selectChain = mocks.createSelectChain([{ discordScheduledEventId: null }]);
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: null },
+      ]);
       mocks.mockDb.select.mockReturnValue(selectChain);
       const updateChain = mocks.createUpdateChain();
       mocks.mockDb.update.mockReturnValue(updateChain);
@@ -200,12 +211,17 @@ describe('ScheduledEventService — CRUD operations', () => {
       const updateChain = mocks.createUpdateChain();
       mocks.mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(unknownError);
 
       await mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
 
-      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
       expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalled();
     });
 
@@ -214,7 +230,9 @@ describe('ScheduledEventService — CRUD operations', () => {
         { discordScheduledEventId: 'discord-se-id-1' },
       ]);
       mocks.mockDb.select.mockReturnValue(selectChain);
-      mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(new Error('Rate limited'));
+      mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(
+        new Error('Rate limited'),
+      );
 
       await expect(
         mocks.service.updateScheduledEvent(42, baseEventData, 1, false),
@@ -236,7 +254,9 @@ describe('ScheduledEventService — CRUD operations', () => {
 
       await mocks.service.deleteScheduledEvent(42);
 
-      expect(mocks.mockGuild.scheduledEvents.delete).toHaveBeenCalledWith('discord-se-id-1');
+      expect(mocks.mockGuild.scheduledEvents.delete).toHaveBeenCalledWith(
+        'discord-se-id-1',
+      );
     });
 
     it('clears discordScheduledEventId in DB after successful delete', async () => {
@@ -249,11 +269,15 @@ describe('ScheduledEventService — CRUD operations', () => {
 
       await mocks.service.deleteScheduledEvent(42);
 
-      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
     });
 
     it('skips when no discordScheduledEventId stored in DB', async () => {
-      const selectChain = mocks.createSelectChain([{ discordScheduledEventId: null }]);
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: null },
+      ]);
       mocks.mockDb.select.mockReturnValue(selectChain);
 
       await mocks.service.deleteScheduledEvent(42);
@@ -270,7 +294,9 @@ describe('ScheduledEventService — CRUD operations', () => {
 
     it('skips silently when bot is not connected', async () => {
       mocks.clientService.isConnected.mockReturnValue(false);
-      await expect(mocks.service.deleteScheduledEvent(42)).resolves.not.toThrow();
+      await expect(
+        mocks.service.deleteScheduledEvent(42),
+      ).resolves.not.toThrow();
       expect(mocks.mockGuild.scheduledEvents.delete).not.toHaveBeenCalled();
     });
 
@@ -282,11 +308,18 @@ describe('ScheduledEventService — CRUD operations', () => {
       const updateChain = mocks.createUpdateChain();
       mocks.mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mocks.mockGuild.scheduledEvents.delete.mockRejectedValue(unknownError);
 
-      await expect(mocks.service.deleteScheduledEvent(42)).resolves.not.toThrow();
-      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+      await expect(
+        mocks.service.deleteScheduledEvent(42),
+      ).resolves.not.toThrow();
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
     });
 
     it('does not throw on other Discord errors — logs and swallows (AC-13)', async () => {
@@ -298,7 +331,9 @@ describe('ScheduledEventService — CRUD operations', () => {
         new Error('Unexpected API error'),
       );
 
-      await expect(mocks.service.deleteScheduledEvent(42)).resolves.not.toThrow();
+      await expect(
+        mocks.service.deleteScheduledEvent(42),
+      ).resolves.not.toThrow();
     });
   });
 
@@ -318,13 +353,16 @@ describe('ScheduledEventService — CRUD operations', () => {
         'discord-se-id-1',
         expect.objectContaining({ description: expect.any(String) }),
       );
-      const editArg = mocks.mockGuild.scheduledEvents.edit.mock.calls[0][1] as Record<string, unknown>;
+      const editArg = mocks.mockGuild.scheduledEvents.edit.mock
+        .calls[0][1] as Record<string, unknown>;
       expect(editArg).not.toHaveProperty('name');
       expect(editArg).not.toHaveProperty('scheduledStartTime');
     });
 
     it('skips when no discordScheduledEventId in DB', async () => {
-      const selectChain = mocks.createSelectChain([{ discordScheduledEventId: null }]);
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: null },
+      ]);
       mocks.mockDb.select.mockReturnValue(selectChain);
 
       await mocks.service.updateDescription(42, baseEventData);
@@ -345,14 +383,19 @@ describe('ScheduledEventService — CRUD operations', () => {
       const updateChain = mocks.createUpdateChain();
       mocks.mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(unknownError);
 
       await expect(
         mocks.service.updateDescription(42, baseEventData),
       ).resolves.not.toThrow();
 
-      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
     });
 
     it('does not throw on other Discord errors — logs and swallows', async () => {
@@ -360,7 +403,9 @@ describe('ScheduledEventService — CRUD operations', () => {
         { discordScheduledEventId: 'discord-se-id-1' },
       ]);
       mocks.mockDb.select.mockReturnValue(selectChain);
-      mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(new Error('Some other error'));
+      mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(
+        new Error('Some other error'),
+      );
 
       await expect(
         mocks.service.updateDescription(42, baseEventData),

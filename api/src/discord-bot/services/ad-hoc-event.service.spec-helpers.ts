@@ -12,7 +12,10 @@ import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { VoiceAttendanceService } from './voice-attendance.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 
 export const baseMember = {
   discordUserId: 'discord-123',
@@ -62,7 +65,10 @@ export async function setupAdHocTestModule(): Promise<{
       getActiveCount: jest.fn().mockResolvedValue(0),
       finalizeAll: jest.fn().mockResolvedValue(undefined),
     },
-    channelBindingsService: { getBindingById: jest.fn(), getBindings: jest.fn() },
+    channelBindingsService: {
+      getBindingById: jest.fn(),
+      getBindings: jest.fn(),
+    },
     usersService: { findByDiscordId: jest.fn() },
     gracePeriodQueue: {
       enqueue: jest.fn().mockResolvedValue(undefined),
@@ -77,25 +83,46 @@ export async function setupAdHocTestModule(): Promise<{
       { provide: SettingsService, useValue: mocks.settingsService },
       { provide: UsersService, useValue: mocks.usersService },
       { provide: AdHocParticipantService, useValue: mocks.participantService },
-      { provide: ChannelBindingsService, useValue: mocks.channelBindingsService },
-      { provide: AdHocGracePeriodQueueService, useValue: mocks.gracePeriodQueue },
+      {
+        provide: ChannelBindingsService,
+        useValue: mocks.channelBindingsService,
+      },
+      {
+        provide: AdHocGracePeriodQueueService,
+        useValue: mocks.gracePeriodQueue,
+      },
       {
         provide: AdHocNotificationService,
-        useValue: { notifySpawn: jest.fn(), queueUpdate: jest.fn(), notifyCompleted: jest.fn(), flush: jest.fn() },
+        useValue: {
+          notifySpawn: jest.fn(),
+          queueUpdate: jest.fn(),
+          notifyCompleted: jest.fn(),
+          flush: jest.fn(),
+        },
       },
       {
         provide: AdHocEventsGateway,
-        useValue: { emitRosterUpdate: jest.fn(), emitStatusChange: jest.fn(), emitEndTimeExtended: jest.fn() },
+        useValue: {
+          emitRosterUpdate: jest.fn(),
+          emitStatusChange: jest.fn(),
+          emitEndTimeExtended: jest.fn(),
+        },
       },
       {
         provide: VoiceAttendanceService,
-        useValue: { handleJoin: jest.fn(), handleLeave: jest.fn(), getActiveCount: jest.fn().mockReturnValue(0) },
+        useValue: {
+          handleJoin: jest.fn(),
+          handleLeave: jest.fn(),
+          getActiveCount: jest.fn().mockReturnValue(0),
+        },
       },
     ],
   }).compile();
 
   const service = module.get(AdHocEventService);
-  jest.spyOn(service as any, 'autoSignupParticipant').mockResolvedValue(undefined);
+  jest
+    .spyOn(service as any, 'autoSignupParticipant')
+    .mockResolvedValue(undefined);
 
   return { service, mocks };
 }

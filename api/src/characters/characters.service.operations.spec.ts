@@ -1,38 +1,16 @@
-/* eslint-disable */
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  ForbiddenException,
-  ConflictException,
-} from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CharactersService } from './characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
 
 /**
- * Helper: build a mock tx.select chain that resolves to `rows`.
- * Supports both direct where-resolve and .where().limit() patterns.
- */
-function mockTxSelect(rows: unknown[]) {
-  return jest.fn().mockReturnValue({
-    from: jest.fn().mockReturnValue({
-      where: jest.fn().mockReturnValue({
-        limit: jest.fn().mockResolvedValue(rows),
-      }),
-    }),
-  });
-}
-
-/**
  * Helper: build a mock tx.select that handles two sequential calls:
  *   1st call → duplicate claim check → .from().where().limit(1) → claimRows
  *   2nd call → charCount            → .from().where()           → countRows
  */
-function mockTxSelectDualCall(
-  claimRows: unknown[],
-  countRows: unknown[],
-) {
+function mockTxSelectDualCall(claimRows: unknown[], countRows: unknown[]) {
   const fn = jest.fn();
   // 1st call: duplicate claim check (.where().limit())
   fn.mockReturnValueOnce({
@@ -197,7 +175,6 @@ describe('CharactersService — operations', () => {
     service = module.get<CharactersService>(CharactersService);
   });
 
-
   describe('delete', () => {
     it('should delete a non-main character when main still exists', async () => {
       // findOne returns the alt character
@@ -356,7 +333,8 @@ describe('CharactersService — operations', () => {
           level: 80,
           race: 'Orc',
           faction: 'horde',
-          profileUrl: 'https://worldofwarcraft.blizzard.com/en-us/character/us/area-52/thrall',
+          profileUrl:
+            'https://worldofwarcraft.blizzard.com/en-us/character/us/area-52/thrall',
         }),
         fetchSpecialization: jest.fn().mockResolvedValue({
           spec: 'Enhancement',
@@ -430,7 +408,8 @@ describe('CharactersService — operations', () => {
         region: 'us',
         gameVariant: 'retail',
         lastSyncedAt: new Date(),
-        profileUrl: 'https://worldofwarcraft.blizzard.com/en-us/character/us/area-52/thrall',
+        profileUrl:
+          'https://worldofwarcraft.blizzard.com/en-us/character/us/area-52/thrall',
         equipment: { slots: [] },
         talents: { loadouts: [] },
       };
@@ -452,7 +431,9 @@ describe('CharactersService — operations', () => {
 
       // Should return merged data, not throw ConflictException
       expect(result.itemLevel).toBe(500);
-      expect(result.avatarUrl).toBe('https://render.worldofwarcraft.com/thrall.jpg');
+      expect(result.avatarUrl).toBe(
+        'https://render.worldofwarcraft.com/thrall.jpg',
+      );
       expect(result.region).toBe('us');
       expect(result.gameVariant).toBe('retail');
       expect(result.equipment).toEqual({ slots: [] });
@@ -492,5 +473,4 @@ describe('CharactersService — operations', () => {
       );
     });
   });
-
 });

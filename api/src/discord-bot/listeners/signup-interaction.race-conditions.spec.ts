@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-enable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-enable @typescript-eslint/no-unsafe-return */
-
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
   type SignupInteractionMocks,
@@ -85,7 +80,11 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
       mocks.mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([{ id: 2001, title: 'Race Test', gameId: null }]),
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { id: 2001, title: 'Race Test', gameId: null },
+              ]),
           }),
         }),
       });
@@ -153,7 +152,9 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
         userId,
       );
 
-      const discordError = new Error('Interaction has already been acknowledged');
+      const discordError = new Error(
+        'Interaction has already been acknowledged',
+      );
       (discordError as unknown as { code: number }).code = 40060;
       interaction.deferReply.mockRejectedValueOnce(discordError);
 
@@ -176,7 +177,9 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
         userId,
       );
 
-      const discordError = new Error('Interaction has already been acknowledged.');
+      const discordError = new Error(
+        'Interaction has already been acknowledged.',
+      );
       (discordError as unknown as { code: number }).code = 40060;
       interaction.editReply.mockRejectedValueOnce(discordError);
 
@@ -237,7 +240,11 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
       mocks.mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([{ id: 2005, title: 'Test', slotConfig: null }]),
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { id: 2005, title: 'Test', slotConfig: null },
+              ]),
           }),
         }),
       });
@@ -252,7 +259,9 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
         userId,
       );
 
-      const discordError = new Error('Interaction has already been acknowledged.');
+      const discordError = new Error(
+        'Interaction has already been acknowledged.',
+      );
       (discordError as unknown as { code: number }).code = 40060;
       interaction.editReply.mockRejectedValueOnce(discordError);
 

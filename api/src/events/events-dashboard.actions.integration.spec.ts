@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Events Cancel, Reschedule, Invite & Embed Integration Tests (ROK-523)
  *
@@ -25,10 +24,18 @@ async function createMemberAndLogin(
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
   const [user] = await testApp.db
     .insert(schema.users)
-    .values({ discordId: discordId ?? `local:${email}`, username, role: 'member' })
+    .values({
+      discordId: discordId ?? `local:${email}`,
+      username,
+      role: 'member',
+    })
     .returning();
-  await testApp.db.insert(schema.localCredentials).values({ email, passwordHash, userId: user.id });
-  const loginRes = await testApp.request.post('/auth/local').send({ email, password: 'TestPassword123!' });
+  await testApp.db
+    .insert(schema.localCredentials)
+    .values({ email, passwordHash, userId: user.id });
+  const loginRes = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: 'TestPassword123!' });
   return { userId: user.id, token: loginRes.body.access_token as string };
 }
 
@@ -43,9 +50,16 @@ async function createFutureEvent(
   const res = await testApp.request
     .post('/events')
     .set('Authorization', `Bearer ${adminToken}`)
-    .send({ title: 'Integration Test Event', startTime: start.toISOString(), endTime: end.toISOString(), ...overrides });
+    .send({
+      title: 'Integration Test Event',
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      ...overrides,
+    });
   if (res.status !== 201) {
-    throw new Error(`createFutureEvent failed: ${res.status} — ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `createFutureEvent failed: ${res.status} — ${JSON.stringify(res.body)}`,
+    );
   }
   return res.body.id as number;
 }
@@ -70,7 +84,9 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
 
   describe('cancel', () => {
     it('should soft-cancel an event with a reason', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { title: 'Cancelled Raid' });
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        title: 'Cancelled Raid',
+      });
       const cancelRes = await testApp.request
         .patch(`/events/${eventId}/cancel`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -84,27 +100,57 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
     });
 
     it('should create notifications for signed-up users on cancel', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { title: 'Notified Cancel' });
-      const { userId, token: memberToken } = await createMemberAndLogin(testApp, 'cancel_notif', 'cancel_notif@test.local');
-      await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${memberToken}`).send({});
-      await testApp.request.patch(`/events/${eventId}/cancel`).set('Authorization', `Bearer ${adminToken}`).send({});
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        title: 'Notified Cancel',
+      });
+      const { userId, token: memberToken } = await createMemberAndLogin(
+        testApp,
+        'cancel_notif',
+        'cancel_notif@test.local',
+      );
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({});
+      await testApp.request
+        .patch(`/events/${eventId}/cancel`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
 
-      const notifications = await testApp.db.select().from(schema.notifications).where(eq(schema.notifications.userId, userId));
-      const cancelNotif = notifications.find((n) => n.type === 'event_cancelled');
+      const notifications = await testApp.db
+        .select()
+        .from(schema.notifications)
+        .where(eq(schema.notifications.userId, userId));
+      const cancelNotif = notifications.find(
+        (n) => n.type === 'event_cancelled',
+      );
       expect(cancelNotif).toBeDefined();
     });
 
     it('should reject cancellation of already-cancelled event', async () => {
       const eventId = await createFutureEvent(testApp, adminToken);
-      await testApp.request.patch(`/events/${eventId}/cancel`).set('Authorization', `Bearer ${adminToken}`).send({});
-      const res = await testApp.request.patch(`/events/${eventId}/cancel`).set('Authorization', `Bearer ${adminToken}`).send({});
+      await testApp.request
+        .patch(`/events/${eventId}/cancel`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
+      const res = await testApp.request
+        .patch(`/events/${eventId}/cancel`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
       expect(res.status).toBe(400);
     });
 
     it('should forbid non-creator non-admin from cancelling', async () => {
       const eventId = await createFutureEvent(testApp, adminToken);
-      const { token: memberToken } = await createMemberAndLogin(testApp, 'noauth_cancel', 'noauth_cancel@test.local');
-      const res = await testApp.request.patch(`/events/${eventId}/cancel`).set('Authorization', `Bearer ${memberToken}`).send({});
+      const { token: memberToken } = await createMemberAndLogin(
+        testApp,
+        'noauth_cancel',
+        'noauth_cancel@test.local',
+      );
+      const res = await testApp.request
+        .patch(`/events/${eventId}/cancel`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({});
       expect(res.status).toBe(403);
     });
   });
@@ -115,13 +161,18 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
 
   describe('reschedule', () => {
     it('should reschedule an event to new times', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { title: 'Rescheduled Raid' });
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        title: 'Rescheduled Raid',
+      });
       const newStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
       const newEnd = new Date(newStart.getTime() + 4 * 60 * 60 * 1000);
       const res = await testApp.request
         .patch(`/events/${eventId}/reschedule`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+        .send({
+          startTime: newStart.toISOString(),
+          endTime: newEnd.toISOString(),
+        });
       expect(res.status).toBe(200);
       expect(res.body.startTime).toBe(newStart.toISOString());
       expect(res.body.endTime).toBe(newEnd.toISOString());
@@ -129,29 +180,65 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
 
     it('should clear reminder records on reschedule', async () => {
       const eventId = await createFutureEvent(testApp, adminToken);
-      await testApp.db.insert(schema.eventRemindersSent).values({ eventId, userId: testApp.seed.adminUser.id, reminderType: '15min' });
-      const beforeReminders = await testApp.db.select().from(schema.eventRemindersSent).where(eq(schema.eventRemindersSent.eventId, eventId));
+      await testApp.db.insert(schema.eventRemindersSent).values({
+        eventId,
+        userId: testApp.seed.adminUser.id,
+        reminderType: '15min',
+      });
+      const beforeReminders = await testApp.db
+        .select()
+        .from(schema.eventRemindersSent)
+        .where(eq(schema.eventRemindersSent.eventId, eventId));
       expect(beforeReminders).toHaveLength(1);
 
       const newStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
       const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
-      await testApp.request.patch(`/events/${eventId}/reschedule`).set('Authorization', `Bearer ${adminToken}`).send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+      await testApp.request
+        .patch(`/events/${eventId}/reschedule`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          startTime: newStart.toISOString(),
+          endTime: newEnd.toISOString(),
+        });
 
-      const afterReminders = await testApp.db.select().from(schema.eventRemindersSent).where(eq(schema.eventRemindersSent.eventId, eventId));
+      const afterReminders = await testApp.db
+        .select()
+        .from(schema.eventRemindersSent)
+        .where(eq(schema.eventRemindersSent.eventId, eventId));
       expect(afterReminders).toHaveLength(0);
     });
 
     it('should create notifications for signed-up users on reschedule', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { title: 'Rescheduled Notif' });
-      const { userId, token } = await createMemberAndLogin(testApp, 'resched_notif', 'resched_notif@test.local');
-      await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${token}`).send({});
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        title: 'Rescheduled Notif',
+      });
+      const { userId, token } = await createMemberAndLogin(
+        testApp,
+        'resched_notif',
+        'resched_notif@test.local',
+      );
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
 
       const newStart = new Date(Date.now() + 72 * 60 * 60 * 1000);
       const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
-      await testApp.request.patch(`/events/${eventId}/reschedule`).set('Authorization', `Bearer ${adminToken}`).send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+      await testApp.request
+        .patch(`/events/${eventId}/reschedule`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          startTime: newStart.toISOString(),
+          endTime: newEnd.toISOString(),
+        });
 
-      const notifications = await testApp.db.select().from(schema.notifications).where(eq(schema.notifications.userId, userId));
-      const reschedNotif = notifications.find((n) => n.type === 'event_rescheduled');
+      const notifications = await testApp.db
+        .select()
+        .from(schema.notifications)
+        .where(eq(schema.notifications.userId, userId));
+      const reschedNotif = notifications.find(
+        (n) => n.type === 'event_rescheduled',
+      );
       expect(reschedNotif).toBeDefined();
     });
   });
@@ -162,8 +249,15 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
 
   describe('invite member', () => {
     it('should invite a registered user by Discord ID', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { title: 'Invite Test Event' });
-      const { userId } = await createMemberAndLogin(testApp, 'invitee', 'invitee@test.local', 'discord-123456');
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        title: 'Invite Test Event',
+      });
+      const { userId } = await createMemberAndLogin(
+        testApp,
+        'invitee',
+        'invitee@test.local',
+        'discord-123456',
+      );
 
       const res = await testApp.request
         .post(`/events/${eventId}/invite-member`)
@@ -172,7 +266,10 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
       expect(res.status).toBe(201);
       expect(res.body.message).toContain('invitee');
 
-      const notifications = await testApp.db.select().from(schema.notifications).where(eq(schema.notifications.userId, userId));
+      const notifications = await testApp.db
+        .select()
+        .from(schema.notifications)
+        .where(eq(schema.notifications.userId, userId));
       const inviteNotif = notifications.find((n) => n.type === 'new_event');
       expect(inviteNotif).toBeDefined();
       expect(inviteNotif!.title).toBe('Event Invitation');
@@ -189,8 +286,16 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
 
     it('should reject invite for user already signed up', async () => {
       const eventId = await createFutureEvent(testApp, adminToken);
-      const { token } = await createMemberAndLogin(testApp, 'already_in', 'already_in@test.local', 'discord-already-in');
-      await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${token}`).send({});
+      const { token } = await createMemberAndLogin(
+        testApp,
+        'already_in',
+        'already_in@test.local',
+        'discord-already-in',
+      );
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
 
       const res = await testApp.request
         .post(`/events/${eventId}/invite-member`)
@@ -216,21 +321,47 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
   describe('buildEmbedEventData (service-level)', () => {
     it('should return embed data with role counts and signup mentions', async () => {
       const eventId = await createFutureEvent(testApp, adminToken, {
-        title: 'Embed Test Event', gameId: testApp.seed.game.id,
-        slotConfig: { type: 'mmo', tank: 2, healer: 2, dps: 6, flex: 0, bench: 0 },
+        title: 'Embed Test Event',
+        gameId: testApp.seed.game.id,
+        slotConfig: {
+          type: 'mmo',
+          tank: 2,
+          healer: 2,
+          dps: 6,
+          flex: 0,
+          bench: 0,
+        },
       });
-      const { token } = await createMemberAndLogin(testApp, 'embed_player', 'embed_player@test.local', 'discord-embed-123');
-      const signupRes = await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${token}`).send({});
+      const { token } = await createMemberAndLogin(
+        testApp,
+        'embed_player',
+        'embed_player@test.local',
+        'discord-embed-123',
+      );
+      const signupRes = await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
 
       const charRes = await testApp.request
         .post('/users/me/characters')
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: testApp.seed.game.id, name: 'EmbedWarrior', class: 'Warrior', role: 'tank' });
+        .send({
+          gameId: testApp.seed.game.id,
+          name: 'EmbedWarrior',
+          class: 'Warrior',
+          role: 'tank',
+        });
       await testApp.request
         .patch(`/events/${eventId}/signups/${signupRes.body.id}/confirm`)
         .set('Authorization', `Bearer ${token}`)
         .send({ characterId: charRes.body.id });
-      await testApp.db.insert(schema.rosterAssignments).values({ eventId, signupId: signupRes.body.id, role: 'tank', position: 1 });
+      await testApp.db.insert(schema.rosterAssignments).values({
+        eventId,
+        signupId: signupRes.body.id,
+        role: 'tank',
+        position: 1,
+      });
 
       const eventsService = testApp.app.get(EventsService);
       const embedData = await eventsService.buildEmbedEventData(eventId);
@@ -241,7 +372,9 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
       expect(embedData.roleCounts!.tank).toBeGreaterThanOrEqual(1);
       expect(embedData.signupMentions!.length).toBeGreaterThanOrEqual(1);
 
-      const playerMention = embedData.signupMentions!.find((m: any) => m.username === 'embed_player');
+      const playerMention = embedData.signupMentions!.find(
+        (m: any) => m.username === 'embed_player',
+      );
       expect(playerMention).toBeDefined();
       expect(playerMention!.role).toBe('tank');
       expect(playerMention!.className).toBe('Warrior');
@@ -249,27 +382,43 @@ describe('Events Cancel, Reschedule, Invite & Embed (integration)', () => {
 
     it('should exclude declined and roached_out signups from embed data', async () => {
       const eventId = await createFutureEvent(testApp, adminToken);
-      const { userId: declinedUserId } = await createMemberAndLogin(testApp, 'declined_user', 'declined@test.local');
-      await testApp.db.insert(schema.eventSignups).values({ eventId, userId: declinedUserId, status: 'declined', confirmationStatus: 'pending' });
+      const { userId: declinedUserId } = await createMemberAndLogin(
+        testApp,
+        'declined_user',
+        'declined@test.local',
+      );
+      await testApp.db.insert(schema.eventSignups).values({
+        eventId,
+        userId: declinedUserId,
+        status: 'declined',
+        confirmationStatus: 'pending',
+      });
 
       const eventsService = testApp.app.get(EventsService);
       const embedData = await eventsService.buildEmbedEventData(eventId);
 
-      const declinedMention = embedData.signupMentions!.find((m: any) => m.username === 'declined_user');
+      const declinedMention = embedData.signupMentions!.find(
+        (m: any) => m.username === 'declined_user',
+      );
       expect(declinedMention).toBeUndefined();
     });
 
     it('should COALESCE Discord IDs from user and signup tables', async () => {
       const eventId = await createFutureEvent(testApp, adminToken);
       await testApp.db.insert(schema.eventSignups).values({
-        eventId, discordUserId: 'anon-discord-999', discordUsername: 'AnonPlayer',
-        status: 'signed_up', confirmationStatus: 'pending',
+        eventId,
+        discordUserId: 'anon-discord-999',
+        discordUsername: 'AnonPlayer',
+        status: 'signed_up',
+        confirmationStatus: 'pending',
       });
 
       const eventsService = testApp.app.get(EventsService);
       const embedData = await eventsService.buildEmbedEventData(eventId);
 
-      const anonMention = embedData.signupMentions!.find((m: any) => m.discordId === 'anon-discord-999');
+      const anonMention = embedData.signupMentions!.find(
+        (m: any) => m.discordId === 'anon-discord-999',
+      );
       expect(anonMention).toBeDefined();
     });
   });

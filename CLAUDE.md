@@ -23,8 +23,8 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 
 ## Code Size Limits (STRICT — enforced by ESLint)
 
-- **Max 300 lines per file** (`max-lines: error`, skipBlankLines + skipComments)
-- **Max 30 lines per function** (`max-lines-per-function: error`, skipBlankLines + skipComments)
+- **Max 300 lines per file** (`max-lines: warn`, skipBlankLines + skipComments) — will be upgraded to `error` once existing violations are resolved
+- **Max 30 lines per function** (`max-lines-per-function: warn`, skipBlankLines + skipComments) — will be upgraded to `error` once existing violations are resolved
 - **Design small from the start** — do not write large files and refactor after. Plan focused modules, extract helpers/sub-services/child components proactively.
 - Test files (`*.spec.ts`, `*.test.tsx`) have a relaxed **750-line** file limit (not 300).
 - Migration files are exempt from both limits.

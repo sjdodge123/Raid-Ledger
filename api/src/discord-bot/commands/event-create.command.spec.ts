@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventCreateCommand } from './event-create.command';
 import { EventsService } from '../../events/events.service';

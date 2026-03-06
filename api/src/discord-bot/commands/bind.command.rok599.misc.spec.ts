@@ -3,18 +3,15 @@
  * Covers notification channel override, game reassignment, permission checks,
  * and autocomplete for the new 'event' option.
  */
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BindCommand } from './bind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { ChannelType } from 'discord.js';
-import { APP_EVENT_EVENTS } from '../discord-bot.constants';
 
 describe('BindCommand — ROK-599 event bind — misc', () => {
   let command: BindCommand;
-  let eventEmitter: jest.Mocked<EventEmitter2>;
 
   /**
    * Build a chainable Drizzle select mock.
@@ -31,14 +28,6 @@ describe('BindCommand — ROK-599 event bind — misc', () => {
     return chain;
   };
 
-  /** Select chain that resolves at .where() (no .limit()) — for count queries. */
-  const makeCountSelectChain = (rows: unknown[] = []) => {
-    const chain: Record<string, jest.Mock> = {};
-    chain.from = jest.fn().mockReturnValue(chain);
-    chain.where = jest.fn().mockResolvedValue(rows);
-    return chain;
-  };
-
   const makeUpdateChain = () => {
     const chain: Record<string, jest.Mock> = {};
     chain.set = jest.fn().mockReturnValue(chain);
@@ -46,47 +35,9 @@ describe('BindCommand — ROK-599 event bind — misc', () => {
     return chain;
   };
 
-  // Default event row returned from DB for event lookup
-  const mockEvent = {
-    id: 42,
-    title: 'Raid Night',
-    creatorId: 10,
-    gameId: 5,
-    recurrenceGroupId: 'rec-uuid-123',
-    notificationChannelOverride: null,
-    duration: [
-      new Date('2026-04-01T20:00:00Z'),
-      new Date('2026-04-01T23:00:00Z'),
-    ],
-  };
-
   // Default user row: the event creator
   const mockCreatorUser = { id: 10, role: 'member' };
   const mockAdminUser = { id: 99, role: 'admin' };
-  const mockOperatorUser = { id: 88, role: 'operator' };
-
-  // Updated event (after save) with joined game
-  const mockUpdatedEvent = {
-    events: {
-      id: 42,
-      title: 'Raid Night',
-      description: null,
-      creatorId: 10,
-      gameId: 5,
-      recurrenceGroupId: 'rec-uuid-123',
-      notificationChannelOverride: 'channel-override-id',
-      duration: [
-        new Date('2026-04-01T20:00:00Z'),
-        new Date('2026-04-01T23:00:00Z'),
-      ],
-      maxAttendees: null,
-      slotConfig: null,
-    },
-    games: {
-      name: 'World of Warcraft',
-      coverUrl: 'https://example.com/art.jpg',
-    },
-  };
 
   let mockDb: {
     select: jest.Mock;
@@ -172,7 +123,6 @@ describe('BindCommand — ROK-599 event bind — misc', () => {
     }).compile();
 
     command = module.get(BindCommand);
-    eventEmitter = module.get(EventEmitter2);
   });
 
   afterEach(() => {

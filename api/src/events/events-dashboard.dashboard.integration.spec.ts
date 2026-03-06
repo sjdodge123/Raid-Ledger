@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Events Dashboard & findAll Integration Tests (ROK-523)
  *
@@ -23,10 +22,18 @@ async function createMemberAndLogin(
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
   const [user] = await testApp.db
     .insert(schema.users)
-    .values({ discordId: discordId ?? `local:${email}`, username, role: 'member' })
+    .values({
+      discordId: discordId ?? `local:${email}`,
+      username,
+      role: 'member',
+    })
     .returning();
-  await testApp.db.insert(schema.localCredentials).values({ email, passwordHash, userId: user.id });
-  const loginRes = await testApp.request.post('/auth/local').send({ email, password: 'TestPassword123!' });
+  await testApp.db
+    .insert(schema.localCredentials)
+    .values({ email, passwordHash, userId: user.id });
+  const loginRes = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: 'TestPassword123!' });
   return { userId: user.id, token: loginRes.body.access_token as string };
 }
 
@@ -41,9 +48,16 @@ async function createFutureEvent(
   const res = await testApp.request
     .post('/events')
     .set('Authorization', `Bearer ${adminToken}`)
-    .send({ title: 'Integration Test Event', startTime: start.toISOString(), endTime: end.toISOString(), ...overrides });
+    .send({
+      title: 'Integration Test Event',
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      ...overrides,
+    });
   if (res.status !== 201) {
-    throw new Error(`createFutureEvent failed: ${res.status} — ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `createFutureEvent failed: ${res.status} — ${JSON.stringify(res.body)}`,
+    );
   }
   return res.body.id as number;
 }
@@ -58,7 +72,12 @@ async function createPastEvent(
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
   const [event] = await testApp.db
     .insert(schema.events)
-    .values({ title: 'Past Integration Test Event', creatorId, duration: [start, end] as [Date, Date], ...overrides })
+    .values({
+      title: 'Past Integration Test Event',
+      creatorId,
+      duration: [start, end] as [Date, Date],
+      ...overrides,
+    })
     .returning();
   return event.id;
 }
@@ -83,20 +102,45 @@ describe('Events Dashboard & findAll (integration)', () => {
 
   describe('dashboard (my-dashboard)', () => {
     it('should return empty dashboard when no upcoming events exist', async () => {
-      const res = await testApp.request.get('/events/my-dashboard').set('Authorization', `Bearer ${adminToken}`);
+      const res = await testApp.request
+        .get('/events/my-dashboard')
+        .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
-      expect(res.body.stats).toMatchObject({ totalUpcomingEvents: 0, totalSignups: 0, averageFillRate: 0, eventsWithRosterGaps: 0 });
+      expect(res.body.stats).toMatchObject({
+        totalUpcomingEvents: 0,
+        totalSignups: 0,
+        averageFillRate: 0,
+        eventsWithRosterGaps: 0,
+      });
       expect(res.body.events).toHaveLength(0);
     });
 
     it('should include upcoming events with correct signup counts', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { title: 'Dashboard Event' });
-      const { token: t1 } = await createMemberAndLogin(testApp, 'dash_p1', 'dash_p1@test.local');
-      const { token: t2 } = await createMemberAndLogin(testApp, 'dash_p2', 'dash_p2@test.local');
-      await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${t1}`).send({});
-      await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${t2}`).send({});
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        title: 'Dashboard Event',
+      });
+      const { token: t1 } = await createMemberAndLogin(
+        testApp,
+        'dash_p1',
+        'dash_p1@test.local',
+      );
+      const { token: t2 } = await createMemberAndLogin(
+        testApp,
+        'dash_p2',
+        'dash_p2@test.local',
+      );
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${t1}`)
+        .send({});
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${t2}`)
+        .send({});
 
-      const res = await testApp.request.get('/events/my-dashboard').set('Authorization', `Bearer ${adminToken}`);
+      const res = await testApp.request
+        .get('/events/my-dashboard')
+        .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.stats.totalUpcomingEvents).toBe(1);
       expect(res.body.stats.totalSignups).toBe(3);
@@ -105,56 +149,129 @@ describe('Events Dashboard & findAll (integration)', () => {
     });
 
     it('should compute unconfirmed counts per event', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { gameId: testApp.seed.game.id });
-      const { token: t1 } = await createMemberAndLogin(testApp, 'unconf_p1', 'unconf_p1@test.local');
-      await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${t1}`).send({});
-      const { token: t2 } = await createMemberAndLogin(testApp, 'unconf_p2', 'unconf_p2@test.local');
-      await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${t2}`).send({});
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        gameId: testApp.seed.game.id,
+      });
+      const { token: t1 } = await createMemberAndLogin(
+        testApp,
+        'unconf_p1',
+        'unconf_p1@test.local',
+      );
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${t1}`)
+        .send({});
+      const { token: t2 } = await createMemberAndLogin(
+        testApp,
+        'unconf_p2',
+        'unconf_p2@test.local',
+      );
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${t2}`)
+        .send({});
 
-      const res = await testApp.request.get('/events/my-dashboard').set('Authorization', `Bearer ${adminToken}`);
+      const res = await testApp.request
+        .get('/events/my-dashboard')
+        .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.events[0].unconfirmedCount).toBe(2);
     });
 
     it('should compute roster fill percent with slot config', async () => {
       const eventId = await createFutureEvent(testApp, adminToken, {
-        slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 2, flex: 0, bench: 0 },
+        slotConfig: {
+          type: 'mmo',
+          tank: 1,
+          healer: 1,
+          dps: 2,
+          flex: 0,
+          bench: 0,
+        },
       });
-      const [adminSignup] = await testApp.db.select().from(schema.eventSignups).where(eq(schema.eventSignups.eventId, eventId));
-      await testApp.db.insert(schema.rosterAssignments).values({ eventId, signupId: adminSignup.id, role: 'tank', position: 1 });
+      const [adminSignup] = await testApp.db
+        .select()
+        .from(schema.eventSignups)
+        .where(eq(schema.eventSignups.eventId, eventId));
+      await testApp.db.insert(schema.rosterAssignments).values({
+        eventId,
+        signupId: adminSignup.id,
+        role: 'tank',
+        position: 1,
+      });
 
-      const res = await testApp.request.get('/events/my-dashboard').set('Authorization', `Bearer ${adminToken}`);
+      const res = await testApp.request
+        .get('/events/my-dashboard')
+        .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.events[0].rosterFillPercent).toBe(25);
       expect(res.body.events[0].missingRoles).toEqual(
-        expect.arrayContaining([expect.stringContaining('healer'), expect.stringContaining('dps')]),
+        expect.arrayContaining([
+          expect.stringContaining('healer'),
+          expect.stringContaining('dps'),
+        ]),
       );
     });
 
     it('should exclude cancelled events from dashboard', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { title: 'Soon-to-be-cancelled' });
-      await testApp.request.patch(`/events/${eventId}/cancel`).set('Authorization', `Bearer ${adminToken}`).send({});
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        title: 'Soon-to-be-cancelled',
+      });
+      await testApp.request
+        .patch(`/events/${eventId}/cancel`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
 
-      const res = await testApp.request.get('/events/my-dashboard').set('Authorization', `Bearer ${adminToken}`);
+      const res = await testApp.request
+        .get('/events/my-dashboard')
+        .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.stats.totalUpcomingEvents).toBe(0);
       expect(res.body.events).toHaveLength(0);
     });
 
     it('should compute attendance metrics from past events', async () => {
-      const pastEventId = await createPastEvent(testApp, testApp.seed.adminUser.id);
-      const { token: t1 } = await createMemberAndLogin(testApp, 'att_p1', 'att_p1@test.local');
-      const { token: t2 } = await createMemberAndLogin(testApp, 'att_p2', 'att_p2@test.local');
-      const s1 = await testApp.request.post(`/events/${pastEventId}/signup`).set('Authorization', `Bearer ${t1}`).send({});
-      const s2 = await testApp.request.post(`/events/${pastEventId}/signup`).set('Authorization', `Bearer ${t2}`).send({});
-      await testApp.request.patch(`/events/${pastEventId}/attendance`).set('Authorization', `Bearer ${adminToken}`).send({ signupId: s1.body.id, attendanceStatus: 'attended' });
-      await testApp.request.patch(`/events/${pastEventId}/attendance`).set('Authorization', `Bearer ${adminToken}`).send({ signupId: s2.body.id, attendanceStatus: 'no_show' });
+      const pastEventId = await createPastEvent(
+        testApp,
+        testApp.seed.adminUser.id,
+      );
+      const { token: t1 } = await createMemberAndLogin(
+        testApp,
+        'att_p1',
+        'att_p1@test.local',
+      );
+      const { token: t2 } = await createMemberAndLogin(
+        testApp,
+        'att_p2',
+        'att_p2@test.local',
+      );
+      const s1 = await testApp.request
+        .post(`/events/${pastEventId}/signup`)
+        .set('Authorization', `Bearer ${t1}`)
+        .send({});
+      const s2 = await testApp.request
+        .post(`/events/${pastEventId}/signup`)
+        .set('Authorization', `Bearer ${t2}`)
+        .send({});
+      await testApp.request
+        .patch(`/events/${pastEventId}/attendance`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ signupId: s1.body.id, attendanceStatus: 'attended' });
+      await testApp.request
+        .patch(`/events/${pastEventId}/attendance`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ signupId: s2.body.id, attendanceStatus: 'no_show' });
 
-      const signups = await testApp.db.select().from(schema.eventSignups).where(eq(schema.eventSignups.eventId, pastEventId));
+      const signups = await testApp.db
+        .select()
+        .from(schema.eventSignups)
+        .where(eq(schema.eventSignups.eventId, pastEventId));
       const markedSignups = signups.filter((s) => s.attendanceStatus !== null);
       expect(markedSignups.length).toBe(2);
 
-      const res = await testApp.request.get('/events/my-dashboard').set('Authorization', `Bearer ${adminToken}`);
+      const res = await testApp.request
+        .get('/events/my-dashboard')
+        .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       const { attendanceRate, noShowRate } = res.body.stats;
       if (attendanceRate !== undefined) {
@@ -165,9 +282,15 @@ describe('Events Dashboard & findAll (integration)', () => {
 
     it('should scope dashboard to creator events for non-admin users', async () => {
       await createFutureEvent(testApp, adminToken, { title: 'Admin Event' });
-      const { token: memberToken } = await createMemberAndLogin(testApp, 'member_dash', 'member_dash@test.local');
+      const { token: memberToken } = await createMemberAndLogin(
+        testApp,
+        'member_dash',
+        'member_dash@test.local',
+      );
 
-      const res = await testApp.request.get('/events/my-dashboard').set('Authorization', `Bearer ${memberToken}`);
+      const res = await testApp.request
+        .get('/events/my-dashboard')
+        .set('Authorization', `Bearer ${memberToken}`);
       expect(res.status).toBe(200);
       expect(res.body.stats.totalUpcomingEvents).toBe(0);
     });
@@ -179,13 +302,24 @@ describe('Events Dashboard & findAll (integration)', () => {
 
   describe('findAll', () => {
     it('should return events with correct signup counts', async () => {
-      const eventId = await createFutureEvent(testApp, adminToken, { title: 'FindAll Event' });
-      const { token } = await createMemberAndLogin(testApp, 'findall_p1', 'findall_p1@test.local');
-      await testApp.request.post(`/events/${eventId}/signup`).set('Authorization', `Bearer ${token}`).send({});
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        title: 'FindAll Event',
+      });
+      const { token } = await createMemberAndLogin(
+        testApp,
+        'findall_p1',
+        'findall_p1@test.local',
+      );
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
 
       const res = await testApp.request.get('/events');
       expect(res.status).toBe(200);
-      const event = res.body.data.find((e: any) => e.id === eventId);
+      const events = (res.body as { data: Array<Record<string, unknown>> })
+        .data;
+      const event = events.find((e) => e.id === eventId);
       expect(event).toBeDefined();
       expect(event.signupCount).toBe(2);
     });
@@ -194,18 +328,27 @@ describe('Events Dashboard & findAll (integration)', () => {
       const nearFuture = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       await createFutureEvent(testApp, adminToken, {
-        title: 'Near Event', startTime: nearFuture.toISOString(),
-        endTime: new Date(nearFuture.getTime() + 3 * 60 * 60 * 1000).toISOString(),
+        title: 'Near Event',
+        startTime: nearFuture.toISOString(),
+        endTime: new Date(
+          nearFuture.getTime() + 3 * 60 * 60 * 1000,
+        ).toISOString(),
       });
       await createFutureEvent(testApp, adminToken, {
-        title: 'Far Event', startTime: farFuture.toISOString(),
-        endTime: new Date(farFuture.getTime() + 3 * 60 * 60 * 1000).toISOString(),
+        title: 'Far Event',
+        startTime: farFuture.toISOString(),
+        endTime: new Date(
+          farFuture.getTime() + 3 * 60 * 60 * 1000,
+        ).toISOString(),
       });
 
       const cutoff = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      const res = await testApp.request.get(`/events?endBefore=${cutoff.toISOString()}`);
+      const res = await testApp.request.get(
+        `/events?endBefore=${cutoff.toISOString()}`,
+      );
       expect(res.status).toBe(200);
-      const titles = res.body.data.map((e: any) => e.title as string);
+      const evts = (res.body as { data: Array<{ title: string }> }).data;
+      const titles = evts.map((e) => e.title);
       expect(titles).toContain('Near Event');
       expect(titles).not.toContain('Far Event');
     });
@@ -214,7 +357,8 @@ describe('Events Dashboard & findAll (integration)', () => {
       for (let i = 0; i < 3; i++) {
         const start = new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000);
         await createFutureEvent(testApp, adminToken, {
-          title: `Page Event ${i}`, startTime: start.toISOString(),
+          title: `Page Event ${i}`,
+          startTime: start.toISOString(),
           endTime: new Date(start.getTime() + 3 * 60 * 60 * 1000).toISOString(),
         });
       }
@@ -232,8 +376,17 @@ describe('Events Dashboard & findAll (integration)', () => {
 
     it('should exclude roached_out signups from signup count', async () => {
       const eventId = await createFutureEvent(testApp, adminToken);
-      const { userId } = await createMemberAndLogin(testApp, 'roacher', 'roacher@test.local');
-      await testApp.db.insert(schema.eventSignups).values({ eventId, userId, status: 'roached_out', confirmationStatus: 'pending' });
+      const { userId } = await createMemberAndLogin(
+        testApp,
+        'roacher',
+        'roacher@test.local',
+      );
+      await testApp.db.insert(schema.eventSignups).values({
+        eventId,
+        userId,
+        status: 'roached_out',
+        confirmationStatus: 'pending',
+      });
 
       const res = await testApp.request.get(`/events/${eventId}`);
       expect(res.status).toBe(200);

@@ -548,5 +548,4 @@ describe('LiveNoShowService — phase2', () => {
   });
 
   // ─── Phase sequencing ────────────────────────────────────────────────────
-
 });

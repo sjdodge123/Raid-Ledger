@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -14,6 +11,25 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+
+/** Test-friendly interface exposing private members needed by specs */
+interface TestableRescheduleResponseListener {
+  onBotConnected: () => void;
+  handleButtonInteraction: (interaction: unknown) => Promise<void>;
+  handleConfirm: (interaction: unknown, eventId: number) => Promise<void>;
+  handleTentative: (interaction: unknown, eventId: number) => Promise<void>;
+  handleDecline: (interaction: unknown, eventId: number) => Promise<void>;
+  handleSelectMenuInteraction: (interaction: unknown) => Promise<void>;
+  handleCharacterSelect: (
+    interaction: unknown,
+    eventId: number,
+  ) => Promise<void>;
+  handleRoleSelect: (
+    interaction: unknown,
+    eventId: number,
+    characterId?: string,
+  ) => Promise<void>;
+}
 
 /** Create a minimal ButtonInteraction mock */
 function makeButtonInteraction(
@@ -54,39 +70,10 @@ function makeButtonInteraction(
   return interaction;
 }
 
-/** Create a minimal StringSelectMenuInteraction mock */
-function makeSelectMenuInteraction(
-  customId: string,
-  values: string[],
-  userId: string = 'discord-user-123',
-) {
-  const mockMessages = new Map<string, unknown>();
-  const interaction = {
-    isButton: () => false,
-    isStringSelectMenu: () => true,
-    customId,
-    values,
-    id: 'select-interaction-1',
-    user: { id: userId, username: 'TestUser', avatar: null },
-    replied: false,
-    deferred: false,
-    client: { user: { id: 'bot-user-id' } },
-    deferUpdate: jest.fn().mockResolvedValue(undefined),
-    editReply: jest.fn().mockResolvedValue(undefined),
-    channel: {
-      messages: {
-        fetch: jest.fn().mockResolvedValue(mockMessages),
-      },
-    },
-    _mockMessages: mockMessages,
-  };
-  return interaction;
-}
-
 describe('RescheduleResponseListener — status', () => {
   let module: TestingModule;
 
-  let listener: any;
+  let listener: TestableRescheduleResponseListener;
   let mockDb: MockDb;
   let mockClientService: { getClient: jest.Mock };
   let mockSignupsService: {
@@ -169,9 +156,8 @@ describe('RescheduleResponseListener — status', () => {
       ],
     }).compile();
 
-    listener = module.get<RescheduleResponseListener>(
-      RescheduleResponseListener,
-    );
+    const instance: unknown = module.get(RescheduleResponseListener);
+    listener = instance as TestableRescheduleResponseListener;
   });
 
   afterEach(async () => {
@@ -403,5 +389,4 @@ describe('RescheduleResponseListener — status', () => {
   });
 
   // ─── Select menu routing ─────────────────────────────────────────────
-
 });

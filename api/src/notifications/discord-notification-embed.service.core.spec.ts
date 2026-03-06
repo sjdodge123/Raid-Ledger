@@ -650,5 +650,4 @@ describe('DiscordNotificationEmbedService — core', () => {
       expect(result.message).toContain("couldn't reach you on Discord");
     });
   });
-
 });

@@ -25,7 +25,10 @@ export function makeValidInvite(
       game:
         overrides.game !== undefined
           ? overrides.game
-          : { name: 'World of Warcraft', coverUrl: 'https://images.igdb.com/cover.jpg' },
+          : {
+              name: 'World of Warcraft',
+              coverUrl: 'https://images.igdb.com/cover.jpg',
+            },
     },
     slot: { id: 1, role: 'dps', status: 'pending' },
   };

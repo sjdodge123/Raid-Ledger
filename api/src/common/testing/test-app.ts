@@ -189,8 +189,9 @@ export async function getTestApp(): Promise<TestApp> {
   const app = moduleRef.createNestApplication();
   await app.init();
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-  const request = supertest.default(app.getHttpServer());
+  const request = supertest.default(
+    app.getHttpServer() as import('http').Server,
+  );
 
   const testApp: TestApp = { app, request, db, seed, container };
   setInstance(testApp);

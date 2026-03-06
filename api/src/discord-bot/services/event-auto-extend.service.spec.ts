@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventAutoExtendService } from './event-auto-extend.service';
 import { SettingsService } from '../../settings/settings.service';
