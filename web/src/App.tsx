@@ -1,10 +1,6 @@
-import { lazy, Suspense, useEffect } from 'react';
-import type { ComponentType } from 'react';
+import { Suspense, useEffect } from 'react';
 import {
   BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
   useLocation,
   useNavigationType,
 } from 'react-router-dom';
@@ -14,17 +10,14 @@ import { useConnectivityStore } from './stores/connectivity-store';
 import { queryClient } from './lib/query-client';
 import { getAuthToken, setAuthToken, getCachedUser, fetchCurrentUser } from './hooks/use-auth';
 import { Layout } from './components/layout';
-import { AuthGuard } from './components/auth';
-import { RootRedirect } from './components/RootRedirect';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
 import { ThemeParticles } from './components/ui/ThemeParticles';
+import { CHUNK_RELOAD_KEY } from './lazy-routes';
+import { AppRoutes } from './app-routes';
 
 // ROK-657: Consume magic link token from URL before React renders.
-// Magic links arrive as ?token=JWT from Discord slash command embeds.
-// Storing the token here ensures fetchCurrentUser (below) picks it up
-// and AuthGuard sees the user as authenticated on first render.
 const _magicLinkParams = new URLSearchParams(window.location.search);
 const _magicLinkToken = _magicLinkParams.get('token');
 if (_magicLinkToken && !getAuthToken()) {
@@ -32,110 +25,19 @@ if (_magicLinkToken && !getAuthToken()) {
 }
 
 // Seed auth cache from localStorage for instant return visits.
-// Runs at module load (before React renders) so AuthGuard never
-// shows "Checking authentication..." for returning users.
 const _cachedUser = getCachedUser();
 if (_cachedUser && getAuthToken()) {
   queryClient.setQueryData(['auth', 'me'], _cachedUser);
 }
 
-export const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
-
-function isChunkLoadError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const msg = error.message.toLowerCase();
-  return (
-    msg.includes('dynamically imported module') ||
-    msg.includes('failed to fetch') ||
-    msg.includes('loading chunk') ||
-    msg.includes('loading css chunk')
-  );
-}
-
-/**
- * Wraps React.lazy() to auto-reload the page on stale chunk import failures.
- * On first failure: sets a sessionStorage flag and reloads (fetches fresh HTML).
- * On second failure: throws so the ErrorBoundary can show a fallback.
- */
-function lazyWithRetry<T extends ComponentType<Record<string, never>>>(
-  importFn: () => Promise<{ default: T }>,
-) {
-  return lazy(() =>
-    importFn().catch((error: unknown) => {
-      if (isChunkLoadError(error) && !sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
-        sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
-        window.location.reload();
-        // Return a never-resolving promise — the page is reloading
-        return new Promise<{ default: T }>(() => {});
-      }
-      throw error;
-    }),
-  );
-}
-
-// -- Eagerly loaded pages (critical path) --
-import { EventsPage } from './pages/events-page';
-import { EventDetailPage } from './pages/event-detail-page';
-import { AuthSuccessPage } from './pages/auth-success-page';
-
-// -- Lazy loaded public pages --
-const JoinPage = lazyWithRetry(() => import('./pages/join-page').then(m => ({ default: m.JoinPage })));
-const InvitePage = lazyWithRetry(() => import('./pages/invite-page').then(m => ({ default: m.InvitePage })));
-
-// -- Lazy loaded pages --
-const CalendarPage = lazyWithRetry(() => import('./pages/calendar-page').then(m => ({ default: m.CalendarPage })));
-const CreateEventPage = lazyWithRetry(() => import('./pages/create-event-page').then(m => ({ default: m.CreateEventPage })));
-const PlanEventPage = lazyWithRetry(() => import('./pages/plan-event-page').then(m => ({ default: m.PlanEventPage })));
-const EditEventPage = lazyWithRetry(() => import('./pages/edit-event-page').then(m => ({ default: m.EditEventPage })));
-const GamesPage = lazyWithRetry(() => import('./pages/games-page').then(m => ({ default: m.GamesPage })));
-const GameDetailPage = lazyWithRetry(() => import('./pages/game-detail-page').then(m => ({ default: m.GameDetailPage })));
-const CharacterDetailPage = lazyWithRetry(() => import('./pages/character-detail-page').then(m => ({ default: m.CharacterDetailPage })));
-const PlayersPage = lazyWithRetry(() => import('./pages/players-page').then(m => ({ default: m.PlayersPage })));
-const MyEventsPage = lazyWithRetry(() => import('./pages/my-events-page').then(m => ({ default: m.MyEventsPage })));
-const EventMetricsPage = lazyWithRetry(() => import('./pages/event-metrics-page').then(m => ({ default: m.EventMetricsPage })));
-const UserProfilePage = lazyWithRetry(() => import('./pages/user-profile-page').then(m => ({ default: m.UserProfilePage })));
-const OnboardingWizardPage = lazyWithRetry(() => import('./pages/onboarding-wizard-page').then(m => ({ default: m.OnboardingWizardPage })));
-
-// -- Lazy loaded profile panels (ROK-359 consolidated) --
-const ProfileLayout = lazyWithRetry(() => import('./components/profile/profile-layout').then(m => ({ default: m.ProfileLayout })));
-const IdentityPanel = lazyWithRetry(() => import('./pages/profile/identity-panel').then(m => ({ default: m.IdentityPanel })));
-const PreferencesPanel = lazyWithRetry(() => import('./pages/profile/preferences-panel').then(m => ({ default: m.PreferencesPanel })));
-const NotificationsPanel = lazyWithRetry(() => import('./pages/profile/notifications-panel').then(m => ({ default: m.NotificationsPanel })));
-const ProfileGameTimePanel = lazyWithRetry(() => import('./pages/profile/game-time-panel').then(m => ({ default: m.ProfileGameTimePanel })));
-const CharactersPanel = lazyWithRetry(() => import('./pages/profile/characters-panel').then(m => ({ default: m.CharactersPanel })));
-const WatchedGamesPanel = lazyWithRetry(() => import('./pages/profile/watched-games-panel').then(m => ({ default: m.WatchedGamesPanel })));
-
-// -- Lazy loaded admin panels --
-const AdminSettingsLayout = lazyWithRetry(() => import('./components/admin/admin-settings-layout').then(m => ({ default: m.AdminSettingsLayout })));
-const AdminSetupWizard = lazyWithRetry(() => import('./pages/admin/admin-setup-wizard').then(m => ({ default: m.AdminSetupWizard })));
-const GeneralPanel = lazyWithRetry(() => import('./pages/admin/general-panel').then(m => ({ default: m.GeneralPanel })));
-const RolesPanel = lazyWithRetry(() => import('./pages/admin/roles-panel').then(m => ({ default: m.RolesPanel })));
-const DemoDataPanel = lazyWithRetry(() => import('./pages/admin/demo-data-panel').then(m => ({ default: m.DemoDataPanel })));
-
-const IgdbPanel = lazyWithRetry(() => import('./pages/admin/igdb-panel').then(m => ({ default: m.IgdbPanel })));
-const PluginsPanel = lazyWithRetry(() => import('./pages/admin/plugins-panel').then(m => ({ default: m.PluginsPanel })));
-const PluginIntegrationPanel = lazyWithRetry(() => import('./pages/admin/plugin-integration-panel').then(m => ({ default: m.PluginIntegrationPanel })));
-const CronJobsPanel = lazyWithRetry(() => import('./pages/admin/cron-jobs-panel').then(m => ({ default: m.CronJobsPanel })));
-const BackupsPanel = lazyWithRetry(() => import('./pages/admin/backups-panel').then(m => ({ default: m.BackupsPanel })));
-const LogsPanel = lazyWithRetry(() => import('./pages/admin/logs-panel').then(m => ({ default: m.LogsPanel })));
-
-// -- Lazy loaded Discord admin pages (ROK-430) --
-const DiscordOverviewPage = lazyWithRetry(() => import('./pages/admin/discord-overview-page').then(m => ({ default: m.DiscordOverviewPage })));
-const DiscordAuthPage = lazyWithRetry(() => import('./pages/admin/discord-auth-page').then(m => ({ default: m.DiscordAuthPage })));
-const DiscordConnectionPage = lazyWithRetry(() => import('./pages/admin/discord-connection-page').then(m => ({ default: m.DiscordConnectionPage })));
-const DiscordChannelsPage = lazyWithRetry(() => import('./pages/admin/discord-channels-page').then(m => ({ default: m.DiscordChannelsPage })));
-const DiscordFeaturesPage = lazyWithRetry(() => import('./pages/admin/discord-features-page').then(m => ({ default: m.DiscordFeaturesPage })));
-
+// Re-export for backward compat (used by tests)
+export { CHUNK_RELOAD_KEY };
 
 import './plugins/wow/register';
 import './plugins/discord/register';
 import './App.css';
 
-/**
- * ROK-657: Strip ?token= from the URL after magic link consumption.
- * Runs once on mount inside BrowserRouter so it has access to navigation.
- * Uses replaceState to avoid a history entry.
- */
+/** Strip ?token= from URL after magic link consumption (ROK-657) */
 function MagicLinkCleanup() {
   const { search, pathname, hash } = useLocation();
 
@@ -147,15 +49,12 @@ function MagicLinkCleanup() {
       const newUrl = pathname + (cleaned ? `?${cleaned}` : '') + hash;
       window.history.replaceState(null, '', newUrl);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 }
 
-/**
- * Scrolls to top on PUSH navigations (link clicks, programmatic navigate).
- * Skips POP navigations (back/forward) so the browser can restore scroll natively.
- */
+/** Scroll to top on PUSH navigations */
 function ScrollToTop() {
   const { pathname } = useLocation();
   const navigationType = useNavigationType();
@@ -174,8 +73,6 @@ function App() {
   const startPolling = useConnectivityStore((s) => s.startPolling);
 
   useEffect(() => {
-    // App mounted successfully — clear the chunk reload flag so future
-    // navigations can retry a reload if a new deploy lands.
     sessionStorage.removeItem(CHUNK_RELOAD_KEY);
   }, []);
 
@@ -184,15 +81,12 @@ function App() {
     return cleanup;
   }, [startPolling]);
 
-  // Revalidate auth in parallel with health check.
-  // If seeded from localStorage, this confirms the token is still valid.
-  // If not seeded, this prefetches so AuthGuard sees data sooner.
   useEffect(() => {
     if (getAuthToken()) {
       void queryClient.prefetchQuery({
         queryKey: ['auth', 'me'],
         queryFn: fetchCurrentUser,
-        staleTime: 0, // Always revalidate on app load
+        staleTime: 0,
       });
     }
   }, []);
@@ -214,92 +108,7 @@ function App() {
         <ConnectivityBanner />
         <Layout>
           <Suspense fallback={<LoadingSpinner />}>
-            <Routes>
-              {/* -- Public routes (no auth required) -- */}
-              {/* ROK-175: Root shows login or redirects to events based on auth */}
-              <Route path="/" element={<RootRedirect />} />
-              {/* Legacy /login redirects to root (AC-2) */}
-              <Route path="/login" element={<Navigate to="/" replace />} />
-              {/* OAuth callback -- must stay public for Discord redirect flow */}
-              <Route path="/auth/success" element={<AuthSuccessPage />} />
-              {/* ROK-137: Deferred signup landing page (public — handles intent tokens) */}
-              <Route path="/join" element={<JoinPage />} />
-              <Route path="/i/:code" element={<InvitePage />} />
-
-              {/* -- Protected routes (ROK-283: global auth guard) -- */}
-              <Route element={<AuthGuard />}>
-                {/* ROK-219: First-time user experience wizard */}
-                <Route path="/onboarding" element={<OnboardingWizardPage />} />
-                {/* ROK-204: Admin onboarding wizard */}
-                <Route path="/admin/setup" element={<AdminSetupWizard />} />
-                <Route path="/calendar" element={<CalendarPage />} />
-                <Route path="/games" element={<GamesPage />} />
-                <Route path="/games/:id" element={<GameDetailPage />} />
-                <Route path="/characters/:id" element={<CharacterDetailPage />} />
-                <Route path="/players" element={<PlayersPage />} />
-                <Route path="/events" element={<EventsPage />} />
-                {/* ROK-213: My Events dashboard */}
-                <Route path="/event-metrics" element={<MyEventsPage />} />
-                <Route path="/events/new" element={<CreateEventPage />} />
-                <Route path="/events/plan" element={<PlanEventPage />} />
-                {/* ROK-491: Per-event metrics — must be before :id catch-all */}
-                <Route path="/events/:id/metrics" element={<EventMetricsPage />} />
-                <Route path="/events/:id" element={<EventDetailPage />} />
-                <Route path="/events/:id/edit" element={<EditEventPage />} />
-                {/* ROK-181: Public user profiles */}
-                <Route path="/users/:userId" element={<UserProfilePage />} />
-
-                {/* ROK-359: Consolidated Profile pages */}
-                <Route path="/profile" element={<ProfileLayout />}>
-                  <Route path="identity" element={<IdentityPanel />} />
-                  <Route path="preferences" element={<PreferencesPanel />} />
-                  <Route path="notifications" element={<NotificationsPanel />} />
-                  <Route path="gaming/game-time" element={<ProfileGameTimePanel />} />
-                  <Route path="gaming/characters" element={<CharactersPanel />} />
-                  <Route path="gaming/watched-games" element={<WatchedGamesPanel />} />
-
-                  {/* ROK-359: Redirects for old bookmarked profile paths */}
-                  <Route path="identity/discord" element={<Navigate to="/profile/identity" replace />} />
-                  <Route path="identity/avatar" element={<Navigate to="/profile/identity" replace />} />
-                  <Route path="preferences/appearance" element={<Navigate to="/profile/preferences" replace />} />
-                  <Route path="preferences/timezone" element={<Navigate to="/profile/preferences" replace />} />
-                  <Route path="preferences/notifications" element={<Navigate to="/profile/notifications" replace />} />
-                  <Route path="gaming" element={<Navigate to="/profile/gaming/game-time" replace />} />
-                  <Route path="account" element={<Navigate to="/profile/identity" replace />} />
-                  <Route path="danger/delete-account" element={<Navigate to="/profile/identity" replace />} />
-                </Route>
-
-                {/* ROK-359: Consolidated Admin Settings */}
-                <Route path="/admin/settings" element={<AdminSettingsLayout />}>
-                  <Route path="general" element={<GeneralPanel />} />
-                  <Route path="general/roles" element={<RolesPanel />} />
-                  <Route path="general/data" element={<DemoDataPanel />} />
-                  <Route path="general/cron-jobs" element={<CronJobsPanel />} />
-                  <Route path="general/backups" element={<BackupsPanel />} />
-                  <Route path="general/logs" element={<LogsPanel />} />
-                  <Route path="integrations/igdb" element={<IgdbPanel />} />
-
-                  {/* ROK-430: Discord admin pages */}
-                  <Route path="discord" element={<DiscordOverviewPage />} />
-                  <Route path="discord/auth" element={<DiscordAuthPage />} />
-                  <Route path="discord/connection" element={<DiscordConnectionPage />} />
-                  <Route path="discord/channels" element={<DiscordChannelsPage />} />
-                  <Route path="discord/features" element={<DiscordFeaturesPage />} />
-
-                  {/* Redirects for old Discord routes → new Discord pages */}
-                  <Route path="integrations" element={<Navigate to="/admin/settings/discord" replace />} />
-                  <Route path="integrations/discord" element={<Navigate to="/admin/settings/discord" replace />} />
-                  <Route path="integrations/discord-bot" element={<Navigate to="/admin/settings/discord/connection" replace />} />
-                  <Route path="integrations/channel-bindings" element={<Navigate to="/admin/settings/discord/channels" replace />} />
-                  <Route path="integrations/plugin/discord/*" element={<Navigate to="/admin/settings/discord" replace />} />
-                  <Route path="integrations/plugin/:pluginSlug/:integrationKey" element={<PluginIntegrationPanel />} />
-                  <Route path="plugins" element={<PluginsPanel />} />
-
-                  {/* ROK-359: Redirects for old bookmarked admin paths */}
-                  <Route path="appearance" element={<Navigate to="/admin/settings/general" replace />} />
-                </Route>
-              </Route>
-            </Routes>
+            <AppRoutes />
           </Suspense>
         </Layout>
       </BrowserRouter>
