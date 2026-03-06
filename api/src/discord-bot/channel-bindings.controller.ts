@@ -150,7 +150,7 @@ function toBindingDto(result: {
     bindingPurpose:
       result.bindingPurpose as ChannelBindingDto['bindingPurpose'],
     gameId: result.gameId,
-    config: result.config,
+    config: result.config as ChannelBindingDto['config'],
     createdAt: result.createdAt.toISOString(),
     updatedAt: result.updatedAt.toISOString(),
   };

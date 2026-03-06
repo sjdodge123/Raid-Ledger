@@ -182,7 +182,7 @@ describe('Cron-Job (integration)', () => {
       // not on every tick — ROK-607)
       const cronJobService = testApp.app.get(CronJobService);
       (
-        cronJobService as unknown as { executionCounts: Map<string, number> }
+        cronJobService as unknown as { executionCounts: Map<number, number> }
       ).executionCounts.set(jobId, 49);
 
       await cronJobService.executeWithTracking(

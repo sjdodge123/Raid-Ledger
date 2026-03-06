@@ -7,6 +7,7 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { EmbedPosterService } from './embed-poster.service';
+import type { EmbedEventData } from './discord-embed.factory';
 import {
   shouldPostEmbed,
   getLeadTimeFromRecurrence,
@@ -156,17 +157,7 @@ interface DeferredEvent {
 function buildDeferredEventData(
   event: DeferredEvent,
   gameData: { name: string; coverUrl: string | null } | null,
-): {
-  id: number;
-  title: string;
-  description: string | null;
-  startTime: string;
-  endTime: string;
-  signupCount: number;
-  maxAttendees: number | null;
-  slotConfig: unknown;
-  game: { name: string; coverUrl: string | null } | null;
-} {
+): EmbedEventData {
   return {
     id: event.id,
     title: event.title,
@@ -175,7 +166,7 @@ function buildDeferredEventData(
     endTime: event.duration[1].toISOString(),
     signupCount: 0,
     maxAttendees: event.maxAttendees,
-    slotConfig: event.slotConfig,
+    slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
     game: gameData,
   };
 }

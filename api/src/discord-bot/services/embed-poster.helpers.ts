@@ -32,7 +32,7 @@ export interface SignupRow {
   username: string | null;
   role: string | null;
   status: string | null;
-  preferredRoles: unknown;
+  preferredRoles: string[] | null;
   className: string | null;
 }
 

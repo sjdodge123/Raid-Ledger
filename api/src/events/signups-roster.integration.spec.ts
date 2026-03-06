@@ -201,7 +201,7 @@ describe('Signups — roster & attendance (integration)', () => {
       ).signups;
       const roachSignup = attSignups.find((s) => s.user.username === 'roacher');
       expect(roachSignup).toBeDefined();
-      expect(roachSignup.attendanceStatus).toBe('excused');
+      expect(roachSignup!.attendanceStatus).toBe('excused');
     });
   });
 

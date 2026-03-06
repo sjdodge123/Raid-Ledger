@@ -6,6 +6,7 @@ import {
   showCharacterSelect,
   showRoleSelect,
 } from '../utils/signup-dropdown-builders';
+import type { CharacterDto } from '@raid-ledger/contract';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
 import { reconfirmSignup } from './reschedule-roster.handlers';
 
@@ -127,7 +128,7 @@ async function resolveCharacters(
   event: EventRow,
   linkedUser: { id: number },
 ): Promise<{
-  characters: { id: string; name: string }[];
+  characters: CharacterDto[];
   slotConfig: Record<string, unknown> | null;
 } | null> {
   if (!event.gameId) return null;
@@ -149,7 +150,7 @@ async function resolveCharacters(
 
 async function showCharSelect(
   ctx: ConfirmCtx,
-  characters: { id: string; name: string }[],
+  characters: CharacterDto[],
   suffix?: string,
 ): Promise<void> {
   await showCharacterSelect(ctx.interaction, {

@@ -117,7 +117,7 @@ async function tryLinkedTentativeGameFlow(
   const slotConfig = event.slotConfig as Record<string, unknown> | null;
 
   if (slotConfig?.type === 'mmo' && characters.length >= 1) {
-    const m = (await import('../utils/signup-dropdown-builders')) as {
+    const m = (await import('../utils/signup-dropdown-builders.js')) as {
       showCharacterSelect: typeof ShowCharSelectFn;
     };
     await m.showCharacterSelect(interaction, {
@@ -132,7 +132,7 @@ async function tryLinkedTentativeGameFlow(
   }
 
   if (characters.length > 1) {
-    const m = (await import('../utils/signup-dropdown-builders')) as {
+    const m = (await import('../utils/signup-dropdown-builders.js')) as {
       showCharacterSelect: typeof ShowCharSelectFn;
     };
     await m.showCharacterSelect(interaction, {

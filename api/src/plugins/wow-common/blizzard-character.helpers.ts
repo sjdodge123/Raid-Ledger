@@ -169,7 +169,7 @@ export function inferClassicSpec(
   trees: Array<{
     specialization_name?: string;
     spent_points?: number;
-    talents?: unknown[];
+    talents?: Array<Record<string, unknown>>;
   }>,
   characterClass: string,
 ): {

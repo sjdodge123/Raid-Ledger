@@ -52,7 +52,7 @@ describe('ThrottlerExceptionFilter', () => {
     };
 
     filter.catch(
-      new (jest.fn<new () => Error>())(),
+      {} as never,
       mockHost as unknown as import('@nestjs/common').ArgumentsHost,
     );
 

@@ -107,7 +107,7 @@ function disableRoachOutButtons(
     for (const component of row.components) {
       if (component.type === ComponentType.Button) {
         const btn = ButtonBuilder.from(component);
-        if (isRoachOutButton(component)) btn.setDisabled(true);
+        if (isRoachOutButton(component as unknown as { customId?: string })) btn.setDisabled(true);
         newRow.addComponents(btn);
       }
     }

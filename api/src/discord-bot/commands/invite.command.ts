@@ -98,14 +98,14 @@ export class InviteCommand
   private async resolveEvent(
     interaction: ChatInputCommandInteraction,
     eventId: number,
-  ): Promise<{ title: string; cancelledAt: Date | null } | null> {
+  ): Promise<{ title: string; cancelledAt: string | null } | null> {
     try {
       const event = await this.eventsService.findOne(eventId);
       if (event.cancelledAt) {
         await interaction.editReply('Event not found');
         return null;
       }
-      return event;
+      return { title: event.title, cancelledAt: event.cancelledAt ?? null };
     } catch {
       await interaction.editReply('Event not found');
       return null;

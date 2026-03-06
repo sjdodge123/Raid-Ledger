@@ -157,7 +157,7 @@ async function trySignupWithChar(
       ctx.userId,
       characterId,
     );
-    const role = char.roleOverride ?? char.role ?? 'dps';
+    const role = (char.roleOverride ?? char.role ?? 'dps') as 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
     return await ctx.deps.signupsService.signup(ctx.eventId, ctx.userId, {
       slotRole: role,
     });
@@ -198,7 +198,7 @@ async function doMemberRoleSelect(
 /** Try to create a signup with a role. Returns null on failure. */
 async function tryRoleSignup(
   ctx: MemberSelectCtx,
-  role: string,
+  role: 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench',
 ): Promise<{ id: number } | null> {
   try {
     return await ctx.deps.signupsService.signup(ctx.eventId, ctx.userId, {

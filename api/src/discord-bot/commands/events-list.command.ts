@@ -88,7 +88,7 @@ export class EventsListCommand
     });
 
     collector.on('collect', (i) => {
-      this.routeCollectorEvent(i, events);
+      this.routeCollectorEvent(i as StringSelectMenuInteraction | ButtonInteraction, events);
     });
 
     collector.on('end', () => {

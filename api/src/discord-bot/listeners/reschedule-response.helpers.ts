@@ -77,7 +77,7 @@ export function buildStateEmbed(
   originalEmbed: { description: string | null },
   state: 'confirmed' | 'tentative' | 'declined',
 ): EmbedBuilder {
-  const updated = EmbedBuilder.from(originalEmbed);
+  const updated = EmbedBuilder.from(originalEmbed as never);
   const desc = originalEmbed.description ?? '';
   updated.setDescription(`${desc}${STATE_LABELS[state]}`);
   return updated;
@@ -125,7 +125,7 @@ export async function editDmEmbed(
     const msg = interaction.message;
     if (!msg.embeds[0]) return;
     const embed = buildStateEmbed(msg.embeds[0], state);
-    const components = buildDisabledRows(msg.components);
+    const components = buildDisabledRows(msg.components as never);
     await msg.edit({ embeds: [embed], components });
   } catch (error) {
     logger.warn(
@@ -145,7 +145,7 @@ export async function editDmEmbedFromSelect(
     const botMessage = await findRescheduleDm(interaction);
     if (!botMessage?.embeds[0]) return;
     const embed = buildStateEmbed(botMessage.embeds[0], state);
-    const components = buildDisabledRows(botMessage.components);
+    const components = buildDisabledRows(botMessage.components as never);
     await botMessage.edit({ embeds: [embed], components });
   } catch (error) {
     logger.warn(
@@ -183,7 +183,7 @@ async function findRescheduleDm(
 /** Check if a message has reschedule button components. */
 function isRescheduleMsg(msg: ButtonInteraction['message']): boolean {
   return msg.components.some((row) =>
-    (row.components as Array<{ customId?: string }>).some(
+    ((row as unknown as { components: Array<{ customId?: string }> }).components ?? []).some(
       (c) =>
         typeof c.customId === 'string' &&
         (c.customId.startsWith(RESCHEDULE_BUTTON_IDS.CONFIRM) ||
@@ -194,17 +194,17 @@ function isRescheduleMsg(msg: ButtonInteraction['message']): boolean {
 
 /** Check if a button action is a reschedule action. */
 export function isRescheduleAction(action: string): boolean {
-  return [
+  return ([
     RESCHEDULE_BUTTON_IDS.CONFIRM,
     RESCHEDULE_BUTTON_IDS.TENTATIVE,
     RESCHEDULE_BUTTON_IDS.DECLINE,
-  ].includes(action);
+  ] as string[]).includes(action);
 }
 
 /** Check if a select menu action is a reschedule select action. */
 export function isSelectAction(action: string): boolean {
-  return [
+  return ([
     RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
     RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
-  ].includes(action);
+  ] as string[]).includes(action);
 }

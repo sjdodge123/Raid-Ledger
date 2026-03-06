@@ -38,7 +38,7 @@ export interface InMemorySession {
  * Convert a DB voice session row to DTO format.
  */
 export function toVoiceSessionDto(session: {
-  id: number;
+  id: string;
   eventId: number;
   userId: number | null;
   discordUserId: string;
@@ -75,7 +75,7 @@ export function toVoiceSessionDto(session: {
 export function buildAttendanceSummary(
   eventId: number,
   sessions: Array<{
-    id: number;
+    id: string;
     eventId: number;
     userId: number | null;
     discordUserId: string;

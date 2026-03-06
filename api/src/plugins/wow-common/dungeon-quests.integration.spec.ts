@@ -242,7 +242,7 @@ describe('Dungeon Quests (integration)', () => {
 
       // The quest without a prevQuestId should have null prerequisiteChain
       const prereqQuest = questList.find((q) => q.questId === 5001);
-      expect(prereqQuest.prerequisiteChain).toBeNull();
+      expect(prereqQuest!.prerequisiteChain).toBeNull();
     });
 
     it('should return 400 for invalid variant', async () => {

@@ -33,6 +33,7 @@ interface EligibleEventRow {
   channel_id: string;
   guild_id: string;
   message_id: string;
+  [key: string]: unknown;
 }
 
 /** Map a raw DB row to an EligibleEvent DTO. */

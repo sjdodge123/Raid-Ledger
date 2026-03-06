@@ -51,7 +51,7 @@ import {
   type SearchDeps,
 } from './igdb-helpers.barrel';
 
-export { SearchResult } from './igdb.constants';
+export type { SearchResult } from './igdb.constants';
 
 @Injectable()
 export class IgdbService {

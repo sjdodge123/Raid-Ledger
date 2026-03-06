@@ -301,7 +301,7 @@ export class BlizzardService {
         []) as Array<{
         specialization_name?: string;
         spent_points?: number;
-        talents?: unknown[];
+        talents?: Array<Record<string, unknown>>;
       }>;
       if (trees.length === 0) return { spec: null, role: null, talents: null };
       return inferClassicSpec(trees, characterClass);

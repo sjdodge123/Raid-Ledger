@@ -283,7 +283,7 @@ describe('Event Reminders & Notifications (integration)', () => {
       const notifications = res.body as Array<Record<string, unknown>>;
       const notification = notifications.find((n) => n.title === 'New Event!');
       expect(notification).toBeDefined();
-      expect(notification.type).toBe('new_event');
+      expect(notification!.type).toBe('new_event');
     });
 
     it('should mark notification as read', async () => {

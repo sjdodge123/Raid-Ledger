@@ -321,7 +321,7 @@ describe('Events Dashboard & findAll (integration)', () => {
         .data;
       const event = events.find((e) => e.id === eventId);
       expect(event).toBeDefined();
-      expect(event.signupCount).toBe(2);
+      expect(event!.signupCount).toBe(2);
     });
 
     it('should filter events by date range', async () => {

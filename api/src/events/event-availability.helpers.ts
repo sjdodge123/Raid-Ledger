@@ -30,7 +30,7 @@ function computeTimeRange(
 
 type AvailabilityEntry = {
   timeRange: { start: string; end: string };
-  status: string;
+  status: 'available' | 'committed' | 'blocked' | 'freed';
   gameId: number | null;
   sourceEventId: number | null;
 };

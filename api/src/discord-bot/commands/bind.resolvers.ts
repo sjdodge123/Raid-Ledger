@@ -23,7 +23,7 @@ export function resolveChannel(
   const type = resolveChannelType(opt, interaction);
   return {
     channelId: target.id,
-    channelName: 'name' in target ? target.name : target.id,
+    channelName: 'name' in target ? (target.name ?? target.id) : target.id,
     bindingChannelType: type,
   };
 }

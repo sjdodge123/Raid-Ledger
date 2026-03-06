@@ -19,7 +19,7 @@ function buildCommonInsertValues(
   creatorId: number,
   channelId: string,
   pollDurationHours: number,
-): Record<string, unknown> {
+) {
   return {
     creatorId,
     pollChannelId: channelId,

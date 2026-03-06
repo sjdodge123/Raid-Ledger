@@ -9,12 +9,12 @@ export interface EnrichedProfile {
   profile: {
     name: string;
     realm: string;
-    class: string | null;
+    class: string;
     spec: string | null;
     role: 'tank' | 'healer' | 'dps' | null;
     level: number;
     race: string;
-    faction: 'alliance' | 'horde';
+    faction: string | null;
     itemLevel: number | null;
     avatarUrl: string | null;
     renderUrl: string | null;

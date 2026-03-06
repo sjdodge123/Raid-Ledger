@@ -146,7 +146,7 @@ function assembleEventData(
     description: event.description,
     startTime: event.duration[0].toISOString(),
     endTime: event.duration[1].toISOString(),
-    signupCount: signupMentions.length,
+    signupCount: signupMentions?.length ?? 0,
     maxAttendees: event.maxAttendees,
     slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
     roleCounts,

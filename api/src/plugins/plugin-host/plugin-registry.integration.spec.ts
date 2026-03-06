@@ -190,7 +190,7 @@ describe('Plugin Registry (integration)', () => {
       const deactivated = deactivatedList.find(
         (p) => p.slug === activePlugin.slug,
       );
-      expect(deactivated.status).toBe('inactive');
+      expect(deactivated!.status).toBe('inactive');
 
       // Re-activate
       await testApp.request

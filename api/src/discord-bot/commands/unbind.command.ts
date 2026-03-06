@@ -107,7 +107,7 @@ export class UnbindCommand
       return;
     }
     const channelId = target.id;
-    const channelName = 'name' in target ? target.name : channelId;
+    const channelName = 'name' in target ? (target.name ?? channelId) : channelId;
     const series = await this.resolveSeries(interaction);
 
     try {

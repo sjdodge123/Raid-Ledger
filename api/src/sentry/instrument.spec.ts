@@ -33,7 +33,7 @@ async function loadInstrument(
   }));
 
   // Re-import to trigger module-level side effects
-  await import('./instrument');
+  await import('./instrument.js');
 
   // Retrieve the fresh mock
   const sentry = (await import('@sentry/nestjs')) as unknown as {

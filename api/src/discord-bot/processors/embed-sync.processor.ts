@@ -133,7 +133,7 @@ export class EmbedSyncProcessor extends WorkerHost {
 
   /** Persist the new embed state in the database. */
   private async persistState(
-    recordId: number,
+    recordId: string,
     newState: EmbedState,
   ): Promise<void> {
     await this.db

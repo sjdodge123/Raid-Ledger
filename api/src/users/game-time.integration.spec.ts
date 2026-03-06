@@ -464,7 +464,7 @@ describe('Game-Time (integration)', () => {
         (s) => s.dayOfWeek === 2 && s.hour === 14 && s.fromTemplate,
       );
       expect(tueSlot).toBeDefined();
-      expect(tueSlot.status).toBe('blocked');
+      expect(tueSlot!.status).toBe('blocked');
     });
   });
 
@@ -530,9 +530,9 @@ describe('Game-Time (integration)', () => {
       const eventBlock = evtData.events.find((e) => e.eventId === eventId);
       expect(eventBlock).toBeDefined();
       // Window function limits preview to 6 users max
-      expect(eventBlock.signupsPreview.length).toBeLessThanOrEqual(6);
+      expect((eventBlock! as Record<string, unknown> & { signupsPreview: unknown[] }).signupsPreview.length).toBeLessThanOrEqual(6);
       // Total count should reflect all signups (admin + user + 5 others = 7)
-      expect(eventBlock.signupCount).toBeGreaterThanOrEqual(7);
+      expect(eventBlock!.signupCount).toBeGreaterThanOrEqual(7);
     });
 
     it('should return committed slots for events outside template', async () => {
