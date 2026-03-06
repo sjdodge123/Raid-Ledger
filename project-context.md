@@ -53,8 +53,18 @@ _This file contains critical rules and patterns that AI agents must follow when 
 ### Code Quality & Style Rules
 - **Formatting:** Prettier is authoritative.
 - **Linting:** ESLint with standard presets.
-- **Naming:** 
+- **File Size Limits (strict `error`):**
+  - **Max 300 lines** per source file (`skipBlankLines + skipComments`)
+  - **Max 30 lines** per function (`skipBlankLines + skipComments`)
+  - **Max 750 lines** for test files (`*.spec.ts`, `*.test.tsx`)
+  - Migration files are exempt from both limits
+  - No blanket `/* eslint-disable */` — must specify rules
+- **Design small from the start** — plan focused modules, extract helpers/sub-services/child components proactively. Do not write large files and refactor after.
+- **Naming:**
   - Files: `kebab-case` (e.g., `user-profile.tsx`)
+  - Helper files: `{module}.helpers.ts` (standalone functions extracted from services)
+  - Handler files: `{listener-name}.handlers.ts` (extracted listener methods)
+  - Test helper files: `{name}.spec-helpers.ts` (shared test setup)
   - Classes: `PascalCase`
   - Variables/Properties: `camelCase`
   - Database Columns: `snake_case` (Explicitly mapped in Drizzle)
@@ -85,4 +95,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Review quarterly for outdated rules
 - Remove rules that become obvious over time
 
-Last Updated: 2026-02-02
+Last Updated: 2026-03-06
