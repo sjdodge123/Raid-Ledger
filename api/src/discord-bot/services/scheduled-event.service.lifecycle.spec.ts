@@ -1,0 +1,390 @@
+/* eslint-disable @typescript-eslint/unbound-method */
+import { GuildScheduledEventStatus } from 'discord.js';
+import type { ScheduledEventData } from './scheduled-event.service';
+import {
+  setupScheduledEventTestModule,
+  makeDiscordApiError,
+  baseEventData,
+  type ScheduledEventMocks,
+} from './scheduled-event.service.spec-helpers';
+
+describe('ScheduledEventService — lifecycle operations', () => {
+  let mocks: ScheduledEventMocks;
+
+  beforeEach(async () => {
+    mocks = await setupScheduledEventTestModule();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  // ---------------------------------------------------------------------------
+  // completeScheduledEvent (ROK-577)
+  // ---------------------------------------------------------------------------
+  describe('completeScheduledEvent', () => {
+    it('sets the Discord Scheduled Event status to Completed when Active', async () => {
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+      const updateChain = mocks.createUpdateChain();
+      mocks.mockDb.update.mockReturnValue(updateChain);
+
+      mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Active,
+        setStatus: jest.fn(),
+      });
+
+      await mocks.service.completeScheduledEvent(42);
+
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
+        'discord-se-id-1',
+        { status: GuildScheduledEventStatus.Completed },
+      );
+    });
+
+    it('transitions Scheduled -> Active -> Completed when event is still Scheduled', async () => {
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+      const updateChain = mocks.createUpdateChain();
+      mocks.mockDb.update.mockReturnValue(updateChain);
+
+      mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Scheduled,
+        setStatus: jest.fn(),
+      });
+
+      await mocks.service.completeScheduledEvent(42);
+
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
+        'discord-se-id-1',
+        { status: GuildScheduledEventStatus.Active },
+      );
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
+        'discord-se-id-1',
+        { status: GuildScheduledEventStatus.Completed },
+      );
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips when event is already Completed', async () => {
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+      mocks.mockDb.update.mockReturnValue(mocks.createUpdateChain());
+
+      mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Completed,
+        setStatus: jest.fn(),
+      });
+
+      await mocks.service.completeScheduledEvent(42);
+      expect(mocks.mockGuild.scheduledEvents.edit).not.toHaveBeenCalled();
+    });
+
+    it('skips when event is already Canceled', async () => {
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+      mocks.mockDb.update.mockReturnValue(mocks.createUpdateChain());
+
+      mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Canceled,
+        setStatus: jest.fn(),
+      });
+
+      await mocks.service.completeScheduledEvent(42);
+      expect(mocks.mockGuild.scheduledEvents.edit).not.toHaveBeenCalled();
+    });
+
+    it('clears discordScheduledEventId in DB after completion', async () => {
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+      const updateChain = mocks.createUpdateChain();
+      mocks.mockDb.update.mockReturnValue(updateChain);
+
+      await mocks.service.completeScheduledEvent(42);
+
+      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+    });
+
+    it('skips when no discordScheduledEventId stored in DB', async () => {
+      const selectChain = mocks.createSelectChain([{ discordScheduledEventId: null }]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+
+      await mocks.service.completeScheduledEvent(42);
+      expect(mocks.mockGuild.scheduledEvents.fetch).not.toHaveBeenCalled();
+      expect(mocks.mockGuild.scheduledEvents.edit).not.toHaveBeenCalled();
+    });
+
+    it('skips when bot is not connected', async () => {
+      mocks.clientService.isConnected.mockReturnValue(false);
+      await mocks.service.completeScheduledEvent(42);
+      expect(mocks.mockGuild.scheduledEvents.fetch).not.toHaveBeenCalled();
+    });
+
+    it('handles 10070 gracefully — already deleted in Discord', async () => {
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+      const updateChain = mocks.createUpdateChain();
+      mocks.mockDb.update.mockReturnValue(updateChain);
+
+      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      mocks.mockGuild.scheduledEvents.fetch.mockRejectedValue(unknownError);
+
+      await expect(mocks.service.completeScheduledEvent(42)).resolves.not.toThrow();
+      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+    });
+
+    it('does not throw on other Discord errors — logs and swallows', async () => {
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+      mocks.mockGuild.scheduledEvents.fetch.mockRejectedValue(
+        new Error('Unexpected API error'),
+      );
+
+      await expect(mocks.service.completeScheduledEvent(42)).resolves.not.toThrow();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // description building (tested via createScheduledEvent side effects)
+  // ---------------------------------------------------------------------------
+  describe('description building', () => {
+    it('includes game name, signup count, and view link in the description', async () => {
+      await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
+
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+        description: string;
+      };
+      expect(editArg.description).toContain('World of Warcraft');
+      expect(editArg.description).toContain('5/25 signed up');
+      expect(editArg.description).toContain('https://raidledger.app/events/42');
+    });
+
+    it('shows signup count without max when maxAttendees is null', async () => {
+      const data: ScheduledEventData = { ...baseEventData, maxAttendees: null, signupCount: 7 };
+
+      await mocks.service.createScheduledEvent(42, data, 1, false);
+
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+        description: string;
+      };
+      expect(editArg.description).toContain('7 signed up');
+      expect(editArg.description).not.toMatch(/\d+\/\d+/);
+    });
+
+    it('uses "Event" as game name when no game provided', async () => {
+      const data: ScheduledEventData = { ...baseEventData, game: null };
+
+      await mocks.service.createScheduledEvent(42, data, 1, false);
+
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+        description: string;
+      };
+      expect(editArg.description).toContain('Event —');
+    });
+
+    it('omits view link when clientUrl is null', async () => {
+      mocks.settingsService.getClientUrl.mockResolvedValue(null);
+      await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
+
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+        description: string;
+      };
+      expect(editArg.description).not.toContain('View event');
+      expect(editArg.description).not.toContain('/events/');
+    });
+
+    it('truncates long descriptions to 1000 characters', async () => {
+      const data: ScheduledEventData = { ...baseEventData, description: 'a'.repeat(2000) };
+
+      await mocks.service.createScheduledEvent(42, data, 1, false);
+
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+        description: string;
+      };
+      expect(editArg.description.length).toBeLessThanOrEqual(1000);
+    });
+
+    it('preserves header even when description is extremely long', async () => {
+      const data: ScheduledEventData = { ...baseEventData, description: 'x'.repeat(2000) };
+
+      await mocks.service.createScheduledEvent(42, data, 1, false);
+
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+        description: string;
+      };
+      expect(editArg.description).toContain('World of Warcraft');
+    });
+
+    it('returns full description unchanged when it is under 1000 chars', async () => {
+      const data: ScheduledEventData = { ...baseEventData, description: 'Short description.' };
+
+      await mocks.service.createScheduledEvent(42, data, 1, false);
+
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+        description: string;
+      };
+      expect(editArg.description).toContain('Short description.');
+      expect(editArg.description.length).toBeLessThanOrEqual(1000);
+    });
+
+    it('handles null/undefined description gracefully', async () => {
+      const data: ScheduledEventData = { ...baseEventData, description: null };
+
+      await mocks.service.createScheduledEvent(42, data, 1, false);
+
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+        description: string;
+      };
+      expect(editArg.description).toContain('World of Warcraft');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // startScheduledEvents (ROK-573)
+  // ---------------------------------------------------------------------------
+  describe('startScheduledEvents', () => {
+    /** Helper to build a select chain that resolves at .where() (no .limit()). */
+    const createSelectChainNoLimit = (rows: unknown[] = []) => {
+      const chain: Record<string, jest.Mock> = {};
+      chain.select = jest.fn().mockReturnValue(chain);
+      chain.from = jest.fn().mockReturnValue(chain);
+      chain.where = jest.fn().mockResolvedValue(rows);
+      return chain;
+    };
+
+    it('starts a Discord scheduled event that is still in SCHEDULED state', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+
+      mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Scheduled,
+      });
+
+      await mocks.service.startScheduledEvents();
+
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
+        'discord-se-id-1',
+        { status: GuildScheduledEventStatus.Active },
+      );
+    });
+
+    it('skips events already in ACTIVE state', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+
+      mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Active,
+      });
+
+      await mocks.service.startScheduledEvents();
+      expect(mocks.mockGuild.scheduledEvents.edit).not.toHaveBeenCalled();
+    });
+
+    it('skips when no candidates found', async () => {
+      const selectChain = createSelectChainNoLimit([]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+
+      await mocks.service.startScheduledEvents();
+      expect(mocks.mockGuild.scheduledEvents.fetch).not.toHaveBeenCalled();
+      expect(mocks.mockGuild.scheduledEvents.edit).not.toHaveBeenCalled();
+    });
+
+    it('skips when bot is not connected', async () => {
+      mocks.clientService.isConnected.mockReturnValue(false);
+      await mocks.service.startScheduledEvents();
+      expect(mocks.mockDb.select).not.toHaveBeenCalled();
+    });
+
+    it('skips when no guild is available', async () => {
+      mocks.clientService.getGuild.mockReturnValue(null);
+      await mocks.service.startScheduledEvents();
+      expect(mocks.mockDb.select).not.toHaveBeenCalled();
+    });
+
+    it('clears DB reference when Discord event was manually deleted (10070)', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'deleted-se-id' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+      const updateChain = mocks.createUpdateChain();
+      mocks.mockDb.update.mockReturnValue(updateChain);
+
+      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      mocks.mockGuild.scheduledEvents.fetch.mockRejectedValue(unknownError);
+
+      await mocks.service.startScheduledEvents();
+
+      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+    });
+
+    it('handles multiple candidates — starts only SCHEDULED ones', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'se-1' },
+        { id: 43, discordScheduledEventId: 'se-2' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+
+      mocks.mockGuild.scheduledEvents.fetch
+        .mockResolvedValueOnce({
+          id: 'se-1',
+          status: GuildScheduledEventStatus.Scheduled,
+        })
+        .mockResolvedValueOnce({
+          id: 'se-2',
+          status: GuildScheduledEventStatus.Active,
+        });
+
+      await mocks.service.startScheduledEvents();
+
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledTimes(1);
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-1', {
+        status: GuildScheduledEventStatus.Active,
+      });
+    });
+
+    it('does not throw on Discord API errors — logs and continues', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'se-1' },
+        { id: 43, discordScheduledEventId: 'se-2' },
+      ]);
+      mocks.mockDb.select.mockReturnValue(selectChain);
+
+      mocks.mockGuild.scheduledEvents.fetch
+        .mockRejectedValueOnce(new Error('Rate limited'))
+        .mockResolvedValueOnce({
+          id: 'se-2',
+          status: GuildScheduledEventStatus.Scheduled,
+        });
+
+      await expect(mocks.service.startScheduledEvents()).resolves.not.toThrow();
+
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-2', {
+        status: GuildScheduledEventStatus.Active,
+      });
+    });
+  });
+});
