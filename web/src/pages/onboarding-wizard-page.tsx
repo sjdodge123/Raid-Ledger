@@ -4,7 +4,6 @@ import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useCompleteOnboardingFte } from '../hooks/use-onboarding-fte';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useUserHeartedGames } from '../hooks/use-user-profile';
-import { useMyCharacters } from '../hooks/use-characters';
 import { useSystemStatus } from '../hooks/use-system-status';
 import { toast } from '../lib/toast';
 import { isDiscordLinked } from '../lib/avatar';
@@ -16,119 +15,17 @@ import { GameTimeStep } from '../components/onboarding/gametime-step';
 import { AvatarThemeStep } from '../components/onboarding/avatar-theme-step';
 import { useGuildMembership } from '../hooks/use-discord-onboarding';
 import type { GameRegistryDto } from '@raid-ledger/contract';
-
-interface StepDef {
-    /** Unique key — 'character-gameId-0', 'character-gameId-1', etc. for dynamic character steps */
-    key: string;
-    label: string;
-    /** For character steps, the registry game to pre-fill */
-    registryGame?: GameRegistryDto;
-    /** For character steps, which character slot this step represents (0-based) */
-    charIndex?: number;
-}
-
-/**
- * Breadcrumb label for the Connect step — shows Discord avatar + name
- * when connected, falls back to dot + "Connect" when not.
- */
-function ConnectStepLabel({ user, isCurrent, isVisited }: {
-    user: { avatar: string | null; displayName: string | null; username: string; discordId: string } | null;
-    isCurrent: boolean;
-    isVisited: boolean;
-}) {
-    const isConnected = user && isDiscordLinked(user.discordId);
-
-    if (isConnected) {
-        return (
-            <>
-                {user.avatar ? (
-                    <img
-                        src={user.avatar}
-                        alt={user.displayName || user.username}
-                        className="w-4 h-4 rounded-full object-cover flex-shrink-0"
-                    />
-                ) : (
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent
-                        ? 'bg-white'
-                        : isVisited
-                            ? 'bg-emerald-400'
-                            : 'bg-edge/50'
-                        }`} />
-                )}
-                <span className="truncate max-w-[6rem]">{user.displayName || user.username}</span>
-            </>
-        );
-    }
-
-    return (
-        <>
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent
-                ? 'bg-white'
-                : isVisited
-                    ? 'bg-emerald-400'
-                    : 'bg-edge/50'
-                }`} />
-            Connect
-        </>
-    );
-}
-
-/**
- * Breadcrumb label for character steps — shows avatar + name when saved,
- * falls back to game name + dot when empty.
- */
-function CharacterStepLabel({ game, charIndex, isCurrent, isVisited }: {
-    game: GameRegistryDto;
-    charIndex: number;
-    isCurrent: boolean;
-    isVisited: boolean;
-}) {
-    const { data: myCharsData } = useMyCharacters(game.id);
-    const chars = myCharsData?.data ?? [];
-    const char = chars[charIndex];
-
-    if (char) {
-        return (
-            <>
-                {char.avatarUrl ? (
-                    <img
-                        src={char.avatarUrl}
-                        alt={char.name}
-                        className="w-4 h-4 rounded-full object-cover flex-shrink-0"
-                    />
-                ) : (
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent
-                        ? 'bg-white'
-                        : isVisited
-                            ? 'bg-emerald-400'
-                            : 'bg-edge/50'
-                        }`} />
-                )}
-                <span className="truncate max-w-[6rem]">{char.name}</span>
-            </>
-        );
-    }
-
-    return (
-        <>
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent
-                ? 'bg-white'
-                : isVisited
-                    ? 'bg-emerald-400'
-                    : 'bg-edge/50'
-                }`} />
-            {game.shortName || game.name}
-        </>
-    );
-}
+import type { StepDef } from './onboarding-wizard/onboarding-types';
+import { OnboardingBreadcrumbs } from './onboarding-wizard/OnboardingBreadcrumbs';
 
 /**
  * FTE Onboarding Wizard Page (ROK-219 redesign).
- * Step flow: Connect (conditional) -> Games -> Character × N (per qualifying hearted game) -> Game Time -> Personalize
+ * Step flow: Connect (conditional) -> Games -> Character x N -> Game Time -> Personalize
  * Centered modal overlay. All steps are skippable. Escape dismisses.
  * Re-runnable from settings via /onboarding?rerun=1.
  */
-export function OnboardingWizardPage() {
+// eslint-disable-next-line max-lines-per-function
+export function OnboardingWizardPage(): JSX.Element | null {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { user } = useAuth();
@@ -138,52 +35,39 @@ export function OnboardingWizardPage() {
     const { data: systemStatus } = useSystemStatus();
 
     const [currentStep, setCurrentStep] = useState(0);
-    // Extra character steps beyond the initial one per game
     const [extraCharCounts, setExtraCharCounts] = useState<Record<string, number>>({});
 
     const isRerun = searchParams.get('rerun') === '1';
-
-    // Determine if user needs the connect step (no OAuth linked AND Discord is configured)
     const discordConfigured = systemStatus?.discordConfigured ?? false;
+
     const needsConnect = useMemo(() => {
-        if (!user) return false;
-        if (!discordConfigured) return false;
+        if (!user || !discordConfigured) return false;
         return !isDiscordLinked(user.discordId);
     }, [user, discordConfigured]);
 
-    // Check if user is already in the Discord server (ROK-403)
     const { data: guildMembership } = useGuildMembership(
         discordConfigured && !!user && isDiscordLinked(user.discordId),
     );
 
-    // Show the "Join Discord" step when Discord is configured, user has linked Discord,
-    // and the user is NOT already in the guild server
     const needsDiscordJoin = useMemo(() => {
-        if (!discordConfigured) return false;
-        if (!user || !isDiscordLinked(user.discordId)) return false;
-        // If guild membership hasn't loaded yet, show the step optimistically
+        if (!discordConfigured || !user || !isDiscordLinked(user.discordId)) return false;
         if (!guildMembership) return true;
         return !guildMembership.isMember;
     }, [discordConfigured, user, guildMembership]);
 
-    // Qualifying games = hearted games that have config in the games table (by name).
     const qualifyingGames = useMemo(() => {
         const hearted = heartedGamesData?.data ?? [];
         if (hearted.length === 0 || registryGames.length === 0) return [];
-        const registryByName = new Map(
-            registryGames.map((g) => [g.name.toLowerCase(), g]),
-        );
+        const registryByName = new Map(registryGames.map((g) => [g.name.toLowerCase(), g]));
         return hearted
             .map((h) => registryByName.get(h.name.toLowerCase()))
             .filter((g): g is GameRegistryDto => !!g && g.hasRoles);
     }, [heartedGamesData, registryGames]);
 
-    // Build active steps list dynamically
     const steps: StepDef[] = useMemo(() => {
         const s: StepDef[] = [];
         if (needsConnect) s.push({ key: 'connect', label: 'Connect' });
         s.push({ key: 'games', label: 'Games' });
-        // Character steps: 1 initial + extras per qualifying hearted game
         qualifyingGames.forEach((game) => {
             const total = 1 + (extraCharCounts[game.id] ?? 0);
             for (let j = 0; j < total; j++) {
@@ -191,29 +75,22 @@ export function OnboardingWizardPage() {
                 s.push({
                     key: `character-${game.id}-${j}`,
                     label: total > 1 ? `${displayName} (${j + 1})` : displayName,
-                    registryGame: game,
-                    charIndex: j,
+                    registryGame: game, charIndex: j,
                 });
             }
         });
         s.push({ key: 'gametime', label: 'Game Time' });
         s.push({ key: 'avatar', label: 'Personalize' });
-        // Discord Join is last — the invite link navigates away from the browser
         if (needsDiscordJoin) s.push({ key: 'discord-join', label: 'Discord' });
         return s;
     }, [needsConnect, needsDiscordJoin, qualifyingGames, extraCharCounts]);
 
     const maxStep = steps.length - 1;
     const currentStepDef = steps[currentStep];
-
-    // Validator ref — character steps can register a function that returns false
-    // to block advancing (e.g. unsaved Armory preview). Reset when step changes.
     const stepValidatorRef = useRef<(() => boolean) | null>(null);
 
     const goNext = useCallback(() => {
-        if (stepValidatorRef.current && !stepValidatorRef.current()) {
-            return; // validator blocked — step will show warning
-        }
+        if (stepValidatorRef.current && !stepValidatorRef.current()) return;
         stepValidatorRef.current = null;
         setCurrentStep((prev) => Math.min(prev + 1, maxStep));
     }, [maxStep]);
@@ -222,25 +99,20 @@ export function OnboardingWizardPage() {
         setCurrentStep((prev) => Math.max(prev - 1, 0));
     }, []);
 
-    // Add another character step for a game — inserts right after current step
     const addCharacterStep = useCallback((gameId: number) => {
         setExtraCharCounts((prev) => ({ ...prev, [gameId]: (prev[gameId] ?? 0) + 1 }));
-        // Advance to the newly created step (which appears right after current)
         setCurrentStep((prev) => prev + 1);
     }, []);
 
-    // Remove an extra character step for a game — collapse back
     const removeCharacterStep = useCallback((gameId: number) => {
         setExtraCharCounts((prev) => {
             const current = prev[gameId] ?? 0;
             if (current <= 0) return prev;
             return { ...prev, [gameId]: current - 1 };
         });
-        // Navigate back since this step is being removed
         setCurrentStep((prev) => Math.max(prev - 1, 0));
     }, []);
 
-    // ROK-394: After onboarding, redirect to pending invite claim if present
     const getPostOnboardingRedirect = useCallback(() => {
         const pendingInvite = sessionStorage.getItem('invite_code');
         if (pendingInvite) {
@@ -261,31 +133,18 @@ export function OnboardingWizardPage() {
 
     const handleComplete = useCallback(() => {
         completeOnboarding.mutate(undefined, {
-            onSuccess: () => {
-                navigate(getPostOnboardingRedirect(), { replace: true });
-            },
+            onSuccess: () => { navigate(getPostOnboardingRedirect(), { replace: true }); },
         });
     }, [completeOnboarding, navigate, getPostOnboardingRedirect]);
 
-    // Keyboard: Escape to dismiss
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                handleSkipAll();
-            }
-        };
+        const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') handleSkipAll(); };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [handleSkipAll]);
 
-    // Redirect guards — placed after all hooks
-    if (user && isAdmin(user) && !isRerun) {
-        return <Navigate to="/calendar" replace />;
-    }
-    // Allow re-run from settings (skip the onboardingCompletedAt guard)
-    if (user?.onboardingCompletedAt && !isRerun) {
-        return <Navigate to="/calendar" replace />;
-    }
+    if (user && isAdmin(user) && !isRerun) return <Navigate to="/calendar" replace />;
+    if (user?.onboardingCompletedAt && !isRerun) return <Navigate to="/calendar" replace />;
 
     const isFirstStep = currentStep === 0;
     const isFinalStep = currentStep === maxStep;
@@ -293,185 +152,78 @@ export function OnboardingWizardPage() {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div
-                className="relative w-full max-w-2xl mx-4 h-[90vh] flex flex-col bg-surface border border-edge/50 rounded-2xl shadow-2xl"
-                role="dialog"
-                aria-label="Onboarding wizard"
-            >
-                {/* Header with Skip All — sticky, not scrollable */}
-                <div className="flex-shrink-0 border-b border-edge/30 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                    <div className="text-sm text-muted">
-                        Step {currentStep + 1} of {steps.length}
-                    </div>
-                    {!isFinalStep && (
-                        <button
-                            onClick={handleSkipAll}
-                            className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-full hover:bg-edge/20"
-                        >
-                            Skip All
-                        </button>
-                    )}
-                </div>
-
-                {/* Breadcrumbs — hybrid collapse: current ±1 expanded, rest collapsed to dots, hover to expand */}
-                <div className="flex-shrink-0 px-4 py-2 flex items-center justify-center gap-0.5">
-                    {steps.map((step, index) => {
-                        const distance = Math.abs(index - currentStep);
-                        const isExpanded = distance <= 1;
-
-                        const isCurrent = index === currentStep;
-                        const isVisited = index < currentStep;
-
-                        // Label content (shared for expanded + hover-expanded)
-                        const labelContent = step.key === 'connect' ? (
-                            <ConnectStepLabel
-                                user={user ?? null}
-                                isCurrent={isCurrent}
-                                isVisited={isVisited}
-                            />
-                        ) : step.registryGame != null && step.charIndex != null ? (
-                            <CharacterStepLabel
-                                game={step.registryGame}
-                                charIndex={step.charIndex}
-                                isCurrent={isCurrent}
-                                isVisited={isVisited}
-                            />
-                        ) : (
-                            <>
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent
-                                    ? 'bg-white'
-                                    : isVisited ? 'bg-emerald-400' : 'bg-edge/50'
-                                    }`} />
-                                {step.label}
-                            </>
-                        );
-
-                        const dotColor = isVisited || isCurrent ? 'bg-emerald-400' : 'bg-edge/50';
-
-                        return (
-                            <button
-                                key={step.key}
-                                type="button"
-                                onClick={() => setCurrentStep(index)}
-                                className={`group relative flex items-center justify-center rounded-full text-xs font-medium
-                                    transition-all duration-300 ease-in-out min-w-[44px] min-h-[44px]
-                                    ${isCurrent
-                                        ? 'bg-emerald-600 text-white px-2.5 py-1.5'
-                                        : isVisited
-                                            ? 'text-emerald-400 hover:bg-emerald-500/10 cursor-pointer px-1.5 py-1.5'
-                                            : 'text-dim hover:bg-edge/20 cursor-pointer px-1.5 py-1.5'
-                                    }`}
-                            >
-                                {/* Collapsed dot — shrinks to 0 when step is expanded via proximity */}
-                                <span className={`rounded-full flex-shrink-0 transition-all duration-300 ease-in-out ${dotColor} ${isExpanded ? 'w-0 h-0 opacity-0' : 'w-3 h-3 opacity-100'
-                                    }`} />
-                                {/* In-flow label — visible when expanded by proximity */}
-                                <span className={`flex items-center gap-1.5 overflow-hidden whitespace-nowrap
-                                    transition-all duration-300 ease-in-out
-                                    ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'
-                                    }`}>
-                                    {labelContent}
-                                    {step.charIndex != null && step.charIndex > 0 && step.registryGame && (
-                                        <span
-                                            role="button"
-                                            tabIndex={0}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                removeCharacterStep(step.registryGame!.id);
-                                            }}
-                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); removeCharacterStep(step.registryGame!.id); } }}
-                                            className="ml-0.5 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-500/30 text-current opacity-60 hover:opacity-100 transition-all flex-shrink-0"
-                                            title="Remove this character slot"
-                                        >
-                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </span>
-                                    )}
-                                </span>
-                                {/* Hover overlay — absolute, same level, expands in place from the dot */}
-                                {!isExpanded && (
-                                    <span className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50
-                                        flex items-center gap-1.5 whitespace-nowrap
-                                        rounded-full px-2.5 py-1.5
-                                        text-xs font-medium
-                                        opacity-0 scale-90 pointer-events-none
-                                        group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto
-                                        transition-all duration-200 ease-out
-                                        ${isVisited
-                                            ? 'bg-surface text-emerald-400 shadow-lg shadow-black/30'
-                                            : 'bg-surface text-dim shadow-lg shadow-black/30'
-                                        }
-                                    `}>
-                                        {labelContent}
-                                    </span>
-                                )}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                {/* Scrollable step content */}
-                <div className="flex-1 overflow-y-auto px-6 pb-6">
-                    {currentStepDef?.key === 'connect' && (
-                        <ConnectStep />
-                    )}
-                    {currentStepDef?.key === 'discord-join' && (
-                        <DiscordJoinStep />
-                    )}
-                    {currentStepDef?.key === 'games' && (
-                        <GamesStep />
-                    )}
-                    {isCharacterStep && currentStepDef?.registryGame && (
-                        <CharacterStep
-                            key={currentStepDef.key}
-                            preselectedGame={currentStepDef.registryGame}
-                            charIndex={currentStepDef.charIndex ?? 0}
-                            onRegisterValidator={(fn) => { stepValidatorRef.current = fn; }}
-                            onAddAnother={() => addCharacterStep(currentStepDef.registryGame!.id)}
-                            onRemoveStep={() => removeCharacterStep(currentStepDef.registryGame!.id)}
-                        />
-                    )}
-                    {currentStepDef?.key === 'gametime' && (
-                        <GameTimeStep />
-                    )}
-                    {currentStepDef?.key === 'avatar' && (
-                        <AvatarThemeStep />
-                    )}
-                </div>
-
-                {/* Sticky footer — navigation buttons */}
-                <div className="flex-shrink-0 border-t border-edge/30 px-6 py-4 flex gap-3 justify-center rounded-b-2xl">
-                    {!isFirstStep && (
-                        <button
-                            type="button"
-                            onClick={goBack}
-                            className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                        >
-                            Back
-                        </button>
-                    )}
-                    {!isFinalStep && (
-                        <button
-                            type="button"
-                            onClick={goNext}
-                            className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                        >
-                            Skip
-                        </button>
-                    )}
-                    <button
-                        type="button"
-                        onClick={isFinalStep ? handleComplete : goNext}
-                        disabled={isFinalStep && completeOnboarding.isPending}
-                        className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-semibold rounded-lg transition-colors text-sm"
-                    >
-                        {isFinalStep
-                            ? (completeOnboarding.isPending ? 'Completing...' : 'Complete')
-                            : 'Next'}
-                    </button>
-                </div>
+            <div className="relative w-full max-w-2xl mx-4 h-[90vh] flex flex-col bg-surface border border-edge/50 rounded-2xl shadow-2xl" role="dialog" aria-label="Onboarding wizard">
+                <WizardHeader currentStep={currentStep} totalSteps={steps.length} isFinalStep={isFinalStep} onSkipAll={handleSkipAll} />
+                <OnboardingBreadcrumbs steps={steps} currentStep={currentStep} setCurrentStep={setCurrentStep} removeCharacterStep={removeCharacterStep} user={user ?? null} />
+                <WizardContent currentStepDef={currentStepDef} isCharacterStep={isCharacterStep} stepValidatorRef={stepValidatorRef} addCharacterStep={addCharacterStep} removeCharacterStep={removeCharacterStep} />
+                <WizardFooter isFirstStep={isFirstStep} isFinalStep={isFinalStep} goBack={goBack} goNext={goNext} handleComplete={handleComplete} isPending={completeOnboarding.isPending} />
             </div>
+        </div>
+    );
+}
+
+/** Header with step counter and Skip All button */
+function WizardHeader({ currentStep, totalSteps, isFinalStep, onSkipAll }: {
+    currentStep: number; totalSteps: number; isFinalStep: boolean; onSkipAll: () => void;
+}): JSX.Element {
+    return (
+        <div className="flex-shrink-0 border-b border-edge/30 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+            <div className="text-sm text-muted">Step {currentStep + 1} of {totalSteps}</div>
+            {!isFinalStep && (
+                <button onClick={onSkipAll} className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-full hover:bg-edge/20">
+                    Skip All
+                </button>
+            )}
+        </div>
+    );
+}
+
+/** Scrollable step content area */
+function WizardContent({ currentStepDef, isCharacterStep, stepValidatorRef, addCharacterStep, removeCharacterStep }: {
+    currentStepDef: StepDef | undefined;
+    isCharacterStep: boolean;
+    stepValidatorRef: React.MutableRefObject<(() => boolean) | null>;
+    addCharacterStep: (gameId: number) => void;
+    removeCharacterStep: (gameId: number) => void;
+}): JSX.Element {
+    return (
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+            {currentStepDef?.key === 'connect' && <ConnectStep />}
+            {currentStepDef?.key === 'discord-join' && <DiscordJoinStep />}
+            {currentStepDef?.key === 'games' && <GamesStep />}
+            {isCharacterStep && currentStepDef?.registryGame && (
+                <CharacterStep
+                    key={currentStepDef.key}
+                    preselectedGame={currentStepDef.registryGame}
+                    charIndex={currentStepDef.charIndex ?? 0}
+                    onRegisterValidator={(fn) => { stepValidatorRef.current = fn; }}
+                    onAddAnother={() => addCharacterStep(currentStepDef.registryGame!.id)}
+                    onRemoveStep={() => removeCharacterStep(currentStepDef.registryGame!.id)}
+                />
+            )}
+            {currentStepDef?.key === 'gametime' && <GameTimeStep />}
+            {currentStepDef?.key === 'avatar' && <AvatarThemeStep />}
+        </div>
+    );
+}
+
+/** Sticky footer with navigation buttons */
+function WizardFooter({ isFirstStep, isFinalStep, goBack, goNext, handleComplete, isPending }: {
+    isFirstStep: boolean; isFinalStep: boolean; goBack: () => void; goNext: () => void;
+    handleComplete: () => void; isPending: boolean;
+}): JSX.Element {
+    return (
+        <div className="flex-shrink-0 border-t border-edge/30 px-6 py-4 flex gap-3 justify-center rounded-b-2xl">
+            {!isFirstStep && (
+                <button type="button" onClick={goBack} className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm">Back</button>
+            )}
+            {!isFinalStep && (
+                <button type="button" onClick={goNext} className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm">Skip</button>
+            )}
+            <button type="button" onClick={isFinalStep ? handleComplete : goNext} disabled={isFinalStep && isPending}
+                className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-semibold rounded-lg transition-colors text-sm">
+                {isFinalStep ? (isPending ? 'Completing...' : 'Complete') : 'Next'}
+            </button>
         </div>
     );
 }
