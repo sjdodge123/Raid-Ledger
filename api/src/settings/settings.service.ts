@@ -6,57 +6,55 @@ import * as schema from '../drizzle/schema';
 import { appSettings, SETTING_KEYS, SettingKey } from '../drizzle/schema';
 import { encrypt, decrypt } from './encryption.util';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import {
+  emitBotReconnect,
+  emitOAuthReconnect,
+  emitIgdbReconnect,
+  emitBlizzardReconnect,
+} from './settings-reconnect.helpers';
+import {
+  getDiscordBotConfig as _getDiscordBotConfig,
+  getClientUrl as _getClientUrl,
+  getAutoExtendIncrement,
+  getAutoExtendMaxOverage,
+  getAutoExtendMinVoice,
+  getDiscordOAuthConfig as _getDiscordOAuthConfig,
+  getIgdbConfig as _getIgdbConfig,
+  getBlizzardConfig as _getBlizzardConfig,
+  getBranding as _getBranding,
+  clearBranding as _clearBranding,
+  setDiscordOAuthKeys,
+  setIgdbKeys,
+  setBlizzardKeys,
+  setDiscordBotKeys,
+  clearDiscordBotKeys,
+  bothExist,
+} from './settings-bot.helpers';
 
-export interface DiscordOAuthConfig {
-  clientId: string;
-  clientSecret: string;
-  callbackUrl: string;
-}
+export { SETTINGS_EVENTS } from './settings.types';
+export type {
+  DiscordOAuthConfig,
+  IgdbConfig,
+  BlizzardConfig,
+  BrandingConfig,
+  DiscordBotConfig,
+} from './settings.types';
+import { SETTINGS_EVENTS } from './settings.types';
+import type {
+  DiscordOAuthConfig,
+  IgdbConfig,
+  BlizzardConfig,
+  BrandingConfig,
+  DiscordBotConfig,
+} from './settings.types';
 
-export interface IgdbConfig {
-  clientId: string;
-  clientSecret: string;
-}
-
-export interface BlizzardConfig {
-  clientId: string;
-  clientSecret: string;
-}
-
-export interface BrandingConfig {
-  communityName: string | null;
-  communityLogoPath: string | null;
-  communityAccentColor: string | null;
-}
-
-export interface DiscordBotConfig {
-  token: string;
-  enabled: boolean;
-}
-
-export const SETTINGS_EVENTS = {
-  OAUTH_DISCORD_UPDATED: 'settings.oauth.discord.updated',
-  IGDB_UPDATED: 'settings.igdb.updated',
-  BLIZZARD_UPDATED: 'settings.blizzard.updated',
-  DEMO_MODE_UPDATED: 'settings.demo_mode.updated',
-  DISCORD_BOT_UPDATED: 'settings.discord-bot.updated',
-  STEAM_UPDATED: 'settings.steam.updated',
-} as const;
-
-/** How long the in-memory cache is considered fresh (ms). */
-const CACHE_TTL_MS = 5 * 60_000; // 5 minutes — settings are essentially static
+const CACHE_TTL_MS = 5 * 60_000;
 
 @Injectable()
 export class SettingsService implements OnModuleInit {
   private readonly logger = new Logger(SettingsService.name);
-
-  /** In-memory cache: setting key -> decrypted value. */
   private cache = new Map<string, string>();
-
-  /** Timestamp (epoch ms) when the cache was last loaded from DB. */
   private cacheLoadedAt = 0;
-
-  /** Prevents concurrent cache loads from racing. */
   private cacheLoadPromise: Promise<void> | null = null;
 
   constructor(
@@ -65,21 +63,13 @@ export class SettingsService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
   ) {}
 
-  /** Eagerly warm the cache so the first HTTP request is never cold. */
   async onModuleInit(): Promise<void> {
     await this.loadCache();
   }
 
-  /**
-   * Load all settings into the in-memory cache if stale or empty.
-   * Coalesces concurrent callers so only one DB round-trip occurs.
-   */
   private async ensureCache(): Promise<void> {
     if (Date.now() - this.cacheLoadedAt < CACHE_TTL_MS) return;
-
-    if (!this.cacheLoadPromise) {
-      this.cacheLoadPromise = this.loadCache();
-    }
+    if (!this.cacheLoadPromise) this.cacheLoadPromise = this.loadCache();
     await this.cacheLoadPromise;
   }
 
@@ -87,17 +77,13 @@ export class SettingsService implements OnModuleInit {
     try {
       const rows = await this.db.select().from(appSettings);
       const fresh = new Map<string, string>();
-
       for (const row of rows) {
         try {
           fresh.set(row.key, decrypt(row.encryptedValue));
         } catch {
-          this.logger.error(
-            `Failed to decrypt setting ${row.key} during cache load`,
-          );
+          this.logger.error(`Failed to decrypt setting ${row.key}`);
         }
       }
-
       this.cache = fresh;
       this.cacheLoadedAt = Date.now();
       this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
@@ -106,631 +92,293 @@ export class SettingsService implements OnModuleInit {
     }
   }
 
-  /**
-   * Get a setting value by key (decrypted).
-   * Served from in-memory cache; falls back to DB only on cache miss after load.
-   */
+  /** Get a setting value by key (decrypted, from cache). */
   async get(key: SettingKey): Promise<string | null> {
     await this.ensureCache();
     return this.cache.get(key) ?? null;
   }
 
-  /**
-   * Set a setting value (encrypted).
-   * Writes through to DB and updates the in-memory cache immediately.
-   */
+  /** Set a setting value (encrypted, write-through to cache). */
   async set(key: SettingKey, value: string): Promise<void> {
     const encryptedValue = encrypt(value);
-
     await this.db
       .insert(appSettings)
-      .values({
-        key,
-        encryptedValue,
-        updatedAt: new Date(),
-      })
+      .values({ key, encryptedValue, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: appSettings.key,
-        set: {
-          encryptedValue,
-          updatedAt: new Date(),
-        },
+        set: { encryptedValue, updatedAt: new Date() },
       });
-
     this.cache.set(key, value);
-    this.cacheLoadedAt = Date.now(); // reset TTL — cache is consistent
-    this.logger.debug(`Setting ${key} updated`);
+    this.cacheLoadedAt = Date.now();
   }
 
-  /**
-   * Delete a setting.
-   * Removes from both DB and the in-memory cache.
-   */
+  /** Delete a setting from DB and cache. */
   async delete(key: SettingKey): Promise<void> {
     await this.db.delete(appSettings).where(eq(appSettings.key, key));
     this.cache.delete(key);
-    this.cacheLoadedAt = Date.now(); // reset TTL — cache is consistent
-    this.logger.debug(`Setting ${key} deleted`);
+    this.cacheLoadedAt = Date.now();
   }
 
-  /**
-   * Force-reload the settings cache from DB on the next access.
-   * Useful after pg_restore or other out-of-band DB changes.
-   */
+  /** Check if a setting exists (from cache). */
+  async exists(key: SettingKey): Promise<boolean> {
+    await this.ensureCache();
+    return this.cache.has(key);
+  }
+
+  /** Force-reload cache on next access. */
   invalidateCache(): void {
     this.cacheLoadedAt = 0;
-    this.logger.debug('Settings cache invalidated');
   }
 
-  /**
-   * Emit "cleared" events for all integrations so live services
-   * (Discord bot, etc.) disconnect after a DB reset or restore.
-   */
+  /** Emit cleared events for all integrations. */
   emitAllIntegrationsCleared(): void {
     this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null);
     this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, null);
     this.eventEmitter.emit(SETTINGS_EVENTS.IGDB_UPDATED, null);
     this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, null);
     this.eventEmitter.emit(SETTINGS_EVENTS.STEAM_UPDATED, null);
-    this.logger.debug('All integration events emitted as cleared');
   }
 
-  /**
-   * Reload the settings cache and re-emit integration events so live
-   * services reconnect with restored configuration.
-   */
+  /** Reload cache and re-emit events so live services reconnect. */
   async reloadAndReconnectIntegrations(): Promise<void> {
     this.cacheLoadedAt = 0;
     await this.ensureCache();
-
-    // Discord bot
-    const botToken = this.cache.get(SETTING_KEYS.DISCORD_BOT_TOKEN);
-    const botEnabled = this.cache.get(SETTING_KEYS.DISCORD_BOT_ENABLED);
-    if (botToken && botEnabled === 'true') {
-      this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, {
-        token: botToken,
-        enabled: true,
-      });
-    }
-
-    // Discord OAuth
-    const oauthId = this.cache.get(SETTING_KEYS.DISCORD_CLIENT_ID);
-    const oauthSecret = this.cache.get(SETTING_KEYS.DISCORD_CLIENT_SECRET);
-    const oauthCallback = this.cache.get(SETTING_KEYS.DISCORD_CALLBACK_URL);
-    if (oauthId && oauthSecret && oauthCallback) {
-      this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, {
-        clientId: oauthId,
-        clientSecret: oauthSecret,
-        callbackUrl: oauthCallback,
-      });
-    }
-
-    // IGDB
-    const igdbId = this.cache.get(SETTING_KEYS.IGDB_CLIENT_ID);
-    const igdbSecret = this.cache.get(SETTING_KEYS.IGDB_CLIENT_SECRET);
-    if (igdbId && igdbSecret) {
-      this.eventEmitter.emit(SETTINGS_EVENTS.IGDB_UPDATED, {
-        clientId: igdbId,
-        clientSecret: igdbSecret,
-      });
-    }
-
-    // Blizzard
-    const blizId = this.cache.get(SETTING_KEYS.BLIZZARD_CLIENT_ID);
-    const blizSecret = this.cache.get(SETTING_KEYS.BLIZZARD_CLIENT_SECRET);
-    if (blizId && blizSecret) {
-      this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, {
-        clientId: blizId,
-        clientSecret: blizSecret,
-      });
-    }
-
-    this.logger.log(
-      'Integration reconnect events emitted from restored config',
-    );
+    emitBotReconnect(this.cache, this.eventEmitter);
+    emitOAuthReconnect(this.cache, this.eventEmitter);
+    emitIgdbReconnect(this.cache, this.eventEmitter);
+    emitBlizzardReconnect(this.cache, this.eventEmitter);
+    this.logger.log('Integration reconnect events emitted');
   }
 
-  /**
-   * Check if a setting exists.
-   * Served from in-memory cache.
-   */
-  async exists(key: SettingKey): Promise<boolean> {
-    await this.ensureCache();
-    return this.cache.has(key);
-  }
+  // ─── Discord OAuth ────────────────────────────────────────────
 
-  /**
-   * Get Discord OAuth configuration
-   */
   async getDiscordOAuthConfig(): Promise<DiscordOAuthConfig | null> {
-    const [clientId, clientSecret, callbackUrl] = await Promise.all([
-      this.get(SETTING_KEYS.DISCORD_CLIENT_ID),
-      this.get(SETTING_KEYS.DISCORD_CLIENT_SECRET),
-      this.get(SETTING_KEYS.DISCORD_CALLBACK_URL),
-    ]);
-
-    if (!clientId || !clientSecret) {
-      return null;
-    }
-
-    return {
-      clientId,
-      clientSecret,
-      callbackUrl: callbackUrl || 'http://localhost:3000/auth/discord/callback',
-    };
+    return _getDiscordOAuthConfig(this);
   }
 
-  /**
-   * Set Discord OAuth configuration
-   */
   async setDiscordOAuthConfig(config: DiscordOAuthConfig): Promise<void> {
-    await Promise.all([
-      this.set(SETTING_KEYS.DISCORD_CLIENT_ID, config.clientId),
-      this.set(SETTING_KEYS.DISCORD_CLIENT_SECRET, config.clientSecret),
-      this.set(SETTING_KEYS.DISCORD_CALLBACK_URL, config.callbackUrl),
-    ]);
-
-    // Emit event for hot reload
+    await setDiscordOAuthKeys(this, config);
     this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, config);
-    this.logger.log(
-      'Discord OAuth configuration updated, emitting reload event',
+  }
+
+  async isDiscordConfigured(): Promise<boolean> {
+    return bothExist(
+      this,
+      SETTING_KEYS.DISCORD_CLIENT_ID,
+      SETTING_KEYS.DISCORD_CLIENT_SECRET,
     );
   }
 
-  /**
-   * Check if Discord OAuth is configured
-   */
-  async isDiscordConfigured(): Promise<boolean> {
-    const [clientIdExists, clientSecretExists] = await Promise.all([
-      this.exists(SETTING_KEYS.DISCORD_CLIENT_ID),
-      this.exists(SETTING_KEYS.DISCORD_CLIENT_SECRET),
-    ]);
+  // ─── Demo mode ────────────────────────────────────────────────
 
-    return clientIdExists && clientSecretExists;
-  }
-
-  /**
-   * Get demo mode status
-   */
   async getDemoMode(): Promise<boolean> {
-    const value = await this.get(SETTING_KEYS.DEMO_MODE);
-    return value === 'true';
+    return (await this.get(SETTING_KEYS.DEMO_MODE)) === 'true';
   }
 
-  /**
-   * Set demo mode status
-   */
   async setDemoMode(enabled: boolean): Promise<void> {
     await this.set(SETTING_KEYS.DEMO_MODE, enabled ? 'true' : 'false');
     this.eventEmitter.emit(SETTINGS_EVENTS.DEMO_MODE_UPDATED, enabled);
-    this.logger.log(`Demo mode ${enabled ? 'enabled' : 'disabled'}`);
   }
 
-  /**
-   * Get IGDB configuration
-   */
+  // ─── IGDB ─────────────────────────────────────────────────────
+
   async getIgdbConfig(): Promise<IgdbConfig | null> {
-    const [clientId, clientSecret] = await Promise.all([
-      this.get(SETTING_KEYS.IGDB_CLIENT_ID),
-      this.get(SETTING_KEYS.IGDB_CLIENT_SECRET),
-    ]);
-
-    if (!clientId || !clientSecret) {
-      return null;
-    }
-
-    return { clientId, clientSecret };
+    return _getIgdbConfig(this);
   }
 
-  /**
-   * Set IGDB configuration
-   */
   async setIgdbConfig(config: IgdbConfig): Promise<void> {
-    await Promise.all([
-      this.set(SETTING_KEYS.IGDB_CLIENT_ID, config.clientId),
-      this.set(SETTING_KEYS.IGDB_CLIENT_SECRET, config.clientSecret),
-    ]);
-
+    await setIgdbKeys(this, config);
     this.eventEmitter.emit(SETTINGS_EVENTS.IGDB_UPDATED, config);
-    this.logger.log('IGDB configuration updated, emitting reload event');
   }
 
-  /**
-   * Check if IGDB is configured
-   */
   async isIgdbConfigured(): Promise<boolean> {
-    const [clientIdExists, clientSecretExists] = await Promise.all([
-      this.exists(SETTING_KEYS.IGDB_CLIENT_ID),
-      this.exists(SETTING_KEYS.IGDB_CLIENT_SECRET),
-    ]);
-
-    return clientIdExists && clientSecretExists;
-  }
-
-  /**
-   * Get Blizzard API configuration (ROK-234)
-   */
-  async getBlizzardConfig(): Promise<BlizzardConfig | null> {
-    const [clientId, clientSecret] = await Promise.all([
-      this.get(SETTING_KEYS.BLIZZARD_CLIENT_ID),
-      this.get(SETTING_KEYS.BLIZZARD_CLIENT_SECRET),
-    ]);
-
-    if (!clientId || !clientSecret) {
-      return null;
-    }
-
-    return { clientId, clientSecret };
-  }
-
-  /**
-   * Set Blizzard API configuration (ROK-234)
-   */
-  async setBlizzardConfig(config: BlizzardConfig): Promise<void> {
-    await Promise.all([
-      this.set(SETTING_KEYS.BLIZZARD_CLIENT_ID, config.clientId),
-      this.set(SETTING_KEYS.BLIZZARD_CLIENT_SECRET, config.clientSecret),
-    ]);
-
-    this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, config);
-    this.logger.log(
-      'Blizzard API configuration updated, emitting reload event',
+    return bothExist(
+      this,
+      SETTING_KEYS.IGDB_CLIENT_ID,
+      SETTING_KEYS.IGDB_CLIENT_SECRET,
     );
   }
 
-  /**
-   * Check if Blizzard API is configured (ROK-234)
-   */
+  // ─── Blizzard ─────────────────────────────────────────────────
+
+  async getBlizzardConfig(): Promise<BlizzardConfig | null> {
+    return _getBlizzardConfig(this);
+  }
+
+  async setBlizzardConfig(config: BlizzardConfig): Promise<void> {
+    await setBlizzardKeys(this, config);
+    this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, config);
+  }
+
   async isBlizzardConfigured(): Promise<boolean> {
-    const [clientIdExists, clientSecretExists] = await Promise.all([
-      this.exists(SETTING_KEYS.BLIZZARD_CLIENT_ID),
-      this.exists(SETTING_KEYS.BLIZZARD_CLIENT_SECRET),
-    ]);
-
-    return clientIdExists && clientSecretExists;
+    return bothExist(
+      this,
+      SETTING_KEYS.BLIZZARD_CLIENT_ID,
+      SETTING_KEYS.BLIZZARD_CLIENT_SECRET,
+    );
   }
 
-  /**
-   * Get community branding settings (ROK-271)
-   */
+  // ─── Branding ─────────────────────────────────────────────────
+
   async getBranding(): Promise<BrandingConfig> {
-    const [name, logoPath, accentColor] = await Promise.all([
-      this.get(SETTING_KEYS.COMMUNITY_NAME),
-      this.get(SETTING_KEYS.COMMUNITY_LOGO_PATH),
-      this.get(SETTING_KEYS.COMMUNITY_ACCENT_COLOR),
-    ]);
-
-    return {
-      communityName: name,
-      communityLogoPath: logoPath,
-      communityAccentColor: accentColor,
-    };
+    return _getBranding(this);
   }
 
-  /**
-   * Set community display name (ROK-271)
-   */
   async setCommunityName(name: string): Promise<void> {
     await this.set(SETTING_KEYS.COMMUNITY_NAME, name);
-    this.logger.log('Community name updated');
   }
 
-  /**
-   * Set community logo file path (ROK-271)
-   */
   async setCommunityLogoPath(filePath: string): Promise<void> {
     await this.set(SETTING_KEYS.COMMUNITY_LOGO_PATH, filePath);
-    this.logger.log('Community logo path updated');
   }
 
-  /**
-   * Set community accent color (ROK-271)
-   */
   async setCommunityAccentColor(color: string): Promise<void> {
     await this.set(SETTING_KEYS.COMMUNITY_ACCENT_COLOR, color);
-    this.logger.log('Community accent color updated');
   }
 
-  /**
-   * Clear all branding settings (ROK-271)
-   */
   async clearBranding(): Promise<void> {
-    await Promise.all([
-      this.delete(SETTING_KEYS.COMMUNITY_NAME),
-      this.delete(SETTING_KEYS.COMMUNITY_LOGO_PATH),
-      this.delete(SETTING_KEYS.COMMUNITY_ACCENT_COLOR),
-    ]);
-    this.logger.log('Community branding reset to defaults');
+    await _clearBranding(this);
   }
 
-  /**
-   * Get GitHub PAT for feedback issue creation (ROK-186)
-   */
+  // ─── GitHub ───────────────────────────────────────────────────
+
   async getGitHubPat(): Promise<string | null> {
     return this.get(SETTING_KEYS.GITHUB_PAT);
   }
 
-  /**
-   * Set GitHub PAT (ROK-186)
-   */
   async setGitHubPat(token: string): Promise<void> {
     await this.set(SETTING_KEYS.GITHUB_PAT, token);
-    this.logger.log('GitHub PAT updated');
   }
 
-  /**
-   * Check if GitHub PAT is configured (ROK-186)
-   */
   async isGitHubConfigured(): Promise<boolean> {
     return this.exists(SETTING_KEYS.GITHUB_PAT);
   }
 
-  /**
-   * Get Discord bot configuration (ROK-117)
-   */
-  async getDiscordBotConfig(): Promise<DiscordBotConfig | null> {
-    const token = await this.get(SETTING_KEYS.DISCORD_BOT_TOKEN);
-    if (!token) return null;
+  // ─── Discord bot ──────────────────────────────────────────────
 
-    const enabledVal = await this.get(SETTING_KEYS.DISCORD_BOT_ENABLED);
-    return { token, enabled: enabledVal === 'true' };
+  async getDiscordBotConfig(): Promise<DiscordBotConfig | null> {
+    return _getDiscordBotConfig(this);
   }
 
-  /**
-   * Set Discord bot configuration (ROK-117)
-   */
   async setDiscordBotConfig(token: string, enabled: boolean): Promise<void> {
-    await Promise.all([
-      this.set(SETTING_KEYS.DISCORD_BOT_TOKEN, token),
-      this.set(SETTING_KEYS.DISCORD_BOT_ENABLED, enabled ? 'true' : 'false'),
-    ]);
-
-    // Use emitAsync to properly dispatch to async @OnEvent handlers.
-    // Fire-and-forget: the bot connection happens in the background so we
-    // don't block the HTTP response.  Errors are logged, not re-thrown.
+    await setDiscordBotKeys(this, token, enabled);
     this.eventEmitter
       .emitAsync(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, { token, enabled })
-      .catch((error: unknown) => {
-        this.logger.error('Error in DISCORD_BOT_UPDATED event handler:', error);
-      });
-
-    this.logger.log('Discord bot configuration updated');
+      .catch((err: unknown) => this.logger.error('Bot update error:', err));
   }
 
-  /**
-   * Check if Discord bot is configured (ROK-117)
-   */
   async isDiscordBotConfigured(): Promise<boolean> {
     return this.exists(SETTING_KEYS.DISCORD_BOT_TOKEN);
   }
 
-  /**
-   * Clear Discord bot configuration (ROK-117)
-   */
   async clearDiscordBotConfig(): Promise<void> {
-    await Promise.all([
-      this.delete(SETTING_KEYS.DISCORD_BOT_TOKEN),
-      this.delete(SETTING_KEYS.DISCORD_BOT_ENABLED),
-    ]);
-
+    await clearDiscordBotKeys(this);
     this.eventEmitter
       .emitAsync(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null)
-      .catch((error: unknown) => {
-        this.logger.error(
-          'Error in DISCORD_BOT_UPDATED event handler (clear):',
-          error,
-        );
-      });
-    this.logger.log('Discord bot configuration cleared');
+      .catch((err: unknown) => this.logger.error('Bot clear error:', err));
   }
 
-  /**
-   * Get Discord bot default channel ID (ROK-118)
-   */
   async getDiscordBotDefaultChannel(): Promise<string | null> {
     return this.get(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL);
   }
 
-  /**
-   * Set Discord bot default channel ID (ROK-118)
-   */
   async setDiscordBotDefaultChannel(channelId: string): Promise<void> {
     await this.set(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL, channelId);
-    this.logger.log('Discord bot default channel updated');
   }
 
-  /**
-   * Check if the Discord bot setup wizard has been completed (ROK-349)
-   */
   async isDiscordBotSetupCompleted(): Promise<boolean> {
-    const value = await this.get(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED);
-    return value === 'true';
+    return (
+      (await this.get(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED)) === 'true'
+    );
   }
 
-  /**
-   * Mark setup wizard as completed (ROK-349)
-   */
   async markDiscordBotSetupCompleted(): Promise<void> {
     await this.set(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED, 'true');
-    this.logger.log('Discord bot setup wizard marked as completed');
   }
 
-  /**
-   * Get the Discord bot community name override (ROK-349)
-   */
   async getDiscordBotCommunityName(): Promise<string | null> {
     return this.get(SETTING_KEYS.DISCORD_BOT_COMMUNITY_NAME);
   }
 
-  /**
-   * Set the Discord bot community name override (ROK-349)
-   */
   async setDiscordBotCommunityName(name: string): Promise<void> {
     await this.set(SETTING_KEYS.DISCORD_BOT_COMMUNITY_NAME, name);
-    this.logger.log('Discord bot community name updated');
   }
 
-  /**
-   * Get the Discord bot timezone setting (ROK-349)
-   */
   async getDiscordBotTimezone(): Promise<string | null> {
     return this.get(SETTING_KEYS.DISCORD_BOT_TIMEZONE);
   }
 
-  /**
-   * Set the Discord bot timezone setting (ROK-349)
-   */
   async setDiscordBotTimezone(timezone: string): Promise<void> {
     await this.set(SETTING_KEYS.DISCORD_BOT_TIMEZONE, timezone);
-    this.logger.log('Discord bot timezone updated');
   }
 
-  /**
-   * Get the default timezone setting (ROK-431).
-   * Returns an IANA timezone string or null if not configured.
-   */
   async getDefaultTimezone(): Promise<string | null> {
     return this.get(SETTING_KEYS.DEFAULT_TIMEZONE);
   }
 
-  /**
-   * Set the default timezone (ROK-431).
-   */
   async setDefaultTimezone(timezone: string): Promise<void> {
     await this.set(SETTING_KEYS.DEFAULT_TIMEZONE, timezone);
-    this.logger.log('Default timezone updated');
   }
 
-  /**
-   * Get the client URL with fallback chain (ROK-408):
-   * 1. Explicit app_settings override (client_url)
-   * 2. process.env.CLIENT_URL
-   * 3. Derived from Discord callback URL origin (unreliable — callback
-   *    points to the API, not the web app, so this is a last resort)
-   * 4. null
-   */
   async getClientUrl(): Promise<string | null> {
-    const explicit = await this.get(SETTING_KEYS.CLIENT_URL);
-    if (explicit) return explicit;
-
-    if (process.env.CLIENT_URL) return process.env.CLIENT_URL;
-
-    const callbackUrl = await this.get(SETTING_KEYS.DISCORD_CALLBACK_URL);
-    if (callbackUrl) {
-      try {
-        return new URL(callbackUrl).origin;
-      } catch {
-        /* invalid URL — fall through */
-      }
-    }
-
-    return null;
+    return _getClientUrl(this);
   }
 
-  /**
-   * Get Discord bot default voice channel ID (ROK-471).
-   */
   async getDiscordBotDefaultVoiceChannel(): Promise<string | null> {
     return this.get(SETTING_KEYS.DISCORD_BOT_DEFAULT_VOICE_CHANNEL);
   }
 
-  /**
-   * Set Discord bot default voice channel ID (ROK-471).
-   */
   async setDiscordBotDefaultVoiceChannel(channelId: string): Promise<void> {
     await this.set(SETTING_KEYS.DISCORD_BOT_DEFAULT_VOICE_CHANNEL, channelId);
-    this.logger.log('Discord bot default voice channel updated');
   }
 
-  /**
-   * Get ad-hoc events enabled status (ROK-293).
-   */
+  // ─── Ad-hoc & Auto-extend ────────────────────────────────────
+
   async getAdHocEventsEnabled(): Promise<boolean> {
-    const value = await this.get(SETTING_KEYS.AD_HOC_EVENTS_ENABLED);
-    return value === 'true';
+    return (await this.get(SETTING_KEYS.AD_HOC_EVENTS_ENABLED)) === 'true';
   }
 
-  /**
-   * Set ad-hoc events enabled status (ROK-293).
-   */
   async setAdHocEventsEnabled(enabled: boolean): Promise<void> {
     await this.set(
       SETTING_KEYS.AD_HOC_EVENTS_ENABLED,
       enabled ? 'true' : 'false',
     );
-    this.logger.log(`Ad-hoc events ${enabled ? 'enabled' : 'disabled'}`);
   }
 
-  /**
-   * Get whether event auto-extension is enabled (ROK-576).
-   */
   async getEventAutoExtendEnabled(): Promise<boolean> {
-    const value = await this.get(SETTING_KEYS.EVENT_AUTO_EXTEND_ENABLED);
-    return value === null ? true : value === 'true';
+    const v = await this.get(SETTING_KEYS.EVENT_AUTO_EXTEND_ENABLED);
+    return v === null ? true : v === 'true';
   }
 
-  /**
-   * Get the auto-extend increment in minutes (ROK-576).
-   */
   async getEventAutoExtendIncrementMinutes(): Promise<number> {
-    const value = await this.get(
-      SETTING_KEYS.EVENT_AUTO_EXTEND_INCREMENT_MINUTES,
-    );
-    const parsed = value ? parseInt(value, 10) : NaN;
-    return isNaN(parsed) ? 15 : parsed;
+    return getAutoExtendIncrement(this);
   }
 
-  /**
-   * Get the maximum overage in minutes (ROK-576).
-   */
   async getEventAutoExtendMaxOverageMinutes(): Promise<number> {
-    const value = await this.get(
-      SETTING_KEYS.EVENT_AUTO_EXTEND_MAX_OVERAGE_MINUTES,
-    );
-    const parsed = value ? parseInt(value, 10) : NaN;
-    return isNaN(parsed) ? 720 : parsed;
+    return getAutoExtendMaxOverage(this);
   }
 
-  /**
-   * Get the minimum voice members required for extension (ROK-576).
-   */
   async getEventAutoExtendMinVoiceMembers(): Promise<number> {
-    const value = await this.get(
-      SETTING_KEYS.EVENT_AUTO_EXTEND_MIN_VOICE_MEMBERS,
-    );
-    const parsed = value ? parseInt(value, 10) : NaN;
-    return isNaN(parsed) ? 2 : parsed;
+    return getAutoExtendMinVoice(this);
   }
 
-  /**
-   * Get Steam API key (ROK-417).
-   */
+  // ─── Steam ────────────────────────────────────────────────────
+
   async getSteamApiKey(): Promise<string | null> {
     return this.get(SETTING_KEYS.STEAM_API_KEY);
   }
 
-  /**
-   * Set Steam API key (ROK-417).
-   */
   async setSteamApiKey(apiKey: string): Promise<void> {
     await this.set(SETTING_KEYS.STEAM_API_KEY, apiKey);
     this.eventEmitter.emit(SETTINGS_EVENTS.STEAM_UPDATED, { configured: true });
-    this.logger.log('Steam API key updated');
   }
 
-  /**
-   * Check if Steam API is configured (ROK-417).
-   */
   async isSteamConfigured(): Promise<boolean> {
     return this.exists(SETTING_KEYS.STEAM_API_KEY);
   }
 
-  /**
-   * Clear Steam API key (ROK-417).
-   */
   async clearSteamConfig(): Promise<void> {
     await this.delete(SETTING_KEYS.STEAM_API_KEY);
     this.eventEmitter.emit(SETTINGS_EVENTS.STEAM_UPDATED, null);
-    this.logger.log('Steam API key cleared');
   }
 }

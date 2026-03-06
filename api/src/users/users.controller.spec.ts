@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { UsersController } from './users.controller';
+import { UsersMeController } from './users-me.controller';
 import { UsersService } from './users.service';
 import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
@@ -13,6 +14,7 @@ import { RecentPlayersResponseSchema } from '@raid-ledger/contract';
 
 describe('UsersController', () => {
   let controller: UsersController;
+  let meController: UsersMeController;
   let usersService: UsersService;
   let eventsService: EventsService;
 
@@ -53,7 +55,7 @@ describe('UsersController', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [UsersController],
+      controllers: [UsersController, UsersMeController],
       providers: [
         {
           provide: UsersService,
@@ -129,6 +131,7 @@ describe('UsersController', () => {
     }).compile();
 
     controller = module.get<UsersController>(UsersController);
+    meController = module.get<UsersMeController>(UsersMeController);
     usersService = module.get<UsersService>(UsersService);
     eventsService = module.get<EventsService>(EventsService);
   });
@@ -306,7 +309,7 @@ describe('UsersController', () => {
         .spyOn(usersService, 'checkDisplayNameAvailability')
         .mockResolvedValue(true);
 
-      const result = await controller.checkDisplayName(
+      const result = await meController.checkDisplayName(
         mockRequest as never,
         'AvailableName',
       );
@@ -320,7 +323,7 @@ describe('UsersController', () => {
         .spyOn(usersService, 'checkDisplayNameAvailability')
         .mockResolvedValue(false);
 
-      const result = await controller.checkDisplayName(
+      const result = await meController.checkDisplayName(
         mockRequest as never,
         'TakenName',
       );
@@ -330,20 +333,20 @@ describe('UsersController', () => {
 
     it('should throw BadRequestException when name parameter is missing', async () => {
       await expect(
-        controller.checkDisplayName(mockRequest as never, undefined),
+        meController.checkDisplayName(mockRequest as never, undefined),
       ).rejects.toThrow('name query parameter is required');
     });
 
     it('should validate display name with Zod (min 2 chars)', async () => {
       await expect(
-        controller.checkDisplayName(mockRequest as never, 'a'),
+        meController.checkDisplayName(mockRequest as never, 'a'),
       ).rejects.toThrow();
     });
 
     it('should validate display name with Zod (max 30 chars)', async () => {
       const longName = 'a'.repeat(31);
       await expect(
-        controller.checkDisplayName(mockRequest as never, longName),
+        meController.checkDisplayName(mockRequest as never, longName),
       ).rejects.toThrow();
     });
 
@@ -352,7 +355,7 @@ describe('UsersController', () => {
         .spyOn(usersService, 'checkDisplayNameAvailability')
         .mockResolvedValue(true);
 
-      await controller.checkDisplayName(mockRequest as never, 'TestName');
+      await meController.checkDisplayName(mockRequest as never, 'TestName');
 
       expect(checkSpy).toHaveBeenCalledWith('TestName', 1);
     });
@@ -382,7 +385,7 @@ describe('UsersController', () => {
         .spyOn(usersService, 'setDisplayName')
         .mockResolvedValue(updatedUser as never);
 
-      const result = await controller.updateMyProfile(mockRequest as never, {
+      const result = await meController.updateMyProfile(mockRequest as never, {
         displayName: 'NewName',
       });
 
@@ -396,7 +399,7 @@ describe('UsersController', () => {
         .mockResolvedValue(false);
 
       await expect(
-        controller.updateMyProfile(mockRequest as never, {
+        meController.updateMyProfile(mockRequest as never, {
           displayName: 'TakenName',
         }),
       ).rejects.toThrow('Display name is already taken');
@@ -404,7 +407,7 @@ describe('UsersController', () => {
 
     it('should validate input with Zod schema', async () => {
       await expect(
-        controller.updateMyProfile(mockRequest as never, {
+        meController.updateMyProfile(mockRequest as never, {
           displayName: 'x',
         }),
       ).rejects.toThrow();
@@ -431,7 +434,7 @@ describe('UsersController', () => {
         .spyOn(usersService, 'setDisplayName')
         .mockResolvedValue(updatedUser as never);
 
-      const result = await controller.updateMyProfile(mockRequest as never, {
+      const result = await meController.updateMyProfile(mockRequest as never, {
         displayName: 'ValidName',
       });
 
@@ -462,7 +465,7 @@ describe('UsersController', () => {
         .spyOn(usersService, 'completeOnboarding')
         .mockResolvedValue(completedUser as never);
 
-      const result = await controller.completeOnboarding(mockRequest as never);
+      const result = await meController.completeOnboarding(mockRequest as never);
 
       expect(result.success).toBe(true);
       expect(result.onboardingCompletedAt).toBe('2026-02-13T12:00:00.000Z');
@@ -487,7 +490,7 @@ describe('UsersController', () => {
         .spyOn(usersService, 'completeOnboarding')
         .mockResolvedValue(completedUser as never);
 
-      const result = await controller.completeOnboarding(mockRequest as never);
+      const result = await meController.completeOnboarding(mockRequest as never);
 
       expect(result).toHaveProperty('success', true);
       expect(result).toHaveProperty('onboardingCompletedAt');
@@ -503,7 +506,7 @@ describe('UsersController', () => {
         .spyOn(usersService, 'resetOnboarding')
         .mockResolvedValue(undefined as never);
 
-      const result = await controller.resetOnboarding(mockRequest as never);
+      const result = await meController.resetOnboarding(mockRequest as never);
 
       expect(result).toEqual({ success: true });
       expect(resetSpy).toHaveBeenCalledWith(1);

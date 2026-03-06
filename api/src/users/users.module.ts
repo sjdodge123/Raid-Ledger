@@ -6,6 +6,7 @@ import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
 import { GameTimeService } from './game-time.service';
 import { UsersController } from './users.controller';
+import { UsersMeController } from './users-me.controller';
 import { CharactersModule } from '../characters/characters.module';
 import { EventsModule } from '../events/events.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
@@ -17,7 +18,7 @@ import { DiscordBotModule } from '../discord-bot/discord-bot.module';
     forwardRef(() => DiscordBotModule),
     MulterModule.register({ storage: multer.memoryStorage() }),
   ],
-  controllers: [UsersController],
+  controllers: [UsersController, UsersMeController],
   providers: [UsersService, AvatarService, PreferencesService, GameTimeService],
   exports: [UsersService, AvatarService, PreferencesService, GameTimeService],
 })

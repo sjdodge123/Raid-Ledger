@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UsersController } from './users.controller';
+import { UsersMeController } from './users-me.controller';
 import { UsersService } from './users.service';
 import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
@@ -11,7 +11,7 @@ import { ChannelResolverService } from '../discord-bot/services/channel-resolver
 import { DiscordMembershipResponseSchema } from '@raid-ledger/contract';
 
 describe('UsersController — getDiscordMembership (ROK-425)', () => {
-  let controller: UsersController;
+  let controller: UsersMeController;
   let usersService: UsersService;
   let discordBotClientService: DiscordBotClientService;
   let channelResolver: ChannelResolverService;
@@ -58,7 +58,7 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [UsersController],
+      controllers: [UsersMeController],
       providers: [
         {
           provide: UsersService,
@@ -135,7 +135,7 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       ],
     }).compile();
 
-    controller = module.get<UsersController>(UsersController);
+    controller = module.get<UsersMeController>(UsersMeController);
     usersService = module.get<UsersService>(UsersService);
     discordBotClientService = module.get<DiscordBotClientService>(
       DiscordBotClientService,

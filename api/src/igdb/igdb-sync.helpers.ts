@@ -1,0 +1,104 @@
+import { Logger } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import Redis from 'ioredis';
+import * as schema from '../drizzle/schema';
+import {
+  IGDB_CONFIG,
+  ADULT_THEME_IDS,
+  type IgdbApiGame,
+} from './igdb.constants';
+import { delay } from './igdb-api.helpers';
+import { upsertGamesFromApi } from './igdb-upsert.helpers';
+
+const logger = new Logger('IgdbSyncHelpers');
+
+/**
+ * Refresh existing non-hidden, non-banned games from IGDB in batches.
+ * @param db - Database connection
+ * @param queryIgdb - Function to execute IGDB queries
+ * @param adultThemeFilter - APICALYPSE adult theme filter string
+ * @returns Number of games refreshed
+ */
+export async function refreshExistingGames(
+  db: PostgresJsDatabase<typeof schema>,
+  queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
+  adultThemeFilter: string,
+): Promise<number> {
+  let refreshed = 0;
+  const games = await db
+    .select({ igdbId: schema.games.igdbId })
+    .from(schema.games)
+    .where(and(eq(schema.games.hidden, false), eq(schema.games.banned, false)));
+
+  if (games.length === 0) return 0;
+
+  for (let i = 0; i < games.length; i += 10) {
+    const ids = games
+      .slice(i, i + 10)
+      .map((g) => g.igdbId)
+      .join(',');
+    try {
+      const apiGames = await queryIgdb(
+        `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = (${ids})${adultThemeFilter}; limit 10;`,
+      );
+      await upsertGamesFromApi(db, apiGames);
+      refreshed += apiGames.length;
+    } catch (err) {
+      logger.warn(`Failed to refresh batch at index ${i}: ${err}`);
+    }
+    await delay(250);
+  }
+
+  return refreshed;
+}
+
+/**
+ * Discover popular multiplayer games from IGDB.
+ * @param db - Database connection
+ * @param queryIgdb - Function to execute IGDB queries
+ * @param adultThemeFilter - APICALYPSE adult theme filter string
+ * @returns Number of games discovered
+ */
+export async function discoverPopularGames(
+  db: PostgresJsDatabase<typeof schema>,
+  queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
+  adultThemeFilter: string,
+): Promise<number> {
+  try {
+    const popular = await queryIgdb(
+      `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; ` +
+        `where game_modes = (2,3,5) & rating_count > 10${adultThemeFilter}; ` +
+        `sort total_rating desc; limit 100;`,
+    );
+    await upsertGamesFromApi(db, popular);
+    return popular.length;
+  } catch (err) {
+    logger.warn(`Failed to discover popular games: ${err}`);
+    return 0;
+  }
+}
+
+/**
+ * Clear discovery cache from Redis after sync.
+ * @param redis - Redis client
+ */
+export async function clearDiscoveryCache(redis: Redis): Promise<void> {
+  try {
+    const keys = await redis.keys('games:discover:*');
+    if (keys.length > 0) await redis.del(...keys);
+  } catch {
+    // Non-fatal
+  }
+}
+
+/**
+ * Build the APICALYPSE adult theme filter string.
+ * @param adultFilterEnabled - Whether adult filter is active
+ * @returns Filter string for APICALYPSE queries
+ */
+export function buildAdultThemeFilter(adultFilterEnabled: boolean): string {
+  return adultFilterEnabled
+    ? ` & themes != (${ADULT_THEME_IDS.join(',')})`
+    : '';
+}
