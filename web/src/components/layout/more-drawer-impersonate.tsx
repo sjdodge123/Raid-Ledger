@@ -24,7 +24,7 @@ export function ImpersonateSection({ impersonateUsers, onImpersonate }: Imperson
         onImpersonate(userId);
     };
 
-    const filtered = (impersonateUsers ?? []).filter((u) =>
+    const filtered = (Array.isArray(impersonateUsers) ? impersonateUsers : []).filter((u) =>
         u.username.toLowerCase().includes(search.toLowerCase())
     );
 
