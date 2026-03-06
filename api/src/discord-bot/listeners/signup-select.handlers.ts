@@ -147,7 +147,16 @@ async function handleLinkedRoleSelect(
     eventId,
     linkedUser.id,
     selectedRoles.length === 1
-      ? { slotRole: primaryRole as 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench', preferredRoles: selectedRoles }
+      ? {
+          slotRole: primaryRole as
+            | 'tank'
+            | 'healer'
+            | 'dps'
+            | 'flex'
+            | 'player'
+            | 'bench',
+          preferredRoles: selectedRoles,
+        }
       : { preferredRoles: selectedRoles },
   );
   await deps.signupsService.confirmSignup(
@@ -218,7 +227,10 @@ async function handleUnlinkedRoleSelect(
     discordUserId,
     discordUsername: interaction.user.username,
     discordAvatarHash: interaction.user.avatar,
-    role: selectedRoles.length === 1 ? primaryRole as 'tank' | 'healer' | 'dps' | 'flex' | 'player' : undefined,
+    role:
+      selectedRoles.length === 1
+        ? (primaryRole as 'tank' | 'healer' | 'dps' | 'flex' | 'player')
+        : undefined,
     preferredRoles: selectedRoles,
     status: signupStatus ?? undefined,
   });
@@ -255,7 +267,16 @@ async function handleLinkedNoCharRoleSelect(
     eventId,
     linkedUser.id,
     selectedRoles.length === 1
-      ? { slotRole: primaryRole as 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench', preferredRoles: selectedRoles }
+      ? {
+          slotRole: primaryRole as
+            | 'tank'
+            | 'healer'
+            | 'dps'
+            | 'flex'
+            | 'player'
+            | 'bench',
+          preferredRoles: selectedRoles,
+        }
       : { preferredRoles: selectedRoles },
   );
 

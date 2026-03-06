@@ -50,7 +50,10 @@ export async function insertRecurringEvents(
       new Date(instanceStart.getTime() + durationMs),
     ] as [Date, Date],
   }));
-  return db.insert(schema.events).values(allValues as never).returning();
+  return db
+    .insert(schema.events)
+    .values(allValues as never)
+    .returning();
 }
 
 /** Inserts a single (non-recurring) event and returns its DB row. */

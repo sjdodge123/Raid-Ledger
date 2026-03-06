@@ -129,7 +129,13 @@ export class BindCommand
     if (game === false) return;
     const series = await resolveSeries(this.db, interaction);
     if (series === false) return;
-    await this.tryBindChannel(interaction, guildId, resolved as ResolvedChannel & { channelId: string }, game, series);
+    await this.tryBindChannel(
+      interaction,
+      guildId,
+      resolved as ResolvedChannel & { channelId: string },
+      game,
+      series,
+    );
   }
 
   private async tryBindChannel(

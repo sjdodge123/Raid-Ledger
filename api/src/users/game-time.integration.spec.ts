@@ -530,7 +530,10 @@ describe('Game-Time (integration)', () => {
       const eventBlock = evtData.events.find((e) => e.eventId === eventId);
       expect(eventBlock).toBeDefined();
       // Window function limits preview to 6 users max
-      expect((eventBlock! as Record<string, unknown> & { signupsPreview: unknown[] }).signupsPreview.length).toBeLessThanOrEqual(6);
+      expect(
+        (eventBlock! as Record<string, unknown> & { signupsPreview: unknown[] })
+          .signupsPreview.length,
+      ).toBeLessThanOrEqual(6);
       // Total count should reflect all signups (admin + user + 5 others = 7)
       expect(eventBlock!.signupCount).toBeGreaterThanOrEqual(7);
     });

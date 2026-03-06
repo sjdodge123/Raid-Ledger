@@ -157,7 +157,13 @@ async function trySignupWithChar(
       ctx.userId,
       characterId,
     );
-    const role = (char.roleOverride ?? char.role ?? 'dps') as 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
+    const role = (char.roleOverride ?? char.role ?? 'dps') as
+      | 'tank'
+      | 'healer'
+      | 'dps'
+      | 'flex'
+      | 'player'
+      | 'bench';
     return await ctx.deps.signupsService.signup(ctx.eventId, ctx.userId, {
       slotRole: role,
     });

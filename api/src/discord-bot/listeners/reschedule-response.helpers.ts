@@ -183,7 +183,10 @@ async function findRescheduleDm(
 /** Check if a message has reschedule button components. */
 function isRescheduleMsg(msg: ButtonInteraction['message']): boolean {
   return msg.components.some((row) =>
-    ((row as unknown as { components: Array<{ customId?: string }> }).components ?? []).some(
+    (
+      (row as unknown as { components: Array<{ customId?: string }> })
+        .components ?? []
+    ).some(
       (c) =>
         typeof c.customId === 'string' &&
         (c.customId.startsWith(RESCHEDULE_BUTTON_IDS.CONFIRM) ||
@@ -194,17 +197,21 @@ function isRescheduleMsg(msg: ButtonInteraction['message']): boolean {
 
 /** Check if a button action is a reschedule action. */
 export function isRescheduleAction(action: string): boolean {
-  return ([
-    RESCHEDULE_BUTTON_IDS.CONFIRM,
-    RESCHEDULE_BUTTON_IDS.TENTATIVE,
-    RESCHEDULE_BUTTON_IDS.DECLINE,
-  ] as string[]).includes(action);
+  return (
+    [
+      RESCHEDULE_BUTTON_IDS.CONFIRM,
+      RESCHEDULE_BUTTON_IDS.TENTATIVE,
+      RESCHEDULE_BUTTON_IDS.DECLINE,
+    ] as string[]
+  ).includes(action);
 }
 
 /** Check if a select menu action is a reschedule select action. */
 export function isSelectAction(action: string): boolean {
-  return ([
-    RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
-    RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
-  ] as string[]).includes(action);
+  return (
+    [
+      RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
+      RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
+    ] as string[]
+  ).includes(action);
 }
