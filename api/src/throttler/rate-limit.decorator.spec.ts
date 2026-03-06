@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { RATE_LIMIT_TIERS, RateLimit } from './rate-limit.decorator';
 
 describe('RATE_LIMIT_TIERS', () => {
@@ -49,11 +48,9 @@ describe('RateLimit decorator', () => {
       'testMethod',
     )!;
 
-    const limit = Reflect.getMetadata(
-      'THROTTLER:LIMITdefault',
-      descriptor.value,
-    );
-    const ttl = Reflect.getMetadata('THROTTLER:TTLdefault', descriptor.value);
+    const target = descriptor.value as object;
+    const limit = Reflect.getMetadata('THROTTLER:LIMITdefault', target);
+    const ttl = Reflect.getMetadata('THROTTLER:TTLdefault', target);
     expect(limit).toBe(30);
     expect(ttl).toBe(60_000);
   });

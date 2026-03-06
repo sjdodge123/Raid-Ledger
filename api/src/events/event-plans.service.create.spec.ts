@@ -69,7 +69,9 @@ function makeDbMock(): MockDb {
 function makeDiscordMock() {
   const mockTextChannel = {
     send: jest.fn().mockResolvedValue({ id: MESSAGE_ID }),
-    messages: { fetch: jest.fn().mockResolvedValue({ poll: { answers: new Map() } }) },
+    messages: {
+      fetch: jest.fn().mockResolvedValue({ poll: { answers: new Map() } }),
+    },
   };
   const mockClient = {
     isReady: jest.fn().mockReturnValue(true),
@@ -106,7 +108,9 @@ describe('EventPlansService — create, findOne, findAll, cancel', () => {
     db = makeDbMock();
     discordClient = makeDiscordMock();
     queue = makeQueueMock();
-    channelResolver = { resolveChannelForEvent: jest.fn().mockResolvedValue(CHANNEL_ID) };
+    channelResolver = {
+      resolveChannelForEvent: jest.fn().mockResolvedValue(CHANNEL_ID),
+    };
     settingsService = { getDefaultTimezone: jest.fn().mockResolvedValue(null) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -117,8 +121,14 @@ describe('EventPlansService — create, findOne, findAll, cancel', () => {
         { provide: DiscordBotClientService, useValue: discordClient },
         { provide: ChannelResolverService, useValue: channelResolver },
         { provide: SettingsService, useValue: settingsService },
-        { provide: EventsService, useValue: { create: jest.fn().mockResolvedValue({ id: 99 }) } },
-        { provide: SignupsService, useValue: { signup: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: EventsService,
+          useValue: { create: jest.fn().mockResolvedValue({ id: 99 }) },
+        },
+        {
+          provide: SignupsService,
+          useValue: { signup: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -129,7 +139,9 @@ describe('EventPlansService — create, findOne, findAll, cancel', () => {
     channelResolver.resolveChannelForEvent.mockResolvedValue(CHANNEL_ID);
     discordClient.getClient.mockReturnValue(discordClient._mockClient);
     discordClient._mockClient.isReady.mockReturnValue(true);
-    discordClient._mockClient.channels.fetch.mockResolvedValue(discordClient._mockTextChannel);
+    discordClient._mockClient.channels.fetch.mockResolvedValue(
+      discordClient._mockTextChannel,
+    );
     discordClient._mockTextChannel.send.mockResolvedValue({ id: MESSAGE_ID });
     discordClient.deleteMessage.mockResolvedValue(undefined);
     queue.add.mockResolvedValue(undefined);
@@ -151,7 +163,9 @@ describe('EventPlansService — create, findOne, findAll, cancel', () => {
 
     it('should throw BadRequestException when no channel is resolved', async () => {
       channelResolver.resolveChannelForEvent.mockResolvedValue(null);
-      await expect(service.create(CREATOR_ID, validDto)).rejects.toThrow(BadRequestException);
+      await expect(service.create(CREATOR_ID, validDto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should insert plan and post Discord poll', async () => {
@@ -167,28 +181,40 @@ describe('EventPlansService — create, findOne, findAll, cancel', () => {
       expect(queue.add).toHaveBeenCalledWith(
         'poll-closed',
         { planId: expect.any(String) as string },
-        expect.objectContaining({ delay: validDto.pollDurationHours * 3600 * 1000, attempts: 3 }),
+        expect.objectContaining({
+          delay: validDto.pollDurationHours * 3600 * 1000,
+          attempts: 3,
+        }),
       );
     });
 
     it('should mark plan as draft and throw if Discord poll post fails', async () => {
-      discordClient._mockTextChannel.send.mockRejectedValue(new Error('No permission'));
-      await expect(service.create(CREATOR_ID, validDto)).rejects.toThrow(BadRequestException);
+      discordClient._mockTextChannel.send.mockRejectedValue(
+        new Error('No permission'),
+      );
+      await expect(service.create(CREATOR_ID, validDto)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(db.update).toHaveBeenCalled();
     });
 
     it('should include "None of these work" in poll answers', async () => {
       await service.create(CREATOR_ID, validDto);
-      const sendCall = (discordClient._mockTextChannel.send.mock.calls[1] as unknown[])[0] as {
+      const sendCall = (
+        discordClient._mockTextChannel.send.mock.calls[1] as unknown[]
+      )[0] as {
         poll: { answers: Array<{ text: string }> };
       };
-      const lastAnswer = sendCall.poll.answers[sendCall.poll.answers.length - 1];
+      const lastAnswer =
+        sendCall.poll.answers[sendCall.poll.answers.length - 1];
       expect(lastAnswer.text).toBe('None of these work');
     });
 
     it('should include content prefix for re-poll rounds (round > 1)', async () => {
       await service.create(CREATOR_ID, validDto);
-      const sendCall = (discordClient._mockTextChannel.send.mock.calls[1] as unknown[])[0] as {
+      const sendCall = (
+        discordClient._mockTextChannel.send.mock.calls[1] as unknown[]
+      )[0] as {
         content?: string;
       };
       expect(sendCall.content).toBeUndefined();
@@ -207,7 +233,9 @@ describe('EventPlansService — create, findOne, findAll, cancel', () => {
 
     it('should throw NotFoundException when plan does not exist', async () => {
       db.limit.mockResolvedValue([]);
-      await expect(service.findOne('non-existent-id')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('non-existent-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -233,29 +261,40 @@ describe('EventPlansService — create, findOne, findAll, cancel', () => {
   describe('cancel', () => {
     it('should throw NotFoundException when plan not found', async () => {
       db.limit.mockResolvedValue([]);
-      await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(NotFoundException);
+      await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException when caller is not creator', async () => {
       db.limit.mockResolvedValue([makePlan()]);
-      await expect(service.cancel(PLAN_ID, CREATOR_ID + 1)).rejects.toThrow(ForbiddenException);
+      await expect(service.cancel(PLAN_ID, CREATOR_ID + 1)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw BadRequestException when plan is not in polling status', async () => {
       db.limit.mockResolvedValue([makePlan({ status: 'completed' })]);
-      await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(BadRequestException);
+      await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw BadRequestException when plan is cancelled', async () => {
       db.limit.mockResolvedValue([makePlan({ status: 'cancelled' })]);
-      await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(BadRequestException);
+      await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should delete Discord poll message on cancel', async () => {
       db.limit.mockResolvedValue([makePlan()]);
       db.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
       await service.cancel(PLAN_ID, CREATOR_ID);
-      expect(discordClient.deleteMessage).toHaveBeenCalledWith(CHANNEL_ID, MESSAGE_ID);
+      expect(discordClient.deleteMessage).toHaveBeenCalledWith(
+        CHANNEL_ID,
+        MESSAGE_ID,
+      );
     });
 
     it('should remove queued BullMQ job on cancel', async () => {
@@ -334,9 +373,15 @@ describe('EventPlansService — create, findOne, findAll, cancel', () => {
 
     it('should respect afterDate parameter for suggestions', async () => {
       const futureDate = new Date(Date.now() + 10 * 24 * 3600 * 1000);
-      const result = await service.getTimeSuggestions(undefined, 0, futureDate.toISOString());
+      const result = await service.getTimeSuggestions(
+        undefined,
+        0,
+        futureDate.toISOString(),
+      );
       result.suggestions.forEach((s) => {
-        expect(new Date(s.date).getTime()).toBeGreaterThan(futureDate.getTime());
+        expect(new Date(s.date).getTime()).toBeGreaterThan(
+          futureDate.getTime(),
+        );
       });
     });
   });

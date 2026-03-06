@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -14,6 +11,25 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+
+/** Test-friendly interface exposing private members needed by specs */
+interface TestableRescheduleResponseListener {
+  onBotConnected: () => void;
+  handleButtonInteraction: (interaction: unknown) => Promise<void>;
+  handleConfirm: (interaction: unknown, eventId: number) => Promise<void>;
+  handleTentative: (interaction: unknown, eventId: number) => Promise<void>;
+  handleDecline: (interaction: unknown, eventId: number) => Promise<void>;
+  handleSelectMenuInteraction: (interaction: unknown) => Promise<void>;
+  handleCharacterSelect: (
+    interaction: unknown,
+    eventId: number,
+  ) => Promise<void>;
+  handleRoleSelect: (
+    interaction: unknown,
+    eventId: number,
+    characterId?: string,
+  ) => Promise<void>;
+}
 
 /** Create a minimal ButtonInteraction mock */
 function makeButtonInteraction(
@@ -86,7 +102,7 @@ function makeSelectMenuInteraction(
 describe('RescheduleResponseListener — menus', () => {
   let module: TestingModule;
 
-  let listener: any;
+  let listener: TestableRescheduleResponseListener;
   let mockDb: MockDb;
   let mockClientService: { getClient: jest.Mock };
   let mockSignupsService: {
@@ -169,9 +185,8 @@ describe('RescheduleResponseListener — menus', () => {
       ],
     }).compile();
 
-    listener = module.get<RescheduleResponseListener>(
-      RescheduleResponseListener,
-    );
+    const instance: unknown = module.get(RescheduleResponseListener);
+    listener = instance as TestableRescheduleResponseListener;
   });
 
   afterEach(async () => {

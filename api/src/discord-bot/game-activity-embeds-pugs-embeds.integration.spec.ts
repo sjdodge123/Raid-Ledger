@@ -9,7 +9,7 @@
  * Uses direct DB operations and service-level calls since these services are
  * triggered by Discord bot events, not HTTP endpoints.
  */
-import { eq, and, isNull, lt } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -699,18 +699,4 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
       expect(remaining.length).toBe(0);
     });
   });
-});
-
-// ─── Helper functions (mirroring GameActivityService logic) ──────────
-
-function formatDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function getWeekStart(date: Date): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  return formatDate(d);
 });

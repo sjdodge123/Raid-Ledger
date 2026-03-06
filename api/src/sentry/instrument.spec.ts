@@ -3,11 +3,13 @@
  * Verifies that pg_catalog spans are filtered out to suppress false-positive N+1 noise.
  */
 
-function loadInstrument(env: Record<string, string | undefined> = {}): {
+async function loadInstrument(
+  env: Record<string, string | undefined> = {},
+): Promise<{
   sentryInitMock: jest.MockedFunction<
     (options?: Record<string, unknown>) => void
   >;
-} {
+}> {
   // Save and restore env
   const saved: Record<string, string | undefined> = {};
   for (const key of ['NODE_ENV', 'DISABLE_TELEMETRY']) {
@@ -30,13 +32,11 @@ function loadInstrument(env: Record<string, string | undefined> = {}): {
     init: jest.fn(),
   }));
 
-  // Re-require to trigger module-level side effects
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('./instrument');
+  // Re-import to trigger module-level side effects
+  await import('./instrument');
 
   // Retrieve the fresh mock
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const sentry = require('@sentry/nestjs') as {
+  const sentry = (await import('@sentry/nestjs')) as unknown as {
     init: jest.MockedFunction<(options?: Record<string, unknown>) => void>;
   };
 
@@ -62,8 +62,10 @@ describe('Sentry instrument.ts', () => {
       (options?: Record<string, unknown>) => void
     >;
 
-    beforeEach(() => {
-      ({ sentryInitMock } = loadInstrument({ DISABLE_TELEMETRY: undefined }));
+    beforeEach(async () => {
+      ({ sentryInitMock } = await loadInstrument({
+        DISABLE_TELEMETRY: undefined,
+      }));
     });
 
     it('calls Sentry.init', () => {
@@ -151,8 +153,8 @@ describe('Sentry instrument.ts', () => {
       (options?: Record<string, unknown>) => void
     >;
 
-    beforeEach(() => {
-      ({ sentryInitMock } = loadInstrument({
+    beforeEach(async () => {
+      ({ sentryInitMock } = await loadInstrument({
         NODE_ENV: 'production',
         DISABLE_TELEMETRY: undefined,
       }));
@@ -183,8 +185,10 @@ describe('Sentry instrument.ts', () => {
       (options?: Record<string, unknown>) => void
     >;
 
-    beforeEach(() => {
-      ({ sentryInitMock } = loadInstrument({ DISABLE_TELEMETRY: 'true' }));
+    beforeEach(async () => {
+      ({ sentryInitMock } = await loadInstrument({
+        DISABLE_TELEMETRY: 'true',
+      }));
     });
 
     it('does NOT call Sentry.init', () => {
@@ -197,8 +201,10 @@ describe('Sentry instrument.ts', () => {
       (options?: Record<string, unknown>) => void
     >;
 
-    beforeEach(() => {
-      ({ sentryInitMock } = loadInstrument({ DISABLE_TELEMETRY: undefined }));
+    beforeEach(async () => {
+      ({ sentryInitMock } = await loadInstrument({
+        DISABLE_TELEMETRY: undefined,
+      }));
     });
 
     it('calls Sentry.init (telemetry is on by default)', () => {

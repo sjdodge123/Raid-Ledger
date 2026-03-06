@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   NotFoundException,
@@ -11,28 +10,11 @@ import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.se
 import { EnrichmentsService } from '../enrichments/enrichments.service';
 
 /**
- * Helper: build a mock tx.select chain that resolves to `rows`.
- * Supports both direct where-resolve and .where().limit() patterns.
- */
-function mockTxSelect(rows: unknown[]) {
-  return jest.fn().mockReturnValue({
-    from: jest.fn().mockReturnValue({
-      where: jest.fn().mockReturnValue({
-        limit: jest.fn().mockResolvedValue(rows),
-      }),
-    }),
-  });
-}
-
-/**
  * Helper: build a mock tx.select that handles two sequential calls:
  *   1st call → duplicate claim check → .from().where().limit(1) → claimRows
  *   2nd call → charCount            → .from().where()           → countRows
  */
-function mockTxSelectDualCall(
-  claimRows: unknown[],
-  countRows: unknown[],
-) {
+function mockTxSelectDualCall(claimRows: unknown[], countRows: unknown[]) {
   const fn = jest.fn();
   // 1st call: duplicate claim check (.where().limit())
   fn.mockReturnValueOnce({
@@ -196,7 +178,6 @@ describe('CharactersService — crud', () => {
 
     service = module.get<CharactersService>(CharactersService);
   });
-
 
   describe('findAllForUser', () => {
     it('should return all characters for a user', async () => {
@@ -568,7 +549,9 @@ describe('CharactersService — crud', () => {
         values: jest.fn().mockReturnValue({
           returning: jest
             .fn()
-            .mockResolvedValue([{ ...mockCharacter, realm: null, isMain: true }]),
+            .mockResolvedValue([
+              { ...mockCharacter, realm: null, isMain: true },
+            ]),
         }),
       });
 
@@ -612,5 +595,4 @@ describe('CharactersService — crud', () => {
       expect(mockDb.update).toHaveBeenCalled();
     });
   });
-
 });

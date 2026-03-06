@@ -1,10 +1,14 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-enable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-enable @typescript-eslint/no-unsafe-return */
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { SignupInteractionListener } from './signup-interaction.listener';
+
+/** Test-friendly interface exposing private members needed by specs */
+export interface TestableSignupInteractionListener {
+  onBotConnected: () => void;
+  onBotDisconnected: () => void;
+  handleButtonInteraction: (interaction: unknown) => Promise<void>;
+  handleSelectMenuInteraction: (interaction: unknown) => Promise<void>;
+  boundHandler: ((interaction: unknown) => void) | null;
+}
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
 import { EventsService } from '../../events/events.service';
@@ -19,7 +23,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 /** Shared mock types for signup interaction tests */
 export interface SignupInteractionMocks {
   module: TestingModule;
-  listener: any;
+  listener: TestableSignupInteractionListener;
   mockClientService: {
     getClient: jest.Mock;
     getGuildId: jest.Mock;
@@ -107,10 +111,8 @@ export function makeChain(result: unknown[] = []) {
   chain.leftJoin = jest.fn().mockReturnValue(chain);
   chain.groupBy = jest.fn().mockResolvedValue(result);
   // Make the chain itself awaitable (thenable)
-  chain.then = (
-    resolve: (v: unknown) => void,
-    reject: (e: unknown) => void,
-  ) => Promise.resolve(result).then(resolve, reject);
+  chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
+    Promise.resolve(result).then(resolve, reject);
   return chain;
 }
 
@@ -129,9 +131,7 @@ export async function createSignupInteractionTestModule(): Promise<SignupInterac
     findByDiscordUser: jest.fn().mockResolvedValue(null),
     signup: jest.fn().mockResolvedValue({ id: 1, eventId: 1 }),
     signupDiscord: jest.fn().mockResolvedValue({ id: 2, eventId: 1 }),
-    updateStatus: jest
-      .fn()
-      .mockResolvedValue({ id: 1, status: 'signed_up' }),
+    updateStatus: jest.fn().mockResolvedValue({ id: 1, status: 'signed_up' }),
     getRoster: jest
       .fn()
       .mockResolvedValue({ eventId: 1, signups: [], count: 0 }),
@@ -159,9 +159,7 @@ export async function createSignupInteractionTestModule(): Promise<SignupInterac
     findAllForUser: jest
       .fn()
       .mockResolvedValue({ data: [], meta: { total: 0 } }),
-    findOne: jest
-      .fn()
-      .mockResolvedValue({ id: 'char-1', name: 'Thrall' }),
+    findOne: jest.fn().mockResolvedValue({ id: 'char-1', name: 'Thrall' }),
   };
 
   const mockIntentTokenService = {
@@ -224,7 +222,8 @@ export async function createSignupInteractionTestModule(): Promise<SignupInterac
     ],
   }).compile();
 
-  const listener = module.get(SignupInteractionListener);
+  const instance: unknown = module.get(SignupInteractionListener);
+  const listener = instance as TestableSignupInteractionListener;
 
   return {
     module,

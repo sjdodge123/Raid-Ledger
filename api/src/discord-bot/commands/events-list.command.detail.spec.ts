@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ComponentType } from 'discord.js';
 import { EventsListCommand } from './events-list.command';
@@ -15,20 +14,6 @@ describe('EventsListCommand — detail', () => {
   let magicLinkService: jest.Mocked<MagicLinkService>;
 
   const originalClientUrl = process.env.CLIENT_URL;
-
-  const mockCollector = {
-    on: jest.fn().mockReturnThis(),
-  };
-
-  const mockReplyMessage = {
-    createMessageComponentCollector: jest.fn().mockReturnValue(mockCollector),
-  };
-
-  const mockInteraction = () => ({
-    deferReply: jest.fn().mockResolvedValue(undefined),
-    editReply: jest.fn().mockResolvedValue(mockReplyMessage),
-    user: { id: '123456' },
-  });
 
   const makeEvent = (overrides = {}) => ({
     id: 1,
@@ -580,5 +565,4 @@ describe('EventsListCommand — detail', () => {
   // ============================================================
   // Error handling: event deleted between list and selection
   // ============================================================
-
 });

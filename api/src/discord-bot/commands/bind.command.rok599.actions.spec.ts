@@ -3,7 +3,6 @@
  * Covers notification channel override, game reassignment, permission checks,
  * and autocomplete for the new 'event' option.
  */
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BindCommand } from './bind.command';
@@ -62,8 +61,6 @@ describe('BindCommand — ROK-599 event bind — actions', () => {
 
   // Default user row: the event creator
   const mockCreatorUser = { id: 10, role: 'member' };
-  const mockAdminUser = { id: 99, role: 'admin' };
-  const mockOperatorUser = { id: 88, role: 'operator' };
 
   // Updated event (after save) with joined game
   const mockUpdatedEvent = {

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChannelResolverService } from './channel-resolver.service';
 import { ChannelBindingsService } from './channel-bindings.service';

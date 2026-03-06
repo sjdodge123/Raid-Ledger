@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
@@ -24,38 +23,6 @@ function thenableResult(data: unknown[]): ThenableQueryResult {
   };
   return obj;
 }
-
-const testManifest: PluginManifest = {
-  id: 'test-plugin',
-  name: 'Test Plugin',
-  version: '1.0.0',
-  description: 'A test plugin',
-  author: { name: 'Test Author' },
-  gameSlugs: ['test-game'],
-  capabilities: ['test-cap'],
-  settingKeys: ['test_setting_1'],
-  integrations: [
-    {
-      key: 'test-api',
-      name: 'Test API',
-      description: 'A test integration',
-      credentialKeys: ['test_client_id', 'test_client_secret'],
-      credentialLabels: ['Client ID', 'Client Secret'],
-      settingsEvent: 'settings.test.updated',
-    },
-  ],
-};
-
-const depManifest: PluginManifest = {
-  id: 'dep-plugin',
-  name: 'Dependent Plugin',
-  version: '1.0.0',
-  description: 'Depends on test-plugin',
-  author: { name: 'Test Author' },
-  gameSlugs: [],
-  capabilities: [],
-  dependencies: ['test-plugin'],
-};
 
 const noGameManifest: PluginManifest = {
   id: 'no-game-plugin',

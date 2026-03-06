@@ -14,6 +14,18 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 
+function formatDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function getWeekStart(date: Date): string {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return formatDate(d);
+}
+
 describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activity', () => {
   let testApp: TestApp;
 
@@ -577,5 +589,4 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
   // ===================================================================
   // Embed Scheduler — LEFT JOIN detection
   // ===================================================================
-
 });

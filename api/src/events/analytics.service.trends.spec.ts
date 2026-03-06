@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
@@ -420,5 +419,4 @@ describe('AnalyticsService — trends', () => {
   });
 
   // ─── getEventMetrics ─────────────────────────────────────────────────────────
-
 });

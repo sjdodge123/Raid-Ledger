@@ -57,15 +57,6 @@ const depManifest: PluginManifest = {
   dependencies: ['test-plugin'],
 };
 
-const noGameManifest: PluginManifest = {
-  id: 'no-game-plugin',
-  name: 'Non-Game Plugin',
-  version: '1.0.0',
-  description: 'A plugin without gameSlugs',
-  author: { name: 'Test Author' },
-  capabilities: ['auth-provider'],
-};
-
 describe('PluginRegistryService — lifecycle', () => {
   let service: PluginRegistryService;
   let mockDb: Record<string, jest.Mock>;
@@ -524,5 +515,4 @@ describe('PluginRegistryService — lifecycle', () => {
       expect(service.getActiveSlugsSync().size).toBe(0);
     });
   });
-
 });

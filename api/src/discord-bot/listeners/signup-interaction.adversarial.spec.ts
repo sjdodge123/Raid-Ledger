@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-enable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-enable @typescript-eslint/no-unsafe-return */
-
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
   type SignupInteractionMocks,
@@ -45,8 +40,22 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [
-        { id: 'char-long', name: longName, class: 'Warrior', spec: null, level: 60, isMain: false },
-        { id: 'char-normal', name: 'Thrall', class: 'Shaman', spec: null, level: 60, isMain: false },
+        {
+          id: 'char-long',
+          name: longName,
+          class: 'Warrior',
+          spec: null,
+          level: 60,
+          isMain: false,
+        },
+        {
+          id: 'char-normal',
+          name: 'Thrall',
+          class: 'Shaman',
+          spec: null,
+          level: 60,
+          isMain: false,
+        },
       ],
       meta: { total: 2 },
     });
@@ -76,8 +85,22 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [
-        { id: 'char-null-fields-1', name: 'Ghost', class: null, spec: null, level: null, isMain: false },
-        { id: 'char-null-fields-2', name: 'Phantom', class: null, spec: null, level: null, isMain: false },
+        {
+          id: 'char-null-fields-1',
+          name: 'Ghost',
+          class: null,
+          spec: null,
+          level: null,
+          isMain: false,
+        },
+        {
+          id: 'char-null-fields-2',
+          name: 'Phantom',
+          class: null,
+          spec: null,
+          level: null,
+          isMain: false,
+        },
       ],
       meta: { total: 2 },
     });
@@ -108,8 +131,22 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [
-        { id: 'char-class-only-1', name: 'Uther', class: 'Paladin', spec: null, level: null, isMain: false },
-        { id: 'char-class-only-2', name: 'Anduin', class: 'Priest', spec: null, level: null, isMain: false },
+        {
+          id: 'char-class-only-1',
+          name: 'Uther',
+          class: 'Paladin',
+          spec: null,
+          level: null,
+          isMain: false,
+        },
+        {
+          id: 'char-class-only-2',
+          name: 'Anduin',
+          class: 'Priest',
+          spec: null,
+          level: null,
+          isMain: false,
+        },
       ],
       meta: { total: 2 },
     });
@@ -215,12 +252,19 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     mocks.mockDb.select.mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
-          limit: jest.fn().mockResolvedValue([{ id: 1005, title: 'Test Event', slotConfig: null }]),
+          limit: jest
+            .fn()
+            .mockResolvedValue([
+              { id: 1005, title: 'Test Event', slotConfig: null },
+            ]),
         }),
       }),
     });
 
-    mocks.mockSignupsService.signup.mockResolvedValueOnce({ id: 99, eventId: 1005 });
+    mocks.mockSignupsService.signup.mockResolvedValueOnce({
+      id: 99,
+      eventId: 1005,
+    });
     mocks.mockSignupsService.confirmSignup.mockRejectedValueOnce(
       new Error('Character not found'),
     );
@@ -249,8 +293,22 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [
-        { id: 'char-a', name: 'Char A', class: 'Mage', spec: null, level: 60, isMain: false },
-        { id: 'char-b', name: 'Char B', class: 'Rogue', spec: null, level: 60, isMain: false },
+        {
+          id: 'char-a',
+          name: 'Char A',
+          class: 'Mage',
+          spec: null,
+          level: 60,
+          isMain: false,
+        },
+        {
+          id: 'char-b',
+          name: 'Char B',
+          class: 'Rogue',
+          spec: null,
+          level: 60,
+          isMain: false,
+        },
       ],
       meta: { total: 2 },
     });
@@ -296,7 +354,11 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     mocks.mockDb.select.mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
-          limit: jest.fn().mockResolvedValue([{ id: 1008, title: 'Cancelled Event', slotConfig: null }]),
+          limit: jest
+            .fn()
+            .mockResolvedValue([
+              { id: 1008, title: 'Cancelled Event', slotConfig: null },
+            ]),
         }),
       }),
     });
@@ -438,8 +500,22 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [
-        { id: 'char-alt-1', name: 'Alt One', class: 'Mage', spec: null, level: 50, isMain: false },
-        { id: 'char-alt-2', name: 'Alt Two', class: 'Rogue', spec: null, level: 55, isMain: false },
+        {
+          id: 'char-alt-1',
+          name: 'Alt One',
+          class: 'Mage',
+          spec: null,
+          level: 50,
+          isMain: false,
+        },
+        {
+          id: 'char-alt-2',
+          name: 'Alt Two',
+          class: 'Rogue',
+          spec: null,
+          level: 55,
+          isMain: false,
+        },
       ],
       meta: { total: 2 },
     });
@@ -468,8 +544,22 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [
-        { id: 'char-main', name: 'Main Char', class: 'Warrior', spec: 'Fury', level: 60, isMain: true },
-        { id: 'char-alt', name: 'Alt Char', class: 'Mage', spec: null, level: 40, isMain: false },
+        {
+          id: 'char-main',
+          name: 'Main Char',
+          class: 'Warrior',
+          spec: 'Fury',
+          level: 60,
+          isMain: true,
+        },
+        {
+          id: 'char-alt',
+          name: 'Alt Char',
+          class: 'Mage',
+          spec: null,
+          level: 40,
+          isMain: false,
+        },
       ],
       meta: { total: 2 },
     });
@@ -502,12 +592,19 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     mocks.mockDb.select.mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
-          limit: jest.fn().mockResolvedValue([{ id: 1015, title: 'Embed Update Event', slotConfig: null }]),
+          limit: jest
+            .fn()
+            .mockResolvedValue([
+              { id: 1015, title: 'Embed Update Event', slotConfig: null },
+            ]),
         }),
       }),
     });
 
-    mocks.mockSignupsService.signup.mockResolvedValueOnce({ id: 55, eventId: 1015 });
+    mocks.mockSignupsService.signup.mockResolvedValueOnce({
+      id: 55,
+      eventId: 1015,
+    });
     mocks.mockSignupsService.confirmSignup.mockResolvedValueOnce({ id: 55 });
     mocks.mockCharactersService.findOne.mockResolvedValueOnce({
       id: 'char-embed-test',
@@ -515,7 +612,13 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     });
 
     const msgRecord = [
-      { eventId: 1015, channelId: 'channel-1', messageId: 'msg-1', guildId: 'guild-123', embedState: 'posted' },
+      {
+        eventId: 1015,
+        channelId: 'channel-1',
+        messageId: 'msg-1',
+        guildId: 'guild-123',
+        embedState: 'posted',
+      },
     ];
     const msgChain = makeChain(msgRecord);
     mocks.mockDb.select.mockReturnValueOnce(msgChain);
@@ -529,14 +632,19 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(1015, 77);
     expect(mocks.mockSignupsService.confirmSignup).toHaveBeenCalledWith(
-      1015, 55, 77, { characterId: 'char-embed-test' },
+      1015,
+      55,
+      77,
+      { characterId: 'char-embed-test' },
     );
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('EmbedChar'),
       }),
     );
-    expect(mocks.mockEventsService.buildEmbedEventData).toHaveBeenCalledWith(1015);
+    expect(mocks.mockEventsService.buildEmbedEventData).toHaveBeenCalledWith(
+      1015,
+    );
     expect(mocks.mockClientService.editEmbed).toHaveBeenCalled();
   });
 

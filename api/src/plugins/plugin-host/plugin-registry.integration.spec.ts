@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Plugin Registry Integration Tests (ROK-528)
  *
@@ -183,8 +182,13 @@ describe('Plugin Registry (integration)', () => {
         .get('/admin/plugins')
         .set('Authorization', `Bearer ${adminToken}`);
 
-      const deactivated = listAfterDeactivate.body.data.find(
-        (p: { slug: string }) => p.slug === activePlugin.slug,
+      const deactivatedList = (
+        listAfterDeactivate.body as {
+          data: Array<{ slug: string; status: string }>;
+        }
+      ).data;
+      const deactivated = deactivatedList.find(
+        (p) => p.slug === activePlugin.slug,
       );
       expect(deactivated.status).toBe('inactive');
 
@@ -198,10 +202,13 @@ describe('Plugin Registry (integration)', () => {
         .get('/admin/plugins')
         .set('Authorization', `Bearer ${adminToken}`);
 
-      const activated = listAfterActivate.body.data.find(
-        (p: { slug: string }) => p.slug === activePlugin.slug,
-      );
-      expect(activated.status).toBe('active');
+      const activatedList = (
+        listAfterActivate.body as {
+          data: Array<{ slug: string; status: string }>;
+        }
+      ).data;
+      const activated = activatedList.find((p) => p.slug === activePlugin.slug);
+      expect(activated?.status).toBe('active');
     });
   });
 

@@ -1,6 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
-import { ComponentType } from 'discord.js';
 import { EventsListCommand } from './events-list.command';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
@@ -11,8 +9,6 @@ describe('EventsListCommand — list', () => {
   let module: TestingModule;
   let command: EventsListCommand;
   let eventsService: jest.Mocked<EventsService>;
-  let usersService: jest.Mocked<UsersService>;
-  let magicLinkService: jest.Mocked<MagicLinkService>;
 
   const originalClientUrl = process.env.CLIENT_URL;
 
@@ -72,8 +68,6 @@ describe('EventsListCommand — list', () => {
     module = module_;
     command = module.get(EventsListCommand);
     eventsService = module.get(EventsService);
-    usersService = module.get(UsersService);
-    magicLinkService = module.get(MagicLinkService);
   });
 
   afterEach(async () => {
@@ -476,5 +470,4 @@ describe('EventsListCommand — list', () => {
   // ============================================================
   // Detail embed: buildDetailView via handleEventSelect
   // ============================================================
-
 });

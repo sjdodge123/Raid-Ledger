@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 /**
  * Tests for EmbedSyncProcessor.computeEmbedState() with extendedUntil (ROK-576).
  *

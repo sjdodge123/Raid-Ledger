@@ -1,7 +1,6 @@
 /**
  * Tests that EmbedPosterService resolves and injects voiceChannelId into embed data (ROK-507).
  */
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmbedPosterService } from './embed-poster.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';

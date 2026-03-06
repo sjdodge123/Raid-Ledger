@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { GuildScheduledEventStatus } from 'discord.js';
 import type { ScheduledEventData } from './scheduled-event.service';
 import {
@@ -116,11 +115,15 @@ describe('ScheduledEventService — lifecycle operations', () => {
 
       await mocks.service.completeScheduledEvent(42);
 
-      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
     });
 
     it('skips when no discordScheduledEventId stored in DB', async () => {
-      const selectChain = mocks.createSelectChain([{ discordScheduledEventId: null }]);
+      const selectChain = mocks.createSelectChain([
+        { discordScheduledEventId: null },
+      ]);
       mocks.mockDb.select.mockReturnValue(selectChain);
 
       await mocks.service.completeScheduledEvent(42);
@@ -142,11 +145,18 @@ describe('ScheduledEventService — lifecycle operations', () => {
       const updateChain = mocks.createUpdateChain();
       mocks.mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mocks.mockGuild.scheduledEvents.fetch.mockRejectedValue(unknownError);
 
-      await expect(mocks.service.completeScheduledEvent(42)).resolves.not.toThrow();
-      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+      await expect(
+        mocks.service.completeScheduledEvent(42),
+      ).resolves.not.toThrow();
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
     });
 
     it('does not throw on other Discord errors — logs and swallows', async () => {
@@ -158,7 +168,9 @@ describe('ScheduledEventService — lifecycle operations', () => {
         new Error('Unexpected API error'),
       );
 
-      await expect(mocks.service.completeScheduledEvent(42)).resolves.not.toThrow();
+      await expect(
+        mocks.service.completeScheduledEvent(42),
+      ).resolves.not.toThrow();
     });
   });
 
@@ -169,7 +181,8 @@ describe('ScheduledEventService — lifecycle operations', () => {
     it('includes game name, signup count, and view link in the description', async () => {
       await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
 
-      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock
+        .calls[0][0] as {
         description: string;
       };
       expect(editArg.description).toContain('World of Warcraft');
@@ -178,11 +191,16 @@ describe('ScheduledEventService — lifecycle operations', () => {
     });
 
     it('shows signup count without max when maxAttendees is null', async () => {
-      const data: ScheduledEventData = { ...baseEventData, maxAttendees: null, signupCount: 7 };
+      const data: ScheduledEventData = {
+        ...baseEventData,
+        maxAttendees: null,
+        signupCount: 7,
+      };
 
       await mocks.service.createScheduledEvent(42, data, 1, false);
 
-      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock
+        .calls[0][0] as {
         description: string;
       };
       expect(editArg.description).toContain('7 signed up');
@@ -194,7 +212,8 @@ describe('ScheduledEventService — lifecycle operations', () => {
 
       await mocks.service.createScheduledEvent(42, data, 1, false);
 
-      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock
+        .calls[0][0] as {
         description: string;
       };
       expect(editArg.description).toContain('Event —');
@@ -204,7 +223,8 @@ describe('ScheduledEventService — lifecycle operations', () => {
       mocks.settingsService.getClientUrl.mockResolvedValue(null);
       await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
 
-      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock
+        .calls[0][0] as {
         description: string;
       };
       expect(editArg.description).not.toContain('View event');
@@ -212,33 +232,45 @@ describe('ScheduledEventService — lifecycle operations', () => {
     });
 
     it('truncates long descriptions to 1000 characters', async () => {
-      const data: ScheduledEventData = { ...baseEventData, description: 'a'.repeat(2000) };
+      const data: ScheduledEventData = {
+        ...baseEventData,
+        description: 'a'.repeat(2000),
+      };
 
       await mocks.service.createScheduledEvent(42, data, 1, false);
 
-      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock
+        .calls[0][0] as {
         description: string;
       };
       expect(editArg.description.length).toBeLessThanOrEqual(1000);
     });
 
     it('preserves header even when description is extremely long', async () => {
-      const data: ScheduledEventData = { ...baseEventData, description: 'x'.repeat(2000) };
+      const data: ScheduledEventData = {
+        ...baseEventData,
+        description: 'x'.repeat(2000),
+      };
 
       await mocks.service.createScheduledEvent(42, data, 1, false);
 
-      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock
+        .calls[0][0] as {
         description: string;
       };
       expect(editArg.description).toContain('World of Warcraft');
     });
 
     it('returns full description unchanged when it is under 1000 chars', async () => {
-      const data: ScheduledEventData = { ...baseEventData, description: 'Short description.' };
+      const data: ScheduledEventData = {
+        ...baseEventData,
+        description: 'Short description.',
+      };
 
       await mocks.service.createScheduledEvent(42, data, 1, false);
 
-      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock
+        .calls[0][0] as {
         description: string;
       };
       expect(editArg.description).toContain('Short description.');
@@ -250,7 +282,8 @@ describe('ScheduledEventService — lifecycle operations', () => {
 
       await mocks.service.createScheduledEvent(42, data, 1, false);
 
-      const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
+      const editArg = mocks.mockGuild.scheduledEvents.create.mock
+        .calls[0][0] as {
         description: string;
       };
       expect(editArg.description).toContain('World of Warcraft');
@@ -333,12 +366,17 @@ describe('ScheduledEventService — lifecycle operations', () => {
       const updateChain = mocks.createUpdateChain();
       mocks.mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mocks.mockGuild.scheduledEvents.fetch.mockRejectedValue(unknownError);
 
       await mocks.service.startScheduledEvents();
 
-      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
     });
 
     it('handles multiple candidates — starts only SCHEDULED ones', async () => {
@@ -361,9 +399,12 @@ describe('ScheduledEventService — lifecycle operations', () => {
       await mocks.service.startScheduledEvents();
 
       expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledTimes(1);
-      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-1', {
-        status: GuildScheduledEventStatus.Active,
-      });
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
+        'se-1',
+        {
+          status: GuildScheduledEventStatus.Active,
+        },
+      );
     });
 
     it('does not throw on Discord API errors — logs and continues', async () => {
@@ -382,9 +423,12 @@ describe('ScheduledEventService — lifecycle operations', () => {
 
       await expect(mocks.service.startScheduledEvents()).resolves.not.toThrow();
 
-      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-2', {
-        status: GuildScheduledEventStatus.Active,
-      });
+      expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
+        'se-2',
+        {
+          status: GuildScheduledEventStatus.Active,
+        },
+      );
     });
   });
 });

@@ -16,8 +16,12 @@ export async function createMemberAndLogin(
     .insert(schema.users)
     .values({ discordId: `local:${email}`, username, role: 'member' })
     .returning();
-  await testApp.db.insert(schema.localCredentials).values({ email, passwordHash, userId: user.id });
-  const loginRes = await testApp.request.post('/auth/local').send({ email, password: 'TestPassword123!' });
+  await testApp.db
+    .insert(schema.localCredentials)
+    .values({ email, passwordHash, userId: user.id });
+  const loginRes = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: 'TestPassword123!' });
   return { userId: user.id, token: loginRes.body.access_token as string };
 }
 
@@ -32,9 +36,16 @@ export async function createFutureEvent(
   const res = await testApp.request
     .post('/events')
     .set('Authorization', `Bearer ${adminToken}`)
-    .send({ title: 'Integration Test Event', startTime: start.toISOString(), endTime: end.toISOString(), ...overrides });
+    .send({
+      title: 'Integration Test Event',
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      ...overrides,
+    });
   if (res.status !== 201) {
-    throw new Error(`createFutureEvent failed: ${res.status} — ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `createFutureEvent failed: ${res.status} — ${JSON.stringify(res.body)}`,
+    );
   }
   return res.body.id as number;
 }
@@ -49,7 +60,12 @@ export async function createPastEvent(
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
   const [event] = await testApp.db
     .insert(schema.events)
-    .values({ title: 'Past Integration Test Event', creatorId, duration: [start, end] as [Date, Date], ...overrides })
+    .values({
+      title: 'Past Integration Test Event',
+      creatorId,
+      duration: [start, end] as [Date, Date],
+      ...overrides,
+    })
     .returning();
   return event.id;
 }

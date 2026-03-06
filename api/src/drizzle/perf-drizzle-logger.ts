@@ -9,8 +9,8 @@ import { perfLog } from '../common/perf-logger';
  * include the query text + extracted table name for grep analysis.
  */
 export class PerfDrizzleLogger implements DrizzleLogger {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  logQuery(query: string, _params: unknown[]): void {
+  logQuery(query: string, params: unknown[]): void {
+    void params; // Required by DrizzleLogger interface but unused
     const table = this.extractTable(query);
     perfLog('DB', 'query', 0, {
       table,

@@ -5,7 +5,6 @@
  * Verifies Priority 0 override flows all the way from postEmbed → resolveChannelForEvent
  * and that the fallback (editExistingEmbed) also uses the override when re-posting.
  */
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmbedPosterService } from './embed-poster.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';

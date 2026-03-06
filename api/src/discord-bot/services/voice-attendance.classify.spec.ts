@@ -11,13 +11,11 @@
  *  6. EventsController voice endpoints — 403 for non-creator / non-admin
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
 import {
   VoiceAttendanceService,
   classifyVoiceSession,
 } from './voice-attendance.service';
 import { ChannelBindingsService } from './channel-bindings.service';
-import { ChannelResolverService } from './channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
@@ -26,20 +24,6 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
-import { VoiceStateListener } from '../listeners/voice-state.listener';
-import { AdHocEventService } from './ad-hoc-event.service';
-import { PresenceGameDetectorService } from './presence-game-detector.service';
-import { GameActivityService } from './game-activity.service';
-import { UsersService } from '../../users/users.service';
-import { Events, Collection } from 'discord.js';
-import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
-import { DepartureGraceService } from '../services/departure-grace.service';
-import { EventsAttendanceController } from '../../events/events-attendance.controller';
-import { EventsService } from '../../events/events.service';
-import { AttendanceService } from '../../events/attendance.service';
-import { AnalyticsService } from '../../events/analytics.service';
-
-import type { UserRole } from '@raid-ledger/contract';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,14 +33,6 @@ function eventWindow(durationHours: number) {
   const durationSec = durationHours * 3600;
   const graceMs = 5 * 60 * 1000; // 5 minutes
   return { start, end, durationSec, graceMs };
-}
-
-function makeCollection<K, V>(entries: [K, V][] = []): Collection<K, V> {
-  const col = new Collection<K, V>();
-  for (const [key, val] of entries) {
-    col.set(key, val);
-  }
-  return col;
 }
 
 // ─── 1. classifyVoiceSession — Boundary Conditions ────────────────────────────
@@ -637,3 +613,5 @@ describe('VoiceAttendanceService.autoPopulateAttendance', () => {
     expect(mockDb.update).not.toHaveBeenCalled();
   });
 });
+
+// ─── 4. VoiceStateListener — scheduled event branch independent of ad-hoc ────

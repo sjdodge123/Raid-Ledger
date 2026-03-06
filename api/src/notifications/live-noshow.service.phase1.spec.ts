@@ -22,18 +22,6 @@ function makeSelectFromWhereLimit(resolvedValue: unknown[]) {
   };
 }
 
-/**
- * Build a select chain where .from().where() is the terminal (no .limit()).
- * Used for batch queries that return all matching rows.
- */
-function makeSelectFromWhere(resolvedValue: unknown[]) {
-  return {
-    from: jest.fn().mockReturnValue({
-      where: jest.fn().mockResolvedValue(resolvedValue),
-    }),
-  };
-}
-
 describe('LiveNoShowService — phase1', () => {
   let service: LiveNoShowService;
   let mockDb: Record<string, jest.Mock>;
@@ -536,5 +524,4 @@ describe('LiveNoShowService — phase1', () => {
   });
 
   // ─── Phase 2: creator escalation ─────────────────────────────────────────
-
 });

@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-enable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-enable @typescript-eslint/no-unsafe-return */
-
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
   type SignupInteractionMocks,
@@ -203,8 +198,22 @@ describe('SignupInteractionListener — menus', () => {
 
       mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
-          { id: 'char-1', name: 'Thrall', class: 'Shaman', spec: 'Enhancement', level: 60, isMain: true },
-          { id: 'char-2', name: 'Jaina', class: 'Mage', spec: 'Frost', level: 60, isMain: false },
+          {
+            id: 'char-1',
+            name: 'Thrall',
+            class: 'Shaman',
+            spec: 'Enhancement',
+            level: 60,
+            isMain: true,
+          },
+          {
+            id: 'char-2',
+            name: 'Jaina',
+            class: 'Mage',
+            spec: 'Frost',
+            level: 60,
+            isMain: false,
+          },
         ],
         meta: { total: 2 },
       });
@@ -215,7 +224,10 @@ describe('SignupInteractionListener — menus', () => {
       );
       await mocks.listener.handleButtonInteraction(interaction);
 
-      expect(mocks.mockCharactersService.findAllForUser).toHaveBeenCalledWith(42, 1);
+      expect(mocks.mockCharactersService.findAllForUser).toHaveBeenCalledWith(
+        42,
+        1,
+      );
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
           content: expect.stringContaining('Pick a character'),
@@ -233,7 +245,16 @@ describe('SignupInteractionListener — menus', () => {
       setupGameRegistryQuery(mocks, mockGameWithRoles);
 
       mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-        data: [{ id: 'char-solo', name: 'Thrall', class: 'Shaman', spec: 'Enhancement', level: 60, isMain: true }],
+        data: [
+          {
+            id: 'char-solo',
+            name: 'Thrall',
+            class: 'Shaman',
+            spec: 'Enhancement',
+            level: 60,
+            isMain: true,
+          },
+        ],
         meta: { total: 1 },
       });
 
@@ -247,7 +268,10 @@ describe('SignupInteractionListener — menus', () => {
 
       expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(801, 42);
       expect(mocks.mockSignupsService.confirmSignup).toHaveBeenCalledWith(
-        801, 1, 42, { characterId: 'char-solo' },
+        801,
+        1,
+        42,
+        { characterId: 'char-solo' },
       );
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({ content: expect.stringContaining('Thrall') }),
@@ -278,7 +302,9 @@ describe('SignupInteractionListener — menus', () => {
       expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(802, 42);
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: expect.stringMatching(/signed up.*Raid Night.*Tip.*character/s),
+          content: expect.stringMatching(
+            /signed up.*Raid Night.*Tip.*character/s,
+          ),
         }),
       );
     });
@@ -306,7 +332,9 @@ describe('SignupInteractionListener — menus', () => {
 
       expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(803, 42);
       expect(interaction.editReply).toHaveBeenCalledWith(
-        expect.objectContaining({ content: expect.not.stringContaining('Tip') }),
+        expect.objectContaining({
+          content: expect.not.stringContaining('Tip'),
+        }),
       );
     });
 
@@ -340,7 +368,16 @@ describe('SignupInteractionListener — menus', () => {
       setupGameRegistryQuery(mocks, mockGameWithRoles);
 
       mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-        data: [{ id: 'char-mmo-solo', name: 'Thrall', class: 'Shaman', spec: 'Enhancement', level: 60, isMain: true }],
+        data: [
+          {
+            id: 'char-mmo-solo',
+            name: 'Thrall',
+            class: 'Shaman',
+            spec: 'Enhancement',
+            level: 60,
+            isMain: true,
+          },
+        ],
         meta: { total: 1 },
       });
 
@@ -374,8 +411,22 @@ describe('SignupInteractionListener — menus', () => {
 
       mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
-          { id: 'char-mmo-1', name: 'Thrall', class: 'Shaman', spec: 'Enhancement', level: 60, isMain: true },
-          { id: 'char-mmo-2', name: 'Jaina', class: 'Mage', spec: 'Frost', level: 60, isMain: false },
+          {
+            id: 'char-mmo-1',
+            name: 'Thrall',
+            class: 'Shaman',
+            spec: 'Enhancement',
+            level: 60,
+            isMain: true,
+          },
+          {
+            id: 'char-mmo-2',
+            name: 'Jaina',
+            class: 'Mage',
+            spec: 'Frost',
+            level: 60,
+            isMain: false,
+          },
         ],
         meta: { total: 2 },
       });
@@ -411,7 +462,11 @@ describe('SignupInteractionListener — menus', () => {
       mocks.mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([{ id: 900, title: 'Raid Night', slotConfig: null }]),
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { id: 900, title: 'Raid Night', slotConfig: null },
+              ]),
           }),
         }),
       });
@@ -438,7 +493,10 @@ describe('SignupInteractionListener — menus', () => {
 
       expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(900, 42);
       expect(mocks.mockSignupsService.confirmSignup).toHaveBeenCalledWith(
-        900, 1, 42, { characterId: 'char-selected' },
+        900,
+        1,
+        42,
+        { characterId: 'char-selected' },
       );
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -468,7 +526,9 @@ describe('SignupInteractionListener — menus', () => {
 
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: expect.stringContaining('Could not find your linked account'),
+          content: expect.stringContaining(
+            'Could not find your linked account',
+          ),
           components: [],
         }),
       );
@@ -490,7 +550,11 @@ describe('SignupInteractionListener — menus', () => {
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
             limit: jest.fn().mockResolvedValue([
-              { id: 902, title: 'Mythic Raid', slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 } },
+              {
+                id: 902,
+                title: 'Mythic Raid',
+                slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+              },
             ]),
           }),
         }),
