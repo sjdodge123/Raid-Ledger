@@ -29,17 +29,27 @@ function buildCreateSubcommand(
         opt.setName('title').setDescription('Event title').setRequired(true),
       )
       .addStringOption((opt) =>
-        opt.setName('game').setDescription('Game name').setRequired(true).setAutocomplete(true),
+        opt
+          .setName('game')
+          .setDescription('Game name')
+          .setRequired(true)
+          .setAutocomplete(true),
       )
       .addStringOption((opt) =>
         opt
           .setName('time')
-          .setDescription('When the event starts (e.g., "tonight 8pm", "Friday 7:30pm")')
+          .setDescription(
+            'When the event starts (e.g., "tonight 8pm", "Friday 7:30pm")',
+          )
           .setRequired(true),
       )
       .addStringOption(buildRosterOption)
       .addIntegerOption((opt) =>
-        opt.setName('slots').setDescription(`Max attendees (default: ${DEFAULT_SLOTS})`).setMinValue(1).setMaxValue(100),
+        opt
+          .setName('slots')
+          .setDescription(`Max attendees (default: ${DEFAULT_SLOTS})`)
+          .setMinValue(1)
+          .setMaxValue(100),
       ),
   );
 }
@@ -49,13 +59,25 @@ function addMmoRoleOptions(
 ): import('discord.js').SlashCommandSubcommandBuilder {
   return sub
     .addIntegerOption((opt) =>
-      opt.setName('tanks').setDescription('Number of tank slots (MMO roster only)').setMinValue(0).setMaxValue(20),
+      opt
+        .setName('tanks')
+        .setDescription('Number of tank slots (MMO roster only)')
+        .setMinValue(0)
+        .setMaxValue(20),
     )
     .addIntegerOption((opt) =>
-      opt.setName('healers').setDescription('Number of healer slots (MMO roster only)').setMinValue(0).setMaxValue(20),
+      opt
+        .setName('healers')
+        .setDescription('Number of healer slots (MMO roster only)')
+        .setMinValue(0)
+        .setMaxValue(20),
     )
     .addIntegerOption((opt) =>
-      opt.setName('dps').setDescription('Number of DPS slots (MMO roster only)').setMinValue(0).setMaxValue(50),
+      opt
+        .setName('dps')
+        .setDescription('Number of DPS slots (MMO roster only)')
+        .setMinValue(0)
+        .setMaxValue(50),
     );
 }
 
@@ -115,7 +137,12 @@ function buildMmoSlotConfig(
   const dpsSlots = dps ?? 3;
 
   return {
-    slotConfig: { type: 'mmo', tank: tankSlots, healer: healerSlots, dps: dpsSlots },
+    slotConfig: {
+      type: 'mmo',
+      tank: tankSlots,
+      healer: healerSlots,
+      dps: dpsSlots,
+    },
     maxAttendees: tankSlots + healerSlots + dpsSlots,
   };
 }

@@ -317,11 +317,13 @@ export class DiscordEmbedFactory {
     const lines: string[] = [];
     if (event.game?.name) lines.push(`\uD83C\uDFAE **${event.game.name}**`);
     lines.push(`\uD83D\uDCC6 <t:${startUnix}:f> (<t:${startUnix}:R>)`);
-    if (event.voiceChannelId) lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
+    if (event.voiceChannelId)
+      lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
     if (event.description) {
-      const excerpt = event.description.length > 200
-        ? event.description.slice(0, 200) + '...'
-        : event.description;
+      const excerpt =
+        event.description.length > 200
+          ? event.description.slice(0, 200) + '...'
+          : event.description;
       lines.push('', excerpt);
     }
     return lines;

@@ -43,14 +43,23 @@ function buildInviteDescLines(
     `**${event.title}**`,
     `\uD83D\uDCC5 ${dateStr} at ${timeStr}`,
     '',
-    clientUrl ? `\uD83D\uDCCE [Event details](${clientUrl}/events/${eventId})` : '',
+    clientUrl
+      ? `\uD83D\uDCCE [Event details](${clientUrl}/events/${eventId})`
+      : '',
   ].filter(Boolean);
 }
 
 /** Add optional voice channel field to an embed. */
-function addVoiceField(embed: EmbedBuilder, voiceChannelId: string | null): void {
+function addVoiceField(
+  embed: EmbedBuilder,
+  voiceChannelId: string | null,
+): void {
   if (voiceChannelId) {
-    embed.addFields({ name: 'Voice Channel', value: `<#${voiceChannelId}>`, inline: true });
+    embed.addFields({
+      name: 'Voice Channel',
+      value: `<#${voiceChannelId}>`,
+      inline: true,
+    });
   }
 }
 
@@ -76,12 +85,21 @@ export function buildPugInviteEmbed(
 
   addVoiceField(embed, voiceChannelId);
   if (clientUrl) {
-    embed.addFields({ name: '\u200b', value: `\uD83D\uDCAC Join ${communityName} on [Raid Ledger](${clientUrl})` });
+    embed.addFields({
+      name: '\u200b',
+      value: `\uD83D\uDCAC Join ${communityName} on [Raid Ledger](${clientUrl})`,
+    });
   }
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PUG_BUTTON_IDS.ACCEPT}:${pugSlotId}`).setLabel('Accept').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`${PUG_BUTTON_IDS.DECLINE}:${pugSlotId}`).setLabel('Decline').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`${PUG_BUTTON_IDS.ACCEPT}:${pugSlotId}`)
+      .setLabel('Accept')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`${PUG_BUTTON_IDS.DECLINE}:${pugSlotId}`)
+      .setLabel('Decline')
+      .setStyle(ButtonStyle.Danger),
   );
   return { embed, row };
 }
@@ -110,11 +128,17 @@ export function buildMemberInviteEmbed(
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`)
-      .setLabel('Accept').setStyle(ButtonStyle.Success),
+      .setCustomId(
+        `${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`,
+      )
+      .setLabel('Accept')
+      .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(`${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`)
-      .setLabel('Decline').setStyle(ButtonStyle.Danger),
+      .setCustomId(
+        `${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`,
+      )
+      .setLabel('Decline')
+      .setStyle(ButtonStyle.Danger),
   );
   return { embed, row };
 }

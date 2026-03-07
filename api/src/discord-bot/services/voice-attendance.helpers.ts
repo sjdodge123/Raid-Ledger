@@ -56,7 +56,9 @@ function parseClassification(raw: string | null): VoiceClassification | null {
 /**
  * Convert a DB voice session row to DTO format.
  */
-export function toVoiceSessionDto(session: VoiceSessionRow): EventVoiceSessionDto {
+export function toVoiceSessionDto(
+  session: VoiceSessionRow,
+): EventVoiceSessionDto {
   return {
     id: session.id,
     eventId: session.eventId,
@@ -124,7 +126,9 @@ export function buildActiveRoster(
 function sessionToParticipant(session: InMemorySession): AdHocParticipantDto {
   let totalDuration = session.totalDurationSec;
   if (session.isActive && session.activeSegmentStart) {
-    totalDuration += Math.floor((Date.now() - session.activeSegmentStart.getTime()) / 1000);
+    totalDuration += Math.floor(
+      (Date.now() - session.activeSegmentStart.getTime()) / 1000,
+    );
   }
 
   return {
@@ -135,7 +139,9 @@ function sessionToParticipant(session: InMemorySession): AdHocParticipantDto {
     discordUsername: session.discordUsername,
     discordAvatarHash: session.discordAvatarHash,
     joinedAt: session.firstJoinAt.toISOString(),
-    leftAt: session.isActive ? null : (session.lastLeaveAt?.toISOString() ?? null),
+    leftAt: session.isActive
+      ? null
+      : (session.lastLeaveAt?.toISOString() ?? null),
     totalDurationSeconds: totalDuration,
     sessionCount: session.segments.length,
   };

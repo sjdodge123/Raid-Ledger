@@ -16,7 +16,10 @@ export async function handleTentative(
   deps: SignupInteractionDeps,
 ): Promise<void> {
   const discordUserId = interaction.user.id;
-  const existingSignup = await deps.signupsService.findByDiscordUser(eventId, discordUserId);
+  const existingSignup = await deps.signupsService.findByDiscordUser(
+    eventId,
+    discordUserId,
+  );
 
   if (existingSignup) {
     await markExistingTentative(eventId, existingSignup, deps);
@@ -36,7 +39,11 @@ export async function handleTentative(
 
 async function markExistingTentative(
   eventId: number,
-  existingSignup: NonNullable<Awaited<ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>>>,
+  existingSignup: NonNullable<
+    Awaited<
+      ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>
+    >
+  >,
   deps: SignupInteractionDeps,
 ): Promise<void> {
   await deps.signupsService.updateStatus(
@@ -76,7 +83,13 @@ async function handleLinkedTentative(
   }
 
   if (event.gameId) {
-    const handled = await tryLinkedTentativeGameFlow(interaction, eventId, linkedUser, event, deps);
+    const handled = await tryLinkedTentativeGameFlow(
+      interaction,
+      eventId,
+      linkedUser,
+      event,
+      deps,
+    );
     if (handled) return;
   }
 
@@ -102,7 +115,11 @@ async function signupAsTentative(
   deps: SignupInteractionDeps,
 ): Promise<void> {
   await deps.signupsService.signup(eventId, userId);
-  await deps.signupsService.updateStatus(eventId, { userId }, { status: 'tentative' });
+  await deps.signupsService.updateStatus(
+    eventId,
+    { userId },
+    { status: 'tentative' },
+  );
   await deps.updateEmbedSignupCount(eventId);
 }
 
@@ -123,21 +140,44 @@ async function tryLinkedTentativeGameFlow(
     .limit(1);
   if (!game) return false;
 
-  const characterList = await deps.charactersService.findAllForUser(linkedUser.id, event.gameId!);
+  const characterList = await deps.charactersService.findAllForUser(
+    linkedUser.id,
+    event.gameId!,
+  );
   const characters = characterList.data;
-  const isMMO = (event.slotConfig as Record<string, unknown> | null)?.type === 'mmo';
+  const isMMO =
+    (event.slotConfig as Record<string, unknown> | null)?.type === 'mmo';
 
   if ((isMMO && characters.length >= 1) || characters.length > 1) {
-    await showTentativeCharacterSelect(interaction, eventId, event.title, characters, deps);
+    await showTentativeCharacterSelect(
+      interaction,
+      eventId,
+      event.title,
+      characters,
+      deps,
+    );
     return true;
   }
 
   if (characters.length === 1) {
-    return tentativeSingleCharacter(interaction, eventId, linkedUser.id, characters[0], deps);
+    return tentativeSingleCharacter(
+      interaction,
+      eventId,
+      linkedUser.id,
+      characters[0],
+      deps,
+    );
   }
 
   if (isMMO) {
-    await showRoleSelect(interaction, eventId, deps, undefined, undefined, 'tentative');
+    await showRoleSelect(
+      interaction,
+      eventId,
+      deps,
+      undefined,
+      undefined,
+      'tentative',
+    );
     return true;
   }
 
@@ -172,9 +212,17 @@ async function tentativeSingleCharacter(
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
   const result = await deps.signupsService.signup(eventId, userId);
-  await deps.signupsService.confirmSignup(eventId, result.id, userId, { characterId: char.id });
-  await deps.signupsService.updateStatus(eventId, { userId }, { status: 'tentative' });
-  await interaction.editReply({ content: `You're marked as **tentative** with **${char.name}**.` });
+  await deps.signupsService.confirmSignup(eventId, result.id, userId, {
+    characterId: char.id,
+  });
+  await deps.signupsService.updateStatus(
+    eventId,
+    { userId },
+    { status: 'tentative' },
+  );
+  await interaction.editReply({
+    content: `You're marked as **tentative** with **${char.name}**.`,
+  });
   await deps.updateEmbedSignupCount(eventId);
   return true;
 }
@@ -209,7 +257,14 @@ async function tryMmoTentativeRedirect(
   const slotConfig = event?.slotConfig as Record<string, unknown> | null;
   if (slotConfig?.type !== 'mmo') return false;
 
-  await showRoleSelect(interaction, eventId, deps, undefined, undefined, 'tentative');
+  await showRoleSelect(
+    interaction,
+    eventId,
+    deps,
+    undefined,
+    undefined,
+    'tentative',
+  );
   return true;
 }
 
@@ -222,7 +277,10 @@ export async function handleDecline(
   deps: SignupInteractionDeps,
 ): Promise<void> {
   const discordUserId = interaction.user.id;
-  const existingSignup = await deps.signupsService.findByDiscordUser(eventId, discordUserId);
+  const existingSignup = await deps.signupsService.findByDiscordUser(
+    eventId,
+    discordUserId,
+  );
 
   if (existingSignup) {
     await deps.signupsService.cancelByDiscordUser(eventId, discordUserId);
@@ -244,7 +302,9 @@ async function createDeclinedSignup(
   if (linkedUser) {
     await deps.signupsService.signup(eventId, linkedUser.id);
     await deps.signupsService.updateStatus(
-      eventId, { userId: linkedUser.id }, { status: 'declined' },
+      eventId,
+      { userId: linkedUser.id },
+      { status: 'declined' },
     );
   } else {
     await deps.signupsService.signupDiscord(eventId, {
@@ -264,7 +324,10 @@ export async function handleQuickSignup(
   eventId: number,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const existing = await deps.signupsService.findByDiscordUser(eventId, interaction.user.id);
+  const existing = await deps.signupsService.findByDiscordUser(
+    eventId,
+    interaction.user.id,
+  );
   if (existing) {
     await interaction.editReply({ content: "You're already signed up!" });
     return;
@@ -340,7 +403,10 @@ function buildOnboardingRow(
   const row = new ActionRowBuilder<ButtonBuilder>();
   if (joinUrl) {
     row.addComponents(
-      new ButtonBuilder().setLabel('Join & Sign Up').setStyle(ButtonStyle.Link).setURL(joinUrl),
+      new ButtonBuilder()
+        .setLabel('Join & Sign Up')
+        .setStyle(ButtonStyle.Link)
+        .setURL(joinUrl),
     );
   }
   row.addComponents(

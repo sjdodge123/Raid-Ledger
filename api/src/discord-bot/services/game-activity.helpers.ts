@@ -119,11 +119,15 @@ async function insertOpenSession(
     if (await hasOpenSession(db, ev.userId, ev.discordActivityName)) return;
 
     await db.insert(tables.gameActivitySessions).values({
-      userId: ev.userId, gameId,
-      discordActivityName: ev.discordActivityName, startedAt: ev.startedAt,
+      userId: ev.userId,
+      gameId,
+      discordActivityName: ev.discordActivityName,
+      startedAt: ev.startedAt,
     });
   } catch (err) {
-    logger.warn(`Failed to insert session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`);
+    logger.warn(
+      `Failed to insert session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
+    );
   }
 }
 
@@ -146,13 +150,18 @@ async function findOpenSessionForClose(
   activityName: string,
 ): Promise<{ id: string; startedAt: Date } | null> {
   const [session] = await db
-    .select({ id: tables.gameActivitySessions.id, startedAt: tables.gameActivitySessions.startedAt })
+    .select({
+      id: tables.gameActivitySessions.id,
+      startedAt: tables.gameActivitySessions.startedAt,
+    })
     .from(tables.gameActivitySessions)
-    .where(and(
-      eq(tables.gameActivitySessions.userId, userId),
-      eq(tables.gameActivitySessions.discordActivityName, activityName),
-      isNull(tables.gameActivitySessions.endedAt),
-    ))
+    .where(
+      and(
+        eq(tables.gameActivitySessions.userId, userId),
+        eq(tables.gameActivitySessions.discordActivityName, activityName),
+        isNull(tables.gameActivitySessions.endedAt),
+      ),
+    )
     .orderBy(tables.gameActivitySessions.startedAt)
     .limit(1);
   return session ?? null;
@@ -164,18 +173,28 @@ async function closeOpenSession(
   logger: Logger,
 ): Promise<void> {
   try {
-    const session = await findOpenSessionForClose(db, ev.userId, ev.discordActivityName);
+    const session = await findOpenSessionForClose(
+      db,
+      ev.userId,
+      ev.discordActivityName,
+    );
     if (!session) return;
 
     const durationSeconds = Math.min(
-      Math.max(0, Math.floor((ev.endedAt.getTime() - session.startedAt.getTime()) / 1000)),
+      Math.max(
+        0,
+        Math.floor((ev.endedAt.getTime() - session.startedAt.getTime()) / 1000),
+      ),
       MAX_SESSION_DURATION_SECONDS,
     );
-    await db.update(tables.gameActivitySessions)
+    await db
+      .update(tables.gameActivitySessions)
       .set({ endedAt: ev.endedAt, durationSeconds })
       .where(eq(tables.gameActivitySessions.id, session.id));
   } catch (err) {
-    logger.warn(`Failed to close session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`);
+    logger.warn(
+      `Failed to close session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
+    );
   }
 }
 
@@ -194,7 +213,9 @@ export async function closeOrphanedSessions(
 
   const total = staleCount + recentCount;
   if (total > 0) {
-    logger.log(`Closed ${total} orphaned session(s) (${staleCount} stale, ${recentCount} recent)`);
+    logger.log(
+      `Closed ${total} orphaned session(s) (${staleCount} stale, ${recentCount} recent)`,
+    );
   }
 }
 
@@ -206,7 +227,12 @@ async function closeStaleSessions(
   const result = await db
     .update(tables.gameActivitySessions)
     .set({ endedAt: now, durationSeconds: MAX_SESSION_DURATION_SECONDS })
-    .where(and(isNull(tables.gameActivitySessions.endedAt), lt(tables.gameActivitySessions.startedAt, cutoff)))
+    .where(
+      and(
+        isNull(tables.gameActivitySessions.endedAt),
+        lt(tables.gameActivitySessions.startedAt, cutoff),
+      ),
+    )
     .returning({ id: tables.gameActivitySessions.id });
   return result.length;
 }
@@ -222,7 +248,12 @@ async function closeRecentSessions(
       endedAt: now,
       durationSeconds: sql`EXTRACT(EPOCH FROM ${now.toISOString()}::timestamp - ${tables.gameActivitySessions.startedAt})::integer`,
     })
-    .where(and(isNull(tables.gameActivitySessions.endedAt), gte(tables.gameActivitySessions.startedAt, cutoff)))
+    .where(
+      and(
+        isNull(tables.gameActivitySessions.endedAt),
+        gte(tables.gameActivitySessions.startedAt, cutoff),
+      ),
+    )
     .returning({ id: tables.gameActivitySessions.id });
   return result.length;
 }
@@ -240,12 +271,21 @@ export async function aggregateRollups(
   const rollupMap = buildRollupMap(sessions);
   const upsertCount = await upsertRollups(db, rollupMap);
 
-  logger.log(`Rolled up ${sessions.length} session(s) into ${upsertCount} rollup row(s)`);
+  logger.log(
+    `Rolled up ${sessions.length} session(s) into ${upsertCount} rollup row(s)`,
+  );
 }
 
 async function fetchClosedSessions(
   db: PostgresJsDatabase<typeof schema>,
-): Promise<Array<{ userId: number; gameId: number | null; startedAt: Date; durationSeconds: number | null }>> {
+): Promise<
+  Array<{
+    userId: number;
+    gameId: number | null;
+    startedAt: Date;
+    durationSeconds: number | null;
+  }>
+> {
   const since = new Date();
   since.setHours(since.getHours() - 48);
 
@@ -430,26 +470,43 @@ async function filterCandidates(
     if (!c.gameId) return false;
     if (exclusionSets.optedOut.has(c.userId)) return false;
     const key = `${c.userId}:${c.gameId}`;
-    return !exclusionSets.existing.has(key) && !exclusionSets.suppressed.has(key);
+    return (
+      !exclusionSets.existing.has(key) && !exclusionSets.suppressed.has(key)
+    );
   });
 }
 
 async function buildExclusionSets(
   db: PostgresJsDatabase<typeof schema>,
   userIds: number[],
-): Promise<{ optedOut: Set<number>; existing: Set<string>; suppressed: Set<string> }> {
+): Promise<{
+  optedOut: Set<number>;
+  existing: Set<string>;
+  suppressed: Set<string>;
+}> {
   const optedOut = await db
     .select({ userId: tables.userPreferences.userId })
     .from(tables.userPreferences)
-    .where(and(eq(tables.userPreferences.key, 'autoHeartGames'), sql`${tables.userPreferences.value}::text = 'false'`));
+    .where(
+      and(
+        eq(tables.userPreferences.key, 'autoHeartGames'),
+        sql`${tables.userPreferences.value}::text = 'false'`,
+      ),
+    );
 
   const existing = await db
-    .select({ userId: tables.gameInterests.userId, gameId: tables.gameInterests.gameId })
+    .select({
+      userId: tables.gameInterests.userId,
+      gameId: tables.gameInterests.gameId,
+    })
     .from(tables.gameInterests)
     .where(inArray(tables.gameInterests.userId, userIds));
 
   const suppressions = await db
-    .select({ userId: tables.gameInterestSuppressions.userId, gameId: tables.gameInterestSuppressions.gameId })
+    .select({
+      userId: tables.gameInterestSuppressions.userId,
+      gameId: tables.gameInterestSuppressions.gameId,
+    })
     .from(tables.gameInterestSuppressions)
     .where(inArray(tables.gameInterestSuppressions.userId, userIds));
 

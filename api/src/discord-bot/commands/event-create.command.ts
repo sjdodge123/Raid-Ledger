@@ -173,7 +173,13 @@ export class EventCreateCommand
         slotConfig: opts.slotConfig,
       });
 
-      await this.replyWithConfirmation(interaction, event.id, userId, opts, startTime);
+      await this.replyWithConfirmation(
+        interaction,
+        event.id,
+        userId,
+        opts,
+        startTime,
+      );
     } catch (error) {
       this.logger.error('Failed to create event:', error);
       await interaction.editReply('Failed to create event.');
@@ -207,7 +213,11 @@ export class EventCreateCommand
     const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
     if (!clientUrl || clientUrl === 'auto') return undefined;
 
-    return this.magicLinkService.generateLink(userId, '/events/plan', clientUrl);
+    return this.magicLinkService.generateLink(
+      userId,
+      '/events/plan',
+      clientUrl,
+    );
   }
 
   // ─── Helpers ──────────────────────────────────────────────

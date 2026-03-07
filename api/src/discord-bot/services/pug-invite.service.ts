@@ -41,21 +41,40 @@ export class PugInviteService {
     if (!pugSlot || pugSlot.status !== 'pending') return;
 
     try {
-      await this.routePugSlot(pugSlotId, eventId, discordUsername, event, creatorUserId);
+      await this.routePugSlot(
+        pugSlotId,
+        eventId,
+        discordUsername,
+        event,
+        creatorUserId,
+      );
     } catch (error) {
-      this.logger.error('Failed to process PUG invite for %s (slot: %s):', discordUsername, pugSlotId, error);
+      this.logger.error(
+        'Failed to process PUG invite for %s (slot: %s):',
+        discordUsername,
+        pugSlotId,
+        error,
+      );
     }
   }
 
   private async routePugSlot(
-    pugSlotId: string, eventId: number, discordUsername: string,
-    event: typeof schema.events.$inferSelect, creatorUserId?: number,
+    pugSlotId: string,
+    eventId: number,
+    discordUsername: string,
+    event: typeof schema.events.$inferSelect,
+    creatorUserId?: number,
   ): Promise<void> {
     const member = await this.findGuildMember(discordUsername);
     if (member) {
       await this.handleMemberFound(pugSlotId, eventId, member, event);
     } else {
-      await this.handleMemberNotFound(pugSlotId, eventId, discordUsername, creatorUserId);
+      await this.handleMemberNotFound(
+        pugSlotId,
+        eventId,
+        discordUsername,
+        creatorUserId,
+      );
     }
   }
 
@@ -137,11 +156,19 @@ export class PugInviteService {
     if (!event || event.cancelledAt) return;
 
     const ctx = await this.getContext();
-    const voiceChannelId = await this.channelResolver.resolveVoiceChannelForEvent(
-      gameId, event.recurrenceGroupId,
-    );
+    const voiceChannelId =
+      await this.channelResolver.resolveVoiceChannelForEvent(
+        gameId,
+        event.recurrenceGroupId,
+      );
     const { embed, row } = buildMemberInviteEmbed(
-      eventId, notificationId, event, ctx.communityName, ctx.clientUrl, ctx.timezone, voiceChannelId,
+      eventId,
+      notificationId,
+      event,
+      ctx.communityName,
+      ctx.clientUrl,
+      ctx.timezone,
+      voiceChannelId,
     );
 
     await this.trySendDm(targetDiscordId, embed, row, 'member invite');
@@ -150,7 +177,9 @@ export class PugInviteService {
   private async trySendDm(
     targetDiscordId: string,
     embed: import('discord.js').EmbedBuilder,
-    row?: import('discord.js').ActionRowBuilder<import('discord.js').ButtonBuilder>,
+    row?: import('discord.js').ActionRowBuilder<
+      import('discord.js').ButtonBuilder
+    >,
     label = 'DM',
   ): Promise<void> {
     try {
@@ -328,11 +357,19 @@ export class PugInviteService {
     event: typeof schema.events.$inferSelect,
   ): Promise<void> {
     const ctx = await this.getContext();
-    const voiceChannelId = await this.channelResolver.resolveVoiceChannelForEvent(
-      event.gameId ?? null, event.recurrenceGroupId,
-    );
+    const voiceChannelId =
+      await this.channelResolver.resolveVoiceChannelForEvent(
+        event.gameId ?? null,
+        event.recurrenceGroupId,
+      );
     const { embed, row } = buildPugInviteEmbed(
-      pugSlotId, eventId, event, ctx.communityName, ctx.clientUrl, ctx.timezone, voiceChannelId,
+      pugSlotId,
+      eventId,
+      event,
+      ctx.communityName,
+      ctx.clientUrl,
+      ctx.timezone,
+      voiceChannelId,
     );
 
     await this.trySendDm(discordUserId, embed, row, 'PUG invite');

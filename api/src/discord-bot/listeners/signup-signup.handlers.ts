@@ -9,7 +9,9 @@ import {
 import type { SignupInteractionDeps } from './signup-interaction.types';
 
 type ExistingSignup = NonNullable<
-  Awaited<ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>>
+  Awaited<
+    ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>
+  >
 >;
 
 /**
@@ -21,7 +23,11 @@ export async function handleExistingSignup(
   existingSignup: ExistingSignup,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const wasReactivated = await reactivateIfNeeded(eventId, existingSignup, deps);
+  const wasReactivated = await reactivateIfNeeded(
+    eventId,
+    existingSignup,
+    deps,
+  );
 
   const [linkedUser] = await deps.db
     .select()
@@ -35,7 +41,11 @@ export async function handleExistingSignup(
   }
 
   const handled = await offerCharacterRoleChange(
-    interaction, eventId, linkedUser, existingSignup, deps,
+    interaction,
+    eventId,
+    linkedUser,
+    existingSignup,
+    deps,
   );
   if (!handled) {
     await interaction.editReply({
@@ -114,7 +124,10 @@ async function loadGameContext(
     .limit(1);
   if (!game) return null;
 
-  const characterList = await deps.charactersService.findAllForUser(userId, event.gameId);
+  const characterList = await deps.charactersService.findAllForUser(
+    userId,
+    event.gameId,
+  );
   const slotConfig = event.slotConfig as Record<string, unknown> | null;
   return {
     eventTitle: event.title,
@@ -131,10 +144,25 @@ async function offerSelectionUI(
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
   if (ctx.characters.length >= 1) {
-    if (!existingSignup.characterId || (ctx.isMMO && !existingSignup.character?.role)) {
-      return offerCharacterOrRole(interaction, eventId, ctx, existingSignup, deps);
+    if (
+      !existingSignup.characterId ||
+      (ctx.isMMO && !existingSignup.character?.role)
+    ) {
+      return offerCharacterOrRole(
+        interaction,
+        eventId,
+        ctx,
+        existingSignup,
+        deps,
+      );
     }
-    await showCharacterSelect(interaction, eventId, ctx.eventTitle, ctx.characters, deps);
+    await showCharacterSelect(
+      interaction,
+      eventId,
+      ctx.eventTitle,
+      ctx.characters,
+      deps,
+    );
     return true;
   }
 
@@ -153,14 +181,31 @@ async function offerCharacterOrRole(
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
   if (!existingSignup.characterId) {
-    await showCharacterSelect(interaction, eventId, ctx.eventTitle, ctx.characters, deps);
+    await showCharacterSelect(
+      interaction,
+      eventId,
+      ctx.eventTitle,
+      ctx.characters,
+      deps,
+    );
     return true;
   }
   // MMO without role — show role select
-  const currentChar = ctx.characters.find((c) => c.id === existingSignup.characterId);
-  await showRoleSelect(interaction, eventId, deps, existingSignup.characterId, currentChar
-    ? { name: currentChar.name, role: currentChar.roleOverride ?? currentChar.role ?? null }
-    : undefined);
+  const currentChar = ctx.characters.find(
+    (c) => c.id === existingSignup.characterId,
+  );
+  await showRoleSelect(
+    interaction,
+    eventId,
+    deps,
+    existingSignup.characterId,
+    currentChar
+      ? {
+          name: currentChar.name,
+          role: currentChar.roleOverride ?? currentChar.role ?? null,
+        }
+      : undefined,
+  );
   return true;
 }
 
@@ -180,12 +225,20 @@ export async function handleNewLinkedSignup(
   }
 
   if (event.gameId) {
-    const handled = await tryGameSignupFlow(interaction, eventId, linkedUser, event, deps);
+    const handled = await tryGameSignupFlow(
+      interaction,
+      eventId,
+      linkedUser,
+      event,
+      deps,
+    );
     if (handled) return;
   }
 
   await deps.signupsService.signup(eventId, linkedUser.id);
-  await interaction.editReply({ content: `You're signed up for **${event.title}**!` });
+  await interaction.editReply({
+    content: `You're signed up for **${event.title}**!`,
+  });
   await deps.updateEmbedSignupCount(eventId);
 }
 
@@ -218,18 +271,33 @@ async function tryGameSignupFlow(
     .limit(1);
   if (!game) return false;
 
-  const characterList = await deps.charactersService.findAllForUser(linkedUser.id, event.gameId!);
+  const characterList = await deps.charactersService.findAllForUser(
+    linkedUser.id,
+    event.gameId!,
+  );
   const characters = characterList.data;
   const slotConfig = event.slotConfig as Record<string, unknown> | null;
   const isMMO = slotConfig?.type === 'mmo';
 
   if ((isMMO && characters.length >= 1) || characters.length > 1) {
-    await showCharacterSelect(interaction, eventId, event.title, characters, deps);
+    await showCharacterSelect(
+      interaction,
+      eventId,
+      event.title,
+      characters,
+      deps,
+    );
     return true;
   }
 
   if (characters.length === 1) {
-    return signupSingleCharacter(interaction, eventId, linkedUser.id, characters[0], deps);
+    return signupSingleCharacter(
+      interaction,
+      eventId,
+      linkedUser.id,
+      characters[0],
+      deps,
+    );
   }
 
   if (isMMO) {
@@ -237,7 +305,14 @@ async function tryGameSignupFlow(
     return true;
   }
 
-  return signupWithoutCharacter(interaction, eventId, linkedUser.id, event, game, deps);
+  return signupWithoutCharacter(
+    interaction,
+    eventId,
+    linkedUser.id,
+    event,
+    game,
+    deps,
+  );
 }
 
 async function signupSingleCharacter(
@@ -248,7 +323,9 @@ async function signupSingleCharacter(
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
   const result = await deps.signupsService.signup(eventId, userId);
-  await deps.signupsService.confirmSignup(eventId, result.id, userId, { characterId: char.id });
+  await deps.signupsService.confirmSignup(eventId, result.id, userId, {
+    characterId: char.id,
+  });
   await interaction.editReply({ content: `Signed up as **${char.name}**!` });
   await deps.updateEmbedSignupCount(eventId);
   return true;
@@ -264,10 +341,13 @@ async function signupWithoutCharacter(
 ): Promise<boolean> {
   await deps.signupsService.signup(eventId, userId);
   const clientUrl = process.env.CLIENT_URL ?? '';
-  const nudge = game.hasRoles && clientUrl
-    ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
-    : '';
-  await interaction.editReply({ content: `You're signed up for **${event.title}**!${nudge}` });
+  const nudge =
+    game.hasRoles && clientUrl
+      ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
+      : '';
+  await interaction.editReply({
+    content: `You're signed up for **${event.title}**!${nudge}`,
+  });
   await deps.updateEmbedSignupCount(eventId);
   return true;
 }
