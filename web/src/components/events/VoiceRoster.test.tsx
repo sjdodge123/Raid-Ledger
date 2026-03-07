@@ -28,31 +28,27 @@ function createParticipant(
   };
 }
 
-describe('VoiceRoster', () => {
-  // ── Empty state ─────────────────────────────────────────────────────────────
-
-  it('renders heading', () => {
+function voicerosterGroup1() {
+it('renders heading', () => {
     render(<VoiceRoster participants={[]} activeCount={0} />);
 
     expect(screen.getByText('Voice Channel Roster')).toBeInTheDocument();
   });
 
-  it('shows empty state when no participants', () => {
+it('shows empty state when no participants', () => {
     render(<VoiceRoster participants={[]} activeCount={0} />);
 
     expect(screen.getByText('No participants yet')).toBeInTheDocument();
   });
 
-  it('does not show "In Channel" or "Left" sections when roster is empty', () => {
+it('does not show "In Channel" or "Left" sections when roster is empty', () => {
     render(<VoiceRoster participants={[]} activeCount={0} />);
 
     expect(screen.queryByText(/In Channel/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Left/)).not.toBeInTheDocument();
   });
 
-  // ── Active/total count display ─────────────────────────────────────────────
-
-  it('shows active/total count summary', () => {
+it('shows active/total count summary', () => {
     const participants = [
       createParticipant({ id: 'p1', discordUsername: 'Player1' }),
       createParticipant({ id: 'p2', discordUsername: 'Player2', leftAt: '2026-03-01T18:30:00Z', totalDurationSeconds: 1800 }),
@@ -63,15 +59,16 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('1 active / 2 total')).toBeInTheDocument();
   });
 
-  it('shows 0 active / 0 total for empty roster', () => {
+}
+
+function voicerosterGroup2() {
+it('shows 0 active / 0 total for empty roster', () => {
     render(<VoiceRoster participants={[]} activeCount={0} />);
 
     expect(screen.getByText('0 active / 0 total')).toBeInTheDocument();
   });
 
-  // ── Active vs left sections ───────────────────────────────────────────────
-
-  it('renders active and left participants in separate sections', () => {
+it('renders active and left participants in separate sections', () => {
     const active = createParticipant({ id: 'p-active', discordUsername: 'ActivePlayer' });
     const left = createParticipant({
       id: 'p-left',
@@ -88,7 +85,10 @@ describe('VoiceRoster', () => {
     expect(screen.getByText(/Left \(1\)/)).toBeInTheDocument();
   });
 
-  it('does not show "In Channel" section when all participants have left', () => {
+}
+
+function voicerosterGroup3() {
+it('does not show "In Channel" section when all participants have left', () => {
     const left = createParticipant({
       leftAt: '2026-03-01T18:30:00Z',
       totalDurationSeconds: 1800,
@@ -100,7 +100,7 @@ describe('VoiceRoster', () => {
     expect(screen.getByText(/Left \(1\)/)).toBeInTheDocument();
   });
 
-  it('does not show "Left" section when all participants are still active', () => {
+it('does not show "Left" section when all participants are still active', () => {
     const active = createParticipant({ leftAt: null });
 
     render(<VoiceRoster participants={[active]} activeCount={1} />);
@@ -109,9 +109,10 @@ describe('VoiceRoster', () => {
     expect(screen.queryByText(/^Left/)).not.toBeInTheDocument();
   });
 
-  // ── Avatar display ─────────────────────────────────────────────────────────
+}
 
-  it('renders discord avatar image when discordAvatarHash is present', () => {
+function voicerosterGroup4() {
+it('renders discord avatar image when discordAvatarHash is present', () => {
     const withAvatar = createParticipant({
       discordAvatarHash: 'abc123',
       discordUserId: 'discord-avatar',
@@ -126,7 +127,7 @@ describe('VoiceRoster', () => {
     expect(img?.src).toContain('cdn.discordapp.com/avatars/discord-avatar/abc123');
   });
 
-  it('renders fallback initial when no avatar hash', () => {
+it('renders fallback initial when no avatar hash', () => {
     const noAvatar = createParticipant({
       discordAvatarHash: null,
       discordUsername: 'NoAvatarUser',
@@ -137,7 +138,10 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('N')).toBeInTheDocument();
   });
 
-  it('uses uppercase first letter of username for fallback avatar', () => {
+}
+
+function voicerosterGroup5() {
+it('uses uppercase first letter of username for fallback avatar', () => {
     const noAvatar = createParticipant({
       discordAvatarHash: null,
       discordUsername: 'zen',
@@ -148,9 +152,7 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('Z')).toBeInTheDocument();
   });
 
-  // ── Guest label ───────────────────────────────────────────────────────────
-
-  it('shows "(guest)" label for participants with no userId (unlinked)', () => {
+it('shows "(guest)" label for participants with no userId (unlinked)', () => {
     const guest = createParticipant({ userId: null, discordUsername: 'GuestUser' });
 
     render(<VoiceRoster participants={[guest]} activeCount={1} />);
@@ -158,7 +160,7 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('(guest)')).toBeInTheDocument();
   });
 
-  it('does not show "(guest)" for participants with userId', () => {
+it('does not show "(guest)" for participants with userId', () => {
     const linked = createParticipant({ userId: 99, discordUsername: 'LinkedUser' });
 
     render(<VoiceRoster participants={[linked]} activeCount={1} />);
@@ -166,9 +168,10 @@ describe('VoiceRoster', () => {
     expect(screen.queryByText('(guest)')).not.toBeInTheDocument();
   });
 
-  // ── Join time display ─────────────────────────────────────────────────────
+}
 
-  it('shows join time for participants', () => {
+function voicerosterGroup6() {
+it('shows join time for participants', () => {
     const p = createParticipant({ joinedAt: '2026-03-01T18:00:00Z' });
 
     render(<VoiceRoster participants={[p]} activeCount={1} />);
@@ -176,9 +179,7 @@ describe('VoiceRoster', () => {
     expect(screen.getByText(/joined/)).toBeInTheDocument();
   });
 
-  // ── Duration formatting ───────────────────────────────────────────────────
-
-  it('shows formatted duration for participants with totalDurationSeconds', () => {
+it('shows formatted duration for participants with totalDurationSeconds', () => {
     const withDuration = createParticipant({
       leftAt: '2026-03-01T19:30:00Z',
       totalDurationSeconds: 5400, // 1h 30m
@@ -189,7 +190,7 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('1h 30m')).toBeInTheDocument();
   });
 
-  it('formats duration less than 1 minute as "<1m"', () => {
+it('formats duration less than 1 minute as "<1m"', () => {
     const p = createParticipant({
       leftAt: '2026-03-01T18:00:30Z',
       totalDurationSeconds: 30,
@@ -200,7 +201,10 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });
 
-  it('formats zero duration as "<1m"', () => {
+}
+
+function voicerosterGroup7() {
+it('formats zero duration as "<1m"', () => {
     const p = createParticipant({
       leftAt: '2026-03-01T18:00:00Z',
       totalDurationSeconds: 0,
@@ -211,7 +215,7 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });
 
-  it('formats duration in whole minutes when under 1 hour', () => {
+it('formats duration in whole minutes when under 1 hour', () => {
     const p = createParticipant({
       leftAt: '2026-03-01T18:45:00Z',
       totalDurationSeconds: 2700, // 45m
@@ -222,7 +226,10 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('45m')).toBeInTheDocument();
   });
 
-  it('formats exact hour without minutes', () => {
+}
+
+function voicerosterGroup8() {
+it('formats exact hour without minutes', () => {
     const p = createParticipant({
       leftAt: '2026-03-01T19:00:00Z',
       totalDurationSeconds: 3600, // 1h
@@ -233,7 +240,7 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('1h')).toBeInTheDocument();
   });
 
-  it('does not show duration when totalDurationSeconds is null', () => {
+it('does not show duration when totalDurationSeconds is null', () => {
     const p = createParticipant({ totalDurationSeconds: null });
 
     render(<VoiceRoster participants={[p]} activeCount={1} />);
@@ -243,9 +250,10 @@ describe('VoiceRoster', () => {
     expect(screen.queryByText(/^\d+h$/)).not.toBeInTheDocument();
   });
 
-  // ── Multiple participants ─────────────────────────────────────────────────
+}
 
-  it('renders all participants', () => {
+function voicerosterGroup9() {
+it('renders all participants', () => {
     const participants = [
       createParticipant({ id: 'p1', discordUsername: 'Alpha' }),
       createParticipant({ id: 'p2', discordUsername: 'Beta' }),
@@ -259,7 +267,10 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('Gamma')).toBeInTheDocument();
   });
 
-  it('handles many left participants without errors', () => {
+}
+
+function voicerosterGroup10() {
+it('handles many left participants without errors', () => {
     const participants = Array.from({ length: 10 }, (_, i) =>
       createParticipant({
         id: `p-left-${i}`,
@@ -275,4 +286,18 @@ describe('VoiceRoster', () => {
 
     expect(screen.getByText(/Left \(10\)/)).toBeInTheDocument();
   });
+
+}
+
+describe('VoiceRoster', () => {
+    voicerosterGroup1();
+    voicerosterGroup2();
+    voicerosterGroup3();
+    voicerosterGroup4();
+    voicerosterGroup5();
+    voicerosterGroup6();
+    voicerosterGroup7();
+    voicerosterGroup8();
+    voicerosterGroup9();
+    voicerosterGroup10();
 });

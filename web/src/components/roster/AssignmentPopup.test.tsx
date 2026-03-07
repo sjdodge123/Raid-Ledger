@@ -131,7 +131,7 @@ describe('AssignmentPopup', () => {
         expect(screen.queryByText('HealPlayer')).not.toBeInTheDocument();
     });
 
-    it('shows "Remove to Unassigned" for filled slots', () => {
+    function testShowsRemoveToUnassignedFor() {
         const occupant: RosterAssignmentResponse = {
             id: 1,
             signupId: 10,
@@ -167,7 +167,9 @@ describe('AssignmentPopup', () => {
 
         expect(screen.getByText('Unassign')).toBeInTheDocument();
         expect(screen.getByText('OccupantPlayer')).toBeInTheDocument();
-    });
+    
+    }
+    it('shows "Remove to Unassigned" for filled slots', () => { testShowsRemoveToUnassignedFor(); });
 
     it('calls onAssign when clicking Assign button', () => {
         renderWithRouter(
@@ -410,8 +412,7 @@ describe('AssignmentPopup', () => {
 
 // ========== ROK-486: Generic roster — character modal skip ==========
 
-describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
-    const makePlayer = (overrides: Partial<RosterAssignmentResponse> = {}): RosterAssignmentResponse => ({
+const makePlayer = (overrides: Partial<RosterAssignmentResponse> = {}): RosterAssignmentResponse => ({
         id: 0,
         signupId: 1,
         userId: 101,
@@ -424,27 +425,16 @@ describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
         character: null,
         ...overrides,
     });
-
-    const baseProps = {
+const baseProps = {
         isOpen: true,
         onClose: vi.fn(),
         eventId: 42,
         slotRole: 'player' as RosterRole,
         slotPosition: 1,
     };
-
-    let mockOnAssign: ReturnType<typeof vi.fn>;
-
-    beforeEach(() => {
-        mockOnAssign = vi.fn();
-        vi.clearAllMocks();
-    });
-
-    // ----------------------------------------------------------------
-    // 1. isMMO=false (generic) — targeted mode: assign directly, no modal
-    // ----------------------------------------------------------------
-
-    it('targeted mode: directly calls onAssign without character modal when isMMO is false', () => {
+let mockOnAssign: ReturnType<typeof vi.fn>;
+function assignmentpopupROK486GenericRosterGroup1() {
+it('targeted mode: directly calls onAssign without character modal when isMMO is false', () => {
         const player = makePlayer();
         const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -469,11 +459,10 @@ describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
         expect(screen.queryByText(/Select Character/i)).not.toBeInTheDocument();
     });
 
-    // ----------------------------------------------------------------
-    // 2. isMMO=true (MMO) with gameId — targeted mode: character modal appears
-    // ----------------------------------------------------------------
+}
 
-    it('targeted mode: shows character selection step when isMMO is true and gameId is set', () => {
+function assignmentpopupROK486GenericRosterGroup2() {
+it('targeted mode: shows character selection step when isMMO is true and gameId is set', () => {
         const player = makePlayer({ userId: 101 });
         const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -499,11 +488,10 @@ describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
         expect(mockOnAssign).not.toHaveBeenCalled();
     });
 
-    // ----------------------------------------------------------------
-    // 3. Browse-all mode: generic roster skips character modal, opens slot picker
-    // ----------------------------------------------------------------
+}
 
-    it('browse-all mode: skips character modal and opens slot picker when isMMO is false', () => {
+function assignmentpopupROK486GenericRosterGroup3() {
+it('browse-all mode: skips character modal and opens slot picker when isMMO is false', () => {
         const player = makePlayer({ signupId: 7 });
         const availableSlots = [
             { role: 'player' as RosterRole, position: 1, label: 'Player', color: '' },
@@ -542,11 +530,10 @@ describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
         expect(mockOnAssign).not.toHaveBeenCalled();
     });
 
-    // ----------------------------------------------------------------
-    // 4. Browse-all mode: MMO with gameId still shows character modal first
-    // ----------------------------------------------------------------
+}
 
-    it('browse-all mode: shows character modal before slot picker when isMMO is true', () => {
+function assignmentpopupROK486GenericRosterGroup4() {
+it('browse-all mode: shows character modal before slot picker when isMMO is true', () => {
         const player = makePlayer({ signupId: 8, userId: 201 });
         const availableSlots = [
             { role: 'tank' as RosterRole, position: 1, label: 'Tank', color: '' },
@@ -581,11 +568,10 @@ describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
         expect(mockOnAssign).not.toHaveBeenCalled();
     });
 
-    // ----------------------------------------------------------------
-    // 5. Edge case: isMMO undefined — treated the same as false → skip modal
-    // ----------------------------------------------------------------
+}
 
-    it('targeted mode: skips character modal when isMMO is not passed (undefined)', () => {
+function assignmentpopupROK486GenericRosterGroup5() {
+it('targeted mode: skips character modal when isMMO is not passed (undefined)', () => {
         const player = makePlayer();
         const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -609,11 +595,10 @@ describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
         expect(screen.queryByText(/Select Character/i)).not.toBeInTheDocument();
     });
 
-    // ----------------------------------------------------------------
-    // 6. Edge case: gameId null + isMMO true — no gameId means skip modal
-    // ----------------------------------------------------------------
+}
 
-    it('targeted mode: skips character modal when gameId is absent even if isMMO is true', () => {
+function assignmentpopupROK486GenericRosterGroup6() {
+it('targeted mode: skips character modal when gameId is absent even if isMMO is true', () => {
         const player = makePlayer();
         const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -636,4 +621,19 @@ describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
         expect(mockOnAssign).toHaveBeenCalledWith(player.signupId);
         expect(screen.queryByText(/Select Character/i)).not.toBeInTheDocument();
     });
+
+}
+
+describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
+beforeEach(() => {
+        mockOnAssign = vi.fn();
+        vi.clearAllMocks();
+    });
+
+    assignmentpopupROK486GenericRosterGroup1();
+    assignmentpopupROK486GenericRosterGroup2();
+    assignmentpopupROK486GenericRosterGroup3();
+    assignmentpopupROK486GenericRosterGroup4();
+    assignmentpopupROK486GenericRosterGroup5();
+    assignmentpopupROK486GenericRosterGroup6();
 });

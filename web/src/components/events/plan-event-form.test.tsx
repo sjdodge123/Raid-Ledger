@@ -115,8 +115,61 @@ function renderForm() {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
+function planeventformRenderingGroup1() {
+it('should render the form', () => {
+        const { container } = renderForm();
+        expect(container.querySelector('form')).toBeTruthy();
+    });
+
+it('should render title input', () => {
+        renderForm();
+        expect(screen.getByPlaceholderText('Weekly Raid Night')).toBeTruthy();
+    });
+
+it('should render the "Start Poll" submit button', () => {
+        renderForm();
+        expect(screen.getByRole('button', { name: 'Start Poll' })).toBeTruthy();
+    });
+
+it('should render both poll mode buttons', () => {
+        renderForm();
+        expect(screen.getByRole('button', { name: 'Standard' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'All or Nothing' })).toBeTruthy();
+    });
+
+it('should show suggestions from useTimeSuggestions', () => {
+        renderForm();
+        expect(screen.getByText('Monday Mar 10, 6:00 PM')).toBeTruthy();
+        expect(screen.getByText('Tuesday Mar 11, 6:00 PM')).toBeTruthy();
+    });
+
+}
+
+function planeventformRenderingGroup2() {
+it('should show "Loading suggestions..." when isLoading is true', () => {
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: undefined,
+            isLoading: true,
+        });
+
+        renderForm();
+        expect(screen.getByText('Loading suggestions...')).toBeTruthy();
+    });
+
+it('should show "No suggestions available" when no suggestions', () => {
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: { source: 'fallback', interestedPlayerCount: 0, suggestions: [] },
+            isLoading: false,
+        });
+
+        renderForm();
+        expect(screen.getByText(/No suggestions available/)).toBeTruthy();
+    });
+
+}
+
 describe('PlanEventForm — rendering', () => {
-    beforeEach(() => {
+beforeEach(() => {
         vi.clearAllMocks();
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
             mutate: mockMutate,
@@ -128,56 +181,12 @@ describe('PlanEventForm — rendering', () => {
         });
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('should render the form', () => {
-        const { container } = renderForm();
-        expect(container.querySelector('form')).toBeTruthy();
-    });
-
-    it('should render title input', () => {
-        renderForm();
-        expect(screen.getByPlaceholderText('Weekly Raid Night')).toBeTruthy();
-    });
-
-    it('should render the "Start Poll" submit button', () => {
-        renderForm();
-        expect(screen.getByRole('button', { name: 'Start Poll' })).toBeTruthy();
-    });
-
-    it('should render both poll mode buttons', () => {
-        renderForm();
-        expect(screen.getByRole('button', { name: 'Standard' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'All or Nothing' })).toBeTruthy();
-    });
-
-    it('should show suggestions from useTimeSuggestions', () => {
-        renderForm();
-        expect(screen.getByText('Monday Mar 10, 6:00 PM')).toBeTruthy();
-        expect(screen.getByText('Tuesday Mar 11, 6:00 PM')).toBeTruthy();
-    });
-
-    it('should show "Loading suggestions..." when isLoading is true', () => {
-        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
-            data: undefined,
-            isLoading: true,
-        });
-
-        renderForm();
-        expect(screen.getByText('Loading suggestions...')).toBeTruthy();
-    });
-
-    it('should show "No suggestions available" when no suggestions', () => {
-        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
-            data: { source: 'fallback', interestedPlayerCount: 0, suggestions: [] },
-            isLoading: false,
-        });
-
-        renderForm();
-        expect(screen.getByText(/No suggestions available/)).toBeTruthy();
-    });
+    planeventformRenderingGroup1();
+    planeventformRenderingGroup2();
 });
 
 describe('PlanEventForm — poll mode selector', () => {
@@ -215,24 +224,8 @@ describe('PlanEventForm — poll mode selector', () => {
     });
 });
 
-describe('PlanEventForm — time slot selection', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
-            mutate: mockMutate,
-            isPending: false,
-        });
-        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
-            data: mockTimeSuggestions,
-            isLoading: false,
-        });
-    });
-
-    afterEach(() => {
-        activeQueryClient?.clear();
-    });
-
-    it('should add a time slot when a suggestion is clicked', () => {
+function planeventformTimeSlotSelectionGroup1() {
+it('should add a time slot when a suggestion is clicked', () => {
         renderForm();
         const firstSuggestion = screen.getByText('Monday Mar 10, 6:00 PM');
         fireEvent.click(firstSuggestion.closest('button')!);
@@ -241,7 +234,7 @@ describe('PlanEventForm — time slot selection', () => {
         expect(screen.getByText('Selected (1/9)')).toBeTruthy();
     });
 
-    it('should not allow adding the same slot twice', () => {
+it('should not allow adding the same slot twice', () => {
         renderForm();
         const btn = screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!;
 
@@ -252,7 +245,7 @@ describe('PlanEventForm — time slot selection', () => {
         expect(screen.getByText('Selected (1/9)')).toBeTruthy();
     });
 
-    it('should remove a time slot when remove button is clicked', () => {
+it('should remove a time slot when remove button is clicked', () => {
         renderForm();
         const suggestionBtn = screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!;
         fireEvent.click(suggestionBtn);
@@ -268,7 +261,10 @@ describe('PlanEventForm — time slot selection', () => {
         expect(screen.queryByText('Selected (1/9)')).toBeNull();
     });
 
-    it('should show "Selected (N/9)" count for selected slots', () => {
+}
+
+function planeventformTimeSlotSelectionGroup2() {
+it('should show "Selected (N/9)" count for selected slots', () => {
         renderForm();
 
         // Select both suggestions
@@ -280,10 +276,11 @@ describe('PlanEventForm — time slot selection', () => {
 
         expect(screen.getByText('Selected (2/9)')).toBeTruthy();
     });
-});
 
-describe('PlanEventForm — validation', () => {
-    beforeEach(() => {
+}
+
+describe('PlanEventForm — time slot selection', () => {
+beforeEach(() => {
         vi.clearAllMocks();
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
             mutate: mockMutate,
@@ -295,11 +292,16 @@ describe('PlanEventForm — validation', () => {
         });
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('should show validation error when title is empty on submit', () => {
+    planeventformTimeSlotSelectionGroup1();
+    planeventformTimeSlotSelectionGroup2();
+});
+
+function planeventformValidationGroup1() {
+it('should show validation error when title is empty on submit', () => {
         renderForm();
         const submitBtn = screen.getByRole('button', { name: 'Start Poll' });
         fireEvent.click(submitBtn);
@@ -307,7 +309,7 @@ describe('PlanEventForm — validation', () => {
         expect(screen.getByText('Title is required')).toBeTruthy();
     });
 
-    it('should show validation error when fewer than 2 time slots selected', () => {
+it('should show validation error when fewer than 2 time slots selected', () => {
         renderForm();
 
         // Fill in title
@@ -325,7 +327,10 @@ describe('PlanEventForm — validation', () => {
         expect(screen.getByText('Select at least 2 time options')).toBeTruthy();
     });
 
-    it('should not call mutate when validation fails', () => {
+}
+
+function planeventformValidationGroup2() {
+it('should not call mutate when validation fails', () => {
         renderForm();
 
         const submitBtn = screen.getByRole('button', { name: 'Start Poll' });
@@ -334,7 +339,10 @@ describe('PlanEventForm — validation', () => {
         expect(mockMutate).not.toHaveBeenCalled();
     });
 
-    it('should call mutate when form is valid', () => {
+}
+
+function planeventformValidationGroup3() {
+it('should call mutate when form is valid', () => {
         renderForm();
 
         // Fill in title
@@ -362,10 +370,11 @@ describe('PlanEventForm — validation', () => {
             expect.any(Object),
         );
     });
-});
 
-describe('PlanEventForm — submit behavior', () => {
-    beforeEach(() => {
+}
+
+describe('PlanEventForm — validation', () => {
+beforeEach(() => {
         vi.clearAllMocks();
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
             mutate: mockMutate,
@@ -377,11 +386,17 @@ describe('PlanEventForm — submit behavior', () => {
         });
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('should show "Posting Poll..." when isPending is true', () => {
+    planeventformValidationGroup1();
+    planeventformValidationGroup2();
+    planeventformValidationGroup3();
+});
+
+function planeventformSubmitBehaviorGroup1() {
+it('should show "Posting Poll..." when isPending is true', () => {
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
             mutate: mockMutate,
             isPending: true,
@@ -392,7 +407,7 @@ describe('PlanEventForm — submit behavior', () => {
         expect(screen.getByRole('button', { name: 'Posting Poll...' })).toBeTruthy();
     });
 
-    it('should disable submit button when isPending', () => {
+it('should disable submit button when isPending', () => {
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
             mutate: mockMutate,
             isPending: true,
@@ -404,7 +419,10 @@ describe('PlanEventForm — submit behavior', () => {
         expect(submitBtn).toBeDisabled();
     });
 
-    it('should include pollMode in submitted DTO', () => {
+}
+
+function planeventformSubmitBehaviorGroup2() {
+it('should include pollMode in submitted DTO', () => {
         renderForm();
 
         // Fill required fields
@@ -427,7 +445,10 @@ describe('PlanEventForm — submit behavior', () => {
         );
     });
 
-    it('should navigate to /events on successful creation via onSuccess callback', () => {
+}
+
+function planeventformSubmitBehaviorGroup3() {
+it('should navigate to /events on successful creation via onSuccess callback', () => {
         let capturedCallbacks: { onSuccess?: () => void } = {};
 
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -453,7 +474,10 @@ describe('PlanEventForm — submit behavior', () => {
         expect(mockNavigate).toHaveBeenCalledWith('/events');
     });
 
-    it('should navigate to /events when Cancel button clicked', () => {
+}
+
+function planeventformSubmitBehaviorGroup4() {
+it('should navigate to /events when Cancel button clicked', () => {
         renderForm();
 
         const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
@@ -461,38 +485,49 @@ describe('PlanEventForm — submit behavior', () => {
 
         expect(mockNavigate).toHaveBeenCalledWith('/events');
     });
-});
 
-describe('PlanEventForm — custom time entry', () => {
-    beforeEach(() => {
+}
+
+describe('PlanEventForm — submit behavior', () => {
+beforeEach(() => {
         vi.clearAllMocks();
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
             mutate: mockMutate,
             isPending: false,
         });
         (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
-            data: { source: 'fallback', interestedPlayerCount: 0, suggestions: [] },
+            data: mockTimeSuggestions,
             isLoading: false,
         });
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('should render the custom date and time inputs', () => {
+    planeventformSubmitBehaviorGroup1();
+    planeventformSubmitBehaviorGroup2();
+    planeventformSubmitBehaviorGroup3();
+    planeventformSubmitBehaviorGroup4();
+});
+
+function planeventformCustomTimeEntryGroup1() {
+it('should render the custom date and time inputs', () => {
         renderForm();
         expect(document.querySelector('input[type="date"]')).toBeTruthy();
         expect(document.querySelector('input[type="time"]')).toBeTruthy();
     });
 
-    it('should disable the Add button when date or time is missing', () => {
+it('should disable the Add button when date or time is missing', () => {
         renderForm();
         const addBtn = screen.getByRole('button', { name: 'Add' });
         expect(addBtn).toBeDisabled();
     });
 
-    it('should enable the Add button when both date and time are filled', () => {
+}
+
+function planeventformCustomTimeEntryGroup2() {
+it('should enable the Add button when both date and time are filled', () => {
         renderForm();
 
         const dateInput = document.querySelector('input[type="date"]')!;
@@ -504,4 +539,26 @@ describe('PlanEventForm — custom time entry', () => {
         const addBtn = screen.getByRole('button', { name: 'Add' });
         expect(addBtn).not.toBeDisabled();
     });
+
+}
+
+describe('PlanEventForm — custom time entry', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+            mutate: mockMutate,
+            isPending: false,
+        });
+        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+            data: { source: 'fallback', interestedPlayerCount: 0, suggestions: [] },
+            isLoading: false,
+        });
+    });
+
+afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    planeventformCustomTimeEntryGroup1();
+    planeventformCustomTimeEntryGroup2();
 });

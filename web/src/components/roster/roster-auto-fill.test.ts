@@ -36,8 +36,8 @@ function mmoSlotCount(role: RosterRole): number {
 }
 
 describe('computeAutoFill', () => {
-    describe('ROK-539: flex player role priority (tank/healer before DPS)', () => {
-        it('slots player with [dps, healer] prefs into healer when healer slot is open', () => {
+    function rok539FlexPlayerRoleGroup1() {
+it('slots player with [dps, healer] prefs into healer when healer slot is open', () => {
             const pool = [
                 makePoolPlayer({
                     signupId: 1,
@@ -54,7 +54,10 @@ describe('computeAutoFill', () => {
             expect(assignment.position).toBe(1);
         });
 
-        it('slots player with [dps, healer] prefs into DPS when healer slots are full', () => {
+    }
+
+    function rok539FlexPlayerRoleGroup2() {
+it('slots player with [dps, healer] prefs into DPS when healer slots are full', () => {
             // Pre-fill all 4 healer slots
             const existingAssignments: RosterAssignmentResponse[] = [];
             for (let i = 1; i <= 4; i++) {
@@ -84,7 +87,10 @@ describe('computeAutoFill', () => {
             expect(newAssignment!.slot).toBe('dps');
         });
 
-        it('slots player with [dps, tank] prefs into tank when tank slot is open', () => {
+    }
+
+    function rok539FlexPlayerRoleGroup3() {
+it('slots player with [dps, tank] prefs into tank when tank slot is open', () => {
             const pool = [
                 makePoolPlayer({
                     signupId: 1,
@@ -100,7 +106,10 @@ describe('computeAutoFill', () => {
             expect(assignment.slot).toBe('tank');
         });
 
-        it('prefers tank over healer over DPS for a player with all three prefs', () => {
+    }
+
+    function rok539FlexPlayerRoleGroup4() {
+it('prefers tank over healer over DPS for a player with all three prefs', () => {
             const pool = [
                 makePoolPlayer({
                     signupId: 1,
@@ -116,7 +125,10 @@ describe('computeAutoFill', () => {
             expect(assignment.slot).toBe('tank');
         });
 
-        it('does not affect single-role preference players', () => {
+    }
+
+    function rok539FlexPlayerRoleGroup5() {
+it('does not affect single-role preference players', () => {
             const pool = [
                 makePoolPlayer({
                     signupId: 1,
@@ -132,7 +144,10 @@ describe('computeAutoFill', () => {
             expect(assignment.slot).toBe('dps');
         });
 
-        it('rigid players (1 pref) are seated before flex players (2+ prefs)', () => {
+    }
+
+    function rok539FlexPlayerRoleGroup6() {
+it('rigid players (1 pref) are seated before flex players (2+ prefs)', () => {
             const pool = [
                 makePoolPlayer({
                     signupId: 1,
@@ -156,5 +171,15 @@ describe('computeAutoFill', () => {
             // Flex player falls to next priority (healer slot still open, gets healer too)
             expect(player1!.slot).toBe('healer');
         });
+
+    }
+
+    describe('ROK-539: flex player role priority (tank/healer before DPS)', () => {
+        rok539FlexPlayerRoleGroup1();
+        rok539FlexPlayerRoleGroup2();
+        rok539FlexPlayerRoleGroup3();
+        rok539FlexPlayerRoleGroup4();
+        rok539FlexPlayerRoleGroup5();
+        rok539FlexPlayerRoleGroup6();
     });
 });

@@ -117,8 +117,8 @@ describe('AvatarPanel', () => {
         });
     });
 
-    describe('Avatar options display', () => {
-        it('does not render avatar grid when no options are available', () => {
+    function avatarOptionsDisplayGroup1() {
+it('does not render avatar grid when no options are available', () => {
             // User with no discord, no custom avatar, no characters
             const user = {
                 id: 1,
@@ -138,7 +138,10 @@ describe('AvatarPanel', () => {
             expect(screen.queryByText('Available Avatars')).not.toBeInTheDocument();
         });
 
-        it('renders Available Avatars section when options exist', () => {
+    }
+
+    function avatarOptionsDisplayGroup2() {
+it('renders Available Avatars section when options exist', () => {
             const user = {
                 ...mockUser,
                 customAvatarUrl: '/custom/avatar.jpg',
@@ -153,7 +156,10 @@ describe('AvatarPanel', () => {
             expect(screen.getByText('Available Avatars')).toBeInTheDocument();
         });
 
-        it('renders Custom label when user has customAvatarUrl', () => {
+    }
+
+    function avatarOptionsDisplayGroup3() {
+it('renders Custom label when user has customAvatarUrl', () => {
             const user = {
                 ...mockUser,
                 customAvatarUrl: '/custom/avatar.jpg',
@@ -168,13 +174,16 @@ describe('AvatarPanel', () => {
             expect(screen.getByText('Custom')).toBeInTheDocument();
         });
 
-        it('renders Discord label for linked discord account', () => {
+it('renders Discord label for linked discord account', () => {
             render(<AvatarPanel />, { wrapper: createWrapper() });
             // User has discordId '123456789' and avatar 'abc123' -> Discord option
             expect(screen.getByText('Discord')).toBeInTheDocument();
         });
 
-        it('renders character avatar options when characters have avatarUrl', () => {
+    }
+
+    function avatarOptionsDisplayGroup4() {
+it('renders character avatar options when characters have avatarUrl', () => {
             vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
                 data: {
                     data: [
@@ -190,10 +199,18 @@ describe('AvatarPanel', () => {
             // Jaina has no avatarUrl so should not appear
             expect(screen.queryByText('Jaina')).not.toBeInTheDocument();
         });
+
+    }
+
+    describe('Avatar options display', () => {
+        avatarOptionsDisplayGroup1();
+        avatarOptionsDisplayGroup2();
+        avatarOptionsDisplayGroup3();
+        avatarOptionsDisplayGroup4();
     });
 
-    describe('Avatar selection (ROK-352)', () => {
-        it('calls updatePreference when a thumbnail is clicked', () => {
+    function avatarSelectionROK352Group1() {
+it('calls updatePreference when a thumbnail is clicked', () => {
             const user = {
                 ...mockUser,
                 customAvatarUrl: '/custom/avatar.jpg',
@@ -217,7 +234,10 @@ describe('AvatarPanel', () => {
             }
         });
 
-        it('calls updatePreference with characterName for character avatar', () => {
+    }
+
+    function avatarSelectionROK352Group2() {
+it('calls updatePreference with characterName for character avatar', () => {
             vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
                 data: {
                     data: [
@@ -241,15 +261,20 @@ describe('AvatarPanel', () => {
             }
         });
 
+    }
+
+    describe('Avatar selection (ROK-352)', () => {
+        avatarSelectionROK352Group1();
+        avatarSelectionROK352Group2();
     });
 
-    describe('Upload custom button', () => {
-        it('renders Upload Custom button', () => {
+    function uploadCustomButtonGroup1() {
+it('renders Upload Custom button', () => {
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Upload Custom')).toBeInTheDocument();
         });
 
-        it('shows uploading progress text when isUploading is true', () => {
+it('shows uploading progress text when isUploading is true', () => {
             vi.spyOn(useAvatarUploadHook, 'useAvatarUpload').mockReturnValue({
                 upload: mockUpload,
                 deleteAvatar: mockDeleteAvatar,
@@ -261,7 +286,10 @@ describe('AvatarPanel', () => {
             expect(screen.getByText('Uploading 42%')).toBeInTheDocument();
         });
 
-        it('renders Remove Custom button when user has customAvatarUrl', () => {
+    }
+
+    function uploadCustomButtonGroup2() {
+it('renders Remove Custom button when user has customAvatarUrl', () => {
             const user = {
                 ...mockUser,
                 customAvatarUrl: '/custom/avatar.jpg',
@@ -276,10 +304,16 @@ describe('AvatarPanel', () => {
             expect(screen.getByText('Remove Custom')).toBeInTheDocument();
         });
 
-        it('does not render Remove Custom button when user has no customAvatarUrl', () => {
+it('does not render Remove Custom button when user has no customAvatarUrl', () => {
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.queryByText('Remove Custom')).not.toBeInTheDocument();
         });
+
+    }
+
+    describe('Upload custom button', () => {
+        uploadCustomButtonGroup1();
+        uploadCustomButtonGroup2();
     });
 
     describe('Preview image', () => {

@@ -80,8 +80,8 @@ describe('StartupGate', () => {
 
     });
 
-    describe('"Taking longer than usual" after 30 seconds', () => {
-        it('shows "Starting up..." before 30 seconds', () => {
+    function takingLongerThanUsualAfterGroup1() {
+it('shows "Starting up..." before 30 seconds', () => {
             setStoreState({ status: 'checking', hasBeenOnline: false });
 
             render(
@@ -98,7 +98,10 @@ describe('StartupGate', () => {
             expect(screen.queryByText('Taking longer than usual...')).not.toBeInTheDocument();
         });
 
-        it('shows "Taking longer than usual..." after 30 seconds', () => {
+    }
+
+    function takingLongerThanUsualAfterGroup2() {
+it('shows "Taking longer than usual..." after 30 seconds', () => {
             setStoreState({ status: 'checking', hasBeenOnline: false });
 
             render(
@@ -115,7 +118,10 @@ describe('StartupGate', () => {
             expect(screen.queryByText('Starting up...')).not.toBeInTheDocument();
         });
 
-        it('shows "Retry now" button after 30 seconds', () => {
+    }
+
+    function takingLongerThanUsualAfterGroup3() {
+it('shows "Retry now" button after 30 seconds', () => {
             setStoreState({ status: 'checking', hasBeenOnline: false });
 
             render(
@@ -131,7 +137,10 @@ describe('StartupGate', () => {
             expect(screen.getByRole('button', { name: 'Retry now' })).toBeInTheDocument();
         });
 
-        it('does NOT show "Retry now" button before 30 seconds', () => {
+    }
+
+    function takingLongerThanUsualAfterGroup4() {
+it('does NOT show "Retry now" button before 30 seconds', () => {
             setStoreState({ status: 'checking', hasBeenOnline: false });
 
             render(
@@ -146,6 +155,14 @@ describe('StartupGate', () => {
 
             expect(screen.queryByRole('button', { name: 'Retry now' })).not.toBeInTheDocument();
         });
+
+    }
+
+    describe('"Taking longer than usual" after 30 seconds', () => {
+        takingLongerThanUsualAfterGroup1();
+        takingLongerThanUsualAfterGroup2();
+        takingLongerThanUsualAfterGroup3();
+        takingLongerThanUsualAfterGroup4();
     });
 
     describe('bypass for auth callback routes', () => {

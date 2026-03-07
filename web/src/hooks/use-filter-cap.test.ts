@@ -77,8 +77,8 @@ describe('useFilterCap', () => {
         });
     });
 
-    describe('minimum of 3', () => {
-        it('enforces minimum of 3 when available space is tiny', () => {
+    function minimumOf3Group1() {
+it('enforces minimum of 3 when available space is tiny', () => {
             // Very short sidebar — spaceForItems would be negative
             const el = document.createElement('div');
             Object.defineProperty(el, 'clientHeight', { value: 100, configurable: true });
@@ -89,7 +89,7 @@ describe('useFilterCap', () => {
             expect(result.current).toBe(3);
         });
 
-        it('enforces minimum of 3 when sidebar height is 0', () => {
+it('enforces minimum of 3 when sidebar height is 0', () => {
             const el = document.createElement('div');
             Object.defineProperty(el, 'clientHeight', { value: 0, configurable: true });
 
@@ -99,7 +99,10 @@ describe('useFilterCap', () => {
             expect(result.current).toBe(3);
         });
 
-        it('returns exactly 3 when space yields floor of 1', () => {
+    }
+
+    function minimumOf3Group2() {
+it('returns exactly 3 when space yields floor of 1', () => {
             // Space that yields fewer than 3 items: e.g. overhead = 496, item_height = 44
             // To get 2 items: need space = 2 * 44 = 88 → sidebarHeight = 88 + 496 = 584
             const overhead = MINI_CALENDAR_HEIGHT + QUICK_ACTIONS_HEIGHT + GAPS_AND_PADDING + FILTER_HEADER_HEIGHT + FILTER_SECTION_PADDING;
@@ -115,7 +118,7 @@ describe('useFilterCap', () => {
             expect(result.current).toBe(3);
         });
 
-        it('returns 3 exactly when space yields 3 items', () => {
+it('returns 3 exactly when space yields 3 items', () => {
             const overhead = MINI_CALENDAR_HEIGHT + QUICK_ACTIONS_HEIGHT + GAPS_AND_PADDING + FILTER_HEADER_HEIGHT + FILTER_SECTION_PADDING;
             const sidebarHeight = overhead + 3 * FILTER_ITEM_HEIGHT; // exactly 3 items
 
@@ -128,7 +131,10 @@ describe('useFilterCap', () => {
             expect(result.current).toBe(3);
         });
 
-        it('returns more than 3 when space allows', () => {
+    }
+
+    function minimumOf3Group3() {
+it('returns more than 3 when space allows', () => {
             const overhead = MINI_CALENDAR_HEIGHT + QUICK_ACTIONS_HEIGHT + GAPS_AND_PADDING + FILTER_HEADER_HEIGHT + FILTER_SECTION_PADDING;
             const sidebarHeight = overhead + 10 * FILTER_ITEM_HEIGHT;
 
@@ -140,10 +146,17 @@ describe('useFilterCap', () => {
 
             expect(result.current).toBe(10);
         });
+
+    }
+
+    describe('minimum of 3', () => {
+        minimumOf3Group1();
+        minimumOf3Group2();
+        minimumOf3Group3();
     });
 
-    describe('ResizeObserver integration', () => {
-        it('creates a ResizeObserver and observes the element', () => {
+    function resizeobserverIntegrationGroup1() {
+it('creates a ResizeObserver and observes the element', () => {
             const el = document.createElement('div');
             Object.defineProperty(el, 'clientHeight', { value: 800, configurable: true });
 
@@ -153,7 +166,7 @@ describe('useFilterCap', () => {
             expect(mockObserve).toHaveBeenCalledWith(el);
         });
 
-        it('calls disconnect on unmount', () => {
+it('calls disconnect on unmount', () => {
             const el = document.createElement('div');
             Object.defineProperty(el, 'clientHeight', { value: 800, configurable: true });
 
@@ -165,7 +178,10 @@ describe('useFilterCap', () => {
             expect(mockDisconnect).toHaveBeenCalled();
         });
 
-        it('recalculates maxVisible when ResizeObserver fires', () => {
+    }
+
+    function resizeobserverIntegrationGroup2() {
+it('recalculates maxVisible when ResizeObserver fires', () => {
             const el = document.createElement('div');
             Object.defineProperty(el, 'clientHeight', { value: 800, configurable: true });
 
@@ -184,7 +200,10 @@ describe('useFilterCap', () => {
             expect(result.current).toBe(computeExpected(1200));
         });
 
-        it('recalculates to minimum 3 when resized to tiny height', () => {
+    }
+
+    function resizeobserverIntegrationGroup3() {
+it('recalculates to minimum 3 when resized to tiny height', () => {
             const el = document.createElement('div');
             Object.defineProperty(el, 'clientHeight', { value: 800, configurable: true });
 
@@ -199,7 +218,10 @@ describe('useFilterCap', () => {
             expect(result.current).toBe(3);
         });
 
-        it('updates maxVisible on multiple resize events', () => {
+    }
+
+    function resizeobserverIntegrationGroup4() {
+it('updates maxVisible on multiple resize events', () => {
             const el = document.createElement('div');
             Object.defineProperty(el, 'clientHeight', { value: 600, configurable: true });
 
@@ -222,6 +244,14 @@ describe('useFilterCap', () => {
 
             expect(result.current).toBe(computeExpected(400));
         });
+
+    }
+
+    describe('ResizeObserver integration', () => {
+        resizeobserverIntegrationGroup1();
+        resizeobserverIntegrationGroup2();
+        resizeobserverIntegrationGroup3();
+        resizeobserverIntegrationGroup4();
     });
 
     describe('calculation correctness', () => {

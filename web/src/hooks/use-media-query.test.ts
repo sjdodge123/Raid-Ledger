@@ -2,39 +2,15 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useMediaQuery } from './use-media-query';
 
-describe('useMediaQuery', () => {
-    let mockMatchMedia: ReturnType<typeof vi.fn>;
-    let listeners: Array<() => void>;
-
-    beforeEach(() => {
-        listeners = [];
-        mockMatchMedia = vi.fn((query: string) => ({
-            matches: false,
-            media: query,
-            addEventListener: vi.fn((_event: string, listener: () => void) => {
-                listeners.push(listener);
-            }),
-            removeEventListener: vi.fn((_event: string, listener: () => void) => {
-                const index = listeners.indexOf(listener);
-                if (index > -1) {
-                    listeners.splice(index, 1);
-                }
-            }),
-        }));
-        window.matchMedia = mockMatchMedia as unknown as typeof window.matchMedia;
-    });
-
-    afterEach(() => {
-        vi.clearAllMocks();
-        listeners = [];
-    });
-
-    it('returns false when media query does not match', () => {
+let mockMatchMedia: ReturnType<typeof vi.fn>;
+let listeners: Array<() => void>;
+function usemediaqueryGroup1() {
+it('returns false when media query does not match', () => {
         const { result } = renderHook(() => useMediaQuery('(max-width: 767px)'));
         expect(result.current).toBe(false);
     });
 
-    it('returns true when media query matches', () => {
+it('returns true when media query matches', () => {
         mockMatchMedia.mockReturnValue({
             matches: true,
             media: '(max-width: 767px)',
@@ -45,20 +21,26 @@ describe('useMediaQuery', () => {
         expect(result.current).toBe(true);
     });
 
-    it('subscribes to media query changes', () => {
+it('subscribes to media query changes', () => {
         renderHook(() => useMediaQuery('(max-width: 767px)'));
         expect(mockMatchMedia).toHaveBeenCalledWith('(max-width: 767px)');
         expect(listeners.length).toBe(1);
     });
 
-    it('unsubscribes on unmount', () => {
+}
+
+function usemediaqueryGroup2() {
+it('unsubscribes on unmount', () => {
         const { unmount } = renderHook(() => useMediaQuery('(max-width: 767px)'));
         expect(listeners.length).toBe(1);
         unmount();
         expect(listeners.length).toBe(0);
     });
 
-    it('updates when media query match changes', () => {
+}
+
+function usemediaqueryGroup3() {
+it('updates when media query match changes', () => {
         let currentMatches = false;
         mockMatchMedia.mockImplementation((query: string) => ({
             matches: currentMatches,
@@ -86,7 +68,10 @@ describe('useMediaQuery', () => {
         expect(result.current).toBe(true);
     });
 
-    it('handles different query strings', () => {
+}
+
+function usemediaqueryGroup4() {
+it('handles different query strings', () => {
         const queries = [
             '(max-width: 767px)',
             '(min-width: 768px)',
@@ -101,13 +86,16 @@ describe('useMediaQuery', () => {
         });
     });
 
-    it('returns false for server-side rendering (getServerSnapshot)', () => {
+it('returns false for server-side rendering (getServerSnapshot)', () => {
         // Server snapshot should always return false
         const { result } = renderHook(() => useMediaQuery('(max-width: 767px)'));
         expect(result.current).toBe(false);
     });
 
-    it('recreates subscription when query changes', () => {
+}
+
+function usemediaqueryGroup5() {
+it('recreates subscription when query changes', () => {
         const { rerender, unmount } = renderHook(
             ({ query }) => useMediaQuery(query),
             { initialProps: { query: '(max-width: 767px)' } }
@@ -123,4 +111,36 @@ describe('useMediaQuery', () => {
 
         unmount();
     });
+
+}
+
+describe('useMediaQuery', () => {
+beforeEach(() => {
+        listeners = [];
+        mockMatchMedia = vi.fn((query: string) => ({
+            matches: false,
+            media: query,
+            addEventListener: vi.fn((_event: string, listener: () => void) => {
+                listeners.push(listener);
+            }),
+            removeEventListener: vi.fn((_event: string, listener: () => void) => {
+                const index = listeners.indexOf(listener);
+                if (index > -1) {
+                    listeners.splice(index, 1);
+                }
+            }),
+        }));
+        window.matchMedia = mockMatchMedia as unknown as typeof window.matchMedia;
+    });
+
+afterEach(() => {
+        vi.clearAllMocks();
+        listeners = [];
+    });
+
+    usemediaqueryGroup1();
+    usemediaqueryGroup2();
+    usemediaqueryGroup3();
+    usemediaqueryGroup4();
+    usemediaqueryGroup5();
 });

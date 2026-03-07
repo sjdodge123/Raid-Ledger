@@ -65,12 +65,12 @@ function makePlugin(overrides: Partial<PluginInfoDto> & { slug: string; name: st
     };
 }
 
-describe('buildPluginIntegrationItems', () => {
-    it('returns empty array for empty plugin list', () => {
+function buildpluginintegrationitemsGroup1() {
+it('returns empty array for empty plugin list', () => {
         expect(buildPluginIntegrationItems([])).toHaveLength(0);
     });
 
-    it('skips plugins that are not active', () => {
+it('skips plugins that are not active', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
                 slug: 'wow',
@@ -82,7 +82,10 @@ describe('buildPluginIntegrationItems', () => {
         expect(buildPluginIntegrationItems(plugins)).toHaveLength(0);
     });
 
-    it('returns items for active plugin integrations', () => {
+}
+
+function buildpluginintegrationitemsGroup2() {
+it('returns items for active plugin integrations', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
                 slug: 'wow',
@@ -100,7 +103,10 @@ describe('buildPluginIntegrationItems', () => {
         expect(items[0].pluginSlug).toBe('wow');
     });
 
-    it('excludes Discord plugin from integration items (ROK-430: Discord has its own section)', () => {
+}
+
+function buildpluginintegrationitemsGroup3() {
+it('excludes Discord plugin from integration items (ROK-430: Discord has its own section)', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
                 slug: 'discord',
@@ -113,7 +119,10 @@ describe('buildPluginIntegrationItems', () => {
         expect(items).toHaveLength(0);
     });
 
-    it('sets newBadgeKey for plugin integration items', () => {
+}
+
+function buildpluginintegrationitemsGroup4() {
+it('sets newBadgeKey for plugin integration items', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
                 slug: 'wow',
@@ -126,7 +135,10 @@ describe('buildPluginIntegrationItems', () => {
         expect(items[0].newBadgeKey).toBe('integration-nav-seen:wow:bnet');
     });
 
-    it('returns offline status for unconfigured plugin integration', () => {
+}
+
+function buildpluginintegrationitemsGroup5() {
+it('returns offline status for unconfigured plugin integration', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
                 slug: 'wow',
@@ -139,7 +151,10 @@ describe('buildPluginIntegrationItems', () => {
         expect(items[0].status).toBe('offline');
     });
 
-    it('handles plugin with multiple integrations', () => {
+}
+
+function buildpluginintegrationitemsGroup6() {
+it('handles plugin with multiple integrations', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
                 slug: 'wow',
@@ -154,10 +169,20 @@ describe('buildPluginIntegrationItems', () => {
         const items = buildPluginIntegrationItems(plugins);
         expect(items).toHaveLength(2);
     });
+
+}
+
+describe('buildPluginIntegrationItems', () => {
+    buildpluginintegrationitemsGroup1();
+    buildpluginintegrationitemsGroup2();
+    buildpluginintegrationitemsGroup3();
+    buildpluginintegrationitemsGroup4();
+    buildpluginintegrationitemsGroup5();
+    buildpluginintegrationitemsGroup6();
 });
 
-describe('buildDiscordNavItems', () => {
-    it('returns 3 items when bot is offline: Overview, Authentication, Bot', () => {
+function builddiscordnavitemsGroup1() {
+it('returns 3 items when bot is offline: Overview, Authentication, Bot', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: false },
             { configured: false, loading: false },
@@ -166,7 +191,7 @@ describe('buildDiscordNavItems', () => {
         expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot']);
     });
 
-    it('returns 5 items when bot is connected: Overview, Authentication, Bot, Channels, Features', () => {
+it('returns 5 items when bot is connected: Overview, Authentication, Bot, Channels, Features', () => {
         const items = buildDiscordNavItems(
             { connected: true, connecting: false },
             { configured: true, loading: false },
@@ -175,7 +200,10 @@ describe('buildDiscordNavItems', () => {
         expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot', 'Channels', 'Features']);
     });
 
-    it('Authentication item shows online status when OAuth configured', () => {
+}
+
+function builddiscordnavitemsGroup2() {
+it('Authentication item shows online status when OAuth configured', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: false },
             { configured: true, loading: false },
@@ -184,7 +212,7 @@ describe('buildDiscordNavItems', () => {
         expect(auth.status).toBe('online');
     });
 
-    it('Authentication item shows offline status when OAuth not configured', () => {
+it('Authentication item shows offline status when OAuth not configured', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: false },
             { configured: false, loading: false },
@@ -193,7 +221,10 @@ describe('buildDiscordNavItems', () => {
         expect(auth.status).toBe('offline');
     });
 
-    it('Bot item shows online status when connected', () => {
+}
+
+function builddiscordnavitemsGroup3() {
+it('Bot item shows online status when connected', () => {
         const items = buildDiscordNavItems(
             { connected: true, connecting: false },
             { configured: true, loading: false },
@@ -202,7 +233,7 @@ describe('buildDiscordNavItems', () => {
         expect(bot.status).toBe('online');
     });
 
-    it('Bot item shows offline status when not connected', () => {
+it('Bot item shows offline status when not connected', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: false },
             { configured: false, loading: false },
@@ -211,7 +242,10 @@ describe('buildDiscordNavItems', () => {
         expect(bot.status).toBe('offline');
     });
 
-    it('Bot item shows loading status when connecting', () => {
+}
+
+function builddiscordnavitemsGroup4() {
+it('Bot item shows loading status when connecting', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: true },
             { configured: true, loading: false },
@@ -220,7 +254,7 @@ describe('buildDiscordNavItems', () => {
         expect(bot.status).toBe('loading');
     });
 
-    it('Channels and Features hidden when bot is offline', () => {
+it('Channels and Features hidden when bot is offline', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: false },
             { configured: true, loading: false },
@@ -228,17 +262,25 @@ describe('buildDiscordNavItems', () => {
         expect(items.find((i) => i.label === 'Channels')).toBeUndefined();
         expect(items.find((i) => i.label === 'Features')).toBeUndefined();
     });
+
+}
+
+describe('buildDiscordNavItems', () => {
+    builddiscordnavitemsGroup1();
+    builddiscordnavitemsGroup2();
+    builddiscordnavitemsGroup3();
+    builddiscordnavitemsGroup4();
 });
 
-describe('buildNavSections', () => {
-    it('returns exactly 2 sections when no Discord items: General and Integrations', () => {
+function buildnavsectionsGroup1() {
+it('returns exactly 2 sections when no Discord items: General and Integrations', () => {
         const sections = buildNavSections([], []);
         expect(sections).toHaveLength(2);
         expect(sections[0].id).toBe('general');
         expect(sections[1].id).toBe('integrations');
     });
 
-    it('returns 3 sections when Discord items provided', () => {
+it('returns 3 sections when Discord items provided', () => {
         const discordItems = buildDiscordNavItems(
             { connected: true, connecting: false },
             { configured: true, loading: false },
@@ -250,20 +292,23 @@ describe('buildNavSections', () => {
         expect(sections[2].id).toBe('integrations');
     });
 
-    it('General section has 6 items (including Demo Data and Logs)', () => {
+it('General section has 6 items (including Demo Data and Logs)', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
         expect(general.children).toHaveLength(6);
     });
 
-    it('Demo Data item is at index 2 (after Site Settings and User Management)', () => {
+}
+
+function buildnavsectionsGroup2() {
+it('Demo Data item is at index 2 (after Site Settings and User Management)', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
         expect(general.children[2].label).toBe('Demo Data');
         expect(general.children[2].to).toBe('/admin/settings/general/data');
     });
 
-    it('General section includes Site Settings, User Management, Scheduled Jobs, Backups, Logs', () => {
+it('General section includes Site Settings, User Management, Scheduled Jobs, Backups, Logs', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
         const labels = general.children.map((c) => c.label);
@@ -274,7 +319,10 @@ describe('buildNavSections', () => {
         expect(labels).toContain('Logs');
     });
 
-    it('Integrations section includes Manage Plugins at the end', () => {
+}
+
+function buildnavsectionsGroup3() {
+it('Integrations section includes Manage Plugins at the end', () => {
         const sections = buildNavSections([], []);
         const integrations = sections.find((s) => s.id === 'integrations')!;
         const last = integrations.children[integrations.children.length - 1];
@@ -282,7 +330,7 @@ describe('buildNavSections', () => {
         expect(last.to).toBe('/admin/settings/plugins');
     });
 
-    it('Integrations section includes provided core integration items', () => {
+it('Integrations section includes provided core integration items', () => {
         const coreItems = buildCoreIntegrationItems(allOfflineStatuses);
         const sections = buildNavSections(coreItems, []);
         const integrations = sections.find((s) => s.id === 'integrations')!;
@@ -290,7 +338,10 @@ describe('buildNavSections', () => {
         expect(labels).toContain('IGDB / Twitch');
     });
 
-    it('Integrations section includes plugin items before Manage Plugins', () => {
+}
+
+function buildnavsectionsGroup4() {
+it('Integrations section includes plugin items before Manage Plugins', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
                 slug: 'wow',
@@ -309,10 +360,22 @@ describe('buildNavSections', () => {
         expect(bnetIdx).toBeLessThan(pluginsIdx);
     });
 
-    it('General section has ≤7 core nav items', () => {
+}
+
+function buildnavsectionsGroup5() {
+it('General section has ≤7 core nav items', () => {
         const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), []);
         const general = sections.find((s) => s.id === 'general')!;
         expect(general.children.length).toBeLessThanOrEqual(7);
         expect(general.children.length).toBe(6);
     });
+
+}
+
+describe('buildNavSections', () => {
+    buildnavsectionsGroup1();
+    buildnavsectionsGroup2();
+    buildnavsectionsGroup3();
+    buildnavsectionsGroup4();
+    buildnavsectionsGroup5();
 });

@@ -182,8 +182,8 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
         });
     });
 
-    describe('Availability Data Preservation', () => {
-        it('renders slots passed to GameTimeGrid', () => {
+    function availabilityDataPreservationGroup1() {
+it('renders slots passed to GameTimeGrid', () => {
             vi.mocked(mockUseGameTimeEditor).mockReturnValue({
                 slots: [
                     { dayOfWeek: 0, hour: 18, status: 'available' },
@@ -218,7 +218,10 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(cell1.dataset.status).toBe('available');
         });
 
-        it('preserves committed slots', () => {
+    }
+
+    function availabilityDataPreservationGroup2() {
+it('preserves committed slots', () => {
             vi.mocked(mockUseGameTimeEditor).mockReturnValue({
                 slots: [
                     { dayOfWeek: 2, hour: 20, status: 'committed' },
@@ -248,7 +251,10 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(cell.dataset.status).toBe('committed');
         });
 
-        it('preserves blocked slots', () => {
+    }
+
+    function availabilityDataPreservationGroup3() {
+it('preserves blocked slots', () => {
             vi.mocked(mockUseGameTimeEditor).mockReturnValue({
                 slots: [
                     { dayOfWeek: 3, hour: 14, status: 'blocked' },
@@ -277,10 +283,17 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             const cell = screen.getByTestId('cell-3-14');
             expect(cell.dataset.status).toBe('blocked');
         });
+
+    }
+
+    describe('Availability Data Preservation', () => {
+        availabilityDataPreservationGroup1();
+        availabilityDataPreservationGroup2();
+        availabilityDataPreservationGroup3();
     });
 
-    describe('Profile Mode Rolling Override', () => {
-        it('forces rolling=false in profile mode even if rolling=true is passed', () => {
+    function profileModeRollingOverrideGroup1() {
+it('forces rolling=false in profile mode even if rolling=true is passed', () => {
             const mockEditor = {
                 slots: [],
                 handleChange: vi.fn(),
@@ -311,7 +324,10 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             );
         });
 
-        it('respects rolling prop in modal mode', () => {
+    }
+
+    function profileModeRollingOverrideGroup2() {
+it('respects rolling prop in modal mode', () => {
             vi.mocked(mockUseGameTimeEditor).mockReturnValue({
                 slots: [],
                 handleChange: vi.fn(),
@@ -340,23 +356,16 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 expect.objectContaining({ rolling: true }),
             );
         });
+
+    }
+
+    describe('Profile Mode Rolling Override', () => {
+        profileModeRollingOverrideGroup1();
+        profileModeRollingOverrideGroup2();
     });
 
-    describe('Mobile Responsive Behavior (ROK-340)', () => {
-        beforeEach(() => {
-            // Mock window.matchMedia for responsive tests
-            Object.defineProperty(window, 'matchMedia', {
-                writable: true,
-                value: vi.fn().mockImplementation(query => ({
-                    matches: false,
-                    media: query,
-                    addEventListener: vi.fn(),
-                    removeEventListener: vi.fn(),
-                })),
-            });
-        });
-
-        it('renders GameTimeGrid on desktop (>= 768px)', () => {
+    function mobileResponsiveBehaviorROK340Group1() {
+it('renders GameTimeGrid on desktop (>= 768px)', () => {
             // Mock desktop viewport
             window.matchMedia = vi.fn().mockImplementation(query => ({
                 matches: query === '(max-width: 767px)' ? false : true,
@@ -373,7 +382,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
         });
 
-        it('renders GameTimeMobileEditor on mobile (< 768px)', () => {
+it('renders GameTimeMobileEditor on mobile (< 768px)', () => {
             // Mock mobile viewport
             window.matchMedia = vi.fn().mockImplementation(query => ({
                 matches: query === '(max-width: 767px)' ? true : false,
@@ -390,7 +399,10 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
         });
 
-        it('mobile editor receives correct props in profile mode', () => {
+    }
+
+    function mobileResponsiveBehaviorROK340Group2() {
+it('mobile editor receives correct props in profile mode', () => {
             // Mock mobile viewport
             window.matchMedia = vi.fn().mockImplementation(query => ({
                 matches: query === '(max-width: 767px)' ? true : false,
@@ -426,7 +438,10 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(mobileEditor).toBeInTheDocument();
         });
 
-        it('mobile editor is read-only in picker mode', () => {
+    }
+
+    function mobileResponsiveBehaviorROK340Group3() {
+it('mobile editor is read-only in picker mode', () => {
             // Mock mobile viewport
             window.matchMedia = vi.fn().mockImplementation(query => ({
                 matches: query === '(max-width: 767px)' ? true : false,
@@ -450,7 +465,10 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(screen.queryByText('Morning')).not.toBeInTheDocument();
         });
 
-        it('mobile editor displays timezone label', () => {
+    }
+
+    function mobileResponsiveBehaviorROK340Group4() {
+it('mobile editor displays timezone label', () => {
             // Mock mobile viewport
             window.matchMedia = vi.fn().mockImplementation(query => ({
                 matches: query === '(max-width: 767px)' ? true : false,
@@ -485,7 +503,10 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(screen.getByText('PST')).toBeInTheDocument();
         });
 
-        it('breakpoint is exactly 767px (mobile) vs 768px (desktop)', () => {
+    }
+
+    function mobileResponsiveBehaviorROK340Group5() {
+it('breakpoint is exactly 767px (mobile) vs 768px (desktop)', () => {
             // The breakpoint should use max-width: 767px
             // This means 767px and below = mobile, 768px and above = desktop
 
@@ -512,5 +533,27 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             renderPanel({ mode: 'profile' });
             expect(screen.queryByTestId('game-time-grid')).toBeInTheDocument();
         });
+
+    }
+
+    describe('Mobile Responsive Behavior (ROK-340)', () => {
+beforeEach(() => {
+            // Mock window.matchMedia for responsive tests
+            Object.defineProperty(window, 'matchMedia', {
+                writable: true,
+                value: vi.fn().mockImplementation(query => ({
+                    matches: false,
+                    media: query,
+                    addEventListener: vi.fn(),
+                    removeEventListener: vi.fn(),
+                })),
+            });
+        });
+
+        mobileResponsiveBehaviorROK340Group1();
+        mobileResponsiveBehaviorROK340Group2();
+        mobileResponsiveBehaviorROK340Group3();
+        mobileResponsiveBehaviorROK340Group4();
+        mobileResponsiveBehaviorROK340Group5();
     });
 });

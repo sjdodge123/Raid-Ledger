@@ -70,52 +70,36 @@ vi.mock('../../hooks/use-admin-settings', () => ({
     }),
 }));
 
-describe('DiscordBotForm', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockDiscordBotStatus.data = null;
-        mockDiscordChannels.data = null;
-        mockDiscordDefaultChannel.data = null;
-        mockUpdateDiscordBot.isPending = false;
-        mockUpdateDiscordBot.mutateAsync = vi.fn();
-        mockTestDiscordBot.isPending = false;
-        mockTestDiscordBot.mutateAsync = vi.fn();
-        mockClearDiscordBot.isPending = false;
-        mockClearDiscordBot.mutateAsync = vi.fn();
-        mockCheckDiscordBotPermissions.isPending = false;
-        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
-        mockSetDiscordChannel.isPending = false;
-        mockSetDiscordChannel.mutateAsync = vi.fn();
-    });
-
-    // ── Basic rendering ───────────────────────────────────────────────────
-
-    it('renders bot token input', () => {
+function discordbotformGroup1() {
+it('renders bot token input', () => {
         render(<DiscordBotForm />);
         expect(screen.getByLabelText('Bot Token')).toBeInTheDocument();
     });
 
-    it('renders Save Configuration button', () => {
+it('renders Save Configuration button', () => {
         render(<DiscordBotForm />);
         expect(screen.getByRole('button', { name: 'Save Configuration' })).toBeInTheDocument();
     });
 
-    it('renders Enable Bot toggle', () => {
+it('renders Enable Bot toggle', () => {
         render(<DiscordBotForm />);
         expect(screen.getByRole('switch', { name: 'Enable Bot' })).toBeInTheDocument();
     });
 
-    it('renders setup instructions section', () => {
+it('renders setup instructions section', () => {
         render(<DiscordBotForm />);
         expect(screen.getByText(/Setup Instructions/)).toBeInTheDocument();
     });
 
-    it('bot token input is type=password by default', () => {
+it('bot token input is type=password by default', () => {
         render(<DiscordBotForm />);
         expect(screen.getByLabelText('Bot Token')).toHaveAttribute('type', 'password');
     });
 
-    it('toggles bot token visibility when eye icon button is clicked', () => {
+}
+
+function discordbotformGroup2() {
+it('toggles bot token visibility when eye icon button is clicked', () => {
         render(<DiscordBotForm />);
         const tokenInput = screen.getByLabelText('Bot Token') as HTMLInputElement;
         expect(tokenInput.type).toBe('password');
@@ -126,29 +110,30 @@ describe('DiscordBotForm', () => {
         expect(tokenInput.type).toBe('text');
     });
 
-    it('button label changes to "Hide token" after toggle', () => {
+it('button label changes to "Hide token" after toggle', () => {
         render(<DiscordBotForm />);
         const showBtn = screen.getByRole('button', { name: /Show token/ });
         fireEvent.click(showBtn);
         expect(screen.getByRole('button', { name: /Hide token/ })).toBeInTheDocument();
     });
 
-    // ── Save Configuration button state ───────────────────────────────────
-
-    it('shows "Saving..." when updateDiscordBot is pending', () => {
+it('shows "Saving..." when updateDiscordBot is pending', () => {
         mockUpdateDiscordBot.isPending = true;
         render(<DiscordBotForm />);
         expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
     });
 
-    it('does not submit form when bot token is empty', async () => {
+}
+
+function discordbotformGroup3() {
+it('does not submit form when bot token is empty', async () => {
         render(<DiscordBotForm />);
         const form = screen.getByLabelText('Bot Token').closest('form')!;
         fireEvent.submit(form);
         expect(mockUpdateDiscordBot.mutateAsync).not.toHaveBeenCalled();
     });
 
-    it('calls updateDiscordBot.mutateAsync with token and enabled when form submitted', async () => {
+it('calls updateDiscordBot.mutateAsync with token and enabled when form submitted', async () => {
         mockUpdateDiscordBot.mutateAsync.mockResolvedValueOnce({ success: true, message: 'Saved.' });
         render(<DiscordBotForm />);
 
@@ -165,21 +150,22 @@ describe('DiscordBotForm', () => {
         });
     });
 
-    // ── Test Connection button ─────────────────────────────────────────────
+}
 
-    it('does not show Test Connection button when not configured and no token typed', () => {
+function discordbotformGroup4() {
+it('does not show Test Connection button when not configured and no token typed', () => {
         mockDiscordBotStatus.data = { configured: false, connected: false };
         render(<DiscordBotForm />);
         expect(screen.queryByRole('button', { name: 'Test Connection' })).not.toBeInTheDocument();
     });
 
-    it('shows Test Connection button when configured', () => {
+it('shows Test Connection button when configured', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         render(<DiscordBotForm />);
         expect(screen.getByRole('button', { name: 'Test Connection' })).toBeInTheDocument();
     });
 
-    it('shows Test Connection button when user has typed a token', () => {
+it('shows Test Connection button when user has typed a token', () => {
         mockDiscordBotStatus.data = { configured: false, connected: false };
         render(<DiscordBotForm />);
 
@@ -189,14 +175,17 @@ describe('DiscordBotForm', () => {
         expect(screen.getByRole('button', { name: 'Test Connection' })).toBeInTheDocument();
     });
 
-    it('shows "Testing..." when testDiscordBot is pending', () => {
+}
+
+function discordbotformGroup5() {
+it('shows "Testing..." when testDiscordBot is pending', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         mockTestDiscordBot.isPending = true;
         render(<DiscordBotForm />);
         expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
     });
 
-    it('calls testDiscordBot.mutateAsync when Test Connection clicked', async () => {
+it('calls testDiscordBot.mutateAsync when Test Connection clicked', async () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         mockTestDiscordBot.mutateAsync.mockResolvedValueOnce({
             success: true,
@@ -211,21 +200,22 @@ describe('DiscordBotForm', () => {
         });
     });
 
-    // ── Clear button ──────────────────────────────────────────────────────
+}
 
-    it('does not show Clear button when not configured', () => {
+function discordbotformGroup6() {
+it('does not show Clear button when not configured', () => {
         mockDiscordBotStatus.data = { configured: false, connected: false };
         render(<DiscordBotForm />);
         expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
     });
 
-    it('shows Clear button when configured', () => {
+it('shows Clear button when configured', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         render(<DiscordBotForm />);
         expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
     });
 
-    it('does not call clearDiscordBot when confirm dialog is cancelled', () => {
+it('does not call clearDiscordBot when confirm dialog is cancelled', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         vi.spyOn(window, 'confirm').mockReturnValue(false);
         render(<DiscordBotForm />);
@@ -233,7 +223,10 @@ describe('DiscordBotForm', () => {
         expect(mockClearDiscordBot.mutateAsync).not.toHaveBeenCalled();
     });
 
-    it('calls clearDiscordBot when confirm dialog is accepted', async () => {
+}
+
+function discordbotformGroup7() {
+it('calls clearDiscordBot when confirm dialog is accepted', async () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         vi.spyOn(window, 'confirm').mockReturnValue(true);
         mockClearDiscordBot.mutateAsync.mockResolvedValueOnce({
@@ -249,23 +242,24 @@ describe('DiscordBotForm', () => {
         });
     });
 
-    // ── Enable Bot toggle ─────────────────────────────────────────────────
-
-    it('toggle defaults to enabled=true when status has no enabled field', () => {
+it('toggle defaults to enabled=true when status has no enabled field', () => {
         mockDiscordBotStatus.data = { configured: false, connected: false };
         render(<DiscordBotForm />);
         const toggle = screen.getByRole('switch', { name: 'Enable Bot' });
         expect(toggle).toHaveAttribute('aria-checked', 'true');
     });
 
-    it('toggle reflects enabled=false from status data', () => {
+}
+
+function discordbotformGroup8() {
+it('toggle reflects enabled=false from status data', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false, enabled: false };
         render(<DiscordBotForm />);
         const toggle = screen.getByRole('switch', { name: 'Enable Bot' });
         expect(toggle).toHaveAttribute('aria-checked', 'false');
     });
 
-    it('clicking toggle flips aria-checked value', () => {
+it('clicking toggle flips aria-checked value', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false, enabled: true };
         render(<DiscordBotForm />);
         const toggle = screen.getByRole('switch', { name: 'Enable Bot' });
@@ -276,16 +270,17 @@ describe('DiscordBotForm', () => {
         expect(toggle).toHaveAttribute('aria-checked', 'false');
     });
 
-    // ── Bot status indicator ──────────────────────────────────────────────
-
-    it('does not show bot status section when not configured', () => {
+it('does not show bot status section when not configured', () => {
         mockDiscordBotStatus.data = { configured: false, connected: false };
         render(<DiscordBotForm />);
         expect(screen.queryByText('Online')).not.toBeInTheDocument();
         expect(screen.queryByText('Offline')).not.toBeInTheDocument();
     });
 
-    it('shows "Online" status when bot is connected', () => {
+}
+
+function discordbotformGroup9() {
+it('shows "Online" status when bot is connected', () => {
         mockDiscordBotStatus.data = {
             configured: true,
             connected: true,
@@ -296,19 +291,22 @@ describe('DiscordBotForm', () => {
         expect(screen.getByText('Online')).toBeInTheDocument();
     });
 
-    it('shows "Offline" status when bot is configured but not connected', () => {
+it('shows "Offline" status when bot is configured but not connected', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         render(<DiscordBotForm />);
         expect(screen.getByText('Offline')).toBeInTheDocument();
     });
 
-    it('shows "Starting..." status when bot is connecting', () => {
+it('shows "Starting..." status when bot is connecting', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false, connecting: true };
         render(<DiscordBotForm />);
         expect(screen.getByText('Starting...')).toBeInTheDocument();
     });
 
-    it('shows guild name and member count when connected', () => {
+}
+
+function discordbotformGroup10() {
+it('shows guild name and member count when connected', () => {
         mockDiscordBotStatus.data = {
             configured: true,
             connected: true,
@@ -320,33 +318,64 @@ describe('DiscordBotForm', () => {
         expect(screen.getByText(/50 members/)).toBeInTheDocument();
     });
 
-    it('shows Test Permissions button when connected', () => {
+it('shows Test Permissions button when connected', () => {
         mockDiscordBotStatus.data = { configured: true, connected: true };
         render(<DiscordBotForm />);
         expect(screen.getByRole('button', { name: 'Test Permissions' })).toBeInTheDocument();
     });
 
-    it('does not show Test Permissions button when offline', () => {
+it('does not show Test Permissions button when offline', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         render(<DiscordBotForm />);
         expect(screen.queryByRole('button', { name: 'Test Permissions' })).not.toBeInTheDocument();
     });
 
-    // ── Channel selector ──────────────────────────────────────────────────
+}
 
-    it('does not show channel selector when not connected', () => {
+function discordbotformGroup11() {
+it('does not show channel selector when not connected', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         mockDiscordChannels.data = [{ id: '111', name: 'general' }];
         render(<DiscordBotForm />);
         expect(screen.queryByLabelText('Default Notification Channel')).not.toBeInTheDocument();
     });
 
-    it('does not show channel selector when channels list is empty', () => {
+it('does not show channel selector when channels list is empty', () => {
         mockDiscordBotStatus.data = { configured: true, connected: true };
         mockDiscordChannels.data = [];
         render(<DiscordBotForm />);
         expect(screen.queryByLabelText('Default Notification Channel')).not.toBeInTheDocument();
     });
 
-    // Channel selector tests moved to discord-panel (ROK-359: channel selector relocated to Channel Bindings tab)
+}
+
+describe('DiscordBotForm', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscordBotStatus.data = null;
+        mockDiscordChannels.data = null;
+        mockDiscordDefaultChannel.data = null;
+        mockUpdateDiscordBot.isPending = false;
+        mockUpdateDiscordBot.mutateAsync = vi.fn();
+        mockTestDiscordBot.isPending = false;
+        mockTestDiscordBot.mutateAsync = vi.fn();
+        mockClearDiscordBot.isPending = false;
+        mockClearDiscordBot.mutateAsync = vi.fn();
+        mockCheckDiscordBotPermissions.isPending = false;
+        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
+        mockSetDiscordChannel.isPending = false;
+        mockSetDiscordChannel.mutateAsync = vi.fn();
+    });
+
+    discordbotformGroup1();
+    discordbotformGroup2();
+    discordbotformGroup3();
+    discordbotformGroup4();
+    discordbotformGroup5();
+    discordbotformGroup6();
+    discordbotformGroup7();
+    discordbotformGroup8();
+    discordbotformGroup9();
+    discordbotformGroup10();
+    discordbotformGroup11();
 });

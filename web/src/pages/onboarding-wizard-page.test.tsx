@@ -164,13 +164,8 @@ function renderWithRouter(ui: React.ReactElement, initialEntries = ['/onboarding
     );
 }
 
-describe('OnboardingWizardPage', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockIsAdmin.mockReturnValue(false);
-    });
-
-    it('redirects admin users to calendar', () => {
+function onboardingwizardpageGroup1() {
+it('redirects admin users to calendar', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -187,7 +182,10 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByText('Calendar Page')).toBeInTheDocument();
     });
 
-    it('allows admin to access wizard with ?rerun=1', () => {
+}
+
+function onboardingwizardpageGroup2() {
+it('allows admin to access wizard with ?rerun=1', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -205,7 +203,10 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-    it('redirects users who already completed onboarding', () => {
+}
+
+function onboardingwizardpageGroup3() {
+it('redirects users who already completed onboarding', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -221,7 +222,10 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByText('Calendar Page')).toBeInTheDocument();
     });
 
-    it('allows re-run when ?rerun=1 even if onboarding completed', () => {
+}
+
+function onboardingwizardpageGroup4() {
+it('allows re-run when ?rerun=1 even if onboarding completed', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -239,7 +243,10 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-    it('renders wizard for new users with Discord (skips connect step)', () => {
+}
+
+function onboardingwizardpageGroup5() {
+it('renders wizard for new users with Discord (skips connect step)', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -258,7 +265,10 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByText(/what do you play\?/i)).toBeInTheDocument();
     });
 
-    it('shows connect step for local-auth user without Discord', () => {
+}
+
+function onboardingwizardpageGroup6() {
+it('shows connect step for local-auth user without Discord', () => {
         mockUseSystemStatus.mockReturnValue({
             data: { discordConfigured: true },
         });
@@ -280,7 +290,10 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
     });
 
-    it('shows Skip All button on non-final steps', () => {
+}
+
+function onboardingwizardpageGroup7() {
+it('shows Skip All button on non-final steps', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -296,7 +309,10 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByText(/skip all/i)).toBeInTheDocument();
     });
 
-    it('dismisses wizard on Escape key', async () => {
+}
+
+function onboardingwizardpageGroup8() {
+it('dismisses wizard on Escape key', async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -316,7 +332,10 @@ describe('OnboardingWizardPage', () => {
         });
     });
 
-    it('dismisses wizard on Skip All click', async () => {
+}
+
+function onboardingwizardpageGroup9() {
+it('dismisses wizard on Skip All click', async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -336,4 +355,21 @@ describe('OnboardingWizardPage', () => {
         });
     });
 
+}
+
+describe('OnboardingWizardPage', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
+    });
+
+    onboardingwizardpageGroup1();
+    onboardingwizardpageGroup2();
+    onboardingwizardpageGroup3();
+    onboardingwizardpageGroup4();
+    onboardingwizardpageGroup5();
+    onboardingwizardpageGroup6();
+    onboardingwizardpageGroup7();
+    onboardingwizardpageGroup8();
+    onboardingwizardpageGroup9();
 });

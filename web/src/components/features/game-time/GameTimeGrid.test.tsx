@@ -138,8 +138,7 @@ describe('GameTimeGrid', () => {
         expect(cells).toHaveLength(7 * 18);
     });
 
-    describe('event block overlays', () => {
-        const mockEvents = [
+const mockEvents = [
             {
                 eventId: 1,
                 title: 'Raid Night',
@@ -153,14 +152,14 @@ describe('GameTimeGrid', () => {
                 endHour: 21,
             },
         ];
-
-        it('renders event block overlays when events prop is provided', () => {
+    function eventBlockOverlaysGroup1() {
+it('renders event block overlays when events prop is provided', () => {
             render(<GameTimeGrid slots={[]} events={mockEvents} />);
             expect(screen.getByTestId('event-block-1-0')).toBeInTheDocument();
             expect(screen.getByText('Raid Night')).toBeInTheDocument();
         });
 
-        it('clicking event block calls onEventClick', () => {
+it('clicking event block calls onEventClick', () => {
             const onEventClick = vi.fn();
             render(<GameTimeGrid slots={[]} events={mockEvents} onEventClick={onEventClick} />);
 
@@ -169,13 +168,22 @@ describe('GameTimeGrid', () => {
             expect(onEventClick.mock.calls[0][0]).toMatchObject({ eventId: 1 });
         });
 
-        it('event blocks do not interfere with drag-to-paint', () => {
+    }
+
+    function eventBlockOverlaysGroup2() {
+it('event blocks do not interfere with drag-to-paint', () => {
             const onChange = vi.fn();
             render(<GameTimeGrid slots={[]} events={mockEvents} onChange={onChange} />);
 
             fireEvent.pointerDown(screen.getByTestId('cell-3-10'));
             expect(onChange).toHaveBeenCalledTimes(1);
         });
+
+    }
+
+    describe('event block overlays', () => {
+        eventBlockOverlaysGroup1();
+        eventBlockOverlaysGroup2();
     });
 
     describe('preview block overlays', () => {
@@ -207,8 +215,8 @@ describe('GameTimeGrid', () => {
         });
     });
 
-    describe('fullDayNames prop (ROK-301)', () => {
-        it('renders abbreviated day names by default', () => {
+    function fulldaynamesPropROK301Group1() {
+it('renders abbreviated day names by default', () => {
             render(<GameTimeGrid slots={[]} />);
 
             expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sun');
@@ -220,7 +228,7 @@ describe('GameTimeGrid', () => {
             expect(screen.getByTestId('day-header-6')).toHaveTextContent('Sat');
         });
 
-        it('renders full day names when fullDayNames=true', () => {
+it('renders full day names when fullDayNames=true', () => {
             render(<GameTimeGrid slots={[]} fullDayNames={true} />);
 
             expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sunday');
@@ -232,7 +240,10 @@ describe('GameTimeGrid', () => {
             expect(screen.getByTestId('day-header-6')).toHaveTextContent('Saturday');
         });
 
-        it('renders abbreviated day names when fullDayNames=false', () => {
+    }
+
+    function fulldaynamesPropROK301Group2() {
+it('renders abbreviated day names when fullDayNames=false', () => {
             render(<GameTimeGrid slots={[]} fullDayNames={false} />);
 
             expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sun');
@@ -240,7 +251,7 @@ describe('GameTimeGrid', () => {
             expect(screen.getByTestId('day-header-6')).toHaveTextContent('Sat');
         });
 
-        it('full day names work with weekStart dates', () => {
+it('full day names work with weekStart dates', () => {
             render(<GameTimeGrid slots={[]} fullDayNames={true} weekStart="2026-02-08" />);
 
             const header0 = screen.getByTestId('day-header-0');
@@ -248,6 +259,12 @@ describe('GameTimeGrid', () => {
             // Should also show the date (2/8)
             expect(header0).toHaveTextContent('2/8');
         });
+
+    }
+
+    describe('fullDayNames prop (ROK-301)', () => {
+        fulldaynamesPropROK301Group1();
+        fulldaynamesPropROK301Group2();
     });
 
     // === ROK-370: Fix reschedule modal grid click offset ===

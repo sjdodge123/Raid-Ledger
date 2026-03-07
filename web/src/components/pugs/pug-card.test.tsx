@@ -24,38 +24,41 @@ const createMockPug = (overrides: Partial<PugSlotResponseDto> = {}): PugSlotResp
 });
 
 describe('PugCard', () => {
-    describe('basic rendering', () => {
-        it('renders Discord username', () => {
+    function basicRenderingGroup1() {
+it('renders Discord username', () => {
             render(<PugCard pug={createMockPug()} />);
             expect(screen.getByText('testplayer')).toBeInTheDocument();
         });
 
-        it('renders Guest badge', () => {
+it('renders Guest badge', () => {
             render(<PugCard pug={createMockPug()} />);
             expect(screen.getByText('Guest')).toBeInTheDocument();
         });
 
-        it('renders status indicator', () => {
+it('renders status indicator', () => {
             render(<PugCard pug={createMockPug({ status: 'invited' })} />);
             expect(screen.getByText('Invited')).toBeInTheDocument();
         });
 
-        it('renders Pending status', () => {
+it('renders Pending status', () => {
             render(<PugCard pug={createMockPug({ status: 'pending' })} />);
             expect(screen.getByText('Pending')).toBeInTheDocument();
         });
 
-        it('renders Claimed status', () => {
+it('renders Claimed status', () => {
             render(<PugCard pug={createMockPug({ status: 'claimed' })} />);
             expect(screen.getByText('Claimed')).toBeInTheDocument();
         });
 
-        it('renders notes when provided', () => {
+    }
+
+    function basicRenderingGroup2() {
+it('renders notes when provided', () => {
             render(<PugCard pug={createMockPug({ notes: 'Needs summon' })} />);
             expect(screen.getByText('Needs summon')).toBeInTheDocument();
         });
 
-        it('renders class and spec when provided', () => {
+it('renders class and spec when provided', () => {
             render(
                 <PugCard pug={createMockPug({ class: 'Warrior', spec: 'Arms' })} />,
             );
@@ -63,6 +66,12 @@ describe('PugCard', () => {
             expect(screen.getByText(/Warrior/)).toBeInTheDocument();
             expect(screen.getByText(/Arms/)).toBeInTheDocument();
         });
+
+    }
+
+    describe('basic rendering', () => {
+        basicRenderingGroup1();
+        basicRenderingGroup2();
     });
 
     describe('role badge', () => {
@@ -82,8 +91,8 @@ describe('PugCard', () => {
         });
     });
 
-    describe('server invite link', () => {
-        it('shows invite link for pending PUGs with serverInviteUrl when canManage', () => {
+    function serverInviteLinkGroup1() {
+it('shows invite link for pending PUGs with serverInviteUrl when canManage', () => {
             render(
                 <PugCard
                     pug={createMockPug({
@@ -100,7 +109,10 @@ describe('PugCard', () => {
             expect(link).toHaveAttribute('target', '_blank');
         });
 
-        it('does not show invite link when canManage is false', () => {
+    }
+
+    function serverInviteLinkGroup2() {
+it('does not show invite link when canManage is false', () => {
             render(
                 <PugCard
                     pug={createMockPug({
@@ -113,7 +125,10 @@ describe('PugCard', () => {
             expect(screen.queryByText('Server invite link')).not.toBeInTheDocument();
         });
 
-        it('does not show invite link when status is not pending', () => {
+    }
+
+    function serverInviteLinkGroup3() {
+it('does not show invite link when status is not pending', () => {
             render(
                 <PugCard
                     pug={createMockPug({
@@ -127,7 +142,7 @@ describe('PugCard', () => {
             expect(screen.queryByText('Server invite link')).not.toBeInTheDocument();
         });
 
-        it('does not show invite link when no serverInviteUrl', () => {
+it('does not show invite link when no serverInviteUrl', () => {
             render(
                 <PugCard
                     pug={createMockPug({ status: 'pending', serverInviteUrl: null })}
@@ -138,7 +153,10 @@ describe('PugCard', () => {
             expect(screen.queryByText('Server invite link')).not.toBeInTheDocument();
         });
 
-        it('has a copy button next to the invite link', () => {
+    }
+
+    function serverInviteLinkGroup4() {
+it('has a copy button next to the invite link', () => {
             render(
                 <PugCard
                     pug={createMockPug({
@@ -153,7 +171,10 @@ describe('PugCard', () => {
             expect(copyBtn).toBeInTheDocument();
         });
 
-        it('copies invite URL to clipboard when copy button is clicked', () => {
+    }
+
+    function serverInviteLinkGroup5() {
+it('copies invite URL to clipboard when copy button is clicked', () => {
             const mockWriteText = vi.fn().mockResolvedValue(undefined);
             Object.assign(navigator, {
                 clipboard: { writeText: mockWriteText },
@@ -174,10 +195,19 @@ describe('PugCard', () => {
 
             expect(mockWriteText).toHaveBeenCalledWith('https://discord.gg/test123');
         });
+
+    }
+
+    describe('server invite link', () => {
+        serverInviteLinkGroup1();
+        serverInviteLinkGroup2();
+        serverInviteLinkGroup3();
+        serverInviteLinkGroup4();
+        serverInviteLinkGroup5();
     });
 
-    describe('invite badge (ROK-263)', () => {
-        it('renders clickable invite badge when canManage and inviteCode present', () => {
+    function inviteBadgeROK263Group1() {
+it('renders clickable invite badge when canManage and inviteCode present', () => {
             render(
                 <PugCard
                     pug={createMockPug({ inviteCode: 'abc123', discordUsername: null })}
@@ -191,14 +221,17 @@ describe('PugCard', () => {
             expect(badge).toHaveTextContent('Invite');
         });
 
-        it('renders static badge when no inviteCode', () => {
+it('renders static badge when no inviteCode', () => {
             render(<PugCard pug={createMockPug()} canManage />);
 
             expect(screen.queryByTitle('Click to copy invite link')).not.toBeInTheDocument();
             expect(screen.getByText('Guest')).toBeInTheDocument();
         });
 
-        it('renders static badge when canManage is false even with inviteCode', () => {
+    }
+
+    function inviteBadgeROK263Group2() {
+it('renders static badge when canManage is false even with inviteCode', () => {
             render(
                 <PugCard pug={createMockPug({ inviteCode: 'abc123' })} />,
             );
@@ -207,7 +240,10 @@ describe('PugCard', () => {
             expect(screen.getByText('Guest')).toBeInTheDocument();
         });
 
-        it('copies invite URL when badge is clicked', () => {
+    }
+
+    function inviteBadgeROK263Group3() {
+it('copies invite URL when badge is clicked', () => {
             const mockWriteText = vi.fn().mockResolvedValue(undefined);
             Object.assign(navigator, {
                 clipboard: { writeText: mockWriteText },
@@ -227,7 +263,10 @@ describe('PugCard', () => {
             );
         });
 
-        it('shows "Guest" text on clickable badge when username is present', () => {
+    }
+
+    function inviteBadgeROK263Group4() {
+it('shows "Guest" text on clickable badge when username is present', () => {
             render(
                 <PugCard
                     pug={createMockPug({ inviteCode: 'abc123', discordUsername: 'player1' })}
@@ -238,10 +277,18 @@ describe('PugCard', () => {
             const badge = screen.getByTitle('Click to copy invite link');
             expect(badge).toHaveTextContent('Guest');
         });
+
+    }
+
+    describe('invite badge (ROK-263)', () => {
+        inviteBadgeROK263Group1();
+        inviteBadgeROK263Group2();
+        inviteBadgeROK263Group3();
+        inviteBadgeROK263Group4();
     });
 
-    describe('dropdown link actions (ROK-263)', () => {
-        it('shows Copy Link and Regenerate Link in menu when inviteCode is present', () => {
+    function dropdownLinkActionsROK263Group1() {
+it('shows Copy Link and Regenerate Link in menu when inviteCode is present', () => {
             render(
                 <PugCard
                     pug={createMockPug({ inviteCode: 'abc123' })}
@@ -257,7 +304,10 @@ describe('PugCard', () => {
             expect(screen.getByText('Regenerate Link')).toBeInTheDocument();
         });
 
-        it('does not show Copy Link or Regenerate Link when no inviteCode', () => {
+    }
+
+    function dropdownLinkActionsROK263Group2() {
+it('does not show Copy Link or Regenerate Link when no inviteCode', () => {
             render(
                 <PugCard
                     pug={createMockPug({ inviteCode: null })}
@@ -273,7 +323,10 @@ describe('PugCard', () => {
             expect(screen.queryByText('Regenerate Link')).not.toBeInTheDocument();
         });
 
-        it('copies invite URL when Copy Link is clicked in menu', () => {
+    }
+
+    function dropdownLinkActionsROK263Group3() {
+it('copies invite URL when Copy Link is clicked in menu', () => {
             const mockWriteText = vi.fn().mockResolvedValue(undefined);
             Object.assign(navigator, {
                 clipboard: { writeText: mockWriteText },
@@ -295,7 +348,10 @@ describe('PugCard', () => {
             );
         });
 
-        it('calls onRegenerateLink when Regenerate Link is clicked', () => {
+    }
+
+    function dropdownLinkActionsROK263Group4() {
+it('calls onRegenerateLink when Regenerate Link is clicked', () => {
             const onRegenerateLink = vi.fn();
             render(
                 <PugCard
@@ -310,20 +366,28 @@ describe('PugCard', () => {
 
             expect(onRegenerateLink).toHaveBeenCalledWith('pug-uuid-1');
         });
+
+    }
+
+    describe('dropdown link actions (ROK-263)', () => {
+        dropdownLinkActionsROK263Group1();
+        dropdownLinkActionsROK263Group2();
+        dropdownLinkActionsROK263Group3();
+        dropdownLinkActionsROK263Group4();
     });
 
-    describe('manage actions', () => {
-        it('shows action menu button when canManage is true', () => {
+    function manageActionsGroup1() {
+it('shows action menu button when canManage is true', () => {
             render(<PugCard pug={createMockPug()} canManage />);
             expect(screen.getByLabelText('PUG actions')).toBeInTheDocument();
         });
 
-        it('does not show action menu when canManage is false', () => {
+it('does not show action menu when canManage is false', () => {
             render(<PugCard pug={createMockPug()} />);
             expect(screen.queryByLabelText('PUG actions')).not.toBeInTheDocument();
         });
 
-        it('shows Edit and Remove options when menu is opened', () => {
+it('shows Edit and Remove options when menu is opened', () => {
             render(<PugCard pug={createMockPug()} canManage onEdit={vi.fn()} />);
 
             fireEvent.click(screen.getByLabelText('PUG actions'));
@@ -332,7 +396,7 @@ describe('PugCard', () => {
             expect(screen.getByText('Remove')).toBeInTheDocument();
         });
 
-        it('calls onEdit when Edit is clicked', () => {
+it('calls onEdit when Edit is clicked', () => {
             const onEdit = vi.fn();
             const pug = createMockPug();
             render(<PugCard pug={pug} canManage onEdit={onEdit} />);
@@ -343,7 +407,10 @@ describe('PugCard', () => {
             expect(onEdit).toHaveBeenCalledWith(pug);
         });
 
-        it('calls onRemove when Remove is clicked', () => {
+    }
+
+    function manageActionsGroup2() {
+it('calls onRemove when Remove is clicked', () => {
             const onRemove = vi.fn();
             render(
                 <PugCard pug={createMockPug()} canManage onRemove={onRemove} />,
@@ -354,5 +421,11 @@ describe('PugCard', () => {
 
             expect(onRemove).toHaveBeenCalledWith('pug-uuid-1');
         });
+
+    }
+
+    describe('manage actions', () => {
+        manageActionsGroup1();
+        manageActionsGroup2();
     });
 });

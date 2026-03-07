@@ -18,14 +18,9 @@ function makeGenericPlayer(id: number, name: string): RosterAssignmentResponse {
 }
 
 // ROK-487: Toast message language for generic vs MMO rosters
-describe('RosterBuilder — toast message language (ROK-487)', () => {
-    const mockOnRosterChange = vi.fn();
-
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('says "slot N" when assigning a player to a generic player slot', () => {
+const mockOnRosterChange = vi.fn();
+function rosterbuilderToastMessageLanguageROKGroup1() {
+it('says "slot N" when assigning a player to a generic player slot', () => {
         const playerPool = [makeGenericPlayer(1, 'Alice')];
 
         renderWithRouter(
@@ -51,7 +46,10 @@ describe('RosterBuilder — toast message language (ROK-487)', () => {
         );
     });
 
-    it('does NOT say "player N" when assigning to a generic player slot', () => {
+}
+
+function rosterbuilderToastMessageLanguageROKGroup2() {
+it('does NOT say "player N" when assigning to a generic player slot', () => {
         const playerPool = [makeGenericPlayer(2, 'Bob')];
 
         renderWithRouter(
@@ -78,7 +76,10 @@ describe('RosterBuilder — toast message language (ROK-487)', () => {
         expect(assignCall![0]).not.toMatch(/player\s+\d/i);
     });
 
-    it('says "role N" when assigning to an MMO tank slot', () => {
+}
+
+function rosterbuilderToastMessageLanguageROKGroup3() {
+it('says "role N" when assigning to an MMO tank slot', () => {
         const tankPlayer = makeGenericPlayer(3, 'Charlie');
 
         renderWithRouter(
@@ -103,4 +104,15 @@ describe('RosterBuilder — toast message language (ROK-487)', () => {
         expect(assignCall).toBeDefined();
         expect(assignCall![0]).not.toMatch(/slot\s+\d/i);
     });
+
+}
+
+describe('RosterBuilder — toast message language (ROK-487)', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    rosterbuilderToastMessageLanguageROKGroup1();
+    rosterbuilderToastMessageLanguageROKGroup2();
+    rosterbuilderToastMessageLanguageROKGroup3();
 });

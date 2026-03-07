@@ -19,32 +19,23 @@ const createMockEvent = (overrides: Partial<EventResponseDto> = {}): EventRespon
     ...overrides,
 });
 
-describe('MobileEventCard', () => {
-    beforeEach(() => {
-        vi.useFakeTimers();
-        vi.setSystemTime(MOCK_NOW);
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
-    });
-
-    it('renders event title', () => {
+function mobileeventcardGroup1() {
+it('renders event title', () => {
         render(<MobileEventCard event={createMockEvent()} />);
         expect(screen.getByText('Test Raid Night')).toBeInTheDocument();
     });
 
-    it('renders game name', () => {
+it('renders game name', () => {
         render(<MobileEventCard event={createMockEvent()} />);
         expect(screen.getByText('World of Warcraft')).toBeInTheDocument();
     });
 
-    it('renders status badge for upcoming events', () => {
+it('renders status badge for upcoming events', () => {
         render(<MobileEventCard event={createMockEvent()} />);
         expect(screen.getByTestId('mobile-event-status')).toHaveTextContent('Upcoming');
     });
 
-    it('renders live status badge when event is in progress', () => {
+it('renders live status badge when event is in progress', () => {
         const liveEvent = createMockEvent({
             startTime: '2026-02-10T18:00:00Z',
             endTime: '2026-02-10T22:00:00Z',
@@ -53,19 +44,22 @@ describe('MobileEventCard', () => {
         expect(screen.getByTestId('mobile-event-status')).toHaveTextContent('Live');
     });
 
-    it('shows signup count', () => {
+}
+
+function mobileeventcardGroup2() {
+it('shows signup count', () => {
         render(<MobileEventCard event={createMockEvent()} signupCount={5} />);
         expect(screen.getByTestId('mobile-event-signup-count')).toBeInTheDocument();
     });
 
-    it('fires onClick when card is tapped', () => {
+it('fires onClick when card is tapped', () => {
         const onClick = vi.fn();
         render(<MobileEventCard event={createMockEvent()} onClick={onClick} />);
         fireEvent.click(screen.getByTestId('mobile-event-card'));
         expect(onClick).toHaveBeenCalledTimes(1);
     });
 
-    it('renders avatar stack container', () => {
+it('renders avatar stack container', () => {
         const event = createMockEvent({
             signupsPreview: [
                 { id: 1, discordId: '111', username: 'A', avatar: 'a.png' },
@@ -78,26 +72,45 @@ describe('MobileEventCard', () => {
         expect(avatarStack.children.length).toBe(3);
     });
 
-    it('renders relative time', () => {
+}
+
+function mobileeventcardGroup3() {
+it('renders relative time', () => {
         render(<MobileEventCard event={createMockEvent()} />);
         expect(screen.getByTestId('mobile-event-relative')).toBeInTheDocument();
     });
 
-    it('applies badge-overlay class to status badge', () => {
+it('applies badge-overlay class to status badge', () => {
         render(<MobileEventCard event={createMockEvent()} />);
         const statusBadge = screen.getByTestId('mobile-event-status');
         expect(statusBadge).toHaveClass('badge-overlay');
     });
 
-    it('applies badge-overlay class to game-time badge when matchesGameTime is true', () => {
+it('applies badge-overlay class to game-time badge when matchesGameTime is true', () => {
         render(<MobileEventCard event={createMockEvent()} matchesGameTime />);
         const gameTimeBadge = screen.getByText('Game Time').closest('span');
         expect(gameTimeBadge).toHaveClass('badge-overlay');
     });
 
-    it('does not render game-time badge when matchesGameTime is false', () => {
+it('does not render game-time badge when matchesGameTime is false', () => {
         render(<MobileEventCard event={createMockEvent()} />);
         expect(screen.queryByText('Game Time')).not.toBeInTheDocument();
     });
+
+}
+
+describe('MobileEventCard', () => {
+beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+
+afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    mobileeventcardGroup1();
+    mobileeventcardGroup2();
+    mobileeventcardGroup3();
 });
 

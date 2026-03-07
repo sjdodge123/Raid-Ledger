@@ -97,7 +97,7 @@ describe('RosterList', () => {
         expect(screen.getByAltText('dps')).toBeInTheDocument();
     });
 
-    it('sorts signups alphabetically by username (case-insensitive)', () => {
+    function testSortsSignupsAlphabeticallyByUsername() {
         const unsortedSignups = [
             {
                 id: 3,
@@ -132,7 +132,9 @@ describe('RosterList', () => {
         expect(items[0]).toHaveTextContent('alice');
         expect(items[1]).toHaveTextContent('Bob');
         expect(items[2]).toHaveTextContent('charlie');
-    });
+    
+    }
+    it('sorts signups alphabetically by username (case-insensitive)', () => { testSortsSignupsAlphabeticallyByUsername(); });
 
     it('does not mutate the original signups array', () => {
         const signups = [

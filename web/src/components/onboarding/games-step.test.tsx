@@ -201,14 +201,14 @@ describe('GamesStep', () => {
         });
     });
 
-    describe('Genre filtering', () => {
-        it('shows all games when "All" is selected', () => {
+    function genreFilteringGroup1() {
+it('shows all games when "All" is selected', () => {
             renderWithProviders(<GamesStep />);
             expect(screen.getByText('World of Warcraft')).toBeInTheDocument();
             expect(screen.getByText('Counter-Strike')).toBeInTheDocument();
         });
 
-        it('filters games by MMORPG genre chip', () => {
+it('filters games by MMORPG genre chip', () => {
             const { container } = renderWithProviders(<GamesStep />);
             // Find the MMORPG <button> chip inside the genre container (not div[role=button])
             const genreContainer = container.querySelector('.flex.flex-wrap.gap-2');
@@ -222,7 +222,10 @@ describe('GamesStep', () => {
             expect(screen.queryByText('Counter-Strike')).not.toBeInTheDocument();
         });
 
-        it('deselects genre filter when clicked again', () => {
+    }
+
+    function genreFilteringGroup2() {
+it('deselects genre filter when clicked again', () => {
             const { container } = renderWithProviders(<GamesStep />);
             const genreContainer = container.querySelector('.flex.flex-wrap.gap-2');
             const mmorpgChip = Array.from(genreContainer!.querySelectorAll('button')).find(
@@ -235,12 +238,18 @@ describe('GamesStep', () => {
             expect(screen.getByText('Counter-Strike')).toBeInTheDocument();
         });
 
-        it('hides genre chips when search query is active', () => {
+it('hides genre chips when search query is active', () => {
             renderWithProviders(<GamesStep />);
             const searchInput = screen.getByPlaceholderText(/search for a game/i);
             fireEvent.change(searchInput, { target: { value: 'world' } });
             expect(screen.queryByRole('button', { name: /mmorpg/i })).not.toBeInTheDocument();
         });
+
+    }
+
+    describe('Genre filtering', () => {
+        genreFilteringGroup1();
+        genreFilteringGroup2();
     });
 
     describe('Search', () => {
@@ -276,7 +285,7 @@ describe('GamesStep', () => {
     // ROK-375: Local source warning banner
     // ============================================================
     describe('ROK-375: local source warning banner', () => {
-        it('shows "external search unavailable" warning when search source is "local"', () => {
+        function testShowsExternalSearchUnavailableWarning() {
             mockUseGameSearch.mockReturnValue({
                 data: {
                     data: [
@@ -311,9 +320,11 @@ describe('GamesStep', () => {
             fireEvent.change(searchInput, { target: { value: 'fallback' } });
 
             expect(screen.getByText(/external search unavailable/i)).toBeInTheDocument();
-        });
+        
+        }
+        it('shows "external search unavailable" warning when search source is "local"', () => { testShowsExternalSearchUnavailableWarning(); });
 
-        it('does NOT show warning when search source is "igdb"', () => {
+        function testDoesNOTShowWarningWhen2() {
             mockUseGameSearch.mockReturnValue({
                 data: {
                     data: [
@@ -348,9 +359,11 @@ describe('GamesStep', () => {
             fireEvent.change(searchInput, { target: { value: 'igdb game' } });
 
             expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
-        });
+        
+        }
+        it('does NOT show warning when search source is "igdb"', () => { testDoesNOTShowWarningWhen2(); });
 
-        it('does NOT show warning when search source is "database"', () => {
+        function testDoesNOTShowWarningWhen() {
             mockUseGameSearch.mockReturnValue({
                 data: {
                     data: [
@@ -385,7 +398,9 @@ describe('GamesStep', () => {
             fireEvent.change(searchInput, { target: { value: 'db game' } });
 
             expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
-        });
+        
+        }
+        it('does NOT show warning when search source is "database"', () => { testDoesNOTShowWarningWhen(); });
 
         it('does NOT show warning when not searching', () => {
             mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });

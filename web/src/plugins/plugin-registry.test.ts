@@ -4,12 +4,8 @@ import { registerSlotComponent, getSlotRegistrations, clearRegistry, registerPlu
 function StubComponent() { return null; }
 function StubComponent2() { return null; }
 
-describe('plugin-registry', () => {
-    beforeEach(() => {
-        clearRegistry();
-    });
-
-    it('registers a component and retrieves it by slot name', () => {
+function pluginRegistryGroup1() {
+it('registers a component and retrieves it by slot name', () => {
         registerSlotComponent({
             pluginSlug: 'test-plugin',
             slotName: 'character-detail:sections',
@@ -23,12 +19,15 @@ describe('plugin-registry', () => {
         expect(registrations[0].component).toBe(StubComponent);
     });
 
-    it('returns empty array for slots with no registrations', () => {
+it('returns empty array for slots with no registrations', () => {
         const registrations = getSlotRegistrations('admin-settings:integration-cards');
         expect(registrations).toHaveLength(0);
     });
 
-    it('filters registrations by slot name', () => {
+}
+
+function pluginRegistryGroup2() {
+it('filters registrations by slot name', () => {
         registerSlotComponent({
             pluginSlug: 'test-plugin',
             slotName: 'character-detail:sections',
@@ -46,7 +45,10 @@ describe('plugin-registry', () => {
         expect(getSlotRegistrations('event-create:content-browser')).toHaveLength(1);
     });
 
-    it('sorts registrations by priority (ascending)', () => {
+}
+
+function pluginRegistryGroup3() {
+it('sorts registrations by priority (ascending)', () => {
         registerSlotComponent({
             pluginSlug: 'plugin-b',
             slotName: 'character-detail:sections',
@@ -66,7 +68,10 @@ describe('plugin-registry', () => {
         expect(registrations[1].pluginSlug).toBe('plugin-b');
     });
 
-    it('clearRegistry removes all registrations', () => {
+}
+
+function pluginRegistryGroup4() {
+it('clearRegistry removes all registrations', () => {
         registerSlotComponent({
             pluginSlug: 'test-plugin',
             slotName: 'character-detail:sections',
@@ -81,7 +86,10 @@ describe('plugin-registry', () => {
         expect(getSlotRegistrations('character-detail:sections')).toHaveLength(0);
     });
 
-    it('supports multiple plugins registering the same slot', () => {
+}
+
+function pluginRegistryGroup5() {
+it('supports multiple plugins registering the same slot', () => {
         registerSlotComponent({
             pluginSlug: 'plugin-a',
             slotName: 'character-detail:header-badges',
@@ -101,17 +109,20 @@ describe('plugin-registry', () => {
         expect(registrations[1].pluginSlug).toBe('plugin-b');
     });
 
-    it('registerPlugin stores badge metadata', () => {
+}
+
+function pluginRegistryGroup6() {
+it('registerPlugin stores badge metadata', () => {
         registerPlugin('my-plugin', { icon: 'X', color: 'blue', label: 'My Plugin' });
         const badge = getPluginBadge('my-plugin');
         expect(badge).toEqual({ icon: 'X', color: 'blue', label: 'My Plugin' });
     });
 
-    it('getPluginBadge returns undefined for unregistered plugin', () => {
+it('getPluginBadge returns undefined for unregistered plugin', () => {
         expect(getPluginBadge('nonexistent')).toBeUndefined();
     });
 
-    it('clearRegistry also clears badge metadata', () => {
+it('clearRegistry also clears badge metadata', () => {
         registerPlugin('test', { icon: 'T', color: 'red', label: 'Test' });
         expect(getPluginBadge('test')).toBeDefined();
 
@@ -120,11 +131,25 @@ describe('plugin-registry', () => {
         expect(getPluginBadge('test')).toBeUndefined();
     });
 
-    it('registerPlugin overwrites badge for same slug (HMR safe)', () => {
+it('registerPlugin overwrites badge for same slug (HMR safe)', () => {
         registerPlugin('plug', { icon: 'A', color: 'blue', label: 'First' });
         registerPlugin('plug', { icon: 'B', color: 'red', label: 'Second' });
 
         const badge = getPluginBadge('plug');
         expect(badge).toEqual({ icon: 'B', color: 'red', label: 'Second' });
     });
+
+}
+
+describe('plugin-registry', () => {
+beforeEach(() => {
+        clearRegistry();
+    });
+
+    pluginRegistryGroup1();
+    pluginRegistryGroup2();
+    pluginRegistryGroup3();
+    pluginRegistryGroup4();
+    pluginRegistryGroup5();
+    pluginRegistryGroup6();
 });

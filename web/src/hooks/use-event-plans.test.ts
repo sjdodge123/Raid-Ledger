@@ -92,12 +92,8 @@ const mockSuggestions = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('useTimeSuggestions', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('should fetch time suggestions on mount', async () => {
+function usetimesuggestionsGroup1() {
+it('should fetch time suggestions on mount', async () => {
         mockGetTimeSuggestions.mockResolvedValue(mockSuggestions);
 
         const { result } = renderHook(() => useTimeSuggestions(), {
@@ -112,7 +108,7 @@ describe('useTimeSuggestions', () => {
         expect(mockGetTimeSuggestions).toHaveBeenCalledOnce();
     });
 
-    it('should use query key with gameId and afterDate', async () => {
+it('should use query key with gameId and afterDate', async () => {
         mockGetTimeSuggestions.mockResolvedValue(mockSuggestions);
 
         const params = { gameId: 5, afterDate: '2026-03-01T00:00:00Z' };
@@ -128,7 +124,10 @@ describe('useTimeSuggestions', () => {
         expect(mockGetTimeSuggestions).toHaveBeenCalledWith(params);
     });
 
-    it('should be enabled by default', async () => {
+}
+
+function usetimesuggestionsGroup2() {
+it('should be enabled by default', async () => {
         mockGetTimeSuggestions.mockResolvedValue(mockSuggestions);
 
         const { result } = renderHook(() => useTimeSuggestions(), {
@@ -142,14 +141,20 @@ describe('useTimeSuggestions', () => {
 
         expect(mockGetTimeSuggestions).toHaveBeenCalled();
     });
-});
 
-describe('useCreateEventPlan', () => {
-    beforeEach(() => {
+}
+
+describe('useTimeSuggestions', () => {
+beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('should call createEventPlan on mutate', async () => {
+    usetimesuggestionsGroup1();
+    usetimesuggestionsGroup2();
+});
+
+function usecreateeventplanGroup1() {
+it('should call createEventPlan on mutate', async () => {
         mockCreateEventPlan.mockResolvedValue(mockPlan);
 
         const { result } = renderHook(() => useCreateEventPlan(), {
@@ -171,7 +176,10 @@ describe('useCreateEventPlan', () => {
         expect(mockCreateEventPlan).toHaveBeenCalledWith(dto);
     });
 
-    it('should show success toast on successful creation', async () => {
+}
+
+function usecreateeventplanGroup2() {
+it('should show success toast on successful creation', async () => {
         mockCreateEventPlan.mockResolvedValue(mockPlan);
 
         const { result } = renderHook(() => useCreateEventPlan(), {
@@ -193,7 +201,10 @@ describe('useCreateEventPlan', () => {
         );
     });
 
-    it('should show error toast on failure', async () => {
+}
+
+function usecreateeventplanGroup3() {
+it('should show error toast on failure', async () => {
         mockCreateEventPlan.mockRejectedValue(new Error('No channel configured'));
 
         const { result } = renderHook(() => useCreateEventPlan(), {
@@ -216,14 +227,21 @@ describe('useCreateEventPlan', () => {
 
         expect(toast.error).toHaveBeenCalledWith('No channel configured');
     });
-});
 
-describe('useMyEventPlans', () => {
-    beforeEach(() => {
+}
+
+describe('useCreateEventPlan', () => {
+beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('should fetch user plans on mount', async () => {
+    usecreateeventplanGroup1();
+    usecreateeventplanGroup2();
+    usecreateeventplanGroup3();
+});
+
+function usemyeventplansGroup1() {
+it('should fetch user plans on mount', async () => {
         mockGetMyEventPlans.mockResolvedValue([mockPlan]);
 
         const { result } = renderHook(() => useMyEventPlans(), {
@@ -238,7 +256,7 @@ describe('useMyEventPlans', () => {
         expect(mockGetMyEventPlans).toHaveBeenCalledOnce();
     });
 
-    it('should use the correct query key ["event-plans", "my-plans"]', async () => {
+it('should use the correct query key ["event-plans", "my-plans"]', async () => {
         // We verify the query key indirectly by checking that invalidateQueries
         // (triggered by create/cancel mutations) properly affects this query.
         // Here we just confirm the hook fires the right API function.
@@ -255,7 +273,10 @@ describe('useMyEventPlans', () => {
         expect(mockGetMyEventPlans).toHaveBeenCalled();
     });
 
-    it('should return empty array when user has no plans', async () => {
+}
+
+function usemyeventplansGroup2() {
+it('should return empty array when user has no plans', async () => {
         mockGetMyEventPlans.mockResolvedValue([]);
 
         const { result } = renderHook(() => useMyEventPlans(), {
@@ -268,14 +289,20 @@ describe('useMyEventPlans', () => {
 
         expect(result.current.data).toEqual([]);
     });
-});
 
-describe('useEventPlan', () => {
-    beforeEach(() => {
+}
+
+describe('useMyEventPlans', () => {
+beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('should fetch a specific plan by ID', async () => {
+    usemyeventplansGroup1();
+    usemyeventplansGroup2();
+});
+
+function useeventplanGroup1() {
+it('should fetch a specific plan by ID', async () => {
         mockGetEventPlan.mockResolvedValue(mockPlan);
 
         const planId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -291,7 +318,7 @@ describe('useEventPlan', () => {
         expect(mockGetEventPlan).toHaveBeenCalledWith(planId);
     });
 
-    it('should not fetch when planId is undefined', async () => {
+it('should not fetch when planId is undefined', async () => {
         const { result } = renderHook(() => useEventPlan(undefined), {
             wrapper: createWrapper(),
         });
@@ -303,7 +330,10 @@ describe('useEventPlan', () => {
         expect(mockGetEventPlan).not.toHaveBeenCalled();
     });
 
-    it('should use query key with the planId', async () => {
+}
+
+function useeventplanGroup2() {
+it('should use query key with the planId', async () => {
         mockGetEventPlan.mockResolvedValue(mockPlan);
 
         const planId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -315,14 +345,20 @@ describe('useEventPlan', () => {
             expect(mockGetEventPlan).toHaveBeenCalledWith(planId);
         });
     });
-});
 
-describe('useCancelEventPlan', () => {
-    beforeEach(() => {
+}
+
+describe('useEventPlan', () => {
+beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('should call cancelEventPlan with the planId on mutate', async () => {
+    useeventplanGroup1();
+    useeventplanGroup2();
+});
+
+function usecanceleventplanGroup1() {
+it('should call cancelEventPlan with the planId on mutate', async () => {
         mockCancelEventPlan.mockResolvedValue({ ...mockPlan, status: 'cancelled' });
 
         const { result } = renderHook(() => useCancelEventPlan(), {
@@ -338,7 +374,7 @@ describe('useCancelEventPlan', () => {
         );
     });
 
-    it('should show success toast after cancellation', async () => {
+it('should show success toast after cancellation', async () => {
         mockCancelEventPlan.mockResolvedValue({ ...mockPlan, status: 'cancelled' });
 
         const { result } = renderHook(() => useCancelEventPlan(), {
@@ -352,7 +388,10 @@ describe('useCancelEventPlan', () => {
         expect(toast.success).toHaveBeenCalledWith('Event plan cancelled');
     });
 
-    it('should show error toast on failure', async () => {
+}
+
+function usecanceleventplanGroup2() {
+it('should show error toast on failure', async () => {
         mockCancelEventPlan.mockRejectedValue(new Error('Not authorized'));
 
         const { result } = renderHook(() => useCancelEventPlan(), {
@@ -369,4 +408,14 @@ describe('useCancelEventPlan', () => {
 
         expect(toast.error).toHaveBeenCalledWith('Not authorized');
     });
+
+}
+
+describe('useCancelEventPlan', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    usecanceleventplanGroup1();
+    usecanceleventplanGroup2();
 });

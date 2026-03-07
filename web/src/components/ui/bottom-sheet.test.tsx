@@ -3,18 +3,8 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { BottomSheet } from './bottom-sheet';
 
-describe('BottomSheet', () => {
-    beforeEach(() => {
-        // Reset document.body.style.overflow before each test
-        document.body.style.overflow = '';
-    });
-
-    afterEach(() => {
-        // Clean up after each test
-        document.body.style.overflow = '';
-    });
-
-    it('renders dialog when isOpen is true', () => {
+function bottomsheetGroup1() {
+it('renders dialog when isOpen is true', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -25,7 +15,7 @@ describe('BottomSheet', () => {
         expect(dialog).toBeInTheDocument();
     });
 
-    it('renders children content', () => {
+it('renders children content', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Test Content</p>
@@ -35,7 +25,10 @@ describe('BottomSheet', () => {
         expect(screen.getByText('Test Content')).toBeInTheDocument();
     });
 
-    it('renders title when provided', () => {
+}
+
+function bottomsheetGroup2() {
+it('renders title when provided', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}} title="Filter by Game">
                 <p>Content</p>
@@ -45,7 +38,7 @@ describe('BottomSheet', () => {
         expect(screen.getByText('Filter by Game')).toBeInTheDocument();
     });
 
-    it('uses title in aria-label', () => {
+it('uses title in aria-label', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}} title="Filter by Game">
                 <p>Content</p>
@@ -56,7 +49,10 @@ describe('BottomSheet', () => {
         expect(dialog).toBeInTheDocument();
     });
 
-    it('has default aria-label when title not provided', () => {
+}
+
+function bottomsheetGroup3() {
+it('has default aria-label when title not provided', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -67,7 +63,7 @@ describe('BottomSheet', () => {
         expect(dialog).toBeInTheDocument();
     });
 
-    it('renders close button when title is provided', () => {
+it('renders close button when title is provided', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}} title="Filter by Game">
                 <p>Content</p>
@@ -78,7 +74,10 @@ describe('BottomSheet', () => {
         expect(closeButton).toBeInTheDocument();
     });
 
-    it('does not render close button when title is not provided', () => {
+}
+
+function bottomsheetGroup4() {
+it('does not render close button when title is not provided', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -88,7 +87,7 @@ describe('BottomSheet', () => {
         expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
     });
 
-    it('calls onClose when close button clicked', () => {
+it('calls onClose when close button clicked', () => {
         const handleClose = vi.fn();
 
         render(
@@ -103,7 +102,10 @@ describe('BottomSheet', () => {
         expect(handleClose).toHaveBeenCalledTimes(1);
     });
 
-    it('calls onClose when backdrop clicked', () => {
+}
+
+function bottomsheetGroup5() {
+it('calls onClose when backdrop clicked', () => {
         const handleClose = vi.fn();
 
         render(
@@ -122,7 +124,10 @@ describe('BottomSheet', () => {
         }
     });
 
-    it('calls onClose when Escape key pressed', () => {
+}
+
+function bottomsheetGroup6() {
+it('calls onClose when Escape key pressed', () => {
         const handleClose = vi.fn();
 
         render(
@@ -136,7 +141,7 @@ describe('BottomSheet', () => {
         expect(handleClose).toHaveBeenCalledTimes(1);
     });
 
-    it('does not call onClose when Escape pressed but sheet is closed', () => {
+it('does not call onClose when Escape pressed but sheet is closed', () => {
         const handleClose = vi.fn();
 
         render(
@@ -150,7 +155,10 @@ describe('BottomSheet', () => {
         expect(handleClose).not.toHaveBeenCalled();
     });
 
-    it('locks body scroll when open', () => {
+}
+
+function bottomsheetGroup7() {
+it('locks body scroll when open', () => {
         const { rerender } = render(
             <BottomSheet isOpen={false} onClose={() => {}}>
                 <p>Content</p>
@@ -168,7 +176,10 @@ describe('BottomSheet', () => {
         expect(document.body.style.overflow).toBe('hidden');
     });
 
-    it('restores body scroll when closed', () => {
+}
+
+function bottomsheetGroup8() {
+it('restores body scroll when closed', () => {
         const { rerender } = render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -186,7 +197,10 @@ describe('BottomSheet', () => {
         expect(document.body.style.overflow).toBe('');
     });
 
-    it('cleans up body scroll on unmount', () => {
+}
+
+function bottomsheetGroup9() {
+it('cleans up body scroll on unmount', () => {
         const { unmount } = render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -200,7 +214,7 @@ describe('BottomSheet', () => {
         expect(document.body.style.overflow).toBe('');
     });
 
-    it('has aria-modal="true"', () => {
+it('has aria-modal="true"', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -211,8 +225,10 @@ describe('BottomSheet', () => {
         expect(dialog).toHaveAttribute('aria-modal', 'true');
     });
 
-    // Swipe gesture tests — touch handlers are on the drag handle (.cursor-grab)
-    it('handles touch start', () => {
+}
+
+function bottomsheetGroup10() {
+it('handles touch start', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -228,7 +244,10 @@ describe('BottomSheet', () => {
         // No assertion needed - just verify it doesn't throw
     });
 
-    it('handles touch move downward', () => {
+}
+
+function bottomsheetGroup11() {
+it('handles touch move downward', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -250,7 +269,10 @@ describe('BottomSheet', () => {
         expect(dialog.style.transform).toBe('translateY(50px)');
     });
 
-    it('does not apply negative transform on upward swipe', () => {
+}
+
+function bottomsheetGroup12() {
+it('does not apply negative transform on upward swipe', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -273,7 +295,10 @@ describe('BottomSheet', () => {
         expect(dialog.style.transform).toBe('translateY(-20px)');
     });
 
-    it('calls onClose when dragged down >150px', async () => {
+}
+
+function bottomsheetGroup13() {
+it('calls onClose when dragged down >150px', async () => {
         const handleClose = vi.fn();
 
         render(
@@ -300,7 +325,10 @@ describe('BottomSheet', () => {
         });
     });
 
-    it('does not call onClose when dragged down <150px and <40% of height', () => {
+}
+
+function bottomsheetGroup14() {
+it('does not call onClose when dragged down <150px and <40% of height', () => {
         const handleClose = vi.fn();
 
         render(
@@ -332,7 +360,10 @@ describe('BottomSheet', () => {
         expect(handleClose).not.toHaveBeenCalled();
     });
 
-    it('resets transform after drag end', () => {
+}
+
+function bottomsheetGroup15() {
+it('resets transform after drag end', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -358,7 +389,10 @@ describe('BottomSheet', () => {
         expect(dialog.style.transform).toBe('');
     });
 
-    it('has no accessibility violations when open', async () => {
+}
+
+function bottomsheetGroup16() {
+it('has no accessibility violations when open', async () => {
         const { container } = render(
             <BottomSheet isOpen={true} onClose={() => {}} title="Accessible Sheet">
                 <p>Sheet content</p>
@@ -367,4 +401,33 @@ describe('BottomSheet', () => {
         expect(await axe(container)).toHaveNoViolations();
     });
 
+}
+
+describe('BottomSheet', () => {
+beforeEach(() => {
+        // Reset document.body.style.overflow before each test
+        document.body.style.overflow = '';
+    });
+
+afterEach(() => {
+        // Clean up after each test
+        document.body.style.overflow = '';
+    });
+
+    bottomsheetGroup1();
+    bottomsheetGroup2();
+    bottomsheetGroup3();
+    bottomsheetGroup4();
+    bottomsheetGroup5();
+    bottomsheetGroup6();
+    bottomsheetGroup7();
+    bottomsheetGroup8();
+    bottomsheetGroup9();
+    bottomsheetGroup10();
+    bottomsheetGroup11();
+    bottomsheetGroup12();
+    bottomsheetGroup13();
+    bottomsheetGroup14();
+    bottomsheetGroup15();
+    bottomsheetGroup16();
 });

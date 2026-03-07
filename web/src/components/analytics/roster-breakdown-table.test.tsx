@@ -38,71 +38,77 @@ const rosterWithVoice: RosterBreakdownEntryDto[] = [
     },
 ];
 
-describe('RosterBreakdownTable', () => {
-    it('renders "No signups for this event." when roster is empty', () => {
+function rosterbreakdowntableGroup1() {
+it('renders "No signups for this event." when roster is empty', () => {
         render(<RosterBreakdownTable roster={[]} hasVoiceData={false} />);
         expect(screen.getByText('No signups for this event.')).toBeInTheDocument();
     });
 
-    it('renders Roster Breakdown heading', () => {
+it('renders Roster Breakdown heading', () => {
         render(<RosterBreakdownTable roster={[makeEntry()]} hasVoiceData={false} />);
         expect(screen.getByText('Roster Breakdown')).toBeInTheDocument();
     });
 
-    it('renders player usernames', () => {
+it('renders player usernames', () => {
         render(<RosterBreakdownTable roster={[makeEntry({ username: 'Thorin' })]} hasVoiceData={false} />);
         expect(screen.getByText('Thorin')).toBeInTheDocument();
     });
 
-    it('renders attendance status label (Attended)', () => {
+it('renders attendance status label (Attended)', () => {
         render(<RosterBreakdownTable roster={[makeEntry({ attendanceStatus: 'attended' })]} hasVoiceData={false} />);
         expect(screen.getByText('Attended')).toBeInTheDocument();
     });
 
-    it('renders attendance status label (No-Show)', () => {
+it('renders attendance status label (No-Show)', () => {
         render(<RosterBreakdownTable roster={[makeEntry({ attendanceStatus: 'no_show' })]} hasVoiceData={false} />);
         expect(screen.getByText('No-Show')).toBeInTheDocument();
     });
 
-    it('renders attendance status label (Excused)', () => {
+}
+
+function rosterbreakdowntableGroup2() {
+it('renders attendance status label (Excused)', () => {
         render(<RosterBreakdownTable roster={[makeEntry({ attendanceStatus: 'excused' })]} hasVoiceData={false} />);
         expect(screen.getByText('Excused')).toBeInTheDocument();
     });
 
-    it('renders "Unmarked" for null attendanceStatus', () => {
+it('renders "Unmarked" for null attendanceStatus', () => {
         render(<RosterBreakdownTable roster={[makeEntry({ attendanceStatus: null })]} hasVoiceData={false} />);
         expect(screen.getByText('Unmarked')).toBeInTheDocument();
     });
 
-    it('renders signup status with underscore replaced', () => {
+it('renders signup status with underscore replaced', () => {
         render(<RosterBreakdownTable roster={[makeEntry({ signupStatus: 'signed_up' })]} hasVoiceData={false} />);
         // The component replaces _ with space and capitalizes
         expect(screen.getByText('signed up')).toBeInTheDocument();
     });
 
-    it('renders "--" for null signupStatus', () => {
+it('renders "--" for null signupStatus', () => {
         render(<RosterBreakdownTable roster={[makeEntry({ signupStatus: null })]} hasVoiceData={false} />);
         expect(screen.getByText('--')).toBeInTheDocument();
     });
 
-    it('does NOT render voice columns when hasVoiceData is false', () => {
+it('does NOT render voice columns when hasVoiceData is false', () => {
         render(<RosterBreakdownTable roster={rosterWithVoice} hasVoiceData={false} />);
         expect(screen.queryByText('Voice Status')).not.toBeInTheDocument();
         expect(screen.queryByText('Voice Duration')).not.toBeInTheDocument();
     });
 
-    it('renders voice columns when hasVoiceData is true', () => {
+}
+
+function rosterbreakdowntableGroup3() {
+it('renders voice columns when hasVoiceData is true', () => {
         render(<RosterBreakdownTable roster={rosterWithVoice} hasVoiceData={true} />);
         expect(screen.getByText('Voice Status')).toBeInTheDocument();
         expect(screen.getByText('Voice Duration')).toBeInTheDocument();
     });
 
-    it('renders voice classification label (Full)', () => {
+it('renders voice classification label (Full)', () => {
         render(<RosterBreakdownTable roster={rosterWithVoice} hasVoiceData={true} />);
         expect(screen.getByText('Full')).toBeInTheDocument();
     });
 
-    it('renders "--" for null voice classification', () => {
+it('renders "--" for null voice classification', () => {
         const roster = [makeEntry({ voiceClassification: null, voiceDurationSec: null })];
         render(<RosterBreakdownTable roster={roster} hasVoiceData={true} />);
         // Should show -- for both voice status and duration
@@ -110,19 +116,22 @@ describe('RosterBreakdownTable', () => {
         expect(dashes.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('formats voice duration in minutes correctly (2h = 2h 0m)', () => {
+it('formats voice duration in minutes correctly (2h = 2h 0m)', () => {
         // 7200 seconds = 2h 0m
         render(<RosterBreakdownTable roster={rosterWithVoice} hasVoiceData={true} />);
         expect(screen.getByText('2h 0m')).toBeInTheDocument();
     });
 
-    it('formats voice duration under an hour as minutes only', () => {
+}
+
+function rosterbreakdowntableGroup4() {
+it('formats voice duration under an hour as minutes only', () => {
         const roster = [makeEntry({ voiceClassification: 'partial', voiceDurationSec: 1800 })];
         render(<RosterBreakdownTable roster={roster} hasVoiceData={true} />);
         expect(screen.getByText('30m')).toBeInTheDocument();
     });
 
-    it('sorts by username ascending by default', () => {
+it('sorts by username ascending by default', () => {
         const roster = [
             makeEntry({ userId: 1, username: 'Zara' }),
             makeEntry({ userId: 2, username: 'Alice' }),
@@ -133,7 +142,10 @@ describe('RosterBreakdownTable', () => {
         expect(cells[1].textContent).toBe('Zara');
     });
 
-    it('clicking Player column header toggles sort direction', async () => {
+}
+
+function rosterbreakdowntableGroup5() {
+it('clicking Player column header toggles sort direction', async () => {
         const user = userEvent.setup();
         const roster = [
             makeEntry({ userId: 1, username: 'Zara' }),
@@ -151,7 +163,10 @@ describe('RosterBreakdownTable', () => {
         expect(cellsAfter[0].textContent).toBe('Zara');
     });
 
-    it('clicking Attendance header sorts by attendanceStatus', async () => {
+}
+
+function rosterbreakdowntableGroup6() {
+it('clicking Attendance header sorts by attendanceStatus', async () => {
         const user = userEvent.setup();
         const roster = [
             makeEntry({ userId: 1, username: 'Alice', attendanceStatus: 'no_show' }),
@@ -166,14 +181,17 @@ describe('RosterBreakdownTable', () => {
         expect(screen.getByText('Attendance').parentElement?.textContent).toContain('↓');
     });
 
-    it('shows sort indicator on active sort column', () => {
+it('shows sort indicator on active sort column', () => {
         render(<RosterBreakdownTable roster={[makeEntry()]} hasVoiceData={false} />);
         // Default sort is "username" asc — should show ↑
         const playerHeader = screen.getByText('Player');
         expect(playerHeader.textContent).toContain('↑');
     });
 
-    it('renders multiple roster entries', () => {
+}
+
+function rosterbreakdowntableGroup7() {
+it('renders multiple roster entries', () => {
         const roster = [
             makeEntry({ userId: 1, username: 'Alice' }),
             makeEntry({ userId: 2, username: 'Bob' }),
@@ -184,4 +202,15 @@ describe('RosterBreakdownTable', () => {
         expect(screen.getByText('Bob')).toBeInTheDocument();
         expect(screen.getByText('Carol')).toBeInTheDocument();
     });
+
+}
+
+describe('RosterBreakdownTable', () => {
+    rosterbreakdowntableGroup1();
+    rosterbreakdowntableGroup2();
+    rosterbreakdowntableGroup3();
+    rosterbreakdowntableGroup4();
+    rosterbreakdowntableGroup5();
+    rosterbreakdowntableGroup6();
+    rosterbreakdowntableGroup7();
 });

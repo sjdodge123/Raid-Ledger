@@ -2,21 +2,13 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useDebouncedValue } from '../use-debounced-value';
 
-describe('useDebouncedValue', () => {
-    beforeEach(() => {
-        vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
-    });
-
-    it('should return initial value immediately', () => {
+function usedebouncedvalueGroup1() {
+it('should return initial value immediately', () => {
         const { result } = renderHook(() => useDebouncedValue('initial', 300));
         expect(result.current).toBe('initial');
     });
 
-    it('should debounce value updates', () => {
+it('should debounce value updates', () => {
         const { result, rerender } = renderHook(
             ({ value }) => useDebouncedValue(value, 300),
             { initialProps: { value: 'initial' } }
@@ -39,7 +31,10 @@ describe('useDebouncedValue', () => {
         expect(result.current).toBe('updated');
     });
 
-    it('should reset timer on rapid updates', () => {
+}
+
+function usedebouncedvalueGroup2() {
+it('should reset timer on rapid updates', () => {
         const { result, rerender } = renderHook(
             ({ value }) => useDebouncedValue(value, 300),
             { initialProps: { value: 'initial' } }
@@ -65,7 +60,10 @@ describe('useDebouncedValue', () => {
         expect(result.current).toBe('update3');
     });
 
-    it('should use default delay of 300ms', () => {
+}
+
+function usedebouncedvalueGroup3() {
+it('should use default delay of 300ms', () => {
         const { result, rerender } = renderHook(
             ({ value }) => useDebouncedValue(value),
             { initialProps: { value: 'initial' } }
@@ -82,7 +80,7 @@ describe('useDebouncedValue', () => {
         expect(result.current).toBe('updated');
     });
 
-    it('should work with different types', () => {
+it('should work with different types', () => {
         const { result, rerender } = renderHook(
             ({ value }) => useDebouncedValue(value, 100),
             { initialProps: { value: 42 } }
@@ -95,4 +93,19 @@ describe('useDebouncedValue', () => {
 
         expect(result.current).toBe(100);
     });
+
+}
+
+describe('useDebouncedValue', () => {
+beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    usedebouncedvalueGroup1();
+    usedebouncedvalueGroup2();
+    usedebouncedvalueGroup3();
 });

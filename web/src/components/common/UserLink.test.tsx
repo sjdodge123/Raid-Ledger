@@ -3,12 +3,11 @@ import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { UserLink } from './UserLink';
 
-describe('UserLink', () => {
-    const renderWithRouter = (component: React.ReactNode) => {
+const renderWithRouter = (component: React.ReactNode) => {
         return render(<BrowserRouter>{component}</BrowserRouter>);
     };
-
-    it('renders username as link to profile', () => {
+function userlinkGroup1() {
+it('renders username as link to profile', () => {
         renderWithRouter(
             <UserLink userId={123} username="TestUser" />
         );
@@ -17,7 +16,7 @@ describe('UserLink', () => {
         expect(link).toHaveAttribute('href', '/users/123');
     });
 
-    it('shows avatar when showAvatar is true', () => {
+it('shows avatar when showAvatar is true', () => {
         const { container } = renderWithRouter(
             <UserLink
                 userId={1}
@@ -31,7 +30,10 @@ describe('UserLink', () => {
         expect(avatar).toHaveAttribute('src', 'https://example.com/avatar.png');
     });
 
-    it('does not show avatar by default', () => {
+}
+
+function userlinkGroup2() {
+it('does not show avatar by default', () => {
         renderWithRouter(
             <UserLink
                 userId={1}
@@ -43,7 +45,10 @@ describe('UserLink', () => {
         expect(screen.queryByRole('img')).not.toBeInTheDocument();
     });
 
-    it('stops propagation on click', () => {
+}
+
+function userlinkGroup3() {
+it('stops propagation on click', () => {
         const parentClick = vi.fn();
 
         render(
@@ -61,7 +66,7 @@ describe('UserLink', () => {
         expect(parentClick).not.toHaveBeenCalled();
     });
 
-    it('applies custom className', () => {
+it('applies custom className', () => {
         renderWithRouter(
             <UserLink userId={1} username="Styled" className="custom-class" />
         );
@@ -70,7 +75,10 @@ describe('UserLink', () => {
         expect(link).toHaveClass('custom-class');
     });
 
-    it('applies size class correctly', () => {
+}
+
+function userlinkGroup4() {
+it('applies size class correctly', () => {
         const { rerender } = renderWithRouter(
             <UserLink userId={1} username="SmallUser" size="sm" />
         );
@@ -85,4 +93,12 @@ describe('UserLink', () => {
 
         expect(screen.getByRole('link')).toHaveClass('user-link--md');
     });
+
+}
+
+describe('UserLink', () => {
+    userlinkGroup1();
+    userlinkGroup2();
+    userlinkGroup3();
+    userlinkGroup4();
 });

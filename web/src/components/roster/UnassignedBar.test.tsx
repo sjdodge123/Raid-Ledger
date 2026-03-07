@@ -58,7 +58,7 @@ describe('UnassignedBar', () => {
         expect(bar).toHaveAttribute('aria-label', '5 unassigned players. Click to view.');
     });
 
-    it('sorts pool alphabetically by username (case-insensitive)', () => {
+    function testSortsPoolAlphabeticallyByUsername() {
         const unsortedPool: RosterAssignmentResponse[] = [
             {
                 id: 3,
@@ -106,7 +106,9 @@ describe('UnassignedBar', () => {
         expect(avatars[0]).toHaveTextContent('A');
         expect(avatars[1]).toHaveTextContent('B');
         expect(avatars[2]).toHaveTextContent('C');
-    });
+    
+    }
+    it('sorts pool alphabetically by username (case-insensitive)', () => { testSortsPoolAlphabeticallyByUsername(); });
 
     it('does not mutate the original pool array', () => {
         const pool: RosterAssignmentResponse[] = [

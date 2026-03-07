@@ -24,12 +24,8 @@ function createWrapper(initialUrl: string) {
     };
 }
 
-describe('useNotifReadSync', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('should call markRead with notif ID when ?notif param is present', () => {
+function usenotifreadsyncGroup1() {
+it('should call markRead with notif ID when ?notif param is present', () => {
         renderHook(() => useNotifReadSync(), {
             wrapper: createWrapper('/events/42?notif=notif-abc-123'),
         });
@@ -37,7 +33,7 @@ describe('useNotifReadSync', () => {
         expect(mockMarkRead).toHaveBeenCalledWith('notif-abc-123');
     });
 
-    it('should NOT call markRead when ?notif param is absent', () => {
+it('should NOT call markRead when ?notif param is absent', () => {
         renderHook(() => useNotifReadSync(), {
             wrapper: createWrapper('/events/42'),
         });
@@ -45,7 +41,7 @@ describe('useNotifReadSync', () => {
         expect(mockMarkRead).not.toHaveBeenCalled();
     });
 
-    it('should NOT call markRead when URL has no query params at all', () => {
+it('should NOT call markRead when URL has no query params at all', () => {
         renderHook(() => useNotifReadSync(), {
             wrapper: createWrapper('/profile'),
         });
@@ -53,7 +49,10 @@ describe('useNotifReadSync', () => {
         expect(mockMarkRead).not.toHaveBeenCalled();
     });
 
-    it('should call markRead once per mount when notif param is present', () => {
+}
+
+function usenotifreadsyncGroup2() {
+it('should call markRead once per mount when notif param is present', () => {
         renderHook(() => useNotifReadSync(), {
             wrapper: createWrapper('/events/10?notif=notif-xyz'),
         });
@@ -62,7 +61,7 @@ describe('useNotifReadSync', () => {
         expect(mockMarkRead).toHaveBeenCalledWith('notif-xyz');
     });
 
-    it('should handle different notif IDs correctly', () => {
+it('should handle different notif IDs correctly', () => {
         renderHook(() => useNotifReadSync(), {
             wrapper: createWrapper('/events/5?notif=some-uuid-here'),
         });
@@ -70,7 +69,7 @@ describe('useNotifReadSync', () => {
         expect(mockMarkRead).toHaveBeenCalledWith('some-uuid-here');
     });
 
-    it('should not call markRead when ?notif value is empty string', () => {
+it('should not call markRead when ?notif value is empty string', () => {
         // An empty ?notif= returns '' from searchParams.get, which is falsy
         renderHook(() => useNotifReadSync(), {
             wrapper: createWrapper('/events/42?notif='),
@@ -80,7 +79,10 @@ describe('useNotifReadSync', () => {
         expect(mockMarkRead).not.toHaveBeenCalled();
     });
 
-    it('should work with additional query params alongside notif', () => {
+}
+
+function usenotifreadsyncGroup3() {
+it('should work with additional query params alongside notif', () => {
         renderHook(() => useNotifReadSync(), {
             wrapper: createWrapper('/events/42?tab=roster&notif=notif-multi'),
         });
@@ -89,7 +91,7 @@ describe('useNotifReadSync', () => {
         expect(mockMarkRead).toHaveBeenCalledTimes(1);
     });
 
-    it('should re-run effect and call markRead when notif param changes', () => {
+it('should re-run effect and call markRead when notif param changes', () => {
         // Start with first notif ID
         const { rerender } = renderHook(() => useNotifReadSync(), {
             wrapper: createWrapper('/events/42?notif=notif-first'),
@@ -109,4 +111,15 @@ describe('useNotifReadSync', () => {
         // Still only called once since the params didn't change
         expect(mockMarkRead).toHaveBeenCalledTimes(1);
     });
+
+}
+
+describe('useNotifReadSync', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    usenotifreadsyncGroup1();
+    usenotifreadsyncGroup2();
+    usenotifreadsyncGroup3();
 });

@@ -166,8 +166,8 @@ describe('RescheduleModal', () => {
         });
     });
 
-    describe('cell click interaction', () => {
-        it('clicking a grid cell populates the start time input', () => {
+    function cellClickInteractionGroup1() {
+it('clicking a grid cell populates the start time input', () => {
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
             fireEvent.click(within(grid).getByTestId('cell-5-18'));
@@ -176,7 +176,7 @@ describe('RescheduleModal', () => {
             expect(input.value).not.toBe('');
         });
 
-        it('clicking the current event cell does not select it', () => {
+it('clicking the current event cell does not select it', () => {
             // currentStartTime = Wed 8PM UTC, so currentDayOfWeek and currentHour
             // depend on local timezone, but the click guard checks dayOfWeek + hour
             renderModal();
@@ -188,14 +188,17 @@ describe('RescheduleModal', () => {
             expect(screen.queryByText('Confirm')).not.toBeInTheDocument();
         });
 
-        it('selecting a cell shows the New time legend item', () => {
+it('selecting a cell shows the New time legend item', () => {
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
             fireEvent.click(within(grid).getByTestId('cell-5-18'));
             expect(screen.getByText('New time')).toBeInTheDocument();
         });
 
-        it('selecting a cell shows Confirm and Clear buttons', () => {
+    }
+
+    function cellClickInteractionGroup2() {
+it('selecting a cell shows Confirm and Clear buttons', () => {
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
             fireEvent.click(within(grid).getByTestId('cell-5-18'));
@@ -203,7 +206,7 @@ describe('RescheduleModal', () => {
             expect(screen.getByText('Clear')).toBeInTheDocument();
         });
 
-        it('Clear button resets the selection', () => {
+it('Clear button resets the selection', () => {
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
             fireEvent.click(within(grid).getByTestId('cell-5-18'));
@@ -213,10 +216,16 @@ describe('RescheduleModal', () => {
             expect(screen.queryByText('Confirm')).not.toBeInTheDocument();
             expect(screen.queryByText('New time')).not.toBeInTheDocument();
         });
+
+    }
+
+    describe('cell click interaction', () => {
+        cellClickInteractionGroup1();
+        cellClickInteractionGroup2();
     });
 
-    describe('duration presets', () => {
-        it('renders duration preset buttons', () => {
+    function durationPresetsGroup1() {
+it('renders duration preset buttons', () => {
             renderModal();
             // Use getAllByRole to find buttons specifically, avoiding DurationBadge spans
             const buttons = screen.getAllByRole('button');
@@ -229,7 +238,7 @@ describe('RescheduleModal', () => {
             expect(presetLabels).toContain('Custom');
         });
 
-        it('original duration preset is highlighted by default', () => {
+it('original duration preset is highlighted by default', () => {
             // Default event is 2 hours — find the 2h button (not the DurationBadge span)
             renderModal();
             const buttons = screen.getAllByRole('button');
@@ -238,7 +247,10 @@ describe('RescheduleModal', () => {
             expect(btn2h!.className).toContain('bg-emerald-600');
         });
 
-        it('clicking a different preset changes the active selection', () => {
+    }
+
+    function durationPresetsGroup2() {
+it('clicking a different preset changes the active selection', () => {
             renderModal();
             const btn3h = screen.getByText('3h');
             fireEvent.click(btn3h);
@@ -248,12 +260,18 @@ describe('RescheduleModal', () => {
             expect(btn2h.className).not.toContain('bg-emerald-600');
         });
 
-        it('clicking Custom shows hour/minute inputs', () => {
+it('clicking Custom shows hour/minute inputs', () => {
             renderModal();
             fireEvent.click(screen.getByText('Custom'));
             expect(screen.getByText('hr')).toBeInTheDocument();
             expect(screen.getByText('min')).toBeInTheDocument();
         });
+
+    }
+
+    describe('duration presets', () => {
+        durationPresetsGroup1();
+        durationPresetsGroup2();
     });
 
     describe('manual time input', () => {
@@ -329,16 +347,8 @@ describe('RescheduleModal', () => {
 
 import { useAggregateGameTime } from '../../hooks/use-reschedule';
 
-describe('ROK-475: full 24h scrollable grid', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    afterEach(() => {
-        activeQueryClient?.clear();
-    });
-
-    it('renders all 24 hours regardless of availability data range', () => {
+function rok475Full24hScrollableGroup1() {
+it('renders all 24 hours regardless of availability data range', () => {
         // Data covers only hour 20, but grid should still show all 24 hours
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: {
@@ -359,7 +369,10 @@ describe('ROK-475: full 24h scrollable grid', () => {
         }
     });
 
-    it('shows "no players" message and hides the grid when signups are 0', () => {
+}
+
+function rok475Full24hScrollableGroup2() {
+it('shows "no players" message and hides the grid when signups are 0', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: { totalUsers: 0, cells: [] },
             isLoading: false,
@@ -371,7 +384,10 @@ describe('ROK-475: full 24h scrollable grid', () => {
         expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
     });
 
-    it('current event block is rendered in the grid', () => {
+}
+
+function rok475Full24hScrollableGroup3() {
+it('current event block is rendered in the grid', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: {
                 totalUsers: 2,
@@ -389,7 +405,10 @@ describe('ROK-475: full 24h scrollable grid', () => {
         expect(screen.getByTestId(`event-block-42-${currentDay}`)).toBeInTheDocument();
     });
 
-    it('heatmap cells are rendered at the correct positions', () => {
+}
+
+function rok475Full24hScrollableGroup4() {
+it('heatmap cells are rendered at the correct positions', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: {
                 totalUsers: 5,
@@ -410,7 +429,10 @@ describe('ROK-475: full 24h scrollable grid', () => {
         expect(within(grid).getByTestId('cell-3-20')).toBeInTheDocument();
     });
 
-    it('shows signup count in the instruction text', () => {
+}
+
+function rok475Full24hScrollableGroup5() {
+it('shows signup count in the instruction text', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: {
                 totalUsers: 7,
@@ -423,7 +445,7 @@ describe('ROK-475: full 24h scrollable grid', () => {
         expect(screen.getByText(/7 signed up/)).toBeInTheDocument();
     });
 
-    it('does not render the grid when loading', () => {
+it('does not render the grid when loading', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: undefined,
             isLoading: true,
@@ -434,7 +456,10 @@ describe('ROK-475: full 24h scrollable grid', () => {
         expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
     });
 
-    it('uses GameTimeGrid (not TeamAvailabilityPicker) for the heatmap', () => {
+}
+
+function rok475Full24hScrollableGroup6() {
+it('uses GameTimeGrid (not TeamAvailabilityPicker) for the heatmap', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: {
                 totalUsers: 5,
@@ -447,4 +472,22 @@ describe('ROK-475: full 24h scrollable grid', () => {
         expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
         expect(screen.queryByTestId('team-availability-picker')).not.toBeInTheDocument();
     });
+
+}
+
+describe('ROK-475: full 24h scrollable grid', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    rok475Full24hScrollableGroup1();
+    rok475Full24hScrollableGroup2();
+    rok475Full24hScrollableGroup3();
+    rok475Full24hScrollableGroup4();
+    rok475Full24hScrollableGroup5();
+    rok475Full24hScrollableGroup6();
 });

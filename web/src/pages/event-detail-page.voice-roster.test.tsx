@@ -43,10 +43,8 @@ function timeOffset(offsetMs: number): string {
   return new Date(Date.now() + offsetMs).toISOString();
 }
 
-describe('showVoiceRoster logic (ROK-530)', () => {
-  // ── Ad-hoc events ─────────────────────────────────────────────────────────
-
-  it('showVoiceRoster is true for ad-hoc events regardless of time', () => {
+function showvoicerosterLogicROK530Group1() {
+it('showVoiceRoster is true for ad-hoc events regardless of time', () => {
     // Ad-hoc events show voice roster always (they have no scheduled time window)
     const adHocEvent = {
       isAdHoc: true,
@@ -58,7 +56,7 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(adHocEvent)).toBe(true);
   });
 
-  it('showVoiceRoster is true for ad-hoc events even without a game', () => {
+it('showVoiceRoster is true for ad-hoc events even without a game', () => {
     const adHocEvent = {
       isAdHoc: true,
       startTime: timeOffset(-1 * 3600_000),
@@ -69,7 +67,10 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(adHocEvent)).toBe(true);
   });
 
-  it('showVoiceRoster is true for ad-hoc events even when upcoming', () => {
+}
+
+function showvoicerosterLogicROK530Group2() {
+it('showVoiceRoster is true for ad-hoc events even when upcoming', () => {
     const adHocEvent = {
       isAdHoc: true,
       startTime: timeOffset(1 * 3600_000), // starts in 1h
@@ -80,9 +81,7 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(adHocEvent)).toBe(true);
   });
 
-  // ── Planned events: live window ───────────────────────────────────────────
-
-  it('showVoiceRoster is true for planned events that are live AND have a game', () => {
+it('showVoiceRoster is true for planned events that are live AND have a game', () => {
     const livePlannedWithGame = {
       isAdHoc: false,
       startTime: timeOffset(-30 * 60_000), // started 30 min ago
@@ -93,7 +92,10 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(livePlannedWithGame)).toBe(true);
   });
 
-  it('showVoiceRoster is true for planned events that are live without a game (default voice channel fallback)', () => {
+}
+
+function showvoicerosterLogicROK530Group3() {
+it('showVoiceRoster is true for planned events that are live without a game (default voice channel fallback)', () => {
     const livePlannedNoGame = {
       isAdHoc: false,
       startTime: timeOffset(-30 * 60_000),
@@ -104,9 +106,7 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(livePlannedNoGame)).toBe(true);
   });
 
-  // ── Planned events: upcoming ──────────────────────────────────────────────
-
-  it('showVoiceRoster is false for planned upcoming events even with a game (AC: panel only during live window)', () => {
+it('showVoiceRoster is false for planned upcoming events even with a game (AC: panel only during live window)', () => {
     const upcomingWithGame = {
       isAdHoc: false,
       startTime: timeOffset(2 * 3600_000), // starts in 2h
@@ -117,7 +117,10 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(upcomingWithGame)).toBe(false);
   });
 
-  it('showVoiceRoster is false for planned upcoming events without a game', () => {
+}
+
+function showvoicerosterLogicROK530Group4() {
+it('showVoiceRoster is false for planned upcoming events without a game', () => {
     const upcoming = {
       isAdHoc: false,
       startTime: timeOffset(1 * 3600_000),
@@ -128,9 +131,7 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(upcoming)).toBe(false);
   });
 
-  // ── Planned events: ended ─────────────────────────────────────────────────
-
-  it('showVoiceRoster is false for ended planned events even with a game', () => {
+it('showVoiceRoster is false for ended planned events even with a game', () => {
     const endedWithGame = {
       isAdHoc: false,
       startTime: timeOffset(-4 * 3600_000), // started 4h ago
@@ -141,11 +142,17 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(endedWithGame)).toBe(false);
   });
 
-  // ── No event loaded ───────────────────────────────────────────────────────
-
-  it('showVoiceRoster is false when event is null (loading state)', () => {
+it('showVoiceRoster is false when event is null (loading state)', () => {
     expect(deriveShowVoiceRoster(null)).toBe(false);
   });
+
+}
+
+describe('showVoiceRoster logic (ROK-530)', () => {
+    showvoicerosterLogicROK530Group1();
+    showvoicerosterLogicROK530Group2();
+    showvoicerosterLogicROK530Group3();
+    showvoicerosterLogicROK530Group4();
 });
 
 // ─── useVoiceRoster hook receives correct eventId ─────────────────────────────
@@ -212,29 +219,32 @@ describe('VoiceRoster panel visibility guard (ROK-530)', () => {
 
 // ─── getEventStatus boundary tests (used by showVoiceRoster) ─────────────────
 
-describe('getEventStatus boundaries relevant to showVoiceRoster (ROK-530)', () => {
-  it('returns "live" for an event currently in progress', () => {
+function geteventstatusBoundariesRelevantToShowVoiceRosterGroup1() {
+it('returns "live" for an event currently in progress', () => {
     const start = new Date(Date.now() - 30 * 60_000).toISOString();
     const end = new Date(Date.now() + 90 * 60_000).toISOString();
 
     expect(getEventStatus(start, end)).toBe('live');
   });
 
-  it('returns "upcoming" for an event starting in the future', () => {
+it('returns "upcoming" for an event starting in the future', () => {
     const start = new Date(Date.now() + 60 * 60_000).toISOString();
     const end = new Date(Date.now() + 3 * 60 * 60_000).toISOString();
 
     expect(getEventStatus(start, end)).toBe('upcoming');
   });
 
-  it('returns "ended" for a past event', () => {
+it('returns "ended" for a past event', () => {
     const start = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
     const end = new Date(Date.now() - 60 * 60_000).toISOString();
 
     expect(getEventStatus(start, end)).toBe('ended');
   });
 
-  it('an "ended" event has showVoiceRoster=false for planned events', () => {
+}
+
+function geteventstatusBoundariesRelevantToShowVoiceRosterGroup2() {
+it('an "ended" event has showVoiceRoster=false for planned events', () => {
     const status = getEventStatus(
       new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
       new Date(Date.now() - 60 * 60_000).toISOString(),
@@ -246,7 +256,7 @@ describe('getEventStatus boundaries relevant to showVoiceRoster (ROK-530)', () =
     expect(showVoiceRoster).toBe(false);
   });
 
-  it('an "upcoming" event has showVoiceRoster=false for planned events', () => {
+it('an "upcoming" event has showVoiceRoster=false for planned events', () => {
     const status = getEventStatus(
       new Date(Date.now() + 60 * 60_000).toISOString(),
       new Date(Date.now() + 3 * 60 * 60_000).toISOString(),
@@ -257,6 +267,12 @@ describe('getEventStatus boundaries relevant to showVoiceRoster (ROK-530)', () =
 
     expect(showVoiceRoster).toBe(false);
   });
+
+}
+
+describe('getEventStatus boundaries relevant to showVoiceRoster (ROK-530)', () => {
+    geteventstatusBoundariesRelevantToShowVoiceRosterGroup1();
+    geteventstatusBoundariesRelevantToShowVoiceRosterGroup2();
 });
 
 // Silence unused import warning from vitest

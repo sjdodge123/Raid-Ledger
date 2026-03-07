@@ -58,12 +58,8 @@ const mockActivityResponse = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('useUserActivity (ROK-443)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('should fetch user activity with correct userId and period', async () => {
+function useuseractivityROK443Group1() {
+it('should fetch user activity with correct userId and period', async () => {
         mockGetUserActivity.mockResolvedValue(mockActivityResponse);
 
         const { result } = renderHook(() => useUserActivity(1, 'week'), {
@@ -78,7 +74,7 @@ describe('useUserActivity (ROK-443)', () => {
         expect(mockGetUserActivity).toHaveBeenCalledWith(1, 'week');
     });
 
-    it('should not fetch when userId is undefined', async () => {
+it('should not fetch when userId is undefined', async () => {
         const { result } = renderHook(() => useUserActivity(undefined, 'week'), {
             wrapper: createWrapper(),
         });
@@ -90,7 +86,10 @@ describe('useUserActivity (ROK-443)', () => {
         expect(mockGetUserActivity).not.toHaveBeenCalled();
     });
 
-    it('should fetch with period=month', async () => {
+}
+
+function useuseractivityROK443Group2() {
+it('should fetch with period=month', async () => {
         mockGetUserActivity.mockResolvedValue({ data: [], period: 'month' });
 
         const { result } = renderHook(() => useUserActivity(5, 'month'), {
@@ -104,7 +103,7 @@ describe('useUserActivity (ROK-443)', () => {
         expect(mockGetUserActivity).toHaveBeenCalledWith(5, 'month');
     });
 
-    it('should fetch with period=all', async () => {
+it('should fetch with period=all', async () => {
         mockGetUserActivity.mockResolvedValue({ data: [], period: 'all' });
 
         const { result } = renderHook(() => useUserActivity(2, 'all'), {
@@ -118,7 +117,10 @@ describe('useUserActivity (ROK-443)', () => {
         expect(mockGetUserActivity).toHaveBeenCalledWith(2, 'all');
     });
 
-    it('should return data with activity entries', async () => {
+}
+
+function useuseractivityROK443Group3() {
+it('should return data with activity entries', async () => {
         mockGetUserActivity.mockResolvedValue(mockActivityResponse);
 
         const { result } = renderHook(() => useUserActivity(1, 'week'), {
@@ -134,7 +136,7 @@ describe('useUserActivity (ROK-443)', () => {
         expect(result.current.data?.data[1].isMostPlayed).toBe(false);
     });
 
-    it('should return isLoading=true before data arrives', () => {
+it('should return isLoading=true before data arrives', () => {
         // Never resolves
         mockGetUserActivity.mockReturnValue(new Promise(() => {}));
 
@@ -145,7 +147,10 @@ describe('useUserActivity (ROK-443)', () => {
         expect(result.current.isLoading).toBe(true);
     });
 
-    it('should return empty data array when activity is empty', async () => {
+}
+
+function useuseractivityROK443Group4() {
+it('should return empty data array when activity is empty', async () => {
         mockGetUserActivity.mockResolvedValue({ data: [], period: 'week' });
 
         const { result } = renderHook(() => useUserActivity(1, 'week'), {
@@ -159,7 +164,7 @@ describe('useUserActivity (ROK-443)', () => {
         expect(result.current.data?.data).toEqual([]);
     });
 
-    it('should use query key that includes userId and period', async () => {
+it('should use query key that includes userId and period', async () => {
         mockGetUserActivity.mockResolvedValue(mockActivityResponse);
 
         // Render with one period
@@ -175,7 +180,10 @@ describe('useUserActivity (ROK-443)', () => {
         expect(mockGetUserActivity).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle API errors gracefully', async () => {
+}
+
+function useuseractivityROK443Group5() {
+it('should handle API errors gracefully', async () => {
         mockGetUserActivity.mockRejectedValue(new Error('Network error'));
 
         const { result } = renderHook(() => useUserActivity(1, 'week'), {
@@ -188,4 +196,17 @@ describe('useUserActivity (ROK-443)', () => {
 
         expect(result.current.error).toBeInstanceOf(Error);
     });
+
+}
+
+describe('useUserActivity (ROK-443)', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    useuseractivityROK443Group1();
+    useuseractivityROK443Group2();
+    useuseractivityROK443Group3();
+    useuseractivityROK443Group4();
+    useuseractivityROK443Group5();
 });

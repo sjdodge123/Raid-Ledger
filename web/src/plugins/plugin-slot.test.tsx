@@ -12,23 +12,15 @@ function TestComponent2(props: { message?: string }) {
     return <div data-testid="test-component-2">{props.message ?? 'second'}</div>;
 }
 
-describe('PluginSlot', () => {
-    beforeEach(() => {
-        clearRegistry();
-        usePluginStore.setState({
-            activeSlugs: new Set<string>(),
-            initialized: false,
-        });
-    });
-
-    it('renders nothing when no registrations exist and no fallback', () => {
+function pluginslotGroup1() {
+it('renders nothing when no registrations exist and no fallback', () => {
         const { container } = render(
             <PluginSlot name="character-detail:sections" />,
         );
         expect(container.innerHTML).toBe('');
     });
 
-    it('renders fallback when no active plugin fills the slot', () => {
+it('renders fallback when no active plugin fills the slot', () => {
         render(
             <PluginSlot
                 name="character-detail:sections"
@@ -38,7 +30,10 @@ describe('PluginSlot', () => {
         expect(screen.getByTestId('fallback')).toBeInTheDocument();
     });
 
-    it('renders fallback when registrations exist but plugin is inactive', () => {
+}
+
+function pluginslotGroup2() {
+it('renders fallback when registrations exist but plugin is inactive', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:sections',
@@ -56,7 +51,10 @@ describe('PluginSlot', () => {
         expect(screen.queryByTestId('test-component')).not.toBeInTheDocument();
     });
 
-    it('renders registered component when plugin is active', () => {
+}
+
+function pluginslotGroup3() {
+it('renders registered component when plugin is active', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:sections',
@@ -70,7 +68,10 @@ describe('PluginSlot', () => {
         expect(screen.getByTestId('test-component')).toBeInTheDocument();
     });
 
-    it('passes context props to the rendered component', () => {
+}
+
+function pluginslotGroup4() {
+it('passes context props to the rendered component', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:sections',
@@ -89,7 +90,10 @@ describe('PluginSlot', () => {
         expect(screen.getByTestId('test-component')).toHaveTextContent('hello from context');
     });
 
-    it('renders multiple components stacked by priority', () => {
+}
+
+function pluginslotGroup5() {
+it('renders multiple components stacked by priority', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:header-badges',
@@ -113,7 +117,10 @@ describe('PluginSlot', () => {
         expect(components[1]).toHaveTextContent('default');
     });
 
-    it('wraps content in div with className when provided', () => {
+}
+
+function pluginslotGroup6() {
+it('wraps content in div with className when provided', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:sections',
@@ -134,7 +141,10 @@ describe('PluginSlot', () => {
         expect(wrapper?.querySelector('[data-testid="test-component"]')).toBeInTheDocument();
     });
 
-    it('wraps fallback in div with className when provided', () => {
+}
+
+function pluginslotGroup7() {
+it('wraps fallback in div with className when provided', () => {
         const { container } = render(
             <PluginSlot
                 name="character-detail:sections"
@@ -147,7 +157,10 @@ describe('PluginSlot', () => {
         expect(wrapper?.textContent).toBe('Fallback content');
     });
 
-    it('does not render badges on user-facing slots (badges are admin-only)', () => {
+}
+
+function pluginslotGroup8() {
+it('does not render badges on user-facing slots (badges are admin-only)', () => {
         registerPlugin('blizzard', {
             icon: 'W',
             color: 'blue',
@@ -169,4 +182,24 @@ describe('PluginSlot', () => {
         // Badges only appear on admin UI cards, not on PluginSlot
         expect(container.querySelector('[title="WoW Plugin"]')).toBeNull();
     });
+
+}
+
+describe('PluginSlot', () => {
+beforeEach(() => {
+        clearRegistry();
+        usePluginStore.setState({
+            activeSlugs: new Set<string>(),
+            initialized: false,
+        });
+    });
+
+    pluginslotGroup1();
+    pluginslotGroup2();
+    pluginslotGroup3();
+    pluginslotGroup4();
+    pluginslotGroup5();
+    pluginslotGroup6();
+    pluginslotGroup7();
+    pluginslotGroup8();
 });

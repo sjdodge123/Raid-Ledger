@@ -48,54 +48,63 @@ function deriveShouldShowCharacterModal(input: ModalGateInput): boolean {
     return !!input.gameId && (input.gameHasRoles || input.userHasCharacters);
 }
 
+function shouldshowcharactermodalLogicROK600Group1() {
+it('shows modal for MMO game (hasRoles: true)', () => {
+        expect(deriveShouldShowCharacterModal({
+            gameId: 1,
+            gameHasRoles: true,
+            userHasCharacters: false,
+        })).toBe(true);
+    });
+
+it('skips modal for non-MMO game with no characters', () => {
+        expect(deriveShouldShowCharacterModal({
+            gameId: 2,
+            gameHasRoles: false,
+            userHasCharacters: false,
+        })).toBe(false);
+    });
+
+it('shows modal for non-MMO game when user has characters', () => {
+        expect(deriveShouldShowCharacterModal({
+            gameId: 2,
+            gameHasRoles: false,
+            userHasCharacters: true,
+        })).toBe(true);
+    });
+
+}
+
+function shouldshowcharactermodalLogicROK600Group2() {
+it('skips modal when event has no game', () => {
+        expect(deriveShouldShowCharacterModal({
+            gameId: undefined,
+            gameHasRoles: false,
+            userHasCharacters: false,
+        })).toBe(false);
+    });
+
+it('skips modal when event has no game even if hasRoles is somehow true', () => {
+        expect(deriveShouldShowCharacterModal({
+            gameId: undefined,
+            gameHasRoles: true,
+            userHasCharacters: false,
+        })).toBe(false);
+    });
+
+it('shows modal for MMO game even when user also has characters', () => {
+        expect(deriveShouldShowCharacterModal({
+            gameId: 1,
+            gameHasRoles: true,
+            userHasCharacters: true,
+        })).toBe(true);
+    });
+
+}
+
 describe('shouldShowCharacterModal logic (ROK-600)', () => {
-    it('shows modal for MMO game (hasRoles: true)', () => {
-        expect(deriveShouldShowCharacterModal({
-            gameId: 1,
-            gameHasRoles: true,
-            userHasCharacters: false,
-        })).toBe(true);
-    });
-
-    it('skips modal for non-MMO game with no characters', () => {
-        expect(deriveShouldShowCharacterModal({
-            gameId: 2,
-            gameHasRoles: false,
-            userHasCharacters: false,
-        })).toBe(false);
-    });
-
-    it('shows modal for non-MMO game when user has characters', () => {
-        expect(deriveShouldShowCharacterModal({
-            gameId: 2,
-            gameHasRoles: false,
-            userHasCharacters: true,
-        })).toBe(true);
-    });
-
-    it('skips modal when event has no game', () => {
-        expect(deriveShouldShowCharacterModal({
-            gameId: undefined,
-            gameHasRoles: false,
-            userHasCharacters: false,
-        })).toBe(false);
-    });
-
-    it('skips modal when event has no game even if hasRoles is somehow true', () => {
-        expect(deriveShouldShowCharacterModal({
-            gameId: undefined,
-            gameHasRoles: true,
-            userHasCharacters: false,
-        })).toBe(false);
-    });
-
-    it('shows modal for MMO game even when user also has characters', () => {
-        expect(deriveShouldShowCharacterModal({
-            gameId: 1,
-            gameHasRoles: true,
-            userHasCharacters: true,
-        })).toBe(true);
-    });
+    shouldshowcharactermodalLogicROK600Group1();
+    shouldshowcharactermodalLogicROK600Group2();
 });
 
 // ─── Component tests: signup flow with mocked hooks ──────────────────────────
@@ -275,15 +284,8 @@ function renderEventDetailPage() {
     );
 }
 
-describe('EventDetailPage signup flow (ROK-600)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockUser = { id: 99, username: 'TestUser', role: 'member' };
-        mockIsAuthenticated = true;
-        mockMyCharactersData = { data: [], meta: { total: 0 } };
-    });
-
-    it('shows character modal for MMO game event', async () => {
+function eventdetailpageSignupFlowROK600Group1() {
+it('shows character modal for MMO game event', async () => {
         const event = createMockEventResponse({
             game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null, hasRoles: true },
         });
@@ -309,7 +311,10 @@ describe('EventDetailPage signup flow (ROK-600)', () => {
         expect(mockSignupMutateAsync).not.toHaveBeenCalled();
     });
 
-    it('direct signup for non-MMO game event (no modal)', async () => {
+}
+
+function eventdetailpageSignupFlowROK600Group2() {
+it('direct signup for non-MMO game event (no modal)', async () => {
         const event = createMockEventResponse({
             game: { id: 2, name: 'GTA V', slug: 'gta-v', coverUrl: null, hasRoles: false },
         });
@@ -337,7 +342,10 @@ describe('EventDetailPage signup flow (ROK-600)', () => {
         });
     });
 
-    it('direct signup for event with no game (no modal)', async () => {
+}
+
+function eventdetailpageSignupFlowROK600Group3() {
+it('direct signup for event with no game (no modal)', async () => {
         const event = createMockEventResponse({
             game: null,
         });
@@ -358,7 +366,10 @@ describe('EventDetailPage signup flow (ROK-600)', () => {
         });
     });
 
-    it('shows character modal for non-MMO game when user has characters', async () => {
+}
+
+function eventdetailpageSignupFlowROK600Group4() {
+it('shows character modal for non-MMO game when user has characters', async () => {
         // Set up characters data synchronously via the mocked hook
         mockMyCharactersData = {
             data: [{ id: 'char-uuid-1', name: 'Captain Jack' }],
@@ -387,4 +398,19 @@ describe('EventDetailPage signup flow (ROK-600)', () => {
         });
         expect(mockSignupMutateAsync).not.toHaveBeenCalled();
     });
+
+}
+
+describe('EventDetailPage signup flow (ROK-600)', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = { id: 99, username: 'TestUser', role: 'member' };
+        mockIsAuthenticated = true;
+        mockMyCharactersData = { data: [], meta: { total: 0 } };
+    });
+
+    eventdetailpageSignupFlowROK600Group1();
+    eventdetailpageSignupFlowROK600Group2();
+    eventdetailpageSignupFlowROK600Group3();
+    eventdetailpageSignupFlowROK600Group4();
 });

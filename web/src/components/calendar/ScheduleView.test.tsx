@@ -72,8 +72,8 @@ describe('ScheduleView', () => {
         });
     });
 
-    describe('Event grouping by day', () => {
-        it('renders events grouped under correct day abbreviation and date', () => {
+    function eventGroupingByDayGroup1() {
+it('renders events grouped under correct day abbreviation and date', () => {
             const events = [
                 makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
                 makeCalendarEvent(2, 'Event B', new Date('2026-02-13T15:00:00'), new Date('2026-02-13T17:00:00')),
@@ -94,7 +94,10 @@ describe('ScheduleView', () => {
             expect(screen.getByText('Event B')).toBeInTheDocument();
         });
 
-        it('groups multiple events under same day', () => {
+    }
+
+    function eventGroupingByDayGroup2() {
+it('groups multiple events under same day', () => {
             const events = [
                 makeCalendarEvent(1, 'Morning Raid', new Date('2026-02-12T08:00:00'), new Date('2026-02-12T10:00:00')),
                 makeCalendarEvent(2, 'Evening Raid', new Date('2026-02-12T18:00:00'), new Date('2026-02-12T20:00:00')),
@@ -111,7 +114,7 @@ describe('ScheduleView', () => {
             expect(screen.getByText('Evening Raid')).toBeInTheDocument();
         });
 
-        it('renders events sorted by start time within the same day', () => {
+it('renders events sorted by start time within the same day', () => {
             const events = [
                 makeCalendarEvent(2, 'Evening Raid', new Date('2026-02-12T18:00:00'), new Date('2026-02-12T20:00:00')),
                 makeCalendarEvent(1, 'Morning Raid', new Date('2026-02-12T08:00:00'), new Date('2026-02-12T10:00:00')),
@@ -124,7 +127,10 @@ describe('ScheduleView', () => {
             expect(buttons[1]).toHaveTextContent('Evening Raid');
         });
 
-        it('renders day groups in ascending date order', () => {
+    }
+
+    function eventGroupingByDayGroup3() {
+it('renders day groups in ascending date order', () => {
             const events = [
                 makeCalendarEvent(2, 'Later Event', new Date('2026-02-14T10:00:00'), new Date('2026-02-14T12:00:00')),
                 makeCalendarEvent(1, 'Earlier Event', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
@@ -137,7 +143,7 @@ describe('ScheduleView', () => {
             expect(buttons[1]).toHaveTextContent('Later Event');
         });
 
-        it('does not render days without events', () => {
+it('does not render days without events', () => {
             // Events on Feb 12 and Feb 14 — Feb 13 should be hidden
             const events = [
                 makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
@@ -154,7 +160,10 @@ describe('ScheduleView', () => {
             expect(screen.queryByText('13')).not.toBeInTheDocument();
         });
 
-        it('always shows today even without events', () => {
+    }
+
+    function eventGroupingByDayGroup4() {
+it('always shows today even without events', () => {
             // MOCK_NOW is Feb 10. Event only on Feb 12.
             const events = [
                 makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
@@ -166,6 +175,14 @@ describe('ScheduleView', () => {
             expect(screen.getByText('10')).toBeInTheDocument();
             expect(screen.getByText('Tue')).toBeInTheDocument();
         });
+
+    }
+
+    describe('Event grouping by day', () => {
+        eventGroupingByDayGroup1();
+        eventGroupingByDayGroup2();
+        eventGroupingByDayGroup3();
+        eventGroupingByDayGroup4();
     });
 
     describe('Google Calendar-style day headers', () => {
@@ -260,8 +277,8 @@ describe('ScheduleView', () => {
 
     });
 
-    describe('Swipe gesture handling', () => {
-        it('calls onDateChange with next day on swipe left (dx < -50)', () => {
+    function swipeGestureHandlingGroup1() {
+it('calls onDateChange with next day on swipe left (dx < -50)', () => {
             const onDateChange = vi.fn();
             const events = [
                 makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
@@ -285,7 +302,10 @@ describe('ScheduleView', () => {
             expect(newDate.getDate()).toBe(MOCK_NOW.getDate() + 1);
         });
 
-        it('calls onDateChange with previous day on swipe right (dx > 50)', () => {
+    }
+
+    function swipeGestureHandlingGroup2() {
+it('calls onDateChange with previous day on swipe right (dx > 50)', () => {
             const onDateChange = vi.fn();
             const events = [
                 makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
@@ -309,7 +329,10 @@ describe('ScheduleView', () => {
             expect(newDate.getDate()).toBe(MOCK_NOW.getDate() - 1);
         });
 
-        it('does not call onDateChange when horizontal movement < 50px', () => {
+    }
+
+    function swipeGestureHandlingGroup3() {
+it('does not call onDateChange when horizontal movement < 50px', () => {
             const onDateChange = vi.fn();
             const events = [
                 makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
@@ -331,7 +354,10 @@ describe('ScheduleView', () => {
             expect(onDateChange).not.toHaveBeenCalled();
         });
 
-        it('does not call onDateChange when vertical movement dominates', () => {
+    }
+
+    function swipeGestureHandlingGroup4() {
+it('does not call onDateChange when vertical movement dominates', () => {
             const onDateChange = vi.fn();
             const events = [
                 makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
@@ -352,5 +378,13 @@ describe('ScheduleView', () => {
 
             expect(onDateChange).not.toHaveBeenCalled();
         });
+
+    }
+
+    describe('Swipe gesture handling', () => {
+        swipeGestureHandlingGroup1();
+        swipeGestureHandlingGroup2();
+        swipeGestureHandlingGroup3();
+        swipeGestureHandlingGroup4();
     });
 });

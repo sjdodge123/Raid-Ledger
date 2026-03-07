@@ -15,18 +15,8 @@ function resetStore() {
     });
 }
 
-describe('useConnectivityStore', () => {
-    beforeEach(() => {
-        resetStore();
-        vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-        vi.restoreAllMocks();
-        vi.useRealTimers();
-    });
-
-    describe('check() — successful response', () => {
+function useconnectivitystoreGroup1() {
+describe('check() — successful response', () => {
         it('sets status to "online" on successful fetch', async () => {
             vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
 
@@ -68,7 +58,10 @@ describe('useConnectivityStore', () => {
         });
     });
 
-    describe('check() — failed response (non-ok HTTP)', () => {
+}
+
+function useconnectivitystoreGroup2() {
+describe('check() — failed response (non-ok HTTP)', () => {
         it('increments consecutiveFailures on non-ok response', async () => {
             vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
 
@@ -108,7 +101,10 @@ describe('useConnectivityStore', () => {
         });
     });
 
-    describe('check() — fetch throws (network error)', () => {
+}
+
+function useconnectivitystoreGroup3() {
+describe('check() — fetch throws (network error)', () => {
         it('increments consecutiveFailures on thrown error', async () => {
             vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
@@ -137,7 +133,10 @@ describe('useConnectivityStore', () => {
         });
     });
 
-    describe('check() — recovery from offline', () => {
+}
+
+function useconnectivitystoreGroup4() {
+describe('check() — recovery from offline', () => {
         it('resets consecutiveFailures on recovery after being offline', async () => {
             // Prime with failures
             vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
@@ -154,7 +153,10 @@ describe('useConnectivityStore', () => {
         });
     });
 
-    describe('startPolling()', () => {
+}
+
+function useconnectivitystoreGroup5() {
+describe('startPolling()', () => {
         it('calls check() immediately on start', async () => {
             const mockFetch = vi.fn().mockResolvedValue({ ok: true });
             vi.stubGlobal('fetch', mockFetch);
@@ -225,7 +227,7 @@ describe('useConnectivityStore', () => {
             stop();
         });
 
-        it('applies exponential backoff for offline polls (3s, 6s, 12s, 24s, capped at 30s)', async () => {
+        async function testAppliesExponentialBackoffForOffline() {
             useConnectivityStore.setState({
                 status: 'offline',
                 consecutiveFailures: 2,
@@ -280,9 +282,11 @@ describe('useConnectivityStore', () => {
             expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 5);
 
             stop();
-        });
+        
+        }
+        it('applies exponential backoff for offline polls (3s, 6s, 12s, 24s, capped at 30s)', async () => { await testAppliesExponentialBackoffForOffline(); });
 
-        it('resets backoff when recovering to online', async () => {
+        async function testResetsBackoffWhenRecoveringTo() {
             useConnectivityStore.setState({
                 status: 'offline',
                 consecutiveFailures: 2,
@@ -350,7 +354,9 @@ describe('useConnectivityStore', () => {
             expect(mockFetch.mock.calls.length).toBeGreaterThan(callsAfterOffline);
 
             stop();
-        });
+        
+        }
+        it('resets backoff when recovering to online', async () => { await testResetsBackoffWhenRecoveringTo(); });
 
         it('returns a cleanup function that stops polling', async () => {
             const mockFetch = vi.fn().mockResolvedValue({ ok: true });
@@ -371,4 +377,23 @@ describe('useConnectivityStore', () => {
             expect(mockFetch.mock.calls.length).toBe(callCountAtStop);
         });
     });
+
+}
+
+describe('useConnectivityStore', () => {
+beforeEach(() => {
+        resetStore();
+        vi.useFakeTimers();
+    });
+
+afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    useconnectivitystoreGroup1();
+    useconnectivitystoreGroup2();
+    useconnectivitystoreGroup3();
+    useconnectivitystoreGroup4();
+    useconnectivitystoreGroup5();
 });

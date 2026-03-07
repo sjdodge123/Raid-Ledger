@@ -49,12 +49,8 @@ function renderWithProviders(ui: React.ReactElement) {
     );
 }
 
-describe('GameTimeStep', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    describe('Desktop rendering (≥768px)', () => {
+function gametimestepGroup1() {
+describe('Desktop rendering (≥768px)', () => {
         beforeEach(() => {
             mockUseMediaQuery.mockReturnValue(false); // not mobile
         });
@@ -76,7 +72,10 @@ describe('GameTimeStep', () => {
         });
     });
 
-    describe('Mobile rendering (<768px)', () => {
+}
+
+function gametimestepGroup2() {
+describe('Mobile rendering (<768px)', () => {
         beforeEach(() => {
             mockUseMediaQuery.mockReturnValue(true); // is mobile
         });
@@ -98,7 +97,10 @@ describe('GameTimeStep', () => {
         });
     });
 
-    describe('Loading state', () => {
+}
+
+function gametimestepGroup3() {
+describe('Loading state', () => {
         it('renders a loading spinner while data is loading', () => {
             mockUseMediaQuery.mockReturnValue(false);
             mockUseGameTimeEditor.mockReturnValue({
@@ -117,11 +119,26 @@ describe('GameTimeStep', () => {
         });
     });
 
-    describe('useMediaQuery called with correct breakpoint', () => {
+}
+
+function gametimestepGroup4() {
+describe('useMediaQuery called with correct breakpoint', () => {
         it('queries for max-width 767px (mobile breakpoint)', () => {
             mockUseMediaQuery.mockReturnValue(false);
             renderWithProviders(<GameTimeStep />);
             expect(mockUseMediaQuery).toHaveBeenCalledWith('(max-width: 767px)');
         });
     });
+
+}
+
+describe('GameTimeStep', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    gametimestepGroup1();
+    gametimestepGroup2();
+    gametimestepGroup3();
+    gametimestepGroup4();
 });

@@ -48,8 +48,8 @@ describe('Modal', () => {
         expect(screen.getByText('My Dialog Title')).toBeInTheDocument();
     });
 
-    describe('ARIA semantics (ROK-342)', () => {
-        it('dialog has role="dialog"', () => {
+    function ariaSemanticsROK342Group1() {
+it('dialog has role="dialog"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="ARIA Test">
                     <p>Content</p>
@@ -59,7 +59,7 @@ describe('Modal', () => {
             expect(dialog).toHaveAttribute('role', 'dialog');
         });
 
-        it('dialog has aria-modal="true"', () => {
+it('dialog has aria-modal="true"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="ARIA Test">
                     <p>Content</p>
@@ -69,7 +69,10 @@ describe('Modal', () => {
             expect(dialog).toHaveAttribute('aria-modal', 'true');
         });
 
-        it('dialog has aria-labelledby pointing to title element', () => {
+    }
+
+    function ariaSemanticsROK342Group2() {
+it('dialog has aria-labelledby pointing to title element', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Labeled Title">
                     <p>Content</p>
@@ -84,7 +87,10 @@ describe('Modal', () => {
             expect(titleEl?.textContent).toBe('Labeled Title');
         });
 
-        it('title element is an h2', () => {
+    }
+
+    function ariaSemanticsROK342Group3() {
+it('title element is an h2', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="H2 Title">
                     <p>Content</p>
@@ -96,7 +102,7 @@ describe('Modal', () => {
             expect(titleEl?.tagName).toBe('H2');
         });
 
-        it('close button has aria-label="Close modal"', () => {
+it('close button has aria-label="Close modal"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Test">
                     <p>Content</p>
@@ -106,7 +112,10 @@ describe('Modal', () => {
             expect(closeBtn).toBeInTheDocument();
         });
 
-        it('backdrop has aria-hidden="true"', () => {
+    }
+
+    function ariaSemanticsROK342Group4() {
+it('backdrop has aria-hidden="true"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Test">
                     <p>Content</p>
@@ -116,10 +125,18 @@ describe('Modal', () => {
             const backdrop = dialog.parentElement?.querySelector('[aria-hidden="true"]');
             expect(backdrop).toBeInTheDocument();
         });
+
+    }
+
+    describe('ARIA semantics (ROK-342)', () => {
+        ariaSemanticsROK342Group1();
+        ariaSemanticsROK342Group2();
+        ariaSemanticsROK342Group3();
+        ariaSemanticsROK342Group4();
     });
 
-    describe('Escape key closes modal (ROK-342 AC)', () => {
-        it('calls onClose when Escape key is pressed', () => {
+    function escapeKeyClosesModalROKGroup1() {
+it('calls onClose when Escape key is pressed', () => {
             const onClose = vi.fn();
             render(
                 <Modal isOpen={true} onClose={onClose} title="Escape Test">
@@ -130,7 +147,7 @@ describe('Modal', () => {
             expect(onClose).toHaveBeenCalledOnce();
         });
 
-        it('does not call onClose for non-Escape keys', () => {
+it('does not call onClose for non-Escape keys', () => {
             const onClose = vi.fn();
             render(
                 <Modal isOpen={true} onClose={onClose} title="Escape Test">
@@ -142,7 +159,10 @@ describe('Modal', () => {
             expect(onClose).not.toHaveBeenCalled();
         });
 
-        it('does not register Escape listener when modal is closed', () => {
+    }
+
+    function escapeKeyClosesModalROKGroup2() {
+it('does not register Escape listener when modal is closed', () => {
             const onClose = vi.fn();
             render(
                 <Modal isOpen={false} onClose={onClose} title="Closed Modal">
@@ -152,6 +172,12 @@ describe('Modal', () => {
             fireEvent.keyDown(document, { key: 'Escape' });
             expect(onClose).not.toHaveBeenCalled();
         });
+
+    }
+
+    describe('Escape key closes modal (ROK-342 AC)', () => {
+        escapeKeyClosesModalROKGroup1();
+        escapeKeyClosesModalROKGroup2();
     });
 
     describe('backdrop click closes modal', () => {
@@ -182,8 +208,8 @@ describe('Modal', () => {
         });
     });
 
-    describe('body scroll locking', () => {
-        it('locks body scroll when modal opens', () => {
+    function bodyScrollLockingGroup1() {
+it('locks body scroll when modal opens', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Scroll Test">
                     <p>Content</p>
@@ -192,7 +218,7 @@ describe('Modal', () => {
             expect(document.body.style.overflow).toBe('hidden');
         });
 
-        it('restores body scroll when modal closes', () => {
+it('restores body scroll when modal closes', () => {
             const { rerender } = render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Scroll Test">
                     <p>Content</p>
@@ -208,7 +234,10 @@ describe('Modal', () => {
             expect(document.body.style.overflow).toBe('');
         });
 
-        it('restores body scroll on unmount', () => {
+    }
+
+    function bodyScrollLockingGroup2() {
+it('restores body scroll on unmount', () => {
             const { unmount } = render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Scroll Test">
                     <p>Content</p>
@@ -217,6 +246,12 @@ describe('Modal', () => {
             unmount();
             expect(document.body.style.overflow).toBe('');
         });
+
+    }
+
+    describe('body scroll locking', () => {
+        bodyScrollLockingGroup1();
+        bodyScrollLockingGroup2();
     });
 
     describe('custom props', () => {

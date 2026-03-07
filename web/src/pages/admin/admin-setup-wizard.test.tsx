@@ -187,13 +187,13 @@ describe('AdminSetupWizard', () => {
         });
     });
 
-    describe('Step content rendering', () => {
-        it('renders SecureAccountStep on step 0', () => {
+    function stepContentRenderingGroup1() {
+it('renders SecureAccountStep on step 0', () => {
             renderWithRouter(<AdminSetupWizard />);
             expect(screen.getByTestId('secure-account-step')).toBeInTheDocument();
         });
 
-        it('renders CommunityIdentityStep on step 1', () => {
+it('renders CommunityIdentityStep on step 1', () => {
             mockUseOnboarding.mockReturnValue({
                 ...defaultOnboarding,
                 statusQuery: {
@@ -206,7 +206,10 @@ describe('AdminSetupWizard', () => {
             expect(screen.getByTestId('community-identity-step')).toBeInTheDocument();
         });
 
-        it('renders ConnectPluginsStep on step 2', () => {
+    }
+
+    function stepContentRenderingGroup2() {
+it('renders ConnectPluginsStep on step 2', () => {
             mockUseOnboarding.mockReturnValue({
                 ...defaultOnboarding,
                 statusQuery: {
@@ -219,7 +222,7 @@ describe('AdminSetupWizard', () => {
             expect(screen.getByTestId('connect-plugins-step')).toBeInTheDocument();
         });
 
-        it('renders DoneStep on step 3', () => {
+it('renders DoneStep on step 3', () => {
             mockUseOnboarding.mockReturnValue({
                 ...defaultOnboarding,
                 statusQuery: {
@@ -231,6 +234,12 @@ describe('AdminSetupWizard', () => {
             renderWithRouter(<AdminSetupWizard />);
             expect(screen.getByTestId('done-step')).toBeInTheDocument();
         });
+
+    }
+
+    describe('Step content rendering', () => {
+        stepContentRenderingGroup1();
+        stepContentRenderingGroup2();
     });
 
     describe('Step number display', () => {

@@ -38,12 +38,8 @@ function createWrapper() {
     };
 }
 
-describe('usePluginAdmin', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('should fetch plugins on mount', async () => {
+function usepluginadminGroup1() {
+it('should fetch plugins on mount', async () => {
         const plugins = [
             {
                 slug: 'test',
@@ -72,7 +68,10 @@ describe('usePluginAdmin', () => {
         expect(mockGetPlugins).toHaveBeenCalledOnce();
     });
 
-    it('should call installPlugin on install mutation', async () => {
+}
+
+function usepluginadminGroup2() {
+it('should call installPlugin on install mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockInstallPlugin.mockResolvedValue(undefined);
 
@@ -91,7 +90,10 @@ describe('usePluginAdmin', () => {
         expect(mockInstallPlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
 
-    it('should call uninstallPlugin on uninstall mutation', async () => {
+}
+
+function usepluginadminGroup3() {
+it('should call uninstallPlugin on uninstall mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockUninstallPlugin.mockResolvedValue(undefined);
 
@@ -110,7 +112,10 @@ describe('usePluginAdmin', () => {
         expect(mockUninstallPlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
 
-    it('should call activatePlugin on activate mutation', async () => {
+}
+
+function usepluginadminGroup4() {
+it('should call activatePlugin on activate mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockActivatePlugin.mockResolvedValue(undefined);
 
@@ -129,7 +134,10 @@ describe('usePluginAdmin', () => {
         expect(mockActivatePlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
 
-    it('should call deactivatePlugin on deactivate mutation', async () => {
+}
+
+function usepluginadminGroup5() {
+it('should call deactivatePlugin on deactivate mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockDeactivatePlugin.mockResolvedValue(undefined);
 
@@ -147,4 +155,17 @@ describe('usePluginAdmin', () => {
 
         expect(mockDeactivatePlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
+
+}
+
+describe('usePluginAdmin', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    usepluginadminGroup1();
+    usepluginadminGroup2();
+    usepluginadminGroup3();
+    usepluginadminGroup4();
+    usepluginadminGroup5();
 });

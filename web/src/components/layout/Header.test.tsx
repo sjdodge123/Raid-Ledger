@@ -40,8 +40,8 @@ function renderHeader(onMenuClick = vi.fn()) {
     );
 }
 
-describe('Header (ROK-342 accessibility)', () => {
-    describe('skip link (AC: Skip link appears on Tab from top of page)', () => {
+function headerROK342AccessibilityGroup1() {
+describe('skip link (AC: Skip link appears on Tab from top of page)', () => {
         it('renders a skip link to #main-content', () => {
             renderHeader();
             const skipLink = screen.getByText('Skip to main content');
@@ -65,7 +65,10 @@ describe('Header (ROK-342 accessibility)', () => {
         });
     });
 
-    describe('nav aria-label (AC: Semantic landmarks added to layout)', () => {
+}
+
+function headerROK342AccessibilityGroup2() {
+describe('nav aria-label (AC: Semantic landmarks added to layout)', () => {
         it('desktop nav has aria-label="Main navigation"', () => {
             renderHeader();
             const nav = screen.getByRole('navigation', { name: 'Main navigation' });
@@ -81,7 +84,10 @@ describe('Header (ROK-342 accessibility)', () => {
         });
     });
 
-    describe('hamburger button', () => {
+}
+
+function headerROK342AccessibilityGroup3() {
+describe('hamburger button', () => {
         it('hamburger button has aria-label="Open menu"', () => {
             renderHeader();
             const hamburger = screen.getByRole('button', { name: 'Open menu' });
@@ -97,7 +103,7 @@ describe('Header (ROK-342 accessibility)', () => {
         });
     });
 
-    describe('community name', () => {
+describe('community name', () => {
         it('falls back to "Raid Ledger" when communityName is not set', () => {
             renderHeader();
             // The link containing the community name
@@ -105,12 +111,23 @@ describe('Header (ROK-342 accessibility)', () => {
         });
     });
 
-    describe('authenticated user nav links', () => {
+}
+
+function headerROK342AccessibilityGroup4() {
+describe('authenticated user nav links', () => {
         it('does not show Event Metrics when user is null', () => {
             renderHeader();
             expect(screen.queryByText('Event Metrics')).not.toBeInTheDocument();
         });
     });
+
+}
+
+describe('Header (ROK-342 accessibility)', () => {
+    headerROK342AccessibilityGroup1();
+    headerROK342AccessibilityGroup2();
+    headerROK342AccessibilityGroup3();
+    headerROK342AccessibilityGroup4();
 });
 
 describe('Header — authenticated user', () => {

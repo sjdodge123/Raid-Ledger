@@ -176,8 +176,8 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
         });
     });
 
-    describe('activity entries', () => {
-        it('renders game name for each activity entry', () => {
+    function activityEntriesGroup1() {
+it('renders game name for each activity entry', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -197,7 +197,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.getByText('Elden Ring')).toBeInTheDocument();
         });
 
-        it('renders playtime as formatted string', () => {
+    }
+
+    function activityEntriesGroup2() {
+it('renders playtime as formatted string', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -216,7 +219,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.getByText('2h')).toBeInTheDocument();
         });
 
-        it('renders playtime with hours and minutes', () => {
+    }
+
+    function activityEntriesGroup3() {
+it('renders playtime with hours and minutes', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -235,7 +241,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.getByText('1h 30m')).toBeInTheDocument();
         });
 
-        it('renders playtime in minutes only for sub-hour entries', () => {
+    }
+
+    function activityEntriesGroup4() {
+it('renders playtime in minutes only for sub-hour entries', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -254,7 +263,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.getByText('30m')).toBeInTheDocument();
         });
 
-        it('shows Most Played badge on first entry', () => {
+    }
+
+    function activityEntriesGroup5() {
+it('shows Most Played badge on first entry', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -273,7 +285,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.getByText('Most Played')).toBeInTheDocument();
         });
 
-        it('does not show Most Played badge when isMostPlayed is false', () => {
+    }
+
+    function activityEntriesGroup6() {
+it('does not show Most Played badge when isMostPlayed is false', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -291,7 +306,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.queryByText('Most Played')).not.toBeInTheDocument();
         });
 
-        it('links each activity entry to the game detail page', () => {
+    }
+
+    function activityEntriesGroup7() {
+it('links each activity entry to the game detail page', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -310,7 +328,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(link).toHaveAttribute('href', '/games/42');
         });
 
-        it('shows placeholder box when coverUrl is null', () => {
+    }
+
+    function activityEntriesGroup8() {
+it('shows placeholder box when coverUrl is null', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -329,7 +350,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.getByText('?')).toBeInTheDocument();
         });
 
-        it('shows game cover image when coverUrl is present', () => {
+    }
+
+    function activityEntriesGroup9() {
+it('shows game cover image when coverUrl is present', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -353,10 +377,23 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(img).toBeInTheDocument();
             expect(img).toHaveAttribute('src', 'https://example.com/cover.jpg');
         });
+
+    }
+
+    describe('activity entries', () => {
+        activityEntriesGroup1();
+        activityEntriesGroup2();
+        activityEntriesGroup3();
+        activityEntriesGroup4();
+        activityEntriesGroup5();
+        activityEntriesGroup6();
+        activityEntriesGroup7();
+        activityEntriesGroup8();
+        activityEntriesGroup9();
     });
 
-    describe('period selector', () => {
-        it('calls useUserActivity with the correct period initially (week)', () => {
+    function periodSelectorGroup1() {
+it('calls useUserActivity with the correct period initially (week)', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -372,7 +409,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(1, 'week');
         });
 
-        it('changes period when a different button is clicked', async () => {
+    }
+
+    function periodSelectorGroup2() {
+it('changes period when a different button is clicked', async () => {
             const user = userEvent.setup();
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
@@ -389,7 +429,10 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(1, 'month');
         });
 
-        it('changes period to All Time', async () => {
+    }
+
+    function periodSelectorGroup3() {
+it('changes period to All Time', async () => {
             const user = userEvent.setup();
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
@@ -405,5 +448,12 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
 
             expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(1, 'all');
         });
+
+    }
+
+    describe('period selector', () => {
+        periodSelectorGroup1();
+        periodSelectorGroup2();
+        periodSelectorGroup3();
     });
 });

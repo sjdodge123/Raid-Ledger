@@ -70,8 +70,8 @@ describe('RosterBuilder — screen reader announcements (ROK-342)', () => {
         assertiveRegion?.remove();
     });
 
-    describe('assign player announcement via auto-fill', () => {
-        it('announces when a single player is auto-filled', async () => {
+    function assignPlayerAnnouncementViaAutoGroup1() {
+it('announces when a single player is auto-filled', async () => {
             const pool = [makePlayer(1, 'tank', 'TankA')];
             const onRosterChange = vi.fn();
 
@@ -96,7 +96,10 @@ describe('RosterBuilder — screen reader announcements (ROK-342)', () => {
             expect(politeRegion.textContent).toMatch(/Auto-filled \d+ player/);
         });
 
-        it('announces auto-fill completion', async () => {
+    }
+
+    function assignPlayerAnnouncementViaAutoGroup2() {
+it('announces auto-fill completion', async () => {
             const pool = [
                 makePlayer(1, 'tank', 'TankA'),
                 makePlayer(2, 'healer', 'HealerA'),
@@ -123,7 +126,10 @@ describe('RosterBuilder — screen reader announcements (ROK-342)', () => {
             expect(politeRegion.textContent).toMatch(/Auto-filled \d+ players/);
         });
 
-        it('announces clear all operation', async () => {
+    }
+
+    function assignPlayerAnnouncementViaAutoGroup3() {
+it('announces clear all operation', async () => {
             const assigned = [
                 { ...makePlayer(1, 'tank', 'TankA'), slot: 'tank' as RosterRole, position: 1 },
                 { ...makePlayer(2, 'healer', 'HealerA'), slot: 'healer' as RosterRole, position: 1 },
@@ -150,6 +156,13 @@ describe('RosterBuilder — screen reader announcements (ROK-342)', () => {
             expect(politeRegion.textContent).toContain('Roster cleared');
             expect(politeRegion.textContent).toContain('2 players');
         });
+
+    }
+
+    describe('assign player announcement via auto-fill', () => {
+        assignPlayerAnnouncementViaAutoGroup1();
+        assignPlayerAnnouncementViaAutoGroup2();
+        assignPlayerAnnouncementViaAutoGroup3();
     });
 
     describe('remove player announcement', () => {

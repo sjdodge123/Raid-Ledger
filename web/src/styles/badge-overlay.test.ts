@@ -40,15 +40,14 @@ function extractBadgeOverlayBlock(): string {
     return blockLines.join('\n');
 }
 
-describe('badge-overlay CSS rules (ROK-493)', () => {
-    const block = extractBadgeOverlayBlock();
-
-    it('badge-overlay rules exist in index.css', () => {
+const block = extractBadgeOverlayBlock();
+function badgeOverlayCSSRulesROKGroup1() {
+it('badge-overlay rules exist in index.css', () => {
         expect(block.length).toBeGreaterThan(0);
         expect(block).toContain('.badge-overlay');
     });
 
-    it('badge-overlay rules do NOT use !important on color property', () => {
+it('badge-overlay rules do NOT use !important on color property', () => {
         // Extract only the property declarations within the badge-overlay block
         const declarations = block
             .split('\n')
@@ -59,7 +58,7 @@ describe('badge-overlay CSS rules (ROK-493)', () => {
         }
     });
 
-    it('badge-overlay rules do NOT use !important on background-color property', () => {
+it('badge-overlay rules do NOT use !important on background-color property', () => {
         const declarations = block
             .split('\n')
             .filter((line) => line.includes('background-color:') && line.includes('.badge-overlay'));
@@ -69,7 +68,10 @@ describe('badge-overlay CSS rules (ROK-493)', () => {
         }
     });
 
-    it('badge-overlay rules do NOT use !important on border-color property', () => {
+}
+
+function badgeOverlayCSSRulesROKGroup2() {
+it('badge-overlay rules do NOT use !important on border-color property', () => {
         const declarations = block
             .split('\n')
             .filter((line) => line.includes('border-color:') && line.includes('.badge-overlay'));
@@ -79,7 +81,7 @@ describe('badge-overlay CSS rules (ROK-493)', () => {
         }
     });
 
-    it('badge-overlay rules contain zero !important declarations overall', () => {
+it('badge-overlay rules contain zero !important declarations overall', () => {
         // Strip multi-line comments, then check remaining rule lines for !important
         const withoutComments = block.replace(/\/\*[\s\S]*?\*\//g, '');
         const ruleLines = withoutComments
@@ -91,32 +93,38 @@ describe('badge-overlay CSS rules (ROK-493)', () => {
         }
     });
 
-    it('uses :is(.badge-overlay, .badge-overlay *) selector pattern for specificity', () => {
+it('uses :is(.badge-overlay, .badge-overlay *) selector pattern for specificity', () => {
         expect(block).toContain(':is(.badge-overlay, .badge-overlay *)');
     });
 
-    it('covers text-color overrides for all four status colors', () => {
+}
+
+function badgeOverlayCSSRulesROKGroup3() {
+it('covers text-color overrides for all four status colors', () => {
         expect(block).toContain('.text-emerald-400');
         expect(block).toContain('.text-yellow-400');
         expect(block).toContain('.text-red-400');
         expect(block).toContain('.text-cyan-300');
     });
 
-    it('covers background-color overrides for all four status colors', () => {
+it('covers background-color overrides for all four status colors', () => {
         expect(block).toContain('.bg-emerald-500\\/20');
         expect(block).toContain('.bg-yellow-500\\/20');
         expect(block).toContain('.bg-red-500\\/20');
         expect(block).toContain('.bg-cyan-500\\/20');
     });
 
-    it('covers border-color overrides for all four status colors', () => {
+it('covers border-color overrides for all four status colors', () => {
         expect(block).toContain('.border-emerald-500\\/30');
         expect(block).toContain('.border-yellow-500\\/30');
         expect(block).toContain('.border-red-500\\/30');
         expect(block).toContain('.border-cyan-500\\/30');
     });
 
-    it('rules are scoped under [data-scheme="light"]', () => {
+}
+
+function badgeOverlayCSSRulesROKGroup4() {
+it('rules are scoped under [data-scheme="light"]', () => {
         const selectorLines = block
             .split('\n')
             .filter((line) => line.includes('.badge-overlay') && line.includes('{'));
@@ -125,4 +133,12 @@ describe('badge-overlay CSS rules (ROK-493)', () => {
             expect(line).toContain('[data-scheme="light"]');
         }
     });
+
+}
+
+describe('badge-overlay CSS rules (ROK-493)', () => {
+    badgeOverlayCSSRulesROKGroup1();
+    badgeOverlayCSSRulesROKGroup2();
+    badgeOverlayCSSRulesROKGroup3();
+    badgeOverlayCSSRulesROKGroup4();
 });

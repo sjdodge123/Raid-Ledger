@@ -52,8 +52,168 @@ vi.mock('../../hooks/use-admin-settings', () => ({
     }),
 }));
 
+function igdbformGroup1() {
+it('renders Client ID and Client Secret inputs', () => {
+        render(<IgdbForm />);
+        expect(screen.getByLabelText('Client ID')).toBeInTheDocument();
+        expect(screen.getByLabelText('Client Secret')).toBeInTheDocument();
+    });
+
+it('renders Save Configuration button', () => {
+        render(<IgdbForm />);
+        expect(screen.getByRole('button', { name: 'Save Configuration' })).toBeInTheDocument();
+    });
+
+it('renders setup instructions', () => {
+        render(<IgdbForm />);
+        expect(screen.getByText(/Setup Instructions/)).toBeInTheDocument();
+    });
+
+it('renders Twitch Developer Console link', () => {
+        render(<IgdbForm />);
+        const link = screen.getByRole('link', { name: /Twitch Developer Console/ });
+        expect(link).toBeInTheDocument();
+        expect(link).toHaveAttribute('href', 'https://dev.twitch.tv/console/apps');
+    });
+
+}
+
+function igdbformGroup2() {
+it('Save Configuration button is disabled when updateIgdb is pending', () => {
+        mockUpdateIgdb.isPending = true;
+        render(<IgdbForm />);
+        expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+    });
+
+it('does not show Test Connection button when not configured', () => {
+        mockIgdbStatus.data = { configured: false };
+        render(<IgdbForm />);
+        expect(screen.queryByRole('button', { name: 'Test Connection' })).not.toBeInTheDocument();
+    });
+
+it('does not show Clear button when not configured', () => {
+        mockIgdbStatus.data = { configured: false };
+        render(<IgdbForm />);
+        expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+    });
+
+it('does not show sync section when not configured', () => {
+        mockIgdbStatus.data = { configured: false };
+        render(<IgdbForm />);
+        expect(screen.queryByRole('button', { name: 'Sync Now' })).not.toBeInTheDocument();
+    });
+
+}
+
+function igdbformGroup3() {
+it('shows Test Connection button when configured', () => {
+        mockIgdbStatus.data = { configured: true };
+        render(<IgdbForm />);
+        expect(screen.getByRole('button', { name: 'Test Connection' })).toBeInTheDocument();
+    });
+
+it('shows Clear button when configured', () => {
+        mockIgdbStatus.data = { configured: true };
+        render(<IgdbForm />);
+        expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+    });
+
+it('Test Connection button is disabled when testIgdb is pending', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockTestIgdb.isPending = true;
+        render(<IgdbForm />);
+        expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
+    });
+
+it('Clear button is disabled when clearIgdb is pending', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockClearIgdb.isPending = true;
+        render(<IgdbForm />);
+        expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
+    });
+
+}
+
+function igdbformGroup4() {
+it('Sync Now button is disabled when syncIgdb is pending', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 0, syncInProgress: false };
+        mockSyncIgdb.isPending = true;
+        render(<IgdbForm />);
+        const syncBtn = screen.getByRole('button', { name: 'Syncing...' });
+        expect(syncBtn).toBeDisabled();
+    });
+
+it('Sync Now button is disabled when syncInProgress is true', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 42, syncInProgress: true };
+        render(<IgdbForm />);
+        const syncBtn = screen.getByRole('button', { name: 'Sync Now' });
+        expect(syncBtn).toBeDisabled();
+    });
+
+it('shows game count from sync status', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 123, syncInProgress: false };
+        render(<IgdbForm />);
+        expect(screen.getByText('123 games cached')).toBeInTheDocument();
+    });
+
+}
+
+function igdbformGroup5() {
+it('shows Loading... when sync status data is null', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = null;
+        render(<IgdbForm />);
+        expect(screen.getByText('Loading...')).toBeInTheDocument();
+    });
+
+it('Client Secret input is type=password by default', () => {
+        render(<IgdbForm />);
+        const secretInput = screen.getByLabelText('Client Secret');
+        expect(secretInput).toHaveAttribute('type', 'password');
+    });
+
+it('toggles Client Secret visibility when eye button is clicked', () => {
+        render(<IgdbForm />);
+        const secretInput = screen.getByLabelText('Client Secret') as HTMLInputElement;
+        expect(secretInput.type).toBe('password');
+
+        const toggleBtn = screen.getByRole('button', { name: 'Show password' });
+        fireEvent.click(toggleBtn);
+        expect(secretInput.type).toBe('text');
+    });
+
+}
+
+function igdbformGroup6() {
+it('show/hide button label updates after toggle', () => {
+        render(<IgdbForm />);
+        const toggleBtn = screen.getByRole('button', { name: 'Show password' });
+        fireEvent.click(toggleBtn);
+        expect(screen.getByRole('button', { name: 'Hide password' })).toBeInTheDocument();
+    });
+
+it('does not submit when Client ID is empty', async () => {
+        render(<IgdbForm />);
+        const form = screen.getByLabelText('Client ID').closest('form')!;
+        fireEvent.submit(form);
+        expect(mockUpdateIgdb.mutateAsync).not.toHaveBeenCalled();
+    });
+
+it('does not call clearIgdb when confirm is cancelled', () => {
+        mockIgdbStatus.data = { configured: true };
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
+        render(<IgdbForm />);
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+        expect(mockClearIgdb.mutateAsync).not.toHaveBeenCalled();
+    });
+
+}
+
 describe('IgdbForm', () => {
-    beforeEach(() => {
+beforeEach(() => {
         vi.clearAllMocks();
         mockIgdbStatus.data = null;
         mockIgdbSyncStatus.data = null;
@@ -67,163 +227,10 @@ describe('IgdbForm', () => {
         mockSyncIgdb.mutateAsync = vi.fn();
     });
 
-    // ── Form rendering ───────────────────────────────────────────
-
-    it('renders Client ID and Client Secret inputs', () => {
-        render(<IgdbForm />);
-        expect(screen.getByLabelText('Client ID')).toBeInTheDocument();
-        expect(screen.getByLabelText('Client Secret')).toBeInTheDocument();
-    });
-
-    it('renders Save Configuration button', () => {
-        render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Save Configuration' })).toBeInTheDocument();
-    });
-
-    it('renders setup instructions', () => {
-        render(<IgdbForm />);
-        expect(screen.getByText(/Setup Instructions/)).toBeInTheDocument();
-    });
-
-    it('renders Twitch Developer Console link', () => {
-        render(<IgdbForm />);
-        const link = screen.getByRole('link', { name: /Twitch Developer Console/ });
-        expect(link).toBeInTheDocument();
-        expect(link).toHaveAttribute('href', 'https://dev.twitch.tv/console/apps');
-    });
-
-    // ── Save Configuration button state ─────────────────────────
-
-    it('Save Configuration button is disabled when updateIgdb is pending', () => {
-        mockUpdateIgdb.isPending = true;
-        render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
-    });
-
-    // ── Unconfigured state ───────────────────────────────────────
-
-    it('does not show Test Connection button when not configured', () => {
-        mockIgdbStatus.data = { configured: false };
-        render(<IgdbForm />);
-        expect(screen.queryByRole('button', { name: 'Test Connection' })).not.toBeInTheDocument();
-    });
-
-    it('does not show Clear button when not configured', () => {
-        mockIgdbStatus.data = { configured: false };
-        render(<IgdbForm />);
-        expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
-    });
-
-    it('does not show sync section when not configured', () => {
-        mockIgdbStatus.data = { configured: false };
-        render(<IgdbForm />);
-        expect(screen.queryByRole('button', { name: 'Sync Now' })).not.toBeInTheDocument();
-    });
-
-    // ── Configured state ─────────────────────────────────────────
-
-    it('shows Test Connection button when configured', () => {
-        mockIgdbStatus.data = { configured: true };
-        render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Test Connection' })).toBeInTheDocument();
-    });
-
-    it('shows Clear button when configured', () => {
-        mockIgdbStatus.data = { configured: true };
-        render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
-    });
-
-    it('Test Connection button is disabled when testIgdb is pending', () => {
-        mockIgdbStatus.data = { configured: true };
-        mockTestIgdb.isPending = true;
-        render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
-    });
-
-    it('Clear button is disabled when clearIgdb is pending', () => {
-        mockIgdbStatus.data = { configured: true };
-        mockClearIgdb.isPending = true;
-        render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
-    });
-
-    // ── Sync Now button ──────────────────────────────────────────
-
-    it('Sync Now button is disabled when syncIgdb is pending', () => {
-        mockIgdbStatus.data = { configured: true };
-        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 0, syncInProgress: false };
-        mockSyncIgdb.isPending = true;
-        render(<IgdbForm />);
-        const syncBtn = screen.getByRole('button', { name: 'Syncing...' });
-        expect(syncBtn).toBeDisabled();
-    });
-
-    it('Sync Now button is disabled when syncInProgress is true', () => {
-        mockIgdbStatus.data = { configured: true };
-        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 42, syncInProgress: true };
-        render(<IgdbForm />);
-        const syncBtn = screen.getByRole('button', { name: 'Sync Now' });
-        expect(syncBtn).toBeDisabled();
-    });
-
-    // ── Sync status display ──────────────────────────────────────
-
-    it('shows game count from sync status', () => {
-        mockIgdbStatus.data = { configured: true };
-        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 123, syncInProgress: false };
-        render(<IgdbForm />);
-        expect(screen.getByText('123 games cached')).toBeInTheDocument();
-    });
-
-    it('shows Loading... when sync status data is null', () => {
-        mockIgdbStatus.data = { configured: true };
-        mockIgdbSyncStatus.data = null;
-        render(<IgdbForm />);
-        expect(screen.getByText('Loading...')).toBeInTheDocument();
-    });
-
-    // ── Password visibility toggle ───────────────────────────────
-
-    it('Client Secret input is type=password by default', () => {
-        render(<IgdbForm />);
-        const secretInput = screen.getByLabelText('Client Secret');
-        expect(secretInput).toHaveAttribute('type', 'password');
-    });
-
-    it('toggles Client Secret visibility when eye button is clicked', () => {
-        render(<IgdbForm />);
-        const secretInput = screen.getByLabelText('Client Secret') as HTMLInputElement;
-        expect(secretInput.type).toBe('password');
-
-        const toggleBtn = screen.getByRole('button', { name: 'Show password' });
-        fireEvent.click(toggleBtn);
-        expect(secretInput.type).toBe('text');
-    });
-
-    it('show/hide button label updates after toggle', () => {
-        render(<IgdbForm />);
-        const toggleBtn = screen.getByRole('button', { name: 'Show password' });
-        fireEvent.click(toggleBtn);
-        expect(screen.getByRole('button', { name: 'Hide password' })).toBeInTheDocument();
-    });
-
-    // ── Form validation ──────────────────────────────────────────
-
-    it('does not submit when Client ID is empty', async () => {
-        render(<IgdbForm />);
-        const form = screen.getByLabelText('Client ID').closest('form')!;
-        fireEvent.submit(form);
-        expect(mockUpdateIgdb.mutateAsync).not.toHaveBeenCalled();
-    });
-
-    // ── Confirm dialog on Clear ──────────────────────────────────
-
-    it('does not call clearIgdb when confirm is cancelled', () => {
-        mockIgdbStatus.data = { configured: true };
-        vi.spyOn(window, 'confirm').mockReturnValue(false);
-        render(<IgdbForm />);
-        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-        expect(mockClearIgdb.mutateAsync).not.toHaveBeenCalled();
-    });
+    igdbformGroup1();
+    igdbformGroup2();
+    igdbformGroup3();
+    igdbformGroup4();
+    igdbformGroup5();
+    igdbformGroup6();
 });

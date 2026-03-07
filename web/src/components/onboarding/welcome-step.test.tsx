@@ -45,15 +45,10 @@ function renderWithProviders(ui: React.ReactElement) {
     );
 }
 
-describe('WelcomeStep', () => {
-    const mockOnNext = vi.fn();
-    const mockOnSkip = vi.fn();
-
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('renders welcome message and display name input', () => {
+const mockOnNext = vi.fn();
+const mockOnSkip = vi.fn();
+function welcomestepGroup1() {
+it('renders welcome message and display name input', () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -64,7 +59,7 @@ describe('WelcomeStep', () => {
         expect(screen.getByRole('button', { name: /skip/i })).toBeInTheDocument();
     });
 
-    it('pre-fills display name from user username', () => {
+it('pre-fills display name from user username', () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -73,7 +68,10 @@ describe('WelcomeStep', () => {
         expect(input.value).toBe('testuser');
     });
 
-    it('validates display name length (min 2 chars)', () => {
+}
+
+function welcomestepGroup2() {
+it('validates display name length (min 2 chars)', () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -84,7 +82,7 @@ describe('WelcomeStep', () => {
         expect(screen.getByText(/1\/30 characters \(min 2\)/i)).toBeInTheDocument();
     });
 
-    it('validates display name length (max 30 chars)', () => {
+it('validates display name length (max 30 chars)', () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -95,7 +93,10 @@ describe('WelcomeStep', () => {
         expect(screen.getByText(/30\/30 characters/i)).toBeInTheDocument();
     });
 
-    it('shows availability indicator when name is available', async () => {
+}
+
+function welcomestepGroup3() {
+it('shows availability indicator when name is available', async () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -108,7 +109,7 @@ describe('WelcomeStep', () => {
         });
     });
 
-    it('shows taken indicator when name is unavailable', async () => {
+it('shows taken indicator when name is unavailable', async () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -121,7 +122,10 @@ describe('WelcomeStep', () => {
         });
     });
 
-    it('calls onSkip when Skip button is clicked', () => {
+}
+
+function welcomestepGroup4() {
+it('calls onSkip when Skip button is clicked', () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -131,7 +135,7 @@ describe('WelcomeStep', () => {
         expect(mockOnSkip).toHaveBeenCalledOnce();
     });
 
-    it('calls onNext after successful update', async () => {
+it('calls onNext after successful update', async () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -150,7 +154,10 @@ describe('WelcomeStep', () => {
         });
     });
 
-    it('supports Enter key to submit', async () => {
+}
+
+function welcomestepGroup5() {
+it('supports Enter key to submit', async () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -169,7 +176,10 @@ describe('WelcomeStep', () => {
         });
     });
 
-    it('disables Next button when name is too short', () => {
+}
+
+function welcomestepGroup6() {
+it('disables Next button when name is too short', () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -181,7 +191,7 @@ describe('WelcomeStep', () => {
         expect(nextButton).toBeDisabled();
     });
 
-    it('disables Next button when name is taken', async () => {
+it('disables Next button when name is taken', async () => {
         renderWithProviders(
             <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
         );
@@ -194,4 +204,18 @@ describe('WelcomeStep', () => {
             expect(nextButton).toBeDisabled();
         });
     });
+
+}
+
+describe('WelcomeStep', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    welcomestepGroup1();
+    welcomestepGroup2();
+    welcomestepGroup3();
+    welcomestepGroup4();
+    welcomestepGroup5();
+    welcomestepGroup6();
 });

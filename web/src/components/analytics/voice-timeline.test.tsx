@@ -54,15 +54,15 @@ function makeMetrics(overrides: Partial<EventMetricsResponseDto> = {}): EventMet
     };
 }
 
-describe('VoiceTimeline', () => {
-    it('renders nothing when voiceSummary is null', () => {
+function voicetimelineGroup1() {
+it('renders nothing when voiceSummary is null', () => {
         const { container } = render(
             <VoiceTimeline metrics={makeMetrics({ voiceSummary: null })} />,
         );
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('renders nothing when all sessions are no_show', () => {
+it('renders nothing when all sessions are no_show', () => {
         const noShowSession = makeSession({ classification: 'no_show' as const });
         const metrics = makeMetrics({
             voiceSummary: {
@@ -79,7 +79,10 @@ describe('VoiceTimeline', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('renders nothing when voiceSummary has no sessions', () => {
+}
+
+function voicetimelineGroup2() {
+it('renders nothing when voiceSummary has no sessions', () => {
         const metrics = makeMetrics({
             voiceSummary: {
                 totalTracked: 0,
@@ -95,7 +98,10 @@ describe('VoiceTimeline', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('renders nothing when event duration is zero', () => {
+}
+
+function voicetimelineGroup3() {
+it('renders nothing when event duration is zero', () => {
         const metrics = makeMetrics({
             startTime: '2026-01-15T18:00:00.000Z',
             endTime: '2026-01-15T18:00:00.000Z', // same = 0 duration
@@ -104,17 +110,20 @@ describe('VoiceTimeline', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('renders Voice Timeline heading when voice data exists', () => {
+it('renders Voice Timeline heading when voice data exists', () => {
         render(<VoiceTimeline metrics={makeMetrics()} />);
         expect(screen.getByText('Voice Timeline')).toBeInTheDocument();
     });
 
-    it('renders username in timeline bar', () => {
+it('renders username in timeline bar', () => {
         render(<VoiceTimeline metrics={makeMetrics()} />);
         expect(screen.getByText('Alice#1234')).toBeInTheDocument();
     });
 
-    it('renders legend items for all classifications', () => {
+}
+
+function voicetimelineGroup4() {
+it('renders legend items for all classifications', () => {
         render(<VoiceTimeline metrics={makeMetrics()} />);
         expect(screen.getByText('Full')).toBeInTheDocument();
         expect(screen.getByText('Partial')).toBeInTheDocument();
@@ -123,7 +132,10 @@ describe('VoiceTimeline', () => {
         expect(screen.getByText('No-Show')).toBeInTheDocument();
     });
 
-    it('filters out no_show sessions from timeline bars', () => {
+}
+
+function voicetimelineGroup5() {
+it('filters out no_show sessions from timeline bars', () => {
         const noShowSession = makeSession({ id: 2, discordUsername: 'Ghost#0000', classification: 'no_show' as const });
         const fullSession = makeSession({ id: 1, discordUsername: 'Alice#1234', classification: 'full' as const });
         const metrics = makeMetrics({
@@ -145,13 +157,16 @@ describe('VoiceTimeline', () => {
         expect(screen.queryByText('Ghost#0000')).not.toBeInTheDocument();
     });
 
-    it('renders duration label for each session bar', () => {
+it('renders duration label for each session bar', () => {
         // 9900 seconds = 2h 45m
         render(<VoiceTimeline metrics={makeMetrics()} />);
         expect(screen.getByText('2h 45m')).toBeInTheDocument();
     });
 
-    it('renders duration in minutes only when under 1 hour', () => {
+}
+
+function voicetimelineGroup6() {
+it('renders duration in minutes only when under 1 hour', () => {
         const shortSession = makeSession({
             totalDurationSec: 1800,
             segments: [{ joinAt: '2026-01-15T18:00:00.000Z', leaveAt: '2026-01-15T18:30:00.000Z', durationSec: 1800 }],
@@ -172,7 +187,10 @@ describe('VoiceTimeline', () => {
         expect(screen.getByText('30m')).toBeInTheDocument();
     });
 
-    it('renders time axis labels for event start and end', () => {
+}
+
+function voicetimelineGroup7() {
+it('renders time axis labels for event start and end', () => {
         render(<VoiceTimeline metrics={makeMetrics()} />);
         // There should be time labels in the header
         // We test they exist (exact format depends on locale)
@@ -180,7 +198,7 @@ describe('VoiceTimeline', () => {
         expect(timelineEl).toBeInTheDocument();
     });
 
-    it('renders multiple session bars for multiple users', () => {
+it('renders multiple session bars for multiple users', () => {
         const session2 = makeSession({ id: 2, discordUsername: 'Bob#5678' });
         const metrics = makeMetrics({
             voiceSummary: {
@@ -199,4 +217,15 @@ describe('VoiceTimeline', () => {
         expect(screen.getByText('Alice#1234')).toBeInTheDocument();
         expect(screen.getByText('Bob#5678')).toBeInTheDocument();
     });
+
+}
+
+describe('VoiceTimeline', () => {
+    voicetimelineGroup1();
+    voicetimelineGroup2();
+    voicetimelineGroup3();
+    voicetimelineGroup4();
+    voicetimelineGroup5();
+    voicetimelineGroup6();
+    voicetimelineGroup7();
 });

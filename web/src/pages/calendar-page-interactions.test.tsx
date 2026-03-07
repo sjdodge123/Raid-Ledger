@@ -89,18 +89,8 @@ function deliver(games: ReturnType<typeof makeGame>[]) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('CalendarPage — game toggle', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
-    });
-
-    afterEach(() => {
-        activeQueryClient?.clear();
-    });
-
-    it('unchecking a game deselects it (checkbox becomes unchecked)', () => {
+function calendarpageGameToggleGroup1() {
+it('unchecking a game deselects it (checkbox becomes unchecked)', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
@@ -111,7 +101,7 @@ describe('CalendarPage — game toggle', () => {
         expect(checkbox).not.toBeChecked();
     });
 
-    it('checking an unchecked game re-selects it', () => {
+it('checking an unchecked game re-selects it', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
@@ -123,7 +113,10 @@ describe('CalendarPage — game toggle', () => {
         expect(checkbox).toBeChecked();
     });
 
-    it('toggling in modal stays synced with inline list', () => {
+}
+
+function calendarpageGameToggleGroup2() {
+it('toggling in modal stays synced with inline list', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -160,20 +153,26 @@ describe('CalendarPage — game toggle', () => {
         expect(inlineAlpha).toBeDefined();
         expect(inlineAlpha).not.toBeChecked();
     });
-});
 
-describe('CalendarPage — All / None buttons', () => {
-    beforeEach(() => {
+}
+
+describe('CalendarPage — game toggle', () => {
+beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('"All" button selects all known games (inline area)', () => {
+    calendarpageGameToggleGroup1();
+    calendarpageGameToggleGroup2();
+});
+
+function calendarpageAllNoneButtonsGroup1() {
+it('"All" button selects all known games (inline area)', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
@@ -187,7 +186,7 @@ describe('CalendarPage — All / None buttons', () => {
         screen.getAllByRole('checkbox').forEach((cb) => expect(cb).toBeChecked());
     });
 
-    it('"None" button deselects all games', () => {
+it('"None" button deselects all games', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
@@ -197,7 +196,10 @@ describe('CalendarPage — All / None buttons', () => {
         screen.getAllByRole('checkbox').forEach((cb) => expect(cb).not.toBeChecked());
     });
 
-    it('"All" in modal selects all games including those not in inline list', () => {
+}
+
+function calendarpageAllNoneButtonsGroup2() {
+it('"All" in modal selects all games including those not in inline list', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -223,7 +225,10 @@ describe('CalendarPage — All / None buttons', () => {
         modalCheckboxes.forEach((cb) => expect(cb as HTMLInputElement).toBeChecked());
     });
 
-    it('"None" deselects all games immediately', () => {
+}
+
+function calendarpageAllNoneButtonsGroup3() {
+it('"None" deselects all games immediately', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
@@ -234,20 +239,27 @@ describe('CalendarPage — All / None buttons', () => {
 
         screen.getAllByRole('checkbox').forEach((cb) => expect(cb).not.toBeChecked());
     });
-});
 
-describe('CalendarPage — filter persistence when view changes', () => {
-    beforeEach(() => {
+}
+
+describe('CalendarPage — All / None buttons', () => {
+beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('filter selections persist across re-renders with same games', () => {
+    calendarpageAllNoneButtonsGroup1();
+    calendarpageAllNoneButtonsGroup2();
+    calendarpageAllNoneButtonsGroup3();
+});
+
+function calendarpageFilterPersistenceWhenViewGroup1() {
+it('filter selections persist across re-renders with same games', () => {
         const { rerender } = render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
@@ -282,7 +294,10 @@ describe('CalendarPage — filter persistence when view changes', () => {
         }
     });
 
-    it('filter selections survive component unmount/remount (ROK-372 regression)', () => {
+}
+
+function calendarpageFilterPersistenceWhenViewGroup2() {
+it('filter selections survive component unmount/remount (ROK-372 regression)', () => {
         const { unmount } = render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
@@ -317,7 +332,10 @@ describe('CalendarPage — filter persistence when view changes', () => {
         expect(updatedApexCb).toBeChecked();
     });
 
-    it('filter selections persist when same games are re-reported (month change scenario)', () => {
+}
+
+function calendarpageFilterPersistenceWhenViewGroup3() {
+it('filter selections persist when same games are re-reported (month change scenario)', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
@@ -333,7 +351,7 @@ describe('CalendarPage — filter persistence when view changes', () => {
         expect(updatedWowCb).not.toBeChecked();
     });
 
-    it('games do not get removed from allKnownGames when a different date range is loaded', () => {
+it('games do not get removed from allKnownGames when a different date range is loaded', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
         deliver([makeGame('apex', 'Apex Legends')]);
@@ -344,31 +362,38 @@ describe('CalendarPage — filter persistence when view changes', () => {
         expect(names).toContain('Apex Legends');
         expect(names).toContain('World of Warcraft');
     });
-});
 
-describe('CalendarPage — FAB and BottomSheet', () => {
-    beforeEach(() => {
+}
+
+describe('CalendarPage — filter persistence when view changes', () => {
+beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('FAB is not visible before any games arrive', () => {
+    calendarpageFilterPersistenceWhenViewGroup1();
+    calendarpageFilterPersistenceWhenViewGroup2();
+    calendarpageFilterPersistenceWhenViewGroup3();
+});
+
+function calendarpageFABAndBottomSheetGroup1() {
+it('FAB is not visible before any games arrive', () => {
         render_page();
         expect(screen.queryByTestId('fab')).not.toBeInTheDocument();
     });
 
-    it('FAB appears after games arrive', () => {
+it('FAB appears after games arrive', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
         expect(screen.getByTestId('fab')).toBeInTheDocument();
     });
 
-    it('clicking FAB opens bottom sheet', () => {
+it('clicking FAB opens bottom sheet', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
 
@@ -379,7 +404,10 @@ describe('CalendarPage — FAB and BottomSheet', () => {
         expect(sheet).toHaveAttribute('data-open', 'true');
     });
 
-    it('bottom sheet is initially closed', () => {
+}
+
+function calendarpageFABAndBottomSheetGroup2() {
+it('bottom sheet is initially closed', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
 
@@ -387,7 +415,10 @@ describe('CalendarPage — FAB and BottomSheet', () => {
         expect(sheet).toHaveAttribute('data-open', 'false');
     });
 
-    it('bottom sheet contains all games including overflow', () => {
+}
+
+function calendarpageFABAndBottomSheetGroup3() {
+it('bottom sheet contains all games including overflow', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -407,27 +438,38 @@ describe('CalendarPage — FAB and BottomSheet', () => {
         expect(sheet).toHaveTextContent('Foxtrot');
     });
 
-    it('bottom sheet shows count of selected vs total games', () => {
+}
+
+function calendarpageFABAndBottomSheetGroup4() {
+it('bottom sheet shows count of selected vs total games', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
         const sheet = screen.getByTestId('bottom-sheet');
         expect(sheet).toHaveTextContent(/3 of 3 selected/i);
     });
-});
 
-describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
-    beforeEach(() => {
+}
+
+describe('CalendarPage — FAB and BottomSheet', () => {
+beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('populates game filter from game registry on mount', () => {
+    calendarpageFABAndBottomSheetGroup1();
+    calendarpageFABAndBottomSheetGroup2();
+    calendarpageFABAndBottomSheetGroup3();
+    calendarpageFABAndBottomSheetGroup4();
+});
+
+function calendarpageUseGameRegistryIntegrationROK650Group1() {
+it('populates game filter from game registry on mount', () => {
         mockRegistryGames = [
             makeRegistryGame('wow', 'World of Warcraft', 1),
             makeRegistryGame('ff14', 'Final Fantasy XIV', 2),
@@ -444,7 +486,10 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         expect(gameNames.length).toBe(3);
     });
 
-    it('shows all registry games even when no events exist for some games', () => {
+}
+
+function calendarpageUseGameRegistryIntegrationROK650Group2() {
+it('shows all registry games even when no events exist for some games', () => {
         mockRegistryGames = [
             makeRegistryGame('wow', 'World of Warcraft', 1),
             makeRegistryGame('ff14', 'Final Fantasy XIV', 2),
@@ -456,4 +501,20 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         expect(checkboxes).toHaveLength(3);
         checkboxes.forEach((cb) => expect(cb).toBeChecked());
     });
+
+}
+
+describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
+    });
+
+afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    calendarpageUseGameRegistryIntegrationROK650Group1();
+    calendarpageUseGameRegistryIntegrationROK650Group2();
 });

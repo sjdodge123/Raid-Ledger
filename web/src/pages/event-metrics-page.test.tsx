@@ -139,7 +139,7 @@ describe('EventMetricsPage', () => {
         expect(screen.queryByText('Voice Timeline')).not.toBeInTheDocument();
     });
 
-    it('renders voice timeline section when voiceSummary has sessions', async () => {
+    async function testRendersVoiceTimelineSectionWhen() {
         const metricsWithVoice: EventMetricsResponseDto = {
             ...mockMetrics,
             voiceSummary: {
@@ -184,7 +184,9 @@ describe('EventMetricsPage', () => {
         await waitFor(() => {
             expect(screen.getByText('Voice Timeline')).toBeInTheDocument();
         });
-    });
+    
+    }
+    it('renders voice timeline section when voiceSummary has sessions', async () => { await testRendersVoiceTimelineSectionWhen(); });
 
     it('shows error state when metrics request fails', async () => {
         server.use(
@@ -260,7 +262,7 @@ describe('EventMetricsPage', () => {
         expect(screen.queryByText('World of Warcraft')).not.toBeInTheDocument();
     });
 
-    it('renders voice status columns in roster when voice data is present', async () => {
+    async function testRendersVoiceStatusColumnsIn() {
         const metricsWithVoice: EventMetricsResponseDto = {
             ...mockMetrics,
             voiceSummary: {
@@ -311,7 +313,9 @@ describe('EventMetricsPage', () => {
             expect(screen.getByText('Voice Status')).toBeInTheDocument();
             expect(screen.getByText('Voice Duration')).toBeInTheDocument();
         });
-    });
+    
+    }
+    it('renders voice status columns in roster when voice data is present', async () => { await testRendersVoiceStatusColumnsIn(); });
 
     it('does not render voice status columns in roster when no voice data', async () => {
         renderWithProviders(<EventMetricsPage />, {

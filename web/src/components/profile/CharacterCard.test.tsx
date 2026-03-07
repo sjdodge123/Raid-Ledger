@@ -55,8 +55,8 @@ describe('CharacterCard', () => {
         } as unknown as ReturnType<typeof useCharacterMutationsHook.useDeleteCharacter>);
     });
 
-    describe('Mobile actions panel', () => {
-        it('renders a kebab menu button for mobile', () => {
+    function mobileActionsPanelGroup1() {
+it('renders a kebab menu button for mobile', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
             );
@@ -64,7 +64,7 @@ describe('CharacterCard', () => {
             expect(kebabBtn).toBeInTheDocument();
         });
 
-        it('opens accordion actions panel when kebab button is clicked', () => {
+it('opens accordion actions panel when kebab button is clicked', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
             );
@@ -75,7 +75,10 @@ describe('CharacterCard', () => {
             expect(panel).toBeInTheDocument();
         });
 
-        it('closes accordion panel when kebab button is toggled again', () => {
+    }
+
+    function mobileActionsPanelGroup2() {
+it('closes accordion panel when kebab button is toggled again', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
             );
@@ -88,7 +91,10 @@ describe('CharacterCard', () => {
             expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();
         });
 
-        it('mobile panel Edit calls onEdit and closes panel', () => {
+    }
+
+    function mobileActionsPanelGroup3() {
+it('mobile panel Edit calls onEdit and closes panel', () => {
             const onEdit = vi.fn();
             const character = createMockCharacter();
             renderWithRouter(
@@ -104,7 +110,10 @@ describe('CharacterCard', () => {
             expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();
         });
 
-        it('mobile panel Delete calls handleDelete and closes panel', () => {
+    }
+
+    function mobileActionsPanelGroup4() {
+it('mobile panel Delete calls handleDelete and closes panel', () => {
             vi.spyOn(window, 'confirm').mockReturnValue(true);
             const character = createMockCharacter({ id: 'char-mobile-del' });
             renderWithRouter(
@@ -119,17 +128,25 @@ describe('CharacterCard', () => {
             // Panel should be closed
             expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();
         });
+
+    }
+
+    describe('Mobile actions panel', () => {
+        mobileActionsPanelGroup1();
+        mobileActionsPanelGroup2();
+        mobileActionsPanelGroup3();
+        mobileActionsPanelGroup4();
     });
 
-    describe('Character display', () => {
-        it('renders character name', () => {
+    function characterDisplayGroup1() {
+it('renders character name', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ name: 'Thrall' })} onEdit={vi.fn()} />
             );
             expect(screen.getByText('Thrall')).toBeInTheDocument();
         });
 
-        it('links character name to detail page', () => {
+it('links character name to detail page', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ id: 'char-abc', name: 'Jaina' })} onEdit={vi.fn()} />
             );
@@ -137,28 +154,31 @@ describe('CharacterCard', () => {
             expect(link).toHaveAttribute('href', '/characters/char-abc');
         });
 
-        it('renders faction badge for alliance character', () => {
+it('renders faction badge for alliance character', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ faction: 'alliance' })} onEdit={vi.fn()} />
             );
             expect(screen.getByText('Alliance')).toBeInTheDocument();
         });
 
-        it('renders faction badge for horde character', () => {
+    }
+
+    function characterDisplayGroup2() {
+it('renders faction badge for horde character', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ faction: 'horde' })} onEdit={vi.fn()} />
             );
             expect(screen.getByText('Horde')).toBeInTheDocument();
         });
 
-        it('renders level when provided', () => {
+it('renders level when provided', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ level: 70 })} onEdit={vi.fn()} />
             );
             expect(screen.getByText('Lv.70')).toBeInTheDocument();
         });
 
-        it('renders class and spec', () => {
+it('renders class and spec', () => {
             renderWithRouter(
                 <CharacterCard
                     character={createMockCharacter({ class: 'Paladin', spec: 'Holy' })}
@@ -169,14 +189,17 @@ describe('CharacterCard', () => {
             expect(screen.getByText(/Holy/)).toBeInTheDocument();
         });
 
-        it('renders item level when provided', () => {
+    }
+
+    function characterDisplayGroup3() {
+it('renders item level when provided', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ itemLevel: 500 })} onEdit={vi.fn()} />
             );
             expect(screen.getByText('500 iLvl')).toBeInTheDocument();
         });
 
-        it('renders Main badge when character isMain is true', () => {
+it('renders Main badge when character isMain is true', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ isMain: true })} onEdit={vi.fn()} />
             );
@@ -185,14 +208,17 @@ describe('CharacterCard', () => {
             expect(mainBadges.length).toBeGreaterThanOrEqual(1);
         });
 
-        it('does not render Main badge when character isMain is false', () => {
+it('does not render Main badge when character isMain is false', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ isMain: false })} onEdit={vi.fn()} />
             );
             expect(screen.queryByText(/Main/)).not.toBeInTheDocument();
         });
 
-        it('renders avatar image when avatarUrl is provided', () => {
+    }
+
+    function characterDisplayGroup4() {
+it('renders avatar image when avatarUrl is provided', () => {
             renderWithRouter(
                 <CharacterCard
                     character={createMockCharacter({ avatarUrl: 'https://example.com/avatar.jpg', name: 'Arthas' })}
@@ -202,10 +228,18 @@ describe('CharacterCard', () => {
             const img = screen.getByRole('img', { name: 'Arthas' });
             expect(img).toHaveAttribute('src', 'https://example.com/avatar.jpg');
         });
+
+    }
+
+    describe('Character display', () => {
+        characterDisplayGroup1();
+        characterDisplayGroup2();
+        characterDisplayGroup3();
+        characterDisplayGroup4();
     });
 
-    describe('Actions', () => {
-        it('calls onEdit with character when Edit button is clicked', () => {
+    function actionsGroup1() {
+it('calls onEdit with character when Edit button is clicked', () => {
             const onEdit = vi.fn();
             const character = createMockCharacter({ name: 'Sylvanas' });
             renderWithRouter(<CharacterCard character={character} onEdit={onEdit} />);
@@ -213,7 +247,7 @@ describe('CharacterCard', () => {
             expect(onEdit).toHaveBeenCalledWith(character);
         });
 
-        it('calls deleteMutation.mutate when Delete is confirmed', () => {
+it('calls deleteMutation.mutate when Delete is confirmed', () => {
             vi.spyOn(window, 'confirm').mockReturnValue(true);
             const character = createMockCharacter({ id: 'char-delete-me', name: 'DeleteMe' });
             renderWithRouter(<CharacterCard character={character} onEdit={vi.fn()} />);
@@ -221,7 +255,7 @@ describe('CharacterCard', () => {
             expect(mockDeleteMutate).toHaveBeenCalledWith('char-delete-me');
         });
 
-        it('does not call deleteMutation.mutate when Delete is cancelled', () => {
+it('does not call deleteMutation.mutate when Delete is cancelled', () => {
             vi.spyOn(window, 'confirm').mockReturnValue(false);
             const character = createMockCharacter({ name: 'KeepMe' });
             renderWithRouter(<CharacterCard character={character} onEdit={vi.fn()} />);
@@ -229,7 +263,10 @@ describe('CharacterCard', () => {
             expect(mockDeleteMutate).not.toHaveBeenCalled();
         });
 
-        it('disables Delete button when deleteMutation is pending', () => {
+    }
+
+    function actionsGroup2() {
+it('disables Delete button when deleteMutation is pending', () => {
             vi.spyOn(useCharacterMutationsHook, 'useDeleteCharacter').mockReturnValue({
                 mutate: mockDeleteMutate,
                 isPending: true,
@@ -239,5 +276,11 @@ describe('CharacterCard', () => {
             );
             expect(screen.getByText('Delete')).toBeDisabled();
         });
+
+    }
+
+    describe('Actions', () => {
+        actionsGroup1();
+        actionsGroup2();
     });
 });

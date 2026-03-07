@@ -64,8 +64,8 @@ function renderWidget(props: {
     );
 }
 
-describe('GameTimeWidget', () => {
-    it('shows overlap message when template matches event hours', () => {
+function gametimewidgetGroup1() {
+it('shows overlap message when template matches event hours', () => {
         // 2026-02-09 is Monday → JS getDay()=1 → game-time dayOfWeek=0
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [
@@ -79,7 +79,7 @@ describe('GameTimeWidget', () => {
         expect(screen.getByText('Inside Game Time')).toBeInTheDocument();
     });
 
-    it('shows no-overlap message when template does not match', () => {
+it('shows no-overlap message when template does not match', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [
                 { dayOfWeek: 5, hour: 10, status: 'available' },
@@ -91,7 +91,10 @@ describe('GameTimeWidget', () => {
         expect(screen.getByText('Outside Game Time')).toBeInTheDocument();
     });
 
-    it('click opens read-only modal with GameTimeGrid', () => {
+}
+
+function gametimewidgetGroup2() {
+it('click opens read-only modal with GameTimeGrid', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         }));
@@ -104,7 +107,7 @@ describe('GameTimeWidget', () => {
         expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
     });
 
-    it('modal shows preview block overlay for the current event', () => {
+it('modal shows preview block overlay for the current event', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         }));
@@ -118,7 +121,10 @@ describe('GameTimeWidget', () => {
         expect(previewBlock.style.border).toContain('dashed');
     });
 
-    it('modal shows event title in the detail card below the grid', () => {
+}
+
+function gametimewidgetGroup3() {
+it('modal shows event title in the detail card below the grid', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         }));
@@ -140,7 +146,10 @@ describe('GameTimeWidget', () => {
         expect(raidNights.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('modal is read-only (cells are not paintable)', () => {
+}
+
+function gametimewidgetGroup4() {
+it('modal is read-only (cells are not paintable)', () => {
         const handleChange = vi.fn();
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [],
@@ -159,7 +168,7 @@ describe('GameTimeWidget', () => {
         expect(handleChange).not.toHaveBeenCalled();
     });
 
-    it('modal has "Edit my game time" link to profile', () => {
+it('modal has "Edit my game time" link to profile', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         }));
@@ -172,4 +181,12 @@ describe('GameTimeWidget', () => {
         expect(link).toBeInTheDocument();
         expect(link.closest('a')).toHaveAttribute('href', '/profile/gaming');
     });
+
+}
+
+describe('GameTimeWidget', () => {
+    gametimewidgetGroup1();
+    gametimewidgetGroup2();
+    gametimewidgetGroup3();
+    gametimewidgetGroup4();
 });

@@ -112,8 +112,8 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         } as unknown as ReturnType<typeof useUserProfileHook.useUserActivity>);
     });
 
-    describe('AC1: Characters grouped by game with section headers', () => {
-        it('groups characters by game with correct headers', () => {
+    function ac1CharactersGroupedByGameGroup1() {
+it('groups characters by game with correct headers', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'WowChar1' }),
@@ -144,7 +144,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(screen.getByText('FF14Char')).toBeInTheDocument();
         });
 
-        it('shows singular "character" when count is 1', () => {
+    }
+
+    function ac1CharactersGroupedByGameGroup2() {
+it('shows singular "character" when count is 1', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'OnlyChar' }),
@@ -163,7 +166,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(screen.queryByText('1 characters')).not.toBeInTheDocument();
         });
 
-        it('shows main section header with total character count', () => {
+    }
+
+    function ac1CharactersGroupedByGameGroup3() {
+it('shows main section header with total character count', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1 }),
@@ -183,10 +189,17 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             // Verify main Characters section header with total
             expect(screen.getByText('Characters (3)')).toBeInTheDocument();
         });
+
+    }
+
+    describe('AC1: Characters grouped by game with section headers', () => {
+        ac1CharactersGroupedByGameGroup1();
+        ac1CharactersGroupedByGameGroup2();
+        ac1CharactersGroupedByGameGroup3();
     });
 
-    describe('AC2: Styling matches reference (My Characters page)', () => {
-        it('renders game section with divider line', () => {
+    function ac2StylingMatchesReferenceMyGroup1() {
+it('renders game section with divider line', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1 }),
@@ -206,7 +219,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(divider).toBeInTheDocument();
         });
 
-        it('uses correct CSS classes for section structure', () => {
+    }
+
+    function ac2StylingMatchesReferenceMyGroup2() {
+it('uses correct CSS classes for section structure', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1 }),
@@ -229,10 +245,16 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             const sectionTitle = screen.getByText('Characters (1)');
             expect(sectionTitle).toHaveClass('user-profile-section-title');
         });
+
+    }
+
+    describe('AC2: Styling matches reference (My Characters page)', () => {
+        ac2StylingMatchesReferenceMyGroup1();
+        ac2StylingMatchesReferenceMyGroup2();
     });
 
-    describe('AC3: Characters sorted within groups (main first, then displayOrder)', () => {
-        it('sorts main character first within game group', () => {
+    function ac3CharactersSortedWithinGroupsGroup1() {
+it('sorts main character first within game group', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'Alt1', isMain: false, displayOrder: 1 }),
@@ -258,7 +280,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(within(characterLinks[0]).getByText('MainChar')).toBeInTheDocument();
         });
 
-        it('sorts by displayOrder when no main character', () => {
+    }
+
+    function ac3CharactersSortedWithinGroupsGroup2() {
+it('sorts by displayOrder when no main character', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'Char3', isMain: false, displayOrder: 3 }),
@@ -285,7 +310,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(within(characterLinks[2]).getByText('Char3')).toBeInTheDocument();
         });
 
-        it('sorts main first, then remaining by displayOrder', () => {
+    }
+
+    function ac3CharactersSortedWithinGroupsGroup3() {
+it('sorts main first, then remaining by displayOrder', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'Alt2', isMain: false, displayOrder: 3 }),
@@ -312,10 +340,17 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(within(characterLinks[1]).getByText('Alt1')).toBeInTheDocument();
             expect(within(characterLinks[2]).getByText('Alt2')).toBeInTheDocument();
         });
+
+    }
+
+    describe('AC3: Characters sorted within groups (main first, then displayOrder)', () => {
+        ac3CharactersSortedWithinGroupsGroup1();
+        ac3CharactersSortedWithinGroupsGroup2();
+        ac3CharactersSortedWithinGroupsGroup3();
     });
 
     describe('AC4: Section repositioned (Characters below Events)', () => {
-        it('renders sections in correct order: Events, Characters, Hearted Games', () => {
+        function testRendersSectionsInCorrectOrder() {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'TestChar' }),
@@ -358,11 +393,13 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
 
             expect(eventsIndex).toBeLessThan(charactersIndex);
             expect(charactersIndex).toBeLessThan(heartedIndex);
-        });
+        
+        }
+        it('renders sections in correct order: Events, Characters, Hearted Games', () => { testRendersSectionsInCorrectOrder(); });
     });
 
-    describe('AC5: Edge cases', () => {
-        it('hides characters section when user has zero characters', () => {
+    function ac5EdgeCasesGroup1() {
+it('hides characters section when user has zero characters', () => {
             const profile = createMockProfile({
                 characters: [],
             });
@@ -378,7 +415,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(screen.queryByText(/Characters/)).not.toBeInTheDocument();
         });
 
-        it('renders single game section for single-game user', () => {
+    }
+
+    function ac5EdgeCasesGroup2() {
+it('renders single game section for single-game user', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'Char1' }),
@@ -400,7 +440,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(screen.getByText('2 characters')).toBeInTheDocument();
         });
 
-        it('renders multiple game sections for multi-game user', () => {
+    }
+
+    function ac5EdgeCasesGroup3() {
+it('renders multiple game sections for multi-game user', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'WowChar' }),
@@ -429,7 +472,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(screen.getByText('2 characters')).toBeInTheDocument(); // FF14
         });
 
-        it('falls back to "Unknown Game" when game data is missing', () => {
+    }
+
+    function ac5EdgeCasesGroup4() {
+it('falls back to "Unknown Game" when game data is missing', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 999, name: 'OrphanChar' }),
@@ -449,7 +495,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(screen.getByText('OrphanChar')).toBeInTheDocument();
         });
 
-        it('handles empty game registry gracefully', () => {
+    }
+
+    function ac5EdgeCasesGroup5() {
+it('handles empty game registry gracefully', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-1', gameId: 1, name: 'TestChar' }),
@@ -475,10 +524,19 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(screen.getByText('Unknown Game')).toBeInTheDocument();
             expect(screen.getByText('TestChar')).toBeInTheDocument();
         });
+
+    }
+
+    describe('AC5: Edge cases', () => {
+        ac5EdgeCasesGroup1();
+        ac5EdgeCasesGroup2();
+        ac5EdgeCasesGroup3();
+        ac5EdgeCasesGroup4();
+        ac5EdgeCasesGroup5();
     });
 
-    describe('Character card rendering', () => {
-        it('renders character with all details', () => {
+    function characterCardRenderingGroup1() {
+it('renders character with all details', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({
@@ -515,7 +573,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             expect(screen.getByText(/450 iLvl/)).toBeInTheDocument();
         });
 
-        it('links to character detail page', () => {
+    }
+
+    function characterCardRenderingGroup2() {
+it('links to character detail page', () => {
             const profile = createMockProfile({
                 characters: [
                     createMockCharacter({ id: 'char-uuid-123', gameId: 1, name: 'LinkChar' }),
@@ -533,6 +594,12 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             const link = screen.getByRole('link', { name: /LinkChar/i });
             expect(link).toHaveAttribute('href', '/characters/char-uuid-123');
         });
+
+    }
+
+    describe('Character card rendering', () => {
+        characterCardRenderingGroup1();
+        characterCardRenderingGroup2();
     });
 
     describe('Loading and error states', () => {

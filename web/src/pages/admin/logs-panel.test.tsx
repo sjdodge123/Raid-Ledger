@@ -166,7 +166,7 @@ describe('LogsPanel', () => {
       expect(downloadButtons).toHaveLength(3);
     });
 
-    it('formats file sizes correctly', async () => {
+    async function testFormatsFileSizesCorrectly() {
       server.use(
         http.get(`${API_BASE}/admin/logs`, () =>
           HttpResponse.json({
@@ -201,7 +201,9 @@ describe('LogsPanel', () => {
       expect(screen.getByText('500 B')).toBeInTheDocument();
       expect(screen.getByText('2.0 KB')).toBeInTheDocument();
       expect(screen.getByText('1.50 MB')).toBeInTheDocument();
-    });
+    
+    }
+    it('formats file sizes correctly', async () => { await testFormatsFileSizesCorrectly(); });
 
     it('shows filter pills when files are present', async () => {
       renderWithProviders(<LogsPanel />);
@@ -212,8 +214,8 @@ describe('LogsPanel', () => {
     });
   });
 
-  describe('service filter', () => {
-    it('filters table to show only api logs when api pill is clicked', async () => {
+  function serviceFilterGroup1() {
+it('filters table to show only api logs when api pill is clicked', async () => {
       const user = userEvent.setup();
       renderWithProviders(<LogsPanel />);
       await screen.findByText('api.log');
@@ -226,7 +228,7 @@ describe('LogsPanel', () => {
       expect(screen.queryByText('postgresql.log')).not.toBeInTheDocument();
     });
 
-    it('clicking same service pill twice resets to all', async () => {
+it('clicking same service pill twice resets to all', async () => {
       const user = userEvent.setup();
       renderWithProviders(<LogsPanel />);
       await screen.findByText('api.log');
@@ -239,7 +241,10 @@ describe('LogsPanel', () => {
       expect(screen.getByText('postgresql.log')).toBeInTheDocument();
     });
 
-    it('clicking "All" pill after a filter shows all files', async () => {
+  }
+
+  function serviceFilterGroup2() {
+it('clicking "All" pill after a filter shows all files', async () => {
       const user = userEvent.setup();
       renderWithProviders(<LogsPanel />);
       await screen.findByText('api.log');
@@ -254,7 +259,7 @@ describe('LogsPanel', () => {
       expect(screen.getByText('postgresql.log')).toBeInTheDocument();
     });
 
-    it('shows empty filter message when no files match the filter', async () => {
+it('shows empty filter message when no files match the filter', async () => {
       const user = userEvent.setup();
       // Files only have api and nginx, no redis
       renderWithProviders(<LogsPanel />);
@@ -269,7 +274,10 @@ describe('LogsPanel', () => {
       ).toBeInTheDocument();
     });
 
-    it('shows count for each service in filter pill', async () => {
+  }
+
+  function serviceFilterGroup3() {
+it('shows count for each service in filter pill', async () => {
       renderWithProviders(<LogsPanel />);
       await screen.findByText('api.log');
 
@@ -278,10 +286,17 @@ describe('LogsPanel', () => {
       // nginx has 1 file
       expect(screen.getByRole('button', { name: /^nginx \(1\)/i })).toBeInTheDocument();
     });
+
+  }
+
+  describe('service filter', () => {
+      serviceFilterGroup1();
+      serviceFilterGroup2();
+      serviceFilterGroup3();
   });
 
-  describe('download file', () => {
-    it('calls downloadLogFile with filename when download button is clicked', async () => {
+  function downloadFileGroup1() {
+it('calls downloadLogFile with filename when download button is clicked', async () => {
       const user = userEvent.setup();
       renderWithProviders(<LogsPanel />);
       await screen.findByText('api.log');
@@ -294,7 +309,10 @@ describe('LogsPanel', () => {
       expect(downloadLogFile).toHaveBeenCalledWith('api.log');
     });
 
-    it('shows downloading state during download', async () => {
+  }
+
+  function downloadFileGroup2() {
+it('shows downloading state during download', async () => {
       const user = userEvent.setup();
       let resolveDownload!: () => void;
       vi.mocked(downloadLogFile).mockReturnValueOnce(
@@ -319,7 +337,10 @@ describe('LogsPanel', () => {
       });
     });
 
-    it('shows error toast when download fails', async () => {
+  }
+
+  function downloadFileGroup3() {
+it('shows error toast when download fails', async () => {
       const user = userEvent.setup();
       vi.mocked(downloadLogFile).mockRejectedValueOnce(
         new Error('Failed to download log file'),
@@ -345,7 +366,10 @@ describe('LogsPanel', () => {
       });
     });
 
-    it('disables download button while download is in progress', async () => {
+  }
+
+  function downloadFileGroup4() {
+it('disables download button while download is in progress', async () => {
       const user = userEvent.setup();
       let resolveDownload!: () => void;
       vi.mocked(downloadLogFile).mockReturnValueOnce(
@@ -367,10 +391,18 @@ describe('LogsPanel', () => {
 
       resolveDownload();
     });
+
+  }
+
+  describe('download file', () => {
+      downloadFileGroup1();
+      downloadFileGroup2();
+      downloadFileGroup3();
+      downloadFileGroup4();
   });
 
-  describe('export', () => {
-    it('calls exportLogs with no service when "All" filter is active', async () => {
+  function exportGroup1() {
+it('calls exportLogs with no service when "All" filter is active', async () => {
       const user = userEvent.setup();
       renderWithProviders(<LogsPanel />);
       await screen.findByText('api.log');
@@ -381,7 +413,7 @@ describe('LogsPanel', () => {
       expect(exportLogs).toHaveBeenCalledWith({ service: undefined });
     });
 
-    it('calls exportLogs with service when a service filter is active', async () => {
+it('calls exportLogs with service when a service filter is active', async () => {
       const user = userEvent.setup();
       renderWithProviders(<LogsPanel />);
       await screen.findByText('api.log');
@@ -395,7 +427,10 @@ describe('LogsPanel', () => {
       expect(exportLogs).toHaveBeenCalledWith({ service: 'api' });
     });
 
-    it('shows "Exporting..." text while export is in progress', async () => {
+  }
+
+  function exportGroup2() {
+it('shows "Exporting..." text while export is in progress', async () => {
       const user = userEvent.setup();
       let resolveExport!: () => void;
       vi.mocked(exportLogs).mockReturnValueOnce(
@@ -418,7 +453,10 @@ describe('LogsPanel', () => {
       });
     });
 
-    it('disables export button while exporting', async () => {
+  }
+
+  function exportGroup3() {
+it('disables export button while exporting', async () => {
       const user = userEvent.setup();
       let resolveExport!: () => void;
       vi.mocked(exportLogs).mockReturnValueOnce(
@@ -437,6 +475,13 @@ describe('LogsPanel', () => {
 
       resolveExport();
     });
+
+  }
+
+  describe('export', () => {
+      exportGroup1();
+      exportGroup2();
+      exportGroup3();
   });
 
   describe('heading and description', () => {

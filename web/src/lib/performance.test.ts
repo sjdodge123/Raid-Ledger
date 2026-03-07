@@ -38,64 +38,55 @@ class MockObserver {
     }
 }
 
-describe('initPerformanceMonitoring', () => {
-    beforeEach(() => {
-        observerInstances.length = 0;
-        vi.stubGlobal('PerformanceObserver', MockObserver);
-        // Reset any existing event listeners
-        vi.spyOn(globalThis, 'addEventListener');
-    });
-
-    afterEach(() => {
-        vi.restoreAllMocks();
-        vi.unstubAllGlobals();
-    });
-
-    it('does nothing when PerformanceObserver is undefined', () => {
+function initperformancemonitoringGroup1() {
+it('does nothing when PerformanceObserver is undefined', () => {
         vi.stubGlobal('PerformanceObserver', undefined);
         // Should not throw
         expect(() => initPerformanceMonitoring()).not.toThrow();
         expect(observerInstances.length).toBe(0);
     });
 
-    it('creates observers for FCP, LCP, CLS, and TTFB', () => {
+it('creates observers for FCP, LCP, CLS, and TTFB', () => {
         initPerformanceMonitoring();
         // 4 observers: FCP, LCP, CLS, TTFB
         expect(observerInstances.length).toBe(4);
     });
 
-    it('FCP observer watches paint type with buffered:true', () => {
+it('FCP observer watches paint type with buffered:true', () => {
         initPerformanceMonitoring();
         const fcpObserver = observerInstances[0];
         expect(fcpObserver.observeOptions).toEqual({ type: 'paint', buffered: true });
     });
 
-    it('LCP observer watches largest-contentful-paint type with buffered:true', () => {
+it('LCP observer watches largest-contentful-paint type with buffered:true', () => {
         initPerformanceMonitoring();
         const lcpObserver = observerInstances[1];
         expect(lcpObserver.observeOptions).toEqual({ type: 'largest-contentful-paint', buffered: true });
     });
 
-    it('CLS observer watches layout-shift type with buffered:true', () => {
+}
+
+function initperformancemonitoringGroup2() {
+it('CLS observer watches layout-shift type with buffered:true', () => {
         initPerformanceMonitoring();
         const clsObserver = observerInstances[2];
         expect(clsObserver.observeOptions).toEqual({ type: 'layout-shift', buffered: true });
     });
 
-    it('TTFB observer watches navigation type with buffered:true', () => {
+it('TTFB observer watches navigation type with buffered:true', () => {
         initPerformanceMonitoring();
         const navObserver = observerInstances[3];
         expect(navObserver.observeOptions).toEqual({ type: 'navigation', buffered: true });
     });
 
-    it('FCP observer disconnects after processing first-contentful-paint', () => {
+it('FCP observer disconnects after processing first-contentful-paint', () => {
         initPerformanceMonitoring();
         const fcpObserver = observerInstances[0];
         fcpObserver.trigger([{ name: 'first-contentful-paint', startTime: 1200, entryType: 'paint' } as PerformanceEntry]);
         expect(fcpObserver.disconnected).toBe(true);
     });
 
-    it('FCP observer ignores non-FCP paint entries', () => {
+it('FCP observer ignores non-FCP paint entries', () => {
         initPerformanceMonitoring();
         const fcpObserver = observerInstances[0];
         // Trigger with a non-FCP paint entry
@@ -104,7 +95,10 @@ describe('initPerformanceMonitoring', () => {
         expect(fcpObserver.disconnected).toBe(false);
     });
 
-    it('TTFB observer disconnects after navigation entry with positive TTFB', () => {
+}
+
+function initperformancemonitoringGroup3() {
+it('TTFB observer disconnects after navigation entry with positive TTFB', () => {
         initPerformanceMonitoring();
         const navObserver = observerInstances[3];
         navObserver.trigger([
@@ -119,7 +113,10 @@ describe('initPerformanceMonitoring', () => {
         expect(navObserver.disconnected).toBe(true);
     });
 
-    it('TTFB observer skips entry when TTFB is zero or negative', () => {
+}
+
+function initperformancemonitoringGroup4() {
+it('TTFB observer skips entry when TTFB is zero or negative', () => {
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         initPerformanceMonitoring();
         const navObserver = observerInstances[3];
@@ -137,7 +134,10 @@ describe('initPerformanceMonitoring', () => {
         consoleSpy.mockRestore();
     });
 
-    it('LCP and CLS report on visibilitychange to hidden', () => {
+}
+
+function initperformancemonitoringGroup5() {
+it('LCP and CLS report on visibilitychange to hidden', () => {
         initPerformanceMonitoring();
         const lcpObserver = observerInstances[1];
 
@@ -153,7 +153,7 @@ describe('initPerformanceMonitoring', () => {
         expect(lcpObserver.disconnected).toBe(true);
     });
 
-    it('CLS accumulates layout shift values without recent input', () => {
+it('CLS accumulates layout shift values without recent input', () => {
         initPerformanceMonitoring();
         const clsObserver = observerInstances[2];
 
@@ -167,7 +167,10 @@ describe('initPerformanceMonitoring', () => {
         expect(clsObserver.disconnected).toBe(false);
     });
 
-    it('CLS ignores layout shifts with recent input', () => {
+}
+
+function initperformancemonitoringGroup6() {
+it('CLS ignores layout shifts with recent input', () => {
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         initPerformanceMonitoring();
         const clsObserver = observerInstances[2];
@@ -182,7 +185,10 @@ describe('initPerformanceMonitoring', () => {
         consoleSpy.mockRestore();
     });
 
-    it('handles FCP observer throwing (paint not supported)', () => {
+}
+
+function initperformancemonitoringGroup7() {
+it('handles FCP observer throwing (paint not supported)', () => {
         vi.stubGlobal('PerformanceObserver', class {
             callback: PerformanceObserverCallback;
             constructor(cb: PerformanceObserverCallback) { this.callback = cb; }
@@ -198,7 +204,10 @@ describe('initPerformanceMonitoring', () => {
         expect(() => initPerformanceMonitoring()).not.toThrow();
     });
 
-    it('handles LCP observer throwing (LCP not supported)', () => {
+}
+
+function initperformancemonitoringGroup8() {
+it('handles LCP observer throwing (LCP not supported)', () => {
         vi.stubGlobal('PerformanceObserver', class {
             constructor() {}
             observe(options: PerformanceObserverInit) {
@@ -212,7 +221,10 @@ describe('initPerformanceMonitoring', () => {
         expect(() => initPerformanceMonitoring()).not.toThrow();
     });
 
-    it('handles CLS observer throwing (layout-shift not supported)', () => {
+}
+
+function initperformancemonitoringGroup9() {
+it('handles CLS observer throwing (layout-shift not supported)', () => {
         vi.stubGlobal('PerformanceObserver', class {
             constructor() {}
             observe(options: PerformanceObserverInit) {
@@ -226,7 +238,10 @@ describe('initPerformanceMonitoring', () => {
         expect(() => initPerformanceMonitoring()).not.toThrow();
     });
 
-    it('handles navigation observer throwing (navigation not supported)', () => {
+}
+
+function initperformancemonitoringGroup10() {
+it('handles navigation observer throwing (navigation not supported)', () => {
         vi.stubGlobal('PerformanceObserver', class {
             constructor() {}
             observe(options: PerformanceObserverInit) {
@@ -239,22 +254,36 @@ describe('initPerformanceMonitoring', () => {
 
         expect(() => initPerformanceMonitoring()).not.toThrow();
     });
-});
 
-describe('rate function (via initPerformanceMonitoring integration)', () => {
-    beforeEach(() => {
+}
+
+describe('initPerformanceMonitoring', () => {
+beforeEach(() => {
         observerInstances.length = 0;
         vi.stubGlobal('PerformanceObserver', MockObserver);
-        // Suppress console.log in DEV mode
-        vi.spyOn(console, 'log').mockImplementation(() => {});
+        // Reset any existing event listeners
+        vi.spyOn(globalThis, 'addEventListener');
     });
 
-    afterEach(() => {
+afterEach(() => {
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
     });
 
-    it('FCP rated good when <= 1800ms', () => {
+    initperformancemonitoringGroup1();
+    initperformancemonitoringGroup2();
+    initperformancemonitoringGroup3();
+    initperformancemonitoringGroup4();
+    initperformancemonitoringGroup5();
+    initperformancemonitoringGroup6();
+    initperformancemonitoringGroup7();
+    initperformancemonitoringGroup8();
+    initperformancemonitoringGroup9();
+    initperformancemonitoringGroup10();
+});
+
+function rateFunctionViaInitPerformanceMonitoringIntegrationGroup1() {
+it('FCP rated good when <= 1800ms', () => {
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         // Patch import.meta.env.DEV to true so report() logs
         vi.stubGlobal('import', { meta: { env: { DEV: true } } });
@@ -270,7 +299,10 @@ describe('rate function (via initPerformanceMonitoring integration)', () => {
         consoleSpy.mockRestore();
     });
 
-    it('TTFB rated poor when > 1800ms', () => {
+}
+
+function rateFunctionViaInitPerformanceMonitoringIntegrationGroup2() {
+it('TTFB rated poor when > 1800ms', () => {
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
         initPerformanceMonitoring();
@@ -287,4 +319,22 @@ describe('rate function (via initPerformanceMonitoring integration)', () => {
 
         consoleSpy.mockRestore();
     });
+
+}
+
+describe('rate function (via initPerformanceMonitoring integration)', () => {
+beforeEach(() => {
+        observerInstances.length = 0;
+        vi.stubGlobal('PerformanceObserver', MockObserver);
+        // Suppress console.log in DEV mode
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+
+afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+    });
+
+    rateFunctionViaInitPerformanceMonitoringIntegrationGroup1();
+    rateFunctionViaInitPerformanceMonitoringIntegrationGroup2();
 });

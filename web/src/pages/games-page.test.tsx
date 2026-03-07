@@ -111,19 +111,19 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
         mockSearch();
     });
 
-    describe('Mobile Filter Button', () => {
-        it('renders genre filter button', () => {
+    function mobileFilterButtonGroup1() {
+it('renders genre filter button', () => {
             renderPage();
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
             expect(filterBtn).toBeInTheDocument();
         });
 
-        it('renders Genre Filter aria-label on the FAB', () => {
+it('renders Genre Filter aria-label on the FAB', () => {
             renderPage();
             expect(screen.getByRole('button', { name: /genre filter/i })).toBeInTheDocument();
         });
 
-        it('renders funnel icon inside the filter button', () => {
+it('renders funnel icon inside the filter button', () => {
             renderPage();
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
             // FunnelIcon renders as an svg inside the button
@@ -131,14 +131,17 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(svg).toBeInTheDocument();
         });
 
-        it('does NOT show badge when no genre selected', () => {
+it('does NOT show badge when no genre selected', () => {
             renderPage();
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
             // Badge is a span with text "1" — should not be present
             expect(filterBtn.querySelector('span.rounded-full')).not.toBeInTheDocument();
         });
 
-        it('hides filter button when searching (search query >= 2 chars)', () => {
+    }
+
+    function mobileFilterButtonGroup2() {
+it('hides filter button when searching (search query >= 2 chars)', () => {
             // With our useDebouncedValue mock returning the value directly,
             // we need the component to have a search query >= 2 chars
             // We can check this by verifying after entering search text
@@ -150,7 +153,7 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(screen.queryByRole('button', { name: /genre filter/i })).not.toBeInTheDocument();
         });
 
-        it('shows filter button again when search is cleared', () => {
+it('shows filter button again when search is cleared', () => {
             renderPage();
             const searchInput = screen.getByPlaceholderText('Search games...');
             fireEvent.change(searchInput, { target: { value: 'wa' } });
@@ -159,6 +162,12 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             fireEvent.change(searchInput, { target: { value: '' } });
             expect(screen.getByRole('button', { name: /genre filter/i })).toBeInTheDocument();
         });
+
+    }
+
+    describe('Mobile Filter Button', () => {
+        mobileFilterButtonGroup1();
+        mobileFilterButtonGroup2();
     });
 
     describe('Desktop Genre Filter Pills', () => {
@@ -223,8 +232,8 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
 
     });
 
-    describe('Genre selection', () => {
-        it('selected genre row shows checkmark icon', () => {
+    function genreSelectionGroup1() {
+it('selected genre row shows checkmark icon', () => {
             renderPage();
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
             const dialog = screen.getByRole('dialog');
@@ -244,7 +253,10 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(checkIcon).toBeInTheDocument();
         });
 
-        it('"All" option shows checkmark when no genre is selected (default state)', () => {
+    }
+
+    function genreSelectionGroup2() {
+it('"All" option shows checkmark when no genre is selected (default state)', () => {
             renderPage();
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
 
@@ -257,7 +269,10 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(checkIcon).toBeInTheDocument();
         });
 
-        it('"All" button clears selection and shows checkmark', () => {
+    }
+
+    function genreSelectionGroup3() {
+it('"All" button clears selection and shows checkmark', () => {
             renderPage();
             // First select a genre
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
@@ -277,6 +292,13 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             const checkIcon = allBtn?.querySelector('svg');
             expect(checkIcon).toBeInTheDocument();
         });
+
+    }
+
+    describe('Genre selection', () => {
+        genreSelectionGroup1();
+        genreSelectionGroup2();
+        genreSelectionGroup3();
     });
 
     describe('FAB filter button', () => {
@@ -304,8 +326,8 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
         });
     });
 
-    describe('Genre filter applied to content', () => {
-        it('filters discover rows by selected genre', () => {
+    function genreFilterAppliedToContentGroup1() {
+it('filters discover rows by selected genre', () => {
             renderPage();
             // Initially both carousel categories show (may appear in multiple elements due to carousel + h2 mocks)
             expect(screen.getAllByText('Popular RPGs').length).toBeGreaterThan(0);
@@ -324,7 +346,10 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(screen.queryByText('Top Shooters')).not.toBeInTheDocument();
         });
 
-        it('shows empty state message when no games match selected genre', () => {
+    }
+
+    function genreFilterAppliedToContentGroup2() {
+it('shows empty state message when no games match selected genre', () => {
             vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
                 data: {
                     rows: [
@@ -347,19 +372,20 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
 
             expect(screen.getByText(/Try selecting a different genre/i)).toBeInTheDocument();
         });
+
+    }
+
+    describe('Genre filter applied to content', () => {
+        genreFilterAppliedToContentGroup1();
+        genreFilterAppliedToContentGroup2();
     });
 });
 
 // ============================================================
 // ROK-375: Local source warning banner tests
 // ============================================================
-describe('GamesPage — ROK-375: local source warning banner', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockDiscover();
-    });
-
-    it('shows "external search unavailable" warning when search source is "local"', () => {
+function gamespageROK375LocalSourceGroup1() {
+it('shows "external search unavailable" warning when search source is "local"', () => {
         mockSearch(
             {
                 data: [mockGame],
@@ -374,7 +400,10 @@ describe('GamesPage — ROK-375: local source warning banner', () => {
         expect(screen.getByText(/external search unavailable/i)).toBeInTheDocument();
     });
 
-    it('does NOT show warning when search source is "igdb"', () => {
+}
+
+function gamespageROK375LocalSourceGroup2() {
+it('does NOT show warning when search source is "igdb"', () => {
         mockSearch(
             {
                 data: [mockGame],
@@ -389,7 +418,10 @@ describe('GamesPage — ROK-375: local source warning banner', () => {
         expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
     });
 
-    it('does NOT show warning when search source is "database"', () => {
+}
+
+function gamespageROK375LocalSourceGroup3() {
+it('does NOT show warning when search source is "database"', () => {
         mockSearch(
             {
                 data: [mockGame],
@@ -404,7 +436,10 @@ describe('GamesPage — ROK-375: local source warning banner', () => {
         expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
     });
 
-    it('does NOT show warning when search source is "redis"', () => {
+}
+
+function gamespageROK375LocalSourceGroup4() {
+it('does NOT show warning when search source is "redis"', () => {
         mockSearch(
             {
                 data: [mockGame],
@@ -419,7 +454,7 @@ describe('GamesPage — ROK-375: local source warning banner', () => {
         expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
     });
 
-    it('does NOT show warning when not searching', () => {
+it('does NOT show warning when not searching', () => {
         mockSearch(null);
 
         renderPage();
@@ -427,4 +462,16 @@ describe('GamesPage — ROK-375: local source warning banner', () => {
         expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
     });
 
+}
+
+describe('GamesPage — ROK-375: local source warning banner', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscover();
+    });
+
+    gamespageROK375LocalSourceGroup1();
+    gamespageROK375LocalSourceGroup2();
+    gamespageROK375LocalSourceGroup3();
+    gamespageROK375LocalSourceGroup4();
 });

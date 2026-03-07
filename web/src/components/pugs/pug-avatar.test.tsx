@@ -40,15 +40,15 @@ describe('PugAvatar', () => {
         });
     });
 
-    describe('initials fallback avatar', () => {
-        it('renders initials when no Discord avatar is available', () => {
+    function initialsFallbackAvatarGroup1() {
+it('renders initials when no Discord avatar is available', () => {
             render(<PugAvatar username="testplayer" />);
 
             expect(screen.queryByRole('img')).not.toBeInTheDocument();
             expect(screen.getByText('T')).toBeInTheDocument();
         });
 
-        it('renders initials when discordUserId is null', () => {
+it('renders initials when discordUserId is null', () => {
             render(
                 <PugAvatar
                     username="gamerman"
@@ -61,7 +61,10 @@ describe('PugAvatar', () => {
             expect(screen.getByText('G')).toBeInTheDocument();
         });
 
-        it('renders initials when discordAvatarHash is null', () => {
+    }
+
+    function initialsFallbackAvatarGroup2() {
+it('renders initials when discordAvatarHash is null', () => {
             render(
                 <PugAvatar
                     username="gamerman"
@@ -74,13 +77,13 @@ describe('PugAvatar', () => {
             expect(screen.getByText('G')).toBeInTheDocument();
         });
 
-        it('shows username as title attribute', () => {
+it('shows username as title attribute', () => {
             render(<PugAvatar username="testplayer" />);
 
             expect(screen.getByTitle('testplayer')).toBeInTheDocument();
         });
 
-        it('generates consistent color for same username', () => {
+it('generates consistent color for same username', () => {
             const { container: c1 } = render(<PugAvatar username="alice" />);
             const { container: c2 } = render(<PugAvatar username="alice" />);
 
@@ -90,10 +93,20 @@ describe('PugAvatar', () => {
             expect(div1?.getAttribute('style')).toBe(div2?.getAttribute('style'));
         });
 
-        it('uppercases the first character as initial', () => {
+    }
+
+    function initialsFallbackAvatarGroup3() {
+it('uppercases the first character as initial', () => {
             render(<PugAvatar username="lowercase" />);
             expect(screen.getByText('L')).toBeInTheDocument();
         });
+
+    }
+
+    describe('initials fallback avatar', () => {
+        initialsFallbackAvatarGroup1();
+        initialsFallbackAvatarGroup2();
+        initialsFallbackAvatarGroup3();
     });
 
 });

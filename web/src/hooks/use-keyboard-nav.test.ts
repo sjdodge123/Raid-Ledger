@@ -45,8 +45,8 @@ describe('useKeyboardNav', () => {
         document.body.innerHTML = '';
     });
 
-    describe('vertical orientation (default)', () => {
-        it('ArrowDown moves focus to next item', () => {
+    function verticalOrientationDefaultGroup1() {
+it('ArrowDown moves focus to next item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -59,7 +59,7 @@ describe('useKeyboardNav', () => {
             expect(event.preventDefault).toHaveBeenCalled();
         });
 
-        it('ArrowDown wraps from last item to first', () => {
+it('ArrowDown wraps from last item to first', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[2].focus();
@@ -71,7 +71,10 @@ describe('useKeyboardNav', () => {
             expect(document.activeElement).toBe(items[0]);
         });
 
-        it('ArrowUp moves focus to previous item', () => {
+    }
+
+    function verticalOrientationDefaultGroup2() {
+it('ArrowUp moves focus to previous item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[2].focus();
@@ -84,7 +87,7 @@ describe('useKeyboardNav', () => {
             expect(event.preventDefault).toHaveBeenCalled();
         });
 
-        it('ArrowUp wraps from first item to last', () => {
+it('ArrowUp wraps from first item to last', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -96,7 +99,10 @@ describe('useKeyboardNav', () => {
             expect(document.activeElement).toBe(items[2]);
         });
 
-        it('ArrowLeft and ArrowRight have no effect in vertical mode', () => {
+    }
+
+    function verticalOrientationDefaultGroup3() {
+it('ArrowLeft and ArrowRight have no effect in vertical mode', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -111,10 +117,17 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(rightEvent);
             expect(document.activeElement).toBe(items[0]);
         });
+
+    }
+
+    describe('vertical orientation (default)', () => {
+        verticalOrientationDefaultGroup1();
+        verticalOrientationDefaultGroup2();
+        verticalOrientationDefaultGroup3();
     });
 
-    describe('horizontal orientation', () => {
-        it('ArrowRight moves focus to next item', () => {
+    function horizontalOrientationGroup1() {
+it('ArrowRight moves focus to next item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -126,7 +139,7 @@ describe('useKeyboardNav', () => {
             expect(document.activeElement).toBe(items[1]);
         });
 
-        it('ArrowLeft moves focus to previous item', () => {
+it('ArrowLeft moves focus to previous item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[2].focus();
@@ -138,7 +151,10 @@ describe('useKeyboardNav', () => {
             expect(document.activeElement).toBe(items[1]);
         });
 
-        it('ArrowRight wraps from last to first', () => {
+    }
+
+    function horizontalOrientationGroup2() {
+it('ArrowRight wraps from last to first', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[2].focus();
@@ -150,7 +166,7 @@ describe('useKeyboardNav', () => {
             expect(document.activeElement).toBe(items[0]);
         });
 
-        it('ArrowUp and ArrowDown have no effect in horizontal mode', () => {
+it('ArrowUp and ArrowDown have no effect in horizontal mode', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -161,6 +177,12 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(downEvent);
             expect(document.activeElement).toBe(items[0]);
         });
+
+    }
+
+    describe('horizontal orientation', () => {
+        horizontalOrientationGroup1();
+        horizontalOrientationGroup2();
     });
 
     describe('Home and End keys', () => {

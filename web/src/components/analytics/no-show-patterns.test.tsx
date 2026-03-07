@@ -40,30 +40,22 @@ const mockUsers = [
     },
 ];
 
-describe('NoShowPatterns', () => {
-    beforeEach(() => {
-        server.use(
-            http.get(`${API_BASE}/analytics/attendance/users`, () =>
-                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
-            ),
-        );
-    });
-
-    it('renders No-Show Patterns heading', async () => {
+function noshowpatternsGroup1() {
+it('renders No-Show Patterns heading', async () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => {
             expect(screen.getByText('No-Show Patterns')).toBeInTheDocument();
         });
     });
 
-    it('renders Repeat Offenders section label', async () => {
+it('renders Repeat Offenders section label', async () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => {
             expect(screen.getByText('Repeat Offenders')).toBeInTheDocument();
         });
     });
 
-    it('renders users with 2+ no-shows as repeat offenders', async () => {
+it('renders users with 2+ no-shows as repeat offenders', async () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => {
             // Alice (3 no-shows) and Bob (2 no-shows) qualify
@@ -72,14 +64,17 @@ describe('NoShowPatterns', () => {
         });
     });
 
-    it('does NOT show users with only 1 no-show as repeat offenders', async () => {
+}
+
+function noshowpatternsGroup2() {
+it('does NOT show users with only 1 no-show as repeat offenders', async () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => screen.getByText('Alice'));
         // Carol has only 1 no-show — should not appear
         expect(screen.queryByText('Carol')).not.toBeInTheDocument();
     });
 
-    it('shows no-show count for each repeat offender', async () => {
+it('shows no-show count for each repeat offender', async () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => {
             expect(screen.getByText('3 no-shows')).toBeInTheDocument();
@@ -87,7 +82,7 @@ describe('NoShowPatterns', () => {
         });
     });
 
-    it('shows no-show rate percentage', async () => {
+it('shows no-show rate percentage', async () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => {
             // Alice: 3/10 = 30%
@@ -95,7 +90,10 @@ describe('NoShowPatterns', () => {
         });
     });
 
-    it('shows "No repeat offenders found." when no users have 2+ no-shows', async () => {
+}
+
+function noshowpatternsGroup3() {
+it('shows "No repeat offenders found." when no users have 2+ no-shows', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
                 HttpResponse.json({
@@ -113,7 +111,10 @@ describe('NoShowPatterns', () => {
         });
     });
 
-    it('shows "No repeat offenders found." when user list is empty', async () => {
+}
+
+function noshowpatternsGroup4() {
+it('shows "No repeat offenders found." when user list is empty', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
                 HttpResponse.json({ users: [], totalUsers: 0 }),
@@ -126,7 +127,7 @@ describe('NoShowPatterns', () => {
         });
     });
 
-    it('sorts repeat offenders by no-show count descending', async () => {
+it('sorts repeat offenders by no-show count descending', async () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => screen.getByText('Alice'));
 
@@ -138,13 +139,16 @@ describe('NoShowPatterns', () => {
         expect(offenderItems[1]).toContain('2');
     });
 
-    it('does not render Day-of-Week Activity placeholder section', async () => {
+}
+
+function noshowpatternsGroup5() {
+it('does not render Day-of-Week Activity placeholder section', async () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => screen.getByText('Repeat Offenders'));
         expect(screen.queryByText('Day-of-Week Activity')).not.toBeInTheDocument();
     });
 
-    it('shows error state when request fails', async () => {
+it('shows error state when request fails', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
                 HttpResponse.json({ message: 'Forbidden' }, { status: 403 }),
@@ -157,7 +161,10 @@ describe('NoShowPatterns', () => {
         });
     });
 
-    it('shows loading skeleton while data is fetching', () => {
+}
+
+function noshowpatternsGroup6() {
+it('shows loading skeleton while data is fetching', () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, async () => {
                 await new Promise((r) => setTimeout(r, 100));
@@ -169,7 +176,10 @@ describe('NoShowPatterns', () => {
         expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
 
-    it('limits display to 10 repeat offenders max', async () => {
+}
+
+function noshowpatternsGroup7() {
+it('limits display to 10 repeat offenders max', async () => {
         // Create 12 users each with 2+ no-shows
         const manyOffenders = Array.from({ length: 12 }, (_, i) => ({
             userId: i + 1,
@@ -194,4 +204,23 @@ describe('NoShowPatterns', () => {
         const noShowElements = screen.getAllByText('3 no-shows');
         expect(noShowElements.length).toBeLessThanOrEqual(10);
     });
+
+}
+
+describe('NoShowPatterns', () => {
+beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
+    });
+
+    noshowpatternsGroup1();
+    noshowpatternsGroup2();
+    noshowpatternsGroup3();
+    noshowpatternsGroup4();
+    noshowpatternsGroup5();
+    noshowpatternsGroup6();
+    noshowpatternsGroup7();
 });

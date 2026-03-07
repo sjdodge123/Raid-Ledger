@@ -84,7 +84,7 @@ describe('nameToSlug (via buildWowheadTalentString slug matching)', () => {
 
 describe('buildWowheadTalentString', () => {
     describe('full Druid talent string build', () => {
-        it('produces correct Wowhead talent string for a Balance/Resto Druid', () => {
+        function testProducesCorrectWowheadTalentString() {
             // Build a Druid with points in Balance and Restoration, none in Feral.
             // Balance tree (21 talents sorted by position):
             //   a1:starlight-wrath(5), a2:natures-grasp(1), a3:improved-natures-grasp(0)
@@ -137,7 +137,9 @@ describe('buildWowheadTalentString', () => {
             // Restoration: furor is at a3 (3rd position): 0,5 → "05"
             // Trailing tree trimming: Restoration is non-zero, so all 3 trees present
             expect(result).toBe('510005010500135001-0-05');
-        });
+        
+        }
+        it('produces correct Wowhead talent string for a Balance/Resto Druid', () => { testProducesCorrectWowheadTalentString(); });
 
         it('produces correct string for a Feral-only Druid', () => {
             const trees = [
@@ -221,8 +223,8 @@ describe('buildWowheadTalentString', () => {
         });
     });
 
-    describe('API-position fallback', () => {
-        it('uses tierIndex/columnIndex when available (API path)', () => {
+    function apiPositionFallbackGroup1() {
+it('uses tierIndex/columnIndex when available (API path)', () => {
             // Provide talents with tier/column indices matching known positions.
             // For Druid Balance:
             //   starlight-wrath is at a1 → tierIndex=0, columnIndex=0
@@ -255,7 +257,10 @@ describe('buildWowheadTalentString', () => {
             expect(balanceString).not.toBe('0');
         });
 
-        it('falls back to slug matching when tierIndex/columnIndex are absent', () => {
+    }
+
+    function apiPositionFallbackGroup2() {
+it('falls back to slug matching when tierIndex/columnIndex are absent', () => {
             // No tierIndex/columnIndex → slug-based path
             const trees = [
                 {
@@ -276,7 +281,10 @@ describe('buildWowheadTalentString', () => {
             expect(result!.startsWith('5')).toBe(true);
         });
 
-        it('API positions produce same result as slug matching for known talents', () => {
+    }
+
+    function apiPositionFallbackGroup3() {
+it('API positions produce same result as slug matching for known talents', () => {
             // Build the same talent set both ways and compare
             const slugTrees = [
                 {
@@ -312,7 +320,10 @@ describe('buildWowheadTalentString', () => {
             expect(slugResult).toBe(apiResult);
         });
 
-        it('partial API positions falls back to slug matching', () => {
+    }
+
+    function apiPositionFallbackGroup4() {
+it('partial API positions falls back to slug matching', () => {
             // When only some talents have tierIndex/columnIndex, hasApiPositions
             // returns false (it requires ALL ranked talents to have positions)
             const trees = [
@@ -334,10 +345,18 @@ describe('buildWowheadTalentString', () => {
             expect(result).not.toBeNull();
             expect(result!.startsWith('51')).toBe(true); // starlight-wrath(5) + natures-grasp(1)
         });
+
+    }
+
+    describe('API-position fallback', () => {
+        apiPositionFallbackGroup1();
+        apiPositionFallbackGroup2();
+        apiPositionFallbackGroup3();
+        apiPositionFallbackGroup4();
     });
 
-    describe('trailing tree trimming', () => {
-        it('trims trailing zero trees', () => {
+    function trailingTreeTrimmingGroup1() {
+it('trims trailing zero trees', () => {
             const trees = [
                 {
                     name: 'Balance',
@@ -355,7 +374,10 @@ describe('buildWowheadTalentString', () => {
             expect(result).toBe('5');
         });
 
-        it('keeps middle zero tree when later tree has points', () => {
+    }
+
+    function trailingTreeTrimmingGroup2() {
+it('keeps middle zero tree when later tree has points', () => {
             const trees = [
                 {
                     name: 'Balance',
@@ -375,6 +397,12 @@ describe('buildWowheadTalentString', () => {
             // All three trees present: Balance-Feral-Restoration
             expect(result).toBe('5-0-05');
         });
+
+    }
+
+    describe('trailing tree trimming', () => {
+        trailingTreeTrimmingGroup1();
+        trailingTreeTrimmingGroup2();
     });
 
     describe('all classes have position maps', () => {

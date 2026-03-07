@@ -131,8 +131,8 @@ afterEach(() => {
 // Tests
 // ============================================================
 
-describe('UnderwaterAmbience — rendering (ROK-296)', () => {
-    it('renders a hidden canvas when theme is not underwater', () => {
+function underwaterambienceRenderingROK296Group1() {
+it('renders a hidden canvas when theme is not underwater', () => {
         mockResolvedTheme.mockReturnValue('default-dark');
         const { container } = render(<UnderwaterAmbience />);
         const canvas = container.firstChild as HTMLElement | null;
@@ -140,7 +140,7 @@ describe('UnderwaterAmbience — rendering (ROK-296)', () => {
         expect(canvas).toHaveClass('hidden');
     });
 
-    it('renders a hidden canvas when theme is space', () => {
+it('renders a hidden canvas when theme is space', () => {
         mockResolvedTheme.mockReturnValue('space');
         const { container } = render(<UnderwaterAmbience />);
         const canvas = container.firstChild as HTMLElement | null;
@@ -148,7 +148,7 @@ describe('UnderwaterAmbience — rendering (ROK-296)', () => {
         expect(canvas).toHaveClass('hidden');
     });
 
-    it('renders a hidden canvas when theme is default-light', () => {
+it('renders a hidden canvas when theme is default-light', () => {
         mockResolvedTheme.mockReturnValue('default-light');
         const { container } = render(<UnderwaterAmbience />);
         const canvas = container.firstChild as HTMLElement | null;
@@ -156,28 +156,34 @@ describe('UnderwaterAmbience — rendering (ROK-296)', () => {
         expect(canvas).toHaveClass('hidden');
     });
 
-    it('renders a canvas element when theme is underwater', () => {
+}
+
+function underwaterambienceRenderingROK296Group2() {
+it('renders a canvas element when theme is underwater', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         render(<UnderwaterAmbience />);
         const canvas = document.querySelector('canvas');
         expect(canvas).toBeInTheDocument();
     });
 
-    it('canvas has aria-hidden="true" (not a11y obstacle)', () => {
+it('canvas has aria-hidden="true" (not a11y obstacle)', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         render(<UnderwaterAmbience />);
         const canvas = document.querySelector('canvas');
         expect(canvas).toHaveAttribute('aria-hidden', 'true');
     });
 
-    it('canvas has pointer-events-none class (never blocks interaction)', () => {
+it('canvas has pointer-events-none class (never blocks interaction)', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         render(<UnderwaterAmbience />);
         const canvas = document.querySelector('canvas');
         expect(canvas).toHaveClass('pointer-events-none');
     });
 
-    it('canvas is fixed-position and covers the full viewport', () => {
+}
+
+function underwaterambienceRenderingROK296Group3() {
+it('canvas is fixed-position and covers the full viewport', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         render(<UnderwaterAmbience />);
         const canvas = document.querySelector('canvas');
@@ -185,29 +191,36 @@ describe('UnderwaterAmbience — rendering (ROK-296)', () => {
         expect(canvas).toHaveClass('inset-0');
     });
 
-    it('canvas has z-0 so it stays behind content', () => {
+it('canvas has z-0 so it stays behind content', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         render(<UnderwaterAmbience />);
         const canvas = document.querySelector('canvas');
         expect(canvas).toHaveClass('z-0');
     });
+
+}
+
+describe('UnderwaterAmbience — rendering (ROK-296)', () => {
+    underwaterambienceRenderingROK296Group1();
+    underwaterambienceRenderingROK296Group2();
+    underwaterambienceRenderingROK296Group3();
 });
 
-describe('UnderwaterAmbience — animation lifecycle (ROK-296)', () => {
-    it('starts animation loop when theme is underwater', () => {
+function underwaterambienceAnimationLifecycleROK296Group1() {
+it('starts animation loop when theme is underwater', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         render(<UnderwaterAmbience />);
         // requestAnimationFrame should have been called to kick off the loop
         expect(rafCallbacks.size).toBeGreaterThan(0);
     });
 
-    it('does not start animation loop when theme is not underwater', () => {
+it('does not start animation loop when theme is not underwater', () => {
         mockResolvedTheme.mockReturnValue('default-dark');
         render(<UnderwaterAmbience />);
         expect(rafCallbacks.size).toBe(0);
     });
 
-    it('cancels animation frame on unmount', () => {
+it('cancels animation frame on unmount', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         const cancelSpy = vi.spyOn(globalThis, 'cancelAnimationFrame');
         const { unmount } = render(<UnderwaterAmbience />);
@@ -215,7 +228,10 @@ describe('UnderwaterAmbience — animation lifecycle (ROK-296)', () => {
         expect(cancelSpy).toHaveBeenCalled();
     });
 
-    it('removes resize listener on unmount', () => {
+}
+
+function underwaterambienceAnimationLifecycleROK296Group2() {
+it('removes resize listener on unmount', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         const removeListener = vi.spyOn(window, 'removeEventListener');
         const { unmount } = render(<UnderwaterAmbience />);
@@ -223,7 +239,7 @@ describe('UnderwaterAmbience — animation lifecycle (ROK-296)', () => {
         expect(removeListener).toHaveBeenCalledWith('resize', expect.any(Function));
     });
 
-    it('removes visibilitychange listener on unmount', () => {
+it('removes visibilitychange listener on unmount', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         const removeDocListener = vi.spyOn(document, 'removeEventListener');
         const { unmount } = render(<UnderwaterAmbience />);
@@ -231,12 +247,18 @@ describe('UnderwaterAmbience — animation lifecycle (ROK-296)', () => {
         expect(removeDocListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
     });
 
-    it('adds visibilitychange listener when underwater', () => {
+it('adds visibilitychange listener when underwater', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         const addDocListener = vi.spyOn(document, 'addEventListener');
         render(<UnderwaterAmbience />);
         expect(addDocListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
     });
+
+}
+
+describe('UnderwaterAmbience — animation lifecycle (ROK-296)', () => {
+    underwaterambienceAnimationLifecycleROK296Group1();
+    underwaterambienceAnimationLifecycleROK296Group2();
 });
 
 describe('UnderwaterAmbience — tab visibility pause (ROK-296)', () => {

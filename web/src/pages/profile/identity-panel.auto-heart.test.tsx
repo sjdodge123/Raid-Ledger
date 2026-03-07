@@ -189,8 +189,8 @@ describe('IdentityPanel — auto-heart toggle (ROK-444)', () => {
 
     // ── Toggle interaction ────────────────────────────────────────────────────
 
-    describe('Toggle interaction', () => {
-        it('calls updatePreference with false when toggling off from enabled state', async () => {
+    function toggleInteractionGroup1() {
+it('calls updatePreference with false when toggling off from enabled state', async () => {
             const user = userEvent.setup();
             render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: true }) });
 
@@ -202,7 +202,7 @@ describe('IdentityPanel — auto-heart toggle (ROK-444)', () => {
             });
         });
 
-        it('calls updatePreference with true when toggling on from disabled state', async () => {
+it('calls updatePreference with true when toggling on from disabled state', async () => {
             const user = userEvent.setup();
             render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: false }) });
 
@@ -214,7 +214,10 @@ describe('IdentityPanel — auto-heart toggle (ROK-444)', () => {
             });
         });
 
-        it('shows error toast when updatePreference fails', async () => {
+    }
+
+    function toggleInteractionGroup2() {
+it('shows error toast when updatePreference fails', async () => {
             vi.mocked(apiClient.updatePreference).mockRejectedValueOnce(
                 new Error('Network error'),
             );
@@ -232,7 +235,10 @@ describe('IdentityPanel — auto-heart toggle (ROK-444)', () => {
             });
         });
 
-        it('toggle is disabled while mutation is pending', async () => {
+    }
+
+    function toggleInteractionGroup3() {
+it('toggle is disabled while mutation is pending', async () => {
             // Simulate slow response
             vi.mocked(apiClient.updatePreference).mockImplementationOnce(
                 () => new Promise(() => {}), // never resolves
@@ -248,6 +254,13 @@ describe('IdentityPanel — auto-heart toggle (ROK-444)', () => {
                 expect(toggle).toBeDisabled();
             });
         });
+
+    }
+
+    describe('Toggle interaction', () => {
+        toggleInteractionGroup1();
+        toggleInteractionGroup2();
+        toggleInteractionGroup3();
     });
 
     // ── No localStorage usage ────────────────────────────────────────────────

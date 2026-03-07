@@ -114,8 +114,8 @@ describe('DoneStep', () => {
         });
     });
 
-    describe('Configuration summary items', () => {
-        it('shows all 6 configuration items', () => {
+    function configurationSummaryItemsGroup1() {
+it('shows all 6 configuration items', () => {
             renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
             expect(screen.getByText('Password Changed')).toBeInTheDocument();
             expect(screen.getByText('Community Identity')).toBeInTheDocument();
@@ -125,13 +125,16 @@ describe('DoneStep', () => {
             expect(screen.getByText('Discord OAuth')).toBeInTheDocument();
         });
 
-        it('shows "Skipped" status for uncompleted items', () => {
+it('shows "Skipped" status for uncompleted items', () => {
             renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
             const skippedBadges = screen.getAllByText('Skipped');
             expect(skippedBadges.length).toBeGreaterThan(0);
         });
 
-        it('shows "Done" status for completed items', () => {
+    }
+
+    function configurationSummaryItemsGroup2() {
+it('shows "Done" status for completed items', () => {
             mockUseOnboarding.mockReturnValue({
                 ...defaultOnboarding,
                 statusQuery: {
@@ -149,7 +152,7 @@ describe('DoneStep', () => {
             expect(screen.getByText('Done')).toBeInTheDocument();
         });
 
-        it('clicking a summary item calls goToStep with correct step index', () => {
+it('clicking a summary item calls goToStep with correct step index', () => {
             renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
             // Password Changed is step 0
             const passwordItem = screen.getByText('Password Changed').closest('button');
@@ -157,12 +160,22 @@ describe('DoneStep', () => {
             expect(mockGoToStep).toHaveBeenCalledWith(0);
         });
 
-        it('clicking Community Identity calls goToStep(1)', () => {
+    }
+
+    function configurationSummaryItemsGroup3() {
+it('clicking Community Identity calls goToStep(1)', () => {
             renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
             const communityItem = screen.getByText('Community Identity').closest('button');
             fireEvent.click(communityItem!);
             expect(mockGoToStep).toHaveBeenCalledWith(1);
         });
+
+    }
+
+    describe('Configuration summary items', () => {
+        configurationSummaryItemsGroup1();
+        configurationSummaryItemsGroup2();
+        configurationSummaryItemsGroup3();
     });
 
     describe('Skipped items notice', () => {

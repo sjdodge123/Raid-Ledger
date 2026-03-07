@@ -12,48 +12,57 @@ vi.mock('../icons/DiscordIcon', () => ({
     ),
 }));
 
-describe('ConnectStep', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('renders the Connect Your Account heading', () => {
+function connectstepGroup1() {
+it('renders the Connect Your Account heading', () => {
         render(<ConnectStep />);
         expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
     });
 
-    it('renders the Discord connect button', () => {
+it('renders the Discord connect button', () => {
         render(<ConnectStep />);
         expect(screen.getByRole('button', { name: /connect discord/i })).toBeInTheDocument();
     });
 
-    it('Discord button is not disabled by default', () => {
+it('Discord button is not disabled by default', () => {
         render(<ConnectStep />);
         const button = screen.getByRole('button', { name: /connect discord/i });
         expect(button).not.toBeDisabled();
     });
 
-    it('shows redirecting state when button is clicked', () => {
+it('shows redirecting state when button is clicked', () => {
         render(<ConnectStep />);
         const button = screen.getByRole('button', { name: /connect discord/i });
         fireEvent.click(button);
         expect(screen.getByText(/redirecting to discord/i)).toBeInTheDocument();
     });
 
-    it('disables button while redirecting', () => {
+}
+
+function connectstepGroup2() {
+it('disables button while redirecting', () => {
         render(<ConnectStep />);
         const button = screen.getByRole('button', { name: /connect discord/i });
         fireEvent.click(button);
         expect(button).toBeDisabled();
     });
 
-    it('renders informational text about linking accounts later', () => {
+it('renders informational text about linking accounts later', () => {
         render(<ConnectStep />);
         expect(screen.getByText(/link accounts later/i)).toBeInTheDocument();
     });
 
-    it('renders the Discord icon in the button', () => {
+it('renders the Discord icon in the button', () => {
         render(<ConnectStep />);
         expect(screen.getByTestId('discord-icon')).toBeInTheDocument();
     });
+
+}
+
+describe('ConnectStep', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    connectstepGroup1();
+    connectstepGroup2();
 });

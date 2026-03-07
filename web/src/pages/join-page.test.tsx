@@ -73,44 +73,47 @@ describe('JoinPage', () => {
     // Invalid link rendering
     // ============================================================
 
-    describe('invalid link rendering', () => {
-        it('should show "Invalid Link" heading when no query params', () => {
+    function invalidLinkRenderingGroup1() {
+it('should show "Invalid Link" heading when no query params', () => {
             renderJoinPage();
 
             expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
         });
 
-        it('should show "Invalid Link" when intent is missing', () => {
+it('should show "Invalid Link" when intent is missing', () => {
             renderJoinPage('?eventId=42&token=sometoken');
 
             expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
         });
 
-        it('should show "Invalid Link" when eventId is missing', () => {
+it('should show "Invalid Link" when eventId is missing', () => {
             renderJoinPage('?intent=signup&token=sometoken');
 
             expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
         });
 
-        it('should show "Invalid Link" when token is missing', () => {
+it('should show "Invalid Link" when token is missing', () => {
             renderJoinPage('?intent=signup&eventId=42');
 
             expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
         });
 
-        it('should show "Invalid Link" when intent is not "signup"', () => {
+it('should show "Invalid Link" when intent is not "signup"', () => {
             renderJoinPage('?intent=other&eventId=42&token=sometoken');
 
             expect(screen.getByRole('heading', { name: /invalid link/i })).toBeInTheDocument();
         });
 
-        it('should show "Go to Calendar" button on invalid link', () => {
+    }
+
+    function invalidLinkRenderingGroup2() {
+it('should show "Go to Calendar" button on invalid link', () => {
             renderJoinPage();
 
             expect(screen.getByRole('button', { name: /go to calendar/i })).toBeInTheDocument();
         });
 
-        it('should navigate to /calendar when "Go to Calendar" is clicked', async () => {
+it('should navigate to /calendar when "Go to Calendar" is clicked', async () => {
             renderJoinPage();
 
             fireEvent.click(screen.getByRole('button', { name: /go to calendar/i }));
@@ -118,13 +121,19 @@ describe('JoinPage', () => {
             expect(mockNavigate).toHaveBeenCalledWith('/calendar');
         });
 
-        it('should show descriptive error message on invalid link', () => {
+it('should show descriptive error message on invalid link', () => {
             renderJoinPage();
 
             expect(
                 screen.getByText(/invalid or has expired/i),
             ).toBeInTheDocument();
         });
+
+    }
+
+    describe('invalid link rendering', () => {
+        invalidLinkRenderingGroup1();
+        invalidLinkRenderingGroup2();
     });
 
     // ============================================================
@@ -187,8 +196,8 @@ describe('JoinPage', () => {
     // Authenticated user — redeem intent
     // ============================================================
 
-    describe('authenticated user — successful redemption', () => {
-        it('should call redeemIntent with token when authenticated', async () => {
+    function authenticatedUserSuccessfulRedemptionGroup1() {
+it('should call redeemIntent with token when authenticated', async () => {
             mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
             vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
                 success: true,
@@ -203,7 +212,10 @@ describe('JoinPage', () => {
             });
         });
 
-        it('should show success toast and navigate to event page on success', async () => {
+    }
+
+    function authenticatedUserSuccessfulRedemptionGroup2() {
+it('should show success toast and navigate to event page on success', async () => {
             mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
             vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
                 success: true,
@@ -223,7 +235,10 @@ describe('JoinPage', () => {
             );
         });
 
-        it('should show info toast and navigate to event page when token is expired', async () => {
+    }
+
+    function authenticatedUserSuccessfulRedemptionGroup3() {
+it('should show info toast and navigate to event page when token is expired', async () => {
             mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
             vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
                 success: false,
@@ -243,7 +258,10 @@ describe('JoinPage', () => {
             );
         });
 
-        it('should navigate to event page even when redeemIntent throws', async () => {
+    }
+
+    function authenticatedUserSuccessfulRedemptionGroup4() {
+it('should navigate to event page even when redeemIntent throws', async () => {
             mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
             vi.mocked(apiClient.redeemIntent).mockRejectedValueOnce(
                 new Error('Network error'),
@@ -255,6 +273,14 @@ describe('JoinPage', () => {
                 expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true });
             });
         });
+
+    }
+
+    describe('authenticated user — successful redemption', () => {
+        authenticatedUserSuccessfulRedemptionGroup1();
+        authenticatedUserSuccessfulRedemptionGroup2();
+        authenticatedUserSuccessfulRedemptionGroup3();
+        authenticatedUserSuccessfulRedemptionGroup4();
     });
 
     // ============================================================

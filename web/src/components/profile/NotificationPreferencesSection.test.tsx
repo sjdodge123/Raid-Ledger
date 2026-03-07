@@ -46,23 +46,23 @@ describe('NotificationPreferencesSection', () => {
         });
     });
 
-    describe('Column headers', () => {
-        it('renders In-App channel column header', () => {
+    function columnHeadersGroup1() {
+it('renders In-App channel column header', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('In-App')).toBeInTheDocument();
         });
 
-        it('renders Push channel column header', () => {
+it('renders Push channel column header', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('Push')).toBeInTheDocument();
         });
 
-        it('renders Discord channel column header when available', () => {
+it('renders Discord channel column header when available', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('Discord')).toBeInTheDocument();
         });
 
-        it('hides Discord column when not available (ROK-180 AC-7)', () => {
+it('hides Discord column when not available (ROK-180 AC-7)', () => {
             vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
                 preferences: mockPreferences,
                 isLoading: false,
@@ -74,7 +74,10 @@ describe('NotificationPreferencesSection', () => {
             expect(screen.queryByText('Discord')).not.toBeInTheDocument();
         });
 
-        it('shows reason text when Discord is not available (ROK-180 AC-7)', () => {
+    }
+
+    function columnHeadersGroup2() {
+it('shows reason text when Discord is not available (ROK-180 AC-7)', () => {
             vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
                 preferences: mockPreferences,
                 isLoading: false,
@@ -86,10 +89,15 @@ describe('NotificationPreferencesSection', () => {
             expect(screen.getByText('Link your Discord account')).toBeInTheDocument();
         });
 
+    }
+
+    describe('Column headers', () => {
+        columnHeadersGroup1();
+        columnHeadersGroup2();
     });
 
-    describe('Notification type rows', () => {
-        it('renders all visible notification type labels', () => {
+    function notificationTypeRowsGroup1() {
+it('renders all visible notification type labels', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('Slot Vacated')).toBeInTheDocument();
             expect(screen.getByText('Event Reminders')).toBeInTheDocument();
@@ -102,18 +110,21 @@ describe('NotificationPreferencesSection', () => {
             expect(screen.getByText('Tentative Displaced')).toBeInTheDocument();
         });
 
-        it('does not render missed_event_nudge label (ghost row removed)', () => {
+it('does not render missed_event_nudge label (ghost row removed)', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.queryByText('Missed Event Nudge')).not.toBeInTheDocument();
         });
 
-        it('does not render Achievements or Level Up (not yet implemented)', () => {
+it('does not render Achievements or Level Up (not yet implemented)', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.queryByText('Achievements')).not.toBeInTheDocument();
             expect(screen.queryByText('Level Up')).not.toBeInTheDocument();
         });
 
-        it('renders description for each notification type', () => {
+    }
+
+    function notificationTypeRowsGroup2() {
+it('renders description for each notification type', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('When someone leaves a roster slot')).toBeInTheDocument();
             expect(screen.getByText('Reminders for upcoming events')).toBeInTheDocument();
@@ -124,6 +135,12 @@ describe('NotificationPreferencesSection', () => {
             expect(screen.getByText('When your roster slot or role is changed')).toBeInTheDocument();
             expect(screen.getByText('When a confirmed player takes your tentative slot')).toBeInTheDocument();
         });
+
+    }
+
+    describe('Notification type rows', () => {
+        notificationTypeRowsGroup1();
+        notificationTypeRowsGroup2();
     });
 
     describe('Toggle states and interaction', () => {

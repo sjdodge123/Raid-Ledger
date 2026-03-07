@@ -19,17 +19,10 @@ function makeBinding(overrides: Partial<ChannelBindingDto> = {}): ChannelBinding
   };
 }
 
-describe('BindingConfigForm', () => {
-  const onSave = vi.fn();
-  const onCancel = vi.fn();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  // ── General rendering ─────────────────────────────────────────
-
-  it('renders the channel name in the form heading', () => {
+const onSave = vi.fn();
+const onCancel = vi.fn();
+function bindingconfigformGroup1() {
+it('renders the channel name in the form heading', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({ channelName: 'raid-announcements' })}
@@ -42,7 +35,7 @@ describe('BindingConfigForm', () => {
     expect(screen.getByText(/Edit Config: #raid-announcements/)).toBeInTheDocument();
   });
 
-  it('falls back to channelId in heading when channelName is undefined', () => {
+it('falls back to channelId in heading when channelName is undefined', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({ channelName: undefined, channelId: 'ch-789' })}
@@ -55,7 +48,10 @@ describe('BindingConfigForm', () => {
     expect(screen.getByText(/Edit Config: #ch-789/)).toBeInTheDocument();
   });
 
-  it('renders Save and Cancel buttons', () => {
+}
+
+function bindingconfigformGroup2() {
+it('renders Save and Cancel buttons', () => {
     render(
       <BindingConfigForm
         binding={makeBinding()}
@@ -69,9 +65,10 @@ describe('BindingConfigForm', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
-  // ── Event Announcements mode (shows all config fields) ────────
+}
 
-  it('shows voice monitor fields when bindingPurpose is game-voice-monitor', () => {
+function bindingconfigformGroup3() {
+it('shows voice monitor fields when bindingPurpose is game-voice-monitor', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({ bindingPurpose: 'game-voice-monitor' })}
@@ -88,7 +85,10 @@ describe('BindingConfigForm', () => {
     expect(screen.getByText(/Grace Period/)).toBeInTheDocument();
   });
 
-  it('initializes minPlayers from binding config', () => {
+}
+
+function bindingconfigformGroup4() {
+it('initializes minPlayers from binding config', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -108,7 +108,10 @@ describe('BindingConfigForm', () => {
     expect(inputs).toContain('7');
   });
 
-  it('initializes gracePeriod from binding config', () => {
+}
+
+function bindingconfigformGroup5() {
+it('initializes gracePeriod from binding config', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -127,7 +130,10 @@ describe('BindingConfigForm', () => {
     expect(inputs).toContain('180');
   });
 
-  it('initializes autoClose checkbox from binding config', () => {
+}
+
+function bindingconfigformGroup6() {
+it('initializes autoClose checkbox from binding config', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -146,7 +152,10 @@ describe('BindingConfigForm', () => {
     expect(checkbox.checked).toBe(false);
   });
 
-  it('uses default minPlayers of 2 when config is null', () => {
+}
+
+function bindingconfigformGroup7() {
+it('uses default minPlayers of 2 when config is null', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -165,7 +174,10 @@ describe('BindingConfigForm', () => {
     expect(inputs).toContain('2');
   });
 
-  it('uses default gracePeriod of 5 when config is null', () => {
+}
+
+function bindingconfigformGroup8() {
+it('uses default gracePeriod of 5 when config is null', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -184,7 +196,10 @@ describe('BindingConfigForm', () => {
     expect(inputs).toContain('5');
   });
 
-  it('defaults autoClose to true when config is null', () => {
+}
+
+function bindingconfigformGroup9() {
+it('defaults autoClose to true when config is null', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -203,7 +218,10 @@ describe('BindingConfigForm', () => {
     expect(checkbox.checked).toBe(true);
   });
 
-  it('displays grace period label with minutes unit', () => {
+}
+
+function bindingconfigformGroup10() {
+it('displays grace period label with minutes unit', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -219,9 +237,10 @@ describe('BindingConfigForm', () => {
     expect(screen.getByText(/minutes before closing/)).toBeInTheDocument();
   });
 
-  // ── Non-voice-monitor mode ────────────────────────────────────
+}
 
-  it('does not show voice monitor config fields for game-announcements', () => {
+function bindingconfigformGroup11() {
+it('does not show voice monitor config fields for game-announcements', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({ bindingPurpose: 'game-announcements' })}
@@ -238,7 +257,10 @@ describe('BindingConfigForm', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows "no additional configuration" message for announcement channels', () => {
+}
+
+function bindingconfigformGroup12() {
+it('shows "no additional configuration" message for announcement channels', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({ bindingPurpose: 'game-announcements' })}
@@ -255,7 +277,10 @@ describe('BindingConfigForm', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows voice fields for general-lobby (ROK-515)', () => {
+}
+
+function bindingconfigformGroup13() {
+it('shows voice fields for general-lobby (ROK-515)', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({ bindingPurpose: 'general-lobby' })}
@@ -268,9 +293,10 @@ describe('BindingConfigForm', () => {
     expect(screen.queryByText(/Minimum Players/)).toBeInTheDocument();
   });
 
-  // ── Form submission ───────────────────────────────────────────
+}
 
-  it('calls onSave with binding id and config on submit', () => {
+function bindingconfigformGroup14() {
+it('calls onSave with binding id and config on submit', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -295,7 +321,10 @@ describe('BindingConfigForm', () => {
     });
   });
 
-  it('submits updated minPlayers value after user input', () => {
+}
+
+function bindingconfigformGroup15() {
+it('submits updated minPlayers value after user input', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -318,7 +347,10 @@ describe('BindingConfigForm', () => {
     expect(callArg.config.minPlayers).toBe(10);
   });
 
-  it('submits toggled autoClose value', () => {
+}
+
+function bindingconfigformGroup16() {
+it('submits toggled autoClose value', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -340,9 +372,10 @@ describe('BindingConfigForm', () => {
     expect(callArg.config.autoClose).toBe(false);
   });
 
-  // ── Cancel button ────────────────────────────────────────────
+}
 
-  it('calls onCancel when Cancel button is clicked', () => {
+function bindingconfigformGroup17() {
+it('calls onCancel when Cancel button is clicked', () => {
     render(
       <BindingConfigForm
         binding={makeBinding()}
@@ -357,7 +390,10 @@ describe('BindingConfigForm', () => {
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
-  it('does not call onSave when Cancel is clicked', () => {
+}
+
+function bindingconfigformGroup18() {
+it('does not call onSave when Cancel is clicked', () => {
     render(
       <BindingConfigForm
         binding={makeBinding()}
@@ -372,9 +408,10 @@ describe('BindingConfigForm', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  // ── Saving state ─────────────────────────────────────────────
+}
 
-  it('disables Save button when isSaving is true', () => {
+function bindingconfigformGroup19() {
+it('disables Save button when isSaving is true', () => {
     render(
       <BindingConfigForm
         binding={makeBinding()}
@@ -387,7 +424,7 @@ describe('BindingConfigForm', () => {
     expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
   });
 
-  it('shows "Saving..." text when isSaving is true', () => {
+it('shows "Saving..." text when isSaving is true', () => {
     render(
       <BindingConfigForm
         binding={makeBinding()}
@@ -400,7 +437,10 @@ describe('BindingConfigForm', () => {
     expect(screen.getByText('Saving...')).toBeInTheDocument();
   });
 
-  it('shows "Save" text when isSaving is false', () => {
+}
+
+function bindingconfigformGroup20() {
+it('shows "Save" text when isSaving is false', () => {
     render(
       <BindingConfigForm
         binding={makeBinding()}
@@ -412,4 +452,32 @@ describe('BindingConfigForm', () => {
 
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
+
+}
+
+describe('BindingConfigForm', () => {
+beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+    bindingconfigformGroup1();
+    bindingconfigformGroup2();
+    bindingconfigformGroup3();
+    bindingconfigformGroup4();
+    bindingconfigformGroup5();
+    bindingconfigformGroup6();
+    bindingconfigformGroup7();
+    bindingconfigformGroup8();
+    bindingconfigformGroup9();
+    bindingconfigformGroup10();
+    bindingconfigformGroup11();
+    bindingconfigformGroup12();
+    bindingconfigformGroup13();
+    bindingconfigformGroup14();
+    bindingconfigformGroup15();
+    bindingconfigformGroup16();
+    bindingconfigformGroup17();
+    bindingconfigformGroup18();
+    bindingconfigformGroup19();
+    bindingconfigformGroup20();
 });

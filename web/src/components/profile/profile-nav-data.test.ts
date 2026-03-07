@@ -7,17 +7,17 @@
 import { describe, it, expect } from 'vitest';
 import { SECTIONS } from './profile-nav-data';
 
-describe('profile-nav-data (ROK-359 consolidation)', () => {
-    it('has exactly 4 sections', () => {
+function profileNavDataROK359Group1() {
+it('has exactly 4 sections', () => {
         expect(SECTIONS).toHaveLength(4);
     });
 
-    it('section ids are unique', () => {
+it('section ids are unique', () => {
         const ids = SECTIONS.map((s) => s.id);
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    it('includes identity section pointing to /profile/identity', () => {
+it('includes identity section pointing to /profile/identity', () => {
         const identity = SECTIONS.find((s) => s.id === 'identity');
         expect(identity).toBeDefined();
         expect(identity!.children).toHaveLength(1);
@@ -25,21 +25,24 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         expect(identity!.children[0].label).toBe('My Profile');
     });
 
-    it('includes preferences section pointing to /profile/preferences', () => {
+it('includes preferences section pointing to /profile/preferences', () => {
         const preferences = SECTIONS.find((s) => s.id === 'preferences');
         expect(preferences).toBeDefined();
         expect(preferences!.children[0].to).toBe('/profile/preferences');
         expect(preferences!.children[0].label).toBe('Preferences');
     });
 
-    it('includes notifications section pointing to /profile/notifications', () => {
+}
+
+function profileNavDataROK359Group2() {
+it('includes notifications section pointing to /profile/notifications', () => {
         const notifications = SECTIONS.find((s) => s.id === 'notifications');
         expect(notifications).toBeDefined();
         expect(notifications!.children[0].to).toBe('/profile/notifications');
         expect(notifications!.children[0].label).toBe('Notifications');
     });
 
-    it('includes gaming section with 3 children', () => {
+it('includes gaming section with 3 children', () => {
         const gaming = SECTIONS.find((s) => s.id === 'gaming');
         expect(gaming).toBeDefined();
         expect(gaming!.children).toHaveLength(3);
@@ -49,25 +52,28 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         expect(gaming!.children[2].to).toBe('/profile/gaming/watched-games');
     });
 
-    it('does not include a separate account section (consolidated into identity)', () => {
+it('does not include a separate account section (consolidated into identity)', () => {
         const account = SECTIONS.find((s) => s.id === 'account');
         expect(account).toBeUndefined();
     });
 
-    it('every section has a label string', () => {
+}
+
+function profileNavDataROK359Group3() {
+it('every section has a label string', () => {
         for (const section of SECTIONS) {
             expect(typeof section.label).toBe('string');
             expect(section.label.length).toBeGreaterThan(0);
         }
     });
 
-    it('every section has an icon defined', () => {
+it('every section has an icon defined', () => {
         for (const section of SECTIONS) {
             expect(section.icon).toBeTruthy();
         }
     });
 
-    it('every section child has a non-empty label and path starting with /profile/', () => {
+it('every section child has a non-empty label and path starting with /profile/', () => {
         for (const section of SECTIONS) {
             for (const child of section.children) {
                 expect(child.label.length).toBeGreaterThan(0);
@@ -76,7 +82,10 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         }
     });
 
-    it('does not include old separate paths like /profile/identity/discord or /profile/account', () => {
+}
+
+function profileNavDataROK359Group4() {
+it('does not include old separate paths like /profile/identity/discord or /profile/account', () => {
         const allPaths = SECTIONS.flatMap((s) => s.children.map((c) => c.to));
         expect(allPaths).not.toContain('/profile/identity/discord');
         expect(allPaths).not.toContain('/profile/identity/avatar');
@@ -85,4 +94,12 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         expect(allPaths).not.toContain('/profile/danger/delete-account');
         expect(allPaths).not.toContain('/profile/account');
     });
+
+}
+
+describe('profile-nav-data (ROK-359 consolidation)', () => {
+    profileNavDataROK359Group1();
+    profileNavDataROK359Group2();
+    profileNavDataROK359Group3();
+    profileNavDataROK359Group4();
 });

@@ -42,15 +42,15 @@ describe('CalendarView', () => {
         vi.useRealTimers();
     });
 
-    describe('View Toggle', () => {
-        it('renders week view by default', () => {
+    function viewToggleGroup1() {
+it('renders week view by default', () => {
             renderWithProviders(<CalendarView />);
 
             const weekBtn = screen.getByRole('button', { name: 'Week' });
             expect(weekBtn).toHaveAttribute('aria-pressed', 'true');
         });
 
-        it('clicking Week button activates week view', () => {
+it('clicking Week button activates week view', () => {
             renderWithProviders(<CalendarView />);
 
             const weekBtn = screen.getByRole('button', { name: 'Week' });
@@ -59,7 +59,7 @@ describe('CalendarView', () => {
             expect(weekBtn).toHaveAttribute('aria-pressed', 'true');
         });
 
-        it('view toggle has proper accessibility attributes', () => {
+it('view toggle has proper accessibility attributes', () => {
             renderWithProviders(<CalendarView />);
 
             const group = screen.getByRole('group', { name: 'Calendar view' });
@@ -72,7 +72,10 @@ describe('CalendarView', () => {
             expect(weekBtn).toHaveAttribute('type', 'button');
         });
 
-        it('persists view preference to localStorage', () => {
+    }
+
+    function viewToggleGroup2() {
+it('persists view preference to localStorage', () => {
             renderWithProviders(<CalendarView />);
 
             const dayBtn = screen.getByRole('button', { name: 'Day' });
@@ -81,7 +84,7 @@ describe('CalendarView', () => {
             expect(localStorage.getItem('raid_ledger_calendar_view')).toBe('day');
         });
 
-        it('respects stored preference on mount', () => {
+it('respects stored preference on mount', () => {
             localStorage.setItem('raid_ledger_calendar_view', 'month');
             useCalendarViewStore.setState({ viewPref: 'month' });
             renderWithProviders(<CalendarView />);
@@ -90,13 +93,19 @@ describe('CalendarView', () => {
             expect(monthBtn).toHaveAttribute('aria-pressed', 'true');
         });
 
-        it('respects URL param over localStorage', () => {
+it('respects URL param over localStorage', () => {
             localStorage.setItem('raid_ledger_calendar_view', 'day');
             renderWithProviders(<CalendarView />, '/calendar?view=month');
 
             const monthBtn = screen.getByRole('button', { name: 'Month' });
             expect(monthBtn).toHaveAttribute('aria-pressed', 'true');
         });
+
+    }
+
+    describe('View Toggle', () => {
+        viewToggleGroup1();
+        viewToggleGroup2();
     });
 
     describe('Empty State', () => {

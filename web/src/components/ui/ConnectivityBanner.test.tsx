@@ -39,23 +39,8 @@ function setStoreState(partial: Partial<{
     useConnectivityStore.setState(partial as Parameters<typeof useConnectivityStore.setState>[0]);
 }
 
-describe('ConnectivityBanner', () => {
-    beforeEach(() => {
-        vi.useFakeTimers();
-        setStoreState({
-            status: 'online',
-            hasBeenOnline: true,
-            lastOnlineAt: null,
-            consecutiveFailures: 0,
-        });
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
-        vi.clearAllMocks();
-    });
-
-    describe('visibility conditions', () => {
+function connectivitybannerGroup1() {
+describe('visibility conditions', () => {
         it('does NOT render when status is "online"', () => {
             setStoreState({ status: 'online', hasBeenOnline: true });
 
@@ -89,7 +74,10 @@ describe('ConnectivityBanner', () => {
         });
     });
 
-    describe('elapsed time display', () => {
+}
+
+function connectivitybannerGroup2() {
+describe('elapsed time display', () => {
         it('shows elapsed time since lastOnlineAt', () => {
             const lastOnlineAt = new Date(Date.now() - 65_000); // 1m 5s ago
             setStoreState({ status: 'offline', hasBeenOnline: true, lastOnlineAt });
@@ -124,7 +112,10 @@ describe('ConnectivityBanner', () => {
         });
     });
 
-    describe('dismiss button', () => {
+}
+
+function connectivitybannerGroup3() {
+describe('dismiss button', () => {
         it('renders a dismiss button', () => {
             setStoreState({ status: 'offline', hasBeenOnline: true, lastOnlineAt: new Date() });
 
@@ -145,7 +136,10 @@ describe('ConnectivityBanner', () => {
         });
     });
 
-    describe('banner reappears after dismiss on new offline period', () => {
+}
+
+function connectivitybannerGroup4() {
+describe('banner reappears after dismiss on new offline period', () => {
         it('resets dismissed state when status transitions to offline again', () => {
             setStoreState({ status: 'offline', hasBeenOnline: true, lastOnlineAt: new Date() });
 
@@ -167,7 +161,10 @@ describe('ConnectivityBanner', () => {
         });
     });
 
-    describe('reconnection toast', () => {
+}
+
+function connectivitybannerGroup5() {
+describe('reconnection toast', () => {
         it('fires toast.success("Reconnected") when recovering from offline', async () => {
             const { toast } = await import('../../lib/toast');
 
@@ -183,4 +180,28 @@ describe('ConnectivityBanner', () => {
             expect(toast.success).toHaveBeenCalledWith('Reconnected');
         });
     });
+
+}
+
+describe('ConnectivityBanner', () => {
+beforeEach(() => {
+        vi.useFakeTimers();
+        setStoreState({
+            status: 'online',
+            hasBeenOnline: true,
+            lastOnlineAt: null,
+            consecutiveFailures: 0,
+        });
+    });
+
+afterEach(() => {
+        vi.useRealTimers();
+        vi.clearAllMocks();
+    });
+
+    connectivitybannerGroup1();
+    connectivitybannerGroup2();
+    connectivitybannerGroup3();
+    connectivitybannerGroup4();
+    connectivitybannerGroup5();
 });

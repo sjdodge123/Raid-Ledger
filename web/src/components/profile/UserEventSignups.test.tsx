@@ -55,12 +55,8 @@ const renderWithProviders = (component: React.ReactElement) => {
     );
 };
 
-describe('UserEventSignups', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('renders loading skeleton while loading', () => {
+function usereventsignupsGroup1() {
+it('renders loading skeleton while loading', () => {
         vi.spyOn(useUserProfileHook, 'useUserEventSignups').mockReturnValue({
             data: undefined,
             isLoading: true,
@@ -73,7 +69,10 @@ describe('UserEventSignups', () => {
         expect(screen.getByText('Upcoming Events')).toBeInTheDocument();
     });
 
-    it('renders empty state when no events', () => {
+}
+
+function usereventsignupsGroup2() {
+it('renders empty state when no events', () => {
         const emptyResponse: UserEventSignupsResponseDto = {
             data: [],
             total: 0,
@@ -95,7 +94,10 @@ describe('UserEventSignups', () => {
         expect(svg).toBeInTheDocument();
     });
 
-    it('renders event cards when events exist', () => {
+}
+
+function usereventsignupsGroup3() {
+it('renders event cards when events exist', () => {
         const mockEvents: UserEventSignupsResponseDto = {
             data: [
                 createMockEvent({ id: 1, title: 'Raid 1' }),
@@ -118,7 +120,10 @@ describe('UserEventSignups', () => {
         expect(screen.getAllByText('Raid 2')).toHaveLength(2);
     });
 
-    it('shows count badge with total events', () => {
+}
+
+function usereventsignupsGroup4() {
+it('shows count badge with total events', () => {
         const mockEvents: UserEventSignupsResponseDto = {
             data: [createMockEvent()],
             total: 5,
@@ -137,7 +142,10 @@ describe('UserEventSignups', () => {
         expect(screen.getByText('5')).toBeInTheDocument();
     });
 
-    it('shows "View all" link when total > 6', () => {
+}
+
+function usereventsignupsGroup5() {
+it('shows "View all" link when total > 6', () => {
         const mockEvents: UserEventSignupsResponseDto = {
             data: Array.from({ length: 6 }, (_, i) => createMockEvent({ id: i + 1, title: `Event ${i + 1}` })),
             total: 10,
@@ -155,7 +163,10 @@ describe('UserEventSignups', () => {
         expect(screen.getByText('View all')).toBeInTheDocument();
     });
 
-    it('does not show "View all" link when total <= 6', () => {
+}
+
+function usereventsignupsGroup6() {
+it('does not show "View all" link when total <= 6', () => {
         const mockEvents: UserEventSignupsResponseDto = {
             data: [
                 createMockEvent({ id: 1 }),
@@ -176,7 +187,10 @@ describe('UserEventSignups', () => {
         expect(screen.queryByText('View all')).not.toBeInTheDocument();
     });
 
-    it('renders both desktop and mobile event layouts', () => {
+}
+
+function usereventsignupsGroup7() {
+it('renders both desktop and mobile event layouts', () => {
         const mockEvents: UserEventSignupsResponseDto = {
             data: [
                 createMockEvent({ id: 1, title: 'Raid Night' }),
@@ -200,4 +214,19 @@ describe('UserEventSignups', () => {
         const allCards = container.querySelectorAll('[class*="cursor-pointer"], button[class*="rounded"]');
         expect(allCards.length).toBeGreaterThanOrEqual(3);
     });
+
+}
+
+describe('UserEventSignups', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    usereventsignupsGroup1();
+    usereventsignupsGroup2();
+    usereventsignupsGroup3();
+    usereventsignupsGroup4();
+    usereventsignupsGroup5();
+    usereventsignupsGroup6();
+    usereventsignupsGroup7();
 });

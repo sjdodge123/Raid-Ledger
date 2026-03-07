@@ -88,34 +88,27 @@ function deliver(games: ReturnType<typeof makeGame>[]) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('CalendarPage — allKnownGames accumulator', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
-    });
-
-    afterEach(() => {
-        activeQueryClient?.clear();
-    });
-
-    it('renders the calendar view', () => {
+function calendarpageAllKnownGamesAccumulatorGroup1() {
+it('renders the calendar view', () => {
         render_page();
         expect(screen.getByTestId('calendar-view')).toBeInTheDocument();
     });
 
-    it('game filter section is hidden before any games arrive', () => {
+it('game filter section is hidden before any games arrive', () => {
         render_page();
         expect(screen.queryByText('Filter by Game')).not.toBeInTheDocument();
     });
 
-    it('shows game filter section after games arrive', () => {
+it('shows game filter section after games arrive', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
         expect(screen.getAllByText('Filter by Game').length).toBeGreaterThan(0);
     });
 
-    it('accumulates games across multiple calls (no duplicates)', () => {
+}
+
+function calendarpageAllKnownGamesAccumulatorGroup2() {
+it('accumulates games across multiple calls (no duplicates)', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('ff14', 'Final Fantasy XIV')]);
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('gw2', 'Guild Wars 2')]);
@@ -129,7 +122,7 @@ describe('CalendarPage — allKnownGames accumulator', () => {
         expect(gameNames.length).toBe(3);
     });
 
-    it('does not duplicate games when same slug appears multiple times', () => {
+it('does not duplicate games when same slug appears multiple times', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
         deliver([makeGame('wow', 'World of Warcraft')]);
@@ -138,7 +131,10 @@ describe('CalendarPage — allKnownGames accumulator', () => {
         expect(checkboxes).toHaveLength(1);
     });
 
-    it('sorts games alphabetically', () => {
+}
+
+function calendarpageAllKnownGamesAccumulatorGroup3() {
+it('sorts games alphabetically', () => {
         render_page();
         deliver([
             makeGame('wow', 'World of Warcraft'),
@@ -154,6 +150,23 @@ describe('CalendarPage — allKnownGames accumulator', () => {
         expect(labels[1]).toBe('Final Fantasy XIV');
         expect(labels[2]).toBe('World of Warcraft');
     });
+
+}
+
+describe('CalendarPage — allKnownGames accumulator', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
+    });
+
+afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    calendarpageAllKnownGamesAccumulatorGroup1();
+    calendarpageAllKnownGamesAccumulatorGroup2();
+    calendarpageAllKnownGamesAccumulatorGroup3();
 });
 
 describe('CalendarPage — auto-select behaviour', () => {
@@ -196,18 +209,8 @@ describe('CalendarPage — auto-select behaviour', () => {
     });
 });
 
-describe('CalendarPage — inline list capping (maxVisible=5)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
-    });
-
-    afterEach(() => {
-        activeQueryClient?.clear();
-    });
-
-    it('shows all games inline when count <= maxVisible (5)', () => {
+function calendarpageInlineListCappingMaxVisibleGroup1() {
+it('shows all games inline when count <= maxVisible (5)', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -223,7 +226,10 @@ describe('CalendarPage — inline list capping (maxVisible=5)', () => {
         expect(screen.queryByText(/Show all/i)).not.toBeInTheDocument();
     });
 
-    it('shows "Show all N games..." button when count > maxVisible', () => {
+}
+
+function calendarpageInlineListCappingMaxVisibleGroup2() {
+it('shows "Show all N games..." button when count > maxVisible', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -237,7 +243,10 @@ describe('CalendarPage — inline list capping (maxVisible=5)', () => {
         expect(screen.getByText(/Show all 6 games/i)).toBeInTheDocument();
     });
 
-    it('only shows maxVisible (5) items inline when overflow', () => {
+}
+
+function calendarpageInlineListCappingMaxVisibleGroup3() {
+it('only shows maxVisible (5) items inline when overflow', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -252,7 +261,10 @@ describe('CalendarPage — inline list capping (maxVisible=5)', () => {
         expect(checkboxes).toHaveLength(5);
     });
 
-    it('"Show all" button count reflects total game count including overflow', () => {
+}
+
+function calendarpageInlineListCappingMaxVisibleGroup4() {
+it('"Show all" button count reflects total game count including overflow', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -266,20 +278,27 @@ describe('CalendarPage — inline list capping (maxVisible=5)', () => {
 
         expect(screen.getByText(/Show all 7 games/i)).toBeInTheDocument();
     });
-});
 
-describe('CalendarPage — filter modal (overflow)', () => {
-    beforeEach(() => {
+}
+
+describe('CalendarPage — inline list capping (maxVisible=5)', () => {
+beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
 
-    afterEach(() => {
+afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    function setupWithOverflow() {
+    calendarpageInlineListCappingMaxVisibleGroup1();
+    calendarpageInlineListCappingMaxVisibleGroup2();
+    calendarpageInlineListCappingMaxVisibleGroup3();
+    calendarpageInlineListCappingMaxVisibleGroup4();
+});
+
+function setupWithOverflow() {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -291,23 +310,24 @@ describe('CalendarPage — filter modal (overflow)', () => {
         ]);
     }
 
-    function openModal() {
+function openModal() {
         setupWithOverflow();
         const showAllBtn = screen.getByText(/Show all/i);
         fireEvent.click(showAllBtn);
     }
 
-    it('filter modal is not visible initially', () => {
+function calendarpageFilterModalOverflowGroup1() {
+it('filter modal is not visible initially', () => {
         setupWithOverflow();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('opens filter modal when "Show all" is clicked', () => {
+it('opens filter modal when "Show all" is clicked', () => {
         openModal();
         expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-    it('modal shows all games (not just capped list)', () => {
+it('modal shows all games (not just capped list)', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         expect(dialog).toHaveTextContent('Alpha');
@@ -318,27 +338,33 @@ describe('CalendarPage — filter modal (overflow)', () => {
         expect(dialog).toHaveTextContent('Foxtrot');
     });
 
-    it('modal title is "Filter by Game"', () => {
+}
+
+function calendarpageFilterModalOverflowGroup2() {
+it('modal title is "Filter by Game"', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         expect(dialog).toHaveTextContent('Filter by Game');
     });
 
-    it('modal closes when close button (X) is clicked', () => {
+it('modal closes when close button (X) is clicked', () => {
         openModal();
         const closeBtn = screen.getByRole('button', { name: 'Close modal' });
         fireEvent.click(closeBtn);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('modal closes on Escape key', () => {
+it('modal closes on Escape key', () => {
         openModal();
         expect(screen.getByRole('dialog')).toBeInTheDocument();
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('modal closes when backdrop is clicked', () => {
+}
+
+function calendarpageFilterModalOverflowGroup3() {
+it('modal closes when backdrop is clicked', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         const backdrop = dialog.parentElement?.querySelector('[aria-hidden="true"]') as HTMLElement | null;
@@ -347,7 +373,7 @@ describe('CalendarPage — filter modal (overflow)', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('modal has All and None buttons', () => {
+it('modal has All and None buttons', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         const buttons = Array.from(dialog.querySelectorAll('button'));
@@ -355,7 +381,10 @@ describe('CalendarPage — filter modal (overflow)', () => {
         expect(buttons.find((b) => b.textContent === 'None')).toBeTruthy();
     });
 
-    it('modal shows games sorted alphabetically', () => {
+}
+
+function calendarpageFilterModalOverflowGroup4() {
+it('modal shows games sorted alphabetically', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         const checkboxes = Array.from(dialog.querySelectorAll('input[type="checkbox"]'));
@@ -369,4 +398,22 @@ describe('CalendarPage — filter modal (overflow)', () => {
         expect(names[4]).toBe('Foxtrot');
         expect(names[5]).toBe('Gamma');
     });
+
+}
+
+describe('CalendarPage — filter modal (overflow)', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
+    });
+
+afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    calendarpageFilterModalOverflowGroup1();
+    calendarpageFilterModalOverflowGroup2();
+    calendarpageFilterModalOverflowGroup3();
+    calendarpageFilterModalOverflowGroup4();
 });

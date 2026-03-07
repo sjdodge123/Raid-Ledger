@@ -39,17 +39,8 @@ function renderWithRouter(
     );
 }
 
-describe('ProtectedRoute', () => {
-    beforeEach(() => {
-        sessionStorage.clear();
-        mockUseAuth.mockReset();
-    });
-
-    afterEach(() => {
-        sessionStorage.clear();
-    });
-
-    it('shows loading spinner while checking auth', () => {
+function protectedrouteGroup1() {
+it('shows loading spinner while checking auth', () => {
         mockUseAuth.mockReturnValue({
             isAuthenticated: false,
             isLoading: true,
@@ -64,7 +55,10 @@ describe('ProtectedRoute', () => {
         expect(screen.getByText('Checking authentication...')).toBeInTheDocument();
     });
 
-    it('redirects to login when not authenticated', () => {
+}
+
+function protectedrouteGroup2() {
+it('redirects to login when not authenticated', () => {
         mockUseAuth.mockReturnValue({
             isAuthenticated: false,
             isLoading: false,
@@ -79,7 +73,10 @@ describe('ProtectedRoute', () => {
         expect(screen.getByText('Login Page')).toBeInTheDocument();
     });
 
-    it('renders children when authenticated', () => {
+}
+
+function protectedrouteGroup3() {
+it('renders children when authenticated', () => {
         mockUseAuth.mockReturnValue({
             isAuthenticated: true,
             isLoading: false,
@@ -94,7 +91,10 @@ describe('ProtectedRoute', () => {
         expect(screen.getByText('Protected Content')).toBeInTheDocument();
     });
 
-    it('saves current path before redirecting to login', () => {
+}
+
+function protectedrouteGroup4() {
+it('saves current path before redirecting to login', () => {
         mockUseAuth.mockReturnValue({
             isAuthenticated: false,
             isLoading: false,
@@ -109,6 +109,23 @@ describe('ProtectedRoute', () => {
 
         expect(sessionStorage.getItem('authRedirect')).toBe('/protected?query=test');
     });
+
+}
+
+describe('ProtectedRoute', () => {
+beforeEach(() => {
+        sessionStorage.clear();
+        mockUseAuth.mockReset();
+    });
+
+afterEach(() => {
+        sessionStorage.clear();
+    });
+
+    protectedrouteGroup1();
+    protectedrouteGroup2();
+    protectedrouteGroup3();
+    protectedrouteGroup4();
 });
 
 describe('saveAuthRedirect / consumeAuthRedirect', () => {

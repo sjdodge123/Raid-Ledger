@@ -59,8 +59,8 @@ describe('useGameTimeEditor - applyPreset', () => {
         vi.clearAllMocks();
     });
 
-    describe('Morning Preset (6a-12p)', () => {
-        it('adds morning hours (6-11) when none are active', () => {
+    function morningPreset6a12pGroup1() {
+it('adds morning hours (6-11) when none are active', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -76,7 +76,10 @@ describe('useGameTimeEditor - applyPreset', () => {
             });
         });
 
-        it('removes morning hours when all are active', () => {
+    }
+
+    function morningPreset6a12pGroup2() {
+it('removes morning hours when all are active', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -99,7 +102,10 @@ describe('useGameTimeEditor - applyPreset', () => {
             });
         });
 
-        it('adds only missing morning hours when some are active', () => {
+    }
+
+    function morningPreset6a12pGroup3() {
+it('adds only missing morning hours when some are active', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -121,6 +127,13 @@ describe('useGameTimeEditor - applyPreset', () => {
                 expect(hours).toEqual([6, 7, 8, 9, 10, 11]);
             });
         });
+
+    }
+
+    describe('Morning Preset (6a-12p)', () => {
+        morningPreset6a12pGroup1();
+        morningPreset6a12pGroup2();
+        morningPreset6a12pGroup3();
     });
 
     describe('Afternoon Preset (12p-6p)', () => {
@@ -231,8 +244,8 @@ describe('useGameTimeEditor - applyPreset', () => {
         });
     });
 
-    describe('Multiple Presets', () => {
-        it('can apply multiple presets to same day', () => {
+    function multiplePresetsGroup1() {
+it('can apply multiple presets to same day', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -249,7 +262,10 @@ describe('useGameTimeEditor - applyPreset', () => {
             });
         });
 
-        it('can apply presets to different days', () => {
+    }
+
+    function multiplePresetsGroup2() {
+it('can apply presets to different days', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -272,7 +288,10 @@ describe('useGameTimeEditor - applyPreset', () => {
             });
         });
 
-        it('does not affect other days when applying preset', () => {
+    }
+
+    function multiplePresetsGroup3() {
+it('does not affect other days when applying preset', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -291,10 +310,17 @@ describe('useGameTimeEditor - applyPreset', () => {
                 expect(mondaySlots[0].hour).toBe(10);
             });
         });
+
+    }
+
+    describe('Multiple Presets', () => {
+        multiplePresetsGroup1();
+        multiplePresetsGroup2();
+        multiplePresetsGroup3();
     });
 
-    describe('Edge Cases', () => {
-        it('handles applying preset when other days have slots', () => {
+    function edgeCasesGroup1() {
+it('handles applying preset when other days have slots', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -315,7 +341,10 @@ describe('useGameTimeEditor - applyPreset', () => {
             });
         });
 
-        it('handles toggling preset off with partial overlap', () => {
+    }
+
+    function edgeCasesGroup2() {
+it('handles toggling preset off with partial overlap', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -341,7 +370,10 @@ describe('useGameTimeEditor - applyPreset', () => {
             });
         });
 
-        it('sets isDirty flag when applying preset', () => {
+    }
+
+    function edgeCasesGroup3() {
+it('sets isDirty flag when applying preset', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -355,7 +387,7 @@ describe('useGameTimeEditor - applyPreset', () => {
             });
         });
 
-        it('handles all 7 days (0-6)', () => {
+it('handles all 7 days (0-6)', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -370,7 +402,10 @@ describe('useGameTimeEditor - applyPreset', () => {
             });
         });
 
-        it('handles applying all 4 presets to same day (full 24 hours)', () => {
+    }
+
+    function edgeCasesGroup4() {
+it('handles applying all 4 presets to same day (full 24 hours)', () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
@@ -388,6 +423,14 @@ describe('useGameTimeEditor - applyPreset', () => {
                 expect(hours).toEqual(Array.from({ length: 24 }, (_, i) => i));
             });
         });
+
+    }
+
+    describe('Edge Cases', () => {
+        edgeCasesGroup1();
+        edgeCasesGroup2();
+        edgeCasesGroup3();
+        edgeCasesGroup4();
     });
 
     describe('Dirty State Management', () => {

@@ -198,8 +198,8 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
         });
     });
 
-    describe('now playing', () => {
-        it('shows now-playing count when players are active', () => {
+    function nowPlayingGroup1() {
+it('shows now-playing count when players are active', () => {
             setupDefaultMocks(
                 { topPlayers: [createMockTopPlayer()], totalSeconds: 7200 },
                 { players: [createMockNowPlaying()], count: 1 },
@@ -210,7 +210,10 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             expect(screen.getByText('1 playing now')).toBeInTheDocument();
         });
 
-        it('shows correct count for multiple active players', () => {
+    }
+
+    function nowPlayingGroup2() {
+it('shows correct count for multiple active players', () => {
             setupDefaultMocks(
                 { topPlayers: [createMockTopPlayer()], totalSeconds: 7200 },
                 {
@@ -228,7 +231,10 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             expect(screen.getByText('3 playing now')).toBeInTheDocument();
         });
 
-        it('does not show now-playing section when count is 0', () => {
+    }
+
+    function nowPlayingGroup3() {
+it('does not show now-playing section when count is 0', () => {
             setupDefaultMocks(
                 { topPlayers: [createMockTopPlayer()], totalSeconds: 7200 },
                 { players: [], count: 0 },
@@ -239,7 +245,7 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             expect(screen.queryByText(/playing now/)).not.toBeInTheDocument();
         });
 
-        it('links now-playing avatars to user profiles', () => {
+it('links now-playing avatars to user profiles', () => {
             setupDefaultMocks(
                 { topPlayers: [createMockTopPlayer()], totalSeconds: 7200 },
                 { players: [createMockNowPlaying({ userId: 99 })], count: 1 },
@@ -251,6 +257,13 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             const playerLink = links.find(l => l.getAttribute('href') === '/users/99');
             expect(playerLink).toBeTruthy();
         });
+
+    }
+
+    describe('now playing', () => {
+        nowPlayingGroup1();
+        nowPlayingGroup2();
+        nowPlayingGroup3();
     });
 
     describe('community playtime', () => {
@@ -286,8 +299,8 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
         });
     });
 
-    describe('top players', () => {
-        it('renders player names in the leaderboard', () => {
+    function topPlayersGroup1() {
+it('renders player names in the leaderboard', () => {
             const players = [
                 createMockTopPlayer({ userId: 1, username: 'TopPlayer', totalSeconds: 10000 }),
                 createMockTopPlayer({ userId: 2, username: 'RunnerUp', totalSeconds: 5000 }),
@@ -300,7 +313,7 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             expect(screen.getByText('RunnerUp')).toBeInTheDocument();
         });
 
-        it('renders rank numbers for top players', () => {
+it('renders rank numbers for top players', () => {
             const players = [
                 createMockTopPlayer({ userId: 1, username: 'First', totalSeconds: 10000 }),
                 createMockTopPlayer({ userId: 2, username: 'Second', totalSeconds: 5000 }),
@@ -313,7 +326,10 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             expect(screen.getByText('#2')).toBeInTheDocument();
         });
 
-        it('renders formatted playtime for each player', () => {
+    }
+
+    function topPlayersGroup2() {
+it('renders formatted playtime for each player', () => {
             const players = [
                 createMockTopPlayer({ userId: 1, username: 'HeavyPlayer', totalSeconds: 7200 }),
             ];
@@ -326,7 +342,7 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             expect(twoHourTexts.length).toBeGreaterThanOrEqual(1);
         });
 
-        it('links each player row to their profile', () => {
+it('links each player row to their profile', () => {
             const players = [
                 createMockTopPlayer({ userId: 77, username: 'LinkedPlayer', totalSeconds: 3600 }),
             ];
@@ -338,7 +354,10 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             expect(link).toHaveAttribute('href', '/users/77');
         });
 
-        it('renders player playtime in minutes for sub-hour entries', () => {
+    }
+
+    function topPlayersGroup3() {
+it('renders player playtime in minutes for sub-hour entries', () => {
             const players = [
                 createMockTopPlayer({ userId: 1, username: 'QuickPlayer', totalSeconds: 1800 }),
             ];
@@ -348,6 +367,13 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
 
             expect(screen.getByText('30m')).toBeInTheDocument();
         });
+
+    }
+
+    describe('top players', () => {
+        topPlayersGroup1();
+        topPlayersGroup2();
+        topPlayersGroup3();
     });
 
     describe('period selector', () => {

@@ -14,18 +14,8 @@ vi.mock('../hooks/use-auth', () => ({
 const LS_KEY = 'raid_ledger_calendar_view';
 const LEGACY_KEY = 'calendar-view';
 
-describe('useCalendarViewStore', () => {
-    beforeEach(() => {
-        localStorage.clear();
-        // Reset store state
-        useCalendarViewStore.setState({ viewPref: 'week' });
-    });
-
-    afterEach(() => {
-        localStorage.clear();
-    });
-
-    describe('CalendarViewPref type includes schedule', () => {
+function usecalendarviewstoreGroup1() {
+describe('CalendarViewPref type includes schedule', () => {
         it('accepts "schedule" as a valid CalendarViewPref', () => {
             const view: CalendarViewPref = 'schedule';
             expect(view).toBe('schedule');
@@ -47,7 +37,10 @@ describe('useCalendarViewStore', () => {
         });
     });
 
-    describe('setViewPref', () => {
+}
+
+function usecalendarviewstoreGroup2() {
+describe('setViewPref', () => {
         it('updates viewPref in store', () => {
             useCalendarViewStore.getState().setViewPref('schedule');
             expect(useCalendarViewStore.getState().viewPref).toBe('schedule');
@@ -74,7 +67,10 @@ describe('useCalendarViewStore', () => {
         });
     });
 
-    describe('localStorage initialization', () => {
+}
+
+function usecalendarviewstoreGroup3() {
+describe('localStorage initialization', () => {
         it('reads stored schedule preference from localStorage', () => {
             localStorage.setItem(LS_KEY, 'schedule');
             // Re-import or re-initialize would be needed in production,
@@ -97,4 +93,21 @@ describe('useCalendarViewStore', () => {
             expect(localStorage.getItem(LS_KEY)).toBe('schedule');
         });
     });
+
+}
+
+describe('useCalendarViewStore', () => {
+beforeEach(() => {
+        localStorage.clear();
+        // Reset store state
+        useCalendarViewStore.setState({ viewPref: 'week' });
+    });
+
+afterEach(() => {
+        localStorage.clear();
+    });
+
+    usecalendarviewstoreGroup1();
+    usecalendarviewstoreGroup2();
+    usecalendarviewstoreGroup3();
 });
