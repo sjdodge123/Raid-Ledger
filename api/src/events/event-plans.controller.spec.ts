@@ -53,214 +53,207 @@ const mockTimeSuggestions = {
 
 const mockReq = { user: { id: CREATOR_ID, role: 'member' as UserRole } };
 
-describe('EventPlansController', () => {
-  let controller: EventPlansController;
-  let service: Partial<EventPlansService>;
+let controller: EventPlansController;
+let service: Partial<EventPlansService>;
 
-  beforeEach(async () => {
-    service = {
-      create: jest.fn().mockResolvedValue(mockPlan),
-      findOne: jest.fn().mockResolvedValue(mockPlan),
-      findAll: jest.fn().mockResolvedValue([mockPlan]),
-      cancel: jest.fn().mockResolvedValue({ ...mockPlan, status: 'cancelled' }),
-      getTimeSuggestions: jest.fn().mockResolvedValue(mockTimeSuggestions),
-    };
+async function setupEach() {
+  service = {
+    create: jest.fn().mockResolvedValue(mockPlan),
+    findOne: jest.fn().mockResolvedValue(mockPlan),
+    findAll: jest.fn().mockResolvedValue([mockPlan]),
+    cancel: jest.fn().mockResolvedValue({ ...mockPlan, status: 'cancelled' }),
+    getTimeSuggestions: jest.fn().mockResolvedValue(mockTimeSuggestions),
+  };
 
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [EventPlansController],
-      providers: [{ provide: EventPlansService, useValue: service }],
-    }).compile();
+  const module: TestingModule = await Test.createTestingModule({
+    controllers: [EventPlansController],
+    providers: [{ provide: EventPlansService, useValue: service }],
+  }).compile();
 
-    controller = module.get<EventPlansController>(EventPlansController);
-  });
+  controller = module.get<EventPlansController>(EventPlansController);
+}
 
-  // ─── getTimeSuggestions ──────────────────────────────────────────────────────
+const validBody = {
+  title: 'Raid Night',
+  durationMinutes: 120,
+  pollOptions: [
+    { date: '2026-03-10T18:00:00.000Z', label: 'Monday Mar 10, 6:00 PM' },
+    { date: '2026-03-11T18:00:00.000Z', label: 'Tuesday Mar 11, 6:00 PM' },
+  ],
+  pollDurationHours: 24,
+  pollMode: 'standard',
+};
 
-  describe('getTimeSuggestions', () => {
-    it('should call service with parsed gameId and tzOffset', async () => {
-      await controller.getTimeSuggestions('5', '-300', '2026-03-01T00:00:00Z');
+async function testTimeSuggestionsWithParams() {
+  await controller.getTimeSuggestions('5', '-300', '2026-03-01T00:00:00Z');
+  expect(service.getTimeSuggestions).toHaveBeenCalledWith(
+    5,
+    -300,
+    '2026-03-01T00:00:00Z',
+  );
+}
 
-      expect(service.getTimeSuggestions).toHaveBeenCalledWith(
-        5,
-        -300,
-        '2026-03-01T00:00:00Z',
-      );
-    });
+async function testTimeSuggestionsUndefinedParams() {
+  await controller.getTimeSuggestions(undefined, undefined, undefined);
+  expect(service.getTimeSuggestions).toHaveBeenCalledWith(
+    undefined,
+    undefined,
+    undefined,
+  );
+}
 
-    it('should pass undefined when query params are absent', async () => {
-      await controller.getTimeSuggestions(undefined, undefined, undefined);
+async function testTimeSuggestionsReturnsResult() {
+  const result = await controller.getTimeSuggestions();
+  expect(result).toEqual(mockTimeSuggestions);
+}
 
-      expect(service.getTimeSuggestions).toHaveBeenCalledWith(
-        undefined,
-        undefined,
-        undefined,
-      );
-    });
+function testTimeSuggestionsNoAuth() {
+  expect(() =>
+    controller.getTimeSuggestions(undefined, undefined, undefined),
+  ).not.toThrow();
+}
 
-    it('should return time suggestions from service', async () => {
-      const result = await controller.getTimeSuggestions();
+async function testCreateWithValidData() {
+  const result = await controller.create(
+    mockReq as AuthenticatedRequest,
+    validBody,
+  );
+  expect(result).toEqual(mockPlan);
+  expect(service.create).toHaveBeenCalledWith(CREATOR_ID, expect.any(Object));
+}
 
-      expect(result).toEqual(mockTimeSuggestions);
-    });
+async function testCreatePassesUserId() {
+  const req = { user: { id: 99, role: 'member' as UserRole } };
+  await controller.create(req as AuthenticatedRequest, validBody);
+  expect(service.create).toHaveBeenCalledWith(99, expect.any(Object));
+}
 
-    it('should not require authentication (no guard on endpoint)', () => {
-      // Verify there is no auth guard by calling without a user context
-      expect(() =>
-        controller.getTimeSuggestions(undefined, undefined, undefined),
-      ).not.toThrow();
-    });
-  });
+async function testCreateEmptyTitle() {
+  const invalidBody = { ...validBody, title: '' };
+  await expect(
+    controller.create(mockReq as AuthenticatedRequest, invalidBody),
+  ).rejects.toThrow(BadRequestException);
+}
 
-  // ─── create ─────────────────────────────────────────────────────────────────
+async function testCreateTooFewOptions() {
+  const invalidBody = {
+    ...validBody,
+    pollOptions: [{ date: '2026-03-10T18:00:00.000Z', label: 'Only one' }],
+  };
+  await expect(
+    controller.create(mockReq as AuthenticatedRequest, invalidBody),
+  ).rejects.toThrow(BadRequestException);
+}
 
-  describe('create', () => {
-    const validBody = {
-      title: 'Raid Night',
-      durationMinutes: 120,
-      pollOptions: [
-        { date: '2026-03-10T18:00:00.000Z', label: 'Monday Mar 10, 6:00 PM' },
-        { date: '2026-03-11T18:00:00.000Z', label: 'Tuesday Mar 11, 6:00 PM' },
-      ],
-      pollDurationHours: 24,
-      pollMode: 'standard',
-    };
+async function testCreateTooManyOptions() {
+  const tooMany = Array.from({ length: 10 }, (_, i) => ({
+    date: `2026-03-${10 + i}T18:00:00.000Z`,
+    label: `Option ${i + 1}`,
+  }));
+  await expect(
+    controller.create(mockReq as AuthenticatedRequest, {
+      ...validBody,
+      pollOptions: tooMany,
+    }),
+  ).rejects.toThrow(BadRequestException);
+}
 
-    it('should create plan with valid data', async () => {
-      const result = await controller.create(
-        mockReq as AuthenticatedRequest,
-        validBody,
-      );
+async function testCreateInvalidPollMode() {
+  await expect(
+    controller.create(mockReq as AuthenticatedRequest, {
+      ...validBody,
+      pollMode: 'invalid_mode',
+    }),
+  ).rejects.toThrow(BadRequestException);
+}
 
-      expect(result).toEqual(mockPlan);
-      expect(service.create).toHaveBeenCalledWith(
-        CREATOR_ID,
-        expect.any(Object),
-      );
-    });
+async function testCreateReThrowsErrors() {
+  (service.create as jest.Mock).mockRejectedValue(
+    new Error('Unexpected error'),
+  );
+  await expect(
+    controller.create(mockReq as AuthenticatedRequest, validBody),
+  ).rejects.toThrow('Unexpected error');
+}
 
-    it('should pass the user id from the request', async () => {
-      const req = { user: { id: 99, role: 'member' as UserRole } };
+async function testListPlans() {
+  const result = await controller.listPlans();
+  expect(result).toEqual([mockPlan]);
+  expect(service.findAll).toHaveBeenCalled();
+}
 
-      await controller.create(req as AuthenticatedRequest, validBody);
+async function testListPlansEmpty() {
+  (service.findAll as jest.Mock).mockResolvedValue([]);
+  const result = await controller.listPlans();
+  expect(result).toEqual([]);
+}
 
-      expect(service.create).toHaveBeenCalledWith(99, expect.any(Object));
-    });
+async function testFindOneValid() {
+  const result = await controller.findOne(PLAN_ID);
+  expect(result).toEqual(mockPlan);
+  expect(service.findOne).toHaveBeenCalledWith(PLAN_ID);
+}
 
-    it('should throw BadRequestException for invalid body (title empty)', async () => {
-      const invalidBody = { ...validBody, title: '' };
+async function testFindOneNotFound() {
+  (service.findOne as jest.Mock).mockRejectedValue(
+    new NotFoundException(`Event plan ${PLAN_ID} not found`),
+  );
+  await expect(controller.findOne(PLAN_ID)).rejects.toThrow(NotFoundException);
+}
 
-      await expect(
-        controller.create(mockReq as AuthenticatedRequest, invalidBody),
-      ).rejects.toThrow(BadRequestException);
-    });
+async function testCancelPlan() {
+  const result = await controller.cancel(
+    PLAN_ID,
+    mockReq as AuthenticatedRequest,
+  );
+  expect(result.status).toBe('cancelled');
+  expect(service.cancel).toHaveBeenCalledWith(PLAN_ID, CREATOR_ID, 'member');
+}
 
-    it('should throw BadRequestException when fewer than 2 pollOptions', async () => {
-      const invalidBody = {
-        ...validBody,
-        pollOptions: [{ date: '2026-03-10T18:00:00.000Z', label: 'Only one' }],
-      };
+async function testCancelNotFound() {
+  (service.cancel as jest.Mock).mockRejectedValue(
+    new NotFoundException('Not found'),
+  );
+  await expect(
+    controller.cancel(PLAN_ID, mockReq as AuthenticatedRequest),
+  ).rejects.toThrow(NotFoundException);
+}
 
-      await expect(
-        controller.create(mockReq as AuthenticatedRequest, invalidBody),
-      ).rejects.toThrow(BadRequestException);
-    });
+beforeEach(() => setupEach());
 
-    it('should throw BadRequestException when more than 9 pollOptions', async () => {
-      const tooMany = Array.from({ length: 10 }, (_, i) => ({
-        date: `2026-03-${10 + i}T18:00:00.000Z`,
-        label: `Option ${i + 1}`,
-      }));
-      const invalidBody = { ...validBody, pollOptions: tooMany };
+describe('EventPlansController — getTimeSuggestions', () => {
+  it('should call service with parsed params', () =>
+    testTimeSuggestionsWithParams());
+  it('should pass undefined when params absent', () =>
+    testTimeSuggestionsUndefinedParams());
+  it('should return time suggestions', () =>
+    testTimeSuggestionsReturnsResult());
+  it('should not require authentication', () => testTimeSuggestionsNoAuth());
+});
 
-      await expect(
-        controller.create(mockReq as AuthenticatedRequest, invalidBody),
-      ).rejects.toThrow(BadRequestException);
-    });
+describe('EventPlansController — create', () => {
+  it('should create plan with valid data', () => testCreateWithValidData());
+  it('should pass user id from request', () => testCreatePassesUserId());
+  it('should throw for empty title', () => testCreateEmptyTitle());
+  it('should throw for fewer than 2 pollOptions', () =>
+    testCreateTooFewOptions());
+  it('should throw for more than 9 pollOptions', () =>
+    testCreateTooManyOptions());
+  it('should throw for invalid pollMode', () => testCreateInvalidPollMode());
+  it('should re-throw non-Zod errors', () => testCreateReThrowsErrors());
+});
 
-    it('should throw BadRequestException when pollMode is invalid', async () => {
-      const invalidBody = { ...validBody, pollMode: 'invalid_mode' };
+describe('EventPlansController — listPlans', () => {
+  it('should return list of all plans', () => testListPlans());
+  it('should return empty array when no plans', () => testListPlansEmpty());
+});
 
-      await expect(
-        controller.create(mockReq as AuthenticatedRequest, invalidBody),
-      ).rejects.toThrow(BadRequestException);
-    });
+describe('EventPlansController — findOne', () => {
+  it('should return plan for valid UUID', () => testFindOneValid());
+  it('should propagate NotFoundException', () => testFindOneNotFound());
+});
 
-    it('should re-throw non-Zod errors from service', async () => {
-      (service.create as jest.Mock).mockRejectedValue(
-        new Error('Unexpected error'),
-      );
-
-      await expect(
-        controller.create(mockReq as AuthenticatedRequest, validBody),
-      ).rejects.toThrow('Unexpected error');
-    });
-  });
-
-  // ─── listPlans ──────────────────────────────────────────────────────────────
-
-  describe('listPlans', () => {
-    it('should return list of all plans', async () => {
-      const result = await controller.listPlans();
-
-      expect(result).toEqual([mockPlan]);
-      expect(service.findAll).toHaveBeenCalled();
-    });
-
-    it('should return empty array when no plans exist', async () => {
-      (service.findAll as jest.Mock).mockResolvedValue([]);
-
-      const result = await controller.listPlans();
-
-      expect(result).toEqual([]);
-    });
-  });
-
-  // ─── findOne ────────────────────────────────────────────────────────────────
-
-  describe('findOne', () => {
-    it('should return the plan for a valid UUID', async () => {
-      const result = await controller.findOne(PLAN_ID);
-
-      expect(result).toEqual(mockPlan);
-      expect(service.findOne).toHaveBeenCalledWith(PLAN_ID);
-    });
-
-    it('should propagate NotFoundException from service', async () => {
-      (service.findOne as jest.Mock).mockRejectedValue(
-        new NotFoundException(`Event plan ${PLAN_ID} not found`),
-      );
-
-      await expect(controller.findOne(PLAN_ID)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-
-  // ─── cancel ─────────────────────────────────────────────────────────────────
-
-  describe('cancel', () => {
-    it('should cancel the plan for the authenticated user', async () => {
-      const result = await controller.cancel(
-        PLAN_ID,
-        mockReq as AuthenticatedRequest,
-      );
-
-      expect(result.status).toBe('cancelled');
-      expect(service.cancel).toHaveBeenCalledWith(
-        PLAN_ID,
-        CREATOR_ID,
-        'member',
-      );
-    });
-
-    it('should propagate NotFoundException when plan does not exist', async () => {
-      (service.cancel as jest.Mock).mockRejectedValue(
-        new NotFoundException('Not found'),
-      );
-
-      await expect(
-        controller.cancel(PLAN_ID, mockReq as AuthenticatedRequest),
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
+describe('EventPlansController — cancel', () => {
+  it('should cancel for authenticated user', () => testCancelPlan());
+  it('should propagate NotFoundException', () => testCancelNotFound());
 });

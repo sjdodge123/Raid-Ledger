@@ -52,376 +52,360 @@ function makeSelectChain(resolvedValue: unknown[]) {
   };
 }
 
+function makeSelectChainNoLimit(resolvedValue: unknown[]) {
+  return {
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockResolvedValue(resolvedValue),
+    }),
+  };
+}
+
 function createMockDb() {
-  const mockDb: Record<string, jest.Mock> = {
+  const db: Record<string, jest.Mock> = {
     select: jest.fn(),
     insert: jest.fn(),
     delete: jest.fn(),
     update: jest.fn(),
     transaction: jest.fn(),
   };
-  const insertChain = {
+  db.insert.mockReturnValue({
     values: jest.fn().mockReturnValue({
       onConflictDoNothing: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
       }),
       returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
     }),
-  };
-  mockDb.insert.mockReturnValue(insertChain);
-  const deleteChain = {
-    where: jest
-      .fn()
-      .mockReturnValue({ returning: jest.fn().mockResolvedValue([]) }),
-  };
-  mockDb.delete.mockReturnValue(deleteChain);
-  const updateChain = {
+  });
+  db.delete.mockReturnValue({
+    where: jest.fn().mockReturnValue({
+      returning: jest.fn().mockResolvedValue([]),
+    }),
+  });
+  db.update.mockReturnValue({
     set: jest.fn().mockReturnValue({
       where: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
       }),
     }),
-  };
-  mockDb.update.mockReturnValue(updateChain);
-  mockDb.transaction.mockImplementation(
-    async (cb: (tx: typeof mockDb) => Promise<unknown>) => cb(mockDb),
+  });
+  db.transaction.mockImplementation(
+    async (cb: (tx: typeof db) => Promise<unknown>) => cb(db),
   );
-  return mockDb;
+  return db;
 }
 
+let service: SignupsService;
+let mockDb: Record<string, jest.Mock>;
+
+async function setupEach() {
+  mockDb = createMockDb();
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      SignupsService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: NotificationService,
+        useValue: { create: jest.fn().mockResolvedValue(null) },
+      },
+      {
+        provide: RosterNotificationBufferService,
+        useValue: { bufferLeave: jest.fn(), bufferJoin: jest.fn() },
+      },
+      {
+        provide: BenchPromotionService,
+        useValue: {
+          schedulePromotion: jest.fn(),
+          cancelPromotion: jest.fn(),
+          isEligible: jest.fn().mockResolvedValue(false),
+        },
+      },
+      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+    ],
+  }).compile();
+  service = module.get<SignupsService>(SignupsService);
+}
+
+// ─── signupDiscord tests ────────────────────────────────────────────────────
+
+async function testAnonymousSignup() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]));
+  const result = await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+    discordAvatarHash: 'avatar-hash-abc',
+  });
+  expect(result.isAnonymous).toBe(true);
+  expect(result.discordUserId).toBe('discord-anon-456');
+  expect(mockDb.insert).toHaveBeenCalled();
+}
+
+async function testLinkedUserDelegates() {
+  const signupSpy = jest.spyOn(service, 'signup').mockResolvedValueOnce({
+    id: 11,
+    eventId: 1,
+    user: {
+      id: 1,
+      discordId: 'discord-user-123',
+      username: 'linkeduser',
+      avatar: null,
+    },
+    note: null,
+    signedUpAt: new Date().toISOString(),
+    characterId: null,
+    character: null,
+    confirmationStatus: 'pending',
+    status: 'signed_up',
+  });
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([mockUser]));
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-user-123',
+    discordUsername: 'linkeduser',
+  });
+  expect(signupSpy).toHaveBeenCalledWith(1, mockUser.id, {
+    preferredRoles: undefined,
+    slotRole: undefined,
+  });
+}
+
+async function testEventNotFound() {
+  mockDb.select.mockReturnValueOnce(makeSelectChain([]));
+  await expect(
+    service.signupDiscord(999, {
+      discordUserId: 'discord-anon',
+      discordUsername: 'AnonUser',
+    }),
+  ).rejects.toThrow(NotFoundException);
+}
+
+async function testDuplicateReturnsExisting() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]));
+  mockDb.insert.mockReturnValueOnce({
+    values: jest.fn().mockReturnValue({
+      onConflictDoNothing: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([]),
+      }),
+    }),
+  });
+  const result = await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+  });
+  expect(result).toMatchObject({ id: expect.any(Number), isAnonymous: true });
+}
+
+async function testRosterAssignmentWithRole() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChainNoLimit([]));
+  mockDb.insert
+    .mockReturnValueOnce({
+      values: jest.fn().mockReturnValue({
+        onConflictDoNothing: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+        }),
+      }),
+    })
+    .mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+    role: 'dps',
+  });
+  expect(mockDb.insert).toHaveBeenCalledTimes(2);
+}
+
+async function testTentativeStatus() {
+  const tentativeSignup = { ...mockAnonymousSignup, status: 'tentative' };
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]));
+  mockDb.insert.mockReturnValueOnce({
+    values: jest.fn().mockReturnValue({
+      onConflictDoNothing: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([tentativeSignup]),
+      }),
+    }),
+  });
+  const result = await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+    status: 'tentative',
+  });
+  expect(result.status).toBe('tentative');
+}
+
+// ─── ROK-451 auto-slot tests ────────────────────────────────────────────────
+
+const genericEvent = {
+  ...mockEvent,
+  slotConfig: { type: 'generic', player: 4, bench: 2 },
+};
+const mmoEvent = {
+  ...mockEvent,
+  slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+};
+const maxAttendeesEvent = { ...mockEvent, slotConfig: null, maxAttendees: 4 };
+
+async function testAutoSlotGeneric() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([genericEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChainNoLimit([]))
+    .mockReturnValueOnce(makeSelectChainNoLimit([]));
+  mockDb.insert
+    .mockReturnValueOnce({
+      values: jest.fn().mockReturnValue({
+        onConflictDoNothing: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+        }),
+      }),
+    })
+    .mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+  });
+  expect(mockDb.insert).toHaveBeenCalledTimes(2);
+}
+
+async function testNoAutoSlotMmo() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([mmoEvent]))
+    .mockReturnValueOnce(makeSelectChain([]));
+  mockDb.insert.mockReturnValueOnce({
+    values: jest.fn().mockReturnValue({
+      onConflictDoNothing: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+      }),
+    }),
+  });
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+  });
+  expect(mockDb.insert).toHaveBeenCalledTimes(1);
+}
+
+async function testNoAutoSlotFull() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([genericEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(
+      makeSelectChainNoLimit([
+        { position: 1 },
+        { position: 2 },
+        { position: 3 },
+        { position: 4 },
+      ]),
+    );
+  mockDb.insert.mockReturnValueOnce({
+    values: jest.fn().mockReturnValue({
+      onConflictDoNothing: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+      }),
+    }),
+  });
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+  });
+  expect(mockDb.insert).toHaveBeenCalledTimes(1);
+}
+
+async function testAutoSlotMaxAttendees() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([maxAttendeesEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(
+      makeSelectChainNoLimit([{ position: 1 }, { position: 2 }]),
+    )
+    .mockReturnValueOnce(
+      makeSelectChainNoLimit([{ position: 1 }, { position: 2 }]),
+    );
+  mockDb.insert
+    .mockReturnValueOnce({
+      values: jest.fn().mockReturnValue({
+        onConflictDoNothing: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+        }),
+      }),
+    })
+    .mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+  });
+  expect(mockDb.insert).toHaveBeenCalledTimes(2);
+}
+
+async function testNoAutoSlotNoConfig() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]));
+  mockDb.insert.mockReturnValueOnce({
+    values: jest.fn().mockReturnValue({
+      onConflictDoNothing: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+      }),
+    }),
+  });
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+  });
+  expect(mockDb.insert).toHaveBeenCalledTimes(1);
+}
+
+async function testExplicitRoleOverAutoSlot() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([genericEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChainNoLimit([]));
+  mockDb.insert
+    .mockReturnValueOnce({
+      values: jest.fn().mockReturnValue({
+        onConflictDoNothing: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+        }),
+      }),
+    })
+    .mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+    role: 'dps',
+  });
+  expect(mockDb.insert).toHaveBeenCalledTimes(2);
+}
+
+beforeEach(() => setupEach());
+
 describe('SignupsService — signupDiscord', () => {
-  let service: SignupsService;
-  let mockDb: Record<string, jest.Mock>;
+  it('should create anonymous signup', () => testAnonymousSignup());
+  it('should delegate to signup for linked user', () =>
+    testLinkedUserDelegates());
+  it('should throw NotFoundException when event missing', () =>
+    testEventNotFound());
+  it('should return existing on duplicate', () =>
+    testDuplicateReturnsExisting());
+  it('should create roster assignment with role', () =>
+    testRosterAssignmentWithRole());
+  it('should set tentative status', () => testTentativeStatus());
+});
 
-  beforeEach(async () => {
-    mockDb = createMockDb();
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        SignupsService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: NotificationService,
-          useValue: { create: jest.fn().mockResolvedValue(null) },
-        },
-        {
-          provide: RosterNotificationBufferService,
-          useValue: { bufferLeave: jest.fn(), bufferJoin: jest.fn() },
-        },
-        {
-          provide: BenchPromotionService,
-          useValue: {
-            schedulePromotion: jest.fn(),
-            cancelPromotion: jest.fn(),
-            isEligible: jest.fn().mockResolvedValue(false),
-          },
-        },
-        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
-      ],
-    }).compile();
-    service = module.get<SignupsService>(SignupsService);
-  });
-
-  describe('signupDiscord', () => {
-    it('should create anonymous signup for unlinked Discord user', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([mockEvent]))
-        .mockReturnValueOnce(makeSelectChain([]));
-      const result = await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-        discordAvatarHash: 'avatar-hash-abc',
-      });
-      expect(result.isAnonymous).toBe(true);
-      expect(result.discordUserId).toBe('discord-anon-456');
-      expect(mockDb.insert).toHaveBeenCalled();
-    });
-
-    it('should use normal signup path when Discord user has a linked RL account', async () => {
-      const signupSpy = jest.spyOn(service, 'signup').mockResolvedValueOnce({
-        id: 11,
-        eventId: 1,
-        user: {
-          id: 1,
-          discordId: 'discord-user-123',
-          username: 'linkeduser',
-          avatar: null,
-        },
-        note: null,
-        signedUpAt: new Date().toISOString(),
-        characterId: null,
-        character: null,
-        confirmationStatus: 'pending',
-        status: 'signed_up',
-      });
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([mockEvent]))
-        .mockReturnValueOnce(makeSelectChain([mockUser]));
-      await service.signupDiscord(1, {
-        discordUserId: 'discord-user-123',
-        discordUsername: 'linkeduser',
-      });
-      expect(signupSpy).toHaveBeenCalledWith(1, mockUser.id, {
-        preferredRoles: undefined,
-        slotRole: undefined,
-      });
-    });
-
-    it('should throw NotFoundException when event does not exist', async () => {
-      mockDb.select.mockReturnValueOnce(makeSelectChain([]));
-      await expect(
-        service.signupDiscord(999, {
-          discordUserId: 'discord-anon',
-          discordUsername: 'AnonUser',
-        }),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should return existing anonymous signup on duplicate (onConflictDoNothing empty)', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([mockEvent]))
-        .mockReturnValueOnce(makeSelectChain([]))
-        .mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]));
-      mockDb.insert.mockReturnValueOnce({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest
-            .fn()
-            .mockReturnValue({ returning: jest.fn().mockResolvedValue([]) }),
-        }),
-      });
-      const result = await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-      });
-      expect(result).toMatchObject({
-        id: expect.any(Number),
-        isAnonymous: true,
-      });
-    });
-
-    it('should create roster assignment when role is provided', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([mockEvent]))
-        .mockReturnValueOnce(makeSelectChain([]))
-        .mockReturnValueOnce({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        });
-      mockDb.insert
-        .mockReturnValueOnce({
-          values: jest.fn().mockReturnValue({
-            onConflictDoNothing: jest.fn().mockReturnValue({
-              returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
-            }),
-          }),
-        })
-        .mockReturnValueOnce({
-          values: jest.fn().mockResolvedValue(undefined),
-        });
-      await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-        role: 'dps',
-      });
-      expect(mockDb.insert).toHaveBeenCalledTimes(2);
-    });
-
-    it('should set status to tentative when dto.status is tentative', async () => {
-      const tentativeSignup = { ...mockAnonymousSignup, status: 'tentative' };
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([mockEvent]))
-        .mockReturnValueOnce(makeSelectChain([]));
-      mockDb.insert.mockReturnValueOnce({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([tentativeSignup]),
-          }),
-        }),
-      });
-      const result = await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-        status: 'tentative',
-      });
-      expect(result.status).toBe('tentative');
-    });
-  });
-
-  describe('signupDiscord — ROK-451 generic auto-slot', () => {
-    const genericEvent = {
-      ...mockEvent,
-      slotConfig: { type: 'generic', player: 4, bench: 2 },
-    };
-    const mmoEvent = {
-      ...mockEvent,
-      slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
-    };
-    const maxAttendeesEvent = {
-      ...mockEvent,
-      slotConfig: null,
-      maxAttendees: 4,
-    };
-
-    it('should auto-assign to player slot for generic event without explicit role', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([genericEvent]))
-        .mockReturnValueOnce(makeSelectChain([]))
-        .mockReturnValueOnce({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        })
-        .mockReturnValueOnce({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        });
-      mockDb.insert
-        .mockReturnValueOnce({
-          values: jest.fn().mockReturnValue({
-            onConflictDoNothing: jest.fn().mockReturnValue({
-              returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
-            }),
-          }),
-        })
-        .mockReturnValueOnce({
-          values: jest.fn().mockResolvedValue(undefined),
-        });
-      await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-      });
-      expect(mockDb.insert).toHaveBeenCalledTimes(2);
-    });
-
-    it('should NOT auto-slot for MMO events (role selection required)', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([mmoEvent]))
-        .mockReturnValueOnce(makeSelectChain([]));
-      mockDb.insert.mockReturnValueOnce({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
-          }),
-        }),
-      });
-      await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-      });
-      expect(mockDb.insert).toHaveBeenCalledTimes(1);
-    });
-
-    it('should NOT auto-slot when all generic player slots are full', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([genericEvent]))
-        .mockReturnValueOnce(makeSelectChain([]))
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest
-              .fn()
-              .mockResolvedValue([
-                { position: 1 },
-                { position: 2 },
-                { position: 3 },
-                { position: 4 },
-              ]),
-          }),
-        });
-      mockDb.insert.mockReturnValueOnce({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
-          }),
-        }),
-      });
-      await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-      });
-      expect(mockDb.insert).toHaveBeenCalledTimes(1);
-    });
-
-    it('should auto-slot when event has maxAttendees but no slotConfig', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([maxAttendeesEvent]))
-        .mockReturnValueOnce(makeSelectChain([]))
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest
-              .fn()
-              .mockResolvedValue([{ position: 1 }, { position: 2 }]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest
-              .fn()
-              .mockResolvedValue([{ position: 1 }, { position: 2 }]),
-          }),
-        });
-      mockDb.insert
-        .mockReturnValueOnce({
-          values: jest.fn().mockReturnValue({
-            onConflictDoNothing: jest.fn().mockReturnValue({
-              returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
-            }),
-          }),
-        })
-        .mockReturnValueOnce({
-          values: jest.fn().mockResolvedValue(undefined),
-        });
-      await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-      });
-      expect(mockDb.insert).toHaveBeenCalledTimes(2);
-    });
-
-    it('should NOT auto-slot when event has no slotConfig and no maxAttendees', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([mockEvent]))
-        .mockReturnValueOnce(makeSelectChain([]));
-      mockDb.insert.mockReturnValueOnce({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
-          }),
-        }),
-      });
-      await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-      });
-      expect(mockDb.insert).toHaveBeenCalledTimes(1);
-    });
-
-    it('should prefer explicit role over auto-slot for generic events', async () => {
-      mockDb.select
-        .mockReturnValueOnce(makeSelectChain([genericEvent]))
-        .mockReturnValueOnce(makeSelectChain([]))
-        .mockReturnValueOnce({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        });
-      mockDb.insert
-        .mockReturnValueOnce({
-          values: jest.fn().mockReturnValue({
-            onConflictDoNothing: jest.fn().mockReturnValue({
-              returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
-            }),
-          }),
-        })
-        .mockReturnValueOnce({
-          values: jest.fn().mockResolvedValue(undefined),
-        });
-      await service.signupDiscord(1, {
-        discordUserId: 'discord-anon-456',
-        discordUsername: 'AnonUser',
-        role: 'dps',
-      });
-      expect(mockDb.insert).toHaveBeenCalledTimes(2);
-    });
-  });
+describe('SignupsService — signupDiscord auto-slot', () => {
+  it('should auto-assign for generic event', () => testAutoSlotGeneric());
+  it('should NOT auto-slot for MMO events', () => testNoAutoSlotMmo());
+  it('should NOT auto-slot when full', () => testNoAutoSlotFull());
+  it('should auto-slot with maxAttendees', () => testAutoSlotMaxAttendees());
+  it('should NOT auto-slot without config', () => testNoAutoSlotNoConfig());
+  it('should prefer explicit role', () => testExplicitRoleOverAutoSlot());
 });

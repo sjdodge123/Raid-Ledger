@@ -87,16 +87,8 @@ function buildMockServices() {
   };
 }
 
-function buildMockDb(): Record<string, jest.Mock> {
-  const mockDb: Record<string, jest.Mock> = {
-    select: jest.fn(),
-    insert: jest.fn(),
-    delete: jest.fn(),
-    update: jest.fn(),
-    transaction: jest.fn(),
-  };
-
-  const selectEventChain = {
+function buildSelectChain(): Record<string, jest.Mock> {
+  return {
     from: jest.fn().mockReturnValue({
       where: jest.fn().mockReturnValue({
         limit: jest.fn().mockResolvedValue([mockEvent]),
@@ -113,30 +105,45 @@ function buildMockDb(): Record<string, jest.Mock> {
       }),
     }),
   };
-  mockDb.select.mockReturnValue(selectEventChain);
+}
 
-  mockDb.insert.mockReturnValue({
+function buildInsertChain(): Record<string, jest.Mock> {
+  return {
     values: jest.fn().mockReturnValue({
       onConflictDoNothing: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockSignup]),
       }),
       returning: jest.fn().mockResolvedValue([mockSignup]),
     }),
-  });
+  };
+}
 
-  mockDb.delete.mockReturnValue({
+function buildDeleteChain(): Record<string, jest.Mock> {
+  return {
     where: jest.fn().mockReturnValue({
       returning: jest.fn().mockResolvedValue([mockSignup]),
     }),
-  });
+  };
+}
 
-  mockDb.update.mockReturnValue({
+function buildUpdateChain(): Record<string, jest.Mock> {
+  return {
     set: jest.fn().mockReturnValue({
       where: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockSignup]),
       }),
     }),
-  });
+  };
+}
+
+function buildMockDb(): Record<string, jest.Mock> {
+  const mockDb: Record<string, jest.Mock> = {
+    select: jest.fn().mockReturnValue(buildSelectChain()),
+    insert: jest.fn().mockReturnValue(buildInsertChain()),
+    delete: jest.fn().mockReturnValue(buildDeleteChain()),
+    update: jest.fn().mockReturnValue(buildUpdateChain()),
+    transaction: jest.fn(),
+  };
 
   mockDb.transaction.mockImplementation(
     async (cb: (tx: typeof mockDb) => Promise<unknown>) => cb(mockDb),

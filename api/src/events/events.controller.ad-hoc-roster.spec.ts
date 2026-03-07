@@ -57,175 +57,182 @@ const voiceRosterResponse = {
   activeCount: 1,
 };
 
-describe('EventsAttendanceController.getAdHocRoster (ROK-530)', () => {
-  let controller: EventsAttendanceController;
-  let mockEventsService: { findOne: jest.Mock };
-  let mockAdHocEventService: { getAdHocRoster: jest.Mock };
-  let mockVoiceAttendanceService: { getActiveRoster: jest.Mock };
+let controller: EventsAttendanceController;
+let mockEventsService: { findOne: jest.Mock };
+let mockAdHocEventService: { getAdHocRoster: jest.Mock };
+let mockVoiceAttendanceService: { getActiveRoster: jest.Mock };
 
-  function buildAdHocEvent(id = 1) {
-    return {
-      id,
-      title: 'Ad-Hoc Event',
-      isAdHoc: true,
-      creator: { id: 1, username: 'creator', avatar: null },
-    };
-  }
+function buildAdHocEvent(id = 1) {
+  return {
+    id,
+    title: 'Ad-Hoc Event',
+    isAdHoc: true,
+    creator: { id: 1, username: 'creator', avatar: null },
+  };
+}
 
-  function buildPlannedEvent(id = 2) {
-    return {
-      id,
-      title: 'Planned Event',
-      isAdHoc: false,
-      creator: { id: 1, username: 'creator', avatar: null },
-    };
-  }
+function buildPlannedEvent(id = 2) {
+  return {
+    id,
+    title: 'Planned Event',
+    isAdHoc: false,
+    creator: { id: 1, username: 'creator', avatar: null },
+  };
+}
 
-  beforeEach(async () => {
-    mockEventsService = {
-      findOne: jest.fn(),
-    };
+async function setupEach() {
+  mockEventsService = { findOne: jest.fn() };
+  mockAdHocEventService = {
+    getAdHocRoster: jest.fn().mockResolvedValue(adHocRosterResponse),
+  };
+  mockVoiceAttendanceService = {
+    getActiveRoster: jest.fn().mockReturnValue(voiceRosterResponse),
+  };
 
-    mockAdHocEventService = {
-      getAdHocRoster: jest.fn().mockResolvedValue(adHocRosterResponse),
-    };
-
-    mockVoiceAttendanceService = {
-      getActiveRoster: jest.fn().mockReturnValue(voiceRosterResponse),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [EventsAttendanceController],
-      providers: [
-        { provide: EventsService, useValue: mockEventsService },
-        {
-          provide: AttendanceService,
-          useValue: {
-            recordAttendance: jest.fn(),
-            getAttendanceSummary: jest.fn(),
-          },
+  const module: TestingModule = await Test.createTestingModule({
+    controllers: [EventsAttendanceController],
+    providers: [
+      { provide: EventsService, useValue: mockEventsService },
+      {
+        provide: AttendanceService,
+        useValue: {
+          recordAttendance: jest.fn(),
+          getAttendanceSummary: jest.fn(),
         },
-        { provide: AdHocEventService, useValue: mockAdHocEventService },
-        {
-          provide: VoiceAttendanceService,
-          useValue: mockVoiceAttendanceService,
-        },
-        { provide: AnalyticsService, useValue: { getEventMetrics: jest.fn() } },
-        {
-          provide: ChannelResolverService,
-          useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
-        },
-      ],
-    }).compile();
+      },
+      { provide: AdHocEventService, useValue: mockAdHocEventService },
+      {
+        provide: VoiceAttendanceService,
+        useValue: mockVoiceAttendanceService,
+      },
+      {
+        provide: AnalyticsService,
+        useValue: { getEventMetrics: jest.fn() },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
+      },
+    ],
+  }).compile();
 
-    controller = module.get<EventsAttendanceController>(
-      EventsAttendanceController,
-    );
-  });
+  controller = module.get<EventsAttendanceController>(
+    EventsAttendanceController,
+  );
+}
 
-  // ── Ad-hoc event delegation ──────────────────────────────────────────────
-
-  it('delegates to AdHocEventService for ad-hoc events', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(1));
-
-    await controller.getAdHocRoster(1);
-
+function testDelegatesToAdHocService() {
+  mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(1));
+  return controller.getAdHocRoster(1).then(() => {
     expect(mockAdHocEventService.getAdHocRoster).toHaveBeenCalledWith(1);
     expect(mockVoiceAttendanceService.getActiveRoster).not.toHaveBeenCalled();
   });
+}
 
-  it('returns AdHocEventService result for ad-hoc events', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(1));
+function testReturnsAdHocResult() {
+  mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(1));
+  return controller
+    .getAdHocRoster(1)
+    .then((result) => expect(result).toEqual(adHocRosterResponse));
+}
 
-    const result = await controller.getAdHocRoster(1);
-
-    expect(result).toEqual(adHocRosterResponse);
-  });
-
-  it('does NOT call VoiceAttendanceService for ad-hoc events', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(1));
-
-    await controller.getAdHocRoster(1);
-
+function testNoVoiceCallForAdHoc() {
+  mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(1));
+  return controller.getAdHocRoster(1).then(() => {
     expect(mockVoiceAttendanceService.getActiveRoster).not.toHaveBeenCalled();
   });
+}
 
-  // ── Planned event delegation ─────────────────────────────────────────────
-
-  it('delegates to VoiceAttendanceService for non-ad-hoc (planned) events', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
-
-    await controller.getAdHocRoster(2);
-
+function testDelegatesToVoiceService() {
+  mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
+  return controller.getAdHocRoster(2).then(() => {
     expect(mockVoiceAttendanceService.getActiveRoster).toHaveBeenCalledWith(2);
     expect(mockAdHocEventService.getAdHocRoster).not.toHaveBeenCalled();
   });
+}
 
-  it('returns VoiceAttendanceService result for planned events', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
+function testReturnsVoiceResult() {
+  mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
+  return controller
+    .getAdHocRoster(2)
+    .then((result) => expect(result).toEqual(voiceRosterResponse));
+}
 
-    const result = await controller.getAdHocRoster(2);
-
-    expect(result).toEqual(voiceRosterResponse);
-  });
-
-  it('does NOT call AdHocEventService for planned events', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
-
-    await controller.getAdHocRoster(2);
-
+function testNoAdHocCallForPlanned() {
+  mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
+  return controller.getAdHocRoster(2).then(() => {
     expect(mockAdHocEventService.getAdHocRoster).not.toHaveBeenCalled();
   });
+}
 
-  // ── Response shape ────────────────────────────────────────────────────────
-
-  it('returns AdHocRosterResponseDto shape for ad-hoc events', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(1));
-
-    const result = await controller.getAdHocRoster(1);
-
-    expect(result).toMatchObject({
-      eventId: expect.any(Number),
-      participants: expect.any(Array),
-      activeCount: expect.any(Number),
-    });
+async function testAdHocResponseShape() {
+  mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(1));
+  const result = await controller.getAdHocRoster(1);
+  expect(result).toMatchObject({
+    eventId: expect.any(Number),
+    participants: expect.any(Array),
+    activeCount: expect.any(Number),
   });
+}
 
-  it('returns AdHocRosterResponseDto shape for planned events', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
-
-    const result = await controller.getAdHocRoster(2);
-
-    expect(result).toMatchObject({
-      eventId: expect.any(Number),
-      participants: expect.any(Array),
-      activeCount: expect.any(Number),
-    });
+async function testPlannedResponseShape() {
+  mockEventsService.findOne.mockResolvedValue(buildPlannedEvent(2));
+  const result = await controller.getAdHocRoster(2);
+  expect(result).toMatchObject({
+    eventId: expect.any(Number),
+    participants: expect.any(Array),
+    activeCount: expect.any(Number),
   });
+}
 
-  // ── findOne is always called first ────────────────────────────────────────
+async function testCallsFindOneFirst() {
+  mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(42));
+  await controller.getAdHocRoster(42);
+  expect(mockEventsService.findOne).toHaveBeenCalledWith(42);
+}
 
-  it('calls eventsService.findOne with the event id before delegating', async () => {
-    mockEventsService.findOne.mockResolvedValue(buildAdHocEvent(42));
+async function testPropagatesFindOneError() {
+  const notFound = new Error('Event not found');
+  mockEventsService.findOne.mockRejectedValue(notFound);
+  await expect(controller.getAdHocRoster(999)).rejects.toThrow(
+    'Event not found',
+  );
+  expect(mockAdHocEventService.getAdHocRoster).not.toHaveBeenCalled();
+  expect(mockVoiceAttendanceService.getActiveRoster).not.toHaveBeenCalled();
+}
 
-    await controller.getAdHocRoster(42);
+beforeEach(() => setupEach());
 
-    expect(mockEventsService.findOne).toHaveBeenCalledWith(42);
-  });
+describe('getAdHocRoster — ad-hoc delegation', () => {
+  it('delegates to AdHocEventService for ad-hoc events', () =>
+    testDelegatesToAdHocService());
+  it('returns AdHocEventService result for ad-hoc events', () =>
+    testReturnsAdHocResult());
+  it('does NOT call VoiceAttendanceService for ad-hoc events', () =>
+    testNoVoiceCallForAdHoc());
+});
 
-  it('propagates error if eventsService.findOne throws (event not found)', async () => {
-    const notFound = new Error('Event not found');
-    mockEventsService.findOne.mockRejectedValue(notFound);
+describe('getAdHocRoster — planned delegation', () => {
+  it('delegates to VoiceAttendanceService for planned events', () =>
+    testDelegatesToVoiceService());
+  it('returns VoiceAttendanceService result for planned events', () =>
+    testReturnsVoiceResult());
+  it('does NOT call AdHocEventService for planned events', () =>
+    testNoAdHocCallForPlanned());
+});
 
-    await expect(controller.getAdHocRoster(999)).rejects.toThrow(
-      'Event not found',
-    );
+describe('getAdHocRoster — response shape', () => {
+  it('returns correct shape for ad-hoc events', () => testAdHocResponseShape());
+  it('returns correct shape for planned events', () =>
+    testPlannedResponseShape());
+});
 
-    expect(mockAdHocEventService.getAdHocRoster).not.toHaveBeenCalled();
-    expect(mockVoiceAttendanceService.getActiveRoster).not.toHaveBeenCalled();
-  });
+describe('getAdHocRoster — findOne guard', () => {
+  it('calls eventsService.findOne before delegating', () =>
+    testCallsFindOneFirst());
+  it('propagates error if findOne throws', () => testPropagatesFindOneError());
 });

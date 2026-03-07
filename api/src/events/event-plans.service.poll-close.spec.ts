@@ -9,8 +9,6 @@ import { SignupsService } from './signups.service';
 import { SettingsService } from '../settings/settings.service';
 import { getQueueToken } from '@nestjs/bullmq';
 
-// ─── Shared fixtures ──────────────────────────────────────────────────────────
-
 const PLAN_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const CREATOR_ID = 42;
 const CHANNEL_ID = 'discord-channel-123';
@@ -73,12 +71,29 @@ function makePollAnswer(voterIds: string[]) {
   };
 }
 
-function makeDbMock(): MockDb {
-  const mock = createDrizzleMock();
-  mock.limit.mockResolvedValue([makePlan()]);
-  mock.returning.mockResolvedValue([makePlan()]);
-  return mock;
+function setupRegisteredUsersResponse(
+  db: MockDb,
+  registeredDiscordIds: string[],
+) {
+  const registeredResponse = registeredDiscordIds.map((id) => ({
+    discordId: id,
+  }));
+  db.where.mockImplementation(() => {
+    const chainWithPromise = Object.create(db) as MockDb & {
+      then: (resolve: (value: unknown) => void) => void;
+    };
+    chainWithPromise.then = (resolve: (value: unknown) => void) =>
+      resolve(registeredResponse);
+    return chainWithPromise;
+  });
 }
+
+let service: EventPlansService;
+let db: MockDb;
+let discordClient: ReturnType<typeof makeDiscordMock>;
+let eventsService: { create: jest.Mock };
+let signupsService: { signup: jest.Mock };
+let queue: ReturnType<typeof makeQueueMock>;
 
 function makeDiscordMock() {
   const mockTextChannel = {
@@ -118,462 +133,452 @@ function makeQueueMock() {
   };
 }
 
-function setupRegisteredUsersResponse(
-  db: MockDb,
-  registeredDiscordIds: string[],
+async function setupEach() {
+  db = createDrizzleMock();
+  db.limit.mockResolvedValue([makePlan()]);
+  db.returning.mockResolvedValue([makePlan()]);
+  discordClient = makeDiscordMock();
+  queue = makeQueueMock();
+  eventsService = { create: jest.fn().mockResolvedValue({ id: 99 }) };
+  signupsService = { signup: jest.fn().mockResolvedValue(undefined) };
+
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      EventPlansService,
+      { provide: DrizzleAsyncProvider, useValue: db },
+      { provide: getQueueToken(EVENT_PLANS_QUEUE), useValue: queue },
+      { provide: DiscordBotClientService, useValue: discordClient },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveChannelForEvent: jest.fn().mockResolvedValue(CHANNEL_ID),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: { getDefaultTimezone: jest.fn().mockResolvedValue(null) },
+      },
+      { provide: EventsService, useValue: eventsService },
+      { provide: SignupsService, useValue: signupsService },
+    ],
+  }).compile();
+
+  service = module.get<EventPlansService>(EventPlansService);
+  jest.clearAllMocks();
+  resetPollCloseMocks();
+}
+
+function resetPollCloseMocks() {
+  discordClient.getClient.mockReturnValue(discordClient._mockClient);
+  discordClient._mockClient.isReady.mockReturnValue(true);
+  discordClient._mockClient.channels.fetch.mockResolvedValue(
+    discordClient._mockTextChannel,
+  );
+  discordClient._mockTextChannel.send.mockResolvedValue({ id: MESSAGE_ID });
+  discordClient.deleteMessage.mockResolvedValue(undefined);
+  discordClient.sendDirectMessage.mockResolvedValue(undefined);
+  queue.add.mockResolvedValue(undefined);
+  queue.getJob.mockResolvedValue(queue._mockJob);
+  eventsService.create.mockResolvedValue({ id: 99 });
+  signupsService.signup.mockResolvedValue(undefined);
+  db.limit.mockResolvedValue([makePlan()]);
+  db.returning.mockResolvedValue([makePlan()]);
+}
+
+function setupPollWithAnswers(
+  answers: Map<number, ReturnType<typeof makePollAnswer>>,
 ) {
-  const registeredResponse = registeredDiscordIds.map((id) => ({
-    discordId: id,
-  }));
-  db.where.mockImplementation(() => {
-    const chainWithPromise = Object.create(db) as MockDb & {
-      then: (resolve: (value: unknown) => void) => void;
-    };
-    chainWithPromise.then = (resolve: (value: unknown) => void) =>
-      resolve(registeredResponse);
-    return chainWithPromise;
+  discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
+    poll: { answers },
   });
 }
 
-describe('EventPlansService — processPollClose', () => {
-  let service: EventPlansService;
-  let db: MockDb;
-  let discordClient: ReturnType<typeof makeDiscordMock>;
-  let eventsService: { create: jest.Mock };
-  let signupsService: { signup: jest.Mock };
+// ─── processPollClose basic tests ───────────────────────────────────────────
 
-  beforeEach(async () => {
-    db = makeDbMock();
-    discordClient = makeDiscordMock();
-    const queue = makeQueueMock();
-    eventsService = { create: jest.fn().mockResolvedValue({ id: 99 }) };
-    signupsService = { signup: jest.fn().mockResolvedValue(undefined) };
+async function testSkipNotFound() {
+  db.limit.mockResolvedValue([]);
+  await service.processPollClose(PLAN_ID);
+  expect(db.update).not.toHaveBeenCalled();
+}
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EventPlansService,
-        { provide: DrizzleAsyncProvider, useValue: db },
-        { provide: getQueueToken(EVENT_PLANS_QUEUE), useValue: queue },
-        { provide: DiscordBotClientService, useValue: discordClient },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveChannelForEvent: jest.fn().mockResolvedValue(CHANNEL_ID),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: { getDefaultTimezone: jest.fn().mockResolvedValue(null) },
-        },
-        { provide: EventsService, useValue: eventsService },
-        { provide: SignupsService, useValue: signupsService },
+async function testSkipWrongStatus() {
+  db.limit.mockResolvedValue([makePlan({ status: 'completed' })]);
+  await service.processPollClose(PLAN_ID);
+  expect(db.update).not.toHaveBeenCalled();
+}
+
+async function testExpireOnDiscordFail() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  discordClient._mockClient.channels.fetch.mockRejectedValue(
+    new Error('Discord down'),
+  );
+  await service.processPollClose(PLAN_ID);
+  expect(db.update).toHaveBeenCalled();
+}
+
+async function testExpireOnNoVotes() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(new Map());
+  await service.processPollClose(PLAN_ID);
+  expect(db.update).toHaveBeenCalled();
+}
+
+// ─── registered-user filtering tests ────────────────────────────────────────
+
+async function testOnlyRegisteredVotesCount() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [
+        0,
+        makePollAnswer([
+          REGISTERED_USER_IDS[0],
+          'unregistered-1',
+          'unregistered-2',
+        ]),
       ],
-    }).compile();
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [2, makePollAnswer([])],
+      [3, makePollAnswer([])],
+    ]),
+  );
 
-    service = module.get<EventPlansService>(EventPlansService);
-    jest.clearAllMocks();
+  await service.processPollClose(PLAN_ID);
+  const createCall = eventsService.create.mock.calls[0] as [
+    number,
+    { startTime: string },
+  ];
+  expect(createCall[1].startTime).toBe('2026-03-11T18:00:00.000Z');
+}
 
-    discordClient.getClient.mockReturnValue(discordClient._mockClient);
-    discordClient._mockClient.isReady.mockReturnValue(true);
-    discordClient._mockClient.channels.fetch.mockResolvedValue(
-      discordClient._mockTextChannel,
-    );
-    discordClient._mockTextChannel.send.mockResolvedValue({ id: MESSAGE_ID });
-    discordClient.deleteMessage.mockResolvedValue(undefined);
-    discordClient.sendDirectMessage.mockResolvedValue(undefined);
-    queue.add.mockResolvedValue(undefined);
-    queue.getJob.mockResolvedValue(queue._mockJob);
-    eventsService.create.mockResolvedValue({ id: 99 });
-    signupsService.signup.mockResolvedValue(undefined);
-    db.limit.mockResolvedValue([makePlan()]);
-    db.returning.mockResolvedValue([makePlan()]);
-  });
+async function testUnregisteredNoneNotCounted() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [1, makePollAnswer([])],
+      [2, makePollAnswer([])],
+      [
+        3,
+        makePollAnswer([
+          REGISTERED_USER_IDS[3],
+          'unregistered-1',
+          'unregistered-2',
+        ]),
+      ],
+    ]),
+  );
 
-  describe('processPollClose', () => {
-    beforeEach(() => {
-      db.limit.mockResolvedValue([makePlan()]);
-      db.returning.mockResolvedValue([makePlan()]);
-      setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
-    });
+  await service.processPollClose(PLAN_ID);
+  expect(eventsService.create).toHaveBeenCalled();
+}
 
-    it('should skip if plan is not found', async () => {
-      db.limit.mockResolvedValue([]);
-      await service.processPollClose(PLAN_ID);
-      expect(db.update).not.toHaveBeenCalled();
-    });
+// ─── standard mode tests ────────────────────────────────────────────────────
 
-    it('should skip if plan is not in polling status', async () => {
-      db.limit.mockResolvedValue([makePlan({ status: 'completed' })]);
-      await service.processPollClose(PLAN_ID);
-      expect(db.update).not.toHaveBeenCalled();
-    });
+async function testStandardTimeSlotWins() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
+      [3, makePollAnswer([])],
+    ]),
+  );
 
-    it('should expire plan if Discord poll fetch fails', async () => {
-      discordClient._mockClient.channels.fetch.mockRejectedValue(
-        new Error('Discord down'),
-      );
-      await service.processPollClose(PLAN_ID);
-      expect(db.update).toHaveBeenCalled();
-    });
+  await service.processPollClose(PLAN_ID);
+  expect(eventsService.create).toHaveBeenCalled();
+}
 
-    it('should expire plan when there are no votes', async () => {
-      discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-        poll: { answers: new Map() },
-      });
-      await service.processPollClose(PLAN_ID);
-      expect(db.update).toHaveBeenCalled();
-    });
+async function testStandardNoneWins() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
+      [3, makePollAnswer(REGISTERED_USER_IDS.slice(0, 4))],
+    ]),
+  );
 
-    describe('registered-user vote filtering', () => {
-      it('should only count registered user votes for winner determination', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [
-                0,
-                makePollAnswer([
-                  REGISTERED_USER_IDS[0],
-                  'unregistered-1',
-                  'unregistered-2',
-                ]),
-              ],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [2, makePollAnswer([])],
-              [3, makePollAnswer([])],
-            ]),
-          },
-        });
-        setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  await service.processPollClose(PLAN_ID);
+  expect(eventsService.create).not.toHaveBeenCalled();
+  expect(db.update).toHaveBeenCalled();
+}
 
-        await service.processPollClose(PLAN_ID);
+async function testStandardNoneTiesExpires() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
+      [3, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+    ]),
+  );
 
-        const createCall = eventsService.create.mock.calls[0] as [
-          number,
-          { startTime: string },
-        ];
-        expect(createCall[1].startTime).toBe('2026-03-11T18:00:00.000Z');
-      });
+  await service.processPollClose(PLAN_ID);
+  expect(eventsService.create).not.toHaveBeenCalled();
+}
 
-      it('should not count unregistered user votes for "None" in standard mode', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [1, makePollAnswer([])],
-              [2, makePollAnswer([])],
-              [
-                3,
-                makePollAnswer([
-                  REGISTERED_USER_IDS[3],
-                  'unregistered-1',
-                  'unregistered-2',
-                ]),
-              ],
-            ]),
-          },
-        });
-        setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+async function testStandardCreatesWithSomeNone() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 4))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
+      [3, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+    ]),
+  );
 
-        await service.processPollClose(PLAN_ID);
-        expect(eventsService.create).toHaveBeenCalled();
-      });
-    });
+  await service.processPollClose(PLAN_ID);
+  expect(eventsService.create).toHaveBeenCalled();
+}
 
-    describe('standard mode', () => {
-      it('should create event when a time slot wins with most registered votes', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-              [3, makePollAnswer([])],
-            ]),
-          },
-        });
-        setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+// ─── all_or_nothing mode tests ──────────────────────────────────────────────
 
-        await service.processPollClose(PLAN_ID);
-        expect(eventsService.create).toHaveBeenCalled();
-      });
+const slotConfig = {
+  type: 'mmo',
+  tank: 1,
+  healer: 1,
+  dps: 3,
+  flex: 0,
+  bench: 0,
+};
 
-      it('should expire plan when "None" wins with most registered votes', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-              [3, makePollAnswer(REGISTERED_USER_IDS.slice(0, 4))],
-            ]),
-          },
-        });
-        setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+async function testAonRepollBelowThreshold() {
+  const plan = makePlan({ pollMode: 'all_or_nothing', slotConfig });
+  db.limit.mockResolvedValue([plan]);
+  db.orderBy.mockResolvedValue([]);
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
+      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+    ]),
+  );
 
-        await service.processPollClose(PLAN_ID);
-        expect(eventsService.create).not.toHaveBeenCalled();
-        expect(db.update).toHaveBeenCalled();
-      });
+  await service.processPollClose(PLAN_ID);
+  expect(discordClient._mockTextChannel.send).toHaveBeenCalled();
+}
 
-      it('should expire plan when "None" ties with top time slot', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-              [3, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-            ]),
-          },
-        });
-        setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+async function testAonCreatesWhenThresholdMet() {
+  const plan = makePlan({ pollMode: 'all_or_nothing', slotConfig });
+  db.limit.mockResolvedValue([plan]);
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
+      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+    ]),
+  );
 
-        await service.processPollClose(PLAN_ID);
-        expect(eventsService.create).not.toHaveBeenCalled();
-      });
+  await service.processPollClose(PLAN_ID);
+  expect(eventsService.create).toHaveBeenCalled();
+}
 
-      it('should create event even with some "None" votes when a time slot wins', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 4))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-              [3, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-            ]),
-          },
-        });
-        setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+async function testAonCreatesZeroNone() {
+  const plan = makePlan({ pollMode: 'all_or_nothing', slotConfig });
+  db.limit.mockResolvedValue([plan]);
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
+      [3, makePollAnswer([])],
+    ]),
+  );
 
-        await service.processPollClose(PLAN_ID);
-        expect(eventsService.create).toHaveBeenCalled();
-      });
-    });
+  await service.processPollClose(PLAN_ID);
+  expect(eventsService.create).toHaveBeenCalled();
+}
 
-    describe('all_or_nothing mode', () => {
-      const slotConfig = {
-        type: 'mmo',
-        tank: 1,
-        healer: 1,
-        dps: 3,
-        flex: 0,
-        bench: 0,
-      };
-      const allOrNothingPlan = makePlan({
-        pollMode: 'all_or_nothing',
-        slotConfig,
-      });
+async function testAonRepollNoSlotConfig() {
+  const plan = makePlan({ pollMode: 'all_or_nothing', slotConfig: null });
+  db.limit.mockResolvedValue([plan]);
+  db.orderBy.mockResolvedValue([]);
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
+      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+    ]),
+  );
 
-      beforeEach(() => {
-        db.limit.mockResolvedValue([allOrNothingPlan]);
-        setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
-      });
+  await service.processPollClose(PLAN_ID);
+  expect(discordClient._mockTextChannel.send).toHaveBeenCalled();
+}
 
-      it('should trigger re-poll when "None" votes exist and no slot meets roster threshold', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-              [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
-            ]),
-          },
-        });
-        db.limit.mockResolvedValue([allOrNothingPlan]);
-        db.orderBy.mockResolvedValue([]);
+async function testAonExpiresOnRepollFailure() {
+  const plan = makePlan({ pollMode: 'all_or_nothing', slotConfig });
+  db.limit.mockResolvedValue([plan]);
+  db.orderBy.mockResolvedValue([]);
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+    ]),
+  );
+  discordClient.deleteMessage.mockResolvedValue(undefined);
+  discordClient._mockTextChannel.send.mockRejectedValueOnce(
+    new Error('Could not post'),
+  );
+  db.returning.mockResolvedValue([
+    makePlan({ status: 'expired', pollMode: 'all_or_nothing' }),
+  ]);
 
-        await service.processPollClose(PLAN_ID);
-        expect(discordClient._mockTextChannel.send).toHaveBeenCalled();
-      });
+  await service.processPollClose(PLAN_ID);
+  expect(db.update).toHaveBeenCalled();
+}
 
-      it('should create event when roster threshold met despite "None" votes', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-              [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
-            ]),
-          },
-        });
+// ─── winner determination tests ─────────────────────────────────────────────
 
-        await service.processPollClose(PLAN_ID);
-        expect(eventsService.create).toHaveBeenCalled();
-      });
+async function testPicksHighestVotes() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 4))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [3, makePollAnswer([])],
+    ]),
+  );
 
-      it('should create event when zero "None" votes in all_or_nothing mode', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-              [3, makePollAnswer([])],
-            ]),
-          },
-        });
+  await service.processPollClose(PLAN_ID);
+  const createCall = eventsService.create.mock.calls[0] as [
+    number,
+    { startTime: string },
+  ];
+  expect(createCall[1].startTime).toBe('2026-03-11T18:00:00.000Z');
+}
 
-        await service.processPollClose(PLAN_ID);
-        expect(eventsService.create).toHaveBeenCalled();
-      });
+async function testPicksEarliestOnTie() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
+      [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [3, makePollAnswer([])],
+    ]),
+  );
 
-      it('should re-poll when "None" votes exist with no slotConfig (threshold=0)', async () => {
-        const noSlotPlan = makePlan({
-          pollMode: 'all_or_nothing',
-          slotConfig: null,
-        });
-        db.limit.mockResolvedValue([noSlotPlan]);
-        db.orderBy.mockResolvedValue([]);
+  await service.processPollClose(PLAN_ID);
+  const createCall = eventsService.create.mock.calls[0] as [
+    number,
+    { startTime: string },
+  ];
+  expect(createCall[1].startTime).toBe('2026-03-10T18:00:00.000Z');
+}
 
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-              [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
-            ]),
-          },
-        });
+async function testAutoSignupCreator() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
+      [3, makePollAnswer([])],
+    ]),
+  );
 
-        await service.processPollClose(PLAN_ID);
-        expect(discordClient._mockTextChannel.send).toHaveBeenCalled();
-      });
+  await service.processPollClose(PLAN_ID);
+  expect(signupsService.signup).toHaveBeenCalledWith(99, CREATOR_ID);
+}
 
-      it('should expire plan when re-poll Discord post fails', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
-            ]),
-          },
-        });
-        db.limit.mockResolvedValue([allOrNothingPlan]);
-        db.orderBy.mockResolvedValue([]);
-        discordClient.deleteMessage.mockResolvedValue(undefined);
-        discordClient._mockTextChannel.send.mockRejectedValueOnce(
-          new Error('Could not post'),
-        );
-        db.returning.mockResolvedValue([
-          makePlan({ status: 'expired', pollMode: 'all_or_nothing' }),
-        ]);
+async function testMarksPlanCompleted() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
+      [3, makePollAnswer([])],
+    ]),
+  );
 
-        await service.processPollClose(PLAN_ID);
-        expect(db.update).toHaveBeenCalled();
-      });
-    });
+  await service.processPollClose(PLAN_ID);
+  expect(db.update).toHaveBeenCalled();
+}
 
-    describe('winner determination', () => {
-      beforeEach(() => {
-        setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
-      });
+// ─── re-poll round tracking ─────────────────────────────────────────────────
 
-      it('should pick the option with the highest registered votes', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 4))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [3, makePollAnswer([])],
-            ]),
-          },
-        });
+async function testRepollIncrementsRound() {
+  const plan = makePlan({ pollMode: 'all_or_nothing', pollRound: 1 });
+  db.limit.mockResolvedValue([plan]);
+  db.orderBy.mockResolvedValue([]);
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+    ]),
+  );
 
-        await service.processPollClose(PLAN_ID);
-        const createCall = eventsService.create.mock.calls[0] as [
-          number,
-          { startTime: string },
-        ];
-        expect(createCall[1].startTime).toBe('2026-03-11T18:00:00.000Z');
-      });
+  await service.processPollClose(PLAN_ID);
+  const updateCalls = db.update.mock.calls;
+  expect(updateCalls.length).toBeGreaterThan(0);
 
-      it('should pick the earliest date when registered votes are tied', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
-              [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-              [3, makePollAnswer([])],
-            ]),
-          },
-        });
+  const setCall = (db.set.mock.calls as unknown[][]).find(
+    (call: unknown[]) =>
+      call[0] &&
+      typeof call[0] === 'object' &&
+      'pollRound' in (call[0] as Record<string, unknown>),
+  );
+  if (setCall) {
+    expect((setCall[0] as { pollRound: number }).pollRound).toBe(2);
+  }
+}
 
-        await service.processPollClose(PLAN_ID);
-        const createCall = eventsService.create.mock.calls[0] as [
-          number,
-          { startTime: string },
-        ];
-        expect(createCall[1].startTime).toBe('2026-03-10T18:00:00.000Z');
-      });
+beforeEach(() => setupEach());
 
-      it('should auto-signup the creator after event creation', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
-              [3, makePollAnswer([])],
-            ]),
-          },
-        });
+describe('processPollClose — basics', () => {
+  it('should skip if plan not found', () => testSkipNotFound());
+  it('should skip if plan not in polling status', () => testSkipWrongStatus());
+  it('should expire on Discord fetch fail', () => testExpireOnDiscordFail());
+  it('should expire when no votes', () => testExpireOnNoVotes());
+});
 
-        await service.processPollClose(PLAN_ID);
-        expect(signupsService.signup).toHaveBeenCalledWith(99, CREATOR_ID);
-      });
+describe('processPollClose — registered user filtering', () => {
+  it('should only count registered votes', () =>
+    testOnlyRegisteredVotesCount());
+  it('should not count unregistered None votes', () =>
+    testUnregisteredNoneNotCounted());
+});
 
-      it('should mark plan as completed after successful event creation', async () => {
-        discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-          poll: {
-            answers: new Map([
-              [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
-              [3, makePollAnswer([])],
-            ]),
-          },
-        });
+describe('processPollClose — standard mode', () => {
+  it('should create event when time slot wins', () =>
+    testStandardTimeSlotWins());
+  it('should expire when None wins', () => testStandardNoneWins());
+  it('should expire when None ties', () => testStandardNoneTiesExpires());
+  it('should create event with some None votes', () =>
+    testStandardCreatesWithSomeNone());
+});
 
-        await service.processPollClose(PLAN_ID);
-        expect(db.update).toHaveBeenCalled();
-      });
-    });
-  });
+describe('processPollClose — all_or_nothing mode', () => {
+  it('should re-poll below roster threshold', () =>
+    testAonRepollBelowThreshold());
+  it('should create event when threshold met', () =>
+    testAonCreatesWhenThresholdMet());
+  it('should create with zero None votes', () => testAonCreatesZeroNone());
+  it('should re-poll with no slotConfig', () => testAonRepollNoSlotConfig());
+  it('should expire when re-poll Discord fails', () =>
+    testAonExpiresOnRepollFailure());
+});
 
-  // ─── handleRepoll round increment ────────────────────────────────────────────
+describe('processPollClose — winner determination', () => {
+  it('should pick highest registered votes', () => testPicksHighestVotes());
+  it('should pick earliest date on tie', () => testPicksEarliestOnTie());
+  it('should auto-signup creator', () => testAutoSignupCreator());
+  it('should mark plan as completed', () => testMarksPlanCompleted());
+});
 
-  describe('re-poll round tracking', () => {
-    it('should increment pollRound when re-poll is triggered', async () => {
-      const plan = makePlan({ pollMode: 'all_or_nothing', pollRound: 1 });
-      db.limit.mockResolvedValue([plan]);
-      db.orderBy.mockResolvedValue([]);
-
-      discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
-        poll: {
-          answers: new Map([
-            [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-            [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
-          ]),
-        },
-      });
-
-      setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
-
-      await service.processPollClose(PLAN_ID);
-
-      const updateCalls = db.update.mock.calls;
-      expect(updateCalls.length).toBeGreaterThan(0);
-
-      const setCall = (db.set.mock.calls as unknown[][]).find(
-        (call: unknown[]) =>
-          call[0] &&
-          typeof call[0] === 'object' &&
-          'pollRound' in (call[0] as Record<string, unknown>),
-      );
-      if (setCall) {
-        expect((setCall[0] as { pollRound: number }).pollRound).toBe(2);
-      }
-    });
-  });
+describe('processPollClose — re-poll round tracking', () => {
+  it('should increment pollRound on re-poll', () =>
+    testRepollIncrementsRound());
 });

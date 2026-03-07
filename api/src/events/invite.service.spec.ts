@@ -14,10 +14,6 @@ import { PugRoleSchema } from '@raid-ledger/contract';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Build a chain mock that terminates at .limit() with the given value.
- * Each call returns `this` for all chain methods except the terminal.
- */
 function makeChain(limitValue: unknown[] = []) {
   const chain: Record<string, jest.Mock> = {};
   const methods = ['from', 'where', 'innerJoin', 'leftJoin', 'orderBy', 'set'];
@@ -33,8 +29,8 @@ function makeChain(limitValue: unknown[] = []) {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const FUTURE_DATE = new Date(Date.now() + 86_400_000); // +1 day
-const PAST_DATE = new Date(Date.now() - 86_400_000); // -1 day
+const FUTURE_DATE = new Date(Date.now() + 86_400_000);
+const PAST_DATE = new Date(Date.now() - 86_400_000);
 
 const mockSlot = {
   id: 'slot-uuid-1',
@@ -57,374 +53,295 @@ const mockEvent = {
 const mockUserWithDiscord = { discordId: 'discord-user-1' };
 const mockUserWithoutDiscord = { discordId: null };
 
-// ---------------------------------------------------------------------------
-// PugRoleSchema contract tests
-// ---------------------------------------------------------------------------
+let service: InviteService;
+let mockSignupsService: { signup: jest.Mock };
+let mockSettingsService: {
+  getBranding: jest.Mock;
+  getClientUrl: jest.Mock;
+};
+let selectCallCount: number;
+let selectSequence: unknown[][];
+let mockDb: Record<string, jest.Mock>;
 
-describe('PugRoleSchema', () => {
-  it.each(['tank', 'healer', 'dps', 'player'] as const)(
-    'accepts "%s" as a valid PugRole',
-    (role) => {
-      expect(() => PugRoleSchema.parse(role)).not.toThrow();
-      expect(PugRoleSchema.parse(role)).toBe(role);
-    },
-  );
+const inviteProviders = () => [
+  InviteService,
+  { provide: DrizzleAsyncProvider, useValue: mockDb },
+  { provide: SignupsService, useValue: mockSignupsService },
+  { provide: SettingsService, useValue: mockSettingsService },
+  { provide: 'PugInviteService', useValue: null },
+  { provide: 'DiscordBotClientService', useValue: null },
+];
 
-  it('rejects unknown role values', () => {
-    expect(() => PugRoleSchema.parse('warrior')).toThrow();
-    expect(() => PugRoleSchema.parse('')).toThrow();
-    expect(() => PugRoleSchema.parse(null)).toThrow();
-  });
-});
+function buildMockDb() {
+  selectCallCount = 0;
+  const db: Record<string, jest.Mock> = {
+    select: jest.fn().mockImplementation(() => {
+      const idx = selectCallCount++;
+      return makeChain(selectSequence[idx] ?? []);
+    }),
+    update: jest.fn().mockReturnValue(makeChain()),
+    delete: jest.fn().mockReturnValue(makeChain()),
+    insert: jest.fn().mockReturnValue(makeChain()),
+    transaction: jest
+      .fn()
+      .mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn(db),
+      ),
+  };
+  return db;
+}
 
-// ---------------------------------------------------------------------------
-// InviteService unit tests
-// ---------------------------------------------------------------------------
+async function buildService() {
+  mockDb = buildMockDb();
+  const module = await Test.createTestingModule({
+    providers: inviteProviders(),
+  }).compile();
+  return module.get(InviteService);
+}
 
-describe('InviteService', () => {
-  let service: InviteService;
-  let mockSignupsService: { signup: jest.Mock };
-  let mockSettingsService: {
-    getBranding: jest.Mock;
-    getClientUrl: jest.Mock;
+async function setupEach() {
+  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithDiscord]];
+  mockDb = buildMockDb();
+  mockSignupsService = { signup: jest.fn().mockResolvedValue({ id: 1 }) };
+  mockSettingsService = {
+    getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
+    getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
   };
 
-  // Track individual select call counts so we can return different rows
-  let selectCallCount: number;
+  const module: TestingModule = await Test.createTestingModule({
+    providers: inviteProviders(),
+  }).compile();
 
-  // Per-test overrides for select sequences
-  let selectSequence: unknown[][];
+  service = module.get(InviteService);
+}
 
-  function buildMockDb() {
-    selectCallCount = 0;
+// ---------------------------------------------------------------------------
+// PugRoleSchema
+// ---------------------------------------------------------------------------
 
-    const mockDb: Record<string, jest.Mock> = {
-      select: jest.fn().mockImplementation(() => {
-        const idx = selectCallCount++;
-        const value = selectSequence[idx] ?? [];
-        return makeChain(value);
-      }),
-      update: jest.fn().mockReturnValue(makeChain()),
-      delete: jest.fn().mockReturnValue(makeChain()),
-      insert: jest.fn().mockReturnValue(makeChain()),
-      transaction: jest
-        .fn()
-        .mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
-          fn(mockDb),
-        ),
-    };
-
-    return mockDb;
+function testPugRoleValid() {
+  for (const role of ['tank', 'healer', 'dps', 'player'] as const) {
+    expect(() => PugRoleSchema.parse(role)).not.toThrow();
+    expect(PugRoleSchema.parse(role)).toBe(role);
   }
+}
 
-  let mockDb: ReturnType<typeof buildMockDb>;
+function testPugRoleInvalid() {
+  expect(() => PugRoleSchema.parse('warrior')).toThrow();
+  expect(() => PugRoleSchema.parse('')).toThrow();
+  expect(() => PugRoleSchema.parse(null)).toThrow();
+}
 
-  beforeEach(async () => {
-    // Default select sequence: slot → event → user (discordId path)
-    selectSequence = [
-      [mockSlot], // slot lookup
-      [mockEvent], // event lookup
-      [], // existing signup check (none)
-      [mockUserWithDiscord], // user lookup
-    ];
+// ---------------------------------------------------------------------------
+// Path 1: user WITH discordId
+// ---------------------------------------------------------------------------
 
-    mockDb = buildMockDb();
+async function testPath1ReturnsSignup() {
+  const result = await service.claimInvite('abc12345', 1);
+  expect(result.type).toBe('signup');
+  expect(result.eventId).toBe(42);
+  expect(mockSignupsService.signup).toHaveBeenCalledTimes(1);
+  expect(mockSignupsService.signup).toHaveBeenCalledWith(
+    42,
+    1,
+    expect.objectContaining({ slotRole: 'dps' }),
+  );
+}
 
-    mockSignupsService = { signup: jest.fn().mockResolvedValue({ id: 1 }) };
-    mockSettingsService = {
-      getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
-      getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
-    };
+async function testPath1PlayerRole() {
+  selectSequence = [
+    [{ ...mockSlot, role: 'player' }],
+    [mockEvent],
+    [],
+    [mockUserWithDiscord],
+  ];
+  const svc = await buildService();
+  await svc.claimInvite('abc12345', 1);
+  expect(mockSignupsService.signup).toHaveBeenCalledWith(
+    42,
+    1,
+    expect.objectContaining({ slotRole: 'player' }),
+  );
+}
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        InviteService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: SignupsService, useValue: mockSignupsService },
-        { provide: SettingsService, useValue: mockSettingsService },
-        // Optional providers — omit to keep unit tests lean
-        { provide: 'PugInviteService', useValue: null },
-        { provide: 'DiscordBotClientService', useValue: null },
-      ],
-    }).compile();
+async function testPath1RoleOverride() {
+  await service.claimInvite('abc12345', 1, 'tank');
+  expect(mockSignupsService.signup).toHaveBeenCalledWith(
+    42,
+    1,
+    expect.objectContaining({ slotRole: 'tank' }),
+  );
+}
 
-    service = module.get(InviteService);
+async function testPath1DeletesSlot() {
+  await service.claimInvite('abc12345', 1);
+  expect(mockDb.delete).toHaveBeenCalled();
+}
+
+// ---------------------------------------------------------------------------
+// Path 2: user WITHOUT discordId
+// ---------------------------------------------------------------------------
+
+async function testPath2ReturnsClaimed() {
+  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  const svc = await buildService();
+  const result = await svc.claimInvite('abc12345', 1);
+  expect(result.type).toBe('claimed');
+  expect(result.eventId).toBe(42);
+}
+
+async function testPath2UpdatesStatus() {
+  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  const svc = await buildService();
+  await svc.claimInvite('abc12345', 1);
+
+  expect(mockDb.update).toHaveBeenCalled();
+  const updateChain = mockDb.update.mock.results[0].value as Record<
+    string,
+    jest.Mock
+  >;
+  expect(updateChain.set).toHaveBeenCalledWith(
+    expect.objectContaining({ status: 'claimed', claimedByUserId: 1 }),
+  );
+}
+
+async function testPath2CallsSignup() {
+  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  const svc = await buildService();
+  await svc.claimInvite('abc12345', 1);
+  expect(mockSignupsService.signup).toHaveBeenCalledTimes(1);
+  expect(mockSignupsService.signup).toHaveBeenCalledWith(
+    42,
+    1,
+    expect.objectContaining({ slotRole: 'dps' }),
+  );
+}
+
+async function testPath2PlayerRole() {
+  selectSequence = [
+    [{ ...mockSlot, role: 'player' }],
+    [mockEvent],
+    [],
+    [mockUserWithoutDiscord],
+  ];
+  const svc = await buildService();
+  await svc.claimInvite('abc12345', 1);
+  expect(mockSignupsService.signup).toHaveBeenCalledWith(
+    42,
+    1,
+    expect.objectContaining({ slotRole: 'player' }),
+  );
+}
+
+async function testPath2SignupFailNoUpdate() {
+  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  const svc = await buildService();
+  mockSignupsService.signup.mockRejectedValueOnce(
+    new ConflictException('already signed up'),
+  );
+  await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
+    ConflictException,
+  );
+  expect(mockDb.update).not.toHaveBeenCalled();
+}
+
+async function testPath2SignupBeforeUpdate() {
+  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  const svc = await buildService();
+  const callOrder: string[] = [];
+  mockSignupsService.signup.mockImplementation(() => {
+    callOrder.push('signup');
+    return Promise.resolve({ id: 1 });
+  });
+  mockDb.update.mockImplementation(() => {
+    callOrder.push('update');
+    return makeChain();
   });
 
-  // =========================================================================
-  // claimInvite — Path 1: user WITH discordId (existing RL member)
-  // =========================================================================
+  await svc.claimInvite('abc12345', 1);
+  expect(callOrder).toEqual(['signup', 'update']);
+}
 
-  describe('claimInvite — Path 1 (user has discordId)', () => {
-    it('returns type "signup" and calls signupsService.signup()', async () => {
-      const result = await service.claimInvite('abc12345', 1);
+// ---------------------------------------------------------------------------
+// Error cases
+// ---------------------------------------------------------------------------
 
-      expect(result.type).toBe('signup');
-      expect(result.eventId).toBe(42);
-      expect(mockSignupsService.signup).toHaveBeenCalledTimes(1);
-      expect(mockSignupsService.signup).toHaveBeenCalledWith(
-        42,
-        1,
-        expect.objectContaining({ slotRole: 'dps' }),
-      );
-    });
+async function testErrorInviteNotFound() {
+  selectSequence = [[]];
+  const svc = await buildService();
+  await expect(svc.claimInvite('badcode', 1)).rejects.toThrow(
+    NotFoundException,
+  );
+  expect(mockSignupsService.signup).not.toHaveBeenCalled();
+}
 
-    it('passes "player" role through to signup for generic rosters', async () => {
-      selectSequence = [
-        [{ ...mockSlot, role: 'player' }],
-        [mockEvent],
-        [],
-        [mockUserWithDiscord],
-      ];
-      mockDb = buildMockDb();
+async function testErrorAlreadyClaimed() {
+  selectSequence = [[{ ...mockSlot, status: 'claimed' }]];
+  const svc = await buildService();
+  await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
+    ConflictException,
+  );
+}
 
-      // Rebuild service with updated mockDb
-      const module = await Test.createTestingModule({
-        providers: [
-          InviteService,
-          { provide: DrizzleAsyncProvider, useValue: mockDb },
-          { provide: SignupsService, useValue: mockSignupsService },
-          { provide: SettingsService, useValue: mockSettingsService },
-          { provide: 'PugInviteService', useValue: null },
-          { provide: 'DiscordBotClientService', useValue: null },
-        ],
-      }).compile();
+async function testErrorEventEnded() {
+  selectSequence = [
+    [mockSlot],
+    [{ ...mockEvent, duration: [PAST_DATE, PAST_DATE] as [Date, Date] }],
+  ];
+  const svc = await buildService();
+  await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
+    BadRequestException,
+  );
+}
 
-      const svc = module.get(InviteService);
-      await svc.claimInvite('abc12345', 1);
+async function testErrorAlreadySignedUp() {
+  selectSequence = [
+    [mockSlot],
+    [mockEvent],
+    [{ id: 99 }],
+    [mockUserWithDiscord],
+  ];
+  const svc = await buildService();
+  await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
+    ConflictException,
+  );
+  expect(mockDb.delete).toHaveBeenCalled();
+  expect(mockSignupsService.signup).not.toHaveBeenCalled();
+}
 
-      expect(mockSignupsService.signup).toHaveBeenCalledWith(
-        42,
-        1,
-        expect.objectContaining({ slotRole: 'player' }),
-      );
-    });
+beforeEach(() => setupEach());
 
-    it('uses the roleOverride when provided instead of slot role', async () => {
-      await service.claimInvite('abc12345', 1, 'tank');
+describe('PugRoleSchema', () => {
+  it('accepts valid PugRole values', () => testPugRoleValid());
+  it('rejects unknown role values', () => testPugRoleInvalid());
+});
 
-      expect(mockSignupsService.signup).toHaveBeenCalledWith(
-        42,
-        1,
-        expect.objectContaining({ slotRole: 'tank' }),
-      );
-    });
+describe('InviteService — Path 1 (user has discordId)', () => {
+  it('returns type "signup" and calls signupsService', () =>
+    testPath1ReturnsSignup());
+  it('passes "player" role for generic rosters', () => testPath1PlayerRole());
+  it('uses roleOverride when provided', () => testPath1RoleOverride());
+  it('deletes PUG slot after signup', () => testPath1DeletesSlot());
+});
 
-    it('deletes the PUG slot after creating a signup', async () => {
-      await service.claimInvite('abc12345', 1);
+describe('InviteService — Path 2 (no discordId)', () => {
+  it('returns type "claimed"', () => testPath2ReturnsClaimed());
+  it('updates pug_slots status to "claimed"', () => testPath2UpdatesStatus());
+  it('calls signupsService.signup()', () => testPath2CallsSignup());
+  it('passes "player" role for generic rosters', () => testPath2PlayerRole());
+  it('rethrows signup failure without updating slot', () =>
+    testPath2SignupFailNoUpdate());
+  it('calls signup before updating PUG slot', () =>
+    testPath2SignupBeforeUpdate());
+});
 
-      expect(mockDb.delete).toHaveBeenCalled();
-    });
-  });
-
-  // =========================================================================
-  // claimInvite — Path 2: user WITHOUT discordId (PUG slot claim)
-  // =========================================================================
-
-  describe('claimInvite — Path 2 (user has no discordId)', () => {
-    beforeEach(() => {
-      selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
-      mockDb = buildMockDb();
-    });
-
-    async function buildService() {
-      const module = await Test.createTestingModule({
-        providers: [
-          InviteService,
-          { provide: DrizzleAsyncProvider, useValue: mockDb },
-          { provide: SignupsService, useValue: mockSignupsService },
-          { provide: SettingsService, useValue: mockSettingsService },
-          { provide: 'PugInviteService', useValue: null },
-          { provide: 'DiscordBotClientService', useValue: null },
-        ],
-      }).compile();
-      return module.get(InviteService);
-    }
-
-    it('returns type "claimed"', async () => {
-      const svc = await buildService();
-      const result = await svc.claimInvite('abc12345', 1);
-
-      expect(result.type).toBe('claimed');
-      expect(result.eventId).toBe(42);
-    });
-
-    it('updates pug_slots status to "claimed"', async () => {
-      const svc = await buildService();
-      await svc.claimInvite('abc12345', 1);
-
-      expect(mockDb.update).toHaveBeenCalled();
-      // The set() call on the chain should include status: 'claimed'
-      const updateChain = mockDb.update.mock.results[0].value as Record<
-        string,
-        jest.Mock
-      >;
-      expect(updateChain.set).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'claimed', claimedByUserId: 1 }),
-      );
-    });
-
-    it('calls signupsService.signup() so the player appears in the roster', async () => {
-      const svc = await buildService();
-      await svc.claimInvite('abc12345', 1);
-
-      expect(mockSignupsService.signup).toHaveBeenCalledTimes(1);
-      expect(mockSignupsService.signup).toHaveBeenCalledWith(
-        42,
-        1,
-        expect.objectContaining({ slotRole: 'dps' }),
-      );
-    });
-
-    it('passes "player" role to signup for generic rosters (no discordId path)', async () => {
-      selectSequence = [
-        [{ ...mockSlot, role: 'player' }],
-        [mockEvent],
-        [],
-        [mockUserWithoutDiscord],
-      ];
-      mockDb = buildMockDb();
-      const svc = await buildService();
-      await svc.claimInvite('abc12345', 1);
-
-      expect(mockSignupsService.signup).toHaveBeenCalledWith(
-        42,
-        1,
-        expect.objectContaining({ slotRole: 'player' }),
-      );
-    });
-
-    it('rethrows when signupsService.signup() fails and does NOT update the slot (ROK-494)', async () => {
-      const svc = await buildService();
-      mockSignupsService.signup.mockRejectedValueOnce(
-        new ConflictException('already signed up'),
-      );
-
-      await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
-        ConflictException,
-      );
-      // Slot must not be marked "claimed" when signup fails
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it('calls signup before updating the PUG slot (ROK-494 ordering)', async () => {
-      const svc = await buildService();
-      const callOrder: string[] = [];
-      mockSignupsService.signup.mockImplementation(() => {
-        callOrder.push('signup');
-        return Promise.resolve({ id: 1 });
-      });
-      mockDb.update.mockImplementation(() => {
-        callOrder.push('update');
-        return makeChain();
-      });
-
-      await svc.claimInvite('abc12345', 1);
-
-      expect(callOrder).toEqual(['signup', 'update']);
-    });
-  });
-
-  // =========================================================================
-  // claimInvite — Error cases
-  // =========================================================================
-
-  describe('claimInvite — error cases', () => {
-    it('throws NotFoundException when the invite code does not exist', async () => {
-      selectSequence = [[]]; // slot lookup returns nothing
-      mockDb = buildMockDb();
-
-      const module = await Test.createTestingModule({
-        providers: [
-          InviteService,
-          { provide: DrizzleAsyncProvider, useValue: mockDb },
-          { provide: SignupsService, useValue: mockSignupsService },
-          { provide: SettingsService, useValue: mockSettingsService },
-          { provide: 'PugInviteService', useValue: null },
-          { provide: 'DiscordBotClientService', useValue: null },
-        ],
-      }).compile();
-      const svc = module.get(InviteService);
-
-      await expect(svc.claimInvite('badcode', 1)).rejects.toThrow(
-        NotFoundException,
-      );
-      expect(mockSignupsService.signup).not.toHaveBeenCalled();
-    });
-
-    it('throws ConflictException when slot is already claimed', async () => {
-      selectSequence = [[{ ...mockSlot, status: 'claimed' }]];
-      mockDb = buildMockDb();
-
-      const module = await Test.createTestingModule({
-        providers: [
-          InviteService,
-          { provide: DrizzleAsyncProvider, useValue: mockDb },
-          { provide: SignupsService, useValue: mockSignupsService },
-          { provide: SettingsService, useValue: mockSettingsService },
-          { provide: 'PugInviteService', useValue: null },
-          { provide: 'DiscordBotClientService', useValue: null },
-        ],
-      }).compile();
-      const svc = module.get(InviteService);
-
-      await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it('throws BadRequestException when the event has ended', async () => {
-      selectSequence = [
-        [mockSlot],
-        [{ ...mockEvent, duration: [PAST_DATE, PAST_DATE] as [Date, Date] }],
-      ];
-      mockDb = buildMockDb();
-
-      const module = await Test.createTestingModule({
-        providers: [
-          InviteService,
-          { provide: DrizzleAsyncProvider, useValue: mockDb },
-          { provide: SignupsService, useValue: mockSignupsService },
-          { provide: SettingsService, useValue: mockSettingsService },
-          { provide: 'PugInviteService', useValue: null },
-          { provide: 'DiscordBotClientService', useValue: null },
-        ],
-      }).compile();
-      const svc = module.get(InviteService);
-
-      await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('throws ConflictException when user is already signed up (and deletes the PUG slot)', async () => {
-      selectSequence = [
-        [mockSlot],
-        [mockEvent],
-        [{ id: 99 }], // existing signup
-        [mockUserWithDiscord],
-      ];
-      mockDb = buildMockDb();
-
-      const module = await Test.createTestingModule({
-        providers: [
-          InviteService,
-          { provide: DrizzleAsyncProvider, useValue: mockDb },
-          { provide: SignupsService, useValue: mockSignupsService },
-          { provide: SettingsService, useValue: mockSettingsService },
-          { provide: 'PugInviteService', useValue: null },
-          { provide: 'DiscordBotClientService', useValue: null },
-        ],
-      }).compile();
-      const svc = module.get(InviteService);
-
-      await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
-        ConflictException,
-      );
-      // The stale anonymous PUG slot should be cleaned up
-      expect(mockDb.delete).toHaveBeenCalled();
-      // No new signup should have been created
-      expect(mockSignupsService.signup).not.toHaveBeenCalled();
-    });
-  });
+describe('InviteService — error cases', () => {
+  it('throws NotFoundException for missing invite code', () =>
+    testErrorInviteNotFound());
+  it('throws ConflictException for already claimed slot', () =>
+    testErrorAlreadyClaimed());
+  it('throws BadRequestException when event ended', () =>
+    testErrorEventEnded());
+  it('throws ConflictException when user already signed up', () =>
+    testErrorAlreadySignedUp());
 });
