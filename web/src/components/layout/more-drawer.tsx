@@ -190,13 +190,13 @@ function useMoreDrawerState(isOpen: boolean, onClose: () => void) {
 }
 
 export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps) {
-    const s = useMoreDrawerState(isOpen, onClose);
+    const { trapRef, ...s } = useMoreDrawerState(isOpen, onClose);
     return (
         <div className={`fixed inset-0 md:hidden ${isOpen ? 'visible' : 'invisible pointer-events-none'}`}
             style={{ zIndex: Z_INDEX.MODAL }} aria-hidden={!isOpen} data-testid="more-drawer">
             <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
                 onClick={onClose} aria-hidden="true" data-testid="more-drawer-backdrop" />
-            <div ref={s.trapRef} className={`absolute inset-0 bg-surface flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+            <div ref={trapRef} className={`absolute inset-0 bg-surface flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
                 style={{ transitionTimingFunction: 'var(--spring-smooth)' }} data-testid="more-drawer-panel" role="dialog" aria-modal="true" aria-label="More menu">
                 <DrawerHeader onClose={onClose} />
                 <MoreDrawerBody s={s} onClose={onClose} onFeedbackClick={onFeedbackClick} />
@@ -205,7 +205,7 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
     );
 }
 
-function MoreDrawerBody({ s, onClose, onFeedbackClick }: { s: ReturnType<typeof useMoreDrawerState>; onClose: () => void; onFeedbackClick?: () => void }) {
+function MoreDrawerBody({ s, onClose, onFeedbackClick }: { s: Omit<ReturnType<typeof useMoreDrawerState>, 'trapRef'>; onClose: () => void; onFeedbackClick?: () => void }) {
     return (
         <div className="flex-1 overflow-y-auto">
             {s.isAuthenticated && s.user && (

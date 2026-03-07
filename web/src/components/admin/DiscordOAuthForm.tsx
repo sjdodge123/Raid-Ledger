@@ -47,7 +47,7 @@ function useOAuthFormState() {
     const [clientSecret, setClientSecret] = useState('');
     const [showSecret, setShowSecret] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-    const callbackUrl = useMemo(buildCallbackUrl, []);
+    const callbackUrl = useMemo(() => buildCallbackUrl(), []);
     const linkCallbackUrl = useMemo(() => callbackUrl.replace('/callback', '/link/callback'), [callbackUrl]);
     return { oauthStatus, updateOAuth, testOAuth, clearOAuth, clientId, setClientId, clientSecret, setClientSecret, showSecret, setShowSecret, testResult, setTestResult, callbackUrl, linkCallbackUrl };
 }

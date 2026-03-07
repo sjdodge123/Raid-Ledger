@@ -151,11 +151,11 @@ function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGame
 }
 
 export function GameSearchInput({ value, onChange, error, initialSuggestions }: GameSearchInputProps) {
-    const s = useGameSearchState(value, onChange, initialSuggestions);
+    const { containerRef, inputRef, ...s } = useGameSearchState(value, onChange, initialSuggestions);
     return (
-        <div className="relative" ref={s.containerRef}>
+        <div className="relative" ref={containerRef}>
             <label htmlFor="game-search" className="block text-sm font-medium text-secondary mb-2">Game</label>
-            <SearchInputField inputRef={s.inputRef} query={s.query} value={value} isLoading={s.isLoading}
+            <SearchInputField inputRef={inputRef} query={s.query} value={value} isLoading={s.isLoading}
                 error={error}
                 onInputChange={(e) => { s.setQuery(e.target.value); s.setIsOpen(true); if (value && e.target.value !== value.name) onChange(null); }}
                 onFocus={() => (s.query.length >= 2 || s.hasInitialSuggestions) && s.setIsOpen(true)}

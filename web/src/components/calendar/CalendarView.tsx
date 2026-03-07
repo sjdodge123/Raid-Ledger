@@ -193,18 +193,20 @@ function useCalendarInteractions(
     s: ReturnType<typeof useCalendarViewState>, onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined,
     eventOverlapsGameTime: (start: Date, end: Date) => boolean,
 ) {
+    const { setCurrentDate, setView, navigate, view, currentDate, isScheduleView } = s;
+
     const handleMonthChipClick = useCallback((e: React.MouseEvent, eventStart: Date) => {
         if (window.innerWidth >= 768) return;
         e.stopPropagation(); e.preventDefault();
-        s.setCurrentDate(eventStart); s.setView(Views.DAY); onCalendarViewChange?.('day');
-    }, [s.setCurrentDate, s.setView, onCalendarViewChange]);
+        setCurrentDate(eventStart); setView(Views.DAY); onCalendarViewChange?.('day');
+    }, [setCurrentDate, setView, onCalendarViewChange]);
 
     const handleSelectEvent = useCallback((event: CalendarEvent) => {
-        if (window.innerWidth < 768 && s.view === Views.MONTH && !s.isScheduleView) {
-            s.setCurrentDate(event.start); s.setView(Views.DAY); onCalendarViewChange?.('day'); return;
+        if (window.innerWidth < 768 && view === Views.MONTH && !isScheduleView) {
+            setCurrentDate(event.start); setView(Views.DAY); onCalendarViewChange?.('day'); return;
         }
-        s.navigate(`/events/${event.id}`, { state: { fromCalendar: true, calendarDate: format(s.currentDate, 'yyyy-MM-dd'), calendarView: s.isScheduleView ? 'schedule' : viewToStr(s.view) } });
-    }, [s.navigate, s.view, s.currentDate, s.isScheduleView, s.setCurrentDate, s.setView, onCalendarViewChange]);
+        navigate(`/events/${event.id}`, { state: { fromCalendar: true, calendarDate: format(currentDate, 'yyyy-MM-dd'), calendarView: isScheduleView ? 'schedule' : viewToStr(view) } });
+    }, [navigate, view, currentDate, isScheduleView, setCurrentDate, setView, onCalendarViewChange]);
 
     const eventPropGetter = useCallback((event: CalendarEvent) => ({ style: getCalendarEventStyle(event.resource?.game?.slug || 'default') }), []);
     const wrappers = useEventWrappers(eventOverlapsGameTime, handleMonthChipClick);

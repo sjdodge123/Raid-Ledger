@@ -96,29 +96,22 @@ function drawShootingStars(ctx: CanvasRenderingContext2D, shootingStars: Shootin
     }
 }
 
-interface SpaceRefs {
-    stars: React.MutableRefObject<Star[]>;
-    shootingStars: React.MutableRefObject<ShootingStar[]>;
-    nextShooting: React.MutableRefObject<number>;
-    anim: React.MutableRefObject<number>;
-}
-
-function animateSpace(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, refs: SpaceRefs, now: number) {
+function animateSpace(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, starsRef: React.MutableRefObject<Star[]>, shootingStarsRef: React.MutableRefObject<ShootingStar[]>, nextShootingRef: React.MutableRefObject<number>) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawStars(ctx, refs.stars.current, canvas.width, canvas.height);
-    if (now >= refs.nextShooting.current) {
-        spawnShootingStar(refs.shootingStars.current, canvas.width, canvas.height);
-        refs.nextShooting.current = nextShootingTime(now);
+    drawStars(ctx, starsRef.current, canvas.width, canvas.height);
+    if (performance.now() >= nextShootingRef.current) {
+        spawnShootingStar(shootingStarsRef.current, canvas.width, canvas.height);
+        nextShootingRef.current = nextShootingTime(performance.now());
     }
-    drawShootingStars(ctx, refs.shootingStars.current);
+    drawShootingStars(ctx, shootingStarsRef.current);
 }
 
-function initSpaceWorld(canvas: HTMLCanvasElement, refs: SpaceRefs) {
-    refs.stars.current = Array.from({ length: STAR_COUNT }, () => createStar(canvas.width, canvas.height));
-    refs.nextShooting.current = nextShootingTime(performance.now());
+function initSpaceWorld(canvas: HTMLCanvasElement, starsRef: React.MutableRefObject<Star[]>, nextShootingRef: React.MutableRefObject<number>) {
+    starsRef.current = Array.from({ length: STAR_COUNT }, () => createStar(canvas.width, canvas.height));
+    nextShootingRef.current = nextShootingTime(performance.now());
 }
 
-function useSpaceAnimation(isSpace: boolean, canvasRef: React.RefObject<HTMLCanvasElement | null>, refs: SpaceRefs) {
+function useSpaceAnimation(isSpace: boolean, canvasRef: React.RefObject<HTMLCanvasElement | null>, starsRef: React.MutableRefObject<Star[]>, shootingStarsRef: React.MutableRefObject<ShootingStar[]>, nextShootingRef: React.MutableRefObject<number>, animRef: React.MutableRefObject<number>) {
     useEffect(() => {
         if (!isSpace && canvasRef.current) { canvasRef.current.width = 0; canvasRef.current.height = 0; }
     }, [isSpace, canvasRef]);
@@ -131,22 +124,25 @@ function useSpaceAnimation(isSpace: boolean, canvasRef: React.RefObject<HTMLCanv
         if (!ctx) return;
         const resize = () => { if (canvas) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } };
         resize(); window.addEventListener('resize', resize);
-        initSpaceWorld(canvas, refs);
-        const loop = (now: number) => { animateSpace(ctx, canvas, refs, now); refs.anim.current = requestAnimationFrame(loop); };
-        refs.anim.current = requestAnimationFrame(loop);
+        initSpaceWorld(canvas, starsRef, nextShootingRef);
+        const loop = () => { animateSpace(ctx, canvas, starsRef, shootingStarsRef, nextShootingRef); animRef.current = requestAnimationFrame(loop); };
+        animRef.current = requestAnimationFrame(loop);
         return () => {
-            cancelAnimationFrame(refs.anim.current); window.removeEventListener('resize', resize);
+            cancelAnimationFrame(animRef.current); window.removeEventListener('resize', resize);
             if (canvas) { const c = canvas.getContext('2d'); if (c) c.clearRect(0, 0, canvas.width, canvas.height); }
         };
-    }, [isSpace, canvasRef, refs]);
+    }, [isSpace, canvasRef, starsRef, shootingStarsRef, nextShootingRef, animRef]);
 }
 
 export function SpaceEffects() {
     const resolved = useThemeStore((s) => s.resolved);
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const refs: SpaceRefs = { stars: useRef<Star[]>([]), shootingStars: useRef<ShootingStar[]>([]), nextShooting: useRef(0), anim: useRef(0) };
+    const starsRef = useRef<Star[]>([]);
+    const shootingStarsRef = useRef<ShootingStar[]>([]);
+    const nextShootingRef = useRef(0);
+    const animRef = useRef(0);
     const isSpace = resolved.id === 'space';
-    useSpaceAnimation(isSpace, canvasRef, refs);
+    useSpaceAnimation(isSpace, canvasRef, starsRef, shootingStarsRef, nextShootingRef, animRef);
 
     return (
         <>

@@ -57,8 +57,12 @@ function useInviteModalState(isOpen: boolean) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
     const [generatedInviteUrl, setGeneratedInviteUrl] = useState<string | null>(null);
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
 
-    useEffect(() => { if (!isOpen) { m.setSearchQuery(''); setIsSubmitting(false); setGeneratedInviteUrl(null); } }, [isOpen]);
+    if (isOpen !== prevIsOpen) {
+        setPrevIsOpen(isOpen);
+        if (!isOpen) { m.setSearchQuery(''); setIsSubmitting(false); setGeneratedInviteUrl(null); }
+    }
 
     return { ...m, isSubmitting, setIsSubmitting, isSharing, setIsSharing, generatedInviteUrl, setGeneratedInviteUrl };
 }

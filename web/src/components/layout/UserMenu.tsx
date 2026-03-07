@@ -229,7 +229,7 @@ function useUserMenuState() {
 }
 
 export function UserMenu() {
-    const s = useUserMenuState();
+    const { menuRef, trapRef, ...s } = useUserMenuState();
     if (!s.isAuthenticated || !s.user) {
         if (!s.discordConfigured) return null;
         return (
@@ -240,12 +240,12 @@ export function UserMenu() {
     }
     const avatarUrl = resolveAvatar(toAvatarUser(s.user)).url;
     return (
-        <div className="relative" ref={s.menuRef}>
+        <div className="relative" ref={menuRef}>
             <AvatarButton avatarUrl={avatarUrl} username={s.user.username} isOpen={s.isOpen} onClick={() => s.setIsOpen(!s.isOpen)} />
             {s.isOpen && (
                 <DropdownContent user={s.user} isImpersonating={s.isImpersonating} onClose={s.closeMenu}
                     onLogout={s.handleLogout} onExitImpersonation={s.handleExitImpersonation}
-                    onImpersonate={s.handleImpersonate} impersonateUsers={s.impersonateUsers} trapRef={s.trapRef} />
+                    onImpersonate={s.handleImpersonate} impersonateUsers={s.impersonateUsers} trapRef={trapRef} />
             )}
         </div>
     );

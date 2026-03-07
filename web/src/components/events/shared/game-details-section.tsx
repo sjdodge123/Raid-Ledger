@@ -42,18 +42,19 @@ function useRegistryLookup(game: IgdbGameDto | null) {
 }
 
 function useTitleSuggestion(selectedEventType: { name?: string; defaultPlayerCap?: number | null } | undefined, game: IgdbGameDto | null, selectedInstances: Record<string, unknown>[]) {
+    const etName = selectedEventType?.name;
+    const etCap = selectedEventType?.defaultPlayerCap;
+    const gName = game?.name;
     return useCallback((): string => {
-        const etName = selectedEventType?.name;
-        const gName = game?.name;
         if (selectedInstances.length > 0 && etName) {
             const names = selectedInstances.map((i) => (i.shortName as string) || (i.name as string) || '');
-            const suffix = selectedEventType?.defaultPlayerCap ? ` ${selectedEventType.defaultPlayerCap} man` : '';
+            const suffix = etCap ? ` ${etCap} man` : '';
             return `${names.join(' + ')}${suffix}`;
         }
         if (etName && gName) return `${etName} \u2014 ${gName}`;
         if (gName) return `${gName} Event`;
         return '';
-    }, [selectedEventType?.name, selectedEventType?.defaultPlayerCap, game?.name, selectedInstances]);
+    }, [etName, etCap, gName, selectedInstances]);
 }
 
 function useDescriptionSuggestion(selectedInstances: Record<string, unknown>[]) {

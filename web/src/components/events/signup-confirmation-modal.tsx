@@ -60,7 +60,9 @@ function useSignupSelection(isOpen: boolean, characters: CharacterDto[], preSele
     const [selectedRole, setSelectedRole] = useState<CharacterRole | null>(null);
     const [selectedRoles, setSelectedRoles] = useState<CharacterRole[]>([]);
     const [showCreateForm, setShowCreateForm] = useState(false);
-    useEffect(() => { if (isOpen) setSessionKey((k) => k + 1); }, [isOpen]);
+    const [prevIsOpen, setPrevIsOpen] = useState(false);
+    if (isOpen && !prevIsOpen) { setPrevIsOpen(true); setSessionKey((k) => k + 1); }
+    if (!isOpen && prevIsOpen) { setPrevIsOpen(false); }
     const defaultCharacterId = useMemo(() => mainCharacter?.id ?? null, [mainCharacter?.id]);
     useSignupSelectionReset(sessionKey, defaultCharacterId, characters, preSelectedRole, setSelectedCharacterId, setSelectedRole, setSelectedRoles, setShowCreateForm);
 

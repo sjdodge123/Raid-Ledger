@@ -17,7 +17,7 @@ import type {
 
 const BOT_KEY = ['admin', 'settings', 'discord-bot'] as const;
 
-function useBotStatusQuery(botConfigSavedAt: React.RefObject<number>) {
+function useBotStatusQuery(botConfigSavedAtRef: React.MutableRefObject<number>) {
     return useQuery<DiscordBotStatusResponse>({
         queryKey: [...BOT_KEY],
         queryFn: () => adminFetch('/admin/settings/discord-bot'),
@@ -25,14 +25,14 @@ function useBotStatusQuery(botConfigSavedAt: React.RefObject<number>) {
         staleTime: 15_000,
         refetchInterval: (query) => {
             if (query.state.data?.connecting) return 2000;
-            const elapsed = Date.now() - botConfigSavedAt.current;
+            const elapsed = Date.now() - botConfigSavedAtRef.current;
             if (elapsed < 15_000 && !query.state.data?.connected) return 2000;
             return false;
         },
     });
 }
 
-function useBotCoreMutations(botConfigSavedAt: React.MutableRefObject<number>) {
+function useBotCoreMutations(botConfigSavedAtRef: React.MutableRefObject<number>) {
     const queryClient = useQueryClient();
 
     const updateDiscordBot = useMutation<ApiResponse, Error, DiscordBotConfigDto>({
@@ -41,7 +41,7 @@ function useBotCoreMutations(botConfigSavedAt: React.MutableRefObject<number>) {
                 method: 'PUT', body: JSON.stringify(config),
             }, 'Failed to update Discord bot configuration'),
         onSuccess: () => {
-            botConfigSavedAt.current = Date.now();
+            botConfigSavedAtRef.current = Date.now();
             queryClient.invalidateQueries({ queryKey: [...BOT_KEY] });
         },
     });
@@ -94,7 +94,7 @@ function useBotChannelQueries(botConnected: boolean) {
     return { discordChannels, discordDefaultChannel, setDiscordChannel };
 }
 
-function useBotSetupActions(botConfigSavedAt: React.MutableRefObject<number>) {
+function useBotSetupActions(botConfigSavedAtRef: React.MutableRefObject<number>) {
     const queryClient = useQueryClient();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
 
@@ -109,7 +109,7 @@ function useBotSetupActions(botConfigSavedAt: React.MutableRefObject<number>) {
         mutationFn: () =>
             adminFetch('/admin/settings/discord-bot/reconnect', { method: 'POST' }, 'Failed to reconnect'),
         onSuccess: () => {
-            botConfigSavedAt.current = Date.now();
+            botConfigSavedAtRef.current = Date.now();
             queryClient.invalidateQueries({ queryKey: [...BOT_KEY] });
         },
     });
@@ -172,15 +172,15 @@ function useBotAdHocEvents(botConnected: boolean) {
 
 /** Discord bot settings queries and mutations */
 export function useDiscordBotSettings() {
-    const botConfigSavedAt = useRef<number>(0);
-    const discordBotStatus = useBotStatusQuery(botConfigSavedAt);
+    const botConfigSavedAtRef = useRef<number>(0);
+    const discordBotStatus = useBotStatusQuery(botConfigSavedAtRef);
     const botConnected = !!discordBotStatus.data?.connected;
 
     return {
         discordBotStatus,
-        ...useBotCoreMutations(botConfigSavedAt),
+        ...useBotCoreMutations(botConfigSavedAtRef),
         ...useBotChannelQueries(botConnected),
-        ...useBotSetupActions(botConfigSavedAt),
+        ...useBotSetupActions(botConfigSavedAtRef),
         ...useBotVoiceChannels(botConnected),
         ...useBotAdHocEvents(botConnected),
     };
