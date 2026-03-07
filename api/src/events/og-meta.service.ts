@@ -174,18 +174,33 @@ function buildOgHtmlPage(meta: {
   const t = escapeHtml(meta.title);
   const d = escapeHtml(meta.description);
   const u = escapeHtml(meta.url);
-  const imageTag = meta.imageUrl
-    ? `<meta property="og:image" content="${escapeHtml(meta.imageUrl)}" />\n    <meta name="twitter:image" content="${escapeHtml(meta.imageUrl)}" />`
-    : '';
+  const headTags = buildOgHeadTags(t, d, u, meta.imageUrl);
 
   return `<!DOCTYPE html>
 <html lang="en">
-  <head>
+  <head>${headTags}
+  </head>
+  <body>
+    <p>Redirecting to <a href="${u}">${t}</a>...</p>
+  </body>
+</html>`;
+}
+
+function buildOgHeadTags(
+  t: string,
+  d: string,
+  u: string,
+  imageUrl: string | null,
+): string {
+  const imageTag = imageUrl
+    ? `\n    <meta property="og:image" content="${escapeHtml(imageUrl)}" />\n    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`
+    : '';
+
+  return `
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${t}</title>
     <meta name="description" content="${d}" />
-
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Raid Ledger" />
@@ -193,17 +208,10 @@ function buildOgHtmlPage(meta: {
     <meta property="og:description" content="${d}" />
     <meta property="og:url" content="${u}" />
     ${imageTag}
-
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="${t}" />
     <meta name="twitter:description" content="${d}" />
-
     <!-- Redirect real browsers to the SPA -->
-    <meta http-equiv="refresh" content="0;url=${u}" />
-  </head>
-  <body>
-    <p>Redirecting to <a href="${u}">${t}</a>...</p>
-  </body>
-</html>`;
+    <meta http-equiv="refresh" content="0;url=${u}" />`;
 }

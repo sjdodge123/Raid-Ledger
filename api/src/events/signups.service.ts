@@ -64,14 +64,7 @@ export class SignupsService {
     userId: number,
     dto?: CreateSignupDto,
   ): Promise<SignupResponseDto> {
-    const [eventRow] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
-    if (!eventRow)
-      throw new NotFoundException(`Event with ID ${eventId} not found`);
-
+    const eventRow = await this.fetchEventOrThrow(eventId);
     const [user] = await this.db
       .select()
       .from(schema.users)
@@ -88,18 +81,33 @@ export class SignupsService {
     this.fireCleanupPugSlots(eventId, userId);
     if (result.isDuplicate) return result.response;
 
-    this.emitSignupEvent(SIGNUP_EVENTS.CREATED, {
-      eventId,
-      userId,
-      signupId: result.signup.id,
-      action: 'signup_created',
-    });
+    this.emitSignupCreated(eventId, userId, result.signup.id);
     this.rosterNotificationBuffer.bufferJoin(eventId, userId);
 
     const character = dto?.characterId
       ? await this.getCharacterById(dto.characterId)
       : null;
     return this.buildSignupResponse(result.signup, user, character);
+  }
+
+  private async fetchEventOrThrow(eventId: number) {
+    const [eventRow] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    if (!eventRow)
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    return eventRow;
+  }
+
+  private emitSignupCreated(eventId: number, userId: number, signupId: number) {
+    this.emitSignupEvent(SIGNUP_EVENTS.CREATED, {
+      eventId,
+      userId,
+      signupId,
+      action: 'signup_created',
+    });
   }
 
   private fireCleanupPugSlots(eventId: number, userId: number) {
@@ -211,6 +219,33 @@ export class SignupsService {
     hasCharacter: boolean,
     user: typeof schema.users.$inferSelect | undefined,
   ) {
+    const existing = await this.fetchExistingSignup(tx, eventId, userId);
+
+    await this.reactivateIfCancelled(tx, existing, dto, hasCharacter);
+    await this.updatePreferredRolesIfNeeded(tx, existing, dto);
+    await this.ensureAssignment(
+      tx,
+      eventRow,
+      eventId,
+      existing,
+      dto,
+      autoBench,
+    );
+
+    const character = existing.characterId
+      ? await this.getCharacterById(existing.characterId)
+      : null;
+    return {
+      isDuplicate: true as const,
+      response: this.buildSignupResponse(existing, user, character),
+    };
+  }
+
+  private async fetchExistingSignup(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    userId: number,
+  ) {
     const [existing] = await tx
       .select()
       .from(schema.eventSignups)
@@ -221,10 +256,17 @@ export class SignupsService {
         ),
       )
       .limit(1);
+    return existing;
+  }
 
-    await this.reactivateIfCancelled(tx, existing, dto, hasCharacter);
-    await this.updatePreferredRolesIfNeeded(tx, existing, dto);
-
+  private async ensureAssignment(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventRow: typeof schema.events.$inferSelect,
+    eventId: number,
+    existing: typeof schema.eventSignups.$inferSelect,
+    dto: CreateSignupDto | undefined,
+    autoBench: boolean,
+  ) {
     const [existingAssignment] = await tx
       .select()
       .from(schema.rosterAssignments)
@@ -240,14 +282,6 @@ export class SignupsService {
         autoBench,
       );
     }
-
-    const character = existing.characterId
-      ? await this.getCharacterById(existing.characterId)
-      : null;
-    return {
-      isDuplicate: true as const,
-      response: this.buildSignupResponse(existing, user, character),
-    };
   }
 
   private async reactivateIfCancelled(
@@ -256,36 +290,39 @@ export class SignupsService {
     dto: CreateSignupDto | undefined,
     hasCharacter: boolean,
   ) {
-    if (
-      existing.status !== 'roached_out' &&
-      existing.status !== 'declined' &&
-      existing.status !== 'departed'
-    )
-      return;
-    const reactivated = hasCharacter ? 'confirmed' : 'pending';
+    if (!this.isCancelledStatus(existing.status)) return;
+
+    const fields = this.buildReactivationFields(existing, dto, hasCharacter);
     await tx
       .update(schema.eventSignups)
-      .set({
-        status: 'signed_up',
-        confirmationStatus: reactivated,
-        note: dto?.note ?? existing.note,
-        characterId: dto?.characterId ?? null,
-        preferredRoles: dto?.preferredRoles ?? null,
-        attendanceStatus: null,
-        attendanceRecordedAt: null,
-        roachedOutAt: null,
-      })
+      .set(fields)
       .where(eq(schema.eventSignups.id, existing.id));
-    Object.assign(existing, {
-      status: 'signed_up',
-      confirmationStatus: reactivated,
+    Object.assign(existing, fields);
+  }
+
+  private isCancelledStatus(status: string) {
+    return (
+      status === 'roached_out' || status === 'declined' || status === 'departed'
+    );
+  }
+
+  private buildReactivationFields(
+    existing: typeof schema.eventSignups.$inferSelect,
+    dto: CreateSignupDto | undefined,
+    hasCharacter: boolean,
+  ) {
+    return {
+      status: 'signed_up' as const,
+      confirmationStatus: hasCharacter
+        ? ('confirmed' as const)
+        : ('pending' as const),
       note: dto?.note ?? existing.note,
       characterId: dto?.characterId ?? null,
       preferredRoles: dto?.preferredRoles ?? null,
       attendanceStatus: null,
       attendanceRecordedAt: null,
       roachedOutAt: null,
-    });
+    };
   }
 
   private async updatePreferredRolesIfNeeded(
@@ -315,13 +352,7 @@ export class SignupsService {
     dto: CreateSignupDto | undefined,
     autoBench: boolean,
   ) {
-    const shouldAutoAllocate = this.shouldUseAutoAllocation(
-      eventRow,
-      existing,
-      dto,
-      autoBench,
-    );
-    if (shouldAutoAllocate) {
+    if (this.shouldUseAutoAllocation(eventRow, existing, dto, autoBench)) {
       await this.runAutoAllocationForSignup(
         tx,
         eventRow,
@@ -413,21 +444,36 @@ export class SignupsService {
       .insert(schema.rosterAssignments)
       .values({ eventId, signupId, role: slotRole, position, isOverride: 0 });
 
-    if (slotRole !== 'bench') {
-      await tx
-        .update(schema.eventSignups)
-        .set({ confirmationStatus: 'confirmed' })
-        .where(eq(schema.eventSignups.id, signupId));
-      await this.benchPromotionService.cancelPromotion(
-        eventId,
-        slotRole,
-        position,
-      );
-    }
+    await this.confirmAndCancelPromotion(
+      tx,
+      eventId,
+      signupId,
+      slotRole,
+      position,
+    );
     this.logger.log(
       `${logPrefix} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
     );
     return slotRole !== 'bench';
+  }
+
+  private async confirmAndCancelPromotion(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+    slotRole: string,
+    position: number,
+  ) {
+    if (slotRole === 'bench') return;
+    await tx
+      .update(schema.eventSignups)
+      .set({ confirmationStatus: 'confirmed' })
+      .where(eq(schema.eventSignups.id, signupId));
+    await this.benchPromotionService.cancelPromotion(
+      eventId,
+      slotRole,
+      position,
+    );
   }
 
   private async findNextPosition(
@@ -460,13 +506,8 @@ export class SignupsService {
     autoBench: boolean,
   ) {
     this.logger.log(`User ${userId} signed up for event ${eventId}`);
-    const shouldAutoAllocate = this.shouldUseAutoAllocationNew(
-      eventRow,
-      dto,
-      autoBench,
-    );
 
-    if (shouldAutoAllocate) {
+    if (this.shouldUseAutoAllocationNew(eventRow, dto, autoBench)) {
       await this.runAutoAllocationForSignup(
         tx,
         eventRow,
@@ -533,19 +574,8 @@ export class SignupsService {
     eventId: number,
     dto: CreateDiscordSignupDto,
   ): Promise<SignupResponseDto> {
-    const [event] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
-    if (!event)
-      throw new NotFoundException(`Event with ID ${eventId} not found`);
-
-    const [linkedUser] = await this.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.discordId, dto.discordUserId))
-      .limit(1);
+    const event = await this.fetchEventOrThrow(eventId);
+    const linkedUser = await this.findLinkedUser(dto.discordUserId);
     if (linkedUser) {
       return this.signup(eventId, linkedUser.id, {
         preferredRoles: dto.preferredRoles,
@@ -563,6 +593,15 @@ export class SignupsService {
       action: 'discord_signup_created',
     });
     return this.buildAnonymousSignupResponse(result);
+  }
+
+  private async findLinkedUser(discordUserId: string) {
+    const [user] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.discordId, discordUserId))
+      .limit(1);
+    return user ?? null;
   }
 
   private async discordSignupTxBody(
@@ -640,16 +679,56 @@ export class SignupsService {
     const hasSingleRole = !hasPrefs && dto.role;
 
     if (isMMO && (hasPrefs || hasSingleRole)) {
-      if (hasSingleRole && dto.role) {
-        await tx
-          .update(schema.eventSignups)
-          .set({ preferredRoles: [dto.role] })
-          .where(eq(schema.eventSignups.id, signupId));
-      }
-      await this.autoAllocateSignup(tx, eventId, signupId, slotConfig);
+      await this.allocateMmoDiscordSlot(
+        tx,
+        eventId,
+        signupId,
+        slotConfig,
+        dto,
+        hasSingleRole,
+      );
       return;
     }
 
+    await this.allocateGenericDiscordSlot(
+      tx,
+      event,
+      eventId,
+      signupId,
+      dto,
+      isMMO,
+      hasPrefs,
+      hasSingleRole,
+    );
+  }
+
+  private async allocateMmoDiscordSlot(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+    slotConfig: Record<string, unknown> | null,
+    dto: CreateDiscordSignupDto,
+    hasSingleRole: string | undefined | false,
+  ) {
+    if (hasSingleRole && dto.role) {
+      await tx
+        .update(schema.eventSignups)
+        .set({ preferredRoles: [dto.role] })
+        .where(eq(schema.eventSignups.id, signupId));
+    }
+    await this.autoAllocateSignup(tx, eventId, signupId, slotConfig);
+  }
+
+  private async allocateGenericDiscordSlot(
+    tx: PostgresJsDatabase<typeof schema>,
+    event: typeof schema.events.$inferSelect,
+    eventId: number,
+    signupId: number,
+    dto: CreateDiscordSignupDto,
+    isMMO: boolean,
+    hasPrefs: boolean | undefined,
+    hasSingleRole: string | undefined | false,
+  ) {
     const assignRole =
       !isMMO || (!hasPrefs && !hasSingleRole)
         ? (dto.role ?? (await this.resolveGenericSlotRole(tx, event, eventId)))
@@ -676,7 +755,6 @@ export class SignupsService {
     dto: UpdateSignupStatusDto,
   ): Promise<SignupResponseDto> {
     const signup = await this.findSignupByIdentifier(eventId, signupIdentifier);
-
     const [updated] = await this.db
       .update(schema.eventSignups)
       .set({ status: dto.status })
@@ -693,17 +771,21 @@ export class SignupsService {
       action: `status_changed_to_${dto.status}`,
     });
 
-    if (dto.status === 'tentative') {
-      this.checkTentativeDisplacement(eventId, signup.id).catch(
-        (err: unknown) => {
-          this.logger.warn(
-            `ROK-459: Failed tentative displacement check: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        },
-      );
-    }
-
+    this.fireTentativeDisplacementCheck(eventId, signup.id, dto.status);
     return this.buildStatusUpdateResponse(updated);
+  }
+
+  private fireTentativeDisplacementCheck(
+    eventId: number,
+    signupId: number,
+    status: string,
+  ) {
+    if (status !== 'tentative') return;
+    this.checkTentativeDisplacement(eventId, signupId).catch((err: unknown) => {
+      this.logger.warn(
+        `ROK-459: Failed tentative displacement check: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    });
   }
 
   private async findSignupByIdentifier(
@@ -814,24 +896,11 @@ export class SignupsService {
     eventId: number,
     discordUserId: string,
   ): Promise<void> {
-    const [linkedUser] = await this.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.discordId, discordUserId))
-      .limit(1);
-
+    const linkedUser = await this.findLinkedUser(discordUserId);
     if (linkedUser) return this.cancel(eventId, linkedUser.id);
 
     const signup = await this.findActiveAnonymousSignup(eventId, discordUserId);
-    const [event] = await this.db
-      .select({ duration: schema.events.duration })
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
-
-    const { cancelStatus, isGracefulDecline, now } = determineCancelStatus(
-      event?.duration as [Date, Date] | null,
-    );
+    const cancelInfo = await this.resolveCancelStatus(eventId);
 
     await this.db
       .delete(schema.rosterAssignments)
@@ -839,19 +908,28 @@ export class SignupsService {
     await this.db
       .update(schema.eventSignups)
       .set({
-        status: cancelStatus,
-        roachedOutAt: isGracefulDecline ? null : now,
+        status: cancelInfo.cancelStatus,
+        roachedOutAt: cancelInfo.isGracefulDecline ? null : cancelInfo.now,
       })
       .where(eq(schema.eventSignups.id, signup.id));
 
     this.logger.log(
-      `Anonymous Discord user ${discordUserId} canceled signup for event ${eventId} (${cancelStatus})`,
+      `Anonymous Discord user ${discordUserId} canceled signup for event ${eventId} (${cancelInfo.cancelStatus})`,
     );
     this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
       eventId,
       signupId: signup.id,
       action: 'discord_signup_cancelled',
     });
+  }
+
+  private async resolveCancelStatus(eventId: number) {
+    const [event] = await this.db
+      .select({ duration: schema.events.duration })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    return determineCancelStatus(event?.duration as [Date, Date] | null);
   }
 
   private async findActiveAnonymousSignup(
@@ -928,7 +1006,6 @@ export class SignupsService {
       dto.characterId,
       userId,
     );
-
     const newStatus: ConfirmationStatus =
       signup.confirmationStatus === 'pending' ? 'confirmed' : 'changed';
 
@@ -953,7 +1030,6 @@ export class SignupsService {
       signupId,
       action: 'signup_confirmed',
     });
-
     return this.buildSignupResponse(updated, user, character);
   }
 
@@ -1007,16 +1083,7 @@ export class SignupsService {
    */
   async cancel(eventId: number, userId: number): Promise<void> {
     const signup = await this.findActiveSignupForCancel(eventId, userId);
-
-    const [event] = await this.db
-      .select({ duration: schema.events.duration })
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
-
-    const { cancelStatus, isGracefulDecline, now } = determineCancelStatus(
-      event?.duration as [Date, Date] | null,
-    );
+    const cancelInfo = await this.resolveCancelStatus(eventId);
 
     const [assignment] = await this.db
       .select()
@@ -1031,13 +1098,13 @@ export class SignupsService {
     await this.executeCancelSignup(
       signup.id,
       assignment,
-      cancelStatus,
-      isGracefulDecline,
-      now,
+      cancelInfo.cancelStatus,
+      cancelInfo.isGracefulDecline,
+      cancelInfo.now,
     );
 
     this.logger.log(
-      `User ${userId} canceled signup for event ${eventId} (${cancelStatus})`,
+      `User ${userId} canceled signup for event ${eventId} (${cancelInfo.cancelStatus})`,
     );
     this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
       eventId,
@@ -1169,24 +1236,31 @@ export class SignupsService {
       vacatedRole: notifyData.role ?? 'assigned',
     });
 
-    if (assignment.role && assignment.role !== 'bench') {
-      if (await this.benchPromotionService.isEligible(eventId)) {
-        await this.benchPromotionService.schedulePromotion(
-          eventId,
-          assignment.role,
-          assignment.position,
-        );
-      }
-      this.reslotTentativePlayer(
+    await this.triggerSlotBackfill(eventId, assignment);
+  }
+
+  private async triggerSlotBackfill(
+    eventId: number,
+    assignment: typeof schema.rosterAssignments.$inferSelect,
+  ) {
+    if (!assignment.role || assignment.role === 'bench') return;
+
+    if (await this.benchPromotionService.isEligible(eventId)) {
+      await this.benchPromotionService.schedulePromotion(
         eventId,
         assignment.role,
         assignment.position,
-      ).catch((err: unknown) => {
-        this.logger.warn(
-          `ROK-459: Failed tentative reslot check: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
-      });
+      );
     }
+    this.reslotTentativePlayer(
+      eventId,
+      assignment.role,
+      assignment.position,
+    ).catch((err: unknown) => {
+      this.logger.warn(
+        `ROK-459: Failed tentative reslot check: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    });
   }
 
   /**
@@ -1246,31 +1320,11 @@ export class SignupsService {
     if (!row.event_signups.userId) {
       return this.buildAnonymousSignupResponse(row.event_signups);
     }
-    return {
-      id: row.event_signups.id,
-      eventId: row.event_signups.eventId,
-      user: {
-        id: row.users?.id ?? 0,
-        discordId: row.users?.discordId ?? '',
-        username: row.users?.username ?? 'Unknown',
-        avatar: row.users?.avatar ?? null,
-      },
-      note: row.event_signups.note,
-      signedUpAt: row.event_signups.signedUpAt.toISOString(),
-      characterId: row.event_signups.characterId,
-      character: row.characters ? this.buildCharacterDto(row.characters) : null,
-      confirmationStatus: row.event_signups
-        .confirmationStatus as ConfirmationStatus,
-      status: (row.event_signups.status as SignupStatus) ?? 'signed_up',
-      preferredRoles:
-        (row.event_signups.preferredRoles as
-          | ('tank' | 'healer' | 'dps')[]
-          | null) ?? null,
-      attendanceStatus:
-        (row.event_signups.attendanceStatus as AttendanceStatus) ?? null,
-      attendanceRecordedAt:
-        row.event_signups.attendanceRecordedAt?.toISOString() ?? null,
-    };
+    return this.buildSignupResponse(
+      row.event_signups,
+      row.users ?? undefined,
+      row.characters,
+    );
   }
 
   /**
@@ -1424,19 +1478,21 @@ export class SignupsService {
       vacatedRole: assignment.role ?? 'assigned',
     });
 
-    if (
-      assignment.role &&
-      assignment.role !== 'bench' &&
-      (await this.benchPromotionService.isEligible(eventId))
-    ) {
-      await this.benchPromotionService.schedulePromotion(
-        eventId,
-        assignment.role,
-        assignment.position,
-      );
-    }
-
+    await this.scheduleBenchPromotionIfEligible(eventId, assignment);
     return this.getRosterWithAssignments(eventId);
+  }
+
+  private async scheduleBenchPromotionIfEligible(
+    eventId: number,
+    assignment: typeof schema.rosterAssignments.$inferSelect,
+  ) {
+    if (!assignment.role || assignment.role === 'bench') return;
+    if (!(await this.benchPromotionService.isEligible(eventId))) return;
+    await this.benchPromotionService.schedulePromotion(
+      eventId,
+      assignment.role,
+      assignment.position,
+    );
   }
 
   private async findUserAssignment(eventId: number, userId: number) {
@@ -1497,7 +1553,6 @@ export class SignupsService {
       .limit(1);
 
     await this.executeAdminRemove(eventId, signup);
-
     this.logger.log(
       `Admin ${requesterId} removed signup ${signupId} from event ${eventId}`,
     );
@@ -1508,9 +1563,8 @@ export class SignupsService {
       action: 'admin_removed',
     });
 
-    if (signup.userId) {
+    if (signup.userId)
       await this.notifyRemovedUser(signup.userId, eventId, event.title);
-    }
     await this.handleVacatedSlotAfterRemove(eventId, assignment);
   }
 
@@ -1655,7 +1709,6 @@ export class SignupsService {
       eventId,
       action: 'roster_updated',
     });
-
     this.fireRosterNotifications(
       eventId,
       event.title,
@@ -2153,174 +2206,241 @@ export class SignupsService {
   async promoteFromBench(
     eventId: number,
     signupId: number,
-  ): Promise<{
-    role: string;
-    position: number;
-    username: string;
-    chainMoves?: string[];
-    warning?: string;
-  } | null> {
-    return this.db.transaction(async (tx) => {
-      // 1. Get the event's slot config
-      const [event] = await tx
-        .select({ slotConfig: schema.events.slotConfig })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
+  ): Promise<PromotionResult | null> {
+    return this.db.transaction((tx) =>
+      this.promoteFromBenchTx(tx, eventId, signupId),
+    );
+  }
 
-      if (!event?.slotConfig) return null;
+  private async promoteFromBenchTx(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+  ): Promise<PromotionResult | null> {
+    const slotConfig = await this.fetchSlotConfig(tx, eventId);
+    if (!slotConfig) return null;
 
-      const slotConfig = event.slotConfig as Record<string, unknown>;
+    const signup = await this.fetchPromotionSignup(tx, signupId);
+    if (!signup) return null;
 
-      // 2. Get the signup's preferred roles and username
-      const [signup] = await tx
-        .select({
-          preferredRoles: schema.eventSignups.preferredRoles,
-          userId: schema.eventSignups.userId,
-        })
-        .from(schema.eventSignups)
-        .where(eq(schema.eventSignups.id, signupId))
-        .limit(1);
+    const username = await this.resolveSignupUsername(tx, signup.userId);
 
-      if (!signup) return null;
-
-      let username = 'Bench player';
-      if (signup.userId) {
-        const [user] = await tx
-          .select({ username: schema.users.username })
-          .from(schema.users)
-          .where(eq(schema.users.id, signup.userId))
-          .limit(1);
-        if (user) username = user.username;
-      }
-
-      if (slotConfig.type !== 'mmo') {
-        // Generic games: direct assign to first open 'player' slot
-        return this.promoteGenericSlot(
-          tx,
-          eventId,
-          signupId,
-          slotConfig,
-          username,
-        );
-      }
-
-      // 3. Snapshot roster assignments before allocation to detect chain moves
-      const beforeAssignments = await tx
-        .select({
-          id: schema.rosterAssignments.id,
-          signupId: schema.rosterAssignments.signupId,
-          role: schema.rosterAssignments.role,
-          position: schema.rosterAssignments.position,
-        })
-        .from(schema.rosterAssignments)
-        .where(
-          and(
-            eq(schema.rosterAssignments.eventId, eventId),
-            sql`${schema.rosterAssignments.role} != 'bench'`,
-          ),
-        );
-
-      // 4. Delete the bench assignment
-      await tx
-        .delete(schema.rosterAssignments)
-        .where(
-          and(
-            eq(schema.rosterAssignments.eventId, eventId),
-            eq(schema.rosterAssignments.signupId, signupId),
-            eq(schema.rosterAssignments.role, 'bench'),
-          ),
-        );
-
-      // 5. Run the role calculation engine
-      await this.autoAllocateSignup(tx, eventId, signupId, slotConfig);
-
-      // 6. Check where they ended up
-      const [newAssignment] = await tx
-        .select({
-          role: schema.rosterAssignments.role,
-          position: schema.rosterAssignments.position,
-        })
-        .from(schema.rosterAssignments)
-        .where(
-          and(
-            eq(schema.rosterAssignments.eventId, eventId),
-            eq(schema.rosterAssignments.signupId, signupId),
-          ),
-        )
-        .limit(1);
-
-      if (!newAssignment || newAssignment.role === 'bench') {
-        // Allocation failed — put them back on bench
-        if (!newAssignment) {
-          await tx.insert(schema.rosterAssignments).values({
-            eventId,
-            signupId,
-            role: 'bench',
-            position: 1,
-          });
-        }
-        return {
-          role: 'bench',
-          position: 1,
-          username,
-          warning: `Could not find a suitable roster slot for ${username} based on their preferred roles.`,
-        };
-      }
-
-      // 7. Detect chain moves by comparing before/after roster state
-      const afterAssignments = await tx
-        .select({
-          id: schema.rosterAssignments.id,
-          signupId: schema.rosterAssignments.signupId,
-          role: schema.rosterAssignments.role,
-          position: schema.rosterAssignments.position,
-        })
-        .from(schema.rosterAssignments)
-        .where(
-          and(
-            eq(schema.rosterAssignments.eventId, eventId),
-            sql`${schema.rosterAssignments.role} != 'bench'`,
-          ),
-        );
-
-      const chainMoves = await this.detectChainMoves(
+    if (slotConfig.type !== 'mmo') {
+      return this.promoteGenericSlot(
         tx,
-        beforeAssignments,
-        afterAssignments,
+        eventId,
         signupId,
-      );
-
-      // 8. Build warning: promoted player's role mismatch + chain move details
-      const prefs = (signup.preferredRoles as string[]) ?? [];
-      const warnings: string[] = [];
-
-      if (
-        prefs.length > 0 &&
-        newAssignment.role &&
-        !prefs.includes(newAssignment.role)
-      ) {
-        warnings.push(
-          `${username} was placed in **${newAssignment.role}** which is not in their preferred roles (${prefs.join(', ')}).`,
-        );
-      }
-
-      for (const move of chainMoves) {
-        warnings.push(
-          `${move.username} moved from **${move.fromRole}** to **${move.toRole}** to accommodate the promotion.`,
-        );
-      }
-
-      return {
-        role: newAssignment.role ?? 'bench',
-        position: newAssignment.position,
+        slotConfig,
         username,
-        chainMoves: chainMoves.map(
-          (m) => `${m.username}: ${m.fromRole} → ${m.toRole}`,
+      );
+    }
+
+    return this.promoteMmoSlot(
+      tx,
+      eventId,
+      signupId,
+      slotConfig,
+      signup,
+      username,
+    );
+  }
+
+  private async fetchSlotConfig(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+  ) {
+    const [event] = await tx
+      .select({ slotConfig: schema.events.slotConfig })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    return (event?.slotConfig as Record<string, unknown>) ?? null;
+  }
+
+  private async fetchPromotionSignup(
+    tx: PostgresJsDatabase<typeof schema>,
+    signupId: number,
+  ) {
+    const [signup] = await tx
+      .select({
+        preferredRoles: schema.eventSignups.preferredRoles,
+        userId: schema.eventSignups.userId,
+      })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.id, signupId))
+      .limit(1);
+    return signup ?? null;
+  }
+
+  private async resolveSignupUsername(
+    tx: PostgresJsDatabase<typeof schema>,
+    userId: number | null,
+  ) {
+    if (!userId) return 'Bench player';
+    const [user] = await tx
+      .select({ username: schema.users.username })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return user?.username ?? 'Bench player';
+  }
+
+  private async promoteMmoSlot(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+    slotConfig: Record<string, unknown>,
+    signup: { preferredRoles: string[] | null; userId: number | null },
+    username: string,
+  ): Promise<PromotionResult | null> {
+    const beforeAssignments = await this.snapshotNonBenchAssignments(
+      tx,
+      eventId,
+    );
+    await this.deleteBenchAssignment(tx, eventId, signupId);
+    await this.autoAllocateSignup(tx, eventId, signupId, slotConfig);
+
+    const newAssignment = await this.fetchCurrentAssignment(
+      tx,
+      eventId,
+      signupId,
+    );
+    if (!newAssignment || newAssignment.role === 'bench') {
+      return this.handleFailedPromotion(
+        tx,
+        eventId,
+        signupId,
+        newAssignment,
+        username,
+      );
+    }
+
+    return this.buildMmoPromotionResult(
+      tx,
+      eventId,
+      signupId,
+      beforeAssignments,
+      newAssignment,
+      signup,
+      username,
+    );
+  }
+
+  private async snapshotNonBenchAssignments(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+  ) {
+    return tx
+      .select({
+        id: schema.rosterAssignments.id,
+        signupId: schema.rosterAssignments.signupId,
+        role: schema.rosterAssignments.role,
+        position: schema.rosterAssignments.position,
+      })
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          sql`${schema.rosterAssignments.role} != 'bench'`,
         ),
-        warning: warnings.length > 0 ? warnings.join('\n') : undefined,
-      };
-    });
+      );
+  }
+
+  private async deleteBenchAssignment(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+  ) {
+    await tx
+      .delete(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.signupId, signupId),
+          eq(schema.rosterAssignments.role, 'bench'),
+        ),
+      );
+  }
+
+  private async fetchCurrentAssignment(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+  ) {
+    const [a] = await tx
+      .select({
+        role: schema.rosterAssignments.role,
+        position: schema.rosterAssignments.position,
+      })
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.signupId, signupId),
+        ),
+      )
+      .limit(1);
+    return a ?? null;
+  }
+
+  private async handleFailedPromotion(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+    existing: { role: string | null } | null,
+    username: string,
+  ): Promise<PromotionResult> {
+    if (!existing) {
+      await tx.insert(schema.rosterAssignments).values({
+        eventId,
+        signupId,
+        role: 'bench',
+        position: 1,
+      });
+    }
+    return {
+      role: 'bench',
+      position: 1,
+      username,
+      warning: `Could not find a suitable roster slot for ${username} based on their preferred roles.`,
+    };
+  }
+
+  private async buildMmoPromotionResult(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+    beforeAssignments: RosterSnapshot[],
+    newAssignment: { role: string | null; position: number },
+    signup: { preferredRoles: string[] | null },
+    username: string,
+  ): Promise<PromotionResult> {
+    const afterAssignments = await this.snapshotNonBenchAssignments(
+      tx,
+      eventId,
+    );
+    const chainMoves = await this.detectChainMoves(
+      tx,
+      beforeAssignments,
+      afterAssignments,
+      signupId,
+    );
+    const warnings = buildPromotionWarnings(
+      username,
+      signup.preferredRoles,
+      newAssignment.role,
+      chainMoves,
+    );
+
+    return {
+      role: newAssignment.role ?? 'bench',
+      position: newAssignment.position,
+      username,
+      chainMoves: chainMoves.map(
+        (m) => `${m.username}: ${m.fromRole} → ${m.toRole}`,
+      ),
+      warning: warnings.length > 0 ? warnings.join('\n') : undefined,
+    };
   }
 
   /**
@@ -2333,28 +2453,41 @@ export class SignupsService {
     signupId: number,
     slotConfig: Record<string, unknown>,
     username: string,
-  ): Promise<{
-    role: string;
-    position: number;
-    username: string;
-    chainMoves?: string[];
-    warning?: string;
-  } | null> {
+  ): Promise<PromotionResult | null> {
     const maxPlayers = (slotConfig.player as number) ?? null;
+    await this.deleteBenchAssignment(tx, eventId, signupId);
 
-    // Delete the bench assignment
-    await tx
-      .delete(schema.rosterAssignments)
-      .where(
-        and(
-          eq(schema.rosterAssignments.eventId, eventId),
-          eq(schema.rosterAssignments.signupId, signupId),
-          eq(schema.rosterAssignments.role, 'bench'),
-        ),
+    const currentPlayers = await this.fetchPlayerPositions(tx, eventId);
+    if (maxPlayers !== null && currentPlayers.length >= maxPlayers) {
+      return this.restoreBenchAfterFailedGeneric(
+        tx,
+        eventId,
+        signupId,
+        username,
       );
+    }
 
-    // Count current player slots and find first open position
-    const currentPlayers = await tx
+    const position = findFirstGap(currentPlayers.map((p) => p.position));
+    await tx.insert(schema.rosterAssignments).values({
+      eventId,
+      signupId,
+      role: 'player',
+      position,
+      isOverride: 0,
+    });
+    await tx
+      .update(schema.eventSignups)
+      .set({ confirmationStatus: 'confirmed' })
+      .where(eq(schema.eventSignups.id, signupId));
+
+    return { role: 'player', position, username };
+  }
+
+  private async fetchPlayerPositions(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+  ) {
+    return tx
       .select({ position: schema.rosterAssignments.position })
       .from(schema.rosterAssignments)
       .where(
@@ -2363,46 +2496,25 @@ export class SignupsService {
           eq(schema.rosterAssignments.role, 'player'),
         ),
       );
+  }
 
-    if (maxPlayers !== null && currentPlayers.length >= maxPlayers) {
-      // All slots full — put back on bench
-      await tx.insert(schema.rosterAssignments).values({
-        eventId,
-        signupId,
-        role: 'bench',
-        position: 1,
-      });
-      return {
-        role: 'bench',
-        position: 1,
-        username,
-        warning: `All player slots are full — ${username} remains on bench.`,
-      };
-    }
-
-    // Find first gap in positions
-    const occupied = new Set(currentPlayers.map((p) => p.position));
-    let position = 1;
-    while (occupied.has(position)) position++;
-
+  private async restoreBenchAfterFailedGeneric(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+    username: string,
+  ): Promise<PromotionResult> {
     await tx.insert(schema.rosterAssignments).values({
       eventId,
       signupId,
-      role: 'player',
-      position,
-      isOverride: 0,
+      role: 'bench',
+      position: 1,
     });
-
-    // Auto-confirm the promoted player
-    await tx
-      .update(schema.eventSignups)
-      .set({ confirmationStatus: 'confirmed' })
-      .where(eq(schema.eventSignups.id, signupId));
-
     return {
-      role: 'player',
-      position,
+      role: 'bench',
+      position: 1,
       username,
+      warning: `All player slots are full — ${username} remains on bench.`,
     };
   }
 
@@ -2412,58 +2524,30 @@ export class SignupsService {
    */
   private async detectChainMoves(
     tx: PostgresJsDatabase<typeof schema>,
-    before: Array<{
-      id: number;
-      signupId: number;
-      role: string | null;
-      position: number;
-    }>,
-    after: Array<{
-      id: number;
-      signupId: number;
-      role: string | null;
-      position: number;
-    }>,
+    before: RosterSnapshot[],
+    after: RosterSnapshot[],
     excludeSignupId: number,
-  ): Promise<
-    Array<{
-      signupId: number;
-      username: string;
-      fromRole: string;
-      toRole: string;
-    }>
-  > {
-    const moves: Array<{
-      signupId: number;
-      username: string;
-      fromRole: string;
-      toRole: string;
-    }> = [];
-    const beforeMap = new Map(before.map((a) => [a.signupId, a]));
+  ): Promise<ChainMove[]> {
+    const movedEntries = findRoleChanges(before, after, excludeSignupId);
+    if (movedEntries.length === 0) return [];
 
-    // Collect signupIds that actually changed roles
-    const movedEntries: Array<{
-      signupId: number;
-      fromRole: string;
-      toRole: string;
-    }> = [];
-    for (const afterEntry of after) {
-      if (afterEntry.signupId === excludeSignupId) continue;
-      const beforeEntry = beforeMap.get(afterEntry.signupId);
-      if (!beforeEntry) continue;
-      if (beforeEntry.role !== afterEntry.role) {
-        movedEntries.push({
-          signupId: afterEntry.signupId,
-          fromRole: beforeEntry.role ?? 'unknown',
-          toRole: afterEntry.role ?? 'unknown',
-        });
-      }
-    }
+    const usernameMap = await this.batchFetchUsernames(
+      tx,
+      movedEntries.map((m) => m.signupId),
+    );
 
-    if (movedEntries.length === 0) return moves;
+    return movedEntries.map((entry) => ({
+      signupId: entry.signupId,
+      username: usernameMap.get(entry.signupId) ?? 'Unknown',
+      fromRole: entry.fromRole,
+      toRole: entry.toRole,
+    }));
+  }
 
-    // Batch-fetch signups for all moved players
-    const movedSignupIds = movedEntries.map((m) => m.signupId);
+  private async batchFetchUsernames(
+    tx: PostgresJsDatabase<typeof schema>,
+    signupIds: number[],
+  ): Promise<Map<number, string>> {
     const signups = await tx
       .select({
         id: schema.eventSignups.id,
@@ -2471,40 +2555,34 @@ export class SignupsService {
         discordUsername: schema.eventSignups.discordUsername,
       })
       .from(schema.eventSignups)
-      .where(inArray(schema.eventSignups.id, movedSignupIds));
-    const signupMap = new Map(signups.map((s) => [s.id, s]));
+      .where(inArray(schema.eventSignups.id, signupIds));
 
-    // Batch-fetch users for signups that need a username fallback
     const userIds = signups
       .filter((s) => !s.discordUsername && s.userId)
       .map((s) => s.userId!);
-    const userMap = new Map<number, string>();
-    if (userIds.length > 0) {
-      const users = await tx
-        .select({ id: schema.users.id, username: schema.users.username })
-        .from(schema.users)
-        .where(inArray(schema.users.id, userIds));
-      for (const u of users) userMap.set(u.id, u.username);
+    const userMap = await this.fetchUserMap(tx, userIds);
+
+    const result = new Map<number, string>();
+    for (const s of signups) {
+      const name =
+        s.discordUsername ??
+        (s.userId ? userMap.get(s.userId) : undefined) ??
+        'Unknown';
+      result.set(s.id, name);
     }
+    return result;
+  }
 
-    for (const entry of movedEntries) {
-      const signup = signupMap.get(entry.signupId);
-      let moveUsername = 'Unknown';
-      if (signup?.discordUsername) {
-        moveUsername = signup.discordUsername;
-      } else if (signup?.userId) {
-        moveUsername = userMap.get(signup.userId) ?? 'Unknown';
-      }
-
-      moves.push({
-        signupId: entry.signupId,
-        username: moveUsername,
-        fromRole: entry.fromRole,
-        toRole: entry.toRole,
-      });
-    }
-
-    return moves;
+  private async fetchUserMap(
+    tx: PostgresJsDatabase<typeof schema>,
+    userIds: number[],
+  ): Promise<Map<number, string>> {
+    if (userIds.length === 0) return new Map();
+    const users = await tx
+      .select({ id: schema.users.id, username: schema.users.username })
+      .from(schema.users)
+      .where(inArray(schema.users.id, userIds));
+    return new Map(users.map((u) => [u.id, u.username]));
   }
 
   /**
@@ -2529,18 +2607,65 @@ export class SignupsService {
     newSignupId: number,
     slotConfig: Record<string, unknown> | null,
   ): Promise<void> {
-    // Get slot capacities from config
-    const tankSlots = (slotConfig?.tank as number) ?? 2;
-    const healerSlots = (slotConfig?.healer as number) ?? 4;
-    const dpsSlots = (slotConfig?.dps as number) ?? 14;
-    const roleCapacity: Record<string, number> = {
-      tank: tankSlots,
-      healer: healerSlots,
-      dps: dpsSlots,
-    };
+    const ctx = await this.buildAllocationContext(tx, eventId, slotConfig);
+    const newSignup = ctx.allSignups.find((s) => s.id === newSignupId);
+    if (!newSignup?.preferredRoles || newSignup.preferredRoles.length === 0)
+      return;
 
-    // Get all signups with preferred roles and status for this event
-    const allSignups = await tx
+    const newPrefs = sortByRolePriority(newSignup.preferredRoles);
+
+    if (await this.tryDirectAllocation(tx, eventId, newSignupId, newPrefs, ctx))
+      return;
+    if (
+      await this.tryChainRearrangement(tx, eventId, newSignupId, newPrefs, ctx)
+    )
+      return;
+    if (
+      await this.tryTentativeDisplacement(
+        tx,
+        eventId,
+        newSignupId,
+        newPrefs,
+        newSignup.status,
+        ctx,
+      )
+    )
+      return;
+
+    this.logger.log(
+      `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement or tentative displacement available)`,
+    );
+  }
+
+  private async buildAllocationContext(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    slotConfig: Record<string, unknown> | null,
+  ): Promise<AllocationContext> {
+    const roleCapacity = extractRoleCapacity(slotConfig);
+    const allSignups = await this.fetchAllSignups(tx, eventId);
+    const currentAssignments = await tx
+      .select()
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.eventId, eventId));
+
+    const filledPerRole = countFilledPerRole(currentAssignments);
+    const occupiedPositions = buildOccupiedPositions(currentAssignments);
+
+    return {
+      roleCapacity,
+      allSignups,
+      currentAssignments,
+      filledPerRole,
+      occupiedPositions,
+    };
+  }
+
+  private async fetchAllSignups(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+  ) {
+    return tx
       .select({
         id: schema.eventSignups.id,
         preferredRoles: schema.eventSignups.preferredRoles,
@@ -2549,175 +2674,140 @@ export class SignupsService {
       })
       .from(schema.eventSignups)
       .where(eq(schema.eventSignups.eventId, eventId));
+  }
 
-    // Get all current roster assignments
-    const currentAssignments = await tx
-      .select()
-      .from(schema.rosterAssignments)
-      .where(eq(schema.rosterAssignments.eventId, eventId));
-
-    // Count filled slots per role
-    const filledPerRole: Record<string, number> = {
-      tank: 0,
-      healer: 0,
-      dps: 0,
-    };
-    for (const a of currentAssignments) {
-      if (a.role && a.role in filledPerRole) {
-        filledPerRole[a.role]++;
-      }
-    }
-
-    // Get new signup's preferred roles
-    const newSignup = allSignups.find((s) => s.id === newSignupId);
-    if (!newSignup?.preferredRoles || newSignup.preferredRoles.length === 0) {
-      return;
-    }
-    // ROK-539: Sort preferred roles so tank/healer are tried before DPS
-    const rolePriority: Record<string, number> = { tank: 0, healer: 1, dps: 2 };
-    const newPrefs = [...(newSignup.preferredRoles ?? [])].sort(
-      (a, b) => (rolePriority[a] ?? 99) - (rolePriority[b] ?? 99),
-    );
-
-    // Build occupied positions per role for gap-finding
-    const occupiedPositions: Record<string, Set<number>> = {
-      tank: new Set(),
-      healer: new Set(),
-      dps: new Set(),
-    };
-    for (const a of currentAssignments) {
-      if (a.role && a.role in occupiedPositions) {
-        occupiedPositions[a.role].add(a.position);
-      }
-    }
-
-    // Find first available position (fills gaps left by leaves/rearranges)
-    const findFirstAvailablePosition = (role: string): number => {
-      const occupied = occupiedPositions[role] ?? new Set();
-      for (let pos = 1; ; pos++) {
-        if (!occupied.has(pos)) return pos;
-      }
-    };
-
-    // Try direct assignment: find an open slot matching one of the new player's prefs
+  private async tryDirectAllocation(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    newSignupId: number,
+    newPrefs: string[],
+    ctx: AllocationContext,
+  ): Promise<boolean> {
     for (const role of newPrefs) {
-      if (role in roleCapacity && filledPerRole[role] < roleCapacity[role]) {
-        // Open slot found — assign to first available position (fills gaps)
-        const position = findFirstAvailablePosition(role);
-        await tx.insert(schema.rosterAssignments).values({
-          eventId,
-          signupId: newSignupId,
-          role,
-          position,
-          isOverride: 0,
-        });
-        // ROK-598: Auto-slotted signups are implicitly confirmed
-        await tx
-          .update(schema.eventSignups)
-          .set({ confirmationStatus: 'confirmed' })
-          .where(eq(schema.eventSignups.id, newSignupId));
-        this.logger.log(
-          `Auto-allocated signup ${newSignupId} to ${role} slot ${position} (direct match)`,
-        );
-        await this.benchPromotionService.cancelPromotion(
-          eventId,
-          role,
-          position,
-        );
-        return;
-      }
-    }
+      if (
+        !(role in ctx.roleCapacity) ||
+        ctx.filledPerRole[role] >= ctx.roleCapacity[role]
+      )
+        continue;
 
-    // No direct slot available — try chain rearrangement via BFS.
-    // Finds the shortest sequence of moves that frees a slot for the new player.
-    // Example: new player wants DPS (full). Player A in DPS can play Healer (full).
-    //          Player B in Healer can play Tank (open). Chain: B→Tank, A→Healer, new→DPS.
+      const position = findFirstAvailableInSet(ctx.occupiedPositions[role]);
+      await this.insertAndConfirmSlot(tx, eventId, newSignupId, role, position);
+      this.logger.log(
+        `Auto-allocated signup ${newSignupId} to ${role} slot ${position} (direct match)`,
+      );
+      await this.benchPromotionService.cancelPromotion(eventId, role, position);
+      return true;
+    }
+    return false;
+  }
+
+  private async insertAndConfirmSlot(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+    role: string,
+    position: number,
+  ) {
+    await tx.insert(schema.rosterAssignments).values({
+      eventId,
+      signupId,
+      role,
+      position,
+      isOverride: 0,
+    });
+    await tx
+      .update(schema.eventSignups)
+      .set({ confirmationStatus: 'confirmed' })
+      .where(eq(schema.eventSignups.id, signupId));
+  }
+
+  private async tryChainRearrangement(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    newSignupId: number,
+    newPrefs: string[],
+    ctx: AllocationContext,
+  ): Promise<boolean> {
     const chain = this.findRearrangementChain(
       newPrefs,
-      currentAssignments,
-      allSignups,
-      roleCapacity,
-      filledPerRole,
+      ctx.currentAssignments,
+      ctx.allSignups,
+      ctx.roleCapacity,
+      ctx.filledPerRole,
     );
+    if (!chain) return false;
 
-    if (chain) {
-      // Execute moves in reverse order (innermost move first to free slots outward).
-      // Each player takes the position vacated by the next player in the chain.
-      // The last mover (innermost) gets a fresh position in their target role.
-      for (let i = chain.moves.length - 1; i >= 0; i--) {
-        const move = chain.moves[i];
-        // If there's a subsequent move in the chain that freed a position in this role, take it
-        const nextMove = i < chain.moves.length - 1 ? chain.moves[i + 1] : null;
-        const newPos =
-          nextMove && nextMove.fromRole === move.toRole
-            ? nextMove.position
-            : findFirstAvailablePosition(move.toRole);
-        await tx
-          .update(schema.rosterAssignments)
-          .set({ role: move.toRole, position: newPos })
-          .where(eq(schema.rosterAssignments.id, move.assignmentId));
-        // Track position changes for both occupancy and capacity
-        occupiedPositions[move.fromRole]?.delete(move.position);
-        occupiedPositions[move.toRole]?.add(newPos);
-        if (!nextMove || nextMove.fromRole !== move.toRole) {
-          filledPerRole[move.toRole]++;
-        }
-        this.logger.log(
-          `Chain rearrange: signup ${move.signupId} moved from ${move.fromRole} to ${move.toRole} slot ${newPos}`,
-        );
-      }
+    await this.executeChainMoves(tx, chain, ctx);
 
-      // Assign new player to the freed slot (position vacated by the first mover)
-      const freedRole = chain.freedRole;
-      const freedPosition = chain.moves[0].position;
-      await tx.insert(schema.rosterAssignments).values({
-        eventId,
-        signupId: newSignupId,
-        role: freedRole,
-        position: freedPosition,
-        isOverride: 0,
-      });
-
-      // ROK-598: Auto-slotted signups are implicitly confirmed
-      await tx
-        .update(schema.eventSignups)
-        .set({ confirmationStatus: 'confirmed' })
-        .where(eq(schema.eventSignups.id, newSignupId));
-      this.logger.log(
-        `Auto-allocated signup ${newSignupId} to ${freedRole} slot ${freedPosition} (${chain.moves.length}-step chain rearrangement)`,
-      );
-      await this.benchPromotionService.cancelPromotion(
-        eventId,
-        freedRole,
-        freedPosition,
-      );
-      return;
-    }
-
-    // ROK-459: No rearrangement possible among confirmed players — try tentative displacement.
-    // If a tentative player occupies a slot in one of the new player's preferred roles,
-    // displace the longest-tentative to unassigned pool and give their slot to the new player.
-    const newSignupStatus = allSignups.find(
-      (s) => s.id === newSignupId,
-    )?.status;
-    if (newSignupStatus !== 'tentative') {
-      const displaced = await this.displaceTentativeForSlot(
-        tx,
-        eventId,
-        newSignupId,
-        newPrefs,
-        currentAssignments,
-        allSignups,
-        roleCapacity,
-        occupiedPositions,
-        findFirstAvailablePosition,
-      );
-      if (displaced) return;
-    }
-
-    // No rearrangement or displacement possible — leave in unassigned pool
+    const freedRole = chain.freedRole;
+    const freedPosition = chain.moves[0].position;
+    await this.insertAndConfirmSlot(
+      tx,
+      eventId,
+      newSignupId,
+      freedRole,
+      freedPosition,
+    );
     this.logger.log(
-      `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement or tentative displacement available)`,
+      `Auto-allocated signup ${newSignupId} to ${freedRole} slot ${freedPosition} (${chain.moves.length}-step chain rearrangement)`,
+    );
+    await this.benchPromotionService.cancelPromotion(
+      eventId,
+      freedRole,
+      freedPosition,
+    );
+    return true;
+  }
+
+  private async executeChainMoves(
+    tx: PostgresJsDatabase<typeof schema>,
+    chain: NonNullable<ReturnType<SignupsService['findRearrangementChain']>>,
+    ctx: AllocationContext,
+  ) {
+    for (let i = chain.moves.length - 1; i >= 0; i--) {
+      const move = chain.moves[i];
+      const nextMove = i < chain.moves.length - 1 ? chain.moves[i + 1] : null;
+      const newPos =
+        nextMove && nextMove.fromRole === move.toRole
+          ? nextMove.position
+          : findFirstAvailableInSet(ctx.occupiedPositions[move.toRole]);
+
+      await tx
+        .update(schema.rosterAssignments)
+        .set({ role: move.toRole, position: newPos })
+        .where(eq(schema.rosterAssignments.id, move.assignmentId));
+
+      ctx.occupiedPositions[move.fromRole]?.delete(move.position);
+      ctx.occupiedPositions[move.toRole]?.add(newPos);
+      if (!nextMove || nextMove.fromRole !== move.toRole)
+        ctx.filledPerRole[move.toRole]++;
+      this.logger.log(
+        `Chain rearrange: signup ${move.signupId} moved from ${move.fromRole} to ${move.toRole} slot ${newPos}`,
+      );
+    }
+  }
+
+  private async tryTentativeDisplacement(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    newSignupId: number,
+    newPrefs: string[],
+    status: string,
+    ctx: AllocationContext,
+  ): Promise<boolean> {
+    if (status === 'tentative') return false;
+    const posFinder = (role: string) =>
+      findFirstAvailableInSet(ctx.occupiedPositions[role]);
+    return this.displaceTentativeForSlot(
+      tx,
+      eventId,
+      newSignupId,
+      newPrefs,
+      ctx.currentAssignments,
+      ctx.allSignups,
+      ctx.roleCapacity,
+      ctx.occupiedPositions,
+      posFinder,
     );
   }
 
@@ -2730,71 +2820,14 @@ export class SignupsService {
     vacatedRole: string,
     vacatedPosition: number,
   ): Promise<void> {
-    // ROK-459 review fix: wrap in transaction to prevent race between check and insert
-    const reslottedSignupId = await this.db.transaction(async (tx) => {
-      // Find tentative unassigned players who prefer this role
-      const candidates = await tx
-        .select({
-          id: schema.eventSignups.id,
-          preferredRoles: schema.eventSignups.preferredRoles,
-          signedUpAt: schema.eventSignups.signedUpAt,
-        })
-        .from(schema.eventSignups)
-        .leftJoin(
-          schema.rosterAssignments,
-          eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
-        )
-        .where(
-          and(
-            eq(schema.eventSignups.eventId, eventId),
-            eq(schema.eventSignups.status, 'tentative'),
-            isNull(schema.rosterAssignments.id),
-          ),
-        )
-        .orderBy(schema.eventSignups.signedUpAt);
-
-      // Find first candidate who prefers the vacated role
-      const candidate = candidates.find((c) => {
-        const prefs = c.preferredRoles ?? [];
-        return prefs.includes(vacatedRole);
-      });
-
-      if (!candidate) return null;
-
-      // Verify the slot is still empty (might have been filled by bench promotion)
-      const [existing] = await tx
-        .select({ id: schema.rosterAssignments.id })
-        .from(schema.rosterAssignments)
-        .where(
-          and(
-            eq(schema.rosterAssignments.eventId, eventId),
-            eq(schema.rosterAssignments.role, vacatedRole),
-            eq(schema.rosterAssignments.position, vacatedPosition),
-          ),
-        )
-        .limit(1);
-
-      if (existing) return null; // Slot already filled
-
-      // Assign the tentative player to the vacated slot
-      await tx.insert(schema.rosterAssignments).values({
-        eventId,
-        signupId: candidate.id,
-        role: vacatedRole,
-        position: vacatedPosition,
-        isOverride: 0,
-      });
-
-      return candidate.id;
-    });
-
+    const reslottedSignupId = await this.db.transaction((tx) =>
+      this.reslotTentativeTx(tx, eventId, vacatedRole, vacatedPosition),
+    );
     if (!reslottedSignupId) return;
 
     this.logger.log(
       `ROK-459: Reslotted tentative signup ${reslottedSignupId} to ${vacatedRole} slot ${vacatedPosition}`,
     );
-
-    // Resync embed
     this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
       eventId,
       signupId: reslottedSignupId,
@@ -2802,33 +2835,38 @@ export class SignupsService {
     });
   }
 
-  /**
-   * ROK-459: Check if a newly-tentative slotted player should be displaced by
-   * a confirmed unassigned player waiting for the same role.
-   * Called as a fire-and-forget side effect from updateStatus().
-   */
-  private async checkTentativeDisplacement(
+  private async reslotTentativeTx(
+    tx: PostgresJsDatabase<typeof schema>,
     eventId: number,
-    tentativeSignupId: number,
-  ): Promise<void> {
-    // Get the tentative player's current roster assignment
-    const [assignment] = await this.db
-      .select()
-      .from(schema.rosterAssignments)
-      .where(
-        and(
-          eq(schema.rosterAssignments.eventId, eventId),
-          eq(schema.rosterAssignments.signupId, tentativeSignupId),
-        ),
-      )
-      .limit(1);
+    vacatedRole: string,
+    vacatedPosition: number,
+  ): Promise<number | null> {
+    const candidate = await this.findTentativeCandidate(
+      tx,
+      eventId,
+      vacatedRole,
+    );
+    if (!candidate) return null;
 
-    if (!assignment || !assignment.role) return; // Not slotted, nothing to displace
+    if (await this.isSlotOccupied(tx, eventId, vacatedRole, vacatedPosition))
+      return null;
 
-    const role = assignment.role;
+    await tx.insert(schema.rosterAssignments).values({
+      eventId,
+      signupId: candidate.id,
+      role: vacatedRole,
+      position: vacatedPosition,
+      isOverride: 0,
+    });
+    return candidate.id;
+  }
 
-    // Find confirmed unassigned players who want this role
-    const unassignedConfirmed = await this.db
+  private async findTentativeCandidate(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    vacatedRole: string,
+  ) {
+    const candidates = await tx
       .select({
         id: schema.eventSignups.id,
         preferredRoles: schema.eventSignups.preferredRoles,
@@ -2842,45 +2880,123 @@ export class SignupsService {
       .where(
         and(
           eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.status, 'signed_up'),
+          eq(schema.eventSignups.status, 'tentative'),
           isNull(schema.rosterAssignments.id),
         ),
-      );
+      )
+      .orderBy(schema.eventSignups.signedUpAt);
 
-    // Find one that wants this role
-    const candidate = unassignedConfirmed.find((s) => {
-      const prefs = s.preferredRoles ?? [];
-      return prefs.includes(role);
-    });
+    return (
+      candidates.find((c) => (c.preferredRoles ?? []).includes(vacatedRole)) ??
+      null
+    );
+  }
 
-    if (!candidate) return; // No confirmed player waiting for this role
-
-    // Get event's slot config for the displacement method
-    const [event] = await this.db
-      .select({ slotConfig: schema.events.slotConfig })
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
+  private async isSlotOccupied(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    role: string,
+    position: number,
+  ): Promise<boolean> {
+    const [existing] = await tx
+      .select({ id: schema.rosterAssignments.id })
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.role, role),
+          eq(schema.rosterAssignments.position, position),
+        ),
+      )
       .limit(1);
+    return !!existing;
+  }
 
-    const slotConfig = event?.slotConfig as Record<string, unknown> | null;
-    if (slotConfig?.type !== 'mmo') return; // Only MMO events have role-based displacement
+  /**
+   * ROK-459: Check if a newly-tentative slotted player should be displaced by
+   * a confirmed unassigned player waiting for the same role.
+   * Called as a fire-and-forget side effect from updateStatus().
+   */
+  private async checkTentativeDisplacement(
+    eventId: number,
+    tentativeSignupId: number,
+  ): Promise<void> {
+    const role = await this.getTentativeAssignmentRole(
+      eventId,
+      tentativeSignupId,
+    );
+    if (!role) return;
 
-    // Run the auto-allocation for the confirmed unassigned player —
-    // this will trigger the displacement logic since all slots are full
-    await this.db.transaction(async (tx) => {
-      await this.autoAllocateSignup(tx, eventId, candidate.id, slotConfig);
-    });
+    const candidate = await this.findConfirmedCandidateForRole(eventId, role);
+    if (!candidate) return;
+
+    const slotConfig = await this.fetchMmoSlotConfig(eventId);
+    if (!slotConfig) return;
+
+    await this.db.transaction((tx) =>
+      this.autoAllocateSignup(tx, eventId, candidate.id, slotConfig),
+    );
 
     this.logger.log(
       `ROK-459: Triggered displacement check after signup ${tentativeSignupId} went tentative — candidate ${candidate.id}`,
     );
-
-    // Emit update to resync embed
     this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
       eventId,
       signupId: tentativeSignupId,
       action: 'tentative_displacement_check',
     });
+  }
+
+  private async getTentativeAssignmentRole(
+    eventId: number,
+    signupId: number,
+  ): Promise<string | null> {
+    const [assignment] = await this.db
+      .select({ role: schema.rosterAssignments.role })
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.signupId, signupId),
+        ),
+      )
+      .limit(1);
+    return assignment?.role ?? null;
+  }
+
+  private async findConfirmedCandidateForRole(eventId: number, role: string) {
+    const unassigned = await this.db
+      .select({
+        id: schema.eventSignups.id,
+        preferredRoles: schema.eventSignups.preferredRoles,
+      })
+      .from(schema.eventSignups)
+      .leftJoin(
+        schema.rosterAssignments,
+        eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+      )
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.status, 'signed_up'),
+          isNull(schema.rosterAssignments.id),
+        ),
+      );
+    return (
+      unassigned.find((s) => (s.preferredRoles ?? []).includes(role)) ?? null
+    );
+  }
+
+  private async fetchMmoSlotConfig(
+    eventId: number,
+  ): Promise<Record<string, unknown> | null> {
+    const [event] = await this.db
+      .select({ slotConfig: schema.events.slotConfig })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    const config = event?.slotConfig as Record<string, unknown> | null;
+    return config?.type === 'mmo' ? config : null;
   }
 
   /**
@@ -2907,90 +3023,44 @@ export class SignupsService {
     }>,
     roleCapacity: Record<string, number>,
     occupiedPositions: Record<string, Set<number>>,
-    findFirstAvailablePosition: (role: string) => number,
+    findPos: (role: string) => number,
   ): Promise<boolean> {
-    // Build a map of signupId -> signup data for status lookups
     const signupById = new Map(allSignups.map((s) => [s.id, s]));
 
-    // For each preferred role, find tentative occupants (sorted by signedUpAt ASC = longest tentative first)
     for (const role of newPrefs) {
       if (!(role in roleCapacity)) continue;
 
-      const tentativeOccupants = currentAssignments
-        .filter((a) => {
-          if (a.role !== role) return false;
-          const signup = signupById.get(a.signupId);
-          return signup?.status === 'tentative';
-        })
-        .sort((a, b) => {
-          const aTime = signupById.get(a.signupId)?.signedUpAt?.getTime() ?? 0;
-          const bTime = signupById.get(b.signupId)?.signedUpAt?.getTime() ?? 0;
-          return aTime - bTime; // Oldest tentative first (FIFO)
-        });
-
-      if (tentativeOccupants.length === 0) continue;
-
-      const victim = tentativeOccupants[0];
-      const victimSignup = signupById.get(victim.signupId);
-      const victimPrefs =
-        (victimSignup?.preferredRoles as string[] | null) ?? [];
-
-      // Try to rearrange the tentative player to another preferred role (not the displaced role)
-      const alternativeRoles = victimPrefs.filter(
-        (r) => r !== role && r in roleCapacity,
+      const victim = findOldestTentativeOccupant(
+        currentAssignments,
+        role,
+        signupById,
       );
-      let rearrangedToRole: string | undefined;
+      if (!victim) continue;
 
-      for (const altRole of alternativeRoles) {
-        const filledInAlt = currentAssignments.filter(
-          (a) => a.role === altRole,
-        ).length;
-        if (filledInAlt < roleCapacity[altRole]) {
-          // Open slot in alternative role — move tentative player there
-          const newPos = findFirstAvailablePosition(altRole);
-          await tx
-            .update(schema.rosterAssignments)
-            .set({ role: altRole, position: newPos })
-            .where(eq(schema.rosterAssignments.id, victim.id));
-          occupiedPositions[role]?.delete(victim.position);
-          occupiedPositions[altRole]?.add(newPos);
-          this.logger.log(
-            `ROK-459: Rearranged tentative signup ${victim.signupId} from ${role} slot ${victim.position} to ${altRole} slot ${newPos}`,
-          );
-          rearrangedToRole = altRole;
-          break;
-        }
-      }
+      const rearrangedToRole = await this.tryRearrangeVictim(
+        tx,
+        victim,
+        role,
+        currentAssignments,
+        roleCapacity,
+        occupiedPositions,
+        findPos,
+        signupById,
+      );
 
       if (!rearrangedToRole) {
-        // No alternative — remove assignment (move to unassigned pool)
-        await tx
-          .delete(schema.rosterAssignments)
-          .where(eq(schema.rosterAssignments.id, victim.id));
-        occupiedPositions[role]?.delete(victim.position);
-        this.logger.log(
-          `ROK-459: Displaced tentative signup ${victim.signupId} from ${role} slot ${victim.position} to unassigned pool`,
-        );
+        await this.removeVictimAssignment(tx, victim, role, occupiedPositions);
       }
 
-      // Assign new confirmed player to the freed slot
-      const freedPosition = rearrangedToRole
-        ? findFirstAvailablePosition(role)
-        : victim.position;
-      await tx.insert(schema.rosterAssignments).values({
+      const freedPosition = rearrangedToRole ? findPos(role) : victim.position;
+      await this.insertAndConfirmSlot(
+        tx,
         eventId,
-        signupId: newSignupId,
+        newSignupId,
         role,
-        position: freedPosition,
-        isOverride: 0,
-      });
+        freedPosition,
+      );
       occupiedPositions[role]?.add(freedPosition);
-
-      // ROK-598: Auto-slotted signups are implicitly confirmed
-      await tx
-        .update(schema.eventSignups)
-        .set({ confirmationStatus: 'confirmed' })
-        .where(eq(schema.eventSignups.id, newSignupId));
       this.logger.log(
         `ROK-459: Auto-allocated confirmed signup ${newSignupId} to ${role} slot ${freedPosition} (tentative displacement)`,
       );
@@ -3000,56 +3070,121 @@ export class SignupsService {
         freedPosition,
       );
 
-      // Send notification to displaced player
-      if (victimSignup) {
-        const [event] = await tx
-          .select({ title: schema.events.title })
-          .from(schema.events)
-          .where(eq(schema.events.id, eventId))
-          .limit(1);
-        const eventTitle = event?.title ?? `Event #${eventId}`;
-        const action = rearrangedToRole
-          ? `moved to ${rearrangedToRole}`
-          : 'moved to the unassigned pool';
-
-        // Only notify registered users (not anonymous Discord signups)
-        const [signup] = await tx
-          .select({ userId: schema.eventSignups.userId })
-          .from(schema.eventSignups)
-          .where(eq(schema.eventSignups.id, victim.signupId))
-          .limit(1);
-
-        if (signup?.userId) {
-          // ROK-538: Look up Discord embed URL for the event
-          const discordUrl =
-            await this.notificationService.getDiscordEmbedUrl(eventId);
-          // ROK-507: Resolve voice channel for the event
-          const voiceChannelId =
-            await this.notificationService.resolveVoiceChannelForEvent(eventId);
-          this.notificationService
-            .create({
-              userId: signup.userId,
-              type: 'tentative_displaced',
-              title: 'Roster update',
-              message: `A confirmed player took your ${role} slot in "${eventTitle}". You've been ${action}.`,
-              payload: {
-                eventId,
-                ...(discordUrl ? { discordUrl } : {}),
-                ...(voiceChannelId ? { voiceChannelId } : {}),
-              },
-            })
-            .catch((err: unknown) => {
-              this.logger.warn(
-                `Failed to notify displaced tentative player: ${err instanceof Error ? err.message : 'Unknown error'}`,
-              );
-            });
-        }
-      }
-
+      this.fireDisplacedNotification(
+        tx,
+        eventId,
+        victim.signupId,
+        role,
+        rearrangedToRole,
+      );
       return true;
     }
-
     return false;
+  }
+
+  private async tryRearrangeVictim(
+    tx: PostgresJsDatabase<typeof schema>,
+    victim: { id: number; signupId: number; position: number },
+    displacedRole: string,
+    currentAssignments: Array<{ role: string | null }>,
+    roleCapacity: Record<string, number>,
+    occupiedPositions: Record<string, Set<number>>,
+    findPos: (role: string) => number,
+    signupById: Map<number, { preferredRoles: string[] | null }>,
+  ): Promise<string | undefined> {
+    const victimPrefs = signupById.get(victim.signupId)?.preferredRoles ?? [];
+    const altRoles = victimPrefs.filter(
+      (r) => r !== displacedRole && r in roleCapacity,
+    );
+
+    for (const altRole of altRoles) {
+      const filledInAlt = currentAssignments.filter(
+        (a) => a.role === altRole,
+      ).length;
+      if (filledInAlt >= roleCapacity[altRole]) continue;
+
+      const newPos = findPos(altRole);
+      await tx
+        .update(schema.rosterAssignments)
+        .set({ role: altRole, position: newPos })
+        .where(eq(schema.rosterAssignments.id, victim.id));
+      occupiedPositions[displacedRole]?.delete(victim.position);
+      occupiedPositions[altRole]?.add(newPos);
+      this.logger.log(
+        `ROK-459: Rearranged tentative signup ${victim.signupId} from ${displacedRole} slot ${victim.position} to ${altRole} slot ${newPos}`,
+      );
+      return altRole;
+    }
+    return undefined;
+  }
+
+  private async removeVictimAssignment(
+    tx: PostgresJsDatabase<typeof schema>,
+    victim: { id: number; signupId: number; position: number },
+    role: string,
+    occupiedPositions: Record<string, Set<number>>,
+  ) {
+    await tx
+      .delete(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.id, victim.id));
+    occupiedPositions[role]?.delete(victim.position);
+    this.logger.log(
+      `ROK-459: Displaced tentative signup ${victim.signupId} from ${role} slot ${victim.position} to unassigned pool`,
+    );
+  }
+
+  private fireDisplacedNotification(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    victimSignupId: number,
+    role: string,
+    rearrangedToRole: string | undefined,
+  ) {
+    this.sendDisplacedNotification(
+      tx,
+      eventId,
+      victimSignupId,
+      role,
+      rearrangedToRole,
+    ).catch((err: unknown) => {
+      this.logger.warn(
+        `Failed to notify displaced tentative player: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    });
+  }
+
+  private async sendDisplacedNotification(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    victimSignupId: number,
+    role: string,
+    rearrangedToRole: string | undefined,
+  ) {
+    const [signup] = await tx
+      .select({ userId: schema.eventSignups.userId })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.id, victimSignupId))
+      .limit(1);
+    if (!signup?.userId) return;
+
+    const [event] = await tx
+      .select({ title: schema.events.title })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    const eventTitle = event?.title ?? `Event #${eventId}`;
+    const action = rearrangedToRole
+      ? `moved to ${rearrangedToRole}`
+      : 'moved to the unassigned pool';
+    const extraPayload = await this.fetchNotificationContext(eventId);
+
+    await this.notificationService.create({
+      userId: signup.userId,
+      type: 'tentative_displaced',
+      title: 'Roster update',
+      message: `A confirmed player took your ${role} slot in "${eventTitle}". You've been ${action}.`,
+      payload: { eventId, ...extraPayload },
+    });
   }
 
   /**
@@ -3072,105 +3207,14 @@ export class SignupsService {
     allSignups: Array<{ id: number; preferredRoles: string[] | null }>,
     roleCapacity: Record<string, number>,
     filledPerRole: Record<string, number>,
-  ): {
-    freedRole: string;
-    moves: Array<{
-      assignmentId: number;
-      signupId: number;
-      fromRole: string;
-      toRole: string;
-      position: number;
-    }>;
-  } | null {
-    const MAX_DEPTH = 3;
-
-    interface QueueEntry {
-      roleToFree: string;
-      moves: Array<{
-        assignmentId: number;
-        signupId: number;
-        fromRole: string;
-        toRole: string;
-        position: number;
-      }>;
-      usedSignupIds: Set<number>;
-    }
-
-    const queue: QueueEntry[] = [];
-
-    // Seed the BFS with the new player's preferred roles
-    for (const pref of newPrefs) {
-      if (pref in roleCapacity) {
-        queue.push({ roleToFree: pref, moves: [], usedSignupIds: new Set() });
-      }
-    }
-
-    while (queue.length > 0) {
-      const entry = queue.shift()!;
-      if (entry.moves.length >= MAX_DEPTH) continue;
-
-      // Find flexible occupants in the role we need to free
-      const occupants = currentAssignments.filter(
-        (a) =>
-          a.role === entry.roleToFree && !entry.usedSignupIds.has(a.signupId),
-      );
-
-      for (const occupant of occupants) {
-        const occupantSignup = allSignups.find(
-          (s) => s.id === occupant.signupId,
-        );
-        const occupantPrefs =
-          (occupantSignup?.preferredRoles as string[] | null) ?? [];
-        if (occupantPrefs.length <= 1) continue;
-
-        for (const altRole of occupantPrefs) {
-          if (altRole === entry.roleToFree || !(altRole in roleCapacity))
-            continue;
-
-          const move = {
-            assignmentId: occupant.id,
-            signupId: occupant.signupId,
-            fromRole: entry.roleToFree,
-            toRole: altRole,
-            position: occupant.position,
-          };
-          const newMoves = [...entry.moves, move];
-
-          // Count how many moves are already targeting this altRole
-          const movesIntoAltRole = newMoves.filter(
-            (m) => m.toRole === altRole,
-          ).length;
-          const effectiveFilled = filledPerRole[altRole] + movesIntoAltRole;
-          // Also subtract any moves OUT of altRole in the chain
-          const movesOutOfAltRole = newMoves.filter(
-            (m) => m.fromRole === altRole,
-          ).length;
-          const netFilled = effectiveFilled - movesOutOfAltRole;
-
-          if (netFilled <= roleCapacity[altRole]) {
-            // This role has space — chain complete
-            return {
-              freedRole:
-                entry.moves.length === 0
-                  ? entry.roleToFree
-                  : entry.moves[0].fromRole,
-              moves: newMoves,
-            };
-          }
-
-          // altRole is also full — continue BFS
-          const newUsed = new Set(entry.usedSignupIds);
-          newUsed.add(occupant.signupId);
-          queue.push({
-            roleToFree: altRole,
-            moves: newMoves,
-            usedSignupIds: newUsed,
-          });
-        }
-      }
-    }
-
-    return null;
+  ): RearrangementChainResult | null {
+    return bfsRearrangementChain(
+      newPrefs,
+      currentAssignments,
+      allSignups,
+      roleCapacity,
+      filledPerRole,
+    );
   }
 
   /**
@@ -3328,4 +3372,332 @@ function determineCancelStatus(eventDuration: [Date, Date] | null): {
 
 function formatRoleLabel(r: string): string {
   return r.charAt(0).toUpperCase() + r.slice(1);
+}
+
+/** Context for auto-allocation algorithm. */
+interface AllocationContext {
+  roleCapacity: Record<string, number>;
+  allSignups: Array<{
+    id: number;
+    preferredRoles: string[] | null;
+    status: string;
+    signedUpAt: Date | null;
+  }>;
+  currentAssignments: Array<typeof schema.rosterAssignments.$inferSelect>;
+  filledPerRole: Record<string, number>;
+  occupiedPositions: Record<string, Set<number>>;
+}
+
+function extractRoleCapacity(
+  slotConfig: Record<string, unknown> | null,
+): Record<string, number> {
+  return {
+    tank: (slotConfig?.tank as number) ?? 2,
+    healer: (slotConfig?.healer as number) ?? 4,
+    dps: (slotConfig?.dps as number) ?? 14,
+  };
+}
+
+function countFilledPerRole(
+  assignments: Array<{ role: string | null }>,
+): Record<string, number> {
+  const filled: Record<string, number> = { tank: 0, healer: 0, dps: 0 };
+  for (const a of assignments) {
+    if (a.role && a.role in filled) filled[a.role]++;
+  }
+  return filled;
+}
+
+function buildOccupiedPositions(
+  assignments: Array<{ role: string | null; position: number }>,
+): Record<string, Set<number>> {
+  const occupied: Record<string, Set<number>> = {
+    tank: new Set(),
+    healer: new Set(),
+    dps: new Set(),
+  };
+  for (const a of assignments) {
+    if (a.role && a.role in occupied) occupied[a.role].add(a.position);
+  }
+  return occupied;
+}
+
+function sortByRolePriority(roles: string[]): string[] {
+  const priority: Record<string, number> = { tank: 0, healer: 1, dps: 2 };
+  return [...roles].sort((a, b) => (priority[a] ?? 99) - (priority[b] ?? 99));
+}
+
+function findOldestTentativeOccupant(
+  assignments: Array<{
+    id: number;
+    signupId: number;
+    role: string | null;
+    position: number;
+  }>,
+  role: string,
+  signupById: Map<number, { status: string; signedUpAt: Date | null }>,
+) {
+  const tentative = assignments
+    .filter(
+      (a) =>
+        a.role === role && signupById.get(a.signupId)?.status === 'tentative',
+    )
+    .sort((a, b) => {
+      const aTime = signupById.get(a.signupId)?.signedUpAt?.getTime() ?? 0;
+      const bTime = signupById.get(b.signupId)?.signedUpAt?.getTime() ?? 0;
+      return aTime - bTime;
+    });
+  return tentative[0] ?? null;
+}
+
+function findFirstAvailableInSet(occupied: Set<number> | undefined): number {
+  const set = occupied ?? new Set<number>();
+  for (let pos = 1; ; pos++) {
+    if (!set.has(pos)) return pos;
+  }
+}
+
+function findRoleChanges(
+  before: RosterSnapshot[],
+  after: RosterSnapshot[],
+  excludeSignupId: number,
+): Array<{ signupId: number; fromRole: string; toRole: string }> {
+  const beforeMap = new Map(before.map((a) => [a.signupId, a]));
+  const changes: Array<{ signupId: number; fromRole: string; toRole: string }> =
+    [];
+  for (const afterEntry of after) {
+    if (afterEntry.signupId === excludeSignupId) continue;
+    const beforeEntry = beforeMap.get(afterEntry.signupId);
+    if (!beforeEntry || beforeEntry.role === afterEntry.role) continue;
+    changes.push({
+      signupId: afterEntry.signupId,
+      fromRole: beforeEntry.role ?? 'unknown',
+      toRole: afterEntry.role ?? 'unknown',
+    });
+  }
+  return changes;
+}
+
+function findFirstGap(positions: number[]): number {
+  const occupied = new Set(positions);
+  let pos = 1;
+  while (occupied.has(pos)) pos++;
+  return pos;
+}
+
+/** Shared result type for bench promotion methods. */
+interface PromotionResult {
+  role: string;
+  position: number;
+  username: string;
+  chainMoves?: string[];
+  warning?: string;
+}
+
+/** Snapshot of a roster assignment for chain-move detection. */
+type RosterSnapshot = {
+  id: number;
+  signupId: number;
+  role: string | null;
+  position: number;
+};
+
+/** Chain move detection result. */
+interface ChainMove {
+  signupId: number;
+  username: string;
+  fromRole: string;
+  toRole: string;
+}
+
+function buildPromotionWarnings(
+  username: string,
+  preferredRoles: string[] | null,
+  assignedRole: string | null,
+  chainMoves: ChainMove[],
+): string[] {
+  const warnings: string[] = [];
+  const prefs = preferredRoles ?? [];
+  if (prefs.length > 0 && assignedRole && !prefs.includes(assignedRole)) {
+    warnings.push(
+      `${username} was placed in **${assignedRole}** which is not in their preferred roles (${prefs.join(', ')}).`,
+    );
+  }
+  for (const move of chainMoves) {
+    warnings.push(
+      `${move.username} moved from **${move.fromRole}** to **${move.toRole}** to accommodate the promotion.`,
+    );
+  }
+  return warnings;
+}
+
+/** A chain move in the BFS rearrangement solver. */
+interface ChainMoveEntry {
+  assignmentId: number;
+  signupId: number;
+  fromRole: string;
+  toRole: string;
+  position: number;
+}
+
+/** Result from the BFS rearrangement chain solver. */
+type RearrangementChainResult = {
+  freedRole: string;
+  moves: ChainMoveEntry[];
+};
+
+/**
+ * BFS chain rearrangement solver for auto-allocation.
+ * Max depth: 3 (prevents combinatorial explosion for large rosters).
+ */
+function bfsRearrangementChain(
+  newPrefs: string[],
+  currentAssignments: Array<{
+    id: number;
+    signupId: number;
+    role: string | null;
+    position: number;
+  }>,
+  allSignups: Array<{ id: number; preferredRoles: string[] | null }>,
+  roleCapacity: Record<string, number>,
+  filledPerRole: Record<string, number>,
+): RearrangementChainResult | null {
+  const MAX_DEPTH = 3;
+  const queue = seedBfsQueue(newPrefs, roleCapacity);
+
+  while (queue.length > 0) {
+    const entry = queue.shift()!;
+    if (entry.moves.length >= MAX_DEPTH) continue;
+
+    const result = processBfsEntry(
+      entry,
+      currentAssignments,
+      allSignups,
+      roleCapacity,
+      filledPerRole,
+      queue,
+    );
+    if (result) return result;
+  }
+  return null;
+}
+
+function seedBfsQueue(
+  newPrefs: string[],
+  roleCapacity: Record<string, number>,
+): Array<{
+  roleToFree: string;
+  moves: ChainMoveEntry[];
+  usedSignupIds: Set<number>;
+}> {
+  return newPrefs
+    .filter((pref) => pref in roleCapacity)
+    .map((pref) => ({
+      roleToFree: pref,
+      moves: [],
+      usedSignupIds: new Set<number>(),
+    }));
+}
+
+function processBfsEntry(
+  entry: {
+    roleToFree: string;
+    moves: ChainMoveEntry[];
+    usedSignupIds: Set<number>;
+  },
+  currentAssignments: Array<{
+    id: number;
+    signupId: number;
+    role: string | null;
+    position: number;
+  }>,
+  allSignups: Array<{ id: number; preferredRoles: string[] | null }>,
+  roleCapacity: Record<string, number>,
+  filledPerRole: Record<string, number>,
+  queue: Array<{
+    roleToFree: string;
+    moves: ChainMoveEntry[];
+    usedSignupIds: Set<number>;
+  }>,
+): RearrangementChainResult | null {
+  const occupants = currentAssignments.filter(
+    (a) => a.role === entry.roleToFree && !entry.usedSignupIds.has(a.signupId),
+  );
+
+  for (const occupant of occupants) {
+    const result = tryOccupantMoves(
+      occupant,
+      entry,
+      allSignups,
+      roleCapacity,
+      filledPerRole,
+      queue,
+    );
+    if (result) return result;
+  }
+  return null;
+}
+
+function tryOccupantMoves(
+  occupant: { id: number; signupId: number; position: number },
+  entry: {
+    roleToFree: string;
+    moves: ChainMoveEntry[];
+    usedSignupIds: Set<number>;
+  },
+  allSignups: Array<{ id: number; preferredRoles: string[] | null }>,
+  roleCapacity: Record<string, number>,
+  filledPerRole: Record<string, number>,
+  queue: Array<{
+    roleToFree: string;
+    moves: ChainMoveEntry[];
+    usedSignupIds: Set<number>;
+  }>,
+): RearrangementChainResult | null {
+  const prefs =
+    allSignups.find((s) => s.id === occupant.signupId)?.preferredRoles ?? [];
+  if (prefs.length <= 1) return null;
+
+  for (const altRole of prefs) {
+    if (altRole === entry.roleToFree || !(altRole in roleCapacity)) continue;
+
+    const move: ChainMoveEntry = {
+      assignmentId: occupant.id,
+      signupId: occupant.signupId,
+      fromRole: entry.roleToFree,
+      toRole: altRole,
+      position: occupant.position,
+    };
+    const newMoves = [...entry.moves, move];
+    const netFilled = computeNetFilled(
+      newMoves,
+      altRole,
+      filledPerRole[altRole],
+    );
+
+    if (netFilled <= roleCapacity[altRole]) {
+      const freedRole =
+        entry.moves.length === 0 ? entry.roleToFree : entry.moves[0].fromRole;
+      return { freedRole, moves: newMoves };
+    }
+
+    const newUsed = new Set(entry.usedSignupIds);
+    newUsed.add(occupant.signupId);
+    queue.push({
+      roleToFree: altRole,
+      moves: newMoves,
+      usedSignupIds: newUsed,
+    });
+  }
+  return null;
+}
+
+function computeNetFilled(
+  moves: ChainMoveEntry[],
+  altRole: string,
+  baseFilled: number,
+): number {
+  const into = moves.filter((m) => m.toRole === altRole).length;
+  const outOf = moves.filter((m) => m.fromRole === altRole).length;
+  return baseFilled + into - outOf;
 }

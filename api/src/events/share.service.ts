@@ -142,37 +142,65 @@ export class ShareService {
     context: EmbedContext,
   ): Promise<boolean> {
     try {
-      const channel = await guild.channels.fetch(channelId);
-      if (!channel || !channel.isTextBased() || channel.isDMBased())
-        return false;
-
-      const { embed, row } = this.embedFactory.buildEventEmbed(
+      return await this.trySendEmbed(
+        guild,
+        channelId,
+        eventId,
         eventData,
         context,
       );
-      const message = await channel.send({
-        embeds: [embed],
-        ...(row ? { components: [row] } : {}),
-      });
-
-      await this.db.insert(schema.discordEventMessages).values({
-        eventId,
-        guildId: guild.id,
-        channelId,
-        messageId: message.id,
-        embedState: 'posted',
-      });
-      this.logger.log('Shared event %d to channel %s', eventId, channelId);
-      return true;
     } catch (error) {
-      this.logger.warn(
-        'Failed to share event %d to channel %s: %s',
-        eventId,
-        channelId,
-        error instanceof Error ? error.message : 'Unknown error',
-      );
+      this.logShareFailure(eventId, channelId, error);
       return false;
     }
+  }
+
+  private async trySendEmbed(
+    guild: any,
+    channelId: string,
+    eventId: number,
+    eventData: any,
+    context: EmbedContext,
+  ): Promise<boolean> {
+    const channel = await guild.channels.fetch(channelId);
+    if (!channel || !channel.isTextBased() || channel.isDMBased()) return false;
+
+    const { embed, row } = this.embedFactory.buildEventEmbed(
+      eventData,
+      context,
+    );
+    const message = await channel.send({
+      embeds: [embed],
+      ...(row ? { components: [row] } : {}),
+    });
+
+    await this.recordPostedMessage(eventId, guild.id, channelId, message.id);
+    return true;
+  }
+
+  private async recordPostedMessage(
+    eventId: number,
+    guildId: string,
+    channelId: string,
+    messageId: string,
+  ) {
+    await this.db.insert(schema.discordEventMessages).values({
+      eventId,
+      guildId,
+      channelId,
+      messageId,
+      embedState: 'posted',
+    });
+    this.logger.log('Shared event %d to channel %s', eventId, channelId);
+  }
+
+  private logShareFailure(eventId: number, channelId: string, error: unknown) {
+    this.logger.warn(
+      'Failed to share event %d to channel %s: %s',
+      eventId,
+      channelId,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
   }
 
   private async buildContext(): Promise<EmbedContext> {

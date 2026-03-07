@@ -232,6 +232,13 @@ export class BenchPromotionProcessor extends WorkerHost {
       );
     }
 
+    this.emitBenchPromotedEvent(benchPlayer, eventId);
+  }
+
+  private emitBenchPromotedEvent(
+    benchPlayer: { signupId: number; userId: number | null },
+    eventId: number,
+  ) {
     this.eventEmitter.emit(SIGNUP_EVENTS.UPDATED, {
       eventId,
       userId: benchPlayer.userId,
