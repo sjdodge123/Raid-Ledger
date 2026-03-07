@@ -50,16 +50,16 @@ function GameTimeBadge() {
     );
 }
 
-function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPath, matchesGameTime, status }: {
+function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPath, matchesGameTime, status, onImageError }: {
     event: EventResponseDto; showPlaceholder: boolean; gameCoverUrl: string | null;
-    placeholderPath: string; matchesGameTime?: boolean; status: EventDisplayStatus;
+    placeholderPath: string; matchesGameTime?: boolean; status: EventDisplayStatus; onImageError: () => void;
 }) {
     return (
         <div className="aspect-[3/4] relative overflow-hidden bg-panel badge-overlay">
             {!showPlaceholder && gameCoverUrl && (
                 <img src={gameCoverUrl} alt={event.game?.name || 'Event'}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    onError={onImageError} />
             )}
             {showPlaceholder && (
                 <img src={placeholderPath} alt={event.game?.name || 'Gaming Event'}
@@ -135,7 +135,7 @@ export const EventCard = React.memo(function EventCard({ event, signupCount = 0,
             role="button" tabIndex={0}
             className={`group cursor-pointer bg-surface rounded-lg border border-edge overflow-hidden hover:border-dim hover:shadow-xl focus:outline-none transition-all duration-200 ${isCancelled ? 'opacity-60 hover:shadow-red-500/10 focus:border-red-500' : 'hover:shadow-emerald-500/10 focus:border-emerald-500'}`}>
             <GameCoverSection event={event} showPlaceholder={showPlaceholder} gameCoverUrl={gameCoverUrl}
-                placeholderPath={placeholderPath} matchesGameTime={matchesGameTime} status={status} />
+                placeholderPath={placeholderPath} matchesGameTime={matchesGameTime} status={status} onImageError={() => setImageError(true)} />
             <EventInfoSection event={event} signupCount={signupCount} resolved={resolved} />
         </div>
     );

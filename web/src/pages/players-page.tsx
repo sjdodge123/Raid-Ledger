@@ -8,6 +8,7 @@ import { MobilePlayerCard } from '../components/players/mobile-player-card';
 import { PlayersMobileToolbar } from '../components/players/players-mobile-toolbar';
 import { InfiniteScrollSentinel } from '../components/ui/infinite-scroll-sentinel';
 import { PullToRefresh } from '../components/ui/pull-to-refresh';
+import type { UserPreviewDto } from '@raid-ledger/contract';
 
 function usePlayerSearch() {
     const [searchParams] = useSearchParams();
@@ -56,8 +57,7 @@ function PlayersLoadingSkeleton() {
     );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function DesktopPlayerCard({ player }: { player: any }) {
+function DesktopPlayerCard({ player }: { player: UserPreviewDto }) {
     const avatar = resolveAvatar(toAvatarUser(player));
     return (
         <Link to={`/users/${player.id}`} className="bg-panel border border-edge rounded-lg p-4 hover:bg-overlay transition-colors text-center group">
@@ -69,8 +69,7 @@ function DesktopPlayerCard({ player }: { player: any }) {
     );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PlayerGrid({ players, debouncedSearch }: { players: any[]; debouncedSearch: string }) {
+function PlayerGrid({ players, debouncedSearch }: { players: UserPreviewDto[]; debouncedSearch: string }) {
     if (players.length === 0) {
         return <div className="text-center py-12 text-muted"><p className="text-lg">No players found</p>{debouncedSearch && <p className="text-sm mt-1">Try a different search term</p>}</div>;
     }

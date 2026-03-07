@@ -10,13 +10,6 @@ import type { RosterAssignmentResponse, RosterRole, PugRole, CharacterRole } fro
  * Custom hook encapsulating all event detail page handler logic.
  * Extracts signup, roster, PUG, and admin removal handlers.
  */
-function toastMutate(successMsg: string, successDesc: string, errorMsg: string) {
-    return {
-        onSuccess: () => toast.success(successMsg, { description: successDesc }),
-        onError: (err: unknown) => toast.error(errorMsg, { description: err instanceof Error ? err.message : 'Please try again.' }),
-    };
-}
-
 function buildConfirmOpts(selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }, pendingSlot: { role: RosterRole; position: number } | null) {
     const opts: { characterId: string; slotRole?: string; slotPosition?: number; preferredRoles?: string[] } = { characterId: selection.characterId };
     if (selection.preferredRoles?.length) opts.preferredRoles = selection.preferredRoles;

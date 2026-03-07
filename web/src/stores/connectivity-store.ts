@@ -54,7 +54,7 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
     lastOnlineAt: null,
     consecutiveFailures: 0,
 
-    async check() { await performCheck(set, get); },
+    check() { return performCheck(set, get); },
 
     startPolling() {
         let timerId: ReturnType<typeof setTimeout>;

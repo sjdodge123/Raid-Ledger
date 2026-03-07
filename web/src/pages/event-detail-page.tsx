@@ -123,8 +123,16 @@ function useEventDetailVoice(event: EventResponseDto | undefined, eventId: numbe
     return { isAdHoc, eventStatus, showVoiceRoster, voiceRoster, voiceChannel };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function EventDetailModals({ event, eventId, derived, handlers, showCancelModal, setShowCancelModal, showRescheduleModal, setShowRescheduleModal, showInviteModal, setShowInviteModal, roster, searchParams, setSearchParams }: any) {
+type EventDetailDerived = ReturnType<typeof useEventDetailDerived>;
+type EventDetailHandlers = ReturnType<typeof useEventDetailHandlers>;
+type ModalState = ReturnType<typeof useModalState>;
+
+function EventDetailModals({ event, eventId, derived, handlers, showCancelModal, setShowCancelModal, showRescheduleModal, setShowRescheduleModal, showInviteModal, setShowInviteModal, roster, searchParams, setSearchParams }: {
+    event: EventResponseDto; eventId: number; derived: EventDetailDerived; handlers: EventDetailHandlers;
+    showCancelModal: boolean; setShowCancelModal: (v: boolean) => void; showRescheduleModal: boolean; setShowRescheduleModal: (v: boolean) => void;
+    showInviteModal: boolean; setShowInviteModal: (v: boolean) => void; roster: EventRosterDto | undefined;
+    searchParams: URLSearchParams; setSearchParams: ReturnType<typeof useSearchParams>[1];
+}) {
     const deepLinkAction = searchParams.get('action');
     const deepLinkReason = searchParams.get('reason');
     const canDeepLink = derived.canManageRoster;
@@ -154,8 +162,13 @@ function useModalState() {
     return { searchParams, setSearchParams, showRescheduleModal, setShowRescheduleModal, showCancelModal, setShowCancelModal, showInviteModal, setShowInviteModal };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, handlers, modals }: any) {
+type PageState = ReturnType<typeof useEventDetailPageState>;
+type VoiceState = ReturnType<typeof useEventDetailVoice>;
+
+function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, handlers, modals }: {
+    page: PageState & { event: EventResponseDto }; voice: VoiceState; bannerRef: React.RefObject<HTMLDivElement | null>;
+    isBannerCollapsed: boolean; derived: EventDetailDerived; handlers: EventDetailHandlers; modals: ModalState;
+}) {
     return (
         <div className="event-detail-page pb-20 md:pb-0">
             <EventDetailTopbar fromCalendar={page.fromCalendar} navState={page.navState} hasHistory={page.hasHistory} isAuthenticated={page.isAuthenticated}

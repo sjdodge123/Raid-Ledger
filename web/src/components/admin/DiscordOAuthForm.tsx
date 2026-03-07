@@ -41,13 +41,6 @@ function CallbackUrlsSection({ callbackUrl, linkCallbackUrl }: { callbackUrl: st
     );
 }
 
-function OAuthActionButtons({ configured, isPending }: {
-    configured: boolean; isPending: { save: boolean; test: boolean; clear: boolean };
-    onTest: () => void; onClear: () => void;
-}) {
-    return null;
-}
-
 function useOAuthFormState() {
     const { oauthStatus, updateOAuth, testOAuth, clearOAuth } = useAdminSettings();
     const [clientId, setClientId] = useState('');

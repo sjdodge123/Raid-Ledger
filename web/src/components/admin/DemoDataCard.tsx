@@ -95,13 +95,13 @@ function useDemoHandlers() {
 
     const handleInstall = async () => {
         if (!confirm('This will create demo users, events, and sample data for testing. Continue?')) return;
-        try { const r = await installDemoData.mutateAsync(); r.success ? toast.success(r.message) : toast.error(r.message); }
+        try { const r = await installDemoData.mutateAsync(); if (r.success) toast.success(r.message); else toast.error(r.message); }
         catch { toast.error('Failed to install demo data'); }
     };
 
     const handleClear = async () => {
         if (!status || !confirm(buildClearWarning(status))) return;
-        try { const r = await clearDemoData.mutateAsync(); r.success ? toast.success(r.message) : toast.error(r.message); }
+        try { const r = await clearDemoData.mutateAsync(); if (r.success) toast.success(r.message); else toast.error(r.message); }
         catch { toast.error('Failed to delete demo data'); }
     };
 

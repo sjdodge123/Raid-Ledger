@@ -3,7 +3,7 @@ import { useCharacterDetail } from '../hooks/use-character-detail';
 import { useUpdateCharacter } from '../hooks/use-character-mutations';
 import { useAuth } from '../hooks/use-auth';
 import { useState, useEffect, useRef } from 'react';
-import type { CharacterRole } from '@raid-ledger/contract';
+import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { PluginSlot } from '../plugins';
 
 const ROLE_COLORS: Record<string, string> = {
@@ -141,8 +141,7 @@ function CharacterRoleBadge({ character, isOwner }: { character: { id: string; e
     );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CharacterHeader({ character, isOwner, isArmoryImported }: { character: any; isOwner: boolean; isArmoryImported: boolean }) {
+function CharacterHeader({ character, isOwner, isArmoryImported }: { character: CharacterDto; isOwner: boolean; isArmoryImported: boolean }) {
     return (
         <div className="bg-panel border border-edge rounded-lg p-6">
             <div className="flex items-start gap-4">
@@ -163,8 +162,7 @@ function CharacterHeader({ character, isOwner, isArmoryImported }: { character: 
     );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CharacterEquipmentSection({ character, isArmoryImported }: { character: any; isArmoryImported: boolean }) {
+function CharacterEquipmentSection({ character, isArmoryImported }: { character: CharacterDto; isArmoryImported: boolean }) {
     return (
         <PluginSlot name="character-detail:sections"
             context={{ equipment: character.equipment, talents: character.talents, gameVariant: character.gameVariant, renderUrl: character.renderUrl, isArmoryImported, characterClass: character.class ?? null, enrichments: character.enrichments ?? [] }}
