@@ -30,7 +30,7 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
   // ===================================================================
 
   describe('embed scheduler', () => {
-    it('should identify events without embed rows via LEFT JOIN', async () => {
+    async function testShouldidentifyeventswithoutembedrowsvialeft() {
       const db = testApp.db;
       const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000); // 2 days from now
       const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
@@ -67,9 +67,13 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
       const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
       expect(match).toBeDefined();
       expect(match?.embedId).toBeNull();
+    }
+
+    it('should identify events without embed rows via LEFT JOIN', async () => {
+      await testShouldidentifyeventswithoutembedrowsvialeft();
     });
 
-    it('should exclude events that already have an embed row', async () => {
+    async function testShouldexcludeeventsthatalreadyhaveanembed() {
       const db = testApp.db;
       const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
       const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
@@ -112,9 +116,13 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
 
       const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
       expect(match).toBeUndefined();
+    }
+
+    it('should exclude events that already have an embed row', async () => {
+      await testShouldexcludeeventsthatalreadyhaveanembed();
     });
 
-    it('should exclude cancelled events', async () => {
+    async function testShouldexcludecancelledevents() {
       const db = testApp.db;
       const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
       const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
@@ -150,6 +158,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
 
       const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
       expect(match).toBeUndefined();
+    }
+
+    it('should exclude cancelled events', async () => {
+      await testShouldexcludecancelledevents();
     });
   });
 
@@ -158,7 +170,7 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
   // ===================================================================
 
   describe('embed poster roster enrichment', () => {
-    it('should return correct signup counts and role data via multi-JOIN', async () => {
+    async function testShouldreturncorrectsignupcountsandroledata() {
       const db = testApp.db;
       const futureStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
@@ -285,9 +297,13 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
       // Signup without character should have null className
       const dpsRow = signupRows.find((r) => r.role === 'dps');
       expect(dpsRow?.className).toBeNull();
+    }
+
+    it('should return correct signup counts and role data via multi-JOIN', async () => {
+      await testShouldreturncorrectsignupcountsandroledata();
     });
 
-    it('should exclude declined signups from active count', async () => {
+    async function testShouldexcludedeclinedsignupsfromactivecount() {
       const db = testApp.db;
       const futureStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
@@ -344,6 +360,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
 
       expect(signupRows.length).toBe(2);
       expect(activeSignups.length).toBe(1);
+    }
+
+    it('should exclude declined signups from active count', async () => {
+      await testShouldexcludedeclinedsignupsfromactivecount();
     });
   });
 
@@ -388,7 +408,7 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
       expect(slot.invitedAt).toBeNull();
     });
 
-    it('should atomically claim pending slots via UPDATE RETURNING (handleNewGuildMember)', async () => {
+    async function testShouldatomicallyclaimpendingslotsviaupdatereturning() {
       const db = testApp.db;
 
       // Create two pending slots for the same username across different events
@@ -443,6 +463,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
         expect(slot.discordUserId).toBe('999888777666');
         expect(slot.invitedAt).not.toBeNull();
       }
+    }
+
+    it('should atomically claim pending slots via UPDATE RETURNING (handleNewGuildMember)', async () => {
+      await testShouldatomicallyclaimpendingslotsviaupdatereturning();
     });
 
     it('should prevent duplicate DMs by only claiming pending slots', async () => {
@@ -498,7 +522,7 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
       expect(event.cancelledAt).not.toBeNull();
     });
 
-    it('should claim PUG slots by discordUserId OR inviteCode', async () => {
+    async function testShouldclaimpugslotsbydiscorduseridorinvitecode() {
       const db = testApp.db;
 
       // Create a second user who will claim
@@ -578,6 +602,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
 
       expect(byCodeResult.length).toBe(1);
       expect(byCodeResult[0].claimedByUserId).toBe(claimUser.id);
+    }
+
+    it('should claim PUG slots by discordUserId OR inviteCode', async () => {
+      await testShouldclaimpugslotsbydiscorduseridorinvitecode();
     });
 
     it('should enforce unique constraint on (eventId, discordUsername)', async () => {
@@ -629,7 +657,7 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
   // ===================================================================
 
   describe('discord event messages', () => {
-    it('should insert and query embed tracking rows', async () => {
+    async function testShouldinsertandqueryembedtrackingrows() {
       const db = testApp.db;
       const futureStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
@@ -665,6 +693,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds
         .limit(1);
 
       expect(rows.length).toBe(1);
+    }
+
+    it('should insert and query embed tracking rows', async () => {
+      await testShouldinsertandqueryembedtrackingrows();
     });
 
     it('should cascade delete embed rows when event is deleted', async () => {

@@ -26,32 +26,35 @@ describe('EventsListCommand — detail', () => {
     ...overrides,
   });
 
-  beforeEach(async () => {
+  function buildProviders() {
+    return [
+      EventsListCommand,
+      {
+        provide: EventsService,
+        useValue: {
+          findAll: jest.fn(),
+          findOne: jest.fn(),
+        },
+      },
+      {
+        provide: UsersService,
+        useValue: {
+          findByDiscordId: jest.fn(),
+        },
+      },
+      {
+        provide: MagicLinkService,
+        useValue: {
+          generateLink: jest.fn(),
+        },
+      },
+    ];
+  }
+  async function setupBlock() {
     delete process.env.CLIENT_URL;
 
     const module_: TestingModule = await Test.createTestingModule({
-      providers: [
-        EventsListCommand,
-        {
-          provide: EventsService,
-          useValue: {
-            findAll: jest.fn(),
-            findOne: jest.fn(),
-          },
-        },
-        {
-          provide: UsersService,
-          useValue: {
-            findByDiscordId: jest.fn(),
-          },
-        },
-        {
-          provide: MagicLinkService,
-          useValue: {
-            generateLink: jest.fn(),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     module = module_;
@@ -59,6 +62,10 @@ describe('EventsListCommand — detail', () => {
     eventsService = module.get(EventsService);
     usersService = module.get(UsersService);
     magicLinkService = module.get(MagicLinkService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {

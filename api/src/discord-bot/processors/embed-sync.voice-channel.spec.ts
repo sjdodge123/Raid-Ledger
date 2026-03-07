@@ -82,7 +82,73 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
       .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }])); // games
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      EmbedSyncProcessor,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksA() {
+    return [
+      {
+        provide: DiscordEmbedFactory,
+        useValue: {
+          buildEventUpdate: jest
+            .fn()
+            .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Guild',
+            communityLogoPath: null,
+            communityAccentColor: null,
+          }),
+          getClientUrl: jest.fn().mockResolvedValue(null),
+          getDefaultTimezone: jest.fn().mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksB() {
+    return [
+      {
+        provide: ScheduledEventService,
+        useValue: {
+          updateDescription: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveVoiceChannelForScheduledEvent: jest
+            .fn()
+            .mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [...buildProvidersMocksA(), ...buildProvidersMocksB()];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     const selectChain = makeSelectChain();
     const updateChain = makeUpdateChain();
 
@@ -92,57 +158,16 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EmbedSyncProcessor,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
-          },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventUpdate: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue(null),
-            getDefaultTimezone: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: ScheduledEventService,
-          useValue: {
-            updateDescription: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveVoiceChannelForScheduledEvent: jest
-              .fn()
-              .mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     processor = module.get(EmbedSyncProcessor);
     embedFactory = module.get(DiscordEmbedFactory);
     channelResolver = module.get(ChannelResolverService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {

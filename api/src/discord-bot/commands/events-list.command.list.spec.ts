@@ -348,7 +348,7 @@ describe('EventsListCommand — list', () => {
   // ============================================================
 
   describe('collector timeout cleanup', () => {
-    it('should remove components from reply when collector ends (timeout)', async () => {
+    async function testShouldremovecomponentsfromreplywhencollectorends() {
       let endHandler: (() => void) | undefined;
       const collectorWithEnd = {
         on: jest
@@ -389,6 +389,10 @@ describe('EventsListCommand — list', () => {
       expect(interaction.editReply).toHaveBeenLastCalledWith({
         components: [],
       });
+    }
+
+    it('should remove components from reply when collector ends (timeout)', async () => {
+      await testShouldremovecomponentsfromreplywhencollectorends();
     });
 
     it('should register both collect and end handlers on the collector', async () => {
@@ -425,7 +429,7 @@ describe('EventsListCommand — list', () => {
       expect(registeredEvents).toContain('end');
     });
 
-    it('should filter collector to only handle interactions from the original user', async () => {
+    async function testShouldfiltercollectortoonlyhandleinteractionsfrom() {
       let capturedFilter:
         | ((i: { user: { id: string } }) => boolean)
         | undefined;
@@ -464,6 +468,10 @@ describe('EventsListCommand — list', () => {
       expect(capturedFilter!({ user: { id: 'original-user-id' } })).toBe(true);
       // Filter blocks a different user
       expect(capturedFilter!({ user: { id: 'intruder-user-id' } })).toBe(false);
+    }
+
+    it('should filter collector to only handle interactions from the original user', async () => {
+      await testShouldfiltercollectortoonlyhandleinteractionsfrom();
     });
   });
 

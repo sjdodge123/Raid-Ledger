@@ -15,60 +15,60 @@ describe('EventLinkListener', () => {
 
   let messageIdCounter = 0;
 
-  beforeEach(() => {
-    process.env.CLIENT_URL = 'http://localhost:5173';
-
-    mockClientService = {
-      getClient: jest.fn(),
-    };
-
-    mockEmbedFactory = {
-      buildEventEmbed: jest.fn().mockReturnValue({
-        embed: mockEmbed,
-        row: mockRow,
-      }),
-    };
-
-    mockSettingsService = {
-      getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
-      getDefaultTimezone: jest.fn().mockResolvedValue(null),
-    };
-
-    mockEventsService = {
-      findOne: jest.fn().mockResolvedValue({
-        id: 42,
-        title: 'Mythic Raid Night',
-        startTime: '2026-02-20T20:00:00.000Z',
-        endTime: '2026-02-20T23:00:00.000Z',
-        signupCount: 15,
-        cancelledAt: null,
-        game: { name: 'World of Warcraft', coverUrl: null },
-      }),
-      buildEmbedEventData: jest.fn().mockResolvedValue({
-        id: 42,
-        title: 'Mythic Raid Night',
-        startTime: '2026-02-20T20:00:00.000Z',
-        endTime: '2026-02-20T23:00:00.000Z',
-        signupCount: 15,
-        maxAttendees: null,
-        slotConfig: null,
-        roleCounts: {},
-        signupMentions: [],
-        game: { name: 'World of Warcraft', coverUrl: null },
-      }),
-    };
-
-    mockPugsService = {
-      findByInviteCode: jest.fn().mockResolvedValue(null),
-    };
-
+  function createEventLinkMocks() {
     const insertChain: Record<string, jest.Mock> = {};
     insertChain.values = jest.fn().mockReturnValue(insertChain);
     insertChain.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
-    mockDb = {
-      insert: jest.fn().mockReturnValue(insertChain),
+    return {
+      client: { getClient: jest.fn() },
+      embed: {
+        buildEventEmbed: jest
+          .fn()
+          .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+      },
+      settings: {
+        getBranding: jest
+          .fn()
+          .mockResolvedValue({ communityName: 'Test Guild' }),
+        getDefaultTimezone: jest.fn().mockResolvedValue(null),
+      },
+      events: {
+        findOne: jest.fn().mockResolvedValue({
+          id: 42,
+          title: 'Mythic Raid Night',
+          startTime: '2026-02-20T20:00:00.000Z',
+          endTime: '2026-02-20T23:00:00.000Z',
+          signupCount: 15,
+          cancelledAt: null,
+          game: { name: 'World of Warcraft', coverUrl: null },
+        }),
+        buildEmbedEventData: jest.fn().mockResolvedValue({
+          id: 42,
+          title: 'Mythic Raid Night',
+          startTime: '2026-02-20T20:00:00.000Z',
+          endTime: '2026-02-20T23:00:00.000Z',
+          signupCount: 15,
+          maxAttendees: null,
+          slotConfig: null,
+          roleCounts: {},
+          signupMentions: [],
+          game: { name: 'World of Warcraft', coverUrl: null },
+        }),
+      },
+      pugs: { findByInviteCode: jest.fn().mockResolvedValue(null) },
+      db: { insert: jest.fn().mockReturnValue(insertChain) },
     };
+  }
 
+  function setupBlock() {
+    process.env.CLIENT_URL = 'http://localhost:5173';
+    const m = createEventLinkMocks();
+    mockClientService = m.client;
+    mockEmbedFactory = m.embed;
+    mockSettingsService = m.settings;
+    mockEventsService = m.events;
+    mockPugsService = m.pugs;
+    mockDb = m.db;
     listener = new EventLinkListener(
       mockDb as never,
       mockClientService as never,
@@ -77,6 +77,10 @@ describe('EventLinkListener', () => {
       mockEventsService as never,
       mockPugsService as never,
     );
+  }
+
+  beforeEach(() => {
+    setupBlock();
   });
 
   afterEach(() => {

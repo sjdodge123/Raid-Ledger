@@ -43,7 +43,132 @@ describe('RegisterCommandsService', () => {
     enabled: true,
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      RegisterCommandsService,
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          getClientId: jest.fn().mockReturnValue('client-456'),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getDiscordBotConfig: jest.fn().mockResolvedValue(mockBotConfig),
+        },
+      },
+      {
+        provide: EventCreateCommand,
+        useValue: mockEventCreateCommand,
+      },
+      {
+        provide: EventsListCommand,
+        useValue: mockEventsListCommand,
+      },
+      {
+        provide: RosterViewCommand,
+        useValue: mockRosterViewCommand,
+      },
+    ];
+  }
+
+  function buildProvidersMocksAA() {
+    return [
+      {
+        provide: BindCommand,
+        useValue: {
+          commandName: 'bind',
+          getDefinition: jest
+            .fn()
+            .mockReturnValue({ name: 'bind', description: 'Bind channel' }),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksAB() {
+    return [
+      {
+        provide: UnbindCommand,
+        useValue: {
+          commandName: 'unbind',
+          getDefinition: jest.fn().mockReturnValue({
+            name: 'unbind',
+            description: 'Unbind channel',
+          }),
+        },
+      },
+      {
+        provide: BindingsCommand,
+        useValue: {
+          commandName: 'bindings',
+          getDefinition: jest.fn().mockReturnValue({
+            name: 'bindings',
+            description: 'List bindings',
+          }),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksA() {
+    return [...buildProvidersMocksAA(), ...buildProvidersMocksAB()];
+  }
+
+  function buildProvidersMocksBA() {
+    return [
+      {
+        provide: InviteCommand,
+        useValue: {
+          commandName: 'invite',
+          getDefinition: jest.fn().mockReturnValue({
+            name: 'invite',
+            description: 'Invite user to event',
+          }),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksBB() {
+    return [
+      {
+        provide: HelpCommand,
+        useValue: {
+          commandName: 'help',
+          getDefinition: jest.fn().mockReturnValue({
+            name: 'help',
+            description: 'List all available bot commands',
+          }),
+        },
+      },
+      {
+        provide: PlayingCommand,
+        useValue: {
+          commandName: 'playing',
+          getDefinition: jest.fn().mockReturnValue({
+            name: 'playing',
+            description: 'Set what game you are playing',
+          }),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksB() {
+    return [...buildProvidersMocksBA(), ...buildProvidersMocksBB()];
+  }
+
+  function buildProvidersMocks() {
+    return [...buildProvidersMocksA(), ...buildProvidersMocksB()];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     mockRestPut = jest.fn().mockResolvedValue({});
 
     (REST as unknown as jest.Mock).mockImplementation(() => ({
@@ -78,98 +203,16 @@ describe('RegisterCommandsService', () => {
     } as unknown as jest.Mocked<RosterViewCommand>;
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        RegisterCommandsService,
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            getClientId: jest.fn().mockReturnValue('client-456'),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getDiscordBotConfig: jest.fn().mockResolvedValue(mockBotConfig),
-          },
-        },
-        {
-          provide: EventCreateCommand,
-          useValue: mockEventCreateCommand,
-        },
-        {
-          provide: EventsListCommand,
-          useValue: mockEventsListCommand,
-        },
-        {
-          provide: RosterViewCommand,
-          useValue: mockRosterViewCommand,
-        },
-        {
-          provide: BindCommand,
-          useValue: {
-            commandName: 'bind',
-            getDefinition: jest
-              .fn()
-              .mockReturnValue({ name: 'bind', description: 'Bind channel' }),
-          },
-        },
-        {
-          provide: UnbindCommand,
-          useValue: {
-            commandName: 'unbind',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'unbind',
-              description: 'Unbind channel',
-            }),
-          },
-        },
-        {
-          provide: BindingsCommand,
-          useValue: {
-            commandName: 'bindings',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'bindings',
-              description: 'List bindings',
-            }),
-          },
-        },
-        {
-          provide: InviteCommand,
-          useValue: {
-            commandName: 'invite',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'invite',
-              description: 'Invite user to event',
-            }),
-          },
-        },
-        {
-          provide: HelpCommand,
-          useValue: {
-            commandName: 'help',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'help',
-              description: 'List all available bot commands',
-            }),
-          },
-        },
-        {
-          provide: PlayingCommand,
-          useValue: {
-            commandName: 'playing',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'playing',
-              description: 'Set what game you are playing',
-            }),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(RegisterCommandsService);
     clientService = module.get(DiscordBotClientService);
     settingsService = module.get(SettingsService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {

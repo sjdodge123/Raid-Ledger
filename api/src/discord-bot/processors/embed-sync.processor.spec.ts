@@ -71,7 +71,76 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
     return chain;
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      EmbedSyncProcessor,
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: mockDb,
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksA() {
+    return [
+      {
+        provide: DiscordEmbedFactory,
+        useValue: {
+          buildEventUpdate: jest
+            .fn()
+            .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Guild',
+            communityLogoPath: null,
+            communityAccentColor: null,
+          }),
+          getClientUrl: jest.fn().mockResolvedValue(null),
+          getDefaultTimezone: jest.fn().mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksB() {
+    return [
+      {
+        provide: ScheduledEventService,
+        useValue: {
+          updateDescription: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveVoiceChannelForScheduledEvent: jest
+            .fn()
+            .mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [...buildProvidersMocksA(), ...buildProvidersMocksB()];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     const selectChain = makeSelectChain();
     const updateChain = makeUpdateChain();
 
@@ -81,60 +150,16 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EmbedSyncProcessor,
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: mockDb,
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
-          },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventUpdate: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue(null),
-            getDefaultTimezone: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: ScheduledEventService,
-          useValue: {
-            updateDescription: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveVoiceChannelForScheduledEvent: jest
-              .fn()
-              .mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     processor = module.get(EmbedSyncProcessor);
     clientService = module.get(DiscordBotClientService);
     scheduledEventService = module.get(ScheduledEventService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -291,7 +316,74 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
       className: null,
     }));
 
-  beforeEach(async () => {
+  function buildProviders2Core() {
+    return [
+      EmbedSyncProcessor,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
+        },
+      },
+    ];
+  }
+
+  function buildProviders2MocksA() {
+    return [
+      {
+        provide: DiscordEmbedFactory,
+        useValue: {
+          buildEventUpdate: jest
+            .fn()
+            .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Guild',
+            communityLogoPath: null,
+            communityAccentColor: null,
+          }),
+          getClientUrl: jest.fn().mockResolvedValue(null),
+          getDefaultTimezone: jest.fn().mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProviders2MocksB() {
+    return [
+      {
+        provide: ScheduledEventService,
+        useValue: {
+          updateDescription: jest.fn().mockResolvedValue(undefined),
+          completeScheduledEvent: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveVoiceChannelForScheduledEvent: jest
+            .fn()
+            .mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProviders2Mocks() {
+    return [...buildProviders2MocksA(), ...buildProviders2MocksB()];
+  }
+
+  function buildProviders2() {
+    return [...buildProviders2Core(), ...buildProviders2Mocks()];
+  }
+  async function setupBlock2() {
     const selectChain = makeSelectChain();
     const updateChain = makeUpdateChain();
 
@@ -301,57 +393,15 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EmbedSyncProcessor,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
-          },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventUpdate: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue(null),
-            getDefaultTimezone: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: ScheduledEventService,
-          useValue: {
-            updateDescription: jest.fn().mockResolvedValue(undefined),
-            completeScheduledEvent: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveVoiceChannelForScheduledEvent: jest
-              .fn()
-              .mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildProviders2(),
     }).compile();
 
     processor = module.get(EmbedSyncProcessor);
     embedFactory = module.get(DiscordEmbedFactory);
+  }
+
+  beforeEach(async () => {
+    await setupBlock2();
   });
 
   afterEach(() => jest.clearAllMocks());

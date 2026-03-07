@@ -89,7 +89,7 @@ describe('Channel Bindings CRUD (integration)', () => {
     expect(rows[0].gameId).toBe(testApp.seed.game.id);
   });
 
-  it('should handle upsert (onConflictDoUpdate) for same guild+channel+series', async () => {
+  async function testShouldhandleupsertonconflictdoupdateforsameguildchannel() {
     const db = testApp.db;
     const seriesId = '550e8400-e29b-41d4-a716-446655440000';
 
@@ -140,6 +140,10 @@ describe('Channel Bindings CRUD (integration)', () => {
       .where(eq(schema.channelBindings.guildId, '111222333444'));
 
     expect(allRows.length).toBe(1);
+  }
+
+  it('should handle upsert (onConflictDoUpdate) for same guild+channel+series', async () => {
+    await testShouldhandleupsertonconflictdoupdateforsameguildchannel();
   });
 
   it('should delete a channel binding', async () => {

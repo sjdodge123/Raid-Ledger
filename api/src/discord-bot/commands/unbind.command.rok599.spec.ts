@@ -670,7 +670,7 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       );
     });
 
-    it('admin sees all upcoming events (no creator filter)', async () => {
+    async function testAdminseesallupcomingeventsnocreatorfilter() {
       const mockEvents = [
         {
           id: 1,
@@ -709,6 +709,10 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
         interaction.respond.mock.calls as unknown[][]
       )[0][0] as unknown[];
       expect(respondArg).toHaveLength(2);
+    }
+
+    it('admin sees all upcoming events (no creator filter)', async () => {
+      await testAdminseesallupcomingeventsnocreatorfilter();
     });
 
     it('responds with empty array when no events are available', async () => {

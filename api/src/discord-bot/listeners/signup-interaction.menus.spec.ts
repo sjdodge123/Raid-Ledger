@@ -94,7 +94,7 @@ describe('SignupInteractionListener — menus', () => {
       expect(mocks.mockSignupsService.signupDiscord).not.toHaveBeenCalled();
     });
 
-    it('should create linked-user signup with role + character when characterId is in customId (ROK-138)', async () => {
+    async function testShouldcreatelinkedusersignupwithrolecharacterwhen() {
       const userId = 'user-roleselect-linked-1';
 
       mocks.mockDb.select.mockReturnValueOnce({
@@ -152,6 +152,10 @@ describe('SignupInteractionListener — menus', () => {
           content: expect.stringContaining('Tank'),
         }),
       );
+    }
+
+    it('should create linked-user signup with role + character when characterId is in customId (ROK-138)', async () => {
+      await testShouldcreatelinkedusersignupwithrolecharacterwhen();
     });
 
     it('should show error when linked user not found during role select with characterId (ROK-138)', async () => {
@@ -189,7 +193,7 @@ describe('SignupInteractionListener — menus', () => {
     const mockGameWithRoles = { id: 1, hasRoles: true, hasSpecs: true };
     const mockGameWithoutRoles = { id: 2, hasRoles: false, hasSpecs: false };
 
-    it('should show character select dropdown when user has multiple characters', async () => {
+    async function testShouldshowcharacterselectdropdownwhenuserhas() {
       const userId = 'user-charselect-multi';
       const event = { id: 800, title: 'Mythic Raid', gameId: 1 };
 
@@ -235,9 +239,13 @@ describe('SignupInteractionListener — menus', () => {
         }),
       );
       expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
+    }
+
+    it('should show character select dropdown when user has multiple characters', async () => {
+      await testShouldshowcharacterselectdropdownwhenuserhas();
     });
 
-    it('should auto-select and sign up when user has exactly one character', async () => {
+    async function testShouldautoselectandsignupwhenuserhas() {
       const userId = 'user-charselect-single';
       const event = { id: 801, title: 'Heroic Raid', gameId: 1 };
 
@@ -276,6 +284,10 @@ describe('SignupInteractionListener — menus', () => {
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({ content: expect.stringContaining('Thrall') }),
       );
+    }
+
+    it('should auto-select and sign up when user has exactly one character', async () => {
+      await testShouldautoselectandsignupwhenuserhas();
     });
 
     it('should instant-signup with nudge when user has no characters (hasRoles game)', async () => {
@@ -355,7 +367,7 @@ describe('SignupInteractionListener — menus', () => {
       expect(mocks.mockCharactersService.findAllForUser).not.toHaveBeenCalled();
     });
 
-    it('should show role select (not immediate signup) for single character on MMO event', async () => {
+    async function testShouldshowroleselectnotimmediatesignupfor() {
       const userId = 'user-charselect-single-mmo';
       const event = {
         id: 810,
@@ -395,9 +407,13 @@ describe('SignupInteractionListener — menus', () => {
           components: expect.arrayContaining([expect.anything()]),
         }),
       );
+    }
+
+    it('should show role select (not immediate signup) for single character on MMO event', async () => {
+      await testShouldshowroleselectnotimmediatesignupfor();
     });
 
-    it('should show character select dropdown for multiple characters on MMO event', async () => {
+    async function testShouldshowcharacterselectdropdownformultiplecharacters() {
       const userId = 'user-charselect-multi-mmo';
       const event = {
         id: 811,
@@ -444,11 +460,15 @@ describe('SignupInteractionListener — menus', () => {
           components: expect.arrayContaining([expect.anything()]),
         }),
       );
+    }
+
+    it('should show character select dropdown for multiple characters on MMO event', async () => {
+      await testShouldshowcharacterselectdropdownformultiplecharacters();
     });
   });
 
   describe('handleSelectMenuInteraction — character selection (ROK-138)', () => {
-    it('should sign up with selected character from dropdown', async () => {
+    async function testShouldsignupwithselectedcharacterfromdropdown() {
       const userId = 'user-charselect-menu-1';
 
       mocks.mockDb.select.mockReturnValueOnce({
@@ -504,6 +524,10 @@ describe('SignupInteractionListener — menus', () => {
           components: [],
         }),
       );
+    }
+
+    it('should sign up with selected character from dropdown', async () => {
+      await testShouldsignupwithselectedcharacterfromdropdown();
     });
 
     it('should show error when linked user not found during char select', async () => {
@@ -535,7 +559,7 @@ describe('SignupInteractionListener — menus', () => {
       expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
     });
 
-    it('should show role select after character dropdown on MMO event (ROK-138)', async () => {
+    async function testShouldshowroleselectaftercharacterdropdownon() {
       const userId = 'user-charselect-menu-mmo';
 
       mocks.mockDb.select.mockReturnValueOnce({
@@ -575,6 +599,10 @@ describe('SignupInteractionListener — menus', () => {
           components: expect.arrayContaining([expect.anything()]),
         }),
       );
+    }
+
+    it('should show role select after character dropdown on MMO event (ROK-138)', async () => {
+      await testShouldshowroleselectaftercharacterdropdownon();
     });
   });
 });

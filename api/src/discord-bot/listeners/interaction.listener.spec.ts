@@ -23,7 +23,93 @@ describe('InteractionListener', () => {
     on: jest.Mock;
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      InteractionListener,
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          getClient: jest.fn().mockReturnValue(mockClient),
+        },
+      },
+      {
+        provide: EventCreateCommand,
+        useValue: eventCreateCommand,
+      },
+      {
+        provide: EventsListCommand,
+        useValue: eventsListCommand,
+      },
+      {
+        provide: RosterViewCommand,
+        useValue: rosterViewCommand,
+      },
+    ];
+  }
+
+  function buildProvidersMocksA() {
+    return [
+      {
+        provide: BindCommand,
+        useValue: {
+          commandName: 'bind',
+          handleInteraction: jest.fn().mockResolvedValue(undefined),
+          handleAutocomplete: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: UnbindCommand,
+        useValue: {
+          commandName: 'unbind',
+          handleInteraction: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: BindingsCommand,
+        useValue: {
+          commandName: 'bindings',
+          handleInteraction: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksB() {
+    return [
+      {
+        provide: InviteCommand,
+        useValue: {
+          commandName: 'invite',
+          handleInteraction: jest.fn().mockResolvedValue(undefined),
+          handleAutocomplete: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: HelpCommand,
+        useValue: {
+          commandName: 'help',
+          handleInteraction: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: PlayingCommand,
+        useValue: {
+          commandName: 'playing',
+          handleInteraction: jest.fn().mockResolvedValue(undefined),
+          handleAutocomplete: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [...buildProvidersMocksA(), ...buildProvidersMocksB()];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     mockClient = {
       on: jest.fn(),
     };
@@ -46,77 +132,16 @@ describe('InteractionListener', () => {
     } as unknown as jest.Mocked<RosterViewCommand>;
 
     const module_: TestingModule = await Test.createTestingModule({
-      providers: [
-        InteractionListener,
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            getClient: jest.fn().mockReturnValue(mockClient),
-          },
-        },
-        {
-          provide: EventCreateCommand,
-          useValue: eventCreateCommand,
-        },
-        {
-          provide: EventsListCommand,
-          useValue: eventsListCommand,
-        },
-        {
-          provide: RosterViewCommand,
-          useValue: rosterViewCommand,
-        },
-        {
-          provide: BindCommand,
-          useValue: {
-            commandName: 'bind',
-            handleInteraction: jest.fn().mockResolvedValue(undefined),
-            handleAutocomplete: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: UnbindCommand,
-          useValue: {
-            commandName: 'unbind',
-            handleInteraction: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: BindingsCommand,
-          useValue: {
-            commandName: 'bindings',
-            handleInteraction: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: InviteCommand,
-          useValue: {
-            commandName: 'invite',
-            handleInteraction: jest.fn().mockResolvedValue(undefined),
-            handleAutocomplete: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: HelpCommand,
-          useValue: {
-            commandName: 'help',
-            handleInteraction: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: PlayingCommand,
-          useValue: {
-            commandName: 'playing',
-            handleInteraction: jest.fn().mockResolvedValue(undefined),
-            handleAutocomplete: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     module = module_;
     listener = module.get(InteractionListener);
     clientService = module.get(DiscordBotClientService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {

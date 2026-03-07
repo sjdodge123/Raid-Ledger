@@ -61,7 +61,7 @@ describe('VoiceStateListener — registration & binding (ROK-515)', () => {
   });
 
   describe('resolveBinding — general-lobby purpose', () => {
-    it('resolves general-lobby bindings correctly', async () => {
+    async function testResolvesgenerallobbybindingscorrectly() {
       const voiceChannel = {
         isVoiceBased: () => true,
         members: makeCollection([
@@ -94,9 +94,13 @@ describe('VoiceStateListener — registration & binding (ROK-515)', () => {
       expect(
         mocks.channelBindingsService.getBindingsWithGameNames,
       ).toHaveBeenCalledWith('guild-1');
+    }
+
+    it('resolves general-lobby bindings correctly', async () => {
+      await testResolvesgenerallobbybindingscorrectly();
     });
 
-    it('does NOT recognize unknown binding purposes', async () => {
+    async function testDoesnotrecognizeunknownbindingpurposes() {
       let voiceHandler: (oldState: unknown, newState: unknown) => void;
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
@@ -127,6 +131,10 @@ describe('VoiceStateListener — registration & binding (ROK-515)', () => {
       );
       await jest.advanceTimersByTimeAsync(2100);
       expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('does NOT recognize unknown binding purposes', async () => {
+      await testDoesnotrecognizeunknownbindingpurposes();
     });
   });
 });

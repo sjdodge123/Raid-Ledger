@@ -60,12 +60,9 @@ export function createMockClient(
   };
 }
 
-/** Set up the test module and return listener + mocks. */
-export async function setupGeneralLobbyTestModule(): Promise<{
-  listener: VoiceStateListener;
-  mocks: GeneralLobbyMocks;
-}> {
-  const mocks: GeneralLobbyMocks = {
+/** Create default general lobby mock objects. */
+export function createGeneralLobbyMocks(): GeneralLobbyMocks {
+  return {
     clientService: {
       getClient: jest.fn(),
       getGuildId: jest.fn().mockReturnValue('guild-1'),
@@ -89,57 +86,69 @@ export async function setupGeneralLobbyTestModule(): Promise<{
     },
     usersService: { findByDiscordId: jest.fn().mockResolvedValue(null) },
   };
+}
 
+/** Build the providers array for general lobby test module. */
+function buildLobbyProvidersA(mocks: GeneralLobbyMocks) {
+  return [
+    VoiceStateListener,
+    { provide: DiscordBotClientService, useValue: mocks.clientService },
+    { provide: AdHocEventService, useValue: mocks.adHocEventService },
+    {
+      provide: VoiceAttendanceService,
+      useValue: {
+        findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
+        handleJoin: jest.fn(),
+        handleLeave: jest.fn(),
+        getActiveRoster: jest
+          .fn()
+          .mockReturnValue({ eventId: 0, participants: [], activeCount: 0 }),
+        recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+      },
+    },
+    {
+      provide: DepartureGraceService,
+      useValue: {
+        onMemberLeave: jest.fn().mockResolvedValue(undefined),
+        onMemberRejoin: jest.fn().mockResolvedValue(undefined),
+      },
+    },
+  ];
+}
+
+function buildLobbyProvidersB(mocks: GeneralLobbyMocks) {
+  return [
+    { provide: ChannelBindingsService, useValue: mocks.channelBindingsService },
+    { provide: PresenceGameDetectorService, useValue: mocks.presenceDetector },
+    {
+      provide: GameActivityService,
+      useValue: { bufferStart: jest.fn(), bufferStop: jest.fn() },
+    },
+    { provide: UsersService, useValue: mocks.usersService },
+    {
+      provide: AdHocEventsGateway,
+      useValue: {
+        emitRosterUpdate: jest.fn(),
+        emitStatusChange: jest.fn(),
+        emitEndTimeExtended: jest.fn(),
+      },
+    },
+  ];
+}
+
+function buildLobbyProviders(mocks: GeneralLobbyMocks) {
+  return [...buildLobbyProvidersA(mocks), ...buildLobbyProvidersB(mocks)];
+}
+
+/** Set up the test module and return listener + mocks. */
+export async function setupGeneralLobbyTestModule(): Promise<{
+  listener: VoiceStateListener;
+  mocks: GeneralLobbyMocks;
+}> {
+  const mocks = createGeneralLobbyMocks();
   const module: TestingModule = await Test.createTestingModule({
-    providers: [
-      VoiceStateListener,
-      { provide: DiscordBotClientService, useValue: mocks.clientService },
-      { provide: AdHocEventService, useValue: mocks.adHocEventService },
-      {
-        provide: VoiceAttendanceService,
-        useValue: {
-          findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
-          handleJoin: jest.fn(),
-          handleLeave: jest.fn(),
-          getActiveRoster: jest
-            .fn()
-            .mockReturnValue({ eventId: 0, participants: [], activeCount: 0 }),
-          recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
-        },
-      },
-      {
-        provide: DepartureGraceService,
-        useValue: {
-          onMemberLeave: jest.fn().mockResolvedValue(undefined),
-          onMemberRejoin: jest.fn().mockResolvedValue(undefined),
-        },
-      },
-      {
-        provide: ChannelBindingsService,
-        useValue: mocks.channelBindingsService,
-      },
-      {
-        provide: PresenceGameDetectorService,
-        useValue: mocks.presenceDetector,
-      },
-      {
-        provide: GameActivityService,
-        useValue: { bufferStart: jest.fn(), bufferStop: jest.fn() },
-      },
-      { provide: UsersService, useValue: mocks.usersService },
-      {
-        provide: AdHocEventsGateway,
-        useValue: {
-          emitRosterUpdate: jest.fn(),
-          emitStatusChange: jest.fn(),
-          emitEndTimeExtended: jest.fn(),
-        },
-      },
-    ],
+    providers: buildLobbyProviders(mocks),
   }).compile();
 
-  return {
-    listener: module.get(VoiceStateListener),
-    mocks,
-  };
+  return { listener: module.get(VoiceStateListener), mocks };
 }

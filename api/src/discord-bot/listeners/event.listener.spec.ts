@@ -46,7 +46,93 @@ describe('DiscordEventListener', () => {
   const mockEmbed = new EmbedBuilder().setTitle('Test');
   const mockRow = new ActionRowBuilder<ButtonBuilder>();
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      DiscordEventListener,
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: mockDb,
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          sendEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
+          editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
+          deleteMessage: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: DiscordEmbedFactory,
+        useValue: {
+          buildEventEmbed: jest
+            .fn()
+            .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+          buildEventCancelled: jest.fn().mockReturnValue({ embed: mockEmbed }),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksA() {
+    return [
+      {
+        provide: EmbedPosterService,
+        useValue: {
+          postEmbed: jest.fn().mockResolvedValue(true),
+          enrichWithLiveRoster: jest
+            .fn()
+            .mockImplementation((_id: number, event: unknown) =>
+              Promise.resolve(event),
+            ),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveVoiceChannelForScheduledEvent: jest
+            .fn()
+            .mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksB() {
+    return [
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Guild',
+            communityLogoPath: null,
+            communityAccentColor: null,
+          }),
+          getClientUrl: jest.fn().mockResolvedValue(null),
+          getDefaultTimezone: jest.fn().mockResolvedValue(null),
+        },
+      },
+      {
+        provide: ScheduledEventService,
+        useValue: {
+          createScheduledEvent: jest.fn().mockResolvedValue(undefined),
+          updateScheduledEvent: jest.fn().mockResolvedValue(undefined),
+          deleteScheduledEvent: jest.fn().mockResolvedValue(undefined),
+          updateDescription: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [...buildProvidersMocksA(), ...buildProvidersMocksB()];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     delete process.env.CLIENT_URL;
 
     // Chain-able mock for Drizzle query builder.
@@ -74,80 +160,17 @@ describe('DiscordEventListener', () => {
     };
 
     module = await Test.createTestingModule({
-      providers: [
-        DiscordEventListener,
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: mockDb,
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            sendEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
-            editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
-            deleteMessage: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventEmbed: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-            buildEventCancelled: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed }),
-          },
-        },
-        {
-          provide: EmbedPosterService,
-          useValue: {
-            postEmbed: jest.fn().mockResolvedValue(true),
-            enrichWithLiveRoster: jest
-              .fn()
-              .mockImplementation((_id: number, event: unknown) =>
-                Promise.resolve(event),
-              ),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveVoiceChannelForScheduledEvent: jest
-              .fn()
-              .mockResolvedValue(null),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue(null),
-            getDefaultTimezone: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: ScheduledEventService,
-          useValue: {
-            createScheduledEvent: jest.fn().mockResolvedValue(undefined),
-            updateScheduledEvent: jest.fn().mockResolvedValue(undefined),
-            deleteScheduledEvent: jest.fn().mockResolvedValue(undefined),
-            updateDescription: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     listener = module.get(DiscordEventListener);
     clientService = module.get(DiscordBotClientService);
     embedFactory = module.get(DiscordEmbedFactory);
     embedPoster = module.get(EmbedPosterService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {
@@ -261,7 +284,7 @@ describe('DiscordEventListener', () => {
       );
     });
 
-    it('should edit the embed when a message record exists', async () => {
+    async function testShouldedittheembedwhenamessagerecord() {
       const mockRecord = {
         id: 'record-uuid',
         eventId: 42,
@@ -298,11 +321,15 @@ describe('DiscordEventListener', () => {
         mockEmbed,
         mockRow,
       );
+    }
+
+    it('should edit the embed when a message record exists', async () => {
+      await testShouldedittheembedwhenamessagerecord();
     });
   });
 
   describe('handleEventCancelled', () => {
-    it('should edit embed to cancelled state', async () => {
+    async function testShouldeditembedtocancelledstate() {
       const mockRecord = {
         id: 'record-uuid',
         eventId: 42,
@@ -337,6 +364,10 @@ describe('DiscordEventListener', () => {
         'msg-456',
         mockEmbed,
       );
+    }
+
+    it('should edit embed to cancelled state', async () => {
+      await testShouldeditembedtocancelledstate();
     });
   });
 
@@ -413,7 +444,7 @@ describe('DiscordEventListener', () => {
   });
 
   describe('updateEmbedState', () => {
-    it('should update embed state and re-render', async () => {
+    async function testShouldupdateembedstateandrerender() {
       const mockRecord = {
         id: 'record-uuid',
         eventId: 42,
@@ -449,6 +480,10 @@ describe('DiscordEventListener', () => {
         { state: EMBED_STATES.IMMINENT },
       );
       expect(clientService.editEmbed).toHaveBeenCalled();
+    }
+
+    it('should update embed state and re-render', async () => {
+      await testShouldupdateembedstateandrerender();
     });
   });
 });

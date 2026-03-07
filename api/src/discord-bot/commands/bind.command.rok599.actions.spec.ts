@@ -246,7 +246,7 @@ describe('BindCommand — ROK-599 event bind — actions', () => {
       expect(description).toContain('raid-announcements');
     });
 
-    it('emits event.updated with notificationChannelOverride after channel override', async () => {
+    async function testEmitseventupdatedwithnotificationchanneloverrideafterch() {
       const updatedEventWithOverride = {
         ...mockUpdatedEvent,
         events: {
@@ -283,6 +283,10 @@ describe('BindCommand — ROK-599 event bind — actions', () => {
           notificationChannelOverride: 'override-channel-999',
         }),
       );
+    }
+
+    it('emits event.updated with notificationChannelOverride after channel override', async () => {
+      await testEmitseventupdatedwithnotificationchanneloverrideafterch();
     });
 
     it('replies with success embed after channel override', async () => {
@@ -468,7 +472,7 @@ describe('BindCommand — ROK-599 event bind — actions', () => {
       expect(mockDb.update).not.toHaveBeenCalled();
     });
 
-    it('emits event.updated with new gameId after game reassignment', async () => {
+    async function testEmitseventupdatedwithnewgameidaftergamereassignment() {
       const mockGame = { id: 7, name: 'Final Fantasy XIV' };
       mockDb.select = jest
         .fn()
@@ -507,6 +511,10 @@ describe('BindCommand — ROK-599 event bind — actions', () => {
           gameId: 7,
         }),
       );
+    }
+
+    it('emits event.updated with new gameId after game reassignment', async () => {
+      await testEmitseventupdatedwithnewgameidaftergamereassignment();
     });
 
     it('emits event.updated with null gameId when game removed', async () => {
@@ -581,7 +589,7 @@ describe('BindCommand — ROK-599 event bind — actions', () => {
   // Combined: channel override + game reassignment
   // ============================================================
   describe('combined channel override + game reassignment', () => {
-    it('applies both channel override and game change when both options are provided', async () => {
+    async function testAppliesbothchanneloverrideandgamechangewhen() {
       const mockGame = { id: 7, name: 'Final Fantasy XIV' };
       const combinedUpdatedEvent = {
         events: {
@@ -635,9 +643,13 @@ describe('BindCommand — ROK-599 event bind — actions', () => {
           notificationChannelOverride: 'override-channel-999',
         }),
       );
+    }
+
+    it('applies both channel override and game change when both options are provided', async () => {
+      await testAppliesbothchanneloverrideandgamechangewhen();
     });
 
-    it('includes both changes in the reply embed description', async () => {
+    async function testIncludesbothchangesinthereplyembeddescription() {
       const mockGame = { id: 7, name: 'Final Fantasy XIV' };
       const combinedUpdatedEvent = {
         events: {
@@ -682,6 +694,10 @@ describe('BindCommand — ROK-599 event bind — actions', () => {
       const description = replyArg.embeds[0].data.description ?? '';
       expect(description).toContain('raid-announcements');
       expect(description).toContain('Final Fantasy XIV');
+    }
+
+    it('includes both changes in the reply embed description', async () => {
+      await testIncludesbothchangesinthereplyembeddescription();
     });
   });
 

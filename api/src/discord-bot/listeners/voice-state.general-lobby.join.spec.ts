@@ -50,7 +50,7 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
       await listener.onBotConnected();
     });
 
-    it('calls detectGameForMember when a member joins a general-lobby channel', async () => {
+    async function testCallsdetectgameformemberwhenamemberjoinsagenerallobby() {
       mocks.adHocEventService.getActiveState.mockReturnValue({
         eventId: 1,
         memberSet: new Set(['existing-user']),
@@ -82,6 +82,10 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
         5,
         'WoW',
       );
+    }
+
+    it('calls detectGameForMember when a member joins a general-lobby channel', async () => {
+      await testCallsdetectgameformemberwhenamemberjoinsagenerallobby();
     });
 
     it('does NOT create event when no game detected and allowJustChatting is off', async () => {
@@ -111,7 +115,7 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
       expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
     });
 
-    it('schedules a delayed re-check when no game detected, and joins event if game appears', async () => {
+    async function testSchedulesadelayedrecheckwhennogamedetected() {
       mocks.presenceDetector.detectGameForMember
         .mockResolvedValueOnce({
           gameId: null,
@@ -152,6 +156,10 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
         42,
         'World of Warcraft Classic',
       );
+    }
+
+    it('schedules a delayed re-check when no game detected, and joins event if game appears', async () => {
+      await testSchedulesadelayedrecheckwhennogamedetected();
     });
 
     it('does NOT join event on re-check if game is still null', async () => {
@@ -176,7 +184,7 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
       expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
     });
 
-    it('cancels pending re-check when user leaves the channel', async () => {
+    async function testCancelspendingrecheckwhenuserleavesthechannel() {
       mocks.presenceDetector.detectGameForMember.mockResolvedValue({
         gameId: null,
         gameName: 'Untitled Gaming Session',
@@ -206,9 +214,13 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
       });
       await jest.advanceTimersByTimeAsync(7100);
       expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('cancels pending re-check when user leaves the channel', async () => {
+      await testCancelspendingrecheckwhenuserleavesthechannel();
     });
 
-    it('creates "Just Chatting" event when allowJustChatting is enabled and no game detected', async () => {
+    async function testCreatesjustchattingeventwhenallowjustchattingisenabled() {
       mocks.channelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-gl',
@@ -259,6 +271,10 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
         null,
         'Just Chatting',
       );
+    }
+
+    it('creates "Just Chatting" event when allowJustChatting is enabled and no game detected', async () => {
+      await testCreatesjustchattingeventwhenallowjustchattingisenabled();
     });
 
     it('does not create event when below minPlayers threshold and no active event', async () => {
@@ -282,7 +298,7 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
   });
 
   describe('handlePresenceChange (mid-session game switching)', () => {
-    it('moves user to new game event when they switch games mid-session', async () => {
+    async function testMovesusertonewgameeventwhenthey() {
       let presenceHandler: (...args: unknown[]) => void;
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
@@ -342,6 +358,10 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
         2,
         'FFXIV',
       );
+    }
+
+    it('moves user to new game event when they switch games mid-session', async () => {
+      await testMovesusertonewgameeventwhenthey();
     });
 
     it('does nothing when user is not in a tracked channel', async () => {
@@ -362,7 +382,7 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
       expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
     });
 
-    it('does nothing when channel is not a general-lobby binding', async () => {
+    async function testDoesnothingwhenchannelisnotagenerallobby() {
       let voiceHandler: (oldState: unknown, newState: unknown) => void;
       let presenceHandler: (...args: unknown[]) => void;
       const mockClient = createMockClient();
@@ -416,6 +436,10 @@ describe('VoiceStateListener — join & presence (ROK-515)', () => {
       await jest.advanceTimersByTimeAsync(100);
       expect(mocks.presenceDetector.detectGameForMember).not.toHaveBeenCalled();
       expect(mocks.adHocEventService.handleVoiceLeave).not.toHaveBeenCalled();
+    }
+
+    it('does nothing when channel is not a general-lobby binding', async () => {
+      await testDoesnothingwhenchannelisnotagenerallobby();
     });
 
     it('does nothing on presence update when member is not in a tracked channel', async () => {

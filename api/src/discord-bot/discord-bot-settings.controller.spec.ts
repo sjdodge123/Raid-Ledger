@@ -14,66 +14,78 @@ describe('DiscordBotSettingsController', () => {
   let discordBotClientService: DiscordBotClientService;
   let settingsService: SettingsService;
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      {
+        provide: DiscordBotService,
+        useValue: {
+          getStatus: jest.fn(),
+          testToken: jest.fn(),
+          ensureConnected: jest.fn().mockResolvedValue(undefined),
+          getSetupStatus: jest.fn(),
+        },
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          getTextChannels: jest.fn(),
+          getVoiceChannels: jest.fn(),
+          isConnected: jest.fn().mockReturnValue(true),
+          disconnect: jest.fn().mockResolvedValue(undefined),
+          connect: jest.fn().mockResolvedValue(undefined),
+          sendEmbed: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: DiscordEmojiService,
+        useValue: {
+          syncAllEmojis: jest.fn().mockResolvedValue(undefined),
+          isUsingCustomEmojis: jest.fn().mockReturnValue(false),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: SettingsService,
+        useValue: {
+          setDiscordBotConfig: jest.fn(),
+          getDiscordBotConfig: jest.fn(),
+          clearDiscordBotConfig: jest.fn(),
+          getDiscordBotDefaultChannel: jest.fn(),
+          setDiscordBotDefaultChannel: jest.fn(),
+          getDiscordBotDefaultVoiceChannel: jest.fn(),
+          setDiscordBotDefaultVoiceChannel: jest.fn(),
+          getAdHocEventsEnabled: jest.fn(),
+          setAdHocEventsEnabled: jest.fn(),
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Community',
+            communityLogoPath: null,
+            communityAccentColor: null,
+          }),
+          getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
+        },
+      },
+      {
+        provide: CharactersService,
+        useValue: { findAllForUser: jest.fn() },
+      },
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: {},
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DiscordBotSettingsController],
-      providers: [
-        {
-          provide: DiscordBotService,
-          useValue: {
-            getStatus: jest.fn(),
-            testToken: jest.fn(),
-            ensureConnected: jest.fn().mockResolvedValue(undefined),
-            getSetupStatus: jest.fn(),
-          },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            getTextChannels: jest.fn(),
-            getVoiceChannels: jest.fn(),
-            isConnected: jest.fn().mockReturnValue(true),
-            disconnect: jest.fn().mockResolvedValue(undefined),
-            connect: jest.fn().mockResolvedValue(undefined),
-            sendEmbed: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: DiscordEmojiService,
-          useValue: {
-            syncAllEmojis: jest.fn().mockResolvedValue(undefined),
-            isUsingCustomEmojis: jest.fn().mockReturnValue(false),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            setDiscordBotConfig: jest.fn(),
-            getDiscordBotConfig: jest.fn(),
-            clearDiscordBotConfig: jest.fn(),
-            getDiscordBotDefaultChannel: jest.fn(),
-            setDiscordBotDefaultChannel: jest.fn(),
-            getDiscordBotDefaultVoiceChannel: jest.fn(),
-            setDiscordBotDefaultVoiceChannel: jest.fn(),
-            getAdHocEventsEnabled: jest.fn(),
-            setAdHocEventsEnabled: jest.fn(),
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Community',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
-          },
-        },
-        {
-          provide: CharactersService,
-          useValue: { findAllForUser: jest.fn() },
-        },
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: {},
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     controller = module.get<DiscordBotSettingsController>(
@@ -84,6 +96,10 @@ describe('DiscordBotSettingsController', () => {
       DiscordBotClientService,
     );
     settingsService = module.get<SettingsService>(SettingsService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {

@@ -70,7 +70,60 @@ describe('EventCreateCommand', () => {
     },
   });
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      EventCreateCommand,
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: mockDb,
+      },
+      {
+        provide: EventsService,
+        useValue: {
+          create: jest.fn().mockResolvedValue(mockCreatedEvent),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: UsersService,
+        useValue: {
+          findByDiscordId: jest.fn().mockResolvedValue(mockUser),
+        },
+      },
+      {
+        provide: PreferencesService,
+        useValue: {
+          getUserPreference: jest.fn().mockResolvedValue(null),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          get: jest.fn().mockResolvedValue('UTC'),
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Guild',
+            communityLogoPath: null,
+            communityAccentColor: null,
+          }),
+        },
+      },
+      {
+        provide: MagicLinkService,
+        useValue: {
+          generateLink: jest.fn().mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     delete process.env.CLIENT_URL;
 
     mockDb = {
@@ -79,48 +132,7 @@ describe('EventCreateCommand', () => {
     };
 
     const module_: TestingModule = await Test.createTestingModule({
-      providers: [
-        EventCreateCommand,
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: mockDb,
-        },
-        {
-          provide: EventsService,
-          useValue: {
-            create: jest.fn().mockResolvedValue(mockCreatedEvent),
-          },
-        },
-        {
-          provide: UsersService,
-          useValue: {
-            findByDiscordId: jest.fn().mockResolvedValue(mockUser),
-          },
-        },
-        {
-          provide: PreferencesService,
-          useValue: {
-            getUserPreference: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            get: jest.fn().mockResolvedValue('UTC'),
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-          },
-        },
-        {
-          provide: MagicLinkService,
-          useValue: {
-            generateLink: jest.fn().mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     module = module_;
@@ -130,6 +142,10 @@ describe('EventCreateCommand', () => {
     preferencesService = module.get(PreferencesService);
     settingsService = module.get(SettingsService);
     magicLinkService = module.get(MagicLinkService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {

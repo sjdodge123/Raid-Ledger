@@ -18,63 +18,79 @@ describe('PugInviteListener', () => {
   let clientService: jest.Mocked<DiscordBotClientService>;
   let pugInviteService: jest.Mocked<PugInviteService>;
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      PugInviteListener,
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: {
+          select: jest.fn().mockReturnThis(),
+          from: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockResolvedValue([]),
+          update: jest.fn().mockReturnThis(),
+          set: jest.fn().mockReturnThis(),
+          delete: jest.fn().mockReturnThis(),
+        },
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          getClient: jest.fn().mockReturnValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: PugInviteService,
+        useValue: {
+          processPugSlotCreated: jest.fn().mockResolvedValue(undefined),
+          handleNewGuildMember: jest.fn().mockResolvedValue(undefined),
+          claimPugSlots: jest.fn().mockResolvedValue(0),
+          sendMemberInviteDm: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: CharactersService,
+        useValue: {
+          findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+          findOne: jest.fn().mockResolvedValue(null),
+        },
+      },
+      {
+        provide: SignupsService,
+        useValue: {
+          signup: jest.fn().mockResolvedValue({ id: 1 }),
+          confirmSignup: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: PugsService,
+        useValue: {
+          findByInviteCode: jest.fn().mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     module = await Test.createTestingModule({
-      providers: [
-        PugInviteListener,
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: {
-            select: jest.fn().mockReturnThis(),
-            from: jest.fn().mockReturnThis(),
-            where: jest.fn().mockReturnThis(),
-            limit: jest.fn().mockResolvedValue([]),
-            update: jest.fn().mockReturnThis(),
-            set: jest.fn().mockReturnThis(),
-            delete: jest.fn().mockReturnThis(),
-          },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            getClient: jest.fn().mockReturnValue(null),
-          },
-        },
-        {
-          provide: PugInviteService,
-          useValue: {
-            processPugSlotCreated: jest.fn().mockResolvedValue(undefined),
-            handleNewGuildMember: jest.fn().mockResolvedValue(undefined),
-            claimPugSlots: jest.fn().mockResolvedValue(0),
-            sendMemberInviteDm: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: CharactersService,
-          useValue: {
-            findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
-            findOne: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: SignupsService,
-          useValue: {
-            signup: jest.fn().mockResolvedValue({ id: 1 }),
-            confirmSignup: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: PugsService,
-          useValue: {
-            findByInviteCode: jest.fn().mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     listener = module.get(PugInviteListener);
     clientService = module.get(DiscordBotClientService);
     pugInviteService = module.get(PugInviteService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {

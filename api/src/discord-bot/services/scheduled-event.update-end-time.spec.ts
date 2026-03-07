@@ -57,7 +57,53 @@ describe('ScheduledEventService — updateEndTime (ROK-576)', () => {
     };
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      ScheduledEventService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuild: jest.fn().mockReturnValue(mockGuild),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveVoiceChannelForScheduledEvent: jest
+            .fn()
+            .mockResolvedValue('vc-1'),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getClientUrl: jest.fn().mockResolvedValue('https://raidledger.app'),
+        },
+      },
+      {
+        provide: CronJobService,
+        useValue: {
+          executeWithTracking: jest
+            .fn()
+            .mockImplementation((_name: string, fn: () => Promise<void>) =>
+              fn(),
+            ),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     mockGuild = {
       scheduledEvents: {
         create: jest.fn().mockResolvedValue({ id: 'se-1' }),
@@ -73,44 +119,14 @@ describe('ScheduledEventService — updateEndTime (ROK-576)', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ScheduledEventService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getGuild: jest.fn().mockReturnValue(mockGuild),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveVoiceChannelForScheduledEvent: jest
-              .fn()
-              .mockResolvedValue('vc-1'),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getClientUrl: jest.fn().mockResolvedValue('https://raidledger.app'),
-          },
-        },
-        {
-          provide: CronJobService,
-          useValue: {
-            executeWithTracking: jest
-              .fn()
-              .mockImplementation((_name: string, fn: () => Promise<void>) =>
-                fn(),
-              ),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(ScheduledEventService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {

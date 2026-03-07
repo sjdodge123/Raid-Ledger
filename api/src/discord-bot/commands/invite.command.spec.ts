@@ -13,66 +13,71 @@ describe('InviteCommand', () => {
   const mockEmbed = new EmbedBuilder().setTitle('Test');
   const mockRow = { toJSON: jest.fn() };
 
-  beforeEach(() => {
-    mockClientService = {
-      sendEmbedDM: jest.fn().mockResolvedValue(undefined),
+  function createInviteMocks() {
+    return {
+      client: { sendEmbedDM: jest.fn().mockResolvedValue(undefined) },
+      embed: {
+        buildEventInvite: jest
+          .fn()
+          .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+      },
+      settings: {
+        getBranding: jest
+          .fn()
+          .mockResolvedValue({ communityName: 'Test Guild' }),
+        getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
+      },
+      events: {
+        findOne: jest.fn().mockResolvedValue({
+          id: 42,
+          title: 'Mythic Raid Night',
+          description: 'Weekly raid',
+          startTime: '2026-02-20T20:00:00.000Z',
+          endTime: '2026-02-20T23:00:00.000Z',
+          signupCount: 15,
+          cancelledAt: null,
+          game: { name: 'World of Warcraft', coverUrl: null },
+        }),
+        findAll: jest.fn().mockResolvedValue({
+          data: [
+            {
+              id: 42,
+              title: 'Mythic Raid Night',
+              startTime: '2026-02-20T20:00:00.000Z',
+            },
+            {
+              id: 43,
+              title: 'PvP Arena',
+              startTime: '2026-02-21T18:00:00.000Z',
+            },
+          ],
+          total: 2,
+          page: 1,
+          limit: 25,
+        }),
+      },
+      pugs: {
+        create: jest
+          .fn()
+          .mockResolvedValue({ id: 'pug-1', inviteCode: 'abc12345' }),
+      },
+      db: {
+        select: jest.fn().mockReturnThis(),
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue([]),
+      },
     };
+  }
 
-    mockEmbedFactory = {
-      buildEventInvite: jest.fn().mockReturnValue({
-        embed: mockEmbed,
-        row: mockRow,
-      }),
-    };
-
-    mockSettingsService = {
-      getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
-      getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
-    };
-
-    mockEventsService = {
-      findOne: jest.fn().mockResolvedValue({
-        id: 42,
-        title: 'Mythic Raid Night',
-        description: 'Weekly raid',
-        startTime: '2026-02-20T20:00:00.000Z',
-        endTime: '2026-02-20T23:00:00.000Z',
-        signupCount: 15,
-        cancelledAt: null,
-        game: { name: 'World of Warcraft', coverUrl: null },
-      }),
-      findAll: jest.fn().mockResolvedValue({
-        data: [
-          {
-            id: 42,
-            title: 'Mythic Raid Night',
-            startTime: '2026-02-20T20:00:00.000Z',
-          },
-          {
-            id: 43,
-            title: 'PvP Arena',
-            startTime: '2026-02-21T18:00:00.000Z',
-          },
-        ],
-        total: 2,
-        page: 1,
-        limit: 25,
-      }),
-    };
-
-    mockPugsService = {
-      create: jest
-        .fn()
-        .mockResolvedValue({ id: 'pug-1', inviteCode: 'abc12345' }),
-    };
-
-    mockDb = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockResolvedValue([]),
-    };
-
+  function setupBlock() {
+    const m = createInviteMocks();
+    mockClientService = m.client;
+    mockEmbedFactory = m.embed;
+    mockSettingsService = m.settings;
+    mockEventsService = m.events;
+    mockPugsService = m.pugs;
+    mockDb = m.db;
     command = new InviteCommand(
       mockDb as never,
       mockClientService as never,
@@ -81,6 +86,10 @@ describe('InviteCommand', () => {
       mockEventsService as never,
       mockPugsService as never,
     );
+  }
+
+  beforeEach(() => {
+    setupBlock();
   });
 
   describe('commandName', () => {

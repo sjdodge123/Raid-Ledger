@@ -24,6 +24,21 @@ interface TestableRoachOutInteractionListener {
   isDiscordInteractionError: (error: unknown) => boolean;
 }
 
+/** Build the message sub-object for a roach-out interaction mock */
+function makeRoachOutMessage() {
+  return {
+    embeds: [
+      {
+        description: 'Mythic Raid starts in 15 minutes!',
+        title: 'Event Reminder',
+        color: 0xf59e0b,
+      },
+    ],
+    components: [],
+    edit: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 /** Create a minimal ButtonInteraction mock */
 function makeButtonInteraction(
   customId: string,
@@ -49,17 +64,7 @@ function makeButtonInteraction(
       interaction.replied = true;
       return Promise.resolve(undefined);
     }),
-    message: {
-      embeds: [
-        {
-          description: 'Mythic Raid starts in 15 minutes!',
-          title: 'Event Reminder',
-          color: 0xf59e0b,
-        },
-      ],
-      components: [],
-      edit: jest.fn().mockResolvedValue(undefined),
-    },
+    message: makeRoachOutMessage(),
   };
   return interaction;
 }
@@ -86,33 +91,25 @@ describe('RoachOutInteractionListener', () => {
     limit: jest.Mock;
   };
 
-  beforeEach(async () => {
+  async function setupBlock() {
     mockClientService = {
-      getClient: jest.fn().mockReturnValue({
-        on: jest.fn(),
-        removeListener: jest.fn(),
-      }),
+      getClient: jest
+        .fn()
+        .mockReturnValue({ on: jest.fn(), removeListener: jest.fn() }),
       getGuildId: jest.fn().mockReturnValue(null),
       editEmbed: jest.fn().mockResolvedValue(undefined),
     };
-
     mockSignupsService = {
       findByDiscordUser: jest.fn(),
       cancelByDiscordUser: jest.fn().mockResolvedValue(undefined),
     };
-
-    mockEventsService = {
-      buildEmbedEventData: jest.fn(),
-    };
-
-    const mockChain = {
+    mockEventsService = { buildEmbedEventData: jest.fn() };
+    mockDb = {
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([]),
-    };
-
-    mockDb = mockChain as typeof mockDb;
+    } as typeof mockDb;
 
     module = await Test.createTestingModule({
       providers: [
@@ -128,6 +125,10 @@ describe('RoachOutInteractionListener', () => {
 
     const instance: unknown = module.get(RoachOutInteractionListener);
     listener = instance as TestableRoachOutInteractionListener;
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {

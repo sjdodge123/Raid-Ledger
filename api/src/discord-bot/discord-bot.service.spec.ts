@@ -13,35 +13,38 @@ describe('DiscordBotService', () => {
     enabled: true,
   };
 
-  beforeEach(async () => {
+  function buildProviders() {
+    return [
+      DiscordBotService,
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          connect: jest.fn(),
+          disconnect: jest.fn(),
+          isConnected: jest.fn(),
+          isConnecting: jest.fn(),
+          getGuildInfo: jest.fn(),
+          sendDirectMessage: jest.fn(),
+          checkPermissions: jest.fn(),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getDiscordBotConfig: jest.fn(),
+          isDiscordConfigured: jest.fn(),
+          isDiscordBotConfigured: jest.fn(),
+          isDiscordBotSetupCompleted: jest.fn().mockResolvedValue(false),
+          getAdHocEventsEnabled: jest.fn().mockResolvedValue(false),
+          getDiscordBotDefaultChannel: jest.fn(),
+          getDiscordBotTimezone: jest.fn(),
+        },
+      },
+    ];
+  }
+  async function setupBlock() {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DiscordBotService,
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            connect: jest.fn(),
-            disconnect: jest.fn(),
-            isConnected: jest.fn(),
-            isConnecting: jest.fn(),
-            getGuildInfo: jest.fn(),
-            sendDirectMessage: jest.fn(),
-            checkPermissions: jest.fn(),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getDiscordBotConfig: jest.fn(),
-            isDiscordConfigured: jest.fn(),
-            isDiscordBotConfigured: jest.fn(),
-            isDiscordBotSetupCompleted: jest.fn().mockResolvedValue(false),
-            getAdHocEventsEnabled: jest.fn().mockResolvedValue(false),
-            getDiscordBotDefaultChannel: jest.fn(),
-            getDiscordBotTimezone: jest.fn(),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get<DiscordBotService>(DiscordBotService);
@@ -49,6 +52,10 @@ describe('DiscordBotService', () => {
       DiscordBotClientService,
     );
     settingsService = module.get<SettingsService>(SettingsService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {

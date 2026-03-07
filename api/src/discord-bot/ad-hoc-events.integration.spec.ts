@@ -44,7 +44,7 @@ describe('Ad-Hoc Events (integration)', () => {
 
   // ── Event ad-hoc fields persistence ──────────────────────────
 
-  it('should persist isAdHoc, adHocStatus, and channelBindingId on events', async () => {
+  async function testShouldpersistisadhocadhocstatusandchannelbindingidoneve() {
     const db = testApp.db;
 
     // Create a channel binding first (FK target for channelBindingId)
@@ -90,6 +90,10 @@ describe('Ad-Hoc Events (integration)', () => {
     expect(readBack.isAdHoc).toBe(true);
     expect(readBack.adHocStatus).toBe('live');
     expect(readBack.channelBindingId).toBe(binding.id);
+  }
+
+  it('should persist isAdHoc, adHocStatus, and channelBindingId on events', async () => {
+    await testShouldpersistisadhocadhocstatusandchannelbindingidoneve();
   });
 
   it('should default isAdHoc to false for regular events', async () => {
@@ -208,7 +212,7 @@ describe('Ad-Hoc Events (integration)', () => {
       ).rejects.toThrow();
     });
 
-    it('should upsert participant on rejoin (increment sessionCount)', async () => {
+    async function testShouldupsertparticipantonrejoinincrementsessioncount() {
       const db = testApp.db;
       const joinTime = new Date();
 
@@ -274,6 +278,10 @@ describe('Ad-Hoc Events (integration)', () => {
       expect(row.discordUsername).toBe('Player1-Updated');
       // Previous duration should still be tracked
       expect(row.totalDurationSeconds).toBe(600);
+    }
+
+    it('should upsert participant on rejoin (increment sessionCount)', async () => {
+      await testShouldupsertparticipantonrejoinincrementsessioncount();
     });
 
     it('should track anonymous participants (no userId)', async () => {
@@ -296,7 +304,7 @@ describe('Ad-Hoc Events (integration)', () => {
       expect(participant.discordUsername).toBe('UnlinkedPlayer');
     });
 
-    it('should support multiple participants in the same event', async () => {
+    async function testShouldsupportmultipleparticipantsinthesameevent() {
       const db = testApp.db;
 
       await db.insert(schema.adHocParticipants).values([
@@ -339,6 +347,10 @@ describe('Ad-Hoc Events (integration)', () => {
         );
 
       expect(active.length).toBe(3);
+    }
+
+    it('should support multiple participants in the same event', async () => {
+      await testShouldsupportmultipleparticipantsinthesameevent();
     });
 
     it('should cascade delete participants when event is deleted', async () => {
@@ -392,7 +404,7 @@ describe('Ad-Hoc Events (integration)', () => {
       expect(res.body.activeCount).toBe(0);
     });
 
-    it('should return participants with correct fields', async () => {
+    async function testShouldreturnparticipantswithcorrectfields() {
       const db = testApp.db;
       const now = new Date();
 
@@ -469,12 +481,16 @@ describe('Ad-Hoc Events (integration)', () => {
         sessionCount: 2,
       });
       expect(leftParticipant!.leftAt).not.toBeNull();
+    }
+
+    it('should return participants with correct fields', async () => {
+      await testShouldreturnparticipantswithcorrectfields();
     });
   });
 
   // ── Channel binding FK cascade to ad-hoc events ─────────────
 
-  it('should set channelBindingId to null when binding is deleted', async () => {
+  async function testShouldsetchannelbindingidtonullwhenbindingis() {
     const db = testApp.db;
     const now = new Date();
 
@@ -517,6 +533,10 @@ describe('Ad-Hoc Events (integration)', () => {
     expect(updated).toBeDefined();
     expect(updated.channelBindingId).toBeNull();
     expect(updated.isAdHoc).toBe(true);
+  }
+
+  it('should set channelBindingId to null when binding is deleted', async () => {
+    await testShouldsetchannelbindingidtonullwhenbindingis();
   });
 
   // ── Event listing ad-hoc filter ──────────────────────────────

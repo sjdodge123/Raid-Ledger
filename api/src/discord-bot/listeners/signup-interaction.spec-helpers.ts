@@ -116,129 +116,130 @@ export function makeChain(result: unknown[] = []) {
   return chain;
 }
 
+/** Create all mock service objects for signup interaction tests */
+function createCoreMocks() {
+  return {
+    mockClientService: {
+      getClient: jest.fn().mockReturnValue(null),
+      getGuildId: jest.fn().mockReturnValue('guild-123'),
+      editEmbed: jest.fn().mockResolvedValue(undefined),
+    },
+    mockSignupsService: {
+      findByDiscordUser: jest.fn().mockResolvedValue(null),
+      signup: jest.fn().mockResolvedValue({ id: 1, eventId: 1 }),
+      signupDiscord: jest.fn().mockResolvedValue({ id: 2, eventId: 1 }),
+      updateStatus: jest.fn().mockResolvedValue({ id: 1, status: 'signed_up' }),
+      getRoster: jest
+        .fn()
+        .mockResolvedValue({ eventId: 1, signups: [], count: 0 }),
+      cancel: jest.fn(),
+      cancelByDiscordUser: jest.fn(),
+      confirmSignup: jest.fn().mockResolvedValue({ id: 1 }),
+    },
+  };
+}
+
+/** Create secondary mock services */
+function createSecondaryCoreServiceMocks(
+  mockEmbed: EmbedBuilder,
+  mockRow: ActionRowBuilder<ButtonBuilder>,
+) {
+  return {
+    mockEventsService: {
+      buildEmbedEventData: jest.fn().mockResolvedValue({
+        id: 1,
+        title: 'Test Event',
+        startTime: '2026-02-20T20:00:00.000Z',
+        endTime: '2026-02-20T23:00:00.000Z',
+        signupCount: 0,
+        maxAttendees: null,
+        slotConfig: null,
+        roleCounts: {},
+        signupMentions: [],
+        game: null,
+      }),
+    },
+    mockCharactersService: {
+      findAllForUser: jest
+        .fn()
+        .mockResolvedValue({ data: [], meta: { total: 0 } }),
+      findOne: jest.fn().mockResolvedValue({ id: 'char-1', name: 'Thrall' }),
+    },
+    mockIntentTokenService: {
+      generate: jest.fn().mockReturnValue('mock.intent.token'),
+    },
+    mockEmbedFactory: {
+      buildEventEmbed: jest
+        .fn()
+        .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+    },
+    mockSettingsService: {
+      getBranding: jest.fn().mockResolvedValue({
+        communityName: 'Test Guild',
+        communityLogoPath: null,
+      }),
+      getDefaultTimezone: jest.fn().mockResolvedValue(null),
+    },
+    mockDb: { select: jest.fn().mockReturnValue(makeChain([])) } as Record<
+      string,
+      jest.Mock
+    >,
+  };
+}
+
+/** Build the emoji service mock provider */
+function createEmojiServiceProvider() {
+  const roleFallback: Record<string, string> = {
+    tank: '\uD83D\uDEE1\uFE0F',
+    healer: '\uD83D\uDC9A',
+    dps: '\u2694\uFE0F',
+  };
+  return {
+    provide: DiscordEmojiService,
+    useValue: {
+      getRoleEmoji: jest.fn((r: string) => roleFallback[r] ?? ''),
+      getClassEmoji: jest.fn(() => ''),
+      getRoleEmojiComponent: jest.fn((r: string) =>
+        roleFallback[r] ? { name: roleFallback[r] } : undefined,
+      ),
+      getClassEmojiComponent: jest.fn(() => undefined),
+      isUsingCustomEmojis: jest.fn(() => false),
+    },
+  };
+}
+
+/** Build providers array for signup interaction test module */
+function buildSignupProviders(mocks: Record<string, unknown>) {
+  return [
+    SignupInteractionListener,
+    { provide: DrizzleAsyncProvider, useValue: mocks.mockDb },
+    { provide: DiscordBotClientService, useValue: mocks.mockClientService },
+    { provide: SignupsService, useValue: mocks.mockSignupsService },
+    { provide: EventsService, useValue: mocks.mockEventsService },
+    { provide: CharactersService, useValue: mocks.mockCharactersService },
+    { provide: IntentTokenService, useValue: mocks.mockIntentTokenService },
+    { provide: DiscordEmbedFactory, useValue: mocks.mockEmbedFactory },
+    createEmojiServiceProvider(),
+    { provide: SettingsService, useValue: mocks.mockSettingsService },
+  ];
+}
+
 /** Build the NestJS testing module with all mocked providers */
 export async function createSignupInteractionTestModule(): Promise<SignupInteractionMocks> {
   const mockEmbed = new EmbedBuilder().setTitle('Test');
   const mockRow = new ActionRowBuilder<ButtonBuilder>();
-
-  const mockClientService = {
-    getClient: jest.fn().mockReturnValue(null),
-    getGuildId: jest.fn().mockReturnValue('guild-123'),
-    editEmbed: jest.fn().mockResolvedValue(undefined),
-  };
-
-  const mockSignupsService = {
-    findByDiscordUser: jest.fn().mockResolvedValue(null),
-    signup: jest.fn().mockResolvedValue({ id: 1, eventId: 1 }),
-    signupDiscord: jest.fn().mockResolvedValue({ id: 2, eventId: 1 }),
-    updateStatus: jest.fn().mockResolvedValue({ id: 1, status: 'signed_up' }),
-    getRoster: jest
-      .fn()
-      .mockResolvedValue({ eventId: 1, signups: [], count: 0 }),
-    cancel: jest.fn(),
-    cancelByDiscordUser: jest.fn(),
-    confirmSignup: jest.fn().mockResolvedValue({ id: 1 }),
-  };
-
-  const mockEventsService = {
-    buildEmbedEventData: jest.fn().mockResolvedValue({
-      id: 1,
-      title: 'Test Event',
-      startTime: '2026-02-20T20:00:00.000Z',
-      endTime: '2026-02-20T23:00:00.000Z',
-      signupCount: 0,
-      maxAttendees: null,
-      slotConfig: null,
-      roleCounts: {},
-      signupMentions: [],
-      game: null,
-    }),
-  };
-
-  const mockCharactersService = {
-    findAllForUser: jest
-      .fn()
-      .mockResolvedValue({ data: [], meta: { total: 0 } }),
-    findOne: jest.fn().mockResolvedValue({ id: 'char-1', name: 'Thrall' }),
-  };
-
-  const mockIntentTokenService = {
-    generate: jest.fn().mockReturnValue('mock.intent.token'),
-  };
-
-  const mockEmbedFactory = {
-    buildEventEmbed: jest
-      .fn()
-      .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-  };
-
-  const mockSettingsService = {
-    getBranding: jest.fn().mockResolvedValue({
-      communityName: 'Test Guild',
-      communityLogoPath: null,
-    }),
-    getDefaultTimezone: jest.fn().mockResolvedValue(null),
-  };
-
-  const mockDb: Record<string, jest.Mock> = {
-    select: jest.fn().mockReturnValue(makeChain([])),
-  };
+  const core = createCoreMocks();
+  const secondary = createSecondaryCoreServiceMocks(mockEmbed, mockRow);
+  const allMocks = { ...core, ...secondary };
 
   const module = await Test.createTestingModule({
-    providers: [
-      SignupInteractionListener,
-      { provide: DrizzleAsyncProvider, useValue: mockDb },
-      { provide: DiscordBotClientService, useValue: mockClientService },
-      { provide: SignupsService, useValue: mockSignupsService },
-      { provide: EventsService, useValue: mockEventsService },
-      { provide: CharactersService, useValue: mockCharactersService },
-      { provide: IntentTokenService, useValue: mockIntentTokenService },
-      { provide: DiscordEmbedFactory, useValue: mockEmbedFactory },
-      {
-        provide: DiscordEmojiService,
-        useValue: {
-          getRoleEmoji: jest.fn(
-            (r: string) =>
-              ({
-                tank: '\uD83D\uDEE1\uFE0F',
-                healer: '\uD83D\uDC9A',
-                dps: '\u2694\uFE0F',
-              })[r] ?? '',
-          ),
-          getClassEmoji: jest.fn(() => ''),
-          getRoleEmojiComponent: jest.fn((r: string) => {
-            const fallback: Record<string, string> = {
-              tank: '\uD83D\uDEE1\uFE0F',
-              healer: '\uD83D\uDC9A',
-              dps: '\u2694\uFE0F',
-            };
-            return fallback[r] ? { name: fallback[r] } : undefined;
-          }),
-          getClassEmojiComponent: jest.fn(() => undefined),
-          isUsingCustomEmojis: jest.fn(() => false),
-        },
-      },
-      { provide: SettingsService, useValue: mockSettingsService },
-    ],
+    providers: buildSignupProviders(allMocks),
   }).compile();
 
   const instance: unknown = module.get(SignupInteractionListener);
   const listener = instance as TestableSignupInteractionListener;
 
-  return {
-    module,
-    listener,
-    mockClientService,
-    mockSignupsService,
-    mockEventsService,
-    mockCharactersService,
-    mockIntentTokenService,
-    mockEmbedFactory,
-    mockSettingsService,
-    mockDb,
-    mockEmbed,
-    mockRow,
-  };
+  return { module, listener, ...core, ...secondary, mockEmbed, mockRow };
 }
 
 /** Helper to set up linked user + event DB queries */

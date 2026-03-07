@@ -35,45 +35,61 @@ describe('BindCommand', () => {
     ...overrides,
   });
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      BindCommand,
+      {
+        provide: ChannelBindingsService,
+        useValue: {
+          bind: jest.fn().mockResolvedValue({
+            binding: {
+              id: 'binding-uuid',
+              guildId: 'guild-123',
+              channelId: 'channel-456',
+              channelType: 'text',
+              bindingPurpose: 'game-announcements',
+              gameId: null,
+              config: {},
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+            replacedChannelIds: [],
+          }),
+          detectBehavior: jest.fn().mockReturnValue('game-announcements'),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: mockDb,
+      },
+      {
+        provide: EventEmitter2,
+        useValue: { emit: jest.fn() },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     delete process.env.CLIENT_URL;
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        BindCommand,
-        {
-          provide: ChannelBindingsService,
-          useValue: {
-            bind: jest.fn().mockResolvedValue({
-              binding: {
-                id: 'binding-uuid',
-                guildId: 'guild-123',
-                channelId: 'channel-456',
-                channelType: 'text',
-                bindingPurpose: 'game-announcements',
-                gameId: null,
-                config: {},
-                createdAt: new Date(),
-                updatedAt: new Date(),
-              },
-              replacedChannelIds: [],
-            }),
-            detectBehavior: jest.fn().mockReturnValue('game-announcements'),
-          },
-        },
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: mockDb,
-        },
-        {
-          provide: EventEmitter2,
-          useValue: { emit: jest.fn() },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     command = module.get(BindCommand);
     bindingsService = module.get(ChannelBindingsService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   describe('getDefinition', () => {

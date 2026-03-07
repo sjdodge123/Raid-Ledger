@@ -83,7 +83,93 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
   const mockRow = new ActionRowBuilder<ButtonBuilder>();
   const originalClientUrl = process.env.CLIENT_URL;
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      SignupInteractionListener,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          getClient: jest.fn().mockReturnValue(null),
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          editEmbed: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      { provide: SignupsService, useValue: mockSignupsService },
+      { provide: EventsService, useValue: mockEventsService },
+    ];
+  }
+
+  function buildProvidersMocksA() {
+    return [
+      {
+        provide: CharactersService,
+        useValue: {
+          findAllForUser: jest
+            .fn()
+            .mockResolvedValue({ data: [], meta: { total: 0 } }),
+          findOne: jest
+            .fn()
+            .mockResolvedValue({ id: 'char-1', name: 'Thrall' }),
+        },
+      },
+      {
+        provide: IntentTokenService,
+        useValue: { generate: jest.fn().mockReturnValue('mock.token') },
+      },
+    ];
+  }
+
+  function buildProvidersMocksBA() {
+    return [
+      {
+        provide: DiscordEmbedFactory,
+        useValue: {
+          buildEventEmbed: jest
+            .fn()
+            .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksBB() {
+    return [
+      {
+        provide: DiscordEmojiService,
+        useValue: {
+          getRoleEmoji: jest.fn(() => ''),
+          getClassEmoji: jest.fn(() => ''),
+          getRoleEmojiComponent: jest.fn(() => undefined),
+          getClassEmojiComponent: jest.fn(() => undefined),
+          isUsingCustomEmojis: jest.fn(() => false),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Guild',
+            communityLogoPath: null,
+          }),
+          getDefaultTimezone: jest.fn().mockResolvedValue(null),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksB() {
+    return [...buildProvidersMocksBA(), ...buildProvidersMocksBB()];
+  }
+
+  function buildProvidersMocks() {
+    return [...buildProvidersMocksA(), ...buildProvidersMocksB()];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     jest.useFakeTimers();
 
     delete process.env.CLIENT_URL;
@@ -123,67 +209,15 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
     };
 
     module = await Test.createTestingModule({
-      providers: [
-        SignupInteractionListener,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            getClient: jest.fn().mockReturnValue(null),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            editEmbed: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        { provide: SignupsService, useValue: mockSignupsService },
-        { provide: EventsService, useValue: mockEventsService },
-        {
-          provide: CharactersService,
-          useValue: {
-            findAllForUser: jest
-              .fn()
-              .mockResolvedValue({ data: [], meta: { total: 0 } }),
-            findOne: jest
-              .fn()
-              .mockResolvedValue({ id: 'char-1', name: 'Thrall' }),
-          },
-        },
-        {
-          provide: IntentTokenService,
-          useValue: { generate: jest.fn().mockReturnValue('mock.token') },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventEmbed: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-          },
-        },
-        {
-          provide: DiscordEmojiService,
-          useValue: {
-            getRoleEmoji: jest.fn(() => ''),
-            getClassEmoji: jest.fn(() => ''),
-            getRoleEmojiComponent: jest.fn(() => undefined),
-            getClassEmojiComponent: jest.fn(() => undefined),
-            isUsingCustomEmojis: jest.fn(() => false),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-            }),
-            getDefaultTimezone: jest.fn().mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     const instance: unknown = module.get(SignupInteractionListener);
     listener = instance as TestableSignupInteractionListener;
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {
@@ -231,7 +265,7 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
       ).resolves.not.toThrow();
     });
 
-    it('should NOT run cleanup again within 60 seconds of previous run', async () => {
+    async function testShouldnotruncleanupagainwithin60seconds() {
       // Drive first interaction to trigger initial cleanup (sets lastCleanup)
       const setupInteraction = (userId: string, eventId: number) => {
         const interaction = makeButtonInteraction(
@@ -270,9 +304,13 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
       // We verify this by checking the interaction still proceeds normally
       const i2 = setupInteraction('user-freq-2', 4002);
       await expect(listener.handleButtonInteraction(i2)).resolves.not.toThrow();
+    }
+
+    it('should NOT run cleanup again within 60 seconds of previous run', async () => {
+      await testShouldnotruncleanupagainwithin60seconds();
     });
 
-    it('should run cleanup again after 60+ seconds have elapsed', async () => {
+    async function testShouldruncleanupagainafter60secondshave() {
       const setupInteraction = (userId: string, eventId: number) => {
         const interaction = makeButtonInteraction(
           `${SIGNUP_BUTTON_IDS.SIGNUP}:${eventId}`,
@@ -308,6 +346,10 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
       // Second interaction — cleanup should re-run (no error means it ran fine)
       const i2 = setupInteraction('user-interval-2', 5002);
       await expect(listener.handleButtonInteraction(i2)).resolves.not.toThrow();
+    }
+
+    it('should run cleanup again after 60+ seconds have elapsed', async () => {
+      await testShouldruncleanupagainafter60secondshave();
     });
   });
 
@@ -317,7 +359,7 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
   // ============================================================
 
   describe('cleanup preserves unexpired cooldown entries', () => {
-    it('should still rate-limit same user immediately after first interaction (within cooldown window)', async () => {
+    async function testShouldstillratelimitsameuserimmediatelyafterfirst() {
       // This tests that unexpired entries are preserved — a user who just interacted
       // should be rate-limited on the very next interaction within the 3s cooldown.
       // Fake timers start at a fixed time; no advancement means we're still within 3s.
@@ -364,9 +406,13 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
           content: expect.stringContaining('Please wait'),
         }),
       );
+    }
+
+    it('should still rate-limit same user immediately after first interaction (within cooldown window)', async () => {
+      await testShouldstillratelimitsameuserimmediatelyafterfirst();
     });
 
-    it('should NOT rate-limit same user after cooldown window expires', async () => {
+    async function testShouldnotratelimitsameuseraftercooldownwindow() {
       const userId = 'user-cooldown-expires';
       const eventId = 7001;
 
@@ -432,6 +478,10 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
           (args[0] as { content: string }).content.includes('Please wait'),
       );
       expect(wasRateLimited).toBe(false);
+    }
+
+    it('should NOT rate-limit same user after cooldown window expires', async () => {
+      await testShouldnotratelimitsameuseraftercooldownwindow();
     });
   });
 
@@ -440,7 +490,7 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
   // ============================================================
 
   describe('cleanup removes expired entries', () => {
-    it('should allow same user to interact after cooldown expires (cleanup removed old entry)', async () => {
+    async function testShouldallowsameusertointeractaftercooldown() {
       // This test verifies the end-to-end: after 3s+ passes and cleanup runs,
       // an expired entry is gone and the user can interact again without being blocked.
       const userId = 'user-cleanup-expiry';
@@ -495,9 +545,13 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
           (args[0] as { content: string }).content.includes('Please wait'),
       );
       expect(wasRateLimited).toBe(false);
+    }
+
+    it('should allow same user to interact after cooldown expires (cleanup removed old entry)', async () => {
+      await testShouldallowsameusertointeractaftercooldown();
     });
 
-    it('should still rate-limit when cooldown has not yet expired, even after cleanup attempt', async () => {
+    async function testShouldstillratelimitwhencooldownhasnotyet() {
       const userId = 'user-cleanup-still-blocked';
       const eventId = 9001;
 
@@ -552,6 +606,10 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
           content: expect.stringContaining('Please wait'),
         }),
       );
+    }
+
+    it('should still rate-limit when cooldown has not yet expired, even after cleanup attempt', async () => {
+      await testShouldstillratelimitwhencooldownhasnotyet();
     });
   });
 });

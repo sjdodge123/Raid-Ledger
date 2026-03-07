@@ -69,65 +69,75 @@ describe('EventAutoExtendService', () => {
     update: jest.Mock;
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      EventAutoExtendService,
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: mockDb,
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getEventAutoExtendEnabled: jest.fn().mockResolvedValue(true),
+          getEventAutoExtendIncrementMinutes: jest.fn().mockResolvedValue(15),
+          getEventAutoExtendMaxOverageMinutes: jest.fn().mockResolvedValue(120),
+          getEventAutoExtendMinVoiceMembers: jest.fn().mockResolvedValue(2),
+        },
+      },
+      {
+        provide: VoiceAttendanceService,
+        useValue: {
+          getActiveCount: jest.fn().mockReturnValue(3),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: ScheduledEventService,
+        useValue: {
+          updateEndTime: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: AdHocNotificationService,
+        useValue: {
+          queueUpdate: jest.fn(),
+        },
+      },
+      {
+        provide: AdHocEventsGateway,
+        useValue: {
+          emitEndTimeExtended: jest.fn(),
+        },
+      },
+      {
+        provide: CronJobService,
+        useValue: {
+          executeWithTracking: jest
+            .fn()
+            .mockImplementation((_name: string, fn: () => Promise<void>) =>
+              fn(),
+            ),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     mockDb = {
       select: jest.fn(),
       update: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EventAutoExtendService,
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: mockDb,
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getEventAutoExtendEnabled: jest.fn().mockResolvedValue(true),
-            getEventAutoExtendIncrementMinutes: jest.fn().mockResolvedValue(15),
-            getEventAutoExtendMaxOverageMinutes: jest
-              .fn()
-              .mockResolvedValue(120),
-            getEventAutoExtendMinVoiceMembers: jest.fn().mockResolvedValue(2),
-          },
-        },
-        {
-          provide: VoiceAttendanceService,
-          useValue: {
-            getActiveCount: jest.fn().mockReturnValue(3),
-          },
-        },
-        {
-          provide: ScheduledEventService,
-          useValue: {
-            updateEndTime: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: AdHocNotificationService,
-          useValue: {
-            queueUpdate: jest.fn(),
-          },
-        },
-        {
-          provide: AdHocEventsGateway,
-          useValue: {
-            emitEndTimeExtended: jest.fn(),
-          },
-        },
-        {
-          provide: CronJobService,
-          useValue: {
-            executeWithTracking: jest
-              .fn()
-              .mockImplementation((_name: string, fn: () => Promise<void>) =>
-                fn(),
-              ),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(EventAutoExtendService);
@@ -137,6 +147,10 @@ describe('EventAutoExtendService', () => {
     adHocNotificationService = module.get(AdHocNotificationService);
     adHocGateway = module.get(AdHocEventsGateway);
     cronJobService = module.get(CronJobService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -488,7 +502,7 @@ describe('EventAutoExtendService', () => {
       );
     });
 
-    it('skips capped candidates while extending un-capped ones', async () => {
+    async function testSkipscappedcandidateswhileextendinguncappedones() {
       const maxOverageMinutes = 120;
       const originalEnd = new Date(Date.now() - 5 * 60 * 1000);
 
@@ -523,6 +537,10 @@ describe('EventAutoExtendService', () => {
         20,
         expect.any(String),
       );
+    }
+
+    it('skips capped candidates while extending un-capped ones', async () => {
+      await testSkipscappedcandidateswhileextendinguncappedones();
     });
   });
 

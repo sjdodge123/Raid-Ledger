@@ -202,7 +202,7 @@ describe('BindCommand — ROK-599 event bind — misc', () => {
       }),
     });
 
-    it('responds with upcoming events for admin user (no creator filter)', async () => {
+    async function testRespondswithupcomingeventsforadminuserno() {
       const mockEvents = [
         {
           id: 1,
@@ -245,6 +245,10 @@ describe('BindCommand — ROK-599 event bind — misc', () => {
           }),
         ]),
       );
+    }
+
+    it('responds with upcoming events for admin user (no creator filter)', async () => {
+      await testRespondswithupcomingeventsforadminuserno();
     });
 
     it('responds with only own events for non-admin user', async () => {
@@ -280,7 +284,7 @@ describe('BindCommand — ROK-599 event bind — misc', () => {
       );
     });
 
-    it('formats autocomplete result as "Title (Month Day)"', async () => {
+    async function testFormatsautocompleteresultastitlemonthday() {
       const mockEvents = [
         {
           id: 42,
@@ -314,6 +318,10 @@ describe('BindCommand — ROK-599 event bind — misc', () => {
       expect(respondArg[0].name).toMatch(/Summer Raid/);
       expect(respondArg[0].name).toMatch(/Jun.*15|June.*15/i);
       expect(respondArg[0].value).toBe('42');
+    }
+
+    it('formats autocomplete result as "Title (Month Day)"', async () => {
+      await testFormatsautocompleteresultastitlemonthday();
     });
 
     it('responds with empty array when user has no accessible events', async () => {

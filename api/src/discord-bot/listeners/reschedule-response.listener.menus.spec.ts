@@ -31,6 +31,22 @@ interface TestableRescheduleResponseListener {
   ) => Promise<void>;
 }
 
+/** Build the message sub-object for a ButtonInteraction mock */
+function makeInteractionMessage(
+  overrides: {
+    embeds?: Array<{ description: string; title?: string }>;
+    components?: unknown[];
+  } = {},
+) {
+  return {
+    embeds: overrides.embeds ?? [
+      { description: 'Your event has been rescheduled.', title: 'Rescheduled' },
+    ],
+    components: overrides.components ?? [],
+    edit: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 /** Create a minimal ButtonInteraction mock */
 function makeButtonInteraction(
   customId: string,
@@ -40,14 +56,6 @@ function makeButtonInteraction(
     components?: unknown[];
   } = {},
 ) {
-  const message = {
-    embeds: messageOverrides.embeds ?? [
-      { description: 'Your event has been rescheduled.', title: 'Rescheduled' },
-    ],
-    components: messageOverrides.components ?? [],
-    edit: jest.fn().mockResolvedValue(undefined),
-  };
-
   const interaction = {
     isButton: () => true,
     isStringSelectMenu: () => false,
@@ -65,7 +73,7 @@ function makeButtonInteraction(
       interaction.replied = true;
       return Promise.resolve(undefined);
     }),
-    message,
+    message: makeInteractionMessage(messageOverrides),
   };
   return interaction;
 }
@@ -144,30 +152,21 @@ describe('RescheduleResponseListener — menus', () => {
     user: { id: 41 },
   };
 
-  beforeEach(async () => {
+  async function setupBlock() {
     mockDb = createDrizzleMock();
-
-    mockClientService = {
-      getClient: jest.fn().mockReturnValue(null),
-    };
-
+    mockClientService = { getClient: jest.fn().mockReturnValue(null) };
     mockSignupsService = {
       findByDiscordUser: jest.fn().mockResolvedValue(null),
       confirmSignup: jest.fn().mockResolvedValue({ id: 101 }),
       updateStatus: jest.fn().mockResolvedValue(undefined),
     };
-
     mockCharactersService = {
       findAllForUser: jest
         .fn()
         .mockResolvedValue({ data: [], meta: { total: 0 } }),
       findOne: jest.fn().mockResolvedValue({ id: 'char-1', name: 'Arthas' }),
     };
-
-    mockEmbedSyncQueue = {
-      enqueue: jest.fn().mockResolvedValue(undefined),
-    };
-
+    mockEmbedSyncQueue = { enqueue: jest.fn().mockResolvedValue(undefined) };
     mockEmojiService = {
       getClassEmojiComponent: jest.fn().mockReturnValue(undefined),
       getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
@@ -187,6 +186,10 @@ describe('RescheduleResponseListener — menus', () => {
 
     const instance: unknown = module.get(RescheduleResponseListener);
     listener = instance as TestableRescheduleResponseListener;
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {

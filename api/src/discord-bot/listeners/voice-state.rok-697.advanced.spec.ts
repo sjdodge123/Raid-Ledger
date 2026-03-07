@@ -93,7 +93,65 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
     };
   }
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      VoiceStateListener,
+      { provide: DiscordBotClientService, useValue: mockClientService },
+      { provide: AdHocEventService, useValue: mockAdHocEventService },
+      {
+        provide: VoiceAttendanceService,
+        useValue: {
+          findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
+          handleJoin: jest.fn(),
+          handleLeave: jest.fn(),
+          getActiveRoster: jest.fn().mockReturnValue({
+            eventId: 0,
+            participants: [],
+            activeCount: 0,
+          }),
+          recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: DepartureGraceService,
+        useValue: {
+          onMemberLeave: jest.fn().mockResolvedValue(undefined),
+          onMemberRejoin: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: ChannelBindingsService,
+        useValue: mockChannelBindingsService,
+      },
+      {
+        provide: PresenceGameDetectorService,
+        useValue: mockPresenceDetector,
+      },
+      {
+        provide: GameActivityService,
+        useValue: mockGameActivityService,
+      },
+      { provide: UsersService, useValue: mockUsersService },
+      {
+        provide: AdHocEventsGateway,
+        useValue: {
+          emitRosterUpdate: jest.fn(),
+          emitStatusChange: jest.fn(),
+          emitEndTimeExtended: jest.fn(),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     jest.useFakeTimers();
 
     mockClientService = {
@@ -131,56 +189,14 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        VoiceStateListener,
-        { provide: DiscordBotClientService, useValue: mockClientService },
-        { provide: AdHocEventService, useValue: mockAdHocEventService },
-        {
-          provide: VoiceAttendanceService,
-          useValue: {
-            findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
-            handleJoin: jest.fn(),
-            handleLeave: jest.fn(),
-            getActiveRoster: jest.fn().mockReturnValue({
-              eventId: 0,
-              participants: [],
-              activeCount: 0,
-            }),
-            recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: DepartureGraceService,
-          useValue: {
-            onMemberLeave: jest.fn().mockResolvedValue(undefined),
-            onMemberRejoin: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelBindingsService,
-          useValue: mockChannelBindingsService,
-        },
-        {
-          provide: PresenceGameDetectorService,
-          useValue: mockPresenceDetector,
-        },
-        {
-          provide: GameActivityService,
-          useValue: mockGameActivityService,
-        },
-        { provide: UsersService, useValue: mockUsersService },
-        {
-          provide: AdHocEventsGateway,
-          useValue: {
-            emitRosterUpdate: jest.fn(),
-            emitStatusChange: jest.fn(),
-            emitEndTimeExtended: jest.fn(),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     listener = module.get(VoiceStateListener);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -232,7 +248,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
   // ─── AC1: Spawn immediately with unanimous game activity ───────────────────
 
   describe('edge cases', () => {
-    it('does not schedule a second delayed spawn timer when a third player joins during the wait', async () => {
+    async function testDoesnotscheduleaseconddelayedspawntimer() {
       const handler = await setupWithBinding('voice-ch', gameBinding, [
         { id: 'user-1', displayName: 'Player1' },
         { id: 'user-2', displayName: 'Player2' },
@@ -293,9 +309,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       // Spawn fires after delay
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('does not schedule a second delayed spawn timer when a third player joins during the wait', async () => {
+      await testDoesnotscheduleaseconddelayedspawntimer();
     });
 
-    it('skips spawn if active event already exists when delayed timer fires', async () => {
+    async function testSkipsspawnifactiveeventalreadyexistswhen() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       mockPresenceDetector.detectGameForMember.mockResolvedValue({
@@ -345,9 +365,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('skips spawn if active event already exists when delayed timer fires', async () => {
+      await testSkipsspawnifactiveeventalreadyexistswhen();
     });
 
-    it('clears all pending spawn timers on bot disconnect', async () => {
+    async function testClearsallpendingspawntimersonbotdisconnect() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       mockPresenceDetector.detectGameForMember.mockResolvedValue({
@@ -389,9 +413,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('clears all pending spawn timers on bot disconnect', async () => {
+      await testClearsallpendingspawntimersonbotdisconnect();
     });
 
-    it('falls back to delayed spawn when shouldSpawnImmediately cannot get client', async () => {
+    async function testFallsbacktodelayedspawnwhenshouldspawnimmediatelycannot() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       mockAdHocEventService.getActiveState.mockReturnValue(undefined);
@@ -431,13 +459,17 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       // After delay, client still null → group roster also cannot run → no spawn
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('falls back to delayed spawn when shouldSpawnImmediately cannot get client', async () => {
+      await testFallsbacktodelayedspawnwhenshouldspawnimmediatelycannot();
     });
   });
 
   // ─── AC6: Game-specific binding — filtered threshold logic ─────────────────
 
   describe('AC6: game-specific binding — different-game members excluded from threshold', () => {
-    it('excludes members playing a different game from threshold count', async () => {
+    async function testExcludesmembersplayingadifferentgamefromthreshold() {
       // 2 members in channel, minPlayers=2, but one plays a different game
       // → only 1 counted member → below threshold → no spawn at all
       const handler = await setupWithBinding('voice-ch', gameBinding);
@@ -484,9 +516,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       // No delayed spawn either — threshold was never met
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('excludes members playing a different game from threshold count', async () => {
+      await testExcludesmembersplayingadifferentgamefromthreshold();
     });
 
-    it('counts no-game members toward threshold but triggers delayed path', async () => {
+    async function testCountsnogamememberstowardthresholdbuttriggersdelayed() {
       // 2 members, both have no game detected → counted=2, allConfirmed=false → delayed
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
@@ -528,9 +564,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       // Spawns after 15-min delay
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('counts no-game members toward threshold but triggers delayed path', async () => {
+      await testCountsnogamememberstowardthresholdbuttriggersdelayed();
     });
 
-    it('spawns immediately when 2 play bound game + 1 plays different game (minPlayers=2)', async () => {
+    async function testSpawnsimmediatelywhen2playboundgame1() {
       // 3 members: user-1 and user-2 play bound game, user-3 plays a different game
       // Filtered count: 2 (user-1 + user-2), allConfirmed=true → immediate spawn
       const handler = await setupWithBinding('voice-ch', gameBinding, [
@@ -589,9 +629,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
 
       // Different-game player excluded → 2 confirmed bound-game players → immediate
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('spawns immediately when 2 play bound game + 1 plays different game (minPlayers=2)', async () => {
+      await testSpawnsimmediatelywhen2playboundgame1();
     });
 
-    it('delays spawn when 1 plays bound game + 1 has no game (minPlayers=2)', async () => {
+    async function testDelaysspawnwhen1playsboundgame1() {
       // user-1 plays bound game, user-2 has no game → counted=2, allConfirmed=false → delayed
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
@@ -636,6 +680,10 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       // Spawns after delay
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('delays spawn when 1 plays bound game + 1 has no game (minPlayers=2)', async () => {
+      await testDelaysspawnwhen1playsboundgame1();
     });
   });
 
@@ -651,7 +699,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       config: { minPlayers: 2 },
     };
 
-    it('spawns immediately in general-lobby when all members share the same game', async () => {
+    async function testSpawnsimmediatelyingenerallobbywhenallmembersshare() {
       const handler = await setupWithBinding('lobby-ch', lobbyBinding);
 
       // Both playing the same game (gameId=5) → unanimous
@@ -694,9 +742,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
 
       // Unanimous game — should spawn immediately
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('spawns immediately in general-lobby when all members share the same game', async () => {
+      await testSpawnsimmediatelyingenerallobbywhenallmembersshare();
     });
 
-    it('uses delayed spawn in general-lobby when members play different games', async () => {
+    async function testUsesdelayedspawningenerallobbywhenmembersplay() {
       const handler = await setupWithBinding('lobby-ch', lobbyBinding);
 
       // Different games → not unanimous
@@ -745,9 +797,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       // After 15 minutes, the delayed spawn fires
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('uses delayed spawn in general-lobby when members play different games', async () => {
+      await testUsesdelayedspawningenerallobbywhenmembersplay();
     });
 
-    it('cancels general-lobby delayed spawn when player count drops below threshold', async () => {
+    async function testCancelsgenerallobbydelayedspawnwhenplayercountdrops() {
       const handler = await setupWithBinding('lobby-ch', lobbyBinding);
 
       // Different games → delayed spawn
@@ -798,6 +854,10 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       // Advance 15 minutes — timer was cancelled
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('cancels general-lobby delayed spawn when player count drops below threshold', async () => {
+      await testCancelsgenerallobbydelayedspawnwhenplayercountdrops();
     });
   });
 });

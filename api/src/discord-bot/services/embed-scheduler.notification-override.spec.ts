@@ -35,42 +35,49 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
     return chain;
   };
 
-  beforeEach(async () => {
+  function buildProviders() {
+    return [
+      EmbedSchedulerService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: SettingsService,
+        useValue: {
+          getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+        },
+      },
+      {
+        provide: CronJobService,
+        useValue: {
+          executeWithTracking: jest
+            .fn()
+            .mockImplementation(
+              async (_name: string, fn: () => Promise<void>) => fn(),
+            ),
+        },
+      },
+      {
+        provide: EmbedPosterService,
+        useValue: {
+          postEmbed: jest.fn().mockResolvedValue(true),
+        },
+      },
+    ];
+  }
+  async function setupBlock() {
     mockDb = {
       select: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EmbedSchedulerService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: SettingsService,
-          useValue: {
-            getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
-          },
-        },
-        {
-          provide: CronJobService,
-          useValue: {
-            executeWithTracking: jest
-              .fn()
-              .mockImplementation(
-                async (_name: string, fn: () => Promise<void>) => fn(),
-              ),
-          },
-        },
-        {
-          provide: EmbedPosterService,
-          useValue: {
-            postEmbed: jest.fn().mockResolvedValue(true),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(EmbedSchedulerService);
     embedPoster = module.get(EmbedPosterService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -211,7 +218,7 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
   // Multiple events — each carries its own override independently
   // ============================================================
   describe('multiple events with different override states', () => {
-    it('correctly passes distinct override values for multiple events', async () => {
+    async function testCorrectlypassesdistinctoverridevaluesformultipleevents() {
       const eventA = {
         id: 100,
         title: 'Event A',
@@ -261,6 +268,10 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
         null,
         null,
       );
+    }
+
+    it('correctly passes distinct override values for multiple events', async () => {
+      await testCorrectlypassesdistinctoverridevaluesformultipleevents();
     });
   });
 
@@ -312,7 +323,7 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
       );
     });
 
-    it('includes game data in the event object when event has a gameId', async () => {
+    async function testIncludesgamedataintheeventobjectwhen() {
       const eventWithGame = {
         id: 56,
         title: 'WoW Raid',
@@ -352,6 +363,10 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
         null,
         null,
       );
+    }
+
+    it('includes game data in the event object when event has a gameId', async () => {
+      await testIncludesgamedataintheeventobjectwhen();
     });
 
     it('passes null game when event has gameId but game not found in DB', async () => {

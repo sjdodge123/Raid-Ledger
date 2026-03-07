@@ -29,7 +29,7 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     }
   });
 
-  it('should error gracefully when character name exceeds Discord label limit (>100 chars)', async () => {
+  async function testShoulderrorgracefullywhencharacternameexceedsdiscord() {
     const userId = 'user-adv-longname';
     const longName = 'A'.repeat(101);
 
@@ -74,9 +74,13 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         content: expect.stringContaining('Pick a character'),
       }),
     );
+  }
+
+  it('should error gracefully when character name exceeds Discord label limit (>100 chars)', async () => {
+    await testShoulderrorgracefullywhencharacternameexceedsdiscord();
   });
 
-  it('should build dropdown label gracefully when class, spec, and level are null', async () => {
+  async function testShouldbuilddropdownlabelgracefullywhenclassspec() {
     const userId = 'user-adv-nullfields';
     const event = { id: 1002, title: 'Casual Night', gameId: 1 };
 
@@ -120,9 +124,13 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       }),
     );
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
+  }
+
+  it('should build dropdown label gracefully when class, spec, and level are null', async () => {
+    await testShouldbuilddropdownlabelgracefullywhenclassspec();
   });
 
-  it('should build dropdown description with only class (no spec, no level)', async () => {
+  async function testShouldbuilddropdowndescriptionwithonlyclassno() {
     const userId = 'user-adv-classonly';
     const event = { id: 1003, title: 'Alt Run', gameId: 1 };
 
@@ -165,6 +173,10 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         content: expect.stringContaining('Pick a character'),
       }),
     );
+  }
+
+  it('should build dropdown description with only class (no spec, no level)', async () => {
+    await testShouldbuilddropdowndescriptionwithonlyclassno();
   });
 
   it('should show all 25 characters when user has exactly 25', async () => {
@@ -238,7 +250,7 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
   });
 
-  it('should show error message when character select submits an invalid/deleted character ID', async () => {
+  async function testShouldshowerrormessagewhencharacterselectsubmits() {
     const userId = 'user-adv-invalidchar';
 
     mocks.mockDb.select.mockReturnValueOnce({
@@ -282,9 +294,13 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         components: [],
       }),
     );
+  }
+
+  it('should show error message when character select submits an invalid/deleted character ID', async () => {
+    await testShouldshowerrormessagewhencharacterselectsubmits();
   });
 
-  it('should rate-limit a second signup button click while character dropdown is visible', async () => {
+  async function testShouldratelimitasecondsignupbuttonclickwhile() {
     const userId = 'user-adv-concurrent';
 
     const event1 = { id: 1006, title: 'Concurrent Event', gameId: 1 };
@@ -338,9 +354,13 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       }),
     );
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
+  }
+
+  it('should rate-limit a second signup button click while character dropdown is visible', async () => {
+    await testShouldratelimitasecondsignupbuttonclickwhile();
   });
 
-  it('should show error when signup service throws during character select (event cancelled mid-flow)', async () => {
+  async function testShouldshowerrorwhensignupservicethrowsduring() {
     const userId = 'user-adv-cancelled';
 
     mocks.mockDb.select.mockReturnValueOnce({
@@ -380,6 +400,10 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         components: [],
       }),
     );
+  }
+
+  it('should show error when signup service throws during character select (event cancelled mid-flow)', async () => {
+    await testShouldshowerrorwhensignupservicethrowsduring();
   });
 
   it('should do plain signup (no character flow) when event gameId is null', async () => {
@@ -491,7 +515,7 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     );
   });
 
-  it('should show no default selection when no character is marked as main', async () => {
+  async function testShouldshownodefaultselectionwhennocharacter() {
     const userId = 'user-adv-nomain';
     const event = { id: 1013, title: 'No Main Event', gameId: 1 };
 
@@ -533,9 +557,13 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       }),
     );
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
+  }
+
+  it('should show no default selection when no character is marked as main', async () => {
+    await testShouldshownodefaultselectionwhennocharacter();
   });
 
-  it('should pre-select main character in dropdown when one is set', async () => {
+  async function testShouldpreselectmaincharacterindropdownwhenone() {
     const userId = 'user-adv-withmain';
     const event = { id: 1014, title: 'With Main Event', gameId: 1 };
 
@@ -576,9 +604,13 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       }),
     );
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
+  }
+
+  it('should pre-select main character in dropdown when one is set', async () => {
+    await testShouldpreselectmaincharacterindropdownwhenone();
   });
 
-  it('should call updateEmbedSignupCount after successful character select signup', async () => {
+  async function testShouldcallupdateembedsignupcountaftersuccessfulcharacte() {
     const userId = 'user-adv-embedupdate';
 
     mocks.mockDb.select.mockReturnValueOnce({
@@ -646,6 +678,10 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       1015,
     );
     expect(mocks.mockClientService.editEmbed).toHaveBeenCalled();
+  }
+
+  it('should call updateEmbedSignupCount after successful character select signup', async () => {
+    await testShouldcallupdateembedsignupcountaftersuccessfulcharacte();
   });
 
   it('should propagate error gracefully when findAllForUser throws', async () => {

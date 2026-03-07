@@ -210,7 +210,7 @@ describe('DiscordEmbedFactory — features', () => {
   });
 
   describe('role preference badges (ROK-470)', () => {
-    it('should show role emoji badges next to player mentions in MMO roster', () => {
+    function testShouldshowroleemojibadgesnexttoplayer() {
       const eventWithMentions: EmbedEventData = {
         ...baseEvent,
         signupCount: 3,
@@ -247,6 +247,10 @@ describe('DiscordEmbedFactory — features', () => {
       expect(desc).toContain(
         '\u2003<@333> \u{1F6E1}\uFE0F\u{1F49A}\u2694\uFE0F',
       );
+    }
+
+    it('should show role emoji badges next to player mentions in MMO roster', () => {
+      testShouldshowroleemojibadgesnexttoplayer();
     });
 
     it('should show just @mention when player has no preferred roles and no assigned role', () => {

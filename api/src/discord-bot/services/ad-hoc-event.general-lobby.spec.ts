@@ -58,7 +58,67 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
     },
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      AdHocEventService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: SettingsService, useValue: mockSettingsService },
+      { provide: UsersService, useValue: { findByDiscordId: jest.fn() } },
+      { provide: AdHocParticipantService, useValue: mockParticipantService },
+    ];
+  }
+
+  function buildProvidersMocksA() {
+    return [
+      {
+        provide: ChannelBindingsService,
+        useValue: mockChannelBindingsService,
+      },
+      {
+        provide: AdHocGracePeriodQueueService,
+        useValue: mockGracePeriodQueue,
+      },
+    ];
+  }
+
+  function buildProvidersMocksB() {
+    return [
+      {
+        provide: AdHocNotificationService,
+        useValue: {
+          notifySpawn: jest.fn(),
+          queueUpdate: jest.fn(),
+          notifyCompleted: jest.fn(),
+          flush: jest.fn(),
+        },
+      },
+      {
+        provide: AdHocEventsGateway,
+        useValue: {
+          emitRosterUpdate: jest.fn(),
+          emitStatusChange: jest.fn(),
+          emitEndTimeExtended: jest.fn(),
+        },
+      },
+      {
+        provide: VoiceAttendanceService,
+        useValue: {
+          handleJoin: jest.fn(),
+          handleLeave: jest.fn(),
+          getActiveCount: jest.fn().mockReturnValue(0),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [...buildProvidersMocksA(), ...buildProvidersMocksB()];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     mockDb = createDrizzleMock();
 
     mockSettingsService = { get: jest.fn() };
@@ -82,46 +142,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AdHocEventService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: SettingsService, useValue: mockSettingsService },
-        { provide: UsersService, useValue: { findByDiscordId: jest.fn() } },
-        { provide: AdHocParticipantService, useValue: mockParticipantService },
-        {
-          provide: ChannelBindingsService,
-          useValue: mockChannelBindingsService,
-        },
-        {
-          provide: AdHocGracePeriodQueueService,
-          useValue: mockGracePeriodQueue,
-        },
-        {
-          provide: AdHocNotificationService,
-          useValue: {
-            notifySpawn: jest.fn(),
-            queueUpdate: jest.fn(),
-            notifyCompleted: jest.fn(),
-            flush: jest.fn(),
-          },
-        },
-        {
-          provide: AdHocEventsGateway,
-          useValue: {
-            emitRosterUpdate: jest.fn(),
-            emitStatusChange: jest.fn(),
-            emitEndTimeExtended: jest.fn(),
-          },
-        },
-        {
-          provide: VoiceAttendanceService,
-          useValue: {
-            handleJoin: jest.fn(),
-            handleLeave: jest.fn(),
-            getActiveCount: jest.fn().mockReturnValue(0),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(AdHocEventService);
@@ -130,6 +151,10 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
     jest
       .spyOn(service as any, 'autoSignupParticipant')
       .mockResolvedValue(undefined);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -230,7 +255,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       expect(service.getActiveState('bind-lobby-null', null)).toBeDefined();
     });
 
-    it('supports multiple concurrent game events per general-lobby channel', async () => {
+    async function testSupportsmultipleconcurrentgameeventspergenerallobbychan() {
       mockSettingsService.get.mockResolvedValue('true');
 
       // Create event for WoW (gameId=1)
@@ -279,6 +304,10 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       expect(service.getActiveState('bind-multi', 2)).toBeDefined();
       expect(service.getActiveState('bind-multi', 1)?.eventId).toBe(40);
       expect(service.getActiveState('bind-multi', 2)?.eventId).toBe(41);
+    }
+
+    it('supports multiple concurrent game events per general-lobby channel', async () => {
+      await testSupportsmultipleconcurrentgameeventspergenerallobbychan();
     });
   });
 
@@ -369,7 +398,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
   // ─── handleVoiceLeave with gameId ─────────────────────────────────────────
 
   describe('handleVoiceLeave with composite key', () => {
-    it('finds the correct composite key event when gameId is provided', async () => {
+    async function testFindsthecorrectcompositekeyeventwhengameid() {
       mockSettingsService.get.mockResolvedValue('true');
       // Set up general-lobby event
       mockDb.limit.mockResolvedValueOnce([]); // no scheduled event
@@ -409,9 +438,13 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
         80,
         'discord-100',
       );
+    }
+
+    it('finds the correct composite key event when gameId is provided', async () => {
+      await testFindsthecorrectcompositekeyeventwhengameid();
     });
 
-    it('searches composite keys when gameId is not provided on leave', async () => {
+    async function testSearchescompositekeyswhengameidisnotprovided() {
       mockSettingsService.get.mockResolvedValue('true');
       mockDb.limit.mockResolvedValueOnce([]); // no scheduled event
       mockDb.returning.mockResolvedValueOnce([{ id: 81 }]);
@@ -447,6 +480,10 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
         81,
         'discord-100',
       );
+    }
+
+    it('searches composite keys when gameId is not provided on leave', async () => {
+      await testSearchescompositekeyswhengameidisnotprovided();
     });
   });
 

@@ -10,38 +10,45 @@ describe('ChannelResolverService', () => {
   let bindingsService: jest.Mocked<ChannelBindingsService>;
   let clientService: jest.Mocked<DiscordBotClientService>;
 
-  beforeEach(async () => {
+  function buildProviders() {
+    return [
+      ChannelResolverService,
+      {
+        provide: SettingsService,
+        useValue: {
+          getDiscordBotDefaultChannel: jest.fn(),
+          getDiscordBotDefaultVoiceChannel: jest.fn().mockResolvedValue(null),
+        },
+      },
+      {
+        provide: ChannelBindingsService,
+        useValue: {
+          getChannelForGame: jest.fn(),
+          getChannelForSeries: jest.fn().mockResolvedValue(null),
+          getVoiceChannelForGame: jest.fn().mockResolvedValue(null),
+        },
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          getGuildId: jest.fn(),
+        },
+      },
+    ];
+  }
+  async function setupBlock() {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ChannelResolverService,
-        {
-          provide: SettingsService,
-          useValue: {
-            getDiscordBotDefaultChannel: jest.fn(),
-            getDiscordBotDefaultVoiceChannel: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: ChannelBindingsService,
-          useValue: {
-            getChannelForGame: jest.fn(),
-            getChannelForSeries: jest.fn().mockResolvedValue(null),
-            getVoiceChannelForGame: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            getGuildId: jest.fn(),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(ChannelResolverService);
     settingsService = module.get(SettingsService);
     bindingsService = module.get(ChannelBindingsService);
     clientService = module.get(DiscordBotClientService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   it('should return game-specific binding channel when available', async () => {

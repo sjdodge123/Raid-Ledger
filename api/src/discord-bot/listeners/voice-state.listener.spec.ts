@@ -48,7 +48,65 @@ describe('VoiceStateListener', () => {
     findByDiscordId: jest.Mock;
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      VoiceStateListener,
+      { provide: DiscordBotClientService, useValue: mockClientService },
+      { provide: AdHocEventService, useValue: mockAdHocEventService },
+      {
+        provide: VoiceAttendanceService,
+        useValue: {
+          findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
+          handleJoin: jest.fn(),
+          handleLeave: jest.fn(),
+          getActiveRoster: jest.fn().mockReturnValue({
+            eventId: 0,
+            participants: [],
+            activeCount: 0,
+          }),
+          recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: DepartureGraceService,
+        useValue: {
+          onMemberLeave: jest.fn().mockResolvedValue(undefined),
+          onMemberRejoin: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: ChannelBindingsService,
+        useValue: mockChannelBindingsService,
+      },
+      {
+        provide: PresenceGameDetectorService,
+        useValue: mockPresenceDetector,
+      },
+      {
+        provide: GameActivityService,
+        useValue: mockGameActivityService,
+      },
+      { provide: UsersService, useValue: mockUsersService },
+      {
+        provide: AdHocEventsGateway,
+        useValue: {
+          emitRosterUpdate: jest.fn(),
+          emitStatusChange: jest.fn(),
+          emitEndTimeExtended: jest.fn(),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     jest.useFakeTimers();
 
     mockClientService = {
@@ -85,56 +143,14 @@ describe('VoiceStateListener', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        VoiceStateListener,
-        { provide: DiscordBotClientService, useValue: mockClientService },
-        { provide: AdHocEventService, useValue: mockAdHocEventService },
-        {
-          provide: VoiceAttendanceService,
-          useValue: {
-            findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
-            handleJoin: jest.fn(),
-            handleLeave: jest.fn(),
-            getActiveRoster: jest.fn().mockReturnValue({
-              eventId: 0,
-              participants: [],
-              activeCount: 0,
-            }),
-            recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: DepartureGraceService,
-          useValue: {
-            onMemberLeave: jest.fn().mockResolvedValue(undefined),
-            onMemberRejoin: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelBindingsService,
-          useValue: mockChannelBindingsService,
-        },
-        {
-          provide: PresenceGameDetectorService,
-          useValue: mockPresenceDetector,
-        },
-        {
-          provide: GameActivityService,
-          useValue: mockGameActivityService,
-        },
-        { provide: UsersService, useValue: mockUsersService },
-        {
-          provide: AdHocEventsGateway,
-          useValue: {
-            emitRosterUpdate: jest.fn(),
-            emitStatusChange: jest.fn(),
-            emitEndTimeExtended: jest.fn(),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     listener = module.get(VoiceStateListener);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -354,7 +370,7 @@ describe('VoiceStateListener', () => {
       expect(mockAdHocEventService.handleVoiceLeave).toHaveBeenCalled();
     });
 
-    it('detects move event (channel A -> channel B) as leave+join', async () => {
+    async function testDetectsmoveeventchannelachannelbas() {
       // Both channels are bound
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
@@ -399,11 +415,15 @@ describe('VoiceStateListener', () => {
 
       expect(mockAdHocEventService.handleVoiceLeave).toHaveBeenCalled();
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('detects move event (channel A -> channel B) as leave+join', async () => {
+      await testDetectsmoveeventchannelachannelbas();
     });
   });
 
   describe('threshold checking', () => {
-    it('does not trigger event creation when below minPlayers threshold', async () => {
+    async function testDoesnottriggereventcreationwhenbelowminplayers() {
       let capturedHandler: (oldState: unknown, newState: unknown) => void;
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
@@ -445,6 +465,10 @@ describe('VoiceStateListener', () => {
       await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('does not trigger event creation when below minPlayers threshold', async () => {
+      await testDoesnottriggereventcreationwhenbelowminplayers();
     });
   });
 
@@ -501,7 +525,7 @@ describe('VoiceStateListener', () => {
       await listener.onBotConnected();
     });
 
-    it('calls bufferStart with voice source when linked user joins game-bound channel', async () => {
+    async function testCallsbufferstartwithvoicesourcewhenlinkeduser() {
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-game',
@@ -543,9 +567,13 @@ describe('VoiceStateListener', () => {
         expect.any(Date),
         'voice',
       );
+    }
+
+    it('calls bufferStart with voice source when linked user joins game-bound channel', async () => {
+      await testCallsbufferstartwithvoicesourcewhenlinkeduser();
     });
 
-    it('does NOT call bufferStart for unlinked users', async () => {
+    async function testDoesnotcallbufferstartforunlinkedusers() {
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-game',
@@ -581,9 +609,13 @@ describe('VoiceStateListener', () => {
       await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockGameActivityService.bufferStart).not.toHaveBeenCalled();
+    }
+
+    it('does NOT call bufferStart for unlinked users', async () => {
+      await testDoesnotcallbufferstartforunlinkedusers();
     });
 
-    it('does NOT call bufferStart when binding has null gameId', async () => {
+    async function testDoesnotcallbufferstartwhenbindinghasnull() {
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-no-game',
@@ -618,9 +650,13 @@ describe('VoiceStateListener', () => {
       await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockGameActivityService.bufferStart).not.toHaveBeenCalled();
+    }
+
+    it('does NOT call bufferStart when binding has null gameId', async () => {
+      await testDoesnotcallbufferstartwhenbindinghasnull();
     });
 
-    it('calls bufferStop with voice source when tracked user leaves channel', async () => {
+    async function testCallsbufferstopwithvoicesourcewhentrackeduser() {
       // First, set up a join so the user gets tracked
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
@@ -675,9 +711,13 @@ describe('VoiceStateListener', () => {
         expect.any(Date),
         'voice',
       );
+    }
+
+    it('calls bufferStop with voice source when tracked user leaves channel', async () => {
+      await testCallsbufferstopwithvoicesourcewhentrackeduser();
     });
 
-    it('calls bufferStart even when below minPlayers threshold (ROK-604)', async () => {
+    async function testCallsbufferstartevenwhenbelowminplayersthresholdrok604() {
       // Voice activity tracks independently of ad-hoc event creation.
       // A linked user joining a game-bound channel should get a game_activity_session
       // even if the channel is below threshold and no event is spawned.
@@ -722,6 +762,10 @@ describe('VoiceStateListener', () => {
 
       // But no ad-hoc event should be created (below threshold)
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('calls bufferStart even when below minPlayers threshold (ROK-604)', async () => {
+      await testCallsbufferstartevenwhenbelowminplayersthresholdrok604();
     });
 
     it('does NOT call bufferStop for untracked users on leave', async () => {

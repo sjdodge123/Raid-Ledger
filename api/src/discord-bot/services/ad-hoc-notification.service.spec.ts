@@ -58,7 +58,24 @@ describe('AdHocNotificationService', () => {
     ]);
   }
 
-  beforeEach(async () => {
+  function buildProviders() {
+    return [
+      AdHocNotificationService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: DiscordBotClientService, useValue: mockClientService },
+      { provide: DiscordEmbedFactory, useValue: mockEmbedFactory },
+      {
+        provide: ChannelBindingsService,
+        useValue: mockChannelBindingsService,
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: mockChannelResolver,
+      },
+      { provide: SettingsService, useValue: mockSettingsService },
+    ];
+  }
+  async function setupBlock() {
     jest.useFakeTimers();
 
     mockDb = createDrizzleMock();
@@ -94,24 +111,14 @@ describe('AdHocNotificationService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AdHocNotificationService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: DiscordBotClientService, useValue: mockClientService },
-        { provide: DiscordEmbedFactory, useValue: mockEmbedFactory },
-        {
-          provide: ChannelBindingsService,
-          useValue: mockChannelBindingsService,
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: mockChannelResolver,
-        },
-        { provide: SettingsService, useValue: mockSettingsService },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(AdHocNotificationService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -282,7 +289,7 @@ describe('AdHocNotificationService', () => {
       });
     }
 
-    it('edits the existing embed in-place instead of posting a new message (ROK-612)', async () => {
+    async function testEditstheexistingembedinplaceinsteadofposting() {
       await spawnEvent(60);
       mockBuildEmbedData({ id: 60 });
 
@@ -318,6 +325,10 @@ describe('AdHocNotificationService', () => {
         undefined,
       );
       expect(mockClientService.sendEmbed).not.toHaveBeenCalled();
+    }
+
+    it('edits the existing embed in-place instead of posting a new message (ROK-612)', async () => {
+      await testEditstheexistingembedinplaceinsteadofposting();
     });
 
     it('cleans up pending updates after completion', async () => {

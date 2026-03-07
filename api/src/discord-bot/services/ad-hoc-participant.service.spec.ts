@@ -178,7 +178,7 @@ describe('AdHocParticipantService', () => {
   });
 
   describe('getRoster', () => {
-    it('returns roster with ISO string timestamps', async () => {
+    async function testReturnsrosterwithisostringtimestamps() {
       const joinedAt = new Date('2026-02-10T18:00:00Z');
       const leftAt = new Date('2026-02-10T18:30:00Z');
       const rows = [
@@ -228,6 +228,10 @@ describe('AdHocParticipantService', () => {
         totalDurationSeconds: null,
         sessionCount: 2,
       });
+    }
+
+    it('returns roster with ISO string timestamps', async () => {
+      await testReturnsrosterwithisostringtimestamps();
     });
 
     it('returns empty array when no participants', async () => {

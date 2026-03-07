@@ -43,7 +43,36 @@ describe('RosterViewCommand', () => {
     return chain;
   };
 
-  beforeEach(async () => {
+  function buildProviders() {
+    return [
+      RosterViewCommand,
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: mockDb,
+      },
+      {
+        provide: SignupsService,
+        useValue: {
+          getRosterWithAssignments: jest.fn(),
+        },
+      },
+      {
+        provide: DiscordEmojiService,
+        useValue: {
+          getRoleEmoji: jest.fn((role: string) => {
+            const map: Record<string, string> = {
+              tank: '\uD83D\uDEE1\uFE0F',
+              healer: '\uD83D\uDC9A',
+              dps: '\u2694\uFE0F',
+            };
+            return map[role] ?? '';
+          }),
+          isUsingCustomEmojis: jest.fn(() => false),
+        },
+      },
+    ];
+  }
+  async function setupBlock() {
     delete process.env.CLIENT_URL;
 
     mockDb = {
@@ -51,38 +80,16 @@ describe('RosterViewCommand', () => {
     };
 
     const module_: TestingModule = await Test.createTestingModule({
-      providers: [
-        RosterViewCommand,
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: mockDb,
-        },
-        {
-          provide: SignupsService,
-          useValue: {
-            getRosterWithAssignments: jest.fn(),
-          },
-        },
-        {
-          provide: DiscordEmojiService,
-          useValue: {
-            getRoleEmoji: jest.fn((role: string) => {
-              const map: Record<string, string> = {
-                tank: '\uD83D\uDEE1\uFE0F',
-                healer: '\uD83D\uDC9A',
-                dps: '\u2694\uFE0F',
-              };
-              return map[role] ?? '';
-            }),
-            isUsingCustomEmojis: jest.fn(() => false),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     module = module_;
     command = module.get(RosterViewCommand);
     signupsService = module.get(SignupsService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {
@@ -237,7 +244,7 @@ describe('RosterViewCommand', () => {
       expect(call.embeds[0].data.description).toBe('No signups yet.');
     });
 
-    it('should group assignments by role', async () => {
+    async function testShouldgroupassignmentsbyrole() {
       const interaction = mockInteraction('42');
       const chain = createChainMock([{ title: 'Test Raid', maxAttendees: 20 }]);
       mockDb.select.mockReturnValue(chain);
@@ -270,6 +277,10 @@ describe('RosterViewCommand', () => {
       expect(description).toContain('TankPlayer');
       expect(description).toContain('HealerPlayer');
       expect(description).toContain('DpsPlayer');
+    }
+
+    it('should group assignments by role', async () => {
+      await testShouldgroupassignmentsbyrole();
     });
 
     it('should show unassigned pool members', async () => {

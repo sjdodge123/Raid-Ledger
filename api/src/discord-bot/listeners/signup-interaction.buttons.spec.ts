@@ -119,7 +119,7 @@ describe('SignupInteractionListener — buttons', () => {
   });
 
   describe('handleButtonInteraction — signup button (linked user)', () => {
-    it('should sign up linked Discord user for event', async () => {
+    async function testShouldsignuplinkeddiscorduserforevent() {
       const userId = 'user-signup-linked-1';
       const mockLinkedUser = { id: 42, discordId: userId };
       const mockEvent = {
@@ -171,6 +171,10 @@ describe('SignupInteractionListener — buttons', () => {
           content: expect.stringContaining('Raid Night'),
         }),
       );
+    }
+
+    it('should sign up linked Discord user for event', async () => {
+      await testShouldsignuplinkeddiscorduserforevent();
     });
 
     it('should notify already-signed-up user when they click signup again', async () => {
@@ -263,7 +267,7 @@ describe('SignupInteractionListener — buttons', () => {
   });
 
   describe('handleButtonInteraction — rate limiting', () => {
-    it('should reject rapid interactions from same user on same event', async () => {
+    async function testShouldrejectrapidinteractionsfromsameuseron() {
       const userId = 'user-ratelimit-1';
       mocks.mockDb.select
         .mockReturnValueOnce({
@@ -299,11 +303,15 @@ describe('SignupInteractionListener — buttons', () => {
           content: expect.stringContaining('Please wait'),
         }),
       );
+    }
+
+    it('should reject rapid interactions from same user on same event', async () => {
+      await testShouldrejectrapidinteractionsfromsameuseron();
     });
   });
 
   describe('handleButtonInteraction — Quick Sign Up (anonymous)', () => {
-    it('should create anonymous signup for non-MMO event', async () => {
+    async function testShouldcreateanonymoussignupfornonmmoevent() {
       const userId = 'user-quicksignup-1';
       mocks.mockSignupsService.findByDiscordUser.mockResolvedValueOnce(null);
 
@@ -345,6 +353,10 @@ describe('SignupInteractionListener — buttons', () => {
           content: expect.stringContaining('TestUser'),
         }),
       );
+    }
+
+    it('should create anonymous signup for non-MMO event', async () => {
+      await testShouldcreateanonymoussignupfornonmmoevent();
     });
 
     it('should notify already-signed-up user on quick signup attempt', async () => {
@@ -404,7 +416,7 @@ describe('SignupInteractionListener — buttons', () => {
   });
 
   describe('handleButtonInteraction — Tentative button', () => {
-    it('should update existing signup to tentative status', async () => {
+    async function testShouldupdateexistingsignuptotentativestatus() {
       const userId = 'user-tentative-update-1';
       mocks.mockSignupsService.findByDiscordUser.mockResolvedValueOnce({
         id: 1,
@@ -437,6 +449,10 @@ describe('SignupInteractionListener — buttons', () => {
           content: expect.stringContaining('tentative'),
         }),
       );
+    }
+
+    it('should update existing signup to tentative status', async () => {
+      await testShouldupdateexistingsignuptotentativestatus();
     });
 
     it('should create tentative anonymous signup for user with no prior signup', async () => {

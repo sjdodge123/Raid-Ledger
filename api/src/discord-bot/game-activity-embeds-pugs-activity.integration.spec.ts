@@ -218,7 +218,7 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
   // ===================================================================
 
   describe('stale session sweep', () => {
-    it('should cap duration at 24h for sessions older than 24 hours', async () => {
+    async function testShouldcapdurationat24hforsessionsolder() {
       const db = testApp.db;
       const MAX_DURATION = 24 * 60 * 60; // 86400 seconds
       const staleStart = new Date(Date.now() - 25 * 60 * 60 * 1000); // 25h ago
@@ -257,9 +257,13 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
 
       expect(swept.endedAt).not.toBeNull();
       expect(swept.durationSeconds).toBe(MAX_DURATION);
+    }
+
+    it('should cap duration at 24h for sessions older than 24 hours', async () => {
+      await testShouldcapdurationat24hforsessionsolder();
     });
 
-    it('should not affect sessions started within 24 hours', async () => {
+    async function testShouldnotaffectsessionsstartedwithin24hours() {
       const db = testApp.db;
       const MAX_DURATION = 24 * 60 * 60;
       const recentStart = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h ago
@@ -304,6 +308,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
 
       expect(session.endedAt).toBeNull();
       expect(session.durationSeconds).toBeNull();
+    }
+
+    it('should not affect sessions started within 24 hours', async () => {
+      await testShouldnotaffectsessionsstartedwithin24hours();
     });
   });
 
@@ -312,7 +320,7 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
   // ===================================================================
 
   describe('orphaned session cleanup', () => {
-    it('should close stale orphans (>24h) with capped duration', async () => {
+    async function testShouldclosestaleorphans24hwithcappedduration() {
       const db = testApp.db;
       const MAX_DURATION = 24 * 60 * 60;
       const now = new Date();
@@ -354,9 +362,13 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
 
       expect(closed.durationSeconds).toBe(MAX_DURATION);
       expect(closed.endedAt).not.toBeNull();
+    }
+
+    it('should close stale orphans (>24h) with capped duration', async () => {
+      await testShouldclosestaleorphans24hwithcappedduration();
     });
 
-    it('should close recent orphans (<24h) with computed duration', async () => {
+    async function testShouldcloserecentorphans24hwithcomputedduration() {
       const db = testApp.db;
       const now = new Date();
 
@@ -394,6 +406,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
       // Should be approximately 2 hours (7200s), with tolerance for test execution time
       expect(closed.durationSeconds).toBeGreaterThanOrEqual(7190);
       expect(closed.durationSeconds).toBeLessThanOrEqual(7210);
+    }
+
+    it('should close recent orphans (<24h) with computed duration', async () => {
+      await testShouldcloserecentorphans24hwithcomputedduration();
     });
   });
 
@@ -402,7 +418,7 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
   // ===================================================================
 
   describe('daily rollup', () => {
-    it('should upsert day/week/month rollup rows from closed sessions', async () => {
+    async function testShouldupsertdayweekmonthrolluprowsfromclosedsessions() {
       const db = testApp.db;
 
       // Create a closed session
@@ -472,9 +488,13 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
       for (const rollup of rollups) {
         expect(rollup.totalSeconds).toBe(3600);
       }
+    }
+
+    it('should upsert day/week/month rollup rows from closed sessions', async () => {
+      await testShouldupsertdayweekmonthrolluprowsfromclosedsessions();
     });
 
-    it('should upsert (idempotent) on re-run with same period keys', async () => {
+    async function testShouldupsertidempotentonrerunwithsameperiod() {
       const db = testApp.db;
       const dayStart = formatDate(new Date());
 
@@ -523,9 +543,13 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
 
       expect(rollups.length).toBe(1);
       expect(rollups[0].totalSeconds).toBe(5400);
+    }
+
+    it('should upsert (idempotent) on re-run with same period keys', async () => {
+      await testShouldupsertidempotentonrerunwithsameperiod();
     });
 
-    it('should aggregate multiple sessions for the same user/game/period', async () => {
+    async function testShouldaggregatemultiplesessionsforthesameusergameperiod() {
       const db = testApp.db;
       const dayStart = formatDate(new Date());
 
@@ -583,6 +607,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration) — activi
         .limit(1);
 
       expect(rollup.totalSeconds).toBe(5400);
+    }
+
+    it('should aggregate multiple sessions for the same user/game/period', async () => {
+      await testShouldaggregatemultiplesessionsforthesameusergameperiod();
     });
   });
 

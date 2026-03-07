@@ -147,7 +147,7 @@ describe('AdHocEventService — voice', () => {
       expect(mocks.participantService.addParticipant).not.toHaveBeenCalled();
     });
 
-    it('adds joiner to existing live event and cancels grace period', async () => {
+    async function testAddsjoinertoexistingliveeventandcancels() {
       mocks.settingsService.get.mockResolvedValue('true');
       mocks.db.limit.mockResolvedValueOnce([]);
       mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
@@ -178,6 +178,10 @@ describe('AdHocEventService — voice', () => {
         200,
         secondMember,
       );
+    }
+
+    it('adds joiner to existing live event and cancels grace period', async () => {
+      await testAddsjoinertoexistingliveeventandcancels();
     });
 
     it('sets event reminders to false for ad-hoc events', async () => {
@@ -213,7 +217,7 @@ describe('AdHocEventService — voice', () => {
       expect(mocks.participantService.markLeave).not.toHaveBeenCalled();
     });
 
-    it('marks participant as left and starts grace period when channel empties', async () => {
+    async function testMarksparticipantasleftandstartsgraceperiod() {
       mocks.settingsService.get.mockResolvedValue('true');
       mocks.db.limit.mockResolvedValueOnce([]);
       mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
@@ -244,9 +248,13 @@ describe('AdHocEventService — voice', () => {
         400,
         5 * 60 * 1000,
       );
+    }
+
+    it('marks participant as left and starts grace period when channel empties', async () => {
+      await testMarksparticipantasleftandstartsgraceperiod();
     });
 
-    it('uses default 5 minute grace period when not configured', async () => {
+    async function testUsesdefault5minutegraceperiodwhennot() {
       mocks.settingsService.get.mockResolvedValue('true');
       mocks.db.limit.mockResolvedValueOnce([]);
       mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
@@ -281,6 +289,10 @@ describe('AdHocEventService — voice', () => {
         401,
         5 * 60 * 1000,
       );
+    }
+
+    it('uses default 5 minute grace period when not configured', async () => {
+      await testUsesdefault5minutegraceperiodwhennot();
     });
   });
 });

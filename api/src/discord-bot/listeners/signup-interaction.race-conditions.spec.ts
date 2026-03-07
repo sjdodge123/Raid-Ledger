@@ -65,7 +65,7 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
   });
 
   describe('ROK-376 — interaction race condition handling', () => {
-    it('should defer reply immediately before any async work', async () => {
+    async function testShoulddeferreplyimmediatelybeforeanyasyncwork() {
       const userId = 'user-race-defer-1';
       mocks.mockSignupsService.findByDiscordUser.mockResolvedValueOnce(null);
 
@@ -105,6 +105,10 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
 
       expect(interaction.deferReply).toHaveBeenCalledTimes(1);
       expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    }
+
+    it('should defer reply immediately before any async work', async () => {
+      await testShoulddeferreplyimmediatelybeforeanyasyncwork();
     });
 
     it('should gracefully handle expired interaction (code 10062) at deferReply', async () => {
@@ -226,7 +230,7 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
       ).rejects.toThrow('Network failure');
     });
 
-    it('should handle already-acknowledged error in select menu error path', async () => {
+    async function testShouldhandlealreadyacknowledgederrorinselectmenuerror() {
       const userId = 'user-race-select-40060';
 
       mocks.mockDb.select.mockReturnValueOnce({
@@ -268,6 +272,10 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
       await expect(
         mocks.listener.handleSelectMenuInteraction(interaction),
       ).resolves.not.toThrow();
+    }
+
+    it('should handle already-acknowledged error in select menu error path', async () => {
+      await testShouldhandlealreadyacknowledgederrorinselectmenuerror();
     });
   });
 });
