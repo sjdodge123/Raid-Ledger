@@ -9,7 +9,6 @@ import {
   mockUser,
   mockSignup,
   mockCharacter,
-  type SignupsMocks,
 } from './signups.spec-helpers';
 
 let service: SignupsService;

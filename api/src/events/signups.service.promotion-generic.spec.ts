@@ -1,7 +1,6 @@
 import { SignupsService } from './signups.service';
 import {
   createSignupsTestModule,
-  type SignupsMocks,
 } from './signups.spec-helpers';
 
 let service: SignupsService;

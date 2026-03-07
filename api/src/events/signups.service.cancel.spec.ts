@@ -10,7 +10,6 @@ let mockDb: Record<string, jest.Mock>;
 let mockNotificationService: SignupsMocks['mockNotificationService'];
 let mockRosterNotificationBuffer: SignupsMocks['mockRosterNotificationBuffer'];
 
-const mockEvent = { id: 1, title: 'Test Event', creatorId: 99 };
 const mockSignup = {
   id: 1,
   eventId: 1,
