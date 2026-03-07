@@ -66,119 +66,94 @@ interface QuestPrepPanelProps {
     characterId?: string;
 }
 
-/** Quest Prep Panel main component */
-export function QuestPrepPanel({
-    contentInstances,
-    eventId,
-    gameSlug,
-    characterId,
-}: QuestPrepPanelProps) {
-    const { user } = useAuth();
-    const currentUserId = user?.id;
-    const variant = useMemo(() => slugToVariant(gameSlug), [gameSlug]);
-
-    const instanceIds = useMemo(
+function useInstanceIds(contentInstances: Record<string, unknown>[]) {
+    return useMemo(
         () => contentInstances
-            .map((ci) => {
-                const id = ci.id ?? ci.instanceId;
-                return typeof id === 'number' ? id : Number(id);
-            })
+            .map((ci) => { const id = ci.id ?? ci.instanceId; return typeof id === 'number' ? id : Number(id); })
             .filter((id) => !isNaN(id) && id > 0),
         [contentInstances],
     );
+}
 
-    const { data: quests, isLoading } = useEnrichedQuests(instanceIds, variant);
-    const { data: coverage } = useQuestCoverage(eventId);
-    const updateProgress = useUpdateQuestProgress(eventId);
-    const { data: character } = useCharacterDetail(characterId);
-    const wowheadVariant = character?.gameVariant ?? variant;
-
-    const [expandedQuests, setExpandedQuests] = useState<Set<number>>(new Set());
-    const [pendingQuestId, setPendingQuestId] = useState<number | null>(null);
-
-    const equippedBySlot = useMemo(() => {
+function useEquippedSlotMap(character: ReturnType<typeof useCharacterDetail>['data']) {
+    return useMemo(() => {
         const map = new Map<string, EquipmentItemDto>();
         if (character?.equipment?.items) {
-            for (const item of character.equipment.items) {
-                map.set(item.slot.toUpperCase(), item);
-            }
+            for (const item of character.equipment.items) map.set(item.slot.toUpperCase(), item);
         }
         return map;
     }, [character]);
+}
 
-    useWowheadTooltips(quests ? [quests, character] : []);
-
-    const coverageMap = useMemo(() => {
+function useCoverageMap(coverage: QuestCoverageEntry[] | undefined) {
+    return useMemo(() => {
         const map = new Map<number, QuestCoverageEntry>();
-        if (coverage) {
-            for (const entry of coverage) {
-                map.set(entry.questId, entry);
-            }
-        }
+        if (coverage) { for (const entry of coverage) map.set(entry.questId, entry); }
         return map;
     }, [coverage]);
+}
 
-    if (!contentInstances.length || instanceIds.length === 0) return null;
-    if (isLoading) {
-        return (
-            <div className="quest-prep-panel">
-                <div className="quest-prep-loading"><span>Loading quest data…</span></div>
-            </div>
-        );
-    }
-    if (!quests || quests.length === 0) return null;
-
-    const charClass = character?.class ?? null;
-    const charRace = character?.race ?? null;
-    const usableQuests = quests.filter((q) => isQuestUsable(q, charClass, charRace));
-
-    if (usableQuests.length === 0 && quests.length > 0) {
-        return <QuestPrepEmpty />;
-    }
-
-    const outsideQuests = usableQuests.filter((q) => !q.startsInsideDungeon);
-    const insideQuests = usableQuests.filter((q) => q.startsInsideDungeon);
+function useQuestPrepState(eventId: number | undefined) {
+    const [expandedQuests, setExpandedQuests] = useState<Set<number>>(new Set());
+    const [pendingQuestId, setPendingQuestId] = useState<number | null>(null);
+    const updateProgress = useUpdateQuestProgress(eventId);
 
     const handleTogglePickedUp = (questId: number, currentlyPickedUp: boolean) => {
         if (eventId) {
             setPendingQuestId(questId);
-            updateProgress.mutate(
-                { questId, pickedUp: !currentlyPickedUp },
-                { onSettled: () => setPendingQuestId(null) },
-            );
+            updateProgress.mutate({ questId, pickedUp: !currentlyPickedUp }, { onSettled: () => setPendingQuestId(null) });
         }
     };
-
     const toggleExpanded = (questId: number) => {
         setExpandedQuests((prev) => {
             const next = new Set(prev);
-            if (next.has(questId)) next.delete(questId);
-            else next.add(questId);
+            if (next.has(questId)) next.delete(questId); else next.add(questId);
             return next;
         });
     };
+    return { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded };
+}
 
+/** Quest Prep Panel main component */
+export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterId }: QuestPrepPanelProps) {
+    const { user } = useAuth();
+    const variant = useMemo(() => slugToVariant(gameSlug), [gameSlug]);
+    const instanceIds = useInstanceIds(contentInstances);
+    const { data: quests, isLoading } = useEnrichedQuests(instanceIds, variant);
+    const { data: coverage } = useQuestCoverage(eventId);
+    const { data: character } = useCharacterDetail(characterId);
+    const wowheadVariant = character?.gameVariant ?? variant;
+    const equippedBySlot = useEquippedSlotMap(character);
+    const coverageMap = useCoverageMap(coverage);
+    const { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded } = useQuestPrepState(eventId);
+    useWowheadTooltips(quests ? [quests, character] : []);
+
+    if (!contentInstances.length || instanceIds.length === 0) return null;
+    if (isLoading) return <div className="quest-prep-panel"><div className="quest-prep-loading"><span>Loading quest data…</span></div></div>;
+    if (!quests || quests.length === 0) return null;
+
+    const charClass = character?.class ?? null;
+    const usableQuests = quests.filter((q) => isQuestUsable(q, charClass, character?.race ?? null));
+    if (usableQuests.length === 0 && quests.length > 0) return <QuestPrepEmpty />;
+
+    const sharedProps = { coverageMap, currentUserId: user?.id, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, charClass, characterId, onToggleExpanded: toggleExpanded, onTogglePickedUp: handleTogglePickedUp };
     return (
         <div className="quest-prep-panel">
-            <div className="quest-prep-panel__header">
-                <h2 className="quest-prep-panel__title">
-                    <span className="quest-prep-panel__title-icon">📋</span>
-                    Quest Prep
-                </h2>
-                <span className="text-xs text-muted">{usableQuests.length} quests</span>
-            </div>
-            <QuestGroup title="Pick up before you go" icon="🗺️" quests={outsideQuests}
-                coverageMap={coverageMap} currentUserId={currentUserId} eventId={eventId}
-                wowheadVariant={wowheadVariant} expandedQuests={expandedQuests}
-                pendingQuestId={pendingQuestId} equippedBySlot={equippedBySlot}
-                charClass={charClass} characterId={characterId}
-                onToggleExpanded={toggleExpanded} onTogglePickedUp={handleTogglePickedUp} />
-            <QuestGroup title="Starts inside the dungeon" icon="🏰" quests={insideQuests}
-                coverageMap={coverageMap} currentUserId={currentUserId} eventId={eventId}
-                wowheadVariant={wowheadVariant} expandedQuests={expandedQuests}
-                pendingQuestId={pendingQuestId} equippedBySlot={equippedBySlot}
-                charClass={charClass} characterId={characterId}
-                onToggleExpanded={toggleExpanded} onTogglePickedUp={handleTogglePickedUp} />
+            <QuestPrepHeader count={usableQuests.length} />
+            <QuestGroup title="Pick up before you go" icon="🗺️" quests={usableQuests.filter((q) => !q.startsInsideDungeon)} {...sharedProps} />
+            <QuestGroup title="Starts inside the dungeon" icon="🏰" quests={usableQuests.filter((q) => q.startsInsideDungeon)} {...sharedProps} />
+        </div>
+    );
+}
+
+function QuestPrepHeader({ count }: { count: number }) {
+    return (
+        <div className="quest-prep-panel__header">
+            <h2 className="quest-prep-panel__title">
+                <span className="quest-prep-panel__title-icon">📋</span>
+                Quest Prep
+            </h2>
+            <span className="text-xs text-muted">{count} quests</span>
         </div>
     );
 }

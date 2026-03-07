@@ -23,6 +23,13 @@ interface QuestCardProps {
     onTogglePickedUp: (questId: number, currentlyPickedUp: boolean) => void;
 }
 
+function useQuestCardState(questCoverage: QuestCoverageEntry | undefined, currentUserId: number | undefined) {
+    const isCovered = questCoverage && questCoverage.coveredBy.length > 0;
+    const coveredByMe = questCoverage?.coveredBy.some((c: { userId: number }) => c.userId === currentUserId) ?? false;
+    const coveredByOthers = questCoverage?.coveredBy.filter((c: { userId: number }) => c.userId !== currentUserId) ?? [];
+    return { isCovered: !!isCovered, coveredByMe, coveredByOthers };
+}
+
 /** Render a single quest card with coverage indicator */
 export function QuestCard({
     quest, questCoverage, currentUserId, eventId,
@@ -30,52 +37,23 @@ export function QuestCard({
     equippedBySlot, charClass, characterId,
     onToggleExpanded, onTogglePickedUp,
 }: QuestCardProps) {
-    const isCovered = questCoverage && questCoverage.coveredBy.length > 0;
-    const wowheadSuffix = getWowheadDataSuffix(wowheadVariant);
+    const { isCovered, coveredByMe, coveredByOthers } = useQuestCardState(questCoverage, currentUserId);
     const hasPrereqs = !!quest.prevQuestId;
-    const coveredByMe = questCoverage?.coveredBy.some(
-        (c: { userId: number }) => c.userId === currentUserId,
-    ) ?? false;
-    const coveredByOthers = questCoverage?.coveredBy.filter(
-        (c: { userId: number }) => c.userId !== currentUserId,
-    ) ?? [];
 
     return (
         <div key={quest.questId} className="quest-card-row">
             {quest.sharable && !hasPrereqs && (
-                <CoverageIndicator
-                    questId={quest.questId}
-                    coveredByMe={coveredByMe}
-                    isCovered={!!isCovered}
-                    eventId={eventId}
-                    pendingQuestId={pendingQuestId}
-                    onToggle={onTogglePickedUp}
-                />
+                <CoverageIndicator questId={quest.questId} coveredByMe={coveredByMe} isCovered={isCovered}
+                    eventId={eventId} pendingQuestId={pendingQuestId} onToggle={onTogglePickedUp} />
             )}
-
             <div className="quest-card">
-                <QuestCardHeader
-                    quest={quest}
-                    isExpanded={isExpanded}
-                    hasPrereqs={hasPrereqs}
-                    wowheadVariant={wowheadVariant}
-                    onToggle={() => onToggleExpanded(quest.questId)}
-                />
-
+                <QuestCardHeader quest={quest} isExpanded={isExpanded} hasPrereqs={hasPrereqs}
+                    wowheadVariant={wowheadVariant} onToggle={() => onToggleExpanded(quest.questId)} />
                 {isExpanded && (
-                    <QuestCardBody
-                        quest={quest}
-                        hasPrereqs={hasPrereqs}
-                        coveredByMe={coveredByMe}
-                        coveredByOthers={coveredByOthers}
-                        isCovered={!!isCovered}
-                        questCoverage={questCoverage}
-                        wowheadSuffix={wowheadSuffix}
-                        wowheadVariant={wowheadVariant}
-                        equippedBySlot={equippedBySlot}
-                        charClass={charClass}
-                        characterId={characterId}
-                    />
+                    <QuestCardBody quest={quest} hasPrereqs={hasPrereqs} coveredByMe={coveredByMe}
+                        coveredByOthers={coveredByOthers} isCovered={isCovered} questCoverage={questCoverage}
+                        wowheadSuffix={getWowheadDataSuffix(wowheadVariant)} wowheadVariant={wowheadVariant}
+                        equippedBySlot={equippedBySlot} charClass={charClass} characterId={characterId} />
                 )}
             </div>
         </div>
@@ -167,6 +145,22 @@ function QuestCardBody({ quest, hasPrereqs, coveredByMe, coveredByOthers, isCove
     );
 }
 
+function QuestCoverageStatus({ coveredByMe, coveredByOthers, isCovered, questCoverage }: {
+    coveredByMe: boolean; coveredByOthers: { userId: number; username: string }[];
+    isCovered: boolean; questCoverage: QuestCoverageEntry | undefined;
+}) {
+    if (coveredByMe) {
+        return (
+            <>
+                <span className="quest-coverage__status">&#x2713; You have this quest</span>
+                {coveredByOthers.length > 0 && <span className="quest-coverage__also">also: {coveredByOthers.map((c) => c.username).join(', ')}</span>}
+            </>
+        );
+    }
+    if (isCovered) return <span className="quest-coverage__status">&#x2713; Covered by {questCoverage!.coveredBy.map((c: { username: string }) => c.username).join(', ')}</span>;
+    return <span className="quest-coverage__status quest-coverage__status--needed">No one has this yet</span>;
+}
+
 function QuestRestrictions({ quest, hasPrereqs, coveredByMe, coveredByOthers, isCovered, questCoverage }: {
     quest: EnrichedDungeonQuestDto; hasPrereqs: boolean; coveredByMe: boolean;
     coveredByOthers: { userId: number; username: string }[];
@@ -184,18 +178,7 @@ function QuestRestrictions({ quest, hasPrereqs, coveredByMe, coveredByOthers, is
             </div>
             {quest.sharable && !hasPrereqs && (
                 <div className={`quest-card__details-right ${isCovered ? 'quest-coverage--covered' : 'quest-coverage--uncovered'}`}>
-                    {coveredByMe ? (
-                        <>
-                            <span className="quest-coverage__status">&#x2713; You have this quest</span>
-                            {coveredByOthers.length > 0 && (
-                                <span className="quest-coverage__also">also: {coveredByOthers.map((c) => c.username).join(', ')}</span>
-                            )}
-                        </>
-                    ) : isCovered ? (
-                        <span className="quest-coverage__status">&#x2713; Covered by {questCoverage!.coveredBy.map((c: { username: string }) => c.username).join(', ')}</span>
-                    ) : (
-                        <span className="quest-coverage__status quest-coverage__status--needed">No one has this yet</span>
-                    )}
+                    <QuestCoverageStatus coveredByMe={coveredByMe} coveredByOthers={coveredByOthers} isCovered={isCovered} questCoverage={questCoverage} />
                 </div>
             )}
         </div>

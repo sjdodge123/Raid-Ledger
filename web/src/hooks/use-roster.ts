@@ -21,47 +21,29 @@ export function useRoster(eventId: number) {
  * Mutation hook for updating roster assignments (ROK-114).
  * Supports optimistic updates for immediate UI feedback during drag-and-drop.
  */
+function rosterKey(eventId: number) {
+    return ['events', eventId, 'roster', 'assignments'] as const;
+}
+
+function invalidateRosterQueries(queryClient: ReturnType<typeof useQueryClient>, eventId: number) {
+    queryClient.invalidateQueries({ queryKey: rosterKey(eventId) });
+    queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
+}
+
 export function useUpdateRoster(eventId: number) {
     const queryClient = useQueryClient();
 
     return useMutation<RosterWithAssignments, Error, UpdateRosterDto, MutationContext>({
         mutationFn: (dto) => updateRoster(eventId, dto),
-        // Optimistic update: immediately update UI while request is in flight
         onMutate: async () => {
-            // Cancel any outgoing refetches
-            await queryClient.cancelQueries({
-                queryKey: ['events', eventId, 'roster', 'assignments'],
-            });
-
-            // Snapshot the previous value
-            const previousRoster = queryClient.getQueryData<RosterWithAssignments>([
-                'events',
-                eventId,
-                'roster',
-                'assignments',
-            ]);
-
+            await queryClient.cancelQueries({ queryKey: rosterKey(eventId) });
+            const previousRoster = queryClient.getQueryData<RosterWithAssignments>(rosterKey(eventId));
             return { previousRoster };
         },
-        // On error, roll back to the previous value
         onError: (_err, _dto, context) => {
-            if (context?.previousRoster) {
-                queryClient.setQueryData(
-                    ['events', eventId, 'roster', 'assignments'],
-                    context.previousRoster,
-                );
-            }
+            if (context?.previousRoster) queryClient.setQueryData(rosterKey(eventId), context.previousRoster);
         },
-        // Always refetch after success or error
-        onSettled: () => {
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'roster', 'assignments'],
-            });
-            // Also invalidate the regular roster query
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'roster'],
-            });
-        },
+        onSettled: () => invalidateRosterQueries(queryClient, eventId),
     });
 }
 
@@ -71,38 +53,20 @@ export function useUpdateRoster(eventId: number) {
  */
 export function useSelfUnassign(eventId: number) {
     const queryClient = useQueryClient();
-
     return useMutation<RosterWithAssignments, Error, void>({
         mutationFn: () => selfUnassignFromRoster(eventId),
-        onSettled: () => {
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'roster', 'assignments'],
-            });
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'roster'],
-            });
-        },
+        onSettled: () => invalidateRosterQueries(queryClient, eventId),
     });
 }
 
 /**
  * Mutation hook for admin-removing a signup from an event (ROK-402).
- * Deletes the signup and roster assignment entirely.
- * Works for both registered users and anonymous PUG participants.
  */
 export function useAdminRemoveUser(eventId: number) {
     const queryClient = useQueryClient();
-
     return useMutation<void, Error, number>({
         mutationFn: (signupId: number) => adminRemoveUserFromEvent(eventId, signupId),
-        onSettled: () => {
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'roster', 'assignments'],
-            });
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'roster'],
-            });
-        },
+        onSettled: () => invalidateRosterQueries(queryClient, eventId),
     });
 }
 

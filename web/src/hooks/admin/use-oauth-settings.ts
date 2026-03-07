@@ -8,46 +8,47 @@ import type {
     ApiResponse,
 } from './admin-settings-types';
 
-/** OAuth settings query and mutations */
-export function useOAuthSettings() {
-    const queryClient = useQueryClient();
+const OAUTH_KEY = ['admin', 'settings', 'oauth'] as const;
 
-    const oauthStatus = useQuery<OAuthStatusResponse>({
-        queryKey: ['admin', 'settings', 'oauth'],
+function useOAuthStatusQuery() {
+    return useQuery<OAuthStatusResponse>({
+        queryKey: [...OAUTH_KEY],
         queryFn: () => adminFetch('/admin/settings/oauth'),
         enabled: !!getAuthToken(),
         staleTime: 30_000,
     });
+}
+
+function useOAuthMutations() {
+    const queryClient = useQueryClient();
+
+    const invalidateOAuth = () => {
+        queryClient.invalidateQueries({ queryKey: [...OAUTH_KEY] });
+        queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+    };
 
     const updateOAuth = useMutation<ApiResponse, Error, OAuthConfigDto>({
         mutationFn: (config) =>
             adminFetch('/admin/settings/oauth', {
-                method: 'PUT',
-                body: JSON.stringify(config),
+                method: 'PUT', body: JSON.stringify(config),
             }, 'Failed to update OAuth configuration'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'oauth'] });
-            queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
-        },
+        onSuccess: invalidateOAuth,
     });
 
     const testOAuth = useMutation<OAuthTestResponse, Error>({
-        mutationFn: () =>
-            adminFetch('/admin/settings/oauth/test', {
-                method: 'POST',
-            }, 'Failed to test OAuth configuration'),
+        mutationFn: () => adminFetch('/admin/settings/oauth/test', { method: 'POST' }, 'Failed to test OAuth configuration'),
     });
 
     const clearOAuth = useMutation<ApiResponse, Error>({
-        mutationFn: () =>
-            adminFetch('/admin/settings/oauth/clear', {
-                method: 'POST',
-            }, 'Failed to clear OAuth configuration'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'oauth'] });
-            queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
-        },
+        mutationFn: () => adminFetch('/admin/settings/oauth/clear', { method: 'POST' }, 'Failed to clear OAuth configuration'),
+        onSuccess: invalidateOAuth,
     });
 
-    return { oauthStatus, updateOAuth, testOAuth, clearOAuth };
+    return { updateOAuth, testOAuth, clearOAuth };
+}
+
+/** OAuth settings query and mutations */
+export function useOAuthSettings() {
+    const oauthStatus = useOAuthStatusQuery();
+    return { oauthStatus, ...useOAuthMutations() };
 }

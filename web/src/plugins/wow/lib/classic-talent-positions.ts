@@ -106,6 +106,15 @@ function hasApiPositions(
     );
 }
 
+function buildTreeStringForData(treeData: ClassicTalentTree, positionMap: TreePositionMap): string {
+    if (hasApiPositions(treeData.talents)) return buildTreeStringFromApi(treeData.talents, positionMap);
+    const talentRanks: Record<string, number> = {};
+    for (const talent of treeData.talents) {
+        if (talent.rank && talent.rank > 0) talentRanks[nameToSlug(talent.name)] = talent.rank;
+    }
+    return buildTreeString(positionMap, talentRanks);
+}
+
 /**
  * Build a complete Wowhead talent string from Classic talent data.
  * Returns null if the class is unknown.
@@ -125,28 +134,9 @@ export function buildWowheadTalentString(
 
     for (const treeName of treeOrder) {
         const positionMap = classPositions[treeName];
-        const treeData = trees.find(
-            (t) => t.name.toLowerCase() === treeName.toLowerCase(),
-        );
-
-        if (!treeData) {
-            treeStrings.push('0');
-            continue;
-        }
-
-        if (hasApiPositions(treeData.talents)) {
-            treeStrings.push(
-                buildTreeStringFromApi(treeData.talents, positionMap),
-            );
-        } else {
-            const talentRanks: Record<string, number> = {};
-            for (const talent of treeData.talents) {
-                if (talent.rank && talent.rank > 0) {
-                    talentRanks[nameToSlug(talent.name)] = talent.rank;
-                }
-            }
-            treeStrings.push(buildTreeString(positionMap, talentRanks));
-        }
+        const treeData = trees.find((t) => t.name.toLowerCase() === treeName.toLowerCase());
+        if (!treeData) { treeStrings.push('0'); continue; }
+        treeStrings.push(buildTreeStringForData(treeData, positionMap));
     }
 
     // Trim trailing "0" trees

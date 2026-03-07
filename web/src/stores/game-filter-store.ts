@@ -28,80 +28,69 @@ interface GameFilterState {
     _reset: () => void;
 }
 
+function mergeKnownGames(existing: GameInfo[], incoming: GameInfo[]): GameInfo[] {
+    const map = new Map(existing.map((g) => [g.slug, g]));
+    for (const g of incoming) map.set(g.slug, g);
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function discoverNewSlugs(
+    seenSlugs: Set<string>,
+    games: GameInfo[],
+): { nextSeen: Set<string>; newSlugs: string[] } {
+    const nextSeen = new Set(seenSlugs);
+    const newSlugs: string[] = [];
+    for (const g of games) {
+        if (!nextSeen.has(g.slug)) {
+            newSlugs.push(g.slug);
+            nextSeen.add(g.slug);
+        }
+    }
+    return { nextSeen, newSlugs };
+}
+
+function applyGameSelection(
+    set: (partial: Partial<GameFilterState>) => void,
+    state: GameFilterState,
+    games: GameInfo[],
+    nextAllKnown: GameInfo[],
+    nextSeen: Set<string>,
+    newSlugs: string[],
+): void {
+    if (!state.hasInitialized && games.length > 0) {
+        set({
+            allKnownGames: nextAllKnown,
+            selectedGames: new Set(games.map((g) => g.slug)),
+            seenSlugs: nextSeen,
+            hasInitialized: true,
+        });
+    } else if (newSlugs.length > 0) {
+        set({ allKnownGames: nextAllKnown, seenSlugs: nextSeen });
+    } else if (nextAllKnown.length !== state.allKnownGames.length) {
+        set({ allKnownGames: nextAllKnown });
+    }
+}
+
+function toggleSlug(selectedGames: Set<string>, slug: string): Set<string> {
+    const next = new Set(selectedGames);
+    if (next.has(slug)) next.delete(slug); else next.add(slug);
+    return next;
+}
+
+const INITIAL_FILTER_STATE = { allKnownGames: [] as GameInfo[], selectedGames: new Set<string>(), hasInitialized: false, seenSlugs: new Set<string>() };
+
 export const useGameFilterStore = create<GameFilterState>((set, get) => ({
-    allKnownGames: [],
-    selectedGames: new Set<string>(),
-    hasInitialized: false,
-    seenSlugs: new Set<string>(),
+    ...INITIAL_FILTER_STATE,
 
     reportGames(games: GameInfo[]) {
         const state = get();
-
-        // 1. Merge into allKnownGames (accumulator that only grows)
-        const map = new Map(state.allKnownGames.map((g) => [g.slug, g]));
-        for (const g of games) map.set(g.slug, g);
-        const nextAllKnown = Array.from(map.values()).sort((a, b) =>
-            a.name.localeCompare(b.name),
-        );
-
-        // 2. Determine truly new slugs (never seen before)
-        const nextSeen = new Set(state.seenSlugs);
-        const newSlugs: string[] = [];
-        for (const g of games) {
-            if (!nextSeen.has(g.slug)) {
-                newSlugs.push(g.slug);
-                nextSeen.add(g.slug);
-            }
-        }
-
-        // 3. Update selection
-        if (!state.hasInitialized && games.length > 0) {
-            // First time we see any games — select all of them
-            set({
-                allKnownGames: nextAllKnown,
-                selectedGames: new Set(games.map((g) => g.slug)),
-                seenSlugs: nextSeen,
-                hasInitialized: true,
-            });
-        } else if (newSlugs.length > 0) {
-            // New games discovered — add to known list but do NOT auto-select.
-            // The user has already curated their filter; new games appear unchecked.
-            set({
-                allKnownGames: nextAllKnown,
-                seenSlugs: nextSeen,
-            });
-        } else {
-            // No new games — just update allKnownGames if it changed
-            if (nextAllKnown.length !== state.allKnownGames.length) {
-                set({ allKnownGames: nextAllKnown });
-            }
-        }
+        const nextAllKnown = mergeKnownGames(state.allKnownGames, games);
+        const { nextSeen, newSlugs } = discoverNewSlugs(state.seenSlugs, games);
+        applyGameSelection(set, state, games, nextAllKnown, nextSeen, newSlugs);
     },
 
-    toggleGame(slug: string) {
-        const next = new Set(get().selectedGames);
-        if (next.has(slug)) {
-            next.delete(slug);
-        } else {
-            next.add(slug);
-        }
-        set({ selectedGames: next });
-    },
-
-    selectAll() {
-        set({ selectedGames: new Set(get().allKnownGames.map((g) => g.slug)) });
-    },
-
-    deselectAll() {
-        set({ selectedGames: new Set<string>() });
-    },
-
-    _reset() {
-        set({
-            allKnownGames: [],
-            selectedGames: new Set<string>(),
-            hasInitialized: false,
-            seenSlugs: new Set<string>(),
-        });
-    },
+    toggleGame(slug: string) { set({ selectedGames: toggleSlug(get().selectedGames, slug) }); },
+    selectAll() { set({ selectedGames: new Set(get().allKnownGames.map((g) => g.slug)) }); },
+    deselectAll() { set({ selectedGames: new Set<string>() }); },
+    _reset() { set({ ...INITIAL_FILTER_STATE }); },
 }));

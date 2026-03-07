@@ -21,192 +21,123 @@ const MAX_STEP = STEPS.length - 1;
  * Admin Setup Wizard (ROK-204).
  * Step-by-step onboarding experience for first-time admins.
  */
-export function AdminSetupWizard() {
+function clampStep(step: number): number { return Math.max(0, Math.min(MAX_STEP, step)); }
+
+function useWizardNavigation(updateStep: ReturnType<typeof useOnboarding>['updateStep']) {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { statusQuery, updateStep, completeOnboarding } = useOnboarding();
-
-  // Local override: null means "use server step", number means "user navigated"
+  const { completeOnboarding } = useOnboarding();
   const [stepOverride, setStepOverride] = useState<number | null>(null);
-  const serverStep = statusQuery.data?.currentStep ?? 0;
-  const currentStep = stepOverride ?? Math.min(serverStep, MAX_STEP);
 
-  const goToStep = useCallback(
-    (step: number) => {
-      const clamped = Math.max(0, Math.min(MAX_STEP, step));
-      setStepOverride(clamped);
-      updateStep.mutate(clamped);
-    },
-    [updateStep],
-  );
-
-  const goNext = useCallback(() => {
-    if (currentStep < MAX_STEP) {
-      goToStep(currentStep + 1);
-    }
-  }, [currentStep, goToStep]);
-
-  const goBack = useCallback(() => {
-    if (currentStep > 0) {
-      goToStep(currentStep - 1);
-    }
-  }, [currentStep, goToStep]);
-
+  const goToStep = useCallback((step: number) => { const clamped = clampStep(step); setStepOverride(clamped); updateStep.mutate(clamped); }, [updateStep]);
   const handleSkipAll = useCallback(() => {
     completeOnboarding.mutate(undefined, {
-      onSuccess: () => {
-        toast.info(
-          'Setup skipped. You can complete it anytime from Admin Settings.',
-        );
-        navigate('/calendar', { replace: true });
-      },
+      onSuccess: () => { toast.info('Setup skipped. You can complete it anytime from Admin Settings.'); navigate('/calendar', { replace: true }); },
     });
   }, [completeOnboarding, navigate]);
+  const handleComplete = useCallback(() => { completeOnboarding.mutate(undefined, { onSuccess: () => navigate('/calendar', { replace: true }) }); }, [completeOnboarding, navigate]);
 
-  const handleComplete = useCallback(() => {
-    completeOnboarding.mutate(undefined, {
-      onSuccess: () => {
-        navigate('/calendar', { replace: true });
-      },
-    });
-  }, [completeOnboarding, navigate]);
+  return { stepOverride, goToStep, handleSkipAll, handleComplete };
+}
 
-  // Redirect non-admin users (AC-10)
-  if (user && !isAdmin(user)) {
-    return <Navigate to="/calendar" replace />;
-  }
+export function AdminSetupWizard() {
+  const { user } = useAuth();
+  const { statusQuery, updateStep } = useOnboarding();
+  const { stepOverride, goToStep, handleSkipAll, handleComplete } = useWizardNavigation(updateStep);
 
-  // Redirect if onboarding is already completed
-  if (statusQuery.data?.completed) {
-    return <Navigate to="/calendar" replace />;
-  }
+  const currentStep = stepOverride ?? Math.min(statusQuery.data?.currentStep ?? 0, MAX_STEP);
+  const goNext = useCallback(() => { if (currentStep < MAX_STEP) goToStep(currentStep + 1); }, [currentStep, goToStep]);
+  const goBack = useCallback(() => { if (currentStep > 0) goToStep(currentStep - 1); }, [currentStep, goToStep]);
 
-  if (statusQuery.isLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted">Loading setup wizard...</p>
-        </div>
-      </div>
-    );
-  }
+  if (user && !isAdmin(user)) return <Navigate to="/calendar" replace />;
+  if (statusQuery.data?.completed) return <Navigate to="/calendar" replace />;
+  if (statusQuery.isLoading) return <WizardLoading />;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex flex-col">
-      {/* Header with skip-all */}
-      <div className="border-b border-edge/50 bg-panel/30">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              Setup Wizard
-            </h1>
-            <p className="text-sm text-muted mt-0.5">
-              Let's get your community up and running
-            </p>
-          </div>
-          <button
-            onClick={handleSkipAll}
-            className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-edge/20"
-          >
-            Skip Setup
-          </button>
+      <WizardHeader onSkip={handleSkipAll} />
+      <WizardStepper currentStep={currentStep} goToStep={goToStep} />
+      <WizardStepContent currentStep={currentStep} goNext={goNext} goBack={goBack} goToStep={goToStep} onComplete={handleComplete} />
+    </div>
+  );
+}
+
+function WizardLoading() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 mx-auto mb-4 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-muted">Loading setup wizard...</p>
+      </div>
+    </div>
+  );
+}
+
+function WizardHeader({ onSkip }: { onSkip: () => void }) {
+  return (
+    <div className="border-b border-edge/50 bg-panel/30">
+      <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Setup Wizard</h1>
+          <p className="text-sm text-muted mt-0.5">Let's get your community up and running</p>
+        </div>
+        <button onClick={onSkip} className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-edge/20">
+          Skip Setup
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WizardStepper({ currentStep, goToStep }: { currentStep: number; goToStep: (i: number) => void }) {
+  return (
+    <div className="border-b border-edge/30 bg-panel/10">
+      <div className="max-w-4xl mx-auto px-6 py-4">
+        <div className="flex items-center justify-between md:hidden">
+          <span className="text-sm text-muted">Step {currentStep + 1} of {STEPS.length}</span>
+          <span className="text-sm font-medium text-foreground">{STEPS[currentStep].label}</span>
+        </div>
+        <div className="hidden md:flex items-center justify-between">
+          {STEPS.map((step, index) => (
+            <WizardStepIndicator key={step.key} step={step} index={index} currentStep={currentStep} isLast={index === STEPS.length - 1} onClick={() => goToStep(index)} />
+          ))}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Stepper — mobile: "Step X of Y" + title; desktop: full stepper */}
-      <div className="border-b border-edge/30 bg-panel/10">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          {/* Mobile stepper */}
-          <div className="flex items-center justify-between md:hidden">
-            <span className="text-sm text-muted">
-              Step {currentStep + 1} of {STEPS.length}
-            </span>
-            <span className="text-sm font-medium text-foreground">
-              {STEPS[currentStep].label}
-            </span>
-          </div>
-          {/* Desktop stepper */}
-          <div className="hidden md:flex items-center justify-between">
-            {STEPS.map((step, index) => (
-              <button
-                key={step.key}
-                onClick={() => goToStep(index)}
-                className="flex items-center gap-2 group min-h-[44px]"
-              >
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
-                    index === currentStep
-                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/50'
-                      : index < currentStep
-                        ? 'bg-emerald-600/30 text-emerald-400'
-                        : 'bg-surface/50 text-muted border border-edge/50'
-                  }`}
-                >
-                  {index < currentStep ? (
-                    <svg
-                      className="w-4 h-4"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  ) : (
-                    step.number
-                  )}
-                </div>
-                <span
-                  className={`text-sm font-medium transition-colors ${
-                    index === currentStep
-                      ? 'text-foreground'
-                      : 'text-muted group-hover:text-foreground'
-                  }`}
-                >
-                  {step.label}
-                </span>
-                {index < STEPS.length - 1 && (
-                  <div
-                    className={`w-8 h-px ml-2 ${
-                      index < currentStep
-                        ? 'bg-emerald-600/50'
-                        : 'bg-edge/50'
-                    }`}
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+function WizardStepIndicator({ step, index, currentStep, isLast, onClick }: {
+  step: typeof STEPS[number]; index: number; currentStep: number; isLast: boolean; onClick: () => void;
+}) {
+  const circleClass = index === currentStep
+    ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/50'
+    : index < currentStep ? 'bg-emerald-600/30 text-emerald-400' : 'bg-surface/50 text-muted border border-edge/50';
+
+  return (
+    <button onClick={onClick} className="flex items-center gap-2 group min-h-[44px]">
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${circleClass}`}>
+        {index < currentStep ? (
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+        ) : step.number}
       </div>
+      <span className={`text-sm font-medium transition-colors ${index === currentStep ? 'text-foreground' : 'text-muted group-hover:text-foreground'}`}>{step.label}</span>
+      {!isLast && <div className={`w-8 h-px ml-2 ${index < currentStep ? 'bg-emerald-600/50' : 'bg-edge/50'}`} />}
+    </button>
+  );
+}
 
-      {/* Step content */}
-      <div className="flex-1">
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          {currentStep === 0 && (
-            <SecureAccountStep onNext={goNext} onSkip={goNext} />
-          )}
-          {currentStep === 1 && (
-            <CommunityIdentityStep
-              onNext={goNext}
-              onBack={goBack}
-              onSkip={goNext}
-            />
-          )}
-          {currentStep === 2 && (
-            <ConnectPluginsStep
-              onNext={goNext}
-              onBack={goBack}
-              onSkip={goNext}
-            />
-          )}
-          {currentStep === 3 && (
-            <DoneStep onComplete={handleComplete} goToStep={goToStep} />
-          )}
-        </div>
+function WizardStepContent({ currentStep, goNext, goBack, goToStep, onComplete }: {
+  currentStep: number; goNext: () => void; goBack: () => void; goToStep: (i: number) => void; onComplete: () => void;
+}) {
+  return (
+    <div className="flex-1">
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        {currentStep === 0 && <SecureAccountStep onNext={goNext} onSkip={goNext} />}
+        {currentStep === 1 && <CommunityIdentityStep onNext={goNext} onBack={goBack} onSkip={goNext} />}
+        {currentStep === 2 && <ConnectPluginsStep onNext={goNext} onBack={goBack} onSkip={goNext} />}
+        {currentStep === 3 && <DoneStep onComplete={onComplete} goToStep={goToStep} />}
       </div>
     </div>
   );

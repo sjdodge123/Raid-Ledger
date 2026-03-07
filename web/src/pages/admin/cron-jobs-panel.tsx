@@ -14,7 +14,42 @@ type SortOption = 'name' | 'theme' | 'status';
  * Card layout showing all registered cron jobs with pause/resume,
  * execution history, and schedule editing.
  */
-// eslint-disable-next-line max-lines-per-function
+function getThemes(data: CronJobDto[] | undefined): string[] {
+    return data ? [...new Set(data.map((j) => j.category))].sort() : [];
+}
+
+function sortJobs(jobs: CronJobDto[], sortBy: SortOption): CronJobDto[] {
+    return [...jobs].sort((a, b) => {
+        if (sortBy === 'theme') return a.category.localeCompare(b.category);
+        if (sortBy === 'status') return (a.paused ? 1 : 0) - (b.paused ? 1 : 0);
+        return formatJobName(a.name).localeCompare(formatJobName(b.name));
+    });
+}
+
+function filterJobs(data: CronJobDto[] | undefined, activeTheme: string | null, sortBy: SortOption): CronJobDto[] {
+    if (!data) return [];
+    return sortJobs(data.filter((job) => !activeTheme || job.category === activeTheme), sortBy);
+}
+
+function CronJobGrid({ jobs, tz, pauseJob, resumeJob, runJob, onHistory, onEdit }: {
+    jobs: CronJobDto[]; tz: string; pauseJob: ReturnType<typeof useCronJobs>['pauseJob'];
+    resumeJob: ReturnType<typeof useCronJobs>['resumeJob']; runJob: ReturnType<typeof useCronJobs>['runJob'];
+    onHistory: (job: CronJobDto) => void; onEdit: (job: CronJobDto) => void;
+}) {
+    if (jobs.length === 0) return null;
+    return (
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+            {jobs.map((job) => (
+                <JobCard key={job.id} job={job} tz={tz} onViewHistory={() => onHistory(job)} onEditSchedule={() => onEdit(job)}
+                    onRun={() => runJob.mutate(job.id)} onPause={() => pauseJob.mutate(job.id)} onResume={() => resumeJob.mutate(job.id)}
+                    isPausing={pauseJob.isPending && pauseJob.variables === job.id}
+                    isResuming={resumeJob.isPending && resumeJob.variables === job.id}
+                    isRunning={runJob.isPending && runJob.variables === job.id} />
+            ))}
+        </div>
+    );
+}
+
 export function CronJobsPanel() {
     const { cronJobs, pauseJob, resumeJob, runJob } = useCronJobs();
     const tz = useTimezoneStore((s) => s.resolved);
@@ -23,66 +58,16 @@ export function CronJobsPanel() {
     const [activeTheme, setActiveTheme] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<SortOption>('name');
 
-    const allThemes = cronJobs.data
-        ? [...new Set(cronJobs.data.map((j: CronJobDto) => j.category))].sort()
-        : [];
-
-    const filteredJobs = cronJobs.data
-        ? cronJobs.data
-            .filter((job: CronJobDto) => !activeTheme || job.category === activeTheme)
-            .sort((a: CronJobDto, b: CronJobDto) => {
-                if (sortBy === 'theme') return a.category.localeCompare(b.category);
-                if (sortBy === 'status') return (a.paused ? 1 : 0) - (b.paused ? 1 : 0);
-                return formatJobName(a.name).localeCompare(formatJobName(b.name));
-            })
-        : [];
+    const filteredJobs = filterJobs(cronJobs.data, activeTheme, sortBy);
 
     return (
         <div className="space-y-6">
-            <div>
-                <h2 className="text-xl font-semibold text-foreground">Scheduled Jobs</h2>
-                <p className="text-sm text-muted mt-1">
-                    Monitor and manage all scheduled jobs. Pause, resume, view execution history, or edit schedules.
-                </p>
-            </div>
-
-            <FilterToolbar
-                data={cronJobs.data}
-                allThemes={allThemes}
-                activeTheme={activeTheme}
-                onThemeChange={setActiveTheme}
-                sortBy={sortBy}
-                onSortChange={setSortBy}
-            />
-
+            <div><h2 className="text-xl font-semibold text-foreground">Scheduled Jobs</h2>
+                <p className="text-sm text-muted mt-1">Monitor and manage all scheduled jobs. Pause, resume, view execution history, or edit schedules.</p></div>
+            <FilterToolbar data={cronJobs.data} allThemes={getThemes(cronJobs.data)} activeTheme={activeTheme} onThemeChange={setActiveTheme} sortBy={sortBy} onSortChange={setSortBy} />
             <CronJobStates isLoading={cronJobs.isLoading} isError={cronJobs.isError} isEmpty={cronJobs.data?.length === 0} />
-
-            {filteredJobs.length > 0 && (
-                <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-                    {filteredJobs.map((job: CronJobDto) => (
-                        <JobCard
-                            key={job.id}
-                            job={job}
-                            tz={tz}
-                            onViewHistory={() => setHistoryJob(job)}
-                            onEditSchedule={() => setEditJob(job)}
-                            onRun={() => runJob.mutate(job.id)}
-                            onPause={() => pauseJob.mutate(job.id)}
-                            onResume={() => resumeJob.mutate(job.id)}
-                            isPausing={pauseJob.isPending && pauseJob.variables === job.id}
-                            isResuming={resumeJob.isPending && resumeJob.variables === job.id}
-                            isRunning={runJob.isPending && runJob.variables === job.id}
-                        />
-                    ))}
-                </div>
-            )}
-
-            {cronJobs.data && cronJobs.data.length > 0 && filteredJobs.length === 0 && (
-                <div className="py-12 text-center text-muted text-sm">
-                    No jobs match the selected filter.
-                </div>
-            )}
-
+            <CronJobGrid jobs={filteredJobs} tz={tz} pauseJob={pauseJob} resumeJob={resumeJob} runJob={runJob} onHistory={setHistoryJob} onEdit={setEditJob} />
+            {cronJobs.data && cronJobs.data.length > 0 && filteredJobs.length === 0 && <div className="py-12 text-center text-muted text-sm">No jobs match the selected filter.</div>}
             {historyJob && <ExecutionHistoryModal job={historyJob} onClose={() => setHistoryJob(null)} />}
             {editJob && <EditScheduleModal job={editJob} onClose={() => setEditJob(null)} />}
         </div>
@@ -90,50 +75,37 @@ export function CronJobsPanel() {
 }
 
 /** Filter + Sort toolbar */
-function FilterToolbar({
-    data, allThemes, activeTheme, onThemeChange, sortBy, onSortChange,
-}: {
-    data: CronJobDto[] | undefined;
-    allThemes: string[];
-    activeTheme: string | null;
-    onThemeChange: (theme: string | null) => void;
-    sortBy: SortOption;
-    onSortChange: (sort: SortOption) => void;
+function FilterToolbar({ data, allThemes, activeTheme, onThemeChange, sortBy, onSortChange }: {
+    data: CronJobDto[] | undefined; allThemes: string[]; activeTheme: string | null;
+    onThemeChange: (theme: string | null) => void; sortBy: SortOption; onSortChange: (sort: SortOption) => void;
 }): JSX.Element | null {
     if (!data || data.length === 0) return null;
 
     return (
         <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-                <ThemeButton
-                    label={`All (${data.length})`}
-                    isActive={activeTheme === null}
-                    activeClass="bg-accent/20 text-accent border-accent/40"
-                    onClick={() => onThemeChange(null)}
-                />
-                {allThemes.map((theme) => {
-                    const count = data.filter((j: CronJobDto) => j.category === theme).length;
-                    return (
-                        <ThemeButton
-                            key={theme}
-                            label={`${theme} (${count})`}
-                            isActive={activeTheme === theme}
-                            activeClass={THEME_COLORS[theme] || THEME_COLORS['Other']}
-                            onClick={() => onThemeChange(activeTheme === theme ? null : theme)}
-                        />
-                    );
-                })}
-            </div>
+            <FilterThemeButtons data={data} allThemes={allThemes} activeTheme={activeTheme} onThemeChange={onThemeChange} />
             <div className="flex-1" />
-            <select
-                value={sortBy}
-                onChange={(e) => onSortChange(e.target.value as SortOption)}
-                className="px-3 py-1.5 text-xs bg-surface/50 border border-edge rounded-lg text-muted focus:text-foreground focus:ring-1 focus:ring-accent/50"
-            >
+            <select value={sortBy} onChange={(e) => onSortChange(e.target.value as SortOption)}
+                className="px-3 py-1.5 text-xs bg-surface/50 border border-edge rounded-lg text-muted focus:text-foreground focus:ring-1 focus:ring-accent/50">
                 <option value="name">Sort: Name</option>
                 <option value="theme">Sort: Theme</option>
                 <option value="status">Sort: Status</option>
             </select>
+        </div>
+    );
+}
+
+function FilterThemeButtons({ data, allThemes, activeTheme, onThemeChange }: {
+    data: CronJobDto[]; allThemes: string[]; activeTheme: string | null; onThemeChange: (theme: string | null) => void;
+}) {
+    return (
+        <div className="flex items-center gap-2 flex-wrap">
+            <ThemeButton label={`All (${data.length})`} isActive={activeTheme === null} activeClass="bg-accent/20 text-accent border-accent/40" onClick={() => onThemeChange(null)} />
+            {allThemes.map((theme) => (
+                <ThemeButton key={theme} label={`${theme} (${data.filter((j: CronJobDto) => j.category === theme).length})`}
+                    isActive={activeTheme === theme} activeClass={THEME_COLORS[theme] || THEME_COLORS['Other']}
+                    onClick={() => onThemeChange(activeTheme === theme ? null : theme)} />
+            ))}
         </div>
     );
 }
