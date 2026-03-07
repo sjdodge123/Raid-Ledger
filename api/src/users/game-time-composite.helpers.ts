@@ -582,15 +582,8 @@ interface CompositeViewInput {
 
 /** Build slots and events from lookups. */
 function buildSlotsAndEvents(input: CompositeViewInput) {
-  const {
-    remapped,
-    signedUpEvents,
-    overrideRows,
-    absenceRows,
-    weekStart,
-    weekEnd,
-    tzOffset,
-  } = input;
+  const { remapped, signedUpEvents, overrideRows, absenceRows } = input;
+  const { weekStart, weekEnd, tzOffset } = input;
   const lookups = buildCompositeLookups(
     remapped,
     signedUpEvents,
@@ -601,14 +594,7 @@ function buildSlotsAndEvents(input: CompositeViewInput) {
     tzOffset,
   );
   return {
-    slots: buildCompositeSlots(
-      remapped,
-      lookups.templateSet,
-      lookups.committedSet,
-      lookups.absenceDates,
-      lookups.overrideMap,
-      weekStart,
-    ),
+    slots: buildSlotsFromLookups(remapped, lookups, weekStart),
     events: buildEventBlocks(
       signedUpEvents,
       weekStart,
@@ -617,6 +603,21 @@ function buildSlotsAndEvents(input: CompositeViewInput) {
       input.signupsMap,
     ),
   };
+}
+
+function buildSlotsFromLookups(
+  remapped: Array<{ dayOfWeek: number; hour: number }>,
+  lookups: ReturnType<typeof buildCompositeLookups>,
+  weekStart: Date,
+) {
+  return buildCompositeSlots(
+    remapped,
+    lookups.templateSet,
+    lookups.committedSet,
+    lookups.absenceDates,
+    lookups.overrideMap,
+    weekStart,
+  );
 }
 
 /** Assemble the full composite view result from all fetched data. */

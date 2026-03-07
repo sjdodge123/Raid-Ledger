@@ -185,16 +185,44 @@ async function handleLinkedRoleSelect(
     opts,
     signupStatus,
   );
-  const character = await deps.charactersService.findOne(
+  await confirmCharRoleSignup(
+    interaction,
+    eventId,
+    deps,
     linkedUser.id,
     characterId,
+    roleCtx.rolesLabel,
+    signupStatus,
   );
+}
+
+async function confirmCharRoleSignup(
+  interaction: StringSelectMenuInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+  userId: number,
+  characterId: string,
+  rolesLabel: string,
+  signupStatus?: 'tentative',
+): Promise<void> {
+  const character = await deps.charactersService.findOne(userId, characterId);
   await interaction.editReply({
-    content: formatRoleConfirmation(
-      signupStatus,
-      character.name,
-      roleCtx.rolesLabel,
-    ),
+    content: formatRoleConfirmation(signupStatus, character.name, rolesLabel),
+    components: [],
+  });
+  await deps.updateEmbedSignupCount(eventId);
+}
+
+async function replyWithRoleConfirmation(
+  interaction: StringSelectMenuInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+  charName: string,
+  rolesLabel: string,
+  signupStatus?: 'tentative',
+): Promise<void> {
+  await interaction.editReply({
+    content: formatRoleConfirmation(signupStatus, charName, rolesLabel),
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);
@@ -346,20 +374,40 @@ async function handleLinkedNoCharRoleSelect(
     roleCtx.primaryRole,
   );
   await deps.signupsService.signup(eventId, linkedUser.id, opts);
-  if (signupStatus === 'tentative') {
-    await deps.signupsService.updateStatus(
-      eventId,
-      { userId: linkedUser.id },
-      { status: 'tentative' },
-    );
-  }
+  if (signupStatus === 'tentative')
+    await markTentative(deps, eventId, linkedUser.id);
+
+  await confirmNoCharSignup(
+    interaction,
+    eventId,
+    deps,
+    roleCtx.rolesLabel,
+    signupStatus,
+  );
+}
+
+async function markTentative(
+  deps: SignupInteractionDeps,
+  eventId: number,
+  userId: number,
+): Promise<void> {
+  await deps.signupsService.updateStatus(
+    eventId,
+    { userId },
+    { status: 'tentative' },
+  );
+}
+
+async function confirmNoCharSignup(
+  interaction: StringSelectMenuInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+  rolesLabel: string,
+  signupStatus?: 'tentative',
+): Promise<void> {
   const eventTitle = await fetchEventTitle(eventId, deps);
   await interaction.editReply({
-    content: formatNoCharConfirmation(
-      signupStatus,
-      eventTitle,
-      roleCtx.rolesLabel,
-    ),
+    content: formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel),
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);

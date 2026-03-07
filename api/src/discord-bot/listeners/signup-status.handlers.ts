@@ -157,18 +157,25 @@ function shouldShowTentativeCharSelect(
   return (isMMO && charCount >= 1) || charCount > 1;
 }
 
+type TentativeCtx = {
+  characters: import('@raid-ledger/contract').CharacterDto[];
+  isMMO: boolean;
+};
+
+type TentativeCharArgs = {
+  interaction: ButtonInteraction;
+  eventId: number;
+  userId: number;
+  event: typeof schema.events.$inferSelect;
+  ctx: TentativeCtx;
+  deps: SignupInteractionDeps;
+};
+
 /** Handle character-based tentative branch. Returns null if not applicable. */
 async function tryTentativeCharPath(
-  interaction: ButtonInteraction,
-  eventId: number,
-  linkedUser: typeof schema.users.$inferSelect,
-  event: typeof schema.events.$inferSelect,
-  ctx: {
-    characters: import('@raid-ledger/contract').CharacterDto[];
-    isMMO: boolean;
-  },
-  deps: SignupInteractionDeps,
+  args: TentativeCharArgs,
 ): Promise<boolean | null> {
+  const { interaction, eventId, event, ctx, deps } = args;
   if (shouldShowTentativeCharSelect(ctx.isMMO, ctx.characters.length)) {
     await showTentativeCharacterSelect(
       interaction,
@@ -183,10 +190,11 @@ async function tryTentativeCharPath(
     return tentativeSingleCharacter(
       interaction,
       eventId,
-      linkedUser.id,
+      args.userId,
       ctx.characters[0],
       deps,
     );
+
   return null;
 }
 
@@ -199,14 +207,14 @@ async function tryLinkedTentativeGameFlow(
 ): Promise<boolean> {
   const ctx = await loadTentativeGameContext(linkedUser, event, deps);
   if (!ctx) return false;
-  const charResult = await tryTentativeCharPath(
+  const charResult = await tryTentativeCharPath({
     interaction,
     eventId,
-    linkedUser,
+    userId: linkedUser.id,
     event,
     ctx,
     deps,
-  );
+  });
   if (charResult !== null) return charResult;
   if (ctx.isMMO) {
     await showRoleSelect(
