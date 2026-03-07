@@ -4,59 +4,58 @@ import { DungeonQuestsService } from './dungeon-quests.service';
 import { Reflector } from '@nestjs/core';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 
-describe('DungeonQuestsController', () => {
-  let controller: DungeonQuestsController;
-  let mockService: {
-    getQuestsForInstance: jest.Mock;
-    getQuestChain: jest.Mock;
+let controller: DungeonQuestsController;
+let mockService: {
+  getQuestsForInstance: jest.Mock;
+  getQuestChain: jest.Mock;
+};
+
+const mockQuests = [
+  {
+    questId: 2040,
+    dungeonInstanceId: 63,
+    name: 'The Defias Brotherhood',
+    questLevel: 18,
+    requiredLevel: 14,
+    expansion: 'classic',
+    questGiverNpc: 'Gryan Stoutmantle',
+    questGiverZone: 'Kalimdor',
+    prevQuestId: 166,
+    nextQuestId: null,
+    rewardsJson: [2041],
+    objectives: 'Kill Edwin VanCleef and bring his head to Gryan Stoutmantle.',
+    classRestriction: null,
+    raceRestriction: ['Human', 'Dwarf', 'Night Elf', 'Gnome'],
+    startsInsideDungeon: false,
+    sharable: true,
+  },
+];
+
+async function setupEach() {
+  mockService = {
+    getQuestsForInstance: jest.fn().mockResolvedValue(mockQuests),
+    getQuestChain: jest.fn().mockResolvedValue(mockQuests),
   };
 
-  const mockQuests = [
-    {
-      questId: 2040,
-      dungeonInstanceId: 63,
-      name: 'The Defias Brotherhood',
-      questLevel: 18,
-      requiredLevel: 14,
-      expansion: 'classic',
-      questGiverNpc: 'Gryan Stoutmantle',
-      questGiverZone: 'Kalimdor',
-      prevQuestId: 166,
-      nextQuestId: null,
-      rewardsJson: [2041],
-      objectives:
-        'Kill Edwin VanCleef and bring his head to Gryan Stoutmantle.',
-      classRestriction: null,
-      raceRestriction: ['Human', 'Dwarf', 'Night Elf', 'Gnome'],
-      startsInsideDungeon: false,
-      sharable: true,
-    },
-  ];
-
-  beforeEach(async () => {
-    mockService = {
-      getQuestsForInstance: jest.fn().mockResolvedValue(mockQuests),
-      getQuestChain: jest.fn().mockResolvedValue(mockQuests),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [DungeonQuestsController],
-      providers: [
-        { provide: DungeonQuestsService, useValue: mockService },
-        { provide: Reflector, useValue: new Reflector() },
-        {
-          provide: PluginRegistryService,
-          useValue: {
-            getActiveSlugsSync: jest
-              .fn()
-              .mockReturnValue(new Set(['blizzard'])),
-          },
+  const module: TestingModule = await Test.createTestingModule({
+    controllers: [DungeonQuestsController],
+    providers: [
+      { provide: DungeonQuestsService, useValue: mockService },
+      { provide: Reflector, useValue: new Reflector() },
+      {
+        provide: PluginRegistryService,
+        useValue: {
+          getActiveSlugsSync: jest.fn().mockReturnValue(new Set(['blizzard'])),
         },
-      ],
-    }).compile();
+      },
+    ],
+  }).compile();
 
-    controller = module.get<DungeonQuestsController>(DungeonQuestsController);
-  });
+  controller = module.get<DungeonQuestsController>(DungeonQuestsController);
+}
+
+describe('DungeonQuestsController — getQuestsForInstance', () => {
+  beforeEach(() => setupEach());
 
   describe('getQuestsForInstance()', () => {
     it('should return quests for a dungeon instance', async () => {
@@ -93,6 +92,10 @@ describe('DungeonQuestsController', () => {
       ).rejects.toThrow('Invalid variant');
     });
   });
+});
+
+describe('DungeonQuestsController — getQuestChain', () => {
+  beforeEach(() => setupEach());
 
   describe('getQuestChain()', () => {
     it('should return the quest chain', async () => {

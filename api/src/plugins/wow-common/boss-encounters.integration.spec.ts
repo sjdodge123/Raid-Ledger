@@ -53,9 +53,156 @@ async function insertLoot(
   return loot;
 }
 
-describe('Boss Encounters (integration)', () => {
-  let testApp: TestApp;
+let testApp: TestApp;
 
+async function testBossesFilteredByClassicEra() {
+  const instanceId = 100;
+  await insertBoss(testApp, {
+    instanceId,
+    name: 'Lucifron',
+    order: 1,
+    expansion: 'classic',
+  });
+  await insertBoss(testApp, {
+    instanceId,
+    name: 'TBC Boss',
+    order: 2,
+    expansion: 'tbc',
+  });
+
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/instances/${instanceId}/bosses?variant=classic_era`,
+  );
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: 'Lucifron', expansion: 'classic' }),
+    ]),
+  );
+  const names = (res.body as Array<{ name: string }>).map((b) => b.name);
+  expect(names).not.toContain('TBC Boss');
+}
+
+async function testBossesClassicAnniversaryIncludesTbc() {
+  const instanceId = 101;
+  await insertBoss(testApp, {
+    instanceId,
+    name: 'Classic Boss',
+    order: 1,
+    expansion: 'classic',
+  });
+  await insertBoss(testApp, {
+    instanceId,
+    name: 'TBC Boss',
+    order: 2,
+    expansion: 'tbc',
+  });
+
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/instances/${instanceId}/bosses?variant=classic_anniversary`,
+  );
+
+  expect(res.status).toBe(200);
+  const names = (res.body as Array<{ name: string }>).map((b) => b.name);
+  expect(names).toContain('Classic Boss');
+  expect(names).toContain('TBC Boss');
+}
+
+async function testSubInstanceResolution() {
+  const parentId = 316;
+  await insertBoss(testApp, {
+    instanceId: parentId,
+    name: 'Herod',
+    order: 1,
+    expansion: 'classic',
+  });
+  await insertBoss(testApp, {
+    instanceId: parentId,
+    name: 'Arcanist Doan',
+    order: 2,
+    expansion: 'classic',
+  });
+
+  const res = await testApp.request.get(
+    '/plugins/wow-classic/instances/31603/bosses?variant=classic_era',
+  );
+
+  expect(res.status).toBe(200);
+  const names = (res.body as Array<{ name: string }>).map((b) => b.name);
+  expect(names).toContain('Herod');
+  expect(names).not.toContain('Arcanist Doan');
+}
+
+async function testLootFilteredByVariant() {
+  const boss = await insertBoss(testApp, {
+    instanceId: 200,
+    name: 'Test Boss',
+    order: 1,
+    expansion: 'classic',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 5001,
+    itemName: 'Classic Sword',
+    quality: 'Rare',
+    expansion: 'classic',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 5002,
+    itemName: 'TBC Sword',
+    quality: 'Epic',
+    expansion: 'tbc',
+  });
+
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/bosses/${boss.id}/loot?variant=classic_era`,
+  );
+
+  expect(res.status).toBe(200);
+  const itemNames = (res.body as Array<{ itemName: string }>).map(
+    (l) => l.itemName,
+  );
+  expect(itemNames).toContain('Classic Sword');
+  expect(itemNames).not.toContain('TBC Sword');
+}
+
+async function testLootClassicAnniversaryIncludesTbc() {
+  const boss = await insertBoss(testApp, {
+    instanceId: 201,
+    name: 'Multi-Expansion Boss',
+    order: 1,
+    expansion: 'classic',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 6001,
+    itemName: 'Classic Ring',
+    quality: 'Uncommon',
+    expansion: 'classic',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 6002,
+    itemName: 'TBC Ring',
+    quality: 'Rare',
+    expansion: 'tbc',
+  });
+
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/bosses/${boss.id}/loot?variant=classic_anniversary`,
+  );
+
+  expect(res.status).toBe(200);
+  const itemNames = (res.body as Array<{ itemName: string }>).map(
+    (l) => l.itemName,
+  );
+  expect(itemNames).toContain('Classic Ring');
+  expect(itemNames).toContain('TBC Ring');
+}
+
+describe('Boss Encounters (integration)', () => {
   beforeAll(async () => {
     testApp = await getTestApp();
   });
@@ -65,102 +212,20 @@ describe('Boss Encounters (integration)', () => {
     await loginAsAdmin(testApp.request, testApp.seed);
   });
 
-  // ===================================================================
-  // GET /plugins/wow-classic/instances/:id/bosses
-  // ===================================================================
-
   describe('GET /plugins/wow-classic/instances/:id/bosses', () => {
-    it('should return bosses for an instance filtered by classic_era variant', async () => {
-      const instanceId = 100;
-      await insertBoss(testApp, {
-        instanceId,
-        name: 'Lucifron',
-        order: 1,
-        expansion: 'classic',
-      });
-      await insertBoss(testApp, {
-        instanceId,
-        name: 'TBC Boss',
-        order: 2,
-        expansion: 'tbc',
-      });
+    it('should return bosses filtered by classic_era variant', () =>
+      testBossesFilteredByClassicEra());
 
-      const res = await testApp.request.get(
-        `/plugins/wow-classic/instances/${instanceId}/bosses?variant=classic_era`,
-      );
+    it('should include tbc bosses for classic_anniversary variant', () =>
+      testBossesClassicAnniversaryIncludesTbc());
 
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: 'Lucifron', expansion: 'classic' }),
-        ]),
-      );
-      // TBC boss should be excluded in classic_era
-      const bosses = res.body as Array<{ name: string }>;
-      const names = bosses.map((b) => b.name);
-      expect(names).not.toContain('TBC Boss');
-    });
-
-    it('should include tbc bosses for classic_anniversary variant', async () => {
-      const instanceId = 101;
-      await insertBoss(testApp, {
-        instanceId,
-        name: 'Classic Boss',
-        order: 1,
-        expansion: 'classic',
-      });
-      await insertBoss(testApp, {
-        instanceId,
-        name: 'TBC Boss',
-        order: 2,
-        expansion: 'tbc',
-      });
-
-      const res = await testApp.request.get(
-        `/plugins/wow-classic/instances/${instanceId}/bosses?variant=classic_anniversary`,
-      );
-
-      expect(res.status).toBe(200);
-      const bosses = res.body as Array<{ name: string }>;
-      const names = bosses.map((b) => b.name);
-      expect(names).toContain('Classic Boss');
-      expect(names).toContain('TBC Boss');
-    });
-
-    it('should resolve sub-instance IDs to parent and filter by wing', async () => {
-      // Scarlet Monastery parent = 316
-      // SM:Armory = 31603 (suffix 3)
-      // Wing 3 bosses: ['Herod']
-      const parentId = 316;
-      await insertBoss(testApp, {
-        instanceId: parentId,
-        name: 'Herod',
-        order: 1,
-        expansion: 'classic',
-      });
-      await insertBoss(testApp, {
-        instanceId: parentId,
-        name: 'Arcanist Doan',
-        order: 2,
-        expansion: 'classic',
-      });
-
-      const res = await testApp.request.get(
-        `/plugins/wow-classic/instances/31603/bosses?variant=classic_era`,
-      );
-
-      expect(res.status).toBe(200);
-      const bosses = res.body as Array<{ name: string }>;
-      const names = bosses.map((b) => b.name);
-      expect(names).toContain('Herod');
-      expect(names).not.toContain('Arcanist Doan');
-    });
+    it('should resolve sub-instance IDs to parent and filter by wing', () =>
+      testSubInstanceResolution());
 
     it('should return empty array for instance with no bosses', async () => {
       const res = await testApp.request.get(
         '/plugins/wow-classic/instances/99999/bosses?variant=classic_era',
       );
-
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     });
@@ -169,83 +234,16 @@ describe('Boss Encounters (integration)', () => {
       const res = await testApp.request.get(
         '/plugins/wow-classic/instances/100/bosses?variant=invalid_variant',
       );
-
       expect(res.status).toBe(400);
     });
   });
 
-  // ===================================================================
-  // GET /plugins/wow-classic/bosses/:id/loot
-  // ===================================================================
-
   describe('GET /plugins/wow-classic/bosses/:id/loot', () => {
-    it('should return loot for a boss filtered by variant', async () => {
-      const boss = await insertBoss(testApp, {
-        instanceId: 200,
-        name: 'Test Boss',
-        order: 1,
-        expansion: 'classic',
-      });
+    it('should return loot for a boss filtered by variant', () =>
+      testLootFilteredByVariant());
 
-      await insertLoot(testApp, {
-        bossId: boss.id,
-        itemId: 5001,
-        itemName: 'Classic Sword',
-        quality: 'Rare',
-        expansion: 'classic',
-      });
-      await insertLoot(testApp, {
-        bossId: boss.id,
-        itemId: 5002,
-        itemName: 'TBC Sword',
-        quality: 'Epic',
-        expansion: 'tbc',
-      });
-
-      const res = await testApp.request.get(
-        `/plugins/wow-classic/bosses/${boss.id}/loot?variant=classic_era`,
-      );
-
-      expect(res.status).toBe(200);
-      const loot = res.body as Array<{ itemName: string }>;
-      const itemNames = loot.map((l) => l.itemName);
-      expect(itemNames).toContain('Classic Sword');
-      expect(itemNames).not.toContain('TBC Sword');
-    });
-
-    it('should include tbc loot for classic_anniversary variant', async () => {
-      const boss = await insertBoss(testApp, {
-        instanceId: 201,
-        name: 'Multi-Expansion Boss',
-        order: 1,
-        expansion: 'classic',
-      });
-
-      await insertLoot(testApp, {
-        bossId: boss.id,
-        itemId: 6001,
-        itemName: 'Classic Ring',
-        quality: 'Uncommon',
-        expansion: 'classic',
-      });
-      await insertLoot(testApp, {
-        bossId: boss.id,
-        itemId: 6002,
-        itemName: 'TBC Ring',
-        quality: 'Rare',
-        expansion: 'tbc',
-      });
-
-      const res = await testApp.request.get(
-        `/plugins/wow-classic/bosses/${boss.id}/loot?variant=classic_anniversary`,
-      );
-
-      expect(res.status).toBe(200);
-      const loot = res.body as Array<{ itemName: string }>;
-      const itemNames = loot.map((l) => l.itemName);
-      expect(itemNames).toContain('Classic Ring');
-      expect(itemNames).toContain('TBC Ring');
-    });
+    it('should include tbc loot for classic_anniversary variant', () =>
+      testLootClassicAnniversaryIncludesTbc());
 
     it('should return empty array for boss with no loot', async () => {
       const boss = await insertBoss(testApp, {
@@ -254,11 +252,9 @@ describe('Boss Encounters (integration)', () => {
         order: 1,
         expansion: 'classic',
       });
-
       const res = await testApp.request.get(
         `/plugins/wow-classic/bosses/${boss.id}/loot?variant=classic_era`,
       );
-
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     });
@@ -267,7 +263,6 @@ describe('Boss Encounters (integration)', () => {
       const res = await testApp.request.get(
         '/plugins/wow-classic/bosses/1/loot?variant=bad',
       );
-
       expect(res.status).toBe(400);
     });
   });
