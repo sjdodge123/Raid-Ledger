@@ -182,7 +182,9 @@ describe('CronManagerService — activation', () => {
     await setupEach();
   });
   afterEach(() => {
-    createdJobs.forEach((j) => j.stop());
+    createdJobs.forEach((j) => {
+      j.stop();
+    });
     createdJobs.length = 0;
   });
 
@@ -209,7 +211,9 @@ describe('CronManagerService — bootstrap & deactivation', () => {
     await setupEach();
   });
   afterEach(() => {
-    createdJobs.forEach((j) => j.stop());
+    createdJobs.forEach((j) => {
+      j.stop();
+    });
     createdJobs.length = 0;
   });
 
