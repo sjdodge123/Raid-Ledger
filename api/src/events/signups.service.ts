@@ -2468,13 +2468,9 @@ export class SignupsService {
     }
 
     const position = findFirstGap(currentPlayers.map((p) => p.position));
-    await tx.insert(schema.rosterAssignments).values({
-      eventId,
-      signupId,
-      role: 'player',
-      position,
-      isOverride: 0,
-    });
+    await tx
+      .insert(schema.rosterAssignments)
+      .values({ eventId, signupId, role: 'player', position, isOverride: 0 });
     await tx
       .update(schema.eventSignups)
       .set({ confirmationStatus: 'confirmed' })
@@ -2739,7 +2735,7 @@ export class SignupsService {
 
     await this.executeChainMoves(tx, chain, ctx);
 
-    const freedRole = chain.freedRole;
+    const { freedRole } = chain;
     const freedPosition = chain.moves[0].position;
     await this.insertAndConfirmSlot(
       tx,
@@ -3009,18 +3005,8 @@ export class SignupsService {
     eventId: number,
     newSignupId: number,
     newPrefs: string[],
-    currentAssignments: Array<{
-      id: number;
-      signupId: number;
-      role: string | null;
-      position: number;
-    }>,
-    allSignups: Array<{
-      id: number;
-      preferredRoles: string[] | null;
-      status: string;
-      signedUpAt: Date | null;
-    }>,
+    currentAssignments: DisplaceAssignment[],
+    allSignups: DisplaceSignup[],
     roleCapacity: Record<string, number>,
     occupiedPositions: Record<string, Set<number>>,
     findPos: (role: string) => number,
@@ -3029,7 +3015,6 @@ export class SignupsService {
 
     for (const role of newPrefs) {
       if (!(role in roleCapacity)) continue;
-
       const victim = findOldestTentativeOccupant(
         currentAssignments,
         role,
@@ -3037,49 +3022,75 @@ export class SignupsService {
       );
       if (!victim) continue;
 
-      const rearrangedToRole = await this.tryRearrangeVictim(
+      const displaced = await this.executeDisplacement(
         tx,
-        victim,
+        eventId,
+        newSignupId,
         role,
+        victim,
         currentAssignments,
         roleCapacity,
         occupiedPositions,
         findPos,
         signupById,
       );
-
-      if (!rearrangedToRole) {
-        await this.removeVictimAssignment(tx, victim, role, occupiedPositions);
-      }
-
-      const freedPosition = rearrangedToRole ? findPos(role) : victim.position;
-      await this.insertAndConfirmSlot(
-        tx,
-        eventId,
-        newSignupId,
-        role,
-        freedPosition,
-      );
-      occupiedPositions[role]?.add(freedPosition);
-      this.logger.log(
-        `ROK-459: Auto-allocated confirmed signup ${newSignupId} to ${role} slot ${freedPosition} (tentative displacement)`,
-      );
-      await this.benchPromotionService.cancelPromotion(
-        eventId,
-        role,
-        freedPosition,
-      );
-
-      this.fireDisplacedNotification(
-        tx,
-        eventId,
-        victim.signupId,
-        role,
-        rearrangedToRole,
-      );
-      return true;
+      if (displaced) return true;
     }
     return false;
+  }
+
+  private async executeDisplacement(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    newSignupId: number,
+    role: string,
+    victim: { id: number; signupId: number; position: number },
+    currentAssignments: DisplaceAssignment[],
+    roleCapacity: Record<string, number>,
+    occupiedPositions: Record<string, Set<number>>,
+    findPos: (role: string) => number,
+    signupById: Map<number, { preferredRoles: string[] | null }>,
+  ): Promise<boolean> {
+    const rearrangedToRole = await this.tryRearrangeVictim(
+      tx,
+      victim,
+      role,
+      currentAssignments,
+      roleCapacity,
+      occupiedPositions,
+      findPos,
+      signupById,
+    );
+
+    if (!rearrangedToRole) {
+      await this.removeVictimAssignment(tx, victim, role, occupiedPositions);
+    }
+
+    const freedPosition = rearrangedToRole ? findPos(role) : victim.position;
+    await this.insertAndConfirmSlot(
+      tx,
+      eventId,
+      newSignupId,
+      role,
+      freedPosition,
+    );
+    occupiedPositions[role]?.add(freedPosition);
+    this.logger.log(
+      `ROK-459: Auto-allocated confirmed signup ${newSignupId} to ${role} slot ${freedPosition} (tentative displacement)`,
+    );
+    await this.benchPromotionService.cancelPromotion(
+      eventId,
+      role,
+      freedPosition,
+    );
+    this.fireDisplacedNotification(
+      tx,
+      eventId,
+      victim.signupId,
+      role,
+      rearrangedToRole,
+    );
+    return true;
   }
 
   private async tryRearrangeVictim(
@@ -3322,6 +3333,32 @@ export class SignupsService {
 type SignupRow = typeof schema.eventSignups.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect | null;
 type CharacterRow = typeof schema.characters.$inferSelect | null;
+
+type DisplaceAssignment = {
+  id: number;
+  signupId: number;
+  role: string | null;
+  position: number;
+};
+type DisplaceSignup = {
+  id: number;
+  preferredRoles: string[] | null;
+  status: string;
+  signedUpAt: Date | null;
+};
+
+type BfsEntry = {
+  roleToFree: string;
+  moves: ChainMoveEntry[];
+  usedSignupIds: Set<number>;
+};
+type BfsAssignment = {
+  id: number;
+  signupId: number;
+  role: string | null;
+  position: number;
+};
+type BfsSignup = { id: number; preferredRoles: string[] | null };
 
 function buildRosterIdentity(row: {
   event_signups: SignupRow;
@@ -3600,25 +3637,12 @@ function seedBfsQueue(
 }
 
 function processBfsEntry(
-  entry: {
-    roleToFree: string;
-    moves: ChainMoveEntry[];
-    usedSignupIds: Set<number>;
-  },
-  currentAssignments: Array<{
-    id: number;
-    signupId: number;
-    role: string | null;
-    position: number;
-  }>,
-  allSignups: Array<{ id: number; preferredRoles: string[] | null }>,
+  entry: BfsEntry,
+  currentAssignments: BfsAssignment[],
+  allSignups: BfsSignup[],
   roleCapacity: Record<string, number>,
   filledPerRole: Record<string, number>,
-  queue: Array<{
-    roleToFree: string;
-    moves: ChainMoveEntry[];
-    usedSignupIds: Set<number>;
-  }>,
+  queue: BfsEntry[],
 ): RearrangementChainResult | null {
   const occupants = currentAssignments.filter(
     (a) => a.role === entry.roleToFree && !entry.usedSignupIds.has(a.signupId),
@@ -3640,19 +3664,11 @@ function processBfsEntry(
 
 function tryOccupantMoves(
   occupant: { id: number; signupId: number; position: number },
-  entry: {
-    roleToFree: string;
-    moves: ChainMoveEntry[];
-    usedSignupIds: Set<number>;
-  },
-  allSignups: Array<{ id: number; preferredRoles: string[] | null }>,
+  entry: BfsEntry,
+  allSignups: BfsSignup[],
   roleCapacity: Record<string, number>,
   filledPerRole: Record<string, number>,
-  queue: Array<{
-    roleToFree: string;
-    moves: ChainMoveEntry[];
-    usedSignupIds: Set<number>;
-  }>,
+  queue: BfsEntry[],
 ): RearrangementChainResult | null {
   const prefs =
     allSignups.find((s) => s.id === occupant.signupId)?.preferredRoles ?? [];
