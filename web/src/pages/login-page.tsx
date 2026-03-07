@@ -15,7 +15,6 @@ import { LocalLoginForm } from './login/LocalLoginForm';
  * When auth providers are configured (e.g. Discord), OAuth is shown prominently
  * with local login collapsed behind a toggle.
  */
-// eslint-disable-next-line max-lines-per-function
 export function LoginPage(): JSX.Element {
     const navigate = useNavigate();
     const { login } = useAuth();
@@ -141,7 +140,6 @@ function LoginHeader({ communityName, communityLogoUrl }: {
 }
 
 /** Auth provider login buttons (e.g., Discord) */
-// eslint-disable-next-line max-lines-per-function
 function ProviderButtons({ providers, isRedirecting, onLogin }: {
     providers: LoginMethodDto[]; isRedirecting: boolean;
     onLogin: (provider: LoginMethodDto) => void;

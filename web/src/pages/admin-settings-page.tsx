@@ -24,7 +24,6 @@ import { UninstallConfirmModal } from './admin-settings/UninstallConfirmModal';
  * Admin Settings Page — single scrollable page, plugin-centric layout.
  * Core integrations at the top, then real plugins with nested integration cards.
  */
-// eslint-disable-next-line max-lines-per-function
 export function AdminSettingsPage(): JSX.Element {
     const navigate = useNavigate();
     const { user, isLoading: authLoading } = useAuth();
@@ -116,7 +115,6 @@ export function AdminSettingsPage(): JSX.Element {
 }
 
 /** Plugin section wrapper with action buttons */
-// eslint-disable-next-line max-lines-per-function
 function PluginSection({ plugin, isPending, onInstall, onActivate, onDeactivate, onUninstall }: {
     plugin: PluginInfoDto; isPending: boolean;
     onInstall: (s: string) => void; onActivate: (s: string) => void;

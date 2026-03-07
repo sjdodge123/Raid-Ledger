@@ -14,7 +14,6 @@ import { CommunityActivitySection } from './game-detail/CommunityActivitySection
 import type { EventResponseDto } from '@raid-ledger/contract';
 
 /** Game detail page — shows full game info, activity, events, screenshots, streams */
-// eslint-disable-next-line max-lines-per-function
 export function GameDetailPage(): JSX.Element {
     const { id } = useParams<{ id: string }>();
     const gameId = id ? parseInt(id, 10) : undefined;
@@ -98,7 +97,6 @@ function BackButton({ navigate }: { navigate: NavigateFunction }): JSX.Element {
 }
 
 /** Game banner with cover, info, and details grid */
-// eslint-disable-next-line max-lines-per-function
 function GameBanner({ game, rating, genres, platforms, modes }: {
     game: { name: string; coverUrl: string | null; summary: string | null; playerCount: { min: number; max: number } | null; crossplay: boolean | null; firstReleaseDate: string | null };
     rating: number | null; genres: string[]; platforms: string[]; modes: string[];
@@ -153,7 +151,6 @@ function DetailsGrid({ modes, playerCount, platforms, crossplay, releaseDate }: 
 }
 
 /** Want to Play button and interest avatars */
-// eslint-disable-next-line max-lines-per-function
 function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggling, gameId }: {
     wantToPlay: boolean; count: number; source: string | null | undefined;
     players: { id: number; username: string; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[];

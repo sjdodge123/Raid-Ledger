@@ -11,7 +11,6 @@ import { UninstallConfirmModal } from '../admin-settings/UninstallConfirmModal';
  * ROK-281 v2: Card-based layout showing full plugin details at a glance.
  * No collapsible sections — all info visible: author, capabilities, game slugs, integrations.
  */
-// eslint-disable-next-line max-lines-per-function
 export function PluginsPanel(): JSX.Element {
     const { plugins, install, uninstall, activate, deactivate } = usePluginAdmin();
     const [confirmPlugin, setConfirmPlugin] = useState<PluginInfoDto | null>(null);

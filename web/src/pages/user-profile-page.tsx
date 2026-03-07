@@ -17,7 +17,6 @@ import './user-profile-page.css';
  * Public user profile page (ROK-181).
  * Shows username, avatar, member since, and characters.
  */
-// eslint-disable-next-line max-lines-per-function
 export function UserProfilePage(): JSX.Element {
     const { userId } = useParams<{ userId: string }>();
     const numericId = userId ? parseInt(userId, 10) : undefined;

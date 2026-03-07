@@ -15,7 +15,6 @@ interface PluginCardProps {
 }
 
 /** Full plugin card with author, capabilities, game slugs, integrations */
-// eslint-disable-next-line max-lines-per-function
 export function PluginCard({
     plugin, isPending, onInstall, onActivate, onDeactivate, onUninstall,
 }: PluginCardProps): JSX.Element {
@@ -53,7 +52,6 @@ export function PluginCard({
 }
 
 /** Plugin details: author, capabilities, game slugs, integrations, install date */
-// eslint-disable-next-line max-lines-per-function
 function PluginCardDetails({ plugin }: { plugin: PluginInfoDto }): JSX.Element {
     return (
         <>

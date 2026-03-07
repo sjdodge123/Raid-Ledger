@@ -7,7 +7,6 @@ import type { ActivityPeriod } from '@raid-ledger/contract';
 import { PlayerAvatar } from './PlayerAvatar';
 
 /** ROK-443: Community activity section for game detail page */
-// eslint-disable-next-line max-lines-per-function
 export function CommunityActivitySection({ gameId }: { gameId: number }): JSX.Element | null {
     const [period, setPeriod] = useState<ActivityPeriod>('week');
     const { data: activityData, isLoading: activityLoading } = useGameActivity(gameId, period);
@@ -73,7 +72,6 @@ function NowPlayingRow({ players, count }: {
 }
 
 /** Top players leaderboard list */
-// eslint-disable-next-line max-lines-per-function
 function TopPlayersList({ players, isLoading }: {
     players: { userId: number; username: string; totalSeconds: number; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[];
     isLoading: boolean;

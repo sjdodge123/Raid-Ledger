@@ -14,7 +14,6 @@ import { AppearanceSection } from './profile/appearance-components';
  * Legacy profile page — kept for reference but not routed.
  * Active profile uses ProfileLayout with sidebar navigation (ROK-290).
  */
-// eslint-disable-next-line max-lines-per-function
 export function ProfilePage(): JSX.Element {
     const { user, isLoading: authLoading, isAuthenticated } = useAuth();
     const { data: charactersData, isLoading: charactersLoading } = useMyCharacters(undefined, isAuthenticated);
@@ -89,7 +88,6 @@ export function ProfilePage(): JSX.Element {
 }
 
 /** Characters section with add button */
-// eslint-disable-next-line max-lines-per-function
 function CharactersSection({ characters, isLoading, gamesAvailable, onAdd, onEdit }: {
     characters: CharacterDto[]; isLoading: boolean; gamesAvailable: boolean;
     onAdd: () => void; onEdit: (c: CharacterDto) => void;

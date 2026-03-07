@@ -25,7 +25,6 @@ import { OnboardingBreadcrumbs } from './onboarding-wizard/OnboardingBreadcrumbs
  * Centered modal overlay. All steps are skippable. Escape dismisses.
  * Re-runnable from settings via /onboarding?rerun=1.
  */
-// eslint-disable-next-line max-lines-per-function
 export function OnboardingWizardPage(): JSX.Element | null {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();

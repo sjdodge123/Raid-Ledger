@@ -19,7 +19,6 @@ import '../components/calendar/calendar-styles.css';
  * Calendar page - displays events in a month grid view.
  * ROK-171: Calendar Month View
  */
-// eslint-disable-next-line max-lines-per-function
 export function CalendarPage(): JSX.Element {
     const [searchParams] = useSearchParams();
     const [currentDate, setCurrentDate] = useState(() => {
@@ -113,7 +112,6 @@ export function CalendarPage(): JSX.Element {
 }
 
 /** Desktop sidebar with mini calendar, game filter, and quick actions */
-// eslint-disable-next-line max-lines-per-function
 function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal }: {
     currentDate: Date; onDateSelect: (d: Date) => void;
     allKnownGames: { slug: string; name: string; coverUrl: string | null }[];

@@ -43,7 +43,6 @@ export function ConnectStepLabel({ user, isCurrent, isVisited }: {
  * Breadcrumb label for character steps — shows avatar + name when saved,
  * falls back to game name + dot when empty.
  */
-// eslint-disable-next-line max-lines-per-function
 export function CharacterStepLabel({ game, charIndex, isCurrent, isVisited }: {
     game: GameRegistryDto;
     charIndex: number;

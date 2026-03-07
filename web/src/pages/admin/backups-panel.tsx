@@ -11,7 +11,6 @@ import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
 type FilterType = 'all' | 'daily' | 'migration';
 
 /** Admin panel: Backup management with restore, delete, and reset instance */
-// eslint-disable-next-line max-lines-per-function
 export function BackupsPanel() {
     const queryClient = useQueryClient();
     const { backups, createBackup, deleteBackup, restoreBackup, resetInstance } = useBackups();
@@ -125,7 +124,6 @@ function BackupStates({ isLoading, isError, isEmpty, hasData }: { isLoading: boo
     return null;
 }
 
-// eslint-disable-next-line max-lines-per-function
 function BackupTable({ filtered, tz, onRestore, onDelete }: {
     filtered: BackupFileDto[]; tz: string; onRestore: (b: BackupFileDto) => void; onDelete: (b: BackupFileDto) => void;
 }): JSX.Element {

@@ -22,7 +22,6 @@ import { UserIdentityCard, DiscordLinkCta, SteamSection, AutoHeartToggle } from 
  * Consolidated Identity panel (ROK-359).
  * Merges the old My Profile, Discord, Avatar, and Account panels into a single page.
  */
-// eslint-disable-next-line max-lines-per-function
 export function IdentityPanel(): JSX.Element | null {
     const { user, isAuthenticated, refetch, logout } = useAuth();
     const queryClient = useQueryClient();
@@ -143,7 +142,6 @@ function DangerZone({ onOpenDeleteModal }: { onOpenDeleteModal: () => void }): J
 }
 
 /** Delete account confirmation modal */
-// eslint-disable-next-line max-lines-per-function
 function DeleteAccountModal({ isOpen, onClose, expectedName, confirmName, onConfirmNameChange, isConfirmValid, onDelete, isPending }: {
     isOpen: boolean; onClose: () => void; expectedName: string; confirmName: string;
     onConfirmNameChange: (v: string) => void; isConfirmValid: boolean; onDelete: () => void; isPending: boolean;

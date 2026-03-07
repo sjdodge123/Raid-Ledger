@@ -14,7 +14,6 @@ import { EventHeader, AuthStep, SuccessStep, CharacterStep } from './invite/invi
 /**
  * /i/:code route -- Guided PUG invite wizard (ROK-263, ROK-394, ROK-409).
  */
-// eslint-disable-next-line max-lines-per-function
 export function InvitePage() {
     const { code } = useParams<{ code: string }>();
     const navigate = useNavigate();

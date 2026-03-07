@@ -3,7 +3,6 @@ import { Modal } from '../../components/ui/modal';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 
 /** Uninstall confirmation modal for plugins */
-// eslint-disable-next-line max-lines-per-function
 export function UninstallConfirmModal({ plugin, onClose, onConfirm, isPending }: {
     plugin: PluginInfoDto | null;
     onClose: () => void;

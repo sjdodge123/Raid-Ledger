@@ -43,7 +43,6 @@ function ModeIcon({ icon, className }: { icon: 'sun' | 'moon' | 'monitor'; class
 }
 
 /** Appearance section with mode selector and theme pickers (AC-4) */
-// eslint-disable-next-line max-lines-per-function
 export function AppearanceSection(): JSX.Element {
     const themeMode = useThemeStore((s) => s.themeMode);
     const lightTheme = useThemeStore((s) => s.lightTheme);
@@ -100,7 +99,6 @@ function ThemePicker({ label, themes, activeId, onSelect }: {
 }
 
 /** Single theme preview card */
-// eslint-disable-next-line max-lines-per-function
 function ThemeCard({ theme, isActive, onClick }: {
     theme: ThemeDefinition; isActive: boolean; onClick: () => void;
 }): JSX.Element {

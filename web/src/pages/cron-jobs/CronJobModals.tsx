@@ -16,7 +16,6 @@ function ExecutionStatusBadge({ status }: { status: string }): JSX.Element {
 }
 
 /** Execution history modal for a cron job */
-// eslint-disable-next-line max-lines-per-function
 export function ExecutionHistoryModal({
     job,
     onClose,
@@ -90,7 +89,6 @@ function ExecutionTable({ executions, tz }: { executions: CronJobExecutionDto[];
 }
 
 /** Edit schedule modal for a cron job */
-// eslint-disable-next-line max-lines-per-function
 export function EditScheduleModal({
     job,
     onClose,
@@ -155,7 +153,6 @@ function EditScheduleHeader({ job, onClose }: { job: CronJobDto; onClose: () => 
 }
 
 /** Body for the edit schedule modal */
-// eslint-disable-next-line max-lines-per-function
 function EditScheduleBody({
     job, tz, selectedExpression, isCustomExpression, normalizedExpression,
     onExpressionChange, onSave, onClose, isSaving,

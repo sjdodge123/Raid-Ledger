@@ -5,7 +5,6 @@ import { RoleBadge } from '../../components/ui/role-badge';
 import { isDiscordLinked } from '../../lib/avatar';
 
 /** User identity card with avatar and role badge */
-// eslint-disable-next-line max-lines-per-function
 export function UserIdentityCard({ user, currentAvatarUrl, onOpenAvatarModal }: {
     user: { username: string; role?: UserRole; discordId: string | null };
     currentAvatarUrl: string;
@@ -64,7 +63,6 @@ export function DiscordLinkCta({ onLink }: { onLink: () => void }): JSX.Element 
 }
 
 /** Steam account section — linked or link CTA */
-// eslint-disable-next-line max-lines-per-function
 export function SteamSection({ steamStatus, linkSteam, unlinkSteam, syncLibrary }: {
     steamStatus: { data?: { linked: boolean; personaName?: string | null; isPublic?: boolean } | undefined };
     linkSteam: () => void;

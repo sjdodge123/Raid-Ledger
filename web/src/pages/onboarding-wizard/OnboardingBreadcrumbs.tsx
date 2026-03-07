@@ -11,7 +11,6 @@ interface OnboardingBreadcrumbsProps {
 }
 
 /** Breadcrumb navigation for onboarding wizard steps */
-// eslint-disable-next-line max-lines-per-function
 export function OnboardingBreadcrumbs({
     steps, currentStep, setCurrentStep, removeCharacterStep, user,
 }: OnboardingBreadcrumbsProps): JSX.Element {
@@ -33,7 +32,6 @@ export function OnboardingBreadcrumbs({
 }
 
 /** Single breadcrumb step button */
-// eslint-disable-next-line max-lines-per-function
 function BreadcrumbStep({ step, index, currentStep, setCurrentStep, removeCharacterStep, user }: {
     step: StepDef;
     index: number;

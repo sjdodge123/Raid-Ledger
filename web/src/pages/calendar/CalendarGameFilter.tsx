@@ -21,7 +21,6 @@ interface CalendarGameFilterSheetProps {
 }
 
 /** Mobile bottom sheet for game filtering */
-// eslint-disable-next-line max-lines-per-function
 export function CalendarGameFilterSheet({
     isOpen, onClose, allKnownGames, selectedGames,
     toggleGame, selectAllGames, deselectAllGames,
@@ -45,7 +44,6 @@ export function CalendarGameFilterSheet({
 }
 
 /** Single game item in the mobile filter sheet */
-// eslint-disable-next-line max-lines-per-function
 function MobileGameFilterItem({ game, isSelected, onToggle }: {
     game: GameInfo; isSelected: boolean; onToggle: () => void;
 }): JSX.Element {
@@ -87,7 +85,6 @@ interface CalendarGameFilterModalProps {
 }
 
 /** Desktop overflow modal for game filters */
-// eslint-disable-next-line max-lines-per-function
 export function CalendarGameFilterModal({
     isOpen, onClose, allKnownGames, selectedGames,
     toggleGame, selectAllGames, deselectAllGames,

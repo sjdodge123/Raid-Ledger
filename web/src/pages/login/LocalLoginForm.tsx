@@ -2,7 +2,6 @@ import type { JSX } from 'react';
 import { useState } from 'react';
 
 /** Password visibility toggle button */
-// eslint-disable-next-line max-lines-per-function
 function PasswordToggle({ showPassword, onToggle }: {
     showPassword: boolean; onToggle: () => void;
 }): JSX.Element {
@@ -31,7 +30,6 @@ interface LocalLoginFormProps {
 }
 
 /** Local username/password login form */
-// eslint-disable-next-line max-lines-per-function
 export function LocalLoginForm({ onSubmit, isLoading, error }: LocalLoginFormProps): JSX.Element {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');

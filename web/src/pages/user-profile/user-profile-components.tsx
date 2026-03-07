@@ -26,7 +26,6 @@ export function HeartedGameCard({ game }: { game: UserHeartedGameDto }): JSX.Ele
 }
 
 /** Characters grouped by game, matching the My Characters page pattern (ROK-308) */
-// eslint-disable-next-line max-lines-per-function
 export function GroupedCharacters({ characters, games }: {
     characters: CharacterDto[];
     games: { id: number; name: string }[];
@@ -72,7 +71,6 @@ export function GroupedCharacters({ characters, games }: {
 }
 
 /** ROK-443: Game activity section for user profiles */
-// eslint-disable-next-line max-lines-per-function
 export function ActivitySection({ userId, isOwnProfile }: {
     userId: number; isOwnProfile: boolean;
 }): JSX.Element {
@@ -121,7 +119,6 @@ export function ActivitySection({ userId, isOwnProfile }: {
 }
 
 /** Activity entries list or loading/empty states */
-// eslint-disable-next-line max-lines-per-function
 function ActivityContent({ entries, isLoading }: {
     entries: GameActivityEntryDto[]; isLoading: boolean;
 }): JSX.Element {
