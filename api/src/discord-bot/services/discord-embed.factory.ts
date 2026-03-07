@@ -18,6 +18,7 @@ import {
   buildAdHocUpdateEmbed as buildAdHocUpdateEmbedHelper,
   buildAdHocCompletedEmbed as buildAdHocCompletedEmbedHelper,
 } from './discord-embed.helpers';
+import { createInviteEmbed } from './discord-embed-invite.helpers';
 
 /** Minimal event data needed to build an embed. */
 export interface EmbedEventData {
@@ -117,7 +118,7 @@ export class DiscordEmbedFactory {
     context: EmbedContext,
     inviterUsername: string,
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    const embed = this.createInviteEmbed(event, context, inviterUsername);
+    const embed = createInviteEmbed(event, context, inviterUsername);
     const row = buildViewButton(event.id, context.clientUrl);
     return row ? { embed, row } : { embed };
   }
@@ -285,46 +286,6 @@ export class DiscordEmbedFactory {
     lines.push(`\uD83D\uDCC6 ${timeDisplay} (${durationStr})`);
     if (event.voiceChannelId) {
       lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
-    }
-    return lines;
-  }
-
-  private createInviteEmbed(
-    event: EmbedEventData,
-    context: EmbedContext,
-    inviterUsername: string,
-  ): EmbedBuilder {
-    const bodyLines = this.buildInviteBodyLines(event);
-
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.PUG_INVITE)
-      .setTitle(`You're invited to **${event.title}**!`)
-      .setDescription(bodyLines.join('\n'))
-      .setFooter({
-        text: `Sent by ${inviterUsername} via ${context.communityName || 'Raid Ledger'}`,
-      })
-      .setTimestamp();
-
-    const clientUrl = context.clientUrl || process.env.CLIENT_URL;
-    if (clientUrl) embed.setURL(`${clientUrl}/events/${event.id}`);
-    if (event.game?.coverUrl) embed.setThumbnail(event.game.coverUrl);
-
-    return embed;
-  }
-
-  private buildInviteBodyLines(event: EmbedEventData): string[] {
-    const startUnix = Math.floor(new Date(event.startTime).getTime() / 1000);
-    const lines: string[] = [];
-    if (event.game?.name) lines.push(`\uD83C\uDFAE **${event.game.name}**`);
-    lines.push(`\uD83D\uDCC6 <t:${startUnix}:f> (<t:${startUnix}:R>)`);
-    if (event.voiceChannelId)
-      lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
-    if (event.description) {
-      const excerpt =
-        event.description.length > 200
-          ? event.description.slice(0, 200) + '...'
-          : event.description;
-      lines.push('', excerpt);
     }
     return lines;
   }

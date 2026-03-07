@@ -20,6 +20,11 @@ import {
   type GuildInfo,
   type PermissionCheckResult,
 } from './discord-bot-client.helpers';
+import {
+  searchGuildMembers as searchGuildMembersHelper,
+  listGuildMembers as listGuildMembersHelper,
+  isGuildMember as isGuildMemberHelper,
+} from './discord-bot-client.guild.helpers';
 
 export type {
   GuildInfo,
@@ -243,60 +248,19 @@ export class DiscordBotClientService {
   async searchGuildMembers(
     query: string,
   ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
-    const guild = this.getGuild();
-    if (!guild) return [];
-
-    const start = isPerfEnabled() ? performance.now() : 0;
-    try {
-      const members = await guild.members.fetch({ query, limit: 10 });
-      if (start) {
-        perfLog('DISCORD', 'searchGuildMembers', performance.now() - start, {
-          query,
-        });
-      }
-      return members.map((m) => ({
-        discordId: m.user.id,
-        username: m.user.username,
-        avatar: m.user.avatar,
-      }));
-    } catch {
-      return [];
-    }
+    return searchGuildMembersHelper(this.getGuild(), query);
   }
 
   /** List guild members (no query required). */
   async listGuildMembers(
     limit = 25,
   ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
-    const guild = this.getGuild();
-    if (!guild) return [];
-
-    try {
-      const members = await guild.members.list({ limit });
-      return members
-        .filter((m) => !m.user.bot)
-        .map((m) => ({
-          discordId: m.user.id,
-          username: m.user.username,
-          avatar: m.user.avatar,
-        }))
-        .sort((a, b) => a.username.localeCompare(b.username));
-    } catch {
-      return [];
-    }
+    return listGuildMembersHelper(this.getGuild(), limit);
   }
 
   /** Check if a Discord user is in the guild (ROK-403). */
   async isGuildMember(discordUserId: string): Promise<boolean> {
-    const guild = this.getGuild();
-    if (!guild) return false;
-
-    try {
-      const member = await guild.members.fetch(discordUserId);
-      return !!member;
-    } catch {
-      return false;
-    }
+    return isGuildMemberHelper(this.getGuild(), discordUserId);
   }
 
   /** Check bot permissions in the guild. */

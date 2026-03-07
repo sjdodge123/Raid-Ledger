@@ -32,3 +32,17 @@ export function parsePagination(
   const limit = Math.min(50, Math.max(1, parseInt(limitStr ?? '20', 10) || 20));
   return { page, limit };
 }
+
+/** Resolve week start date from query param or current week. */
+export function resolveWeekStart(week?: string): Date {
+  if (week) {
+    const d = new Date(week);
+    if (isNaN(d.getTime()))
+      throw new BadRequestException('Invalid week parameter');
+    return d;
+  }
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  weekStart.setHours(0, 0, 0, 0);
+  return weekStart;
+}

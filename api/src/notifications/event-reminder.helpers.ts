@@ -127,3 +127,44 @@ export function buildTitleTimeLabel(minutesUntil: number): string {
   if (hours === 1) return 'in 1 Hour';
   return `in ${hours} Hours`;
 }
+
+/** Build the notification payload for a reminder. */
+export function buildReminderPayload(input: {
+  eventId: number;
+  windowType: string;
+  characterDisplay: string | null;
+  startTime: Date;
+  discordUrl?: string | null;
+  voiceChannelId?: string | null;
+}): Record<string, unknown> {
+  return {
+    eventId: input.eventId,
+    reminderWindow: input.windowType,
+    characterDisplay: input.characterDisplay,
+    startTime: input.startTime.toISOString(),
+    ...(input.discordUrl ? { discordUrl: input.discordUrl } : {}),
+    ...(input.voiceChannelId ? { voiceChannelId: input.voiceChannelId } : {}),
+  };
+}
+
+/** Build reminder message text and title label. */
+export function buildReminderStrings(input: {
+  title: string;
+  startTime: Date;
+  minutesUntil: number;
+  timezone?: string;
+  defaultTimezone?: string;
+}): { messageText: string; titleTimeLabel: string } {
+  const timezone = input.timezone ?? input.defaultTimezone ?? 'UTC';
+  const timeStr = input.startTime.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+    timeZone: timezone,
+  });
+  return {
+    messageText: buildReminderMessage(input.title, timeStr, input.minutesUntil),
+    titleTimeLabel: buildTitleTimeLabel(input.minutesUntil),
+  };
+}

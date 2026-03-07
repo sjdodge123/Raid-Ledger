@@ -220,3 +220,63 @@ export function snapshotSessionForFlush(session: InMemorySession): {
 
   return { segments: snapshotSegments, totalDurationSec: snapshotTotal };
 }
+
+/** Rejoin an existing in-memory session. */
+export function rejoinSession(session: InMemorySession): void {
+  if (session.isActive) return;
+  const now = new Date();
+  session.isActive = true;
+  session.activeSegmentStart = now;
+  session.segments.push({
+    joinAt: now.toISOString(),
+    leaveAt: null,
+    durationSec: 0,
+  });
+  session.dirty = true;
+}
+
+/** Create a new in-memory session in the map. */
+export function createSession(
+  sessions: Map<string, InMemorySession>,
+  key: string,
+  eventId: number,
+  discordUserId: string,
+  discordUsername: string,
+  userId: number | null,
+  avatarHash: string | null,
+): void {
+  const now = new Date();
+  sessions.set(key, {
+    eventId,
+    userId,
+    discordUserId,
+    discordUsername,
+    discordAvatarHash: avatarHash,
+    firstJoinAt: now,
+    lastLeaveAt: null,
+    totalDurationSec: 0,
+    segments: [{ joinAt: now.toISOString(), leaveAt: null, durationSec: 0 }],
+    isActive: true,
+    activeSegmentStart: now,
+    dirty: true,
+  });
+}
+
+/** Mark a session as left. */
+export function leaveSession(session: InMemorySession): void {
+  if (!session.isActive) return;
+  const now = new Date();
+  const segDuration = session.activeSegmentStart
+    ? Math.floor((now.getTime() - session.activeSegmentStart.getTime()) / 1000)
+    : 0;
+  session.totalDurationSec += segDuration;
+  session.isActive = false;
+  session.activeSegmentStart = null;
+  session.lastLeaveAt = now;
+  const lastSeg = session.segments[session.segments.length - 1];
+  if (lastSeg && !lastSeg.leaveAt) {
+    lastSeg.leaveAt = now.toISOString();
+    lastSeg.durationSec = segDuration;
+  }
+  session.dirty = true;
+}

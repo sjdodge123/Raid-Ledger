@@ -3,10 +3,9 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import { AdminSettingsController } from './settings.controller';
+import { AdminGamesController } from './settings-games.controller';
 import { SettingsService } from '../settings/settings.service';
 import { IgdbService } from '../igdb/igdb.service';
-import { DemoDataService } from './demo-data.service';
 
 function createMockIgdbService(): Partial<IgdbService> {
   return {
@@ -73,8 +72,8 @@ function createMockSettingsService(): Partial<SettingsService> {
   } as any;
 }
 
-describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', () => {
-  let controller: AdminSettingsController;
+describe('AdminGamesController — ROK-231: game hide/ban and adult filter', () => {
+  let controller: AdminGamesController;
   let mockIgdbService: Partial<IgdbService>;
   let mockSettingsService: Partial<SettingsService>;
 
@@ -82,22 +81,15 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
     mockIgdbService = createMockIgdbService();
     mockSettingsService = createMockSettingsService();
 
-    const mockDemoDataService = {
-      getStatus: jest.fn().mockResolvedValue({ demoMode: false }),
-      installDemoData: jest.fn().mockResolvedValue({ success: true }),
-      clearDemoData: jest.fn().mockResolvedValue({ success: true }),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [AdminSettingsController],
+      controllers: [AdminGamesController],
       providers: [
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: IgdbService, useValue: mockIgdbService },
-        { provide: DemoDataService, useValue: mockDemoDataService },
       ],
     }).compile();
 
-    controller = module.get<AdminSettingsController>(AdminSettingsController);
+    controller = module.get<AdminGamesController>(AdminGamesController);
   });
 
   afterEach(() => {

@@ -14,8 +14,6 @@ import {
   ParseIntPipe,
   Param,
   BadRequestException,
-  ForbiddenException,
-  NotFoundException,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -37,15 +35,19 @@ import {
   GameTimeAbsenceInputSchema,
   UpdateUserProfileSchema,
   CheckDisplayNameQuerySchema,
-  DeleteAccountSchema,
-} from '@raid-ledger/contract';
-import type {
-  UserRole,
-  DiscordMembershipResponseDto,
+  type UserRole,
+  type DiscordMembershipResponseDto,
 } from '@raid-ledger/contract';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
-import { parseOrBadRequest } from './users-controller.helpers';
+import {
+  parseOrBadRequest,
+  resolveWeekStart,
+} from './users-controller.helpers';
+import {
+  checkGuildMembership,
+  validateAndDeleteAccount,
+} from './users-me-discord.helpers';
 
 interface AuthenticatedRequest {
   user: { id: number; role: UserRole; impersonatedBy?: number | null };
@@ -144,58 +146,12 @@ export class UsersMeController {
     ) {
       return { botConnected: true, guildName: guildInfo.name, isMember: false };
     }
-    return this.checkGuildMembership(user.discordId, guildInfo.name);
-  }
-
-  /** Check guild membership and generate invite if needed. */
-  private async checkGuildMembership(
-    discordId: string,
-    guildName: string,
-  ): Promise<DiscordMembershipResponseDto> {
-    const client = this.discordBotClientService.getClient();
-    const guild = client?.guilds.cache.first();
-    if (!guild) return { botConnected: false };
-    try {
-      await guild.members.fetch(discordId);
-      return { botConnected: true, guildName, isMember: true };
-    } catch {
-      const inviteUrl = await this.generateJoinInvite(guild);
-      return {
-        botConnected: true,
-        guildName,
-        isMember: false,
-        inviteUrl: inviteUrl ?? undefined,
-      };
-    }
-  }
-
-  /** Generate a Discord server invite for the join banner. */
-  private async generateJoinInvite(
-    guild: import('discord.js').Guild,
-  ): Promise<string | null> {
-    try {
-      let channelId = await this.channelResolver.resolveChannelForEvent();
-      if (!channelId && guild.systemChannelId)
-        channelId = guild.systemChannelId;
-      if (!channelId) {
-        const firstText = guild.channels.cache.find(
-          (ch) => ch.isTextBased() && !ch.isThread() && !ch.isDMBased(),
-        );
-        if (firstText) channelId = firstText.id;
-      }
-      if (!channelId) return null;
-      const channel = await guild.channels.fetch(channelId);
-      if (!channel || !('createInvite' in channel)) return null;
-      const invite = await channel.createInvite({
-        maxAge: 86400,
-        maxUses: 0,
-        unique: false,
-        reason: 'Discord join banner invite (ROK-425)',
-      });
-      return invite.url;
-    } catch {
-      return null;
-    }
+    return checkGuildMembership(
+      this.discordBotClientService,
+      this.channelResolver,
+      user.discordId,
+      guildInfo.name,
+    );
   }
 
   /** Get current user's preferences (ROK-195). */
@@ -249,22 +205,12 @@ export class UsersMeController {
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
   ) {
-    if (req.user.impersonatedBy)
-      throw new ForbiddenException('Cannot delete account while impersonating');
-    const dto = DeleteAccountSchema.parse(body);
-    const user = await this.usersService.findById(req.user.id);
-    if (!user) throw new NotFoundException('User not found');
-    const expectedName = user.displayName || user.username;
-    if (dto.confirmName !== expectedName)
-      throw new BadRequestException(
-        'Confirmation name does not match your display name',
-      );
-    const admin = await this.usersService.findAdmin();
-    const reassignTo =
-      admin && admin.id !== req.user.id ? admin.id : req.user.id;
-    if (user.customAvatarUrl)
-      await this.avatarService.delete(user.customAvatarUrl);
-    await this.usersService.deleteUser(req.user.id, reassignTo);
+    await validateAndDeleteAccount(
+      req.user,
+      body,
+      this.usersService,
+      this.avatarService,
+    );
   }
 
   /** Unlink Discord from current user's account. */
@@ -284,7 +230,7 @@ export class UsersMeController {
     @Query('week') week?: string,
     @Query('tzOffset') tzOffsetStr?: string,
   ) {
-    const weekStart = this.resolveWeekStart(week);
+    const weekStart = resolveWeekStart(week);
     const tzOffset = tzOffsetStr ? parseInt(tzOffsetStr, 10) : 0;
     const result = await this.gameTimeService.getCompositeView(
       req.user.id,
@@ -292,20 +238,6 @@ export class UsersMeController {
       isNaN(tzOffset) ? 0 : tzOffset,
     );
     return { data: result };
-  }
-
-  /** Resolve week start date from query param or current week. */
-  private resolveWeekStart(week?: string): Date {
-    if (week) {
-      const d = new Date(week);
-      if (isNaN(d.getTime()))
-        throw new BadRequestException('Invalid week parameter');
-      return d;
-    }
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    weekStart.setHours(0, 0, 0, 0);
-    return weekStart;
   }
 
   /** Save game time template. */

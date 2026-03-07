@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import {
   fetchWeekSignedUpEvents,
   fetchSignupsPreview,
@@ -10,6 +10,10 @@ import {
   fetchAbsences,
   assembleCompositeView,
 } from './game-time-composite.helpers';
+import {
+  fetchUpcomingSignedUpEvents,
+  buildCommittedDbKeys,
+} from './game-time-committed.helpers';
 
 // Re-export types for backward compatibility
 export type {
@@ -147,54 +151,12 @@ export class GameTimeService {
       .from(schema.gameTimeTemplates)
       .where(eq(schema.gameTimeTemplates.userId, userId));
     if (existingSlots.length === 0) return [];
-    const signedUpEvents = await this.fetchUpcomingSignedUpEvents(userId);
+    const signedUpEvents = await fetchUpcomingSignedUpEvents(this.db, userId);
     if (signedUpEvents.length === 0) return [];
-    const committedKeys = this.buildCommittedDbKeys(signedUpEvents);
+    const committedKeys = buildCommittedDbKeys(signedUpEvents);
     return existingSlots
       .filter((s) => committedKeys.has(`${s.dayOfWeek}:${s.startHour}`))
       .map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.startHour }));
-  }
-
-  /** Fetch signed-up events within the next 2 weeks. */
-  private async fetchUpcomingSignedUpEvents(
-    userId: number,
-  ): Promise<Array<{ duration: [Date, Date] }>> {
-    const now = new Date();
-    const twoWeeksLater = new Date(now);
-    twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
-    const rangeStr = `[${now.toISOString()},${twoWeeksLater.toISOString()})`;
-    return this.db
-      .select({ duration: schema.events.duration })
-      .from(schema.eventSignups)
-      .innerJoin(
-        schema.events,
-        eq(schema.eventSignups.eventId, schema.events.id),
-      )
-      .where(
-        and(
-          eq(schema.eventSignups.userId, userId),
-          sql`${schema.events.duration} && ${rangeStr}::tsrange`,
-        ),
-      );
-  }
-
-  /** Convert event durations to DB-convention day:hour keys. */
-  private buildCommittedDbKeys(
-    events: Array<{ duration: [Date, Date] }>,
-  ): Set<string> {
-    const committedKeys = new Set<string>();
-    for (const event of events) {
-      const [eventStart, eventEnd] = event.duration;
-      const cursor = new Date(eventStart);
-      cursor.setUTCMinutes(0, 0, 0);
-      if (cursor < eventStart) cursor.setUTCHours(cursor.getUTCHours() + 1);
-      while (cursor < eventEnd) {
-        const dbDay = (cursor.getUTCDay() + 6) % 7;
-        committedKeys.add(`${dbDay}:${cursor.getUTCHours()}`);
-        cursor.setUTCHours(cursor.getUTCHours() + 1);
-      }
-    }
-    return committedKeys;
   }
 
   /** Save per-hour date-specific overrides (upsert). */
