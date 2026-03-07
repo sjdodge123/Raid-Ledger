@@ -358,7 +358,8 @@ describe('useConnectivityStore', () => {
 
             const stop = useConnectivityStore.getState().startPolling();
 
-            // Let initial check resolve
+            // Let initial check resolve (fetch mock + performCheck await + .then chain)
+            await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
 
