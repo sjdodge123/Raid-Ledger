@@ -35,6 +35,22 @@ function ActivityItem({ notification }: { notification: Notification }) {
     );
 }
 
+function ActivityFeedSkeleton() {
+    return (
+        <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-start gap-3 py-2 animate-pulse">
+                    <div className="w-2 h-2 bg-panel rounded-full mt-1.5" />
+                    <div className="flex-1 space-y-1">
+                        <div className="h-4 bg-panel rounded w-3/4" />
+                        <div className="h-3 bg-panel rounded w-16" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 export function ActivityFeed() {
     const { notifications, isLoading } = useNotifications(20);
 
@@ -42,26 +58,10 @@ export function ActivityFeed() {
         .filter((n) => EVENT_TYPES.has(n.type))
         .slice(0, 10);
 
-    if (isLoading) {
-        return (
-            <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex items-start gap-3 py-2 animate-pulse">
-                        <div className="w-2 h-2 bg-panel rounded-full mt-1.5" />
-                        <div className="flex-1 space-y-1">
-                            <div className="h-4 bg-panel rounded w-3/4" />
-                            <div className="h-3 bg-panel rounded w-16" />
-                        </div>
-                    </div>
-                ))}
-            </div>
-        );
-    }
+    if (isLoading) return <ActivityFeedSkeleton />;
 
     if (eventNotifications.length === 0) {
-        return (
-            <p className="text-sm text-muted py-4">No recent activity</p>
-        );
+        return <p className="text-sm text-muted py-4">No recent activity</p>;
     }
 
     return (

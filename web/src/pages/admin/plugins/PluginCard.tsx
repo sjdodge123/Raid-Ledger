@@ -15,14 +15,28 @@ interface PluginCardProps {
 }
 
 /** Full plugin card with author, capabilities, game slugs, integrations */
-// eslint-disable-next-line max-lines-per-function
 export function PluginCard({
     plugin, isPending, onInstall, onActivate, onDeactivate, onUninstall,
 }: PluginCardProps): JSX.Element {
     const { isNew, markSeen } = useNewBadge(`plugin-seen:${plugin.slug}`);
     const pluginBadge = getPluginBadge(plugin.slug);
+    const actionButtons = <PluginCardActions plugin={plugin} isPending={isPending} onInstall={onInstall} onActivate={onActivate} onDeactivate={onDeactivate} onUninstall={onUninstall} />;
 
-    const actionButtons = (
+    return (
+        <AdminPluginSection title={plugin.name} version={plugin.version} description={plugin.description}
+            status={plugin.status} badge={<NewBadge visible={isNew} />} pluginBadge={pluginBadge}
+            onMouseEnter={markSeen} actions={actionButtons}>
+            <PluginCardDetails plugin={plugin} />
+        </AdminPluginSection>
+    );
+}
+
+function PluginCardActions({ plugin, isPending, onInstall, onActivate, onDeactivate, onUninstall }: {
+    plugin: PluginInfoDto; isPending: boolean;
+    onInstall: (slug: string) => void; onActivate: (slug: string) => void;
+    onDeactivate: (slug: string) => void; onUninstall: (slug: string) => void;
+}): JSX.Element {
+    return (
         <>
             {plugin.status === 'not_installed' && (
                 <button onClick={() => onInstall(plugin.slug)} disabled={isPending}
@@ -42,57 +56,48 @@ export function PluginCard({
             )}
         </>
     );
-
-    return (
-        <AdminPluginSection title={plugin.name} version={plugin.version} description={plugin.description}
-            status={plugin.status} badge={<NewBadge visible={isNew} />} pluginBadge={pluginBadge}
-            onMouseEnter={markSeen} actions={actionButtons}>
-            <PluginCardDetails plugin={plugin} />
-        </AdminPluginSection>
-    );
 }
 
 /** Plugin details: author, capabilities, game slugs, integrations, install date */
-// eslint-disable-next-line max-lines-per-function
 function PluginCardDetails({ plugin }: { plugin: PluginInfoDto }): JSX.Element {
     return (
         <>
-            <div className="flex items-center gap-2 text-sm">
-                <span className="text-dim">Author:</span>
-                {plugin.author.url ? (
-                    <a href={plugin.author.url} target="_blank" rel="noopener noreferrer"
-                        className="text-secondary hover:text-foreground underline underline-offset-2 transition-colors">{plugin.author.name}</a>
-                ) : (
-                    <span className="text-secondary">{plugin.author.name}</span>
-                )}
-            </div>
-
-            {plugin.capabilities.length > 0 && (
-                <div>
-                    <span className="text-xs font-medium text-dim uppercase tracking-wider">Capabilities</span>
-                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                        {plugin.capabilities.map((cap) => (<span key={cap} className="px-2 py-0.5 text-xs rounded-full bg-overlay text-secondary">{cap}</span>))}
-                    </div>
-                </div>
-            )}
-
-            {plugin.gameSlugs.length > 0 && (
-                <div>
-                    <span className="text-xs font-medium text-dim uppercase tracking-wider">Supported Games</span>
-                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                        {plugin.gameSlugs.map((slug) => (<span key={slug} className="px-2 py-0.5 text-xs rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">{slug}</span>))}
-                    </div>
-                </div>
-            )}
-
+            <PluginAuthor author={plugin.author} />
+            <TagList label="Capabilities" items={plugin.capabilities} className="px-2 py-0.5 text-xs rounded-full bg-overlay text-secondary" />
+            <TagList label="Supported Games" items={plugin.gameSlugs} className="px-2 py-0.5 text-xs rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20" />
             {plugin.integrations.length > 0 && <IntegrationsList integrations={plugin.integrations} />}
-
             {plugin.installedAt && (
                 <p className="text-xs text-dim">
                     Installed {new Date(plugin.installedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                 </p>
             )}
         </>
+    );
+}
+
+function PluginAuthor({ author }: { author: { name: string; url?: string | null } }): JSX.Element {
+    return (
+        <div className="flex items-center gap-2 text-sm">
+            <span className="text-dim">Author:</span>
+            {author.url ? (
+                <a href={author.url} target="_blank" rel="noopener noreferrer"
+                    className="text-secondary hover:text-foreground underline underline-offset-2 transition-colors">{author.name}</a>
+            ) : (
+                <span className="text-secondary">{author.name}</span>
+            )}
+        </div>
+    );
+}
+
+function TagList({ label, items, className }: { label: string; items: string[]; className: string }): JSX.Element | null {
+    if (items.length === 0) return null;
+    return (
+        <div>
+            <span className="text-xs font-medium text-dim uppercase tracking-wider">{label}</span>
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {items.map((item) => (<span key={item} className={className}>{item}</span>))}
+            </div>
+        </div>
     );
 }
 

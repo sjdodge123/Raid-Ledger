@@ -97,38 +97,31 @@ export function buildDiscordNavItems(
  * between General and Integrations. Discord is filtered out of plugin
  * integrations automatically by buildPluginIntegrationItems.
  */
+const GENERAL_CHILDREN: NavItem[] = [
+    { to: '/admin/settings/general', label: 'Site Settings' },
+    { to: '/admin/settings/general/roles', label: 'User Management' },
+    { to: '/admin/settings/general/data', label: 'Demo Data' },
+    { to: '/admin/settings/general/cron-jobs', label: 'Scheduled Jobs' },
+    { to: '/admin/settings/general/backups', label: 'Backups' },
+    { to: '/admin/settings/general/logs', label: 'Logs' },
+];
+
 export function buildNavSections(
     coreIntegrations: NavItem[],
     pluginIntegrations: NavItem[],
     discordItems?: NavItem[] | null,
 ): NavSection[] {
-    const generalChildren: NavItem[] = [
-        { to: '/admin/settings/general', label: 'Site Settings' },
-        { to: '/admin/settings/general/roles', label: 'User Management' },
-        { to: '/admin/settings/general/data', label: 'Demo Data' },
-        { to: '/admin/settings/general/cron-jobs', label: 'Scheduled Jobs' },
-        { to: '/admin/settings/general/backups', label: 'Backups' },
-        { to: '/admin/settings/general/logs', label: 'Logs' },
-    ];
-
     const sections: NavSection[] = [
-        {
-            id: 'general', label: 'General', icon: GeneralIcon, children: generalChildren,
-        },
+        { id: 'general', label: 'General', icon: GeneralIcon, children: GENERAL_CHILDREN },
     ];
 
     if (discordItems) {
-        sections.push({
-            id: 'discord', label: 'Discord', icon: DiscordIcon, children: discordItems,
-        });
+        sections.push({ id: 'discord', label: 'Discord', icon: DiscordIcon, children: discordItems });
     }
 
     sections.push({
-        id: 'integrations', label: 'Integrations', icon: IntegrationsIcon, children: [
-            ...coreIntegrations,
-            ...pluginIntegrations,
-            { to: '/admin/settings/plugins', label: 'Manage Plugins' },
-        ],
+        id: 'integrations', label: 'Integrations', icon: IntegrationsIcon,
+        children: [...coreIntegrations, ...pluginIntegrations, { to: '/admin/settings/plugins', label: 'Manage Plugins' }],
     });
 
     return sections;

@@ -20,25 +20,11 @@ interface CharacterDetailSectionsProps {
     characterClass: string | null;
 }
 
-/** Main character detail sections component */
-export function CharacterDetailSections({
-    equipment, talents, gameVariant,
-    renderUrl, isArmoryImported, characterClass,
-}: CharacterDetailSectionsProps) {
+/** Equipment panel with items and item detail modal */
+function EquipmentWithItems({ equipment, gameVariant, renderUrl, isArmoryImported }: {
+    equipment: CharacterEquipmentDto; gameVariant: string | null; renderUrl: string | null; isArmoryImported: boolean;
+}) {
     const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
-
-    useWowheadTooltips(equipment ? [equipment] : []);
-
-    if (!equipment) {
-        return (
-            <>
-                <EquipmentEmptyState isArmoryImported={isArmoryImported} />
-                <TalentSection talents={talents} isArmoryImported={isArmoryImported}
-                    characterClass={characterClass} gameVariant={gameVariant} />
-            </>
-        );
-    }
-
     const orderedItems = buildOrderedItems(equipment);
 
     function handleItemClick(item: EquipmentItemDto) {
@@ -51,24 +37,34 @@ export function CharacterDetailSections({
             <div className="bg-panel border border-edge rounded-lg p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
                 {equipment.items.length > 0 ? (
-                    <EquipmentGrid
-                        equipment={equipment} gameVariant={gameVariant}
-                        renderUrl={renderUrl} onItemClick={handleItemClick}
-                    />
+                    <EquipmentGrid equipment={equipment} gameVariant={gameVariant}
+                        renderUrl={renderUrl} onItemClick={handleItemClick} />
                 ) : (
                     <EquipmentEmptyMessage isArmoryImported={isArmoryImported} />
                 )}
             </div>
+            <ItemDetailModal isOpen={selectedItemIndex !== null} onClose={() => setSelectedItemIndex(null)}
+                items={orderedItems} currentIndex={selectedItemIndex ?? 0}
+                onNavigate={setSelectedItemIndex} gameVariant={gameVariant} />
+        </>
+    );
+}
 
-            <ItemDetailModal
-                isOpen={selectedItemIndex !== null}
-                onClose={() => setSelectedItemIndex(null)}
-                items={orderedItems}
-                currentIndex={selectedItemIndex ?? 0}
-                onNavigate={setSelectedItemIndex}
-                gameVariant={gameVariant}
-            />
+/** Main character detail sections component */
+export function CharacterDetailSections({
+    equipment, talents, gameVariant,
+    renderUrl, isArmoryImported, characterClass,
+}: CharacterDetailSectionsProps) {
+    useWowheadTooltips(equipment ? [equipment] : []);
 
+    return (
+        <>
+            {equipment ? (
+                <EquipmentWithItems equipment={equipment} gameVariant={gameVariant}
+                    renderUrl={renderUrl} isArmoryImported={isArmoryImported} />
+            ) : (
+                <EquipmentEmptyState isArmoryImported={isArmoryImported} />
+            )}
             <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={gameVariant} />
         </>

@@ -17,6 +17,18 @@ interface RolePickerProps {
     mismatchSelectedRole?: string | null;
 }
 
+function RoleButton({ role, isSelected, onToggle }: { role: CharacterRole; isSelected: boolean; onToggle: () => void }) {
+    return (
+        <button onClick={onToggle}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                isSelected ? `${ROLE_COLORS[role]} border-current` : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
+            }`}>
+            <RoleIcon role={role} size="w-5 h-5" />
+            <span>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
+        </button>
+    );
+}
+
 export function RolePicker({ selectedRoles, onToggleRole, showMismatchWarning, mismatchDefaultRole, mismatchSelectedRole }: RolePickerProps) {
     return (
         <div>
@@ -25,28 +37,12 @@ export function RolePicker({ selectedRoles, onToggleRole, showMismatchWarning, m
                 <span className="ml-1 text-muted font-normal normal-case">(select all you can play)</span>
             </h3>
             <div className="flex gap-2">
-                {ROLES.map((role) => {
-                    const isSelected = selectedRoles.includes(role);
-                    return (
-                        <button
-                            key={role}
-                            onClick={() => onToggleRole(role)}
-                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
-                                isSelected
-                                    ? `${ROLE_COLORS[role]} border-current`
-                                    : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
-                            }`}
-                        >
-                            <RoleIcon role={role} size="w-5 h-5" />
-                            <span>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
-                        </button>
-                    );
-                })}
+                {ROLES.map((role) => (
+                    <RoleButton key={role} role={role} isSelected={selectedRoles.includes(role)} onToggle={() => onToggleRole(role)} />
+                ))}
             </div>
             {selectedRoles.length > 1 && (
-                <p className="text-xs text-emerald-400/80 mt-1.5">
-                    You'll be auto-assigned to the best available slot.
-                </p>
+                <p className="text-xs text-emerald-400/80 mt-1.5">You'll be auto-assigned to the best available slot.</p>
             )}
             {showMismatchWarning && mismatchDefaultRole && mismatchSelectedRole && selectedRoles.length === 1 && (
                 <p className="text-xs text-amber-400/80 mt-1.5">

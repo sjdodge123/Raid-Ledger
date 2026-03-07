@@ -11,7 +11,6 @@ interface OnboardingBreadcrumbsProps {
 }
 
 /** Breadcrumb navigation for onboarding wizard steps */
-// eslint-disable-next-line max-lines-per-function
 export function OnboardingBreadcrumbs({
     steps, currentStep, setCurrentStep, removeCharacterStep, user,
 }: OnboardingBreadcrumbsProps): JSX.Element {
@@ -32,48 +31,41 @@ export function OnboardingBreadcrumbs({
     );
 }
 
+/** Resolves the label content for a breadcrumb step */
+function resolveStepLabel(step: StepDef, isCurrent: boolean, isVisited: boolean,
+    user: { avatar: string | null; displayName: string | null; username: string; discordId: string } | null,
+): JSX.Element {
+    if (step.key === 'connect') {
+        return <ConnectStepLabel user={user} isCurrent={isCurrent} isVisited={isVisited} />;
+    }
+    if (step.registryGame != null && step.charIndex != null) {
+        return <CharacterStepLabel game={step.registryGame} charIndex={step.charIndex} isCurrent={isCurrent} isVisited={isVisited} />;
+    }
+    return (<><StepDot isCurrent={isCurrent} isVisited={isVisited} />{step.label}</>);
+}
+
+/** Returns the button className for a breadcrumb step */
+function breadcrumbButtonClass(isCurrent: boolean, isVisited: boolean): string {
+    const base = 'group relative flex items-center justify-center rounded-full text-xs font-medium transition-all duration-300 ease-in-out min-w-[44px] min-h-[44px]';
+    if (isCurrent) return `${base} bg-emerald-600 text-white px-2.5 py-1.5`;
+    if (isVisited) return `${base} text-emerald-400 hover:bg-emerald-500/10 cursor-pointer px-1.5 py-1.5`;
+    return `${base} text-dim hover:bg-edge/20 cursor-pointer px-1.5 py-1.5`;
+}
+
 /** Single breadcrumb step button */
-// eslint-disable-next-line max-lines-per-function
 function BreadcrumbStep({ step, index, currentStep, setCurrentStep, removeCharacterStep, user }: {
-    step: StepDef;
-    index: number;
-    currentStep: number;
-    setCurrentStep: (index: number) => void;
-    removeCharacterStep: (gameId: number) => void;
+    step: StepDef; index: number; currentStep: number;
+    setCurrentStep: (index: number) => void; removeCharacterStep: (gameId: number) => void;
     user: { avatar: string | null; displayName: string | null; username: string; discordId: string } | null;
 }): JSX.Element {
-    const distance = Math.abs(index - currentStep);
-    const isExpanded = distance <= 1;
+    const isExpanded = Math.abs(index - currentStep) <= 1;
     const isCurrent = index === currentStep;
     const isVisited = index < currentStep;
-
-    const labelContent = step.key === 'connect' ? (
-        <ConnectStepLabel user={user} isCurrent={isCurrent} isVisited={isVisited} />
-    ) : step.registryGame != null && step.charIndex != null ? (
-        <CharacterStepLabel game={step.registryGame} charIndex={step.charIndex} isCurrent={isCurrent} isVisited={isVisited} />
-    ) : (
-        <>
-            <StepDot isCurrent={isCurrent} isVisited={isVisited} />
-            {step.label}
-        </>
-    );
-
+    const labelContent = resolveStepLabel(step, isCurrent, isVisited, user);
     const dotColor = isVisited || isCurrent ? 'bg-emerald-400' : 'bg-edge/50';
 
     return (
-        <button
-            key={step.key}
-            type="button"
-            onClick={() => setCurrentStep(index)}
-            className={`group relative flex items-center justify-center rounded-full text-xs font-medium
-                transition-all duration-300 ease-in-out min-w-[44px] min-h-[44px]
-                ${isCurrent
-                    ? 'bg-emerald-600 text-white px-2.5 py-1.5'
-                    : isVisited
-                        ? 'text-emerald-400 hover:bg-emerald-500/10 cursor-pointer px-1.5 py-1.5'
-                        : 'text-dim hover:bg-edge/20 cursor-pointer px-1.5 py-1.5'
-                }`}
-        >
+        <button key={step.key} type="button" onClick={() => setCurrentStep(index)} className={breadcrumbButtonClass(isCurrent, isVisited)}>
             <span className={`rounded-full flex-shrink-0 transition-all duration-300 ease-in-out ${dotColor} ${isExpanded ? 'w-0 h-0 opacity-0' : 'w-3 h-3 opacity-100'}`} />
             <ExpandedLabel isExpanded={isExpanded} labelContent={labelContent} step={step} removeCharacterStep={removeCharacterStep} />
             {!isExpanded && <HoverLabel isVisited={isVisited} labelContent={labelContent} />}

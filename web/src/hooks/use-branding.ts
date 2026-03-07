@@ -19,74 +19,45 @@ async function fetchBranding(): Promise<BrandingData> {
 /**
  * Hook for managing community branding settings (ROK-271).
  */
-export function useBranding() {
+function useBrandingMutations() {
     const queryClient = useQueryClient();
+    const onBrandingSuccess = (data: BrandingData, msg: string) => {
+        queryClient.setQueryData(['admin', 'branding'], data);
+        void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        toast.success(msg);
+    };
 
+    const updateBranding = useMutation({
+        mutationFn: (data: { communityName?: string; communityAccentColor?: string }) =>
+            fetchApi<BrandingData>('/admin/branding', { method: 'PATCH', body: JSON.stringify(data) }),
+        onSuccess: (data: BrandingData) => onBrandingSuccess(data, 'Branding updated'),
+        onError: (err: Error) => toast.error(err.message || 'Failed to update branding'),
+    });
+
+    const uploadLogo = useMutation({
+        mutationFn: (file: File) => {
+            const formData = new FormData();
+            formData.append('logo', file);
+            return fetchApi<BrandingData>('/admin/branding/logo', { method: 'POST', body: formData });
+        },
+        onSuccess: (data: BrandingData) => onBrandingSuccess(data, 'Logo uploaded'),
+        onError: (err: Error) => toast.error(err.message || 'Failed to upload logo'),
+    });
+
+    const resetBranding = useMutation({
+        mutationFn: () => fetchApi<BrandingData>('/admin/branding/reset', { method: 'POST' }),
+        onSuccess: (data: BrandingData) => onBrandingSuccess(data, 'Branding reset to defaults'),
+        onError: (err: Error) => toast.error(err.message || 'Failed to reset branding'),
+    });
+
+    return { updateBranding, uploadLogo, resetBranding };
+}
+
+export function useBranding() {
     const brandingQuery = useQuery({
         queryKey: ['admin', 'branding'],
         queryFn: fetchBranding,
         staleTime: 60_000,
     });
-
-    const updateBranding = useMutation({
-        mutationFn: async (data: {
-            communityName?: string;
-            communityAccentColor?: string;
-        }) => {
-            return fetchApi<BrandingData>('/admin/branding', {
-                method: 'PATCH',
-                body: JSON.stringify(data),
-            });
-        },
-        onSuccess: (data: BrandingData) => {
-            queryClient.setQueryData(['admin', 'branding'], data);
-            void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
-            toast.success('Branding updated');
-        },
-        onError: (err: Error) => {
-            toast.error(err.message || 'Failed to update branding');
-        },
-    });
-
-    const uploadLogo = useMutation({
-        mutationFn: async (file: File) => {
-            const formData = new FormData();
-            formData.append('logo', file);
-            return fetchApi<BrandingData>('/admin/branding/logo', {
-                method: 'POST',
-                body: formData,
-            });
-        },
-        onSuccess: (data: BrandingData) => {
-            queryClient.setQueryData(['admin', 'branding'], data);
-            void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
-            toast.success('Logo uploaded');
-        },
-        onError: (err: Error) => {
-            toast.error(err.message || 'Failed to upload logo');
-        },
-    });
-
-    const resetBranding = useMutation({
-        mutationFn: async () => {
-            return fetchApi<BrandingData>('/admin/branding/reset', {
-                method: 'POST',
-            });
-        },
-        onSuccess: (data: BrandingData) => {
-            queryClient.setQueryData(['admin', 'branding'], data);
-            void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
-            toast.success('Branding reset to defaults');
-        },
-        onError: (err: Error) => {
-            toast.error(err.message || 'Failed to reset branding');
-        },
-    });
-
-    return {
-        brandingQuery,
-        updateBranding,
-        uploadLogo,
-        resetBranding,
-    };
+    return { brandingQuery, ...useBrandingMutations() };
 }

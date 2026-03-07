@@ -25,26 +25,27 @@ interface LayoutProps {
  * MoreDrawer state is owned here so both the Header hamburger
  * and the drawer's "Send Feedback" button can interact with FeedbackWidget.
  */
+function useFeedbackRef() {
+    const feedbackOpenRef = useRef<(() => void) | null>(null);
+    const registerFeedbackOpen = useCallback((openFn: () => void) => { feedbackOpenRef.current = openFn; }, []);
+    const handleFeedbackClick = useCallback(() => { feedbackOpenRef.current?.(); }, []);
+    return { registerFeedbackOpen, handleFeedbackClick };
+}
+
+function useAmbientEffects() {
+    const isDesktop = useMediaQuery('(min-width: 1024px)');
+    const prefersMotion = useMediaQuery('(prefers-reduced-motion: no-preference)');
+    return isDesktop && prefersMotion;
+}
+
 export function Layout({ children }: LayoutProps) {
     useThemeSync();
     usePluginHydration();
-
-    const isDesktop = useMediaQuery('(min-width: 1024px)');
-    const prefersMotion = useMediaQuery('(prefers-reduced-motion: no-preference)');
-    const showAmbientEffects = isDesktop && prefersMotion;
-
+    const showAmbientEffects = useAmbientEffects();
     const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
     const openMoreDrawer = useCallback(() => setMoreDrawerOpen(true), []);
     const closeMoreDrawer = useCallback(() => setMoreDrawerOpen(false), []);
-
-    // FeedbackWidget exposes its open handler via this ref so MoreDrawer can trigger it
-    const feedbackOpenRef = useRef<(() => void) | null>(null);
-    const registerFeedbackOpen = useCallback((openFn: () => void) => {
-        feedbackOpenRef.current = openFn;
-    }, []);
-    const handleFeedbackClick = useCallback(() => {
-        feedbackOpenRef.current?.();
-    }, []);
+    const { registerFeedbackOpen, handleFeedbackClick } = useFeedbackRef();
 
     return (
         <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
@@ -54,9 +55,7 @@ export function Layout({ children }: LayoutProps) {
             <ImpersonationBanner />
             <DiscordJoinBanner />
             <Header onMenuClick={openMoreDrawer} />
-            <main id="main-content" className="flex-1">
-                {children}
-            </main>
+            <main id="main-content" className="flex-1">{children}</main>
             <Footer />
             <BottomTabBar />
             <MoreDrawer isOpen={moreDrawerOpen} onClose={closeMoreDrawer} onFeedbackClick={handleFeedbackClick} />

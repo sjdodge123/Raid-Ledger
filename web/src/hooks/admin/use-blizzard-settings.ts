@@ -8,50 +8,50 @@ import type {
     ApiResponse,
 } from './admin-settings-types';
 
-/** Blizzard API settings queries and mutations */
-export function useBlizzardSettings() {
-    const queryClient = useQueryClient();
+const BLIZZARD_KEY = ['admin', 'settings', 'blizzard'] as const;
 
-    const blizzardStatus = useQuery<BlizzardStatusResponse>({
-        queryKey: ['admin', 'settings', 'blizzard'],
+function useBlizzardStatusQuery() {
+    return useQuery<BlizzardStatusResponse>({
+        queryKey: [...BLIZZARD_KEY],
         queryFn: () => adminFetch('/admin/settings/blizzard'),
         enabled: !!getAuthToken(),
         staleTime: 30_000,
     });
+}
 
-    const updateBlizzard = useMutation<
-        ApiResponse,
-        Error,
-        BlizzardConfigDto
-    >({
+function useBlizzardMutations() {
+    const queryClient = useQueryClient();
+
+    const invalidateBlizzard = () => {
+        queryClient.invalidateQueries({ queryKey: [...BLIZZARD_KEY] });
+        queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+    };
+
+    const updateBlizzard = useMutation<ApiResponse, Error, BlizzardConfigDto>({
         mutationFn: (config) =>
             adminFetch('/admin/settings/blizzard', {
-                method: 'PUT',
-                body: JSON.stringify(config),
+                method: 'PUT', body: JSON.stringify(config),
             }, 'Failed to update Blizzard configuration'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'blizzard'] });
-            queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
-        },
+        onSuccess: invalidateBlizzard,
     });
 
     const testBlizzard = useMutation<OAuthTestResponse, Error>({
         mutationFn: () =>
-            adminFetch('/admin/settings/blizzard/test', {
-                method: 'POST',
-            }, 'Failed to test Blizzard configuration'),
+            adminFetch('/admin/settings/blizzard/test', { method: 'POST' }, 'Failed to test Blizzard configuration'),
     });
 
     const clearBlizzard = useMutation<ApiResponse, Error>({
         mutationFn: () =>
-            adminFetch('/admin/settings/blizzard/clear', {
-                method: 'POST',
-            }, 'Failed to clear Blizzard configuration'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'blizzard'] });
-            queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
-        },
+            adminFetch('/admin/settings/blizzard/clear', { method: 'POST' }, 'Failed to clear Blizzard configuration'),
+        onSuccess: invalidateBlizzard,
     });
 
-    return { blizzardStatus, updateBlizzard, testBlizzard, clearBlizzard };
+    return { updateBlizzard, testBlizzard, clearBlizzard };
+}
+
+/** Blizzard API settings queries and mutations */
+export function useBlizzardSettings() {
+    const blizzardStatus = useBlizzardStatusQuery();
+    const mutations = useBlizzardMutations();
+    return { blizzardStatus, ...mutations };
 }

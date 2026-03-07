@@ -41,47 +41,31 @@ interface EventDetailRosterProps {
     event: EventResponseDto;
 }
 
+function AnonymousUserLabel({ signup }: { signup: SignupItem }) {
+    return (
+        <span className="flex items-center gap-1.5 text-sm text-muted">
+            <span>{signup.discordUsername ?? signup.user.username}</span>
+            <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
+        </span>
+    );
+}
+
 /** Render a single signup entry with UserLink and optional character card */
 function SignupEntry({ signup, event, showBadge }: {
-    signup: SignupItem;
-    event: EventResponseDto;
-    showBadge?: { text: string; className: string };
+    signup: SignupItem; event: EventResponseDto; showBadge?: { text: string; className: string };
 }): JSX.Element {
     return (
         <div className="space-y-1">
             <div className="flex items-center gap-2">
-                {signup.isAnonymous ? (
-                    <span className="flex items-center gap-1.5 text-sm text-muted">
-                        <span>{signup.discordUsername ?? signup.user.username}</span>
-                        <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
-                    </span>
-                ) : (
-                    <UserLink
-                        userId={signup.user.id}
-                        username={signup.user.username}
-                        user={toAvatarUser(signup.user)}
-                        gameId={event.game?.id ?? undefined}
-                        showAvatar
-                        size="md"
-                    />
-                )}
-                {showBadge && (
-                    <span className={showBadge.className}>{showBadge.text}</span>
-                )}
+                {signup.isAnonymous
+                    ? <AnonymousUserLabel signup={signup} />
+                    : <UserLink userId={signup.user.id} username={signup.user.username} user={toAvatarUser(signup.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />}
+                {showBadge && <span className={showBadge.className}>{showBadge.text}</span>}
             </div>
             {signup.character && (
-                <CharacterCardCompact
-                    id={signup.character.id}
-                    name={signup.character.name}
-                    avatarUrl={signup.character.avatarUrl}
-                    faction={signup.character.faction}
-                    level={signup.character.level}
-                    race={signup.character.race}
-                    className={signup.character.class}
-                    spec={signup.character.spec}
-                    role={signup.character.role}
-                    itemLevel={signup.character.itemLevel}
-                />
+                <CharacterCardCompact id={signup.character.id} name={signup.character.name} avatarUrl={signup.character.avatarUrl}
+                    faction={signup.character.faction} level={signup.character.level} race={signup.character.race}
+                    className={signup.character.class} spec={signup.character.spec} role={signup.character.role} itemLevel={signup.character.itemLevel} />
             )}
         </div>
     );
@@ -90,162 +74,93 @@ function SignupEntry({ signup, event, showBadge }: {
 /**
  * Roster attendee list grouped by status (confirmed, tentative, pending, departed).
  */
-export function EventDetailRoster({ roster, event }: EventDetailRosterProps): JSX.Element {
-    const activeSignups = roster?.signups.filter(
-        (s) => s.status !== 'declined' && s.status !== 'departed',
-    ) || [];
-    const departedSignups = roster?.signups.filter(
-        (s) => s.status === 'departed',
-    ).sort(alphabetical) || [];
+function categorizeSignups(roster: EventRosterDto | undefined) {
+    const active = roster?.signups.filter((s) => s.status !== 'declined' && s.status !== 'departed') || [];
+    const departed = roster?.signups.filter((s) => s.status === 'departed').sort(alphabetical) || [];
+    const tentative = active.filter((s) => s.status === 'tentative').sort(alphabetical);
+    const nonTentative = active.filter((s) => s.status !== 'tentative');
+    const pending = nonTentative.filter((s) => s.confirmationStatus === 'pending' && !s.isAnonymous).sort(alphabetical);
+    const confirmed = nonTentative.filter((s) => s.confirmationStatus !== 'pending' || s.isAnonymous).sort(alphabetical);
+    return { confirmed, tentative, pending, departed };
+}
 
-    const tentativeSignups = activeSignups.filter(
-        (s) => s.status === 'tentative',
-    ).sort(alphabetical);
-    const nonTentative = activeSignups.filter(
-        (s) => s.status !== 'tentative',
-    );
-    const pendingSignups = nonTentative.filter(
-        (s) => s.confirmationStatus === 'pending' && !s.isAnonymous,
-    ).sort(alphabetical);
-    const confirmedSignups = nonTentative.filter(
-        (s) => s.confirmationStatus !== 'pending' || s.isAnonymous,
-    ).sort(alphabetical);
+export function EventDetailRoster({ roster, event }: EventDetailRosterProps): JSX.Element {
+    const { confirmed, tentative, pending, departed } = categorizeSignups(roster);
 
     return (
         <div className="event-detail-roster">
             <h2>Attendees ({roster?.count ?? 0})</h2>
+            <ConfirmedGroup signups={confirmed} event={event} />
+            <TentativeGroup signups={tentative} event={event} />
+            <SimpleSignupGroup signups={pending} event={event} title="Pending" icon="&#8987;" itemClass="event-detail-roster__item--pending" />
+            <SimpleSignupGroup signups={departed} event={event} title="Departed" icon="&#128682;" itemClass="opacity-50" badge={{ text: 'departed', className: 'text-xs text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded' }} />
+            {roster?.signups.length === 0 && <RosterEmptyState />}
+        </div>
+    );
+}
 
-            {confirmedSignups.length > 0 && (
-                <div className="event-detail-roster__group">
-                    <h3><span role="img" aria-hidden="true">&#10003;</span> Confirmed ({confirmedSignups.length})</h3>
-                    <div className="space-y-2">
-                        {confirmedSignups.map((s) => (
-                            <div key={s.id}>
-                                <div className="flex items-center gap-2">
-                                    <UserLink
-                                        userId={s.user.id}
-                                        username={s.user.username}
-                                        user={toAvatarUser(s.user)}
-                                        gameId={event.game?.id ?? undefined}
-                                        showAvatar
-                                        size="md"
-                                    />
-                                    <PluginSlot
-                                        name="event-detail:signup-warnings"
-                                        context={{
-                                            characterLevel: s.character?.level,
-                                            contentInstances: event.contentInstances ?? [],
-                                            gameSlug: event.game?.slug,
-                                        }}
-                                    />
-                                </div>
-                                {s.character && (
-                                    <CharacterCardCompact
-                                        id={s.character.id}
-                                        name={s.character.name}
-                                        avatarUrl={s.character.avatarUrl}
-                                        faction={s.character.faction}
-                                        level={s.character.level}
-                                        race={s.character.race}
-                                        className={s.character.class}
-                                        spec={s.character.spec}
-                                        role={s.character.role}
-                                        itemLevel={s.character.itemLevel}
-                                    />
-                                )}
-                            </div>
-                        ))}
+function ConfirmedGroup({ signups, event }: { signups: SignupItem[]; event: EventResponseDto }) {
+    if (signups.length === 0) return null;
+    return (
+        <div className="event-detail-roster__group">
+            <h3><span role="img" aria-hidden="true">&#10003;</span> Confirmed ({signups.length})</h3>
+            <div className="space-y-2">
+                {signups.map((s) => (
+                    <div key={s.id}>
+                        <div className="flex items-center gap-2">
+                            <UserLink userId={s.user.id} username={s.user.username} user={toAvatarUser(s.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />
+                            <PluginSlot name="event-detail:signup-warnings" context={{ characterLevel: s.character?.level, contentInstances: event.contentInstances ?? [], gameSlug: event.game?.slug }} />
+                        </div>
+                        {s.character && (
+                            <CharacterCardCompact id={s.character.id} name={s.character.name} avatarUrl={s.character.avatarUrl}
+                                faction={s.character.faction} level={s.character.level} race={s.character.race}
+                                className={s.character.class} spec={s.character.spec} role={s.character.role} itemLevel={s.character.itemLevel} />
+                        )}
                     </div>
-                </div>
-            )}
+                ))}
+            </div>
+        </div>
+    );
+}
 
-            {tentativeSignups.length > 0 && (
-                <div className="event-detail-roster__group">
-                    <h3><span role="img" aria-hidden="true">&#8987;</span> Tentative ({tentativeSignups.length})</h3>
-                    <div className="space-y-2">
-                        {tentativeSignups.map((s) => (
-                            <SignupEntry
-                                key={s.id}
-                                signup={s}
-                                event={event}
-                                showBadge={{ text: 'tentative', className: 'text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded' }}
-                            />
-                        ))}
+function TentativeGroup({ signups, event }: { signups: SignupItem[]; event: EventResponseDto }) {
+    if (signups.length === 0) return null;
+    return (
+        <div className="event-detail-roster__group">
+            <h3><span role="img" aria-hidden="true">&#8987;</span> Tentative ({signups.length})</h3>
+            <div className="space-y-2">
+                {signups.map((s) => <SignupEntry key={s.id} signup={s} event={event} showBadge={{ text: 'tentative', className: 'text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded' }} />)}
+            </div>
+        </div>
+    );
+}
+
+function SimpleSignupGroup({ signups, event, title, icon, itemClass, badge }: {
+    signups: SignupItem[]; event: EventResponseDto; title: string; icon: string; itemClass?: string;
+    badge?: { text: string; className: string };
+}) {
+    if (signups.length === 0) return null;
+    return (
+        <div className="event-detail-roster__group">
+            <h3><span role="img" aria-hidden="true">{icon}</span> {title} ({signups.length})</h3>
+            <div className="event-detail-roster__list">
+                {signups.map((s) => (
+                    <div key={s.id} className={`event-detail-roster__item flex items-center gap-2 ${itemClass ?? ''}`}>
+                        {s.isAnonymous ? <AnonymousUserLabel signup={s} /> : <UserLink userId={s.user.id} username={s.user.username} user={toAvatarUser(s.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />}
+                        {badge && <span className={badge.className}>{badge.text}</span>}
                     </div>
-                </div>
-            )}
+                ))}
+            </div>
+        </div>
+    );
+}
 
-            {pendingSignups.length > 0 && (
-                <div className="event-detail-roster__group">
-                    <h3><span role="img" aria-hidden="true">&#8987;</span> Pending ({pendingSignups.length})</h3>
-                    <div className="event-detail-roster__list">
-                        {pendingSignups.map((s) => (
-                            <div key={s.id} className="event-detail-roster__item event-detail-roster__item--pending flex items-center gap-2">
-                                {s.isAnonymous ? (
-                                    <span className="flex items-center gap-1.5 text-sm text-muted">
-                                        <span>{s.discordUsername ?? s.user.username}</span>
-                                        <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
-                                    </span>
-                                ) : (
-                                    <UserLink
-                                        userId={s.user.id}
-                                        username={s.user.username}
-                                        user={toAvatarUser(s.user)}
-                                        gameId={event.game?.id ?? undefined}
-                                        showAvatar
-                                        size="md"
-                                    />
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {departedSignups.length > 0 && (
-                <div className="event-detail-roster__group">
-                    <h3><span role="img" aria-hidden="true">&#128682;</span> Departed ({departedSignups.length})</h3>
-                    <div className="event-detail-roster__list">
-                        {departedSignups.map((s) => (
-                            <div key={s.id} className="event-detail-roster__item flex items-center gap-2 opacity-50">
-                                {s.isAnonymous ? (
-                                    <span className="flex items-center gap-1.5 text-sm text-muted">
-                                        <span>{s.discordUsername ?? s.user.username}</span>
-                                        <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
-                                    </span>
-                                ) : (
-                                    <UserLink
-                                        userId={s.user.id}
-                                        username={s.user.username}
-                                        user={toAvatarUser(s.user)}
-                                        gameId={event.game?.id ?? undefined}
-                                        showAvatar
-                                        size="md"
-                                    />
-                                )}
-                                <span className="text-xs text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">departed</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {roster?.signups.length === 0 && (
-                <div className="event-detail-roster__empty">
-                    <p>No players signed up yet — share the event!</p>
-                    <button
-                        onClick={() => {
-                            const url = window.location.href;
-                            navigator.clipboard.writeText(url).then(() => {
-                                toast.success('Event link copied to clipboard!');
-                            });
-                        }}
-                        className="btn btn-secondary btn-sm mt-2"
-                    >
-                        Copy Event Link
-                    </button>
-                </div>
-            )}
+function RosterEmptyState() {
+    return (
+        <div className="event-detail-roster__empty">
+            <p>No players signed up yet — share the event!</p>
+            <button onClick={() => navigator.clipboard.writeText(window.location.href).then(() => toast.success('Event link copied to clipboard!'))}
+                className="btn btn-secondary btn-sm mt-2">Copy Event Link</button>
         </div>
     );
 }

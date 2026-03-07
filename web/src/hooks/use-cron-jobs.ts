@@ -7,96 +7,54 @@ import { getAuthToken } from './use-auth';
  * Hook for cron job management API operations (ROK-310).
  * Follows the same pattern as use-admin-settings.ts.
  */
-export function useCronJobs() {
-    const queryClient = useQueryClient();
+function cronHeaders(): Record<string, string> {
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken() || ''}` };
+}
 
-    const getHeaders = () => ({
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAuthToken() || ''}`,
+async function cronFetch<T>(path: string, method: string, errorMsg: string, body?: string): Promise<T> {
+    const opts: RequestInit = { method, headers: cronHeaders() };
+    if (body) opts.body = body;
+    const response = await fetch(`${API_BASE_URL}${path}`, opts);
+    if (!response.ok) throw new Error(errorMsg);
+    return response.json();
+}
+
+function useCronJobMutations() {
+    const queryClient = useQueryClient();
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs'] });
+
+    const pauseJob = useMutation<CronJobDto, Error, number>({
+        mutationFn: (id) => cronFetch(`/admin/cron-jobs/${id}/pause`, 'PATCH', 'Failed to pause cron job'),
+        onSuccess: invalidate,
     });
 
-    // GET /admin/cron-jobs — List all registered cron jobs
+    const resumeJob = useMutation<CronJobDto, Error, number>({
+        mutationFn: (id) => cronFetch(`/admin/cron-jobs/${id}/resume`, 'PATCH', 'Failed to resume cron job'),
+        onSuccess: invalidate,
+    });
+
+    const updateSchedule = useMutation<CronJobDto, Error, { id: number; cronExpression: string }>({
+        mutationFn: ({ id, cronExpression }) =>
+            cronFetch(`/admin/cron-jobs/${id}/schedule`, 'PATCH', 'Failed to update cron schedule', JSON.stringify({ cronExpression })),
+        onSuccess: invalidate,
+    });
+
+    const runJob = useMutation<CronJobDto, Error, number>({
+        mutationFn: (id) => cronFetch(`/admin/cron-jobs/${id}/run`, 'POST', 'Failed to trigger cron job'),
+        onSuccess: invalidate,
+    });
+
+    return { pauseJob, resumeJob, updateSchedule, runJob };
+}
+
+export function useCronJobs() {
     const cronJobs = useQuery<CronJobDto[]>({
         queryKey: ['admin', 'cron-jobs'],
-        queryFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/admin/cron-jobs`, {
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to fetch cron jobs');
-            return response.json();
-        },
+        queryFn: () => cronFetch('/admin/cron-jobs', 'GET', 'Failed to fetch cron jobs'),
         enabled: !!getAuthToken(),
         staleTime: 15_000,
     });
-
-    // PATCH /admin/cron-jobs/:id/pause
-    const pauseJob = useMutation<CronJobDto, Error, number>({
-        mutationFn: async (id) => {
-            const response = await fetch(`${API_BASE_URL}/admin/cron-jobs/${id}/pause`, {
-                method: 'PATCH',
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to pause cron job');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs'] });
-        },
-    });
-
-    // PATCH /admin/cron-jobs/:id/resume
-    const resumeJob = useMutation<CronJobDto, Error, number>({
-        mutationFn: async (id) => {
-            const response = await fetch(`${API_BASE_URL}/admin/cron-jobs/${id}/resume`, {
-                method: 'PATCH',
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to resume cron job');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs'] });
-        },
-    });
-
-    // PATCH /admin/cron-jobs/:id/schedule
-    const updateSchedule = useMutation<CronJobDto, Error, { id: number; cronExpression: string }>({
-        mutationFn: async ({ id, cronExpression }) => {
-            const response = await fetch(`${API_BASE_URL}/admin/cron-jobs/${id}/schedule`, {
-                method: 'PATCH',
-                headers: getHeaders(),
-                body: JSON.stringify({ cronExpression }),
-            });
-            if (!response.ok) throw new Error('Failed to update cron schedule');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs'] });
-        },
-    });
-
-    // POST /admin/cron-jobs/:id/run — Manually trigger
-    const runJob = useMutation<CronJobDto, Error, number>({
-        mutationFn: async (id) => {
-            const response = await fetch(`${API_BASE_URL}/admin/cron-jobs/${id}/run`, {
-                method: 'POST',
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to trigger cron job');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs'] });
-        },
-    });
-
-    return {
-        cronJobs,
-        pauseJob,
-        resumeJob,
-        updateSchedule,
-        runJob,
-    };
+    return { cronJobs, ...useCronJobMutations() };
 }
 
 /**

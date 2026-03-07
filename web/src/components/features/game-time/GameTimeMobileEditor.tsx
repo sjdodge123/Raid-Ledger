@@ -19,102 +19,50 @@ interface GameTimeMobileEditorProps {
     tzLabel?: string;
 }
 
-export function GameTimeMobileEditor({
-    slots,
-    onChange,
-    readOnly,
-    tzLabel,
-}: GameTimeMobileEditorProps) {
+function isSlotActive(s: GameTimeSlot) {
+    return s.status === 'available' || !s.status;
+}
+
+function togglePresetSlots(slots: GameTimeSlot[], dayIndex: number, preset: Preset): GameTimeSlot[] {
+    const [start, end] = PRESET_RANGES[preset];
+    const rangeHours = Array.from({ length: end - start }, (_, i) => start + i);
+    const allActive = rangeHours.every((h) => slots.some((s) => s.dayOfWeek === dayIndex && s.hour === h && isSlotActive(s)));
+
+    if (allActive) {
+        return slots.filter((s) => !(s.dayOfWeek === dayIndex && rangeHours.includes(s.hour) && isSlotActive(s)));
+    }
+    const existingHours = new Set(slots.filter((s) => s.dayOfWeek === dayIndex && isSlotActive(s)).map((s) => s.hour));
+    const toAdd = rangeHours.filter((h) => !existingHours.has(h)).map((h) => ({ dayOfWeek: dayIndex, hour: h, status: 'available' as const }));
+    return [...slots, ...toAdd];
+}
+
+export function GameTimeMobileEditor({ slots, onChange, readOnly, tzLabel }: GameTimeMobileEditorProps) {
     const [expandedDay, setExpandedDay] = useState<number | null>(null);
 
     const handleToggle = useCallback((dayIndex: number) => {
         setExpandedDay((prev) => (prev === dayIndex ? null : dayIndex));
     }, []);
 
-    const handleHourToggle = useCallback(
-        (dayIndex: number, hour: number) => {
-            if (readOnly) return;
-            const existing = slots.find(
-                (s) => s.dayOfWeek === dayIndex && s.hour === hour,
-            );
-            if (existing && (existing.status === 'available' || !existing.status)) {
-                onChange(slots.filter((s) => !(s.dayOfWeek === dayIndex && s.hour === hour)));
-            } else if (!existing) {
-                onChange([...slots, { dayOfWeek: dayIndex, hour, status: 'available' }]);
-            }
-        },
-        [slots, onChange, readOnly],
-    );
+    const handleHourToggle = useCallback((dayIndex: number, hour: number) => {
+        if (readOnly) return;
+        const existing = slots.find((s) => s.dayOfWeek === dayIndex && s.hour === hour);
+        if (existing && isSlotActive(existing)) {
+            onChange(slots.filter((s) => !(s.dayOfWeek === dayIndex && s.hour === hour)));
+        } else if (!existing) {
+            onChange([...slots, { dayOfWeek: dayIndex, hour, status: 'available' }]);
+        }
+    }, [slots, onChange, readOnly]);
 
-    const handlePreset = useCallback(
-        (dayIndex: number, preset: Preset) => {
-            if (readOnly) return;
-            const [start, end] = PRESET_RANGES[preset];
-            const rangeHours = Array.from({ length: end - start }, (_, i) => start + i);
-
-            // Check if all hours in the preset are already active
-            const allActive = rangeHours.every((h) =>
-                slots.some(
-                    (s) =>
-                        s.dayOfWeek === dayIndex &&
-                        s.hour === h &&
-                        (s.status === 'available' || !s.status),
-                ),
-            );
-
-            let newSlots: GameTimeSlot[];
-            if (allActive) {
-                // Remove all hours in range
-                newSlots = slots.filter(
-                    (s) =>
-                        !(
-                            s.dayOfWeek === dayIndex &&
-                            rangeHours.includes(s.hour) &&
-                            (s.status === 'available' || !s.status)
-                        ),
-                );
-            } else {
-                // Add missing hours in range
-                const existingHours = new Set(
-                    slots
-                        .filter(
-                            (s) =>
-                                s.dayOfWeek === dayIndex &&
-                                (s.status === 'available' || !s.status),
-                        )
-                        .map((s) => s.hour),
-                );
-                const toAdd = rangeHours
-                    .filter((h) => !existingHours.has(h))
-                    .map((h) => ({ dayOfWeek: dayIndex, hour: h, status: 'available' as const }));
-                newSlots = [...slots, ...toAdd];
-            }
-            onChange(newSlots);
-        },
-        [slots, onChange, readOnly],
-    );
+    const handlePreset = useCallback((dayIndex: number, preset: Preset) => {
+        if (readOnly) return;
+        onChange(togglePresetSlots(slots, dayIndex, preset));
+    }, [slots, onChange, readOnly]);
 
     return (
         <div className="space-y-2" data-testid="game-time-mobile-editor">
-            {/* Timezone label */}
-            {tzLabel && (
-                <div className="flex items-center justify-end">
-                    <span className="text-[10px] text-dim font-medium">{tzLabel}</span>
-                </div>
-            )}
-
-            {/* Day sections */}
+            {tzLabel && <div className="flex items-center justify-end"><span className="text-[10px] text-dim font-medium">{tzLabel}</span></div>}
             {DAYS.map((_, i) => (
-                <DaySection
-                    key={i}
-                    dayIndex={i}
-                    slots={slots}
-                    expanded={expandedDay === i}
-                    onToggle={() => handleToggle(i)}
-                    onHourToggle={handleHourToggle}
-                    onPreset={handlePreset}
-                    readOnly={readOnly}
-                />
+                <DaySection key={i} dayIndex={i} slots={slots} expanded={expandedDay === i} onToggle={() => handleToggle(i)} onHourToggle={handleHourToggle} onPreset={handlePreset} readOnly={readOnly} />
             ))}
         </div>
     );

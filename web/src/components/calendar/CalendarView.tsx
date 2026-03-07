@@ -42,24 +42,25 @@ interface CalendarViewProps {
     onCalendarViewChange?: (view: CalendarViewMode) => void;
 }
 
-export function CalendarView({
-    className = '', currentDate: controlledDate, onDateChange, selectedGames,
-    gameTimeSlots, calendarView, onCalendarViewChange,
-}: CalendarViewProps) {
-    const navigate = useNavigate();
+function useCalendarDate(controlledDate?: Date, onDateChange?: (d: Date) => void) {
     const [searchParams, setSearchParams] = useSearchParams();
-    const resolved = useTimezoneStore((s) => s.resolved);
-    const tzAbbr = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
     const [internalDate, setInternalDate] = useState(() => {
         const dateStr = searchParams.get('date');
         if (dateStr) { const parsed = new Date(dateStr + 'T00:00:00'); if (!isNaN(parsed.getTime())) return parsed; }
         return new Date();
     });
-
     const currentDate = controlledDate ?? internalDate;
     const setCurrentDate = onDateChange ?? setInternalDate;
-    const scrollDirection = useScrollDirection();
-    const isHeaderHidden = scrollDirection === 'down';
+
+    useEffect(() => {
+        const dateStr = format(currentDate, 'yyyy-MM-dd');
+        setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('date', dateStr); return next; }, { replace: true });
+    }, [currentDate, setSearchParams]);
+
+    return { currentDate, setCurrentDate, searchParams, setSearchParams };
+}
+
+function useCalendarViewSync(searchParams: URLSearchParams, setSearchParams: (fn: (p: URLSearchParams) => URLSearchParams, opts?: { replace: boolean }) => void, calendarView?: CalendarViewMode) {
     const viewPref = useCalendarViewStore((s) => s.viewPref);
     const setViewPref = useCalendarViewStore((s) => s.setViewPref);
     const urlViewParam = searchParams.get('view');
@@ -73,26 +74,16 @@ export function CalendarView({
     }, [setViewPref, setSearchParams]);
 
     useEffect(() => {
-        const dateStr = format(currentDate, 'yyyy-MM-dd');
-        setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('date', dateStr); return next; }, { replace: true });
-    }, [currentDate, setSearchParams]);
-
-    useEffect(() => {
         if (!calendarView || calendarView === 'schedule') return;
         const mapped = VIEW_MAP[calendarView];
         if (mapped && mapped !== view) setView(mapped);
     }, [calendarView]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const isScheduleView = calendarView === 'schedule';
-    const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
+    return { view, setView };
+}
 
-    const { data: eventsData, isLoading, isFetching } = useEvents({
-        startAfter, endBefore,
-        includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY,
-        limit: 100,
-    });
-
-    const calendarEvents: CalendarEvent[] = useMemo(() => {
+function useCalendarEvents(eventsData: ReturnType<typeof useEvents>['data'], selectedGames?: Set<string>, resolved?: string) {
+    return useMemo(() => {
         if (!eventsData?.data) return [];
         return eventsData.data
             .filter((event) => {
@@ -102,13 +93,27 @@ export function CalendarView({
             })
             .map((event) => ({
                 id: event.id, title: event.title,
-                start: toZonedDate(event.startTime, resolved),
-                end: event.endTime ? toZonedDate(event.endTime, resolved) : toZonedDate(event.startTime, resolved),
+                start: toZonedDate(event.startTime, resolved!),
+                end: event.endTime ? toZonedDate(event.endTime, resolved!) : toZonedDate(event.startTime, resolved!),
                 resource: event,
             }));
     }, [eventsData, selectedGames, resolved]);
+}
 
-    const handleNavigate = useCallback((date: Date) => setCurrentDate(date), [setCurrentDate]);
+function useGameTimeOverlap(gameTimeSlots?: Set<string>) {
+    return useCallback((start: Date, end: Date): boolean => {
+        if (!gameTimeSlots) return false;
+        const cursor = new Date(start); cursor.setMinutes(0, 0, 0);
+        if (cursor < start) cursor.setHours(cursor.getHours() + 1);
+        while (cursor < end) {
+            if (gameTimeSlots.has(`${cursor.getDay()}:${cursor.getHours()}`)) return true;
+            cursor.setHours(cursor.getHours() + 1);
+        }
+        return false;
+    }, [gameTimeSlots]);
+}
+
+function useCalendarNavigation(currentDate: Date, setCurrentDate: (d: Date) => void, view: View) {
     const handlePrev = useCallback(() => {
         if (view === Views.DAY) setCurrentDate(subDays(currentDate, 1));
         else if (view === Views.WEEK) setCurrentDate(subWeeks(currentDate, 1));
@@ -120,28 +125,75 @@ export function CalendarView({
         else setCurrentDate(addMonths(currentDate, 1));
     }, [currentDate, setCurrentDate, view]);
     const handleToday = useCallback(() => setCurrentDate(new Date()), [setCurrentDate]);
+    return { handlePrev, handleNext, handleToday };
+}
 
-    const handleSelectEvent = useCallback((event: CalendarEvent) => {
-        const isMobile = window.innerWidth < 768;
-        if (isMobile && view === Views.MONTH && !isScheduleView) {
-            setCurrentDate(event.start); setView(Views.DAY); onCalendarViewChange?.('day'); return;
-        }
-        const viewStr = isScheduleView ? 'schedule' : viewToStr(view);
-        navigate(`/events/${event.id}`, { state: { fromCalendar: true, calendarDate: format(currentDate, 'yyyy-MM-dd'), calendarView: viewStr } });
-    }, [navigate, view, currentDate, isScheduleView, setCurrentDate, setView, onCalendarViewChange]);
+function CalendarEmptyState({ view }: { view: View }) {
+    const navigate = useNavigate();
+    return (
+        <div className="calendar-empty">
+            <div className="empty-icon">📅</div>
+            <p>No events {view === Views.DAY ? 'today' : view === Views.WEEK ? 'this week' : 'this month'}</p>
+            <button onClick={() => navigate('/events/new')} className="empty-cta">Create Event</button>
+        </div>
+    );
+}
 
-    const eventPropGetter = useCallback((event: CalendarEvent) => ({ style: getCalendarEventStyle(event.resource?.game?.slug || 'default') }), []);
+function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((d: Date) => void) | undefined, calendarView: CalendarViewMode | undefined, selectedGames: Set<string> | undefined) {
+    const navigate = useNavigate();
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzAbbr = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
+    const { currentDate, setCurrentDate, searchParams, setSearchParams } = useCalendarDate(controlledDate, onDateChange);
+    const { view, setView } = useCalendarViewSync(searchParams, setSearchParams, calendarView);
+    const isScheduleView = calendarView === 'schedule';
+    const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
+    const { data: eventsData, isLoading, isFetching } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
+    const calendarEvents = useCalendarEvents(eventsData, selectedGames, resolved);
+    const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
+    return { navigate, resolved, tzAbbr, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };
+}
 
-    const eventOverlapsGameTime = useCallback((start: Date, end: Date): boolean => {
-        if (!gameTimeSlots) return false;
-        const cursor = new Date(start); cursor.setMinutes(0, 0, 0);
-        if (cursor < start) cursor.setHours(cursor.getHours() + 1);
-        while (cursor < end) {
-            if (gameTimeSlots.has(`${cursor.getDay()}:${cursor.getHours()}`)) return true;
-            cursor.setHours(cursor.getHours() + 1);
-        }
-        return false;
-    }, [gameTimeSlots]);
+function useEventWrappers(eventOverlapsGameTime: (s: Date, e: Date) => boolean, handleMonthChipClick: (e: React.MouseEvent, d: Date) => void) {
+    const MonthEventWrapper = useCallback(({ event }: { event: CalendarEvent }) => <MonthEventComponent event={event} eventOverlapsGameTime={eventOverlapsGameTime} onChipClick={handleMonthChipClick} />, [eventOverlapsGameTime, handleMonthChipClick]);
+    const WeekEventWrapper = useCallback(({ event }: { event: CalendarEvent }) => <WeekEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />, [eventOverlapsGameTime]);
+    const DayEventWrapper = useCallback(({ event }: { event: CalendarEvent }) => <DayEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />, [eventOverlapsGameTime]);
+    return { MonthEventWrapper, WeekEventWrapper, DayEventWrapper };
+}
+
+function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handleSelectEvent, wrappers, calendarView, onCalendarViewChange }: {
+    s: ReturnType<typeof useCalendarViewState>; className: string; isHeaderHidden: boolean;
+    eventPropGetter: (e: CalendarEvent) => { style: React.CSSProperties }; handleSelectEvent: (e: CalendarEvent) => void;
+    wrappers: ReturnType<typeof useEventWrappers>; calendarView: CalendarViewMode | undefined; onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined;
+}) {
+    return (
+        <div className={`calendar-container calendar-view-${s.view} ${className}`}>
+            <CalendarToolbar view={s.view} currentDate={s.currentDate} tzAbbr={s.tzAbbr} isHeaderHidden={isHeaderHidden} calendarView={calendarView} onPrev={s.handlePrev} onNext={s.handleNext} onToday={s.handleToday} onViewChange={s.setView} />
+            {(s.isLoading || (s.isFetching && s.calendarEvents.length === 0)) && <div className="calendar-loading"><div className="loading-spinner" /><span>Loading events...</span></div>}
+            <div className="calendar-grid-wrapper">
+                <Calendar key={s.view} localizer={localizer} events={s.calendarEvents} date={s.currentDate} view={s.view}
+                    views={[Views.MONTH, Views.WEEK, Views.DAY]} onNavigate={(date: Date) => s.setCurrentDate(date)} onView={s.setView}
+                    onSelectEvent={handleSelectEvent}
+                    onDrillDown={(date) => { s.setCurrentDate(date); s.setView(Views.DAY); onCalendarViewChange?.('day'); }}
+                    drilldownView={Views.DAY} eventPropGetter={eventPropGetter}
+                    components={{ month: { event: wrappers.MonthEventWrapper }, week: { event: wrappers.WeekEventWrapper }, day: { event: wrappers.DayEventWrapper }, toolbar: () => null }}
+                    getNow={() => new TZDate(Date.now(), s.resolved)} allDayAccessor={() => false} popup selectable
+                    onSelectSlot={(slotInfo) => {
+                        if (slotInfo.action === 'doubleClick' || (window.innerWidth < 768 && slotInfo.action === 'click' && s.view === Views.MONTH)) {
+                            s.setCurrentDate(slotInfo.start); s.setView(Views.DAY); onCalendarViewChange?.('day');
+                        }
+                    }}
+                    style={{ minHeight: '500px' }} />
+            </div>
+            {!s.isLoading && !s.isFetching && s.calendarEvents.length === 0 && <CalendarEmptyState view={s.view} />}
+        </div>
+    );
+}
+
+function useCalendarInteractions(
+    s: ReturnType<typeof useCalendarViewState>, onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined,
+    eventOverlapsGameTime: (start: Date, end: Date) => boolean,
+) {
+    const { setCurrentDate, setView, navigate, view, currentDate, isScheduleView } = s;
 
     const handleMonthChipClick = useCallback((e: React.MouseEvent, eventStart: Date) => {
         if (window.innerWidth >= 768) return;
@@ -149,57 +201,37 @@ export function CalendarView({
         setCurrentDate(eventStart); setView(Views.DAY); onCalendarViewChange?.('day');
     }, [setCurrentDate, setView, onCalendarViewChange]);
 
-    const MonthEventWrapper = useCallback(
-        ({ event }: { event: CalendarEvent }) => <MonthEventComponent event={event} eventOverlapsGameTime={eventOverlapsGameTime} onChipClick={handleMonthChipClick} />,
-        [eventOverlapsGameTime, handleMonthChipClick],
-    );
-    const WeekEventWrapper = useCallback(
-        ({ event }: { event: CalendarEvent }) => <WeekEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />,
-        [eventOverlapsGameTime],
-    );
-    const DayEventWrapper = useCallback(
-        ({ event }: { event: CalendarEvent }) => <DayEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />,
-        [eventOverlapsGameTime],
-    );
+    const handleSelectEvent = useCallback((event: CalendarEvent) => {
+        if (window.innerWidth < 768 && view === Views.MONTH && !isScheduleView) {
+            setCurrentDate(event.start); setView(Views.DAY); onCalendarViewChange?.('day'); return;
+        }
+        navigate(`/events/${event.id}`, { state: { fromCalendar: true, calendarDate: format(currentDate, 'yyyy-MM-dd'), calendarView: isScheduleView ? 'schedule' : viewToStr(view) } });
+    }, [navigate, view, currentDate, isScheduleView, setCurrentDate, setView, onCalendarViewChange]);
 
-    if (isScheduleView) {
+    const eventPropGetter = useCallback((event: CalendarEvent) => ({ style: getCalendarEventStyle(event.resource?.game?.slug || 'default') }), []);
+    const wrappers = useEventWrappers(eventOverlapsGameTime, handleMonthChipClick);
+    return { handleSelectEvent, eventPropGetter, wrappers };
+}
+
+export function CalendarView({
+    className = '', currentDate: controlledDate, onDateChange, selectedGames,
+    gameTimeSlots, calendarView, onCalendarViewChange,
+}: CalendarViewProps) {
+    const s = useCalendarViewState(controlledDate, onDateChange, calendarView, selectedGames);
+    const scrollDirection = useScrollDirection();
+    const isHeaderHidden = scrollDirection === 'down';
+    const eventOverlapsGameTime = useGameTimeOverlap(gameTimeSlots);
+    const { handleSelectEvent, eventPropGetter, wrappers } = useCalendarInteractions(s, onCalendarViewChange, eventOverlapsGameTime);
+
+    if (s.isScheduleView) {
         return (
             <div className={`min-w-0 ${className}`}>
-                {isLoading && <div className="flex items-center justify-center py-16 gap-2 text-muted"><div className="loading-spinner" /><span>Loading events...</span></div>}
-                {!isLoading && <ScheduleView events={calendarEvents} currentDate={currentDate} onDateChange={setCurrentDate} onSelectEvent={handleSelectEvent} eventOverlapsGameTime={eventOverlapsGameTime} isFetching={isFetching} />}
+                {s.isLoading && <div className="flex items-center justify-center py-16 gap-2 text-muted"><div className="loading-spinner" /><span>Loading events...</span></div>}
+                {!s.isLoading && <ScheduleView events={s.calendarEvents} currentDate={s.currentDate} onDateChange={s.setCurrentDate} onSelectEvent={handleSelectEvent} eventOverlapsGameTime={eventOverlapsGameTime} isFetching={s.isFetching} />}
             </div>
         );
     }
 
-    return (
-        <div className={`calendar-container calendar-view-${view} ${className}`}>
-            <CalendarToolbar view={view} currentDate={currentDate} tzAbbr={tzAbbr} isHeaderHidden={isHeaderHidden} calendarView={calendarView} onPrev={handlePrev} onNext={handleNext} onToday={handleToday} onViewChange={setView} />
-            {(isLoading || (isFetching && calendarEvents.length === 0)) && <div className="calendar-loading"><div className="loading-spinner" /><span>Loading events...</span></div>}
-            <div className="calendar-grid-wrapper">
-                <Calendar
-                    key={view} localizer={localizer} events={calendarEvents} date={currentDate} view={view}
-                    views={[Views.MONTH, Views.WEEK, Views.DAY]} onNavigate={handleNavigate} onView={setView}
-                    onSelectEvent={handleSelectEvent}
-                    onDrillDown={(date) => { setCurrentDate(date); setView(Views.DAY); onCalendarViewChange?.('day'); }}
-                    drilldownView={Views.DAY} eventPropGetter={eventPropGetter}
-                    components={{ month: { event: MonthEventWrapper }, week: { event: WeekEventWrapper }, day: { event: DayEventWrapper }, toolbar: () => null }}
-                    getNow={() => new TZDate(Date.now(), resolved)} allDayAccessor={() => false} popup selectable
-                    onSelectSlot={(slotInfo) => {
-                        const isMobile = window.innerWidth < 768;
-                        if (slotInfo.action === 'doubleClick' || (isMobile && slotInfo.action === 'click' && view === Views.MONTH)) {
-                            setCurrentDate(slotInfo.start); setView(Views.DAY); onCalendarViewChange?.('day');
-                        }
-                    }}
-                    style={{ minHeight: '500px' }}
-                />
-            </div>
-            {!isLoading && !isFetching && calendarEvents.length === 0 && (
-                <div className="calendar-empty">
-                    <div className="empty-icon">📅</div>
-                    <p>No events {view === Views.DAY ? 'today' : view === Views.WEEK ? 'this week' : 'this month'}</p>
-                    <button onClick={() => navigate('/events/new')} className="empty-cta">Create Event</button>
-                </div>
-            )}
-        </div>
-    );
+    return <CalendarGridBody s={s} className={className} isHeaderHidden={isHeaderHidden} eventPropGetter={eventPropGetter}
+        handleSelectEvent={handleSelectEvent} wrappers={wrappers} calendarView={calendarView} onCalendarViewChange={onCalendarViewChange} />;
 }

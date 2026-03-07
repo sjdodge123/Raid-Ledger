@@ -18,23 +18,13 @@ import { API_BASE_URL } from '../../lib/config';
 import { buildAvatarOptions } from './identity-helpers';
 import { UserIdentityCard, DiscordLinkCta, SteamSection, AutoHeartToggle } from './identity-sections';
 
-/**
- * Consolidated Identity panel (ROK-359).
- * Merges the old My Profile, Discord, Avatar, and Account panels into a single page.
- */
-// eslint-disable-next-line max-lines-per-function
-export function IdentityPanel(): JSX.Element | null {
-    const { user, isAuthenticated, refetch, logout } = useAuth();
-    const queryClient = useQueryClient();
-    const navigate = useNavigate();
-    const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
-    const { data: systemStatus } = useSystemStatus();
-    const [showAvatarModal, setShowAvatarModal] = useState(false);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [confirmName, setConfirmName] = useState('');
+/** Avatar upload/remove handlers */
+function useAvatarActions(refetch: () => void): {
+    handleUpload: (file: File) => void;
+    handleRemoveCustom: () => void;
+    isUploading: boolean; uploadProgress: number;
+} {
     const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
-    const handleLinkDiscord = useDiscordLink();
-    const { linkSteam, steamStatus, unlinkSteam, syncLibrary } = useSteamLink();
 
     const handleUpload = useCallback((file: File) => {
         uploadAvatarFile(file, {
@@ -43,15 +33,21 @@ export function IdentityPanel(): JSX.Element | null {
         });
     }, [uploadAvatarFile, refetch]);
 
-    const handleRemoveCustomAvatar = useCallback(() => {
+    const handleRemoveCustom = useCallback(() => {
         deleteAvatar(undefined, {
             onSuccess: () => { toast.success('Custom avatar removed'); refetch(); },
             onError: (err) => { toast.error(err instanceof Error ? err.message : 'Failed to remove avatar'); },
         });
     }, [deleteAvatar, refetch]);
 
-    const characters = useMemo(() => charactersData?.data ?? [], [charactersData?.data]);
-    const avatarOptions = useMemo(() => (user ? buildAvatarOptions(user, characters) : []), [user, characters]);
+    return { handleUpload, handleRemoveCustom, isUploading, uploadProgress };
+}
+
+/** Avatar preference selection with optimistic URL */
+function useAvatarSelection(avatarOptions: ReturnType<typeof buildAvatarOptions>): {
+    optimisticUrl: string | null; handleAvatarSelect: (url: string) => void;
+} {
+    const queryClient = useQueryClient();
     const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
 
     const handleAvatarSelect = useCallback((url: string) => {
@@ -66,57 +62,135 @@ export function IdentityPanel(): JSX.Element | null {
             .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
     }, [avatarOptions, queryClient]);
 
-    const expectedName = user?.displayName || user?.username || '';
+    return { optimisticUrl, handleAvatarSelect };
+}
+
+/** Delete account mutation */
+function useDeleteAccount(confirmName: string): {
+    deleteMutation: ReturnType<typeof useMutation<void, Error>>;
+} {
+    const { logout } = useAuth();
+    const navigate = useNavigate();
     const deleteMutation = useMutation({
         mutationFn: () => deleteMyAccount(confirmName),
         onSuccess: () => { logout(); toast.success('Your account has been deleted'); navigate('/login', { replace: true }); },
-        onError: (err) => { toast.error(err instanceof Error ? err.message : 'Failed to delete account'); },
+        onError: (err: Error) => { toast.error(err.message || 'Failed to delete account'); },
     });
-    const isConfirmValid = confirmName === expectedName;
-    const hasDiscordLinked = isDiscordLinked(user?.discordId ?? null);
+    return { deleteMutation };
+}
 
+/** Auto-heart preference toggle state */
+function useAutoHeart(isAuthenticated: boolean, hasDiscordLinked: boolean): {
+    autoHeartEnabled: boolean; toggleAutoHeart: (v: boolean) => void; isPending: boolean;
+} {
+    const queryClient = useQueryClient();
     const { data: prefs } = useQuery({
         queryKey: ['user-preferences'], queryFn: getMyPreferences,
         enabled: isAuthenticated && hasDiscordLinked, staleTime: Infinity,
     });
-    const autoHeartEnabled = prefs?.autoHeartGames !== false;
     const autoHeartMutation = useMutation({
         mutationFn: (enabled: boolean) => updatePreference('autoHeartGames', enabled),
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user-preferences'] }); },
         onError: () => { toast.error('Failed to update auto-heart preference'); },
     });
+    return {
+        autoHeartEnabled: prefs?.autoHeartGames !== false,
+        toggleAutoHeart: (v) => autoHeartMutation.mutate(v),
+        isPending: autoHeartMutation.isPending,
+    };
+}
+
+/** Resolves the current avatar URL with optimistic override */
+function resolveCurrentAvatar(
+    user: Parameters<typeof toAvatarUser>[0],
+    characters: Parameters<typeof toAvatarUser>[0]['characters'],
+    optimisticUrl: string | null,
+): string {
+    return optimisticUrl ?? (resolveAvatar(toAvatarUser({ ...user, characters })).url ?? '/default-avatar.svg');
+}
+
+/**
+ * Consolidated Identity panel (ROK-359).
+ * Merges the old My Profile, Discord, Avatar, and Account panels into a single page.
+ */
+export function IdentityPanel(): JSX.Element | null {
+    const { user, isAuthenticated, refetch } = useAuth();
+    const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
+    const { data: systemStatus } = useSystemStatus();
+    const handleLinkDiscord = useDiscordLink();
+    const { linkSteam, steamStatus, unlinkSteam, syncLibrary } = useSteamLink();
+    const characters = useMemo(() => charactersData?.data ?? [], [charactersData?.data]);
+    const avatarOptions = useMemo(() => (user ? buildAvatarOptions(user, characters) : []), [user, characters]);
+    const avatarActions = useAvatarActions(refetch);
+    const { optimisticUrl, handleAvatarSelect } = useAvatarSelection(avatarOptions);
+    const hasDiscordLinked = isDiscordLinked(user?.discordId ?? null);
+    const autoHeart = useAutoHeart(isAuthenticated, hasDiscordLinked);
 
     if (!user) return null;
 
-    const showDangerZone = !isImpersonating();
-    const avatarUser = toAvatarUser({ ...user, characters });
-    const resolved = resolveAvatar(avatarUser);
-    const resolvedAvatarUrl = resolved.url ?? '/default-avatar.svg';
-    const currentAvatarUrl = optimisticUrl ?? resolvedAvatarUrl;
-    const showDiscord = systemStatus?.discordConfigured;
+    const currentAvatarUrl = resolveCurrentAvatar(user, characters, optimisticUrl);
+
+    return (
+        <IdentityPanelContent user={user} currentAvatarUrl={currentAvatarUrl}
+            showDiscord={!!systemStatus?.discordConfigured} hasDiscordLinked={hasDiscordLinked}
+            onLinkDiscord={handleLinkDiscord} steamStatus={steamStatus} linkSteam={linkSteam}
+            unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} autoHeart={autoHeart}
+            avatarOptions={avatarOptions} handleAvatarSelect={handleAvatarSelect}
+            avatarActions={avatarActions} />
+    );
+}
+
+/** Inner content with modal state */
+function IdentityPanelContent({ user, currentAvatarUrl, showDiscord, hasDiscordLinked, onLinkDiscord, steamStatus, linkSteam, unlinkSteam, syncLibrary, autoHeart, avatarOptions, handleAvatarSelect, avatarActions }: {
+    user: NonNullable<ReturnType<typeof useAuth>['user']>; currentAvatarUrl: string;
+    showDiscord: boolean; hasDiscordLinked: boolean; onLinkDiscord: () => void;
+    steamStatus: ReturnType<typeof useSteamLink>['steamStatus']; linkSteam: () => void;
+    unlinkSteam: ReturnType<typeof useSteamLink>['unlinkSteam']; syncLibrary: ReturnType<typeof useSteamLink>['syncLibrary'];
+    autoHeart: ReturnType<typeof useAutoHeart>; avatarOptions: ReturnType<typeof buildAvatarOptions>;
+    handleAvatarSelect: (url: string) => void; avatarActions: ReturnType<typeof useAvatarActions>;
+}): JSX.Element {
+    const [showAvatarModal, setShowAvatarModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [confirmName, setConfirmName] = useState('');
+    const { deleteMutation } = useDeleteAccount(confirmName);
 
     return (
         <div className="space-y-6">
-            <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                <h2 className="text-xl font-semibold text-foreground mb-4">Identity</h2>
-                <p className="text-sm text-muted mb-6">Your profile identity and linked accounts. Click your avatar to change it.</p>
-                <UserIdentityCard user={user} currentAvatarUrl={currentAvatarUrl} onOpenAvatarModal={() => setShowAvatarModal(true)} />
-                {showDiscord && !hasDiscordLinked && <DiscordLinkCta onLink={handleLinkDiscord} />}
-                <SteamSection steamStatus={steamStatus} linkSteam={linkSteam} unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} />
-                {hasDiscordLinked && <AutoHeartToggle enabled={autoHeartEnabled} onToggle={(v) => autoHeartMutation.mutate(v)} isPending={autoHeartMutation.isPending} />}
-            </div>
-
-            {showDangerZone && <DangerZone onOpenDeleteModal={() => setShowDeleteModal(true)} />}
-
+            <IdentitySection user={user} currentAvatarUrl={currentAvatarUrl} showDiscord={showDiscord}
+                hasDiscordLinked={hasDiscordLinked} onLinkDiscord={onLinkDiscord}
+                steamStatus={steamStatus} linkSteam={linkSteam} unlinkSteam={unlinkSteam} syncLibrary={syncLibrary}
+                autoHeart={autoHeart} onOpenAvatar={() => setShowAvatarModal(true)} />
+            {!isImpersonating() && <DangerZone onOpenDeleteModal={() => setShowDeleteModal(true)} />}
             <AvatarSelectorModal isOpen={showAvatarModal} onClose={() => setShowAvatarModal(false)}
                 currentAvatarUrl={currentAvatarUrl} avatarOptions={avatarOptions} onSelect={handleAvatarSelect}
                 customAvatarDisplayUrl={user.customAvatarUrl ? `${API_BASE_URL}${user.customAvatarUrl}` : null}
-                onUpload={handleUpload} onRemoveCustom={handleRemoveCustomAvatar}
-                isUploading={isUploading} uploadProgress={uploadProgress} />
-
+                onUpload={avatarActions.handleUpload} onRemoveCustom={avatarActions.handleRemoveCustom}
+                isUploading={avatarActions.isUploading} uploadProgress={avatarActions.uploadProgress} />
             <DeleteAccountModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setConfirmName(''); }}
-                expectedName={expectedName} confirmName={confirmName} onConfirmNameChange={setConfirmName}
-                isConfirmValid={isConfirmValid} onDelete={() => deleteMutation.mutate()} isPending={deleteMutation.isPending} />
+                expectedName={user.displayName || user.username || ''} confirmName={confirmName} onConfirmNameChange={setConfirmName}
+                isConfirmValid={confirmName === (user.displayName || user.username || '')} onDelete={() => deleteMutation.mutate()} isPending={deleteMutation.isPending} />
+        </div>
+    );
+}
+
+/** Identity card + linked accounts section */
+function IdentitySection({ user, currentAvatarUrl, showDiscord, hasDiscordLinked, onLinkDiscord, steamStatus, linkSteam, unlinkSteam, syncLibrary, autoHeart, onOpenAvatar }: {
+    user: Parameters<typeof UserIdentityCard>[0]['user']; currentAvatarUrl: string;
+    showDiscord: boolean; hasDiscordLinked: boolean; onLinkDiscord: () => void;
+    steamStatus: Parameters<typeof SteamSection>[0]['steamStatus'];
+    linkSteam: () => void; unlinkSteam: Parameters<typeof SteamSection>[0]['unlinkSteam'];
+    syncLibrary: Parameters<typeof SteamSection>[0]['syncLibrary'];
+    autoHeart: { autoHeartEnabled: boolean; toggleAutoHeart: (v: boolean) => void; isPending: boolean };
+    onOpenAvatar: () => void;
+}): JSX.Element {
+    return (
+        <div className="bg-surface border border-edge-subtle rounded-xl p-6">
+            <h2 className="text-xl font-semibold text-foreground mb-4">Identity</h2>
+            <p className="text-sm text-muted mb-6">Your profile identity and linked accounts. Click your avatar to change it.</p>
+            <UserIdentityCard user={user} currentAvatarUrl={currentAvatarUrl} onOpenAvatarModal={onOpenAvatar} />
+            {showDiscord && !hasDiscordLinked && <DiscordLinkCta onLink={onLinkDiscord} />}
+            <SteamSection steamStatus={steamStatus} linkSteam={linkSteam} unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} />
+            {hasDiscordLinked && <AutoHeartToggle enabled={autoHeart.autoHeartEnabled} onToggle={autoHeart.toggleAutoHeart} isPending={autoHeart.isPending} />}
         </div>
     );
 }
@@ -143,7 +217,6 @@ function DangerZone({ onOpenDeleteModal }: { onOpenDeleteModal: () => void }): J
 }
 
 /** Delete account confirmation modal */
-// eslint-disable-next-line max-lines-per-function
 function DeleteAccountModal({ isOpen, onClose, expectedName, confirmName, onConfirmNameChange, isConfirmValid, onDelete, isPending }: {
     isOpen: boolean; onClose: () => void; expectedName: string; confirmName: string;
     onConfirmNameChange: (v: string) => void; isConfirmValid: boolean; onDelete: () => void; isPending: boolean;

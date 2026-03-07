@@ -57,135 +57,86 @@ function buildAvatarUser(player: RosterAssignmentResponse): {
     return { avatarUser: base, gameId: undefined };
 }
 
-export function PlayerCard({
-    player,
-    size = 'default',
-    onClick,
-    onRemove,
-    matchAccent,
-}: PlayerCardProps) {
+function PlayerNameLink({ player }: { player: RosterAssignmentResponse }) {
+    return (
+        <Link
+            to={`/users/${player.userId}`}
+            state={player.userId === 0 ? {
+                guest: true, username: player.username,
+                discordId: player.discordId, avatarHash: player.avatar,
+            } : undefined}
+            className="truncate font-medium text-foreground hover:text-indigo-400 transition-colors"
+            title={player.username} onClick={(e) => e.stopPropagation()}>
+            {player.username}
+        </Link>
+    );
+}
+
+function FlexibilityBadges({ preferredRoles }: { preferredRoles: string[] }) {
+    return (
+        <span className="flex shrink-0 items-center gap-0.5" title={`Prefers: ${preferredRoles.map(formatRole).join(', ')}`}>
+            {preferredRoles.map((r) => (
+                <span key={r} className="inline-flex items-center"><RoleIcon role={r} size="w-5 h-5" /></span>
+            ))}
+        </span>
+    );
+}
+
+function PlayerCharacterInfo({ player }: { player: RosterAssignmentResponse }) {
+    if (!player.character) return null;
+    return (
+        <p className="flex items-center gap-1 truncate text-xs text-muted"
+            title={[player.character.name, player.character.className].filter(Boolean).join(' \u2022 ')}>
+            {getClassIconUrl(player.character.className) && (
+                <img src={getClassIconUrl(player.character.className)!} alt="" className="w-3.5 h-3.5 rounded-sm flex-shrink-0" />
+            )}
+            <span className="truncate">
+                {player.character.name}
+                {player.character.className && ` \u2022 ${player.character.className}`}
+            </span>
+        </p>
+    );
+}
+
+function RemoveButton({ username, onRemove }: { username: string; onRemove: () => void }) {
+    return (
+        <button onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors"
+            aria-label={`Remove ${username} from slot`} title="Remove from slot">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    );
+}
+
+export function PlayerCard({ player, size = 'default', onClick, onRemove, matchAccent }: PlayerCardProps) {
     const { avatarUser, gameId } = buildAvatarUser(player);
     const isCompact = size === 'compact';
     const avatarSize = isCompact ? 'h-8 w-8' : 'h-10 w-10';
-
-    // ROK-465: Role badge hidden — the character's spec-derived role is misleading
-    // when the player is assigned to a different slot (e.g. Feral→Dps in a Healer slot).
-    // The slot itself already communicates the assigned role.
-    const roleBadge = null;
-
-    // ROK-459: Tentative badge
     const isTentative = player.signupStatus === 'tentative';
-
-    // ROK-452: Flexibility indicator — show all preferred roles as small colored badges
-    const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 1
-        ? player.preferredRoles
-        : null;
-
-    const borderStyle = matchAccent
-        ? { borderLeft: `3px solid ${matchAccent}` }
-        : undefined;
+    const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 1 ? player.preferredRoles : null;
+    const borderStyle = matchAccent ? { borderLeft: `3px solid ${matchAccent}` } : undefined;
 
     return (
-        <div
-            className={`
-                flex items-center gap-3 rounded-lg border border-edge bg-panel/50
+        <div className={`flex items-center gap-3 rounded-lg border border-edge bg-panel/50
                 ${isCompact ? 'p-2' : 'p-2.5'}
-                ${onClick ? 'cursor-pointer hover:bg-panel transition-colors' : 'transition-all'}
-            `}
-            style={borderStyle}
-            onClick={onClick}
-            role={onClick ? 'button' : undefined}
-            tabIndex={onClick ? 0 : undefined}
-            onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
-        >
-            {/* Avatar - AC-2: resolveAvatar via AvatarWithFallback */}
-            <AvatarWithFallback
-                user={avatarUser}
-                gameId={gameId}
-                username={player.username}
-                sizeClassName={avatarSize}
-            />
-
-            {/* Info - AC-6: truncation with title tooltip */}
+                ${onClick ? 'cursor-pointer hover:bg-panel transition-colors' : 'transition-all'}`}
+            style={borderStyle} onClick={onClick}
+            role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
+            onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}>
+            <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={avatarSize} />
             <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                    <Link
-                        to={`/users/${player.userId}`}
-                        state={player.userId === 0 ? {
-                            guest: true,
-                            username: player.username,
-                            discordId: player.discordId,
-                            avatarHash: player.avatar,
-                        } : undefined}
-                        className="truncate font-medium text-foreground hover:text-indigo-400 transition-colors"
-                        title={player.username}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {player.username}
-                    </Link>
-                    {roleBadge}
-                    {/* ROK-459: Tentative indicator */}
+                    <PlayerNameLink player={player} />
                     {isTentative && (
-                        <span
-                            className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400"
-                            title="Tentative — may not attend"
-                        >
-                            ⏳
-                        </span>
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title="Tentative — may not attend">&#x23F3;</span>
                     )}
-                    {/* ROK-452: Flexibility indicator for multi-role players */}
-                    {preferredRoleBadges && (
-                        <span
-                            className="flex shrink-0 items-center gap-0.5"
-                            title={`Prefers: ${preferredRoleBadges.map(formatRole).join(', ')}`}
-                        >
-                            {preferredRoleBadges.map((r) => (
-                                <span
-                                    key={r}
-                                    className="inline-flex items-center"
-                                >
-                                    <RoleIcon role={r} size="w-5 h-5" />
-                                </span>
-                            ))}
-                        </span>
-                    )}
+                    {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} />}
                 </div>
-                {player.character && (
-                    <p
-                        className="flex items-center gap-1 truncate text-xs text-muted"
-                        title={[
-                            player.character.name,
-                            player.character.className,
-                        ].filter(Boolean).join(' \u2022 ')}
-                    >
-                        {getClassIconUrl(player.character.className) && (
-                            <img
-                                src={getClassIconUrl(player.character.className)!}
-                                alt=""
-                                className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
-                            />
-                        )}
-                        <span className="truncate">
-                            {player.character.name}
-                            {player.character.className && ` \u2022 ${player.character.className}`}
-                        </span>
-                    </p>
-                )}
+                <PlayerCharacterInfo player={player} />
             </div>
-
-            {/* Admin remove button */}
-            {onRemove && (
-                <button
-                    onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                    className="shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors"
-                    aria-label={`Remove ${player.username} from slot`}
-                    title="Remove from slot"
-                >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            )}
+            {onRemove && <RemoveButton username={player.username} onRemove={onRemove} />}
         </div>
     );
 }

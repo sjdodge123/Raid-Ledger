@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
-import type { CreateEventDto, UpdateEventDto, RecurrenceDto, TemplateConfigDto } from '@raid-ledger/contract';
+import type { CreateEventDto, UpdateEventDto, RecurrenceDto, TemplateConfigDto, EventResponseDto } from '@raid-ledger/contract';
 import { createEvent, updateEvent } from '../../lib/api-client';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
@@ -13,59 +13,78 @@ import '../../pages/event-detail-page.css';
 import { type SlotState } from './shared/event-form-constants';
 import { GameDetailsSection } from './shared/game-details-section';
 import { useRegistryGameId } from './shared/use-registry-game-id';
-import { DurationSection } from './shared/duration-section';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';
-import { RECURRENCE_OPTIONS, ERROR_FIELD_MAP } from './create-event-form.types';
-import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount, formatDuration } from './create-event-form.utils';
+import { ERROR_FIELD_MAP } from './create-event-form.types';
+import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount } from './create-event-form.utils';
+import { FormSection, TemplatesBar, WhenSection, SaveTemplateBar, FormFooter } from './create-event-form-sections';
 
-function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-        <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">{title}</h3>
-            <div className="space-y-4">{children}</div>
-        </div>
-    );
-}
-
-export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
-    const isEditMode = !!editEvent;
+function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined) {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const resolved = useTimezoneStore((s) => s.resolved);
-    const tzAbbr = getTimezoneAbbr(resolved);
 
-    const [form, setForm] = useState<FormState>(() => getInitialState(editEvent, resolved));
-    const [errors, setErrors] = useState<FormErrors>({});
+    return useMutation({
+        mutationFn: (dto: CreateEventDto) => isEditMode ? updateEvent(editEventId!, dto as UpdateEventDto) : createEvent(dto),
+        onSuccess: (event) => {
+            toast.success(isEditMode ? 'Event updated!' : 'Event created successfully!');
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+            if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
+            navigate(`/events/${event.id}`);
+        },
+        onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
+    });
+}
+
+function buildSubmitDto(form: FormState, resolved: string, registryGameId: number | null | undefined): CreateEventDto {
+    const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
+    const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
+    let recurrence: RecurrenceDto | undefined;
+    if (form.recurrenceFrequency) {
+        recurrence = { frequency: form.recurrenceFrequency, until: new TZDate(`${form.recurrenceUntil}T23:59:59`, resolved).toISOString() };
+    }
+    return {
+        title: form.title.trim(), description: form.description.trim() || undefined,
+        gameId: registryGameId ?? undefined, startTime: start.toISOString(), endTime: end.toISOString(),
+        slotConfig: buildSlotConfig(form), maxAttendees: form.maxAttendees ? parseInt(form.maxAttendees) : undefined,
+        autoUnbench: form.autoUnbench, recurrence,
+        contentInstances: form.selectedInstances.length > 0 ? form.selectedInstances : undefined,
+        reminder15min: form.reminder15min, reminder1hour: form.reminder1hour, reminder24hour: form.reminder24hour,
+    };
+}
+
+function loadTemplateIntoForm(config: TemplateConfigDto, setForm: React.Dispatch<React.SetStateAction<FormState>>) {
+    setForm((prev) => ({
+        ...prev,
+        title: config.title ?? prev.title, description: config.description ?? prev.description,
+        durationMinutes: config.durationMinutes ?? prev.durationMinutes,
+        slotType: config.slotConfig?.type ?? prev.slotType,
+        slotTank: config.slotConfig?.tank ?? prev.slotTank, slotHealer: config.slotConfig?.healer ?? prev.slotHealer,
+        slotDps: config.slotConfig?.dps ?? prev.slotDps, slotFlex: config.slotConfig?.flex ?? prev.slotFlex,
+        slotPlayer: config.slotConfig?.player ?? prev.slotPlayer,
+        maxAttendees: config.maxAttendees ? String(config.maxAttendees) : prev.maxAttendees,
+        autoUnbench: config.autoUnbench ?? prev.autoUnbench,
+        recurrenceFrequency: config.recurrence?.frequency ?? prev.recurrenceFrequency,
+        titleIsAutoSuggested: false, descriptionIsAutoSuggested: false,
+    }));
+    toast.success('Template loaded');
+}
+
+function useEndTimePreview(startDate: string, startTime: string, durationMinutes: number, resolved: string) {
+    return useMemo(() => {
+        if (!startDate || !startTime || durationMinutes <= 0) return null;
+        const start = new TZDate(`${startDate}T${startTime}`, resolved);
+        const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+        return new TZDate(end, resolved).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: resolved });
+    }, [startDate, startTime, durationMinutes, resolved]);
+}
+
+function useTemplateActions(form: FormState) {
     const [saveTemplateName, setSaveTemplateName] = useState('');
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
-
     const { data: templatesData } = useEventTemplates();
     const createTemplateMutation = useCreateTemplate();
     const deleteTemplateMutation = useDeleteTemplate();
-    const templates = templatesData?.data ?? [];
-
-    const registryGameId = useRegistryGameId(form.game);
-    const gameIdForInterest = form.game?.id ?? undefined;
-    const { count: interestCount, isLoading: interestLoading } = useWantToPlay(gameIdForInterest);
-
-    function loadTemplate(config: TemplateConfigDto) {
-        setForm((prev) => ({
-            ...prev,
-            title: config.title ?? prev.title, description: config.description ?? prev.description,
-            durationMinutes: config.durationMinutes ?? prev.durationMinutes,
-            slotType: config.slotConfig?.type ?? prev.slotType,
-            slotTank: config.slotConfig?.tank ?? prev.slotTank, slotHealer: config.slotConfig?.healer ?? prev.slotHealer,
-            slotDps: config.slotConfig?.dps ?? prev.slotDps, slotFlex: config.slotConfig?.flex ?? prev.slotFlex,
-            slotPlayer: config.slotConfig?.player ?? prev.slotPlayer,
-            maxAttendees: config.maxAttendees ? String(config.maxAttendees) : prev.maxAttendees,
-            autoUnbench: config.autoUnbench ?? prev.autoUnbench,
-            recurrenceFrequency: config.recurrence?.frequency ?? prev.recurrenceFrequency,
-            titleIsAutoSuggested: false, descriptionIsAutoSuggested: false,
-        }));
-        toast.success('Template loaded');
-    }
 
     function saveTemplate() {
         if (!saveTemplateName.trim()) return;
@@ -81,215 +100,138 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         );
     }
 
-    const mutation = useMutation({
-        mutationFn: (dto: CreateEventDto) => isEditMode ? updateEvent(editEvent!.id, dto as UpdateEventDto) : createEvent(dto),
-        onSuccess: (event) => {
-            toast.success(isEditMode ? 'Event updated!' : 'Event created successfully!');
-            queryClient.invalidateQueries({ queryKey: ['events'] });
-            if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEvent!.id] });
-            navigate(`/events/${event.id}`);
-        },
-        onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
-    });
+    return {
+        templates: templatesData?.data ?? [],
+        saveTemplateName, setSaveTemplateName,
+        showSaveTemplate, setShowSaveTemplate,
+        createTemplateMutation, deleteTemplateMutation,
+        saveTemplate,
+    };
+}
 
-    const endTimePreview = useMemo(() => {
-        if (!form.startDate || !form.startTime || form.durationMinutes <= 0) return null;
-        const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
-        const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
-        return new TZDate(end, resolved).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: resolved });
-    }, [form.startDate, form.startTime, form.durationMinutes, resolved]);
-
-    const recurrenceCount = useMemo(
-        () => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil),
-        [form.recurrenceFrequency, form.startDate, form.recurrenceUntil],
-    );
-
-    function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
-        const validationErrors = validateForm(form);
-        setErrors(validationErrors);
-        const errorKeys = Object.keys(validationErrors);
-        if (errorKeys.length > 0) {
-            const fieldId = ERROR_FIELD_MAP[errorKeys[0]];
-            if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            return;
-        }
-        const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
-        const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
-        let recurrence: RecurrenceDto | undefined;
-        if (form.recurrenceFrequency) {
-            recurrence = { frequency: form.recurrenceFrequency, until: new TZDate(`${form.recurrenceUntil}T23:59:59`, resolved).toISOString() };
-        }
-        mutation.mutate({
-            title: form.title.trim(), description: form.description.trim() || undefined,
-            gameId: registryGameId ?? undefined, startTime: start.toISOString(), endTime: end.toISOString(),
-            slotConfig: buildSlotConfig(form), maxAttendees: form.maxAttendees ? parseInt(form.maxAttendees) : undefined,
-            autoUnbench: form.autoUnbench, recurrence,
-            contentInstances: form.selectedInstances.length > 0 ? form.selectedInstances : undefined,
-            reminder15min: form.reminder15min, reminder1hour: form.reminder1hour, reminder24hour: form.reminder24hour,
-        });
+function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
+    resolved: string, registryGameId: number | null | undefined,
+    mutate: (dto: CreateEventDto) => void) {
+    const validationErrors = validateForm(form);
+    setErrors(validationErrors);
+    const errorKeys = Object.keys(validationErrors);
+    if (errorKeys.length > 0) {
+        const fieldId = ERROR_FIELD_MAP[errorKeys[0]];
+        if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
     }
+    mutate(buildSubmitDto(form, resolved, registryGameId));
+}
+
+function useCreateEventFormState(editEvent?: EventResponseDto) {
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzAbbr = getTimezoneAbbr(resolved);
+    const [form, setForm] = useState<FormState>(() => getInitialState(editEvent, resolved));
+    const [errors, setErrors] = useState<FormErrors>({});
+    const registryGameId = useRegistryGameId(form.game);
+    const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
+    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id);
+    const tpl = useTemplateActions(form);
+    const endTimePreview = useEndTimePreview(form.startDate, form.startTime, form.durationMinutes, resolved);
+    const recurrenceCount = useMemo(() => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil), [form.recurrenceFrequency, form.startDate, form.recurrenceUntil]);
 
     function updateField<K extends keyof FormState>(field: K, value: FormState[K]) {
         setForm((prev) => ({ ...prev, [field]: value }));
         if (field in errors) setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
 
+    return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
+}
+
+export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
+    const isEditMode = !!editEvent;
+    const navigate = useNavigate();
+    const s = useCreateEventFormState(editEvent);
+
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-8">
-            <TemplatesBar templates={templates} onLoad={loadTemplate} onDelete={(id) => deleteTemplateMutation.mutate(id)} />
-            <FormSection title="Game & Content">
-                <GameDetailsSection
-                    game={form.game} eventTypeId={form.eventTypeId} title={form.title} description={form.description}
-                    selectedInstances={form.selectedInstances} titleIsAutoSuggested={form.titleIsAutoSuggested}
-                    descriptionIsAutoSuggested={form.descriptionIsAutoSuggested} titleError={errors.title}
-                    titleInputId="title" eventTypeSelectId="eventType" showEventType={!isEditMode}
-                    onGameChange={(game) => setForm((prev) => ({ ...prev, game, titleIsAutoSuggested: prev.titleIsAutoSuggested }))}
-                    onEventTypeIdChange={(id) => setForm((prev) => ({ ...prev, eventTypeId: id }))}
-                    onTitleChange={(title, isAuto) => { setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto })); if (!isAuto && errors.title) setErrors((prev) => ({ ...prev, title: undefined })); }}
-                    onDescriptionChange={(description, isAuto) => setForm((prev) => ({ ...prev, description, descriptionIsAutoSuggested: isAuto }))}
-                    onSelectedInstancesChange={(instances) => setForm((prev) => ({ ...prev, selectedInstances: instances }))}
-                    onEventTypeDefaults={(defaults: Partial<SlotState>) => setForm((prev) => ({ ...prev, ...defaults }))}
-                    interestCount={interestCount} interestLoading={interestLoading}
-                    slotBetween={<><div className="border-t border-edge-subtle -mx-0" /><h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3></>}
-                />
-            </FormSection>
+        <form onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate); }} className="space-y-4 sm:space-y-8">
+            <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
+            <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
+                isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} />
             <div className="border-t border-edge-subtle" />
-            <WhenSection
-                form={form} errors={errors} isEditMode={isEditMode} tzAbbr={tzAbbr}
-                endTimePreview={endTimePreview} recurrenceCount={recurrenceCount}
-                updateField={updateField} setErrors={setErrors}
-            />
+            <WhenSection form={s.form} errors={s.errors} isEditMode={isEditMode} tzAbbr={s.tzAbbr}
+                endTimePreview={s.endTimePreview} recurrenceCount={s.recurrenceCount} updateField={s.updateField} setErrors={s.setErrors} />
             <div className="border-t border-edge-subtle" />
-            <FormSection title="Roster">
-                <RosterSection
-                    slotType={form.slotType} slotTank={form.slotTank} slotHealer={form.slotHealer}
-                    slotDps={form.slotDps} slotFlex={form.slotFlex} slotPlayer={form.slotPlayer}
-                    maxAttendees={form.maxAttendees} autoUnbench={form.autoUnbench}
-                    maxAttendeesError={errors.maxAttendees} maxAttendeesId="maxAttendees"
-                    onSlotTypeChange={(v) => updateField('slotType', v)} onSlotTankChange={(v) => updateField('slotTank', v)}
-                    onSlotHealerChange={(v) => updateField('slotHealer', v)} onSlotDpsChange={(v) => updateField('slotDps', v)}
-                    onSlotFlexChange={(v) => updateField('slotFlex', v)} onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
-                    onMaxAttendeesChange={(v) => { updateField('maxAttendees', v); setErrors((prev) => ({ ...prev, maxAttendees: undefined })); }}
-                    onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}
-                />
-            </FormSection>
+            <RosterFormSection form={s.form} errors={s.errors} updateField={s.updateField} setErrors={s.setErrors} />
             <div className="border-t border-edge-subtle" />
-            <FormSection title="Reminders">
-                <RemindersSection
-                    reminder15min={form.reminder15min} reminder1hour={form.reminder1hour} reminder24hour={form.reminder24hour}
-                    onReminder15minChange={(v) => updateField('reminder15min', v)}
-                    onReminder1hourChange={(v) => updateField('reminder1hour', v)}
-                    onReminder24hourChange={(v) => updateField('reminder24hour', v)}
-                />
-            </FormSection>
+            <RemindersFormSection form={s.form} updateField={s.updateField} />
             <div className="border-t border-edge-subtle" />
-            <SaveTemplateBar
-                show={showSaveTemplate} name={saveTemplateName} isPending={createTemplateMutation.isPending}
-                onNameChange={setSaveTemplateName} onSave={saveTemplate}
-                onClose={() => { setShowSaveTemplate(false); setSaveTemplateName(''); }}
-            />
-            <FormFooter
-                isEditMode={isEditMode} isPending={mutation.isPending}
-                onShowSaveTemplate={() => setShowSaveTemplate(true)}
-                onCancel={() => navigate('/events')}
-            />
+            <SaveTemplateBar show={s.tpl.showSaveTemplate} name={s.tpl.saveTemplateName} isPending={s.tpl.createTemplateMutation.isPending}
+                onNameChange={s.tpl.setSaveTemplateName} onSave={s.tpl.saveTemplate}
+                onClose={() => { s.tpl.setShowSaveTemplate(false); s.tpl.setSaveTemplateName(''); }} />
+            <FormFooter isEditMode={isEditMode} isPending={s.mutation.isPending}
+                onShowSaveTemplate={() => s.tpl.setShowSaveTemplate(true)} onCancel={() => navigate('/events')} />
         </form>
     );
 }
 
-function TemplatesBar({ templates, onLoad, onDelete }: { templates: Array<{ id: number; name: string; config: TemplateConfigDto }>; onLoad: (c: TemplateConfigDto) => void; onDelete: (id: number) => void }) {
-    if (templates.length === 0) return null;
-    return (
-        <div className="flex items-center gap-3 -mb-2">
-            <span className="text-xs text-muted shrink-0">Load template:</span>
-            <div className="flex flex-wrap gap-2">
-                {templates.map((t) => (
-                    <div key={t.id} className="flex items-center gap-1">
-                        <button type="button" onClick={() => onLoad(t.config)} className="px-3 py-1 rounded-md bg-panel border border-edge text-xs text-secondary hover:text-foreground hover:border-emerald-500 transition-colors">{t.name}</button>
-                        <button type="button" onClick={() => onDelete(t.id)} className="p-0.5 text-dim hover:text-red-400 transition-colors" title="Delete template">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function WhenSection({ form, errors, isEditMode, tzAbbr, endTimePreview, recurrenceCount, updateField, setErrors }: {
-    form: FormState; errors: FormErrors; isEditMode: boolean; tzAbbr: string;
-    endTimePreview: string | null; recurrenceCount: number;
-    updateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
-    setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
+function GameContentSection({ form, setForm, errors, setErrors, isEditMode, interestCount, interestLoading }: {
+    form: FormState; setForm: React.Dispatch<React.SetStateAction<FormState>>;
+    errors: FormErrors; setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
+    isEditMode: boolean;
+    interestCount: number; interestLoading: boolean;
 }) {
     return (
-        <FormSection title="When">
-            <p className="text-xs text-muted -mt-2">Times in {tzAbbr}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label htmlFor="startDate" className="block text-sm font-medium text-secondary mb-2">Date <span className="text-red-400">*</span></label>
-                    <input id="startDate" type="date" value={form.startDate} onChange={(e) => updateField('startDate', e.target.value)} className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.startDate ? 'border-red-500' : 'border-edge'}`} />
-                    {errors.startDate && <p className="mt-1 text-sm text-red-400">{errors.startDate}</p>}
-                </div>
-                <div>
-                    <label htmlFor="startTime" className="block text-sm font-medium text-secondary mb-2">Start Time <span className="text-red-400">*</span></label>
-                    <input id="startTime" type="time" value={form.startTime} onChange={(e) => updateField('startTime', e.target.value)} className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.startTime ? 'border-red-500' : 'border-edge'}`} />
-                    {errors.startTime && <p className="mt-1 text-sm text-red-400">{errors.startTime}</p>}
-                </div>
-            </div>
-            <DurationSection durationMinutes={form.durationMinutes} customDuration={form.customDuration} durationError={errors.duration} onDurationMinutesChange={(v) => updateField('durationMinutes', v)} onCustomDurationChange={(v) => updateField('customDuration', v)} onDurationErrorClear={() => setErrors((prev) => ({ ...prev, duration: undefined }))} />
-            {endTimePreview && (
-                <div className="flex items-center gap-2 text-sm text-muted bg-panel/50 border border-edge-subtle rounded-lg px-4 py-2.5">
-                    <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    <span>Ends at <span className="text-emerald-400 font-medium">{endTimePreview} {tzAbbr}</span> ({formatDuration(form.durationMinutes)})</span>
-                </div>
-            )}
-            {!isEditMode && (
-                <>
-                    <div>
-                        <label htmlFor="recurrence" className="block text-sm font-medium text-secondary mb-2">Repeat</label>
-                        <select id="recurrence" value={form.recurrenceFrequency} onChange={(e) => updateField('recurrenceFrequency', e.target.value as FormState['recurrenceFrequency'])} className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors">
-                            {RECURRENCE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                        </select>
-                    </div>
-                    {form.recurrenceFrequency && (
-                        <div>
-                            <label htmlFor="recurrenceUntil" className="block text-sm font-medium text-secondary mb-2">Repeat Until <span className="text-red-400">*</span></label>
-                            <input id="recurrenceUntil" type="date" value={form.recurrenceUntil} min={form.startDate || undefined} onChange={(e) => { updateField('recurrenceUntil', e.target.value); setErrors((prev) => ({ ...prev, recurrenceUntil: undefined })); }} className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.recurrenceUntil ? 'border-red-500' : 'border-edge'}`} />
-                            {errors.recurrenceUntil && <p className="mt-1 text-sm text-red-400">{errors.recurrenceUntil}</p>}
-                            {recurrenceCount > 0 && <p className="mt-1 text-sm text-muted">Creates <span className="text-emerald-400 font-medium">{recurrenceCount}</span> event{recurrenceCount !== 1 ? 's' : ''}</p>}
-                        </div>
-                    )}
-                </>
-            )}
+        <FormSection title="Game & Content">
+            <GameDetailsSection
+                game={form.game} eventTypeId={form.eventTypeId} title={form.title} description={form.description}
+                selectedInstances={form.selectedInstances} titleIsAutoSuggested={form.titleIsAutoSuggested}
+                descriptionIsAutoSuggested={form.descriptionIsAutoSuggested} titleError={errors.title}
+                titleInputId="title" eventTypeSelectId="eventType" showEventType={!isEditMode}
+                onGameChange={(game) => setForm((prev) => ({ ...prev, game, titleIsAutoSuggested: prev.titleIsAutoSuggested }))}
+                onEventTypeIdChange={(id) => setForm((prev) => ({ ...prev, eventTypeId: id }))}
+                onTitleChange={(title, isAuto) => { setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto })); if (!isAuto && errors.title) setErrors((prev) => ({ ...prev, title: undefined })); }}
+                onDescriptionChange={(description, isAuto) => setForm((prev) => ({ ...prev, description, descriptionIsAutoSuggested: isAuto }))}
+                onSelectedInstancesChange={(instances) => setForm((prev) => ({ ...prev, selectedInstances: instances }))}
+                onEventTypeDefaults={(defaults: Partial<SlotState>) => setForm((prev) => ({ ...prev, ...defaults }))}
+                interestCount={interestCount} interestLoading={interestLoading}
+                slotBetween={<><div className="border-t border-edge-subtle -mx-0" /><h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3></>}
+            />
         </FormSection>
     );
 }
 
-function SaveTemplateBar({ show, name, isPending, onNameChange, onSave, onClose }: { show: boolean; name: string; isPending: boolean; onNameChange: (v: string) => void; onSave: () => void; onClose: () => void }) {
-    if (!show) return null;
+function RosterFormSection({ form, errors, updateField, setErrors }: {
+    form: FormState; errors: FormErrors;
+    updateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
+    setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
+}) {
     return (
-        <div className="flex items-center gap-3 bg-panel/50 border border-edge-subtle rounded-lg px-4 py-3">
-            <input type="text" value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Template name..." maxLength={100} className="flex-1 px-3 py-2 bg-panel border border-edge rounded-md text-sm text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-            <button type="button" onClick={onSave} disabled={!name.trim() || isPending} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-white text-sm font-medium rounded-md transition-colors">{isPending ? 'Saving...' : 'Save'}</button>
-            <button type="button" onClick={onClose} className="p-2 text-muted hover:text-foreground transition-colors">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-        </div>
+        <FormSection title="Roster">
+            <RosterSection
+                slotType={form.slotType} slotTank={form.slotTank} slotHealer={form.slotHealer}
+                slotDps={form.slotDps} slotFlex={form.slotFlex} slotPlayer={form.slotPlayer}
+                maxAttendees={form.maxAttendees} autoUnbench={form.autoUnbench}
+                maxAttendeesError={errors.maxAttendees} maxAttendeesId="maxAttendees"
+                onSlotTypeChange={(v) => updateField('slotType', v)} onSlotTankChange={(v) => updateField('slotTank', v)}
+                onSlotHealerChange={(v) => updateField('slotHealer', v)} onSlotDpsChange={(v) => updateField('slotDps', v)}
+                onSlotFlexChange={(v) => updateField('slotFlex', v)} onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
+                onMaxAttendeesChange={(v) => { updateField('maxAttendees', v); setErrors((prev) => ({ ...prev, maxAttendees: undefined })); }}
+                onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}
+            />
+        </FormSection>
     );
 }
 
-function FormFooter({ isEditMode, isPending, onShowSaveTemplate, onCancel }: { isEditMode: boolean; isPending: boolean; onShowSaveTemplate: () => void; onCancel: () => void }) {
+function RemindersFormSection({ form, updateField }: {
+    form: FormState; updateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
+}) {
     return (
-        <div className="flex items-center justify-between pt-2">
-            <button type="button" onClick={onShowSaveTemplate} className="text-sm text-muted hover:text-secondary transition-colors">Save as Template</button>
-            <div className="flex items-center gap-4">
-                <button type="button" onClick={onCancel} className="px-6 py-3 text-secondary hover:text-foreground font-medium transition-colors">Cancel</button>
-                <button type="submit" disabled={isPending} className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-semibold rounded-lg transition-colors">
-                    {isPending ? (isEditMode ? 'Saving...' : 'Creating...') : (isEditMode ? 'Save Changes' : 'Create Event')}
-                </button>
-            </div>
-        </div>
+        <FormSection title="Reminders">
+            <RemindersSection
+                reminder15min={form.reminder15min} reminder1hour={form.reminder1hour} reminder24hour={form.reminder24hour}
+                onReminder15minChange={(v) => updateField('reminder15min', v)}
+                onReminder1hourChange={(v) => updateField('reminder1hour', v)}
+                onReminder24hourChange={(v) => updateField('reminder24hour', v)}
+            />
+        </FormSection>
     );
 }
+
+
+

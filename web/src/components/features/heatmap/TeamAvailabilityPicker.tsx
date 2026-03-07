@@ -23,127 +23,75 @@ interface TeamAvailabilityPickerProps {
  * 
  * Uses the same HeatmapGrid component as Event Detail page for consistency.
  */
-export function TeamAvailabilityPicker({
-    eventId,
-    eventStartTime,
-    eventEndTime,
-    gameId,
-}: TeamAvailabilityPickerProps) {
+function computeDateRange(eventStartTime?: string, eventEndTime?: string) {
+    if (eventStartTime && eventEndTime) {
+        const start = new Date(eventStartTime);
+        const end = new Date(eventEndTime);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+        return { from: start.toISOString(), to: end.toISOString() };
+    }
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return { from: now.toISOString(), to: weekLater.toISOString() };
+}
+
+function PickerHeader({ title, userCount, isEditMode, isExpanded, onToggle }: {
+    title: string; userCount: number; isEditMode: boolean; isExpanded: boolean; onToggle: () => void;
+}) {
+    return (
+        <button type="button" onClick={onToggle} className="w-full px-4 py-3 flex items-center justify-between hover:bg-overlay/50 transition-colors">
+            <span className="text-sm font-medium text-secondary flex items-center gap-2">
+                <span>📅</span>
+                {title}
+                {userCount > 0 && (
+                    <span className="text-xs bg-emerald-600/20 text-emerald-400 px-2 py-0.5 rounded">
+                        {isEditMode ? `${userCount} user${userCount > 1 ? 's' : ''}` : 'Available'}
+                    </span>
+                )}
+            </span>
+            <span className="text-muted text-sm">{isExpanded ? '▼' : '▶'}</span>
+        </button>
+    );
+}
+
+function PickerContent({ isLoading, displayData, emptyMessage }: {
+    isLoading: boolean; displayData: RosterAvailabilityResponse | null; emptyMessage: string;
+}) {
+    if (isLoading) {
+        return <div className="space-y-2 py-4"><div className="h-6 bg-overlay rounded animate-pulse" /><div className="h-24 bg-overlay rounded animate-pulse" /></div>;
+    }
+    if (displayData && displayData.users.length > 0) {
+        return <div className="pt-2"><HeatmapGrid data={displayData} slotDurationMinutes={60} /></div>;
+    }
+    return <div className="text-center py-6 text-muted text-sm">{emptyMessage}</div>;
+}
+
+export function TeamAvailabilityPicker({ eventId, eventStartTime, eventEndTime, gameId }: TeamAvailabilityPickerProps) {
     const [isExpanded, setIsExpanded] = useState(false);
+    const dateRange = useMemo(() => computeDateRange(eventStartTime, eventEndTime), [eventStartTime, eventEndTime]);
 
-    // Calculate date range - show 3 days before and after the event time, or next 7 days if no event time
-    const dateRange = useMemo(() => {
-        if (eventStartTime && eventEndTime) {
-            const start = new Date(eventStartTime);
-            const end = new Date(eventEndTime);
-            // Expand to show full day context
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
-            return {
-                from: start.toISOString(),
-                to: end.toISOString(),
-            };
-        }
-        // Default: next 7 days
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-        const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        return {
-            from: now.toISOString(),
-            to: weekLater.toISOString(),
-        };
-    }, [eventStartTime, eventEndTime]);
+    const { data: rosterAvailability, isLoading: rosterLoading } = useRosterAvailability(eventId ?? 0, { from: dateRange.from, to: dateRange.to }, !!eventId);
+    const { data: myAvailability, isLoading: myLoading } = useMyAvailability({ from: dateRange.from, to: dateRange.to, gameId }, !eventId);
 
-    // Edit mode: fetch signed-up users' availability
-    const {
-        data: rosterAvailability,
-        isLoading: rosterLoading,
-    } = useRosterAvailability(
-        eventId ?? 0,
-        { from: dateRange.from, to: dateRange.to },
-        !!eventId // Only enable if we have an eventId
-    );
-
-    // Create mode: fetch current user's availability
-    const {
-        data: myAvailability,
-        isLoading: myLoading,
-    } = useMyAvailability(
-        { from: dateRange.from, to: dateRange.to, gameId },
-        !eventId // Only enable if we don't have an eventId
-    );
-
-    // Determine which data to use
     const isEditMode = !!eventId;
     const isLoading = isEditMode ? rosterLoading : myLoading;
-    const availabilityData: RosterAvailabilityResponse | null = isEditMode
-        ? rosterAvailability ?? null
-        : myAvailability ?? null;
+    const availabilityData: RosterAvailabilityResponse | null = isEditMode ? rosterAvailability ?? null : myAvailability ?? null;
 
-    // Build display data with event time range if we have it
-    const displayData: RosterAvailabilityResponse | null = useMemo(() => {
+    const displayData = useMemo<RosterAvailabilityResponse | null>(() => {
         if (!availabilityData) return null;
-
-        // If event times provided, use those as the display range
-        if (eventStartTime && eventEndTime) {
-            return {
-                ...availabilityData,
-                timeRange: {
-                    start: eventStartTime,
-                    end: eventEndTime,
-                },
-            };
-        }
+        if (eventStartTime && eventEndTime) return { ...availabilityData, timeRange: { start: eventStartTime, end: eventEndTime } };
         return availabilityData;
     }, [availabilityData, eventStartTime, eventEndTime]);
 
     const title = isEditMode ? 'Team Availability' : 'Your Availability';
-    const emptyMessage = isEditMode
-        ? 'No signups yet to show availability for.'
-        : 'No availability set. Add your availability in your profile.';
+    const emptyMessage = isEditMode ? 'No signups yet to show availability for.' : 'No availability set. Add your availability in your profile.';
 
     return (
         <div className="bg-panel/50 rounded-lg border border-edge overflow-hidden">
-            <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full px-4 py-3 flex items-center justify-between hover:bg-overlay/50 transition-colors"
-            >
-                <span className="text-sm font-medium text-secondary flex items-center gap-2">
-                    <span>📅</span>
-                    {title}
-                    {availabilityData && availabilityData.users.length > 0 && (
-                        <span className="text-xs bg-emerald-600/20 text-emerald-400 px-2 py-0.5 rounded">
-                            {isEditMode
-                                ? `${availabilityData.users.length} user${availabilityData.users.length > 1 ? 's' : ''}`
-                                : 'Available'
-                            }
-                        </span>
-                    )}
-                </span>
-                <span className="text-muted text-sm">
-                    {isExpanded ? '▼' : '▶'}
-                </span>
-            </button>
-
-            {isExpanded && (
-                <div className="px-4 pb-4">
-                    {isLoading ? (
-                        <div className="space-y-2 py-4">
-                            <div className="h-6 bg-overlay rounded animate-pulse" />
-                            <div className="h-24 bg-overlay rounded animate-pulse" />
-                        </div>
-                    ) : displayData && displayData.users.length > 0 ? (
-                        <div className="pt-2">
-                            <HeatmapGrid data={displayData} slotDurationMinutes={60} />
-                        </div>
-                    ) : (
-                        <div className="text-center py-6 text-muted text-sm">
-                            {emptyMessage}
-                        </div>
-                    )}
-                </div>
-            )}
+            <PickerHeader title={title} userCount={availabilityData?.users.length ?? 0} isEditMode={isEditMode} isExpanded={isExpanded} onToggle={() => setIsExpanded(!isExpanded)} />
+            {isExpanded && <div className="px-4 pb-4"><PickerContent isLoading={isLoading} displayData={displayData} emptyMessage={emptyMessage} /></div>}
         </div>
     );
 }

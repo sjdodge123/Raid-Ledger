@@ -61,25 +61,69 @@ export function PugFormModal({
     );
 }
 
-/** Inner form body — keyed to re-mount when editingPug changes */
-function PugFormBody({
-    editingPug,
-    onSubmit,
-    onClose,
-    isSubmitting,
-    isEditing,
-    isMMOGame,
-}: {
-    editingPug?: PugSlotResponseDto | null;
-    onSubmit: PugFormModalProps['onSubmit'];
-    onClose: () => void;
-    isSubmitting: boolean;
-    isEditing: boolean;
-    isMMOGame: boolean;
+const INPUT_CLASS = 'w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500';
+
+function PugTextField({ id, label, value, onChange, placeholder, required, autoFocus, optional }: {
+    id: string; label: string; value: string; onChange: (v: string) => void;
+    placeholder: string; required?: boolean; autoFocus?: boolean; optional?: boolean;
 }) {
-    const [discordUsername, setDiscordUsername] = useState(
-        editingPug?.discordUsername ?? '',
+    return (
+        <div>
+            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-1">
+                {label} {required ? <span className="text-red-400">*</span> : optional ? <span className="text-dim">(optional)</span> : null}
+            </label>
+            <input id={id} type="text" value={value} onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder} className={INPUT_CLASS} required={required} autoFocus={autoFocus} />
+        </div>
     );
+}
+
+function PugRoleSelector({ role, onChange }: { role: PugRole; onChange: (r: PugRole) => void }) {
+    return (
+        <div>
+            <label className="block text-sm font-medium text-secondary mb-1">Role <span className="text-red-400">*</span></label>
+            <div className="flex gap-2">
+                {ROLE_OPTIONS.map((opt) => (
+                    <button key={opt.value} type="button" onClick={() => onChange(opt.value)}
+                        className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${role === opt.value ? 'border-indigo-500 bg-indigo-500/20 text-indigo-300' : 'border-edge bg-panel text-muted hover:bg-panel/80'}`}>
+                        <span className="mr-1">{opt.emoji}</span>{opt.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function submitLabel(isSubmitting: boolean, isEditing: boolean) {
+    if (isSubmitting) return isEditing ? 'Saving...' : 'Adding...';
+    return isEditing ? 'Save Changes' : 'Add PUG';
+}
+
+function PugNotesField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+    return (
+        <div>
+            <label htmlFor="pug-notes" className="block text-sm font-medium text-secondary mb-1">Notes <span className="text-dim">(optional)</span></label>
+            <textarea id="pug-notes" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Any notes about this PUG..." rows={2} className={`${INPUT_CLASS} resize-none`} />
+        </div>
+    );
+}
+
+function PugFormActions({ onClose, isSubmitting, isEditing, canSubmit }: { onClose: () => void; isSubmitting: boolean; isEditing: boolean; canSubmit: boolean }) {
+    return (
+        <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="btn btn-secondary btn-sm" disabled={isSubmitting}>Cancel</button>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={!canSubmit || isSubmitting}>{submitLabel(isSubmitting, isEditing)}</button>
+        </div>
+    );
+}
+
+function PugFormBody({
+    editingPug, onSubmit, onClose, isSubmitting, isEditing, isMMOGame,
+}: {
+    editingPug?: PugSlotResponseDto | null; onSubmit: PugFormModalProps['onSubmit'];
+    onClose: () => void; isSubmitting: boolean; isEditing: boolean; isMMOGame: boolean;
+}) {
+    const [discordUsername, setDiscordUsername] = useState(editingPug?.discordUsername ?? '');
     const [role, setRole] = useState<PugRole>(editingPug?.role ?? (isMMOGame ? 'dps' : 'player'));
     const [charClass, setCharClass] = useState(editingPug?.class ?? '');
     const [spec, setSpec] = useState(editingPug?.spec ?? '');
@@ -88,144 +132,17 @@ function PugFormBody({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!discordUsername.trim()) return;
-        onSubmit({
-            discordUsername: discordUsername.trim(),
-            role,
-            class: charClass.trim() || undefined,
-            spec: spec.trim() || undefined,
-            notes: notes.trim() || undefined,
-        });
+        onSubmit({ discordUsername: discordUsername.trim(), role, class: charClass.trim() || undefined, spec: spec.trim() || undefined, notes: notes.trim() || undefined });
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Discord Username */}
-            <div>
-                <label
-                    htmlFor="pug-discord-username"
-                    className="block text-sm font-medium text-secondary mb-1"
-                >
-                    Discord Username <span className="text-red-400">*</span>
-                </label>
-                <input
-                    id="pug-discord-username"
-                    type="text"
-                    value={discordUsername}
-                    onChange={(e) => setDiscordUsername(e.target.value)}
-                    placeholder="e.g. CoolPlayer#1234"
-                    className="w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    required
-                    autoFocus
-                />
-            </div>
-
-            {/* Role Selector (MMO games only) */}
-            {isMMOGame && (
-                <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                        Role <span className="text-red-400">*</span>
-                    </label>
-                    <div className="flex gap-2">
-                        {ROLE_OPTIONS.map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => setRole(opt.value)}
-                                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                                    role === opt.value
-                                        ? 'border-indigo-500 bg-indigo-500/20 text-indigo-300'
-                                        : 'border-edge bg-panel text-muted hover:bg-panel/80'
-                                }`}
-                            >
-                                <span className="mr-1">{opt.emoji}</span>
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Class & Spec (optional, MMO games only) */}
-            {isMMOGame && (
-                <>
-                    <div>
-                        <label
-                            htmlFor="pug-class"
-                            className="block text-sm font-medium text-secondary mb-1"
-                        >
-                            Class <span className="text-dim">(optional)</span>
-                        </label>
-                        <input
-                            id="pug-class"
-                            type="text"
-                            value={charClass}
-                            onChange={(e) => setCharClass(e.target.value)}
-                            placeholder="e.g. Warrior, Paladin"
-                            className="w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                    </div>
-
-                    <div>
-                        <label
-                            htmlFor="pug-spec"
-                            className="block text-sm font-medium text-secondary mb-1"
-                        >
-                            Spec <span className="text-dim">(optional)</span>
-                        </label>
-                        <input
-                            id="pug-spec"
-                            type="text"
-                            value={spec}
-                            onChange={(e) => setSpec(e.target.value)}
-                            placeholder="e.g. Protection, Holy"
-                            className="w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                    </div>
-                </>
-            )}
-
-            {/* Notes (optional) */}
-            <div>
-                <label
-                    htmlFor="pug-notes"
-                    className="block text-sm font-medium text-secondary mb-1"
-                >
-                    Notes <span className="text-dim">(optional)</span>
-                </label>
-                <textarea
-                    id="pug-notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Any notes about this PUG..."
-                    rows={2}
-                    className="w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
-                />
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-2 pt-2">
-                <button
-                    type="button"
-                    onClick={onClose}
-                    className="btn btn-secondary btn-sm"
-                    disabled={isSubmitting}
-                >
-                    Cancel
-                </button>
-                <button
-                    type="submit"
-                    className="btn btn-primary btn-sm"
-                    disabled={!discordUsername.trim() || isSubmitting}
-                >
-                    {isSubmitting
-                        ? isEditing
-                            ? 'Saving...'
-                            : 'Adding...'
-                        : isEditing
-                            ? 'Save Changes'
-                            : 'Add PUG'}
-                </button>
-            </div>
+            <PugTextField id="pug-discord-username" label="Discord Username" value={discordUsername} onChange={setDiscordUsername} placeholder="e.g. CoolPlayer#1234" required autoFocus />
+            {isMMOGame && <PugRoleSelector role={role} onChange={setRole} />}
+            {isMMOGame && <PugTextField id="pug-class" label="Class" value={charClass} onChange={setCharClass} placeholder="e.g. Warrior, Paladin" optional />}
+            {isMMOGame && <PugTextField id="pug-spec" label="Spec" value={spec} onChange={setSpec} placeholder="e.g. Protection, Holy" optional />}
+            <PugNotesField value={notes} onChange={setNotes} />
+            <PugFormActions onClose={onClose} isSubmitting={isSubmitting} isEditing={isEditing} canSubmit={!!discordUsername.trim()} />
         </form>
     );
 }

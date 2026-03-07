@@ -7,74 +7,29 @@ const FADE_DURATION_MS = 300;
 /** Routes that must bypass the startup gate (time-sensitive auth flows). */
 const BYPASS_PATHS = ['/auth/success'];
 
-export function StartupGate({ children }: { children: ReactNode }) {
-    const hasBeenOnline = useConnectivityStore((s) => s.hasBeenOnline);
-    const check = useConnectivityStore((s) => s.check);
+function FadingOverlay({ onTransitionEnd }: { onTransitionEnd: () => void }) {
+    return (
+        <div
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-surface transition-opacity duration-300"
+            style={{ opacity: 0 }}
+            aria-hidden
+            onTransitionEnd={onTransitionEnd}
+        />
+    );
+}
 
-    const [isSlow, setIsSlow] = useState(false);
-    const [gateVisible, setGateVisible] = useState(true);
-
-    // Track how long we've been waiting
-    useEffect(() => {
-        if (hasBeenOnline) return;
-
-        const timer = setTimeout(() => setIsSlow(true), SLOW_THRESHOLD_MS);
-        return () => clearTimeout(timer);
-    }, [hasBeenOnline]);
-
-    // When API comes online, schedule gate removal after fade
-    useEffect(() => {
-        if (!hasBeenOnline) return;
-
-        const timer = setTimeout(() => setGateVisible(false), FADE_DURATION_MS);
-        return () => clearTimeout(timer);
-    }, [hasBeenOnline]);
-
-    // Handle the CSS transition end to fully remove the gate overlay sooner
-    const handleTransitionEnd = useCallback(() => {
-        setGateVisible(false);
-    }, []);
-
-    // Auth callback routes bypass the gate entirely — the auth code in Redis
-    // has a 30s TTL, so we can't afford to wait for the health check.
-    // These routes have their own error handling for API unavailability.
-    const isBypassRoute = BYPASS_PATHS.includes(window.location.pathname);
-
-    // Once the gate is fully gone (or bypassed), just render children
-    if (!gateVisible || isBypassRoute) {
-        return <>{children}</>;
-    }
-
-    // Gate is fading out — show both overlay (fading) and children underneath
-    if (hasBeenOnline) {
-        return (
-            <>
-                <div
-                    className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-surface transition-opacity duration-300"
-                    style={{ opacity: 0 }}
-                    aria-hidden
-                    onTransitionEnd={handleTransitionEnd}
-                />
-                {children}
-            </>
-        );
-    }
-
-    // Still waiting for API
+function WaitingScreen({ isSlow, onRetry }: { isSlow: boolean; onRetry: () => void }) {
     return (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-surface">
             <h1 className="text-2xl font-bold text-heading mb-6">Raid Ledger</h1>
-
             <div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin mb-4" />
-
             <p className="text-sm text-muted">
                 {isSlow ? 'Taking longer than usual...' : 'Starting up...'}
             </p>
-
             {isSlow && (
                 <button
                     type="button"
-                    onClick={() => void check()}
+                    onClick={onRetry}
                     className="mt-4 px-4 py-2 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
                 >
                     Retry now
@@ -82,4 +37,34 @@ export function StartupGate({ children }: { children: ReactNode }) {
             )}
         </div>
     );
+}
+
+export function StartupGate({ children }: { children: ReactNode }) {
+    const hasBeenOnline = useConnectivityStore((s) => s.hasBeenOnline);
+    const check = useConnectivityStore((s) => s.check);
+    const [isSlow, setIsSlow] = useState(false);
+    const [gateVisible, setGateVisible] = useState(true);
+
+    useEffect(() => {
+        if (hasBeenOnline) return;
+        const timer = setTimeout(() => setIsSlow(true), SLOW_THRESHOLD_MS);
+        return () => clearTimeout(timer);
+    }, [hasBeenOnline]);
+
+    useEffect(() => {
+        if (!hasBeenOnline) return;
+        const timer = setTimeout(() => setGateVisible(false), FADE_DURATION_MS);
+        return () => clearTimeout(timer);
+    }, [hasBeenOnline]);
+
+    const handleTransitionEnd = useCallback(() => setGateVisible(false), []);
+    const isBypassRoute = BYPASS_PATHS.includes(window.location.pathname);
+
+    if (!gateVisible || isBypassRoute) return <>{children}</>;
+
+    if (hasBeenOnline) {
+        return (<><FadingOverlay onTransitionEnd={handleTransitionEnd} />{children}</>);
+    }
+
+    return <WaitingScreen isSlow={isSlow} onRetry={() => void check()} />;
 }

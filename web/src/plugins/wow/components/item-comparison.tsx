@@ -70,24 +70,45 @@ interface ItemComparisonProps {
  *
  * ROK-246: Dungeon Companion — Quest Suggestions UI
  */
+function computeDelta(rewardItemLevel: number | null, equippedItemLevel: number): { deltaClass: string; deltaText: string } {
+    const delta = rewardItemLevel ? rewardItemLevel - equippedItemLevel : null;
+    if (delta === null) return { deltaClass: 'item-comparison__delta--neutral', deltaText: '' };
+    if (delta > 0) return { deltaClass: 'item-comparison__delta--upgrade', deltaText: `▲ +${delta} iLvl` };
+    if (delta < 0) return { deltaClass: 'item-comparison__delta--downgrade', deltaText: `▼ ${delta} iLvl` };
+    return { deltaClass: 'item-comparison__delta--neutral', deltaText: '= Same iLvl' };
+}
+
+function EquippedItemDisplay({ equippedItem, rewardItemLevel, gameVariant }: {
+    equippedItem: EquipmentItemDto; rewardItemLevel: number | null; gameVariant: string | null;
+}) {
+    const wowheadSuffix = getWowheadDataSuffix(gameVariant);
+    const { deltaClass, deltaText } = computeDelta(rewardItemLevel, equippedItem.itemLevel);
+    return (
+        <div className="item-comparison">
+            <span className="item-comparison__label">Equipped:</span>
+            <WowItemCard
+                itemId={equippedItem.itemId} name={equippedItem.name} quality={equippedItem.quality}
+                slot={equippedItem.slot} subclass={equippedItem.itemSubclass} itemLevel={equippedItem.itemLevel}
+                iconUrl={equippedItem.iconUrl} enchant={equippedItem.enchantments?.[0]?.displayString}
+                wowheadUrl={getWowheadItemUrl(equippedItem.itemId, gameVariant)}
+                wowheadData={`item=${equippedItem.itemId}&${wowheadSuffix}`}
+            />
+            {deltaText && <span className={`item-comparison__delta ${deltaClass}`}>{deltaText}</span>}
+        </div>
+    );
+}
+
 export function ItemComparison({
-    rewardItemLevel,
-    equippedItem,
-    gameVariant,
-    characterClass,
-    lootItemSubclass,
-    lootSlot,
+    rewardItemLevel, equippedItem, gameVariant,
+    characterClass, lootItemSubclass, lootSlot,
 }: ItemComparisonProps) {
     const equippable = isItemEquippable(characterClass, lootItemSubclass, lootSlot);
     const displaySubclass = lootItemSubclass ?? (lootSlot === 'Shield' ? 'Shield' : null);
 
-    // If the item is not equippable by this class, show that instead of comparison
     if (equippable === false) {
         return (
             <div className="item-comparison item-comparison--not-equippable">
-                <span className="item-comparison__not-equippable">
-                    Cannot equip {displaySubclass}
-                </span>
+                <span className="item-comparison__not-equippable">Cannot equip {displaySubclass}</span>
             </div>
         );
     }
@@ -101,48 +122,6 @@ export function ItemComparison({
         );
     }
 
-    const wowheadSuffix = getWowheadDataSuffix(gameVariant);
-
-    // Calculate iLvl delta
-    const delta = rewardItemLevel && equippedItem.itemLevel
-        ? rewardItemLevel - equippedItem.itemLevel
-        : null;
-
-    let deltaClass = 'item-comparison__delta--neutral';
-    let deltaText = '';
-    if (delta !== null) {
-        if (delta > 0) {
-            deltaClass = 'item-comparison__delta--upgrade';
-            deltaText = `▲ +${delta} iLvl`;
-        } else if (delta < 0) {
-            deltaClass = 'item-comparison__delta--downgrade';
-            deltaText = `▼ ${delta} iLvl`;
-        } else {
-            deltaText = '= Same iLvl';
-        }
-    }
-
-    return (
-        <div className="item-comparison">
-            <span className="item-comparison__label">Equipped:</span>
-            <WowItemCard
-                itemId={equippedItem.itemId}
-                name={equippedItem.name}
-                quality={equippedItem.quality}
-                slot={equippedItem.slot}
-                subclass={equippedItem.itemSubclass}
-                itemLevel={equippedItem.itemLevel}
-                iconUrl={equippedItem.iconUrl}
-                enchant={equippedItem.enchantments?.[0]?.displayString}
-                wowheadUrl={getWowheadItemUrl(equippedItem.itemId, gameVariant)}
-                wowheadData={`item=${equippedItem.itemId}&${wowheadSuffix}`}
-            />
-            {deltaText && (
-                <span className={`item-comparison__delta ${deltaClass}`}>
-                    {deltaText}
-                </span>
-            )}
-        </div>
-    );
+    return <EquippedItemDisplay equippedItem={equippedItem} rewardItemLevel={rewardItemLevel} gameVariant={gameVariant} />;
 }
 

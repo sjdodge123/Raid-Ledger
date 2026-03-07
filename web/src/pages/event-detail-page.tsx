@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
-import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
+import { useAuth, isOperatorOrAdmin, type User } from '../hooks/use-auth';
 import { useRoster } from '../hooks/use-roster';
 import { EventBanner } from '../components/events/EventBanner';
 import { RosterBuilder } from '../components/roster';
@@ -43,354 +43,248 @@ import './event-detail-page.css';
  * - Roster List below (grouped by status)
  * - Action buttons integrated
  */
-export function EventDetailPage(): JSX.Element | null {
-    const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
-    const location = useLocation();
-    const eventId = Number(id);
-
-    useNotifReadSync();
-    const navState = location.state as { fromCalendar?: boolean; calendarDate?: string; calendarView?: string } | null;
-    const fromCalendar = navState?.fromCalendar === true && !!navState?.calendarDate;
-    const hasHistory = location.key !== 'default';
-
-    const bannerRef = useRef<HTMLDivElement>(null);
-    const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
-
-    const { user, isAuthenticated } = useAuth();
-    const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
-    const { data: roster } = useEventRoster(eventId);
-    const { games } = useGameRegistry();
-
-    const isAdHoc = event?.isAdHoc ?? false;
-    const eventStatus = event ? getEventStatus(event.startTime, event.endTime) : null;
-    const showVoiceRoster = isAdHoc || eventStatus === 'live';
-    const voiceRoster = useVoiceRoster(showVoiceRoster ? eventId : null);
-
+function useVoiceChannelFetch(eventId: number, isAdHoc: boolean) {
     const [voiceChannel, setVoiceChannel] = useState<{ name: string; url: string } | null>(null);
     useEffect(() => {
         if (!eventId || isAdHoc) return;
         let cancelled = false;
-        fetchApi<{ channelId: string | null; channelName: string | null; guildId: string | null }>(
-            `/events/${eventId}/voice-channel`,
-        )
+        fetchApi<{ channelId: string | null; channelName: string | null; guildId: string | null }>(`/events/${eventId}/voice-channel`)
             .then((data) => {
                 if (!cancelled && data?.channelName && data.channelId) {
-                    setVoiceChannel({
-                        name: data.channelName,
-                        url: data.guildId ? `discord://discord.com/channels/${data.guildId}/${data.channelId}` : '',
-                    });
+                    setVoiceChannel({ name: data.channelName, url: data.guildId ? `discord://discord.com/channels/${data.guildId}/${data.channelId}` : '' });
                 }
             })
             .catch(() => { /* ignore */ });
         return () => { cancelled = true; };
     }, [eventId, isAdHoc]);
+    return voiceChannel;
+}
 
-    const gameRegistryEntry = games.find(
-        (g) => g.id === event?.game?.id || g.slug === event?.game?.slug,
-    );
-
-    const gameHasRoles = gameRegistryEntry?.hasRoles ?? event?.game?.hasRoles ?? false;
-    const gameId = event?.game?.id;
-    const { data: myCharsData } = useMyCharacters(gameId, !!gameId && !gameHasRoles);
-    const userHasCharactersForGame = (myCharsData?.data?.length ?? 0) > 0;
-    const shouldShowCharacterModal = !!gameId && (gameHasRoles || userHasCharactersForGame);
-
+function useBannerCollapse(event: EventResponseDto | undefined) {
+    const bannerRef = useRef<HTMLDivElement>(null);
+    const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
     useEffect(() => {
         const el = bannerRef.current;
         if (!el) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => setIsBannerCollapsed(!entry.isIntersecting),
-            { threshold: 0, rootMargin: '-64px 0px 0px 0px' },
-        );
+        const observer = new IntersectionObserver(([entry]) => setIsBannerCollapsed(!entry.isIntersecting), { threshold: 0, rootMargin: '-64px 0px 0px 0px' });
         observer.observe(el);
         return () => observer.disconnect();
     }, [event]);
+    return { bannerRef, isBannerCollapsed };
+}
 
-    const [searchParams, setSearchParams] = useSearchParams();
-    const deepLinkAction = searchParams.get('action');
-    const deepLinkReason = searchParams.get('reason');
-
-    const [showRescheduleModal, setShowRescheduleModal] = useState(false);
-    const [showCancelModal, setShowCancelModal] = useState(false);
-    const [showInviteModal, setShowInviteModal] = useState(false);
+function useEventDetailDerived(event: EventResponseDto | undefined, roster: EventRosterDto | undefined, user: User | null | undefined, isAuthenticated: boolean) {
+    const { games } = useGameRegistry();
+    const gameRegistryEntry = games.find((g) => g.id === event?.game?.id || g.slug === event?.game?.slug);
+    const gameHasRoles = gameRegistryEntry?.hasRoles ?? event?.game?.hasRoles ?? false;
+    const gameId = event?.game?.id;
+    const { data: myCharsData } = useMyCharacters(gameId, !!gameId && !gameHasRoles);
+    const shouldShowCharacterModal = !!gameId && (gameHasRoles || (myCharsData?.data?.length ?? 0) > 0);
 
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
     const isSignedUp = !!userSignup;
-
     const isEventCreator = user?.id != null && event?.creator?.id != null && user.id === event.creator.id;
-    const canManageEvent = isOperatorOrAdmin(user);
-    const canManageRoster = isEventCreator || canManageEvent;
-
-    const canDeepLink = !!event && (isEventCreator || canManageEvent);
-    const deepLinkShowCancel = canDeepLink && deepLinkAction === 'cancel';
-    const deepLinkShowReschedule = canDeepLink && deepLinkAction === 'reschedule';
+    const canManageRoster = isEventCreator || isOperatorOrAdmin(user);
 
     const isCancelled = !!event?.cancelledAt;
     const isEnded = event ? getEventStatus(event.startTime, event.endTime) === 'ended' : false;
-    const { data: rosterAssignments } = useRoster(eventId);
+    const { data: rosterAssignments } = useRoster(Number(event?.id ?? 0));
     const isInPool = isSignedUp && rosterAssignments?.pool.some(p => p.userId === user?.id);
     const canJoinSlot = isAuthenticated && (!isSignedUp || isInPool) && !canManageRoster && !isCancelled;
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
 
-    const handlers = useEventDetailHandlers(eventId, {
-        canManageRoster,
-        isAuthenticated,
-        shouldShowCharacterModal,
-    });
+    return { gameRegistryEntry, shouldShowCharacterModal, userSignup, isSignedUp, canManageRoster, isCancelled, isEnded, rosterAssignments, canJoinSlot, isMMOGame };
+}
 
-    if (eventError) {
-        return (
-            <div className="event-detail-page event-detail-page--error">
-                <div className="event-detail-error">
-                    <h2>Event not found</h2>
-                    <p>{eventError.message}</p>
-                    <button onClick={() => navigate('/calendar')} className="btn btn-secondary">
-                        Back to Calendar
-                    </button>
-                </div>
-            </div>
-        );
-    }
+function useEventDetailPageState() {
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+    const location = useLocation();
+    const eventId = Number(id);
+    useNotifReadSync();
 
-    if (eventLoading) {
-        return (
-            <div className="event-detail-page">
-                <EventDetailSkeleton />
-            </div>
-        );
-    }
+    const navState = location.state as { fromCalendar?: boolean; calendarDate?: string; calendarView?: string } | null;
+    const fromCalendar = navState?.fromCalendar === true && !!navState?.calendarDate;
+    const hasHistory = location.key !== 'default';
 
-    if (!event) return null;
+    const { user, isAuthenticated } = useAuth();
+    const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
+    const { data: roster } = useEventRoster(eventId);
 
+    return { eventId, navigate, navState, fromCalendar, hasHistory, user, isAuthenticated, event, eventLoading, eventError, roster };
+}
+
+function useEventDetailVoice(event: EventResponseDto | undefined, eventId: number) {
+    const isAdHoc = event?.isAdHoc ?? false;
+    const eventStatus = event ? getEventStatus(event.startTime, event.endTime) : null;
+    const showVoiceRoster = isAdHoc || eventStatus === 'live';
+    const voiceRoster = useVoiceRoster(showVoiceRoster ? eventId : null);
+    const voiceChannel = useVoiceChannelFetch(eventId, isAdHoc);
+    return { isAdHoc, eventStatus, showVoiceRoster, voiceRoster, voiceChannel };
+}
+
+type EventDetailDerived = ReturnType<typeof useEventDetailDerived>;
+type EventDetailHandlers = ReturnType<typeof useEventDetailHandlers>;
+type ModalState = ReturnType<typeof useModalState>;
+
+function EventDetailModals({ event, eventId, derived, handlers, showCancelModal, setShowCancelModal, showRescheduleModal, setShowRescheduleModal, showInviteModal, setShowInviteModal, roster, searchParams, setSearchParams }: {
+    event: EventResponseDto; eventId: number; derived: EventDetailDerived; handlers: EventDetailHandlers;
+    showCancelModal: boolean; setShowCancelModal: (v: boolean) => void; showRescheduleModal: boolean; setShowRescheduleModal: (v: boolean) => void;
+    showInviteModal: boolean; setShowInviteModal: (v: boolean) => void; roster: EventRosterDto | undefined;
+    searchParams: URLSearchParams; setSearchParams: ReturnType<typeof useSearchParams>[1];
+}) {
+    const deepLinkAction = searchParams.get('action');
+    const deepLinkReason = searchParams.get('reason');
+    const canDeepLink = derived.canManageRoster;
+    const clearDeepLink = () => { if (deepLinkAction) setSearchParams({}, { replace: true }); };
+    return (
+        <>
+            <ConfirmModalSection show={handlers.showConfirmModal} onClose={handlers.closeConfirmModal} onConfirm={handlers.handleSelectionConfirm} onSkip={handlers.handleSelectionSkip}
+                isConfirming={handlers.signup.isPending} gameId={derived.gameRegistryEntry?.id ?? event.game?.id ?? undefined} gameName={event.game?.name ?? undefined}
+                hasRoles={derived.gameRegistryEntry?.hasRoles ?? true} gameSlug={event.game?.slug ?? undefined} preSelectedRole={handlers.preSelectedRole} eventId={eventId} />
+            <CancelModalSection show={showCancelModal || (canDeepLink && deepLinkAction === 'cancel')} eventId={eventId} eventTitle={event.title} signupCount={event.signupCount} initialReason={deepLinkReason ?? undefined}
+                onClose={() => { setShowCancelModal(false); clearDeepLink(); }} />
+            <RescheduleModalSection show={showRescheduleModal || (canDeepLink && deepLinkAction === 'reschedule')} eventId={eventId} currentStartTime={event.startTime} currentEndTime={event.endTime}
+                eventTitle={event.title} gameSlug={event.game?.slug} gameName={event.game?.name} coverUrl={event.game?.coverUrl} description={event.description}
+                creatorUsername={event.creator?.username} signupCount={event.signupCount} initialReason={deepLinkReason ?? undefined}
+                onClose={() => { setShowRescheduleModal(false); clearDeepLink(); }} />
+            <RemoveConfirmModal removeConfirm={handlers.removeConfirm} onClose={() => handlers.setRemoveConfirm(null)} onConfirm={handlers.handleConfirmRemoveFromEvent} isPending={handlers.adminRemoveUser.isPending} />
+            <InviteModalSection show={showInviteModal} onClose={() => setShowInviteModal(false)} eventId={eventId} pugs={handlers.pugs} roster={roster} isMMOGame={derived.isMMOGame} />
+        </>
+    );
+}
+
+function useModalState() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [showInviteModal, setShowInviteModal] = useState(false);
+    return { searchParams, setSearchParams, showRescheduleModal, setShowRescheduleModal, showCancelModal, setShowCancelModal, showInviteModal, setShowInviteModal };
+}
+
+type PageState = ReturnType<typeof useEventDetailPageState>;
+type VoiceState = ReturnType<typeof useEventDetailVoice>;
+
+function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, handlers, modals }: {
+    page: PageState & { event: EventResponseDto }; voice: VoiceState; bannerRef: React.RefObject<HTMLDivElement | null>;
+    isBannerCollapsed: boolean; derived: EventDetailDerived; handlers: EventDetailHandlers; modals: ModalState;
+}) {
     return (
         <div className="event-detail-page pb-20 md:pb-0">
-            <EventDetailTopbar
-                fromCalendar={fromCalendar}
-                navState={navState}
-                hasHistory={hasHistory}
-                isAuthenticated={isAuthenticated}
-                canManageRoster={canManageRoster}
-                isCancelled={isCancelled}
-                isEnded={isEnded}
-                eventId={eventId}
-                onInvite={() => setShowInviteModal(true)}
-                onReschedule={() => setShowRescheduleModal(true)}
-                onCancel={() => setShowCancelModal(true)}
-            />
-
-            <CancelledBanner event={event} isCancelled={isCancelled} />
-
+            <EventDetailTopbar fromCalendar={page.fromCalendar} navState={page.navState} hasHistory={page.hasHistory} isAuthenticated={page.isAuthenticated}
+                canManageRoster={derived.canManageRoster} isCancelled={derived.isCancelled} isEnded={derived.isEnded} eventId={page.eventId}
+                onInvite={() => modals.setShowInviteModal(true)} onReschedule={() => modals.setShowRescheduleModal(true)} onCancel={() => modals.setShowCancelModal(true)} />
+            <CancelledBanner event={page.event} isCancelled={derived.isCancelled} />
             <div ref={bannerRef}>
-                <EventBanner
-                    title={event.title}
-                    game={event.game}
-                    startTime={event.startTime}
-                    endTime={event.endTime}
-                    creator={event.creator}
-                    description={event.description}
-                    voiceChannelName={voiceChannel?.name ?? null}
-                    voiceChannelUrl={voiceChannel?.url ?? null}
-                />
+                <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator}
+                    description={page.event.description} voiceChannelName={voice.voiceChannel?.name ?? null} voiceChannelUrl={voice.voiceChannel?.url ?? null} />
             </div>
+            <PostEventSections event={page.event} eventId={page.eventId} isCancelled={derived.isCancelled} isAdHoc={voice.isAdHoc} canManageRoster={derived.canManageRoster} />
+            <MobileQuickInfo event={page.event} roster={page.roster} isSignedUp={derived.isSignedUp} alphabetical={alphabetical} />
+            {isBannerCollapsed && <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator} isCollapsed />}
+            <RosterSlotSection event={page.event} eventId={page.eventId} roster={page.roster} rosterAssignments={derived.rosterAssignments}
+                isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp} userSignup={derived.userSignup}
+                canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />
+            <EventDetailFallbackSignup rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
+                isCancelled={derived.isCancelled} onSignup={handlers.handleSignup} isPending={handlers.signup.isPending} />
+            <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
+            <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} />
+            <EventDetailRoster roster={page.roster} event={page.event} />
+            <PluginSlot name="event-detail:content-sections" context={{ contentInstances: page.event.contentInstances ?? [], eventId: page.eventId, gameSlug: page.event.game?.slug, characterId: derived.userSignup?.character?.id }} />
+            <EventDetailModals event={page.event} eventId={page.eventId} derived={derived} handlers={handlers} roster={page.roster} {...modals} />
+        </div>
+    );
+}
 
-            <PostEventSections
-                event={event}
-                eventId={eventId}
-                isCancelled={isCancelled}
-                isAdHoc={isAdHoc}
-                canManageRoster={canManageRoster}
-            />
+export function EventDetailPage(): JSX.Element | null {
+    const page = useEventDetailPageState();
+    const voice = useEventDetailVoice(page.event, page.eventId);
+    const { bannerRef, isBannerCollapsed } = useBannerCollapse(page.event);
+    const derived = useEventDetailDerived(page.event, page.roster, page.user, page.isAuthenticated);
+    const modals = useModalState();
+    const handlers = useEventDetailHandlers(page.eventId, { canManageRoster: derived.canManageRoster, isAuthenticated: page.isAuthenticated, shouldShowCharacterModal: derived.shouldShowCharacterModal });
 
-            <MobileQuickInfo
-                event={event}
-                roster={roster}
-                isSignedUp={isSignedUp}
-                alphabetical={alphabetical}
-            />
+    if (page.eventError) return <EventDetailError message={page.eventError.message} onBack={() => page.navigate('/calendar')} />;
+    if (page.eventLoading) return <div className="event-detail-page"><EventDetailSkeleton /></div>;
+    if (!page.event) return null;
 
-            {isBannerCollapsed && (
-                <EventBanner
-                    title={event.title}
-                    game={event.game}
-                    startTime={event.startTime}
-                    endTime={event.endTime}
-                    creator={event.creator}
-                    isCollapsed
-                />
-            )}
+    return <EventDetailBody page={page as PageState & { event: EventResponseDto }} voice={voice} bannerRef={bannerRef} isBannerCollapsed={isBannerCollapsed} derived={derived} handlers={handlers} modals={modals} />;
+}
 
-            <RosterSlotSection
-                event={event}
-                eventId={eventId}
-                roster={roster}
-                rosterAssignments={rosterAssignments}
-                isAuthenticated={isAuthenticated}
-                isSignedUp={isSignedUp}
-                userSignup={userSignup}
-                canManageRoster={canManageRoster}
-                canJoinSlot={!!canJoinSlot}
-                isMMOGame={isMMOGame}
-                handlers={handlers}
-                user={user}
-            />
+function EventDetailError({ message, onBack }: { message: string; onBack: () => void }) {
+    return (
+        <div className="event-detail-page event-detail-page--error">
+            <div className="event-detail-error">
+                <h2>Event not found</h2>
+                <p>{message}</p>
+                <button onClick={onBack} className="btn btn-secondary">Back to Calendar</button>
+            </div>
+        </div>
+    );
+}
 
-            {!rosterAssignments && isAuthenticated && !isSignedUp && !isCancelled && (
-                <div className="event-detail-signup-fallback">
-                    <button
-                        onClick={handlers.handleSignup}
-                        disabled={handlers.signup.isPending}
-                        className="btn btn-primary"
-                    >
-                        {handlers.signup.isPending ? 'Signing up...' : 'Sign Up for Event'}
-                    </button>
-                </div>
-            )}
+function EventDetailFallbackSignup({ rosterAssignments, isAuthenticated, isSignedUp, isCancelled, onSignup, isPending }: {
+    rosterAssignments: unknown; isAuthenticated: boolean; isSignedUp: boolean; isCancelled: boolean; onSignup: () => void; isPending: boolean;
+}) {
+    if (rosterAssignments || !isAuthenticated || isSignedUp || isCancelled) return null;
+    return (
+        <div className="event-detail-signup-fallback">
+            <button onClick={onSignup} disabled={isPending} className="btn btn-primary">{isPending ? 'Signing up...' : 'Sign Up for Event'}</button>
+        </div>
+    );
+}
 
-            {!rosterAssignments && isAuthenticated && event.startTime && event.endTime && (
-                <GameTimeWidget
-                    eventStartTime={event.startTime}
-                    eventEndTime={event.endTime}
-                    eventTitle={event.title}
-                    gameName={event.game?.name}
-                    gameSlug={event.game?.slug}
-                    coverUrl={event.game?.coverUrl}
-                    description={event.description}
-                    creatorUsername={event.creator?.username}
-                    attendees={roster?.signups.slice(0, 6).map(s => ({
-                        id: s.id,
-                        username: s.user.username,
-                        avatar: s.user.avatar ?? null,
-                    }))}
-                    attendeeCount={roster?.count}
-                />
-            )}
+function EventDetailGameTimeWidget({ rosterAssignments, isAuthenticated, event, roster }: {
+    rosterAssignments: unknown; isAuthenticated: boolean; event: EventResponseDto; roster: EventRosterDto | undefined;
+}) {
+    if (rosterAssignments || !isAuthenticated || !event.startTime || !event.endTime) return null;
+    return (
+        <GameTimeWidget eventStartTime={event.startTime} eventEndTime={event.endTime} eventTitle={event.title} gameName={event.game?.name}
+            gameSlug={event.game?.slug} coverUrl={event.game?.coverUrl} description={event.description} creatorUsername={event.creator?.username}
+            attendees={roster?.signups.slice(0, 6).map(s => ({ id: s.id, username: s.user.username, avatar: s.user.avatar ?? null }))} attendeeCount={roster?.count} />
+    );
+}
 
-            {showVoiceRoster && voiceRoster.participants.length > 0 && (
-                <div className="bg-surface rounded-xl border border-edge p-4 mb-6">
-                    {(isAdHoc ? event.adHocStatus === 'live' : eventStatus === 'live') && <LiveBadge className="mb-3" />}
-                    <VoiceRoster participants={voiceRoster.participants} activeCount={voiceRoster.activeCount} />
-                </div>
-            )}
-
-            <EventDetailRoster roster={roster} event={event} />
-
-            <PluginSlot
-                name="event-detail:content-sections"
-                context={{
-                    contentInstances: event.contentInstances ?? [],
-                    eventId,
-                    gameSlug: event.game?.slug,
-                    characterId: userSignup?.character?.id,
-                }}
-            />
-
-            <ConfirmModalSection
-                show={handlers.showConfirmModal}
-                onClose={handlers.closeConfirmModal}
-                onConfirm={handlers.handleSelectionConfirm}
-                onSkip={handlers.handleSelectionSkip}
-                isConfirming={handlers.signup.isPending}
-                gameId={gameRegistryEntry?.id ?? event.game?.id ?? undefined}
-                gameName={event.game?.name ?? undefined}
-                hasRoles={gameRegistryEntry?.hasRoles ?? true}
-                gameSlug={event.game?.slug ?? undefined}
-                preSelectedRole={handlers.preSelectedRole}
-                eventId={eventId}
-            />
-
-            <CancelModalSection
-                show={showCancelModal || deepLinkShowCancel}
-                onClose={() => {
-                    setShowCancelModal(false);
-                    if (deepLinkAction) setSearchParams({}, { replace: true });
-                }}
-                eventId={eventId}
-                eventTitle={event.title}
-                signupCount={event.signupCount}
-                initialReason={deepLinkReason ?? undefined}
-            />
-
-            <RescheduleModalSection
-                show={showRescheduleModal || deepLinkShowReschedule}
-                onClose={() => {
-                    setShowRescheduleModal(false);
-                    if (deepLinkAction) setSearchParams({}, { replace: true });
-                }}
-                eventId={eventId}
-                currentStartTime={event.startTime}
-                currentEndTime={event.endTime}
-                eventTitle={event.title}
-                gameSlug={event.game?.slug}
-                gameName={event.game?.name}
-                coverUrl={event.game?.coverUrl}
-                description={event.description}
-                creatorUsername={event.creator?.username}
-                signupCount={event.signupCount}
-                initialReason={deepLinkReason ?? undefined}
-            />
-
-            <RemoveConfirmModal
-                removeConfirm={handlers.removeConfirm}
-                onClose={() => handlers.setRemoveConfirm(null)}
-                onConfirm={handlers.handleConfirmRemoveFromEvent}
-                isPending={handlers.adminRemoveUser.isPending}
-            />
-
-            <InviteModalSection
-                show={showInviteModal}
-                onClose={() => setShowInviteModal(false)}
-                eventId={eventId}
-                pugs={handlers.pugs}
-                roster={roster}
-                isMMOGame={isMMOGame}
-            />
+function EventDetailVoiceSection({ showVoiceRoster, voiceRoster, isAdHoc, event, eventStatus }: {
+    showVoiceRoster: boolean; voiceRoster: { participants: unknown[]; activeCount: number };
+    isAdHoc: boolean; event: EventResponseDto; eventStatus: string | null;
+}) {
+    if (!showVoiceRoster || !voiceRoster.participants.length) return null;
+    return (
+        <div className="bg-surface rounded-xl border border-edge p-4 mb-6">
+            {(isAdHoc ? event.adHocStatus === 'live' : eventStatus === 'live') && <LiveBadge className="mb-3" />}
+            <VoiceRoster participants={voiceRoster.participants as never} activeCount={voiceRoster.activeCount} />
         </div>
     );
 }
 
 // ---- Extracted inline sub-components (kept in same file for import simplicity) ----
 
+function resolveBackNavigation(fromCalendar: boolean, navState: { calendarDate?: string; calendarView?: string } | null, hasHistory: boolean, navigate: ReturnType<typeof useNavigate>) {
+    if (fromCalendar) {
+        const params = new URLSearchParams();
+        if (navState?.calendarDate) params.set('date', navState.calendarDate);
+        if (navState?.calendarView) params.set('view', navState.calendarView);
+        navigate(`/calendar?${params.toString()}`);
+    } else if (hasHistory) { navigate(-1); }
+    else { navigate('/calendar'); }
+}
+
 /** Top bar with back + action buttons */
 function EventDetailTopbar({ fromCalendar, navState, hasHistory, isAuthenticated, canManageRoster, isCancelled, isEnded, eventId, onInvite, onReschedule, onCancel }: {
-    fromCalendar: boolean;
-    navState: { calendarDate?: string; calendarView?: string } | null;
-    hasHistory: boolean;
-    isAuthenticated: boolean;
-    canManageRoster: boolean;
-    isCancelled: boolean;
-    isEnded: boolean;
-    eventId: number;
-    onInvite: () => void;
-    onReschedule: () => void;
-    onCancel: () => void;
+    fromCalendar: boolean; navState: { calendarDate?: string; calendarView?: string } | null;
+    hasHistory: boolean; isAuthenticated: boolean; canManageRoster: boolean; isCancelled: boolean;
+    isEnded: boolean; eventId: number; onInvite: () => void; onReschedule: () => void; onCancel: () => void;
 }): JSX.Element {
     const navigate = useNavigate();
     return (
         <div className="event-detail-topbar">
-            <button
-                onClick={() => {
-                    if (fromCalendar) {
-                        const params = new URLSearchParams();
-                        if (navState?.calendarDate) params.set('date', navState.calendarDate);
-                        if (navState?.calendarView) params.set('view', navState.calendarView);
-                        navigate(`/calendar?${params.toString()}`);
-                    } else if (hasHistory) {
-                        navigate(-1);
-                    } else {
-                        navigate('/calendar');
-                    }
-                }}
-                className="event-detail-back"
-                aria-label="Go back"
-            >
+            <button onClick={() => resolveBackNavigation(fromCalendar, navState, hasHistory, navigate)} className="event-detail-back" aria-label="Go back">
                 {fromCalendar ? '\u2190 Back to Calendar' : '\u2190 Back'}
             </button>
-
             {isAuthenticated && !canManageRoster && !isCancelled && !isEnded && (
                 <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
             )}
-
             {canManageRoster && !isCancelled && !isEnded && (
                 <div className="grid grid-cols-2 gap-2 sm:flex">
                     <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
@@ -459,157 +353,108 @@ function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortFn }: {
     isSignedUp: boolean;
     alphabetical: (a: { user: { username: string } }, b: { user: { username: string } }) => number;
 }): JSX.Element {
+    const dateStr = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(event.startTime));
+    const scrollToRoster = () => document.getElementById('event-roster-section')?.scrollIntoView({ behavior: 'smooth' });
+    const avatarSignups = (roster?.signups?.length ?? 0) > 0
+        ? [...roster!.signups].sort(sortFn).slice(0, 5).map(s => ({
+            id: s.user.id, username: s.user.username, avatar: s.user.avatar ?? null,
+            discordId: s.user.discordId ?? null, customAvatarUrl: s.user.customAvatarUrl ?? null,
+        })) : null;
+
     return (
         <div className="md:hidden event-detail-quick-info">
             <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                    <p className="text-xs text-muted">
-                        {new Intl.DateTimeFormat('en-US', {
-                            weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                        }).format(new Date(event.startTime))}
-                    </p>
-                    <div
-                        className="flex items-center gap-2 mt-0.5 cursor-pointer group"
-                        onClick={() => document.getElementById('event-roster-section')?.scrollIntoView({ behavior: 'smooth' })}
-                    >
-                        <span className="text-sm font-semibold text-foreground group-hover:text-indigo-400 transition-colors">
-                            {roster?.count ?? 0} signed up
-                        </span>
-                        {(roster?.signups?.length ?? 0) > 0 && (
-                            <AttendeeAvatars
-                                signups={[...roster!.signups].sort(sortFn).slice(0, 5).map(s => ({
-                                    id: s.user.id,
-                                    username: s.user.username,
-                                    avatar: s.user.avatar ?? null,
-                                    discordId: s.user.discordId ?? null,
-                                    customAvatarUrl: s.user.customAvatarUrl ?? null,
-                                }))}
-                                gameId={event.game?.id ?? undefined}
-                                totalCount={roster!.count}
-                                maxVisible={5}
-                                size="md"
-                            />
-                        )}
+                    <p className="text-xs text-muted">{dateStr}</p>
+                    <div className="flex items-center gap-2 mt-0.5 cursor-pointer group" onClick={scrollToRoster}>
+                        <span className="text-sm font-semibold text-foreground group-hover:text-indigo-400 transition-colors">{roster?.count ?? 0} signed up</span>
+                        {avatarSignups && <AttendeeAvatars signups={avatarSignups} gameId={event.game?.id ?? undefined} totalCount={roster!.count} maxVisible={5} size="md" />}
                     </div>
                 </div>
-                {isSignedUp && (
-                    <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full whitespace-nowrap shrink-0">
-                        &#10003; Signed up
-                    </span>
-                )}
+                {isSignedUp && <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full whitespace-nowrap shrink-0">&#10003; Signed up</span>}
             </div>
         </div>
     );
 }
 
+function AutoSubToggle({ event, handlers }: { event: EventResponseDto; handlers: ReturnType<typeof useEventDetailHandlers> }) {
+    const autoUnbench = event.autoUnbench ?? true;
+    return (
+        <div className={`event-detail-autosub-toggle ${handlers.updateAutoUnbench.isPending ? 'opacity-50 pointer-events-none' : ''}`}>
+            <span className="text-xs text-gray-400 mr-2 whitespace-nowrap">Auto-sub</span>
+            <div className="event-detail-autosub-toggle__track" role="switch" aria-checked={autoUnbench} tabIndex={0}
+                onClick={() => !handlers.updateAutoUnbench.isPending && handlers.updateAutoUnbench.mutate(!autoUnbench)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlers.updateAutoUnbench.mutate(!autoUnbench); } }}>
+                <span className={`event-detail-autosub-toggle__option ${autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                <span className={`event-detail-autosub-toggle__option ${!autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+            </div>
+        </div>
+    );
+}
+
+function SignedUpActions({ userSignup, handlers }: { userSignup: { status: string } | undefined; handlers: ReturnType<typeof useEventDetailHandlers> }) {
+    return (
+        <div className="flex items-center gap-1.5">
+            {userSignup?.status === 'tentative'
+                ? <button onClick={() => handlers.updateStatus.mutate('signed_up')} disabled={handlers.updateStatus.isPending} className="btn btn-primary btn-sm">Confirm</button>
+                : <button onClick={() => { handlers.updateStatus.mutate('tentative'); toast.info('Marked as tentative'); }} disabled={handlers.updateStatus.isPending} className="btn btn-secondary btn-sm" title="Mark as tentative">Tentative</button>}
+            <button onClick={handlers.handleCancel} disabled={handlers.cancelSignup.isPending} className="btn btn-danger btn-sm">{handlers.cancelSignup.isPending ? 'Leaving...' : 'Leave'}</button>
+        </div>
+    );
+}
+
+function RosterSlotHeader({ event, canManageRoster, canJoinSlot, isMMOGame, isAuthenticated, isSignedUp, userSignup, handlers }: {
+    event: EventResponseDto; canManageRoster: boolean; canJoinSlot: boolean; isMMOGame: boolean;
+    isAuthenticated: boolean; isSignedUp: boolean; userSignup: { status: string } | undefined; handlers: ReturnType<typeof useEventDetailHandlers>;
+}) {
+    return (
+        <div className="event-detail-slots__header">
+            <h2>
+                Roster Slots
+                {canManageRoster && <span className="badge badge--indigo hidden md:inline-flex">Click slot to assign</span>}
+                {canJoinSlot && <span className="badge badge--green hidden md:inline-flex">Click to Join</span>}
+            </h2>
+            <div className="flex items-center gap-2">
+                {canManageRoster && !isMMOGame && <AutoSubToggle event={event} handlers={handlers} />}
+                {!isAuthenticated && <Link to="/login" className="btn btn-primary btn-sm">Login to Join</Link>}
+                {canJoinSlot && <button onClick={handlers.handleSignup} disabled={handlers.signup.isPending} className="btn btn-primary btn-sm">{handlers.signup.isPending ? 'Joining...' : 'Join Event'}</button>}
+                {isSignedUp && <SignedUpActions userSignup={userSignup} handlers={handlers} />}
+            </div>
+        </div>
+    );
+}
+
+function buildStickyExtra(isAuthenticated: boolean, event: EventResponseDto, roster: EventRosterDto | undefined) {
+    if (!isAuthenticated || !event.startTime || !event.endTime) return undefined;
+    return (
+        <GameTimeWidget eventStartTime={event.startTime} eventEndTime={event.endTime} eventTitle={event.title}
+            gameName={event.game?.name} gameSlug={event.game?.slug} coverUrl={event.game?.coverUrl} description={event.description}
+            creatorUsername={event.creator?.username}
+            attendees={roster?.signups.slice(0, 6).map(s => ({ id: s.id, username: s.user.username, avatar: s.user.avatar ?? null }))}
+            attendeeCount={roster?.count} />
+    );
+}
+
 /** Roster slot section with RosterBuilder */
-// eslint-disable-next-line max-lines-per-function
 function RosterSlotSection({ event, eventId, roster, rosterAssignments, isAuthenticated, isSignedUp, userSignup, canManageRoster, canJoinSlot, isMMOGame, handlers, user }: {
-    event: EventResponseDto;
-    eventId: number;
-    roster: EventRosterDto | undefined;
-    rosterAssignments: RosterWithAssignments | undefined;
-    isAuthenticated: boolean;
-    isSignedUp: boolean;
-    userSignup: { status: string } | undefined;
-    canManageRoster: boolean;
-    canJoinSlot: boolean;
-    isMMOGame: boolean;
-    handlers: ReturnType<typeof useEventDetailHandlers>;
-    user: { id: number } | null | undefined;
+    event: EventResponseDto; eventId: number; roster: EventRosterDto | undefined; rosterAssignments: RosterWithAssignments | undefined;
+    isAuthenticated: boolean; isSignedUp: boolean; userSignup: { status: string } | undefined;
+    canManageRoster: boolean; canJoinSlot: boolean; isMMOGame: boolean; handlers: ReturnType<typeof useEventDetailHandlers>; user: { id: number } | null | undefined;
 }): JSX.Element | null {
     if (!rosterAssignments) return null;
-
     return (
         <div className="event-detail-slots" id="event-roster-section">
-            <div className="event-detail-slots__header">
-                <h2>
-                    Roster Slots
-                    {canManageRoster && <span className="badge badge--indigo hidden md:inline-flex">Click slot to assign</span>}
-                    {canJoinSlot && <span className="badge badge--green hidden md:inline-flex">Click to Join</span>}
-                </h2>
-                <div className="flex items-center gap-2">
-                    {canManageRoster && !isMMOGame && (
-                        <div className={`event-detail-autosub-toggle ${handlers.updateAutoUnbench.isPending ? 'opacity-50 pointer-events-none' : ''}`}>
-                            <span className="text-xs text-gray-400 mr-2 whitespace-nowrap">Auto-sub</span>
-                            <div
-                                className="event-detail-autosub-toggle__track"
-                                role="switch"
-                                aria-checked={event.autoUnbench ?? true}
-                                tabIndex={0}
-                                onClick={() => !handlers.updateAutoUnbench.isPending && handlers.updateAutoUnbench.mutate(!(event.autoUnbench ?? true))}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlers.updateAutoUnbench.mutate(!(event.autoUnbench ?? true)); } }}
-                            >
-                                <span className={`event-detail-autosub-toggle__option ${(event.autoUnbench ?? true) ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
-                                <span className={`event-detail-autosub-toggle__option ${!(event.autoUnbench ?? true) ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
-                            </div>
-                        </div>
-                    )}
-                    {!isAuthenticated && <Link to="/login" className="btn btn-primary btn-sm">Login to Join</Link>}
-                    {canJoinSlot && (
-                        <button onClick={handlers.handleSignup} disabled={handlers.signup.isPending} className="btn btn-primary btn-sm">
-                            {handlers.signup.isPending ? 'Joining...' : 'Join Event'}
-                        </button>
-                    )}
-                    {isSignedUp && (
-                        <div className="flex items-center gap-1.5">
-                            {userSignup?.status === 'tentative' && (
-                                <button onClick={() => handlers.updateStatus.mutate('signed_up')} disabled={handlers.updateStatus.isPending} className="btn btn-primary btn-sm">Confirm</button>
-                            )}
-                            {userSignup?.status !== 'tentative' && (
-                                <button
-                                    onClick={() => { handlers.updateStatus.mutate('tentative'); toast.info('Marked as tentative'); }}
-                                    disabled={handlers.updateStatus.isPending}
-                                    className="btn btn-secondary btn-sm"
-                                    title="Mark as tentative"
-                                >Tentative</button>
-                            )}
-                            <button onClick={handlers.handleCancel} disabled={handlers.cancelSignup.isPending} className="btn btn-danger btn-sm">
-                                {handlers.cancelSignup.isPending ? 'Leaving...' : 'Leave'}
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <RosterBuilder
-                pool={rosterAssignments.pool as never}
-                assignments={rosterAssignments.assignments as never}
-                slots={rosterAssignments.slots as never}
-                onRosterChange={handlers.handleRosterChange as never}
-                canEdit={canManageRoster}
-                onSlotClick={handlers.handleSlotClick}
-                canJoin={canJoinSlot}
-                signupSucceeded={handlers.signup.isSuccess}
-                currentUserId={user?.id}
+            <RosterSlotHeader event={event} canManageRoster={canManageRoster} canJoinSlot={canJoinSlot} isMMOGame={isMMOGame}
+                isAuthenticated={isAuthenticated} isSignedUp={isSignedUp} userSignup={userSignup} handlers={handlers} />
+            <RosterBuilder pool={rosterAssignments.pool as never} assignments={rosterAssignments.assignments as never} slots={rosterAssignments.slots as never}
+                onRosterChange={handlers.handleRosterChange as never} canEdit={canManageRoster} onSlotClick={handlers.handleSlotClick} canJoin={canJoinSlot}
+                signupSucceeded={handlers.signup.isSuccess} currentUserId={user?.id}
                 onSelfRemove={isSignedUp && !canManageRoster ? handlers.handleSelfRemove : undefined}
                 onGenerateInviteLink={canManageRoster ? handlers.handleGenerateInviteLink : undefined}
-                pugs={handlers.pugs}
-                onRemovePug={canManageRoster ? handlers.handleRemovePug : undefined}
-                onRegeneratePugLink={canManageRoster ? handlers.handleRegeneratePugLink : undefined}
-                eventId={eventId}
+                pugs={handlers.pugs} onRemovePug={canManageRoster ? handlers.handleRemovePug : undefined}
+                onRegeneratePugLink={canManageRoster ? handlers.handleRegeneratePugLink : undefined} eventId={eventId}
                 onRemoveFromEvent={canManageRoster ? handlers.handleRemoveFromEvent : undefined}
-                gameId={event.game?.id}
-                isMMOEvent={isMMOGame}
-                stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
-                    <GameTimeWidget
-                        eventStartTime={event.startTime}
-                        eventEndTime={event.endTime}
-                        eventTitle={event.title}
-                        gameName={event.game?.name}
-                        gameSlug={event.game?.slug}
-                        coverUrl={event.game?.coverUrl}
-                        description={event.description}
-                        creatorUsername={event.creator?.username}
-                        attendees={roster?.signups.slice(0, 6).map(s => ({
-                            id: s.id,
-                            username: s.user.username,
-                            avatar: s.user.avatar ?? null,
-                        }))}
-                        attendeeCount={roster?.count}
-                    />
-                ) : undefined}
-            />
+                gameId={event.game?.id} isMMOEvent={isMMOGame} stickyExtra={buildStickyExtra(isAuthenticated, event, roster)} />
         </div>
     );
 }

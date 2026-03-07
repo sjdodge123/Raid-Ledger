@@ -8,33 +8,25 @@ interface EventsPageHeaderProps {
     isAuthenticated: boolean;
 }
 
+function getHeaderTitle(activeTab: EventsTab, filteredGameName: string | null): string {
+    if (filteredGameName) return `${filteredGameName} Events`;
+    const titles: Record<EventsTab, string> = { plans: 'Event Plans', past: 'Past Events', mine: 'My Events', upcoming: 'Upcoming Events' };
+    return titles[activeTab] ?? 'Upcoming Events';
+}
+
+function getHeaderSubtitle(activeTab: EventsTab, filteredGameName: string | null): string {
+    if (filteredGameName) return `Showing events for ${filteredGameName}`;
+    const subtitles: Record<EventsTab, string> = { plans: 'Community event planning polls', past: 'Browse completed gaming sessions', mine: "Events you've signed up for", upcoming: 'Discover and sign up for gaming sessions' };
+    return subtitles[activeTab] ?? 'Discover and sign up for gaming sessions';
+}
+
 /** Page header with title, subtitle, and create/plan buttons */
 export function EventsPageHeader({ activeTab, filteredGameName, isAuthenticated }: EventsPageHeaderProps): JSX.Element {
     return (
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-                <h1 className="text-3xl font-bold text-foreground mb-2">
-                    {filteredGameName
-                        ? `${filteredGameName} Events`
-                        : activeTab === 'plans'
-                            ? 'Event Plans'
-                            : activeTab === 'past'
-                                ? 'Past Events'
-                                : activeTab === 'mine'
-                                    ? 'My Events'
-                                    : 'Upcoming Events'}
-                </h1>
-                <p className="text-muted">
-                    {filteredGameName
-                        ? `Showing events for ${filteredGameName}`
-                        : activeTab === 'plans'
-                            ? 'Community event planning polls'
-                            : activeTab === 'past'
-                                ? 'Browse completed gaming sessions'
-                                : activeTab === 'mine'
-                                    ? 'Events you\'ve signed up for'
-                                    : 'Discover and sign up for gaming sessions'}
-                </p>
+                <h1 className="text-3xl font-bold text-foreground mb-2">{getHeaderTitle(activeTab, filteredGameName)}</h1>
+                <p className="text-muted">{getHeaderSubtitle(activeTab, filteredGameName)}</p>
             </div>
             {isAuthenticated && <CreateEventButtons />}
         </div>

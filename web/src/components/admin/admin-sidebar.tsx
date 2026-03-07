@@ -20,81 +20,61 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
  * Plugin-installed integrations appear in the Integrations section with "New" badges.
  * Parent section headers show a dot indicator when any child has an unseen "New" badge (ROK-285).
  */
-export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
-    const location = useLocation();
+function useAdminNavSections() {
     const { plugins } = usePluginAdmin();
     const { igdbStatus, oauthStatus, discordBotStatus } = useAdminSettings();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
-        igdb: {
-            configured: igdbStatus.data?.configured ?? false,
-            loading: igdbStatus.isLoading,
-        },
+        igdb: { configured: igdbStatus.data?.configured ?? false, loading: igdbStatus.isLoading },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
     const discordItems = isDiscordActive
         ? buildDiscordNavItems(
-            {
-                connected: discordBotStatus.data?.connected ?? false,
-                connecting: discordBotStatus.data?.connecting ?? false,
-            },
-            {
-                configured: oauthStatus.data?.configured ?? false,
-                loading: oauthStatus.isLoading,
-            },
+            { connected: discordBotStatus.data?.connected ?? false, connecting: discordBotStatus.data?.connecting ?? false },
+            { configured: oauthStatus.data?.configured ?? false, loading: oauthStatus.isLoading },
         )
         : null;
-    const sections = buildNavSections(coreIntegrations, pluginIntegrations, discordItems);
+    return buildNavSections(coreIntegrations, pluginIntegrations, discordItems);
+}
 
+export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
+    const location = useLocation();
+    const sections = useAdminNavSections();
     if (!isOpen) return null;
 
     return (
         <nav className="w-full h-full overflow-y-auto py-4 px-2" aria-label="Admin settings navigation">
             <div className="space-y-4">
                 {sections.map((section) => (
-                    <SidebarSection
-                        key={section.id}
-                        section={section}
-                        currentPath={location.pathname}
-                        onNavigate={onNavigate}
-                    />
+                    <SidebarSection key={section.id} section={section} currentPath={location.pathname} onNavigate={onNavigate} />
                 ))}
             </div>
         </nav>
     );
 }
 
+function SectionHeader({ section, hasNewChild }: { section: NavSection; hasNewChild: boolean }) {
+    return (
+        <div className="flex items-center gap-2.5 px-3 py-1.5 text-secondary">
+            <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+                {section.icon}{section.label}
+            </span>
+            {hasNewChild && <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" aria-label="New items" />}
+        </div>
+    );
+}
+
 /** Section group with parent badge indicator when any child has unseen "New" badge. */
-function SidebarSection({
-    section,
-    currentPath,
-    onNavigate,
-}: {
-    section: NavSection;
-    currentPath: string;
-    onNavigate?: () => void;
-}) {
+function SidebarSection({ section, currentPath, onNavigate }: { section: NavSection; currentPath: string; onNavigate?: () => void }) {
     const { isNew } = useSeenAdminSections();
     const hasNewChild = section.children.some((child) => child.newBadgeKey && isNew(child.newBadgeKey));
 
     return (
         <div>
-            <div className="flex items-center gap-2.5 px-3 py-1.5 text-secondary">
-                <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
-                    {section.icon}{section.label}
-                </span>
-                {hasNewChild && (
-                    <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" aria-label="New items" />
-                )}
-            </div>
+            <SectionHeader section={section} hasNewChild={hasNewChild} />
             <div className="mt-1 space-y-0.5">
                 {section.children.map((child) => (
-                    <SidebarNavItem
-                        key={child.to}
-                        item={child}
-                        isActive={currentPath === child.to}
-                        onNavigate={onNavigate}
-                    />
+                    <SidebarNavItem key={child.to} item={child} isActive={currentPath === child.to} onNavigate={onNavigate} />
                 ))}
             </div>
         </div>
@@ -119,36 +99,18 @@ export function StatusPill({ status }: { status: IntegrationStatus }) {
     );
 }
 
+function navItemClass(isActive: boolean) {
+    return `flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-colors ${isActive ? 'text-emerald-400 bg-emerald-500/10 font-medium' : 'text-muted hover:text-foreground hover:bg-overlay/20'}`;
+}
+
 /** Individual nav link. Renders status pills for integrations and "New" badges for plugin items. */
-export function SidebarNavItem({
-    item,
-    isActive,
-    onNavigate,
-}: {
-    item: NavItem;
-    isActive: boolean;
-    onNavigate?: () => void;
-}) {
+export function SidebarNavItem({ item, isActive, onNavigate }: { item: NavItem; isActive: boolean; onNavigate?: () => void }) {
     const { isNew } = useNewBadge(item.newBadgeKey ?? '', isActive);
     const badge = item.pluginSlug ? getPluginBadge(item.pluginSlug) : undefined;
 
     return (
-        <Link
-            to={item.to}
-            onClick={onNavigate}
-            title={item.pluginSource ? `Installed by ${item.pluginSource}` : undefined}
-            className={`flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-colors ${isActive
-                    ? 'text-emerald-400 bg-emerald-500/10 font-medium'
-                    : 'text-muted hover:text-foreground hover:bg-overlay/20'
-                }`}
-        >
-            {badge && (
-                <PluginBadge
-                    icon={badge.iconSmall ?? badge.icon}
-                    label={badge.label}
-                    size="sm"
-                />
-            )}
+        <Link to={item.to} onClick={onNavigate} title={item.pluginSource ? `Installed by ${item.pluginSource}` : undefined} className={navItemClass(isActive)}>
+            {badge && <PluginBadge icon={badge.iconSmall ?? badge.icon} label={badge.label} size="sm" />}
             <span className="truncate min-w-0 flex-1">{item.label}</span>
             {item.newBadgeKey && <NewBadge visible={isNew} />}
             {item.status && <StatusPill status={item.status} />}

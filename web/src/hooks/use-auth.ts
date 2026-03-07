@@ -71,32 +71,29 @@ export function getCachedUser(): User | null {
  * Throws on network/server errors so React Query preserves any
  * seeded cache data instead of overwriting it with null.
  */
+function clearAllAuthStorage(): void {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+    localStorage.removeItem(USER_CACHE_KEY);
+}
+
 export async function fetchCurrentUser(): Promise<User | null> {
     const token = getAuthToken();
-
-    if (!token) {
-        return null;
-    }
+    if (!token) return null;
 
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!response.ok) {
-        // 401 means token is invalid/expired - clear it
         if (response.status === 401) {
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(ORIGINAL_TOKEN_KEY);
-            localStorage.removeItem(USER_CACHE_KEY);
+            clearAllAuthStorage();
             return null;
         }
         throw new Error(`HTTP ${response.status}`);
     }
 
     const user: User = await response.json();
-    // Cache for instant load on next visit
     localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
     return user;
 }
@@ -105,91 +102,68 @@ export async function fetchCurrentUser(): Promise<User | null> {
  * Hook to get the current authenticated user
  * Returns null when not authenticated
  */
+function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
+    return useCallback(async (token: string): Promise<User | null> => {
+        localStorage.setItem(TOKEN_KEY, token);
+        try {
+            const user = await fetchCurrentUser();
+            queryClient.setQueryData(['auth', 'me'], user);
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+            return user;
+        } catch (error) {
+            console.error('Failed to fetch user after login:', error);
+            return null;
+        }
+    }, [queryClient]);
+}
+
+async function performImpersonation(userId: number, queryClient: ReturnType<typeof useQueryClient>): Promise<boolean> {
+    const token = getAuthToken();
+    if (!token) return false;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/impersonate/${userId}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        localStorage.setItem(ORIGINAL_TOKEN_KEY, data.original_token);
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        await queryClient.invalidateQueries();
+        return true;
+    } catch (error) {
+        console.error('Failed to impersonate:', error);
+        return false;
+    }
+}
+
+async function performExitImpersonation(queryClient: ReturnType<typeof useQueryClient>): Promise<boolean> {
+    const originalToken = localStorage.getItem(ORIGINAL_TOKEN_KEY);
+    if (!originalToken) return false;
+
+    localStorage.setItem(TOKEN_KEY, originalToken);
+    localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+    await queryClient.invalidateQueries();
+    return true;
+}
+
 export function useAuth() {
     const queryClient = useQueryClient();
 
     const { data: user, isLoading, error, refetch } = useQuery({
         queryKey: ['auth', 'me'],
         queryFn: fetchCurrentUser,
-        staleTime: 1000 * 60 * 5, // 5 minutes
-        retry: false, // Don't retry auth failures
+        staleTime: 1000 * 60 * 5,
+        retry: false,
     });
 
-    const login = useCallback(async (token: string): Promise<User | null> => {
-        localStorage.setItem(TOKEN_KEY, token);
-        try {
-            // Fetch user and populate cache directly to avoid race condition
-            // between refetchQueries and useQuery observers mounting on navigation
-            const user = await fetchCurrentUser();
-            queryClient.setQueryData(['auth', 'me'], user);
-            // Clear any stale event data cached before login (e.g. empty/401 responses)
-            queryClient.invalidateQueries({ queryKey: ['events'] });
-            return user;
-        } catch (error) {
-            // Token is stored — will be fetched on next page load
-            console.error('Failed to fetch user after login:', error);
-            return null;
-        }
-    }, [queryClient]);
+    const login = useLogin(queryClient);
 
     const logout = () => {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(ORIGINAL_TOKEN_KEY);
-        localStorage.removeItem(USER_CACHE_KEY);
+        clearAllAuthStorage();
         queryClient.setQueryData(['auth', 'me'], null);
-    };
-
-    /**
-     * Impersonate a user (admin-only).
-     * Stores the original admin token for later restoration.
-     */
-    const impersonate = async (userId: number): Promise<boolean> => {
-        const token = getAuthToken();
-        if (!token) return false;
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/auth/impersonate/${userId}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-
-            // Store original admin token for exit
-            localStorage.setItem(ORIGINAL_TOKEN_KEY, data.original_token);
-            // Set impersonated user's token
-            localStorage.setItem(TOKEN_KEY, data.access_token);
-
-            // Invalidate ALL queries — switching user context means all cached data is stale
-            await queryClient.invalidateQueries();
-            return true;
-        } catch (error) {
-            console.error('Failed to impersonate:', error);
-            return false;
-        }
-    };
-
-    /**
-     * Exit impersonation and restore admin session.
-     */
-    const exitImpersonation = async (): Promise<boolean> => {
-        const originalToken = localStorage.getItem(ORIGINAL_TOKEN_KEY);
-        if (!originalToken) return false;
-
-        // Restore original admin token
-        localStorage.setItem(TOKEN_KEY, originalToken);
-        localStorage.removeItem(ORIGINAL_TOKEN_KEY);
-
-        // Invalidate ALL queries — returning to admin context, all cached data is stale
-        await queryClient.invalidateQueries();
-        return true;
     };
 
     return {
@@ -201,7 +175,7 @@ export function useAuth() {
         refetch,
         login,
         logout,
-        impersonate,
-        exitImpersonation,
+        impersonate: (userId: number) => performImpersonation(userId, queryClient),
+        exitImpersonation: () => performExitImpersonation(queryClient),
     };
 }

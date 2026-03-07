@@ -10,74 +10,76 @@ import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
 
 type FilterType = 'all' | 'daily' | 'migration';
 
-/** Admin panel: Backup management with restore, delete, and reset instance */
-// eslint-disable-next-line max-lines-per-function
-export function BackupsPanel() {
+function useBackupState() {
     const queryClient = useQueryClient();
     const { backups, createBackup, deleteBackup, restoreBackup, resetInstance } = useBackups();
-    const tz = useTimezoneStore((s) => s.resolved);
-    const [filter, setFilter] = useState<FilterType>('all');
     const [deleteTarget, setDeleteTarget] = useState<BackupFileDto | null>(null);
     const [restoreTarget, setRestoreTarget] = useState<BackupFileDto | null>(null);
     const [showResetModal, setShowResetModal] = useState(false);
     const [resetResult, setResetResult] = useState<{ password: string } | null>(null);
 
-    const allBackups = backups.data?.backups ?? [];
+    return {
+        queryClient, backups, createBackup, deleteBackup, restoreBackup, resetInstance,
+        deleteTarget, setDeleteTarget, restoreTarget, setRestoreTarget,
+        showResetModal, setShowResetModal, resetResult, setResetResult,
+    };
+}
+
+function useBackupActions(state: ReturnType<typeof useBackupState>) {
+    const { createBackup, deleteBackup, restoreBackup, resetInstance, queryClient, deleteTarget, setDeleteTarget, restoreTarget, setRestoreTarget, setShowResetModal, setResetResult } = state;
+    const handleCreate = (): void => {
+        createBackup.mutate(undefined, { onSuccess: (data) => toast.success(data.message), onError: (err) => toast.error(err.message) });
+    };
+    const handleDelete = (): void => {
+        if (!deleteTarget) return;
+        deleteBackup.mutate({ type: deleteTarget.type, filename: deleteTarget.filename }, { onSuccess: (data) => { toast.success(data.message); setDeleteTarget(null); }, onError: (err) => toast.error(err.message) });
+    };
+    const handleRestore = (): void => {
+        if (!restoreTarget) return;
+        restoreBackup.mutate({ type: restoreTarget.type, filename: restoreTarget.filename }, { onSuccess: (data) => { toast.success(data.message); setRestoreTarget(null); }, onError: (err) => toast.error(err.message) });
+    };
+    const handleResetConfirm = (): void => {
+        resetInstance.mutate(undefined, {
+            onSuccess: async (data) => { await queryClient.refetchQueries({ queryKey: ['admin'] }); setResetResult({ password: data.password }); },
+            onError: (err) => toast.error(err.message),
+        });
+    };
+    const handleResetClose = (): void => {
+        if (!resetInstance.isPending) { setShowResetModal(false); setResetResult(null); }
+    };
+    return { handleCreate, handleDelete, handleRestore, handleResetConfirm, handleResetClose };
+}
+
+/** Admin panel: Backup management with restore, delete, and reset instance */
+export function BackupsPanel() {
+    const tz = useTimezoneStore((s) => s.resolved);
+    const [filter, setFilter] = useState<FilterType>('all');
+    const state = useBackupState();
+    const h = { ...state, ...useBackupActions(state) };
+
+    const allBackups = h.backups.data?.backups ?? [];
     const filtered = filter === 'all' ? allBackups : allBackups.filter((b) => b.type === filter);
     const dailyCount = allBackups.filter((b) => b.type === 'daily').length;
     const migrationCount = allBackups.filter((b) => b.type === 'migration').length;
 
-    const handleCreate = (): void => {
-        createBackup.mutate(undefined, {
-            onSuccess: (data) => toast.success(data.message),
-            onError: (err) => toast.error(err.message),
-        });
-    };
-
-    const handleDelete = (): void => {
-        if (!deleteTarget) return;
-        deleteBackup.mutate(
-            { type: deleteTarget.type, filename: deleteTarget.filename },
-            { onSuccess: (data) => { toast.success(data.message); setDeleteTarget(null); }, onError: (err) => toast.error(err.message) },
-        );
-    };
-
-    const handleRestore = (): void => {
-        if (!restoreTarget) return;
-        restoreBackup.mutate(
-            { type: restoreTarget.type, filename: restoreTarget.filename },
-            { onSuccess: (data) => { toast.success(data.message); setRestoreTarget(null); }, onError: (err) => toast.error(err.message) },
-        );
-    };
-
     return (
         <div className="space-y-6">
-            <BackupHeader onCreateBackup={handleCreate} isCreating={createBackup.isPending} />
+            <BackupHeader onCreateBackup={h.handleCreate} isCreating={h.createBackup.isPending} />
             <FilterPills filter={filter} setFilter={setFilter} allBackups={allBackups} dailyCount={dailyCount} migrationCount={migrationCount} />
-            <BackupStates isLoading={backups.isLoading} isError={backups.isError} isEmpty={allBackups.length === 0} hasData={!!backups.data} />
-            {filtered.length > 0 && <BackupTable filtered={filtered} tz={tz} onRestore={setRestoreTarget} onDelete={setDeleteTarget} />}
-            {allBackups.length > 0 && filtered.length === 0 && (
-                <div className="py-12 text-center text-muted text-sm">No backups match the selected filter.</div>
-            )}
-            <DangerZone onShowResetModal={() => setShowResetModal(true)} />
-
-            {deleteTarget && <DeleteModal backup={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} isPending={deleteBackup.isPending} />}
-            {restoreTarget && <RestoreModal backup={restoreTarget} onClose={() => setRestoreTarget(null)} onConfirm={handleRestore} isPending={restoreBackup.isPending} />}
-            {showResetModal && (
-                <ResetModal
-                    onClose={() => { if (!resetInstance.isPending) { setShowResetModal(false); setResetResult(null); } }}
-                    onConfirm={() => {
-                        resetInstance.mutate(undefined, {
-                            onSuccess: async (data) => { await queryClient.refetchQueries({ queryKey: ['admin'] }); setResetResult({ password: data.password }); },
-                            onError: (err) => toast.error(err.message),
-                        });
-                    }}
-                    isPending={resetInstance.isPending}
-                    result={resetResult}
-                />
-            )}
+            <BackupStates isLoading={h.backups.isLoading} isError={h.backups.isError} isEmpty={allBackups.length === 0} hasData={!!h.backups.data} />
+            {filtered.length > 0 && <BackupTable filtered={filtered} tz={tz} onRestore={h.setRestoreTarget} onDelete={h.setDeleteTarget} />}
+            <NoFilterMatch show={allBackups.length > 0 && filtered.length === 0} />
+            <DangerZone onShowResetModal={() => h.setShowResetModal(true)} />
+            {h.deleteTarget && <DeleteModal backup={h.deleteTarget} onClose={() => h.setDeleteTarget(null)} onConfirm={h.handleDelete} isPending={h.deleteBackup.isPending} />}
+            {h.restoreTarget && <RestoreModal backup={h.restoreTarget} onClose={() => h.setRestoreTarget(null)} onConfirm={h.handleRestore} isPending={h.restoreBackup.isPending} />}
+            {h.showResetModal && <ResetModal onClose={h.handleResetClose} onConfirm={h.handleResetConfirm} isPending={h.resetInstance.isPending} result={h.resetResult} />}
         </div>
     );
+}
+
+function NoFilterMatch({ show }: { show: boolean }): JSX.Element | null {
+    if (!show) return null;
+    return <div className="py-12 text-center text-muted text-sm">No backups match the selected filter.</div>;
 }
 
 function BackupHeader({ onCreateBackup, isCreating }: { onCreateBackup: () => void; isCreating: boolean }): JSX.Element {
@@ -125,7 +127,6 @@ function BackupStates({ isLoading, isError, isEmpty, hasData }: { isLoading: boo
     return null;
 }
 
-// eslint-disable-next-line max-lines-per-function
 function BackupTable({ filtered, tz, onRestore, onDelete }: {
     filtered: BackupFileDto[]; tz: string; onRestore: (b: BackupFileDto) => void; onDelete: (b: BackupFileDto) => void;
 }): JSX.Element {

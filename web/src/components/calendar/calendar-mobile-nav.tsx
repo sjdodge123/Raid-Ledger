@@ -16,58 +16,31 @@ interface CalendarMobileNavProps {
  * Sticky below the MobilePageToolbar, responds to scroll direction.
  * Hidden on desktop and when schedule view is active.
  */
+function NavArrowButton({ onClick, label, direction }: { onClick: () => void; label: string; direction: 'prev' | 'next' }) {
+    return (
+        <button type="button" onClick={onClick} className="calendar-mobile-nav-arrow" aria-label={label}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={direction === 'prev' ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'} />
+            </svg>
+        </button>
+    );
+}
+
 export function CalendarMobileNav({ currentDate, calendarView, onPrev, onNext, onToday }: CalendarMobileNavProps) {
     const scrollDirection = useScrollDirection();
     const isHeaderHidden = scrollDirection === 'down';
 
-    // Only show for month and day views — schedule uses swipe gestures
     if (calendarView === 'schedule') return null;
 
-    const dateLabel = calendarView === 'month'
-        ? format(currentDate, 'MMMM yyyy')
-        : format(currentDate, 'EEE, MMM d');
+    const unit = calendarView === 'month' ? 'month' : 'day';
+    const dateLabel = calendarView === 'month' ? format(currentDate, 'MMMM yyyy') : format(currentDate, 'EEE, MMM d');
 
     return (
-        <div
-            className="calendar-mobile-nav md:hidden"
-            style={{
-                position: 'sticky',
-                top: isHeaderHidden ? '4.25rem' : '8.25rem',
-                zIndex: Z_INDEX.TOOLBAR,
-                transition: 'top 300ms ease-in-out',
-            }}
-        >
-            <button
-                type="button"
-                onClick={onPrev}
-                className="calendar-mobile-nav-arrow"
-                aria-label={calendarView === 'month' ? 'Previous month' : 'Previous day'}
-            >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-            </button>
-
+        <div className="calendar-mobile-nav md:hidden" style={{ position: 'sticky', top: isHeaderHidden ? '4.25rem' : '8.25rem', zIndex: Z_INDEX.TOOLBAR, transition: 'top 300ms ease-in-out' }}>
+            <NavArrowButton onClick={onPrev} label={`Previous ${unit}`} direction="prev" />
             <span className="calendar-mobile-nav-label">{dateLabel}</span>
-
-            <button
-                type="button"
-                onClick={onNext}
-                className="calendar-mobile-nav-arrow"
-                aria-label={calendarView === 'month' ? 'Next month' : 'Next day'}
-            >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-            </button>
-
-            <button
-                type="button"
-                onClick={onToday}
-                className="calendar-mobile-nav-today"
-            >
-                Today
-            </button>
+            <NavArrowButton onClick={onNext} label={`Next ${unit}`} direction="next" />
+            <button type="button" onClick={onToday} className="calendar-mobile-nav-today">Today</button>
         </div>
     );
 }

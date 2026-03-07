@@ -12,29 +12,42 @@ import { drawLightShafts, drawCaustics, drawFishSilhouette, drawLeviathan } from
  * Only active when the resolved theme is 'underwater'.
  * pointer-events: none so it never blocks interaction.
  */
-export function UnderwaterAmbience() {
-    const resolved = useThemeStore((s) => s.resolved);
-    const prefersMotion = useMediaQuery('(prefers-reduced-motion: no-preference)');
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const animRef = useRef<number>(0);
-    const schoolsRef = useRef<FishSchool[]>([]);
-    const particlesRef = useRef<Particle[]>([]);
-    const leviathanRef = useRef<Leviathan | null>(null);
-    const nextLeviathanRef = useRef<number>(0);
-    const lightShaftsRef = useRef<LightShaft[]>([]);
-    const causticsRef = useRef<CausticNode[]>([]);
-    const bubblesRef = useRef<Bubble[]>([]);
-    const hiddenRef = useRef(false);
+interface UnderwaterRefs {
+    schools: React.MutableRefObject<FishSchool[]>;
+    particles: React.MutableRefObject<Particle[]>;
+    leviathan: React.MutableRefObject<Leviathan | null>;
+    nextLeviathan: React.MutableRefObject<number>;
+    lightShafts: React.MutableRefObject<LightShaft[]>;
+    caustics: React.MutableRefObject<CausticNode[]>;
+    bubbles: React.MutableRefObject<Bubble[]>;
+    hidden: React.MutableRefObject<boolean>;
+}
 
-    const isUnderwater = resolved.id === 'underwater';
-    const isActive = isUnderwater && prefersMotion;
+function initUnderwaterWorld(canvas: HTMLCanvasElement, refs: UnderwaterRefs) {
+    refs.schools.current = Array.from({ length: SCHOOL_COUNT }, (_, i) => {
+        const direction = Math.random() > 0.5 ? 1 : -1 as 1 | -1;
+        return createSchool(canvas.width, canvas.height, i % 3, direction);
+    });
+    refs.particles.current = Array.from({ length: PARTICLE_COUNT }, () => createParticle(canvas.width, canvas.height));
+    refs.lightShafts.current = createLightShafts(canvas.width);
+    refs.caustics.current = createCausticGrid(canvas.width, canvas.height);
+    refs.bubbles.current = createBubbleCluster(canvas.width, canvas.height);
+    refs.nextLeviathan.current = performance.now() + rand(LEVIATHAN_MIN_INTERVAL, LEVIATHAN_MAX_INTERVAL);
+}
 
-    useEffect(() => {
-        if (!isActive) {
-            const canvas = canvasRef.current;
-            if (canvas) { canvas.width = 0; canvas.height = 0; }
-        }
-    }, [isActive]);
+function animateUnderwater(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, refs: UnderwaterRefs, now: number) {
+    if (refs.hidden.current) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawLightShafts(ctx, refs.lightShafts.current, canvas.height, now);
+    drawCaustics(ctx, refs.caustics.current);
+    drawParticles(ctx, refs.particles.current, canvas);
+    drawBubbles(ctx, refs.bubbles.current, canvas);
+    drawSchools(ctx, refs.schools.current, canvas);
+    updateLeviathan(ctx, refs.leviathan, refs.nextLeviathan, canvas, now);
+}
+
+function useUnderwaterAnimation(isActive: boolean, canvasRef: React.RefObject<HTMLCanvasElement | null>, refs: UnderwaterRefs, animRef: React.MutableRefObject<number>) {
+    useEffect(() => { if (!isActive && canvasRef.current) { canvasRef.current.width = 0; canvasRef.current.height = 0; } }, [isActive, canvasRef]);
 
     useEffect(() => {
         if (!isActive) return;
@@ -42,61 +55,36 @@ export function UnderwaterAmbience() {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
-        function resize() {
-            if (!canvas) return;
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        resize();
-        window.addEventListener('resize', resize);
-
-        function onVisibility() { hiddenRef.current = document.hidden; }
-        document.addEventListener('visibilitychange', onVisibility);
-
-        schoolsRef.current = Array.from({ length: SCHOOL_COUNT }, (_, i) => {
-            const depth = i % 3;
-            const direction = Math.random() > 0.5 ? 1 : -1 as 1 | -1;
-            return createSchool(canvas.width, canvas.height, depth, direction);
-        });
-        particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () => createParticle(canvas.width, canvas.height));
-        lightShaftsRef.current = createLightShafts(canvas.width);
-        causticsRef.current = createCausticGrid(canvas.width, canvas.height);
-        bubblesRef.current = createBubbleCluster(canvas.width, canvas.height);
-        nextLeviathanRef.current = performance.now() + rand(LEVIATHAN_MIN_INTERVAL, LEVIATHAN_MAX_INTERVAL);
-
-        function animate(now: number) {
-            if (!canvas || !ctx) return;
-            if (hiddenRef.current) { animRef.current = requestAnimationFrame(animate); return; }
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            drawLightShafts(ctx, lightShaftsRef.current, canvas.height, now);
-            drawCaustics(ctx, causticsRef.current);
-            drawParticles(ctx, particlesRef.current, canvas);
-            drawBubbles(ctx, bubblesRef.current, canvas);
-            drawSchools(ctx, schoolsRef.current, canvas);
-            updateLeviathan(ctx, leviathanRef, nextLeviathanRef, canvas, now);
-
-            animRef.current = requestAnimationFrame(animate);
-        }
-
-        animRef.current = requestAnimationFrame(animate);
-
+        const resize = () => { if (canvas) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; } };
+        resize(); window.addEventListener('resize', resize);
+        const onVis = () => { refs.hidden.current = document.hidden; };
+        document.addEventListener('visibilitychange', onVis);
+        initUnderwaterWorld(canvas, refs);
+        const loop = (now: number) => { animateUnderwater(ctx, canvas, refs, now); animRef.current = requestAnimationFrame(loop); };
+        animRef.current = requestAnimationFrame(loop);
         return () => {
-            cancelAnimationFrame(animRef.current);
-            window.removeEventListener('resize', resize);
-            document.removeEventListener('visibilitychange', onVisibility);
+            cancelAnimationFrame(animRef.current); window.removeEventListener('resize', resize);
+            document.removeEventListener('visibilitychange', onVis);
             if (canvas) { const c = canvas.getContext('2d'); if (c) c.clearRect(0, 0, canvas.width, canvas.height); }
         };
-    }, [isActive]);
+    }, [isActive, canvasRef, refs, animRef]);
+}
 
-    return (
-        <canvas
-            ref={canvasRef}
-            className={`fixed inset-0 w-full h-full pointer-events-none z-0${isActive ? '' : ' hidden'}`}
-            aria-hidden="true"
-        />
-    );
+export function UnderwaterAmbience() {
+    const resolved = useThemeStore((s) => s.resolved);
+    const prefersMotion = useMediaQuery('(prefers-reduced-motion: no-preference)');
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const animRef = useRef<number>(0);
+    const refs: UnderwaterRefs = {
+        schools: useRef<FishSchool[]>([]), particles: useRef<Particle[]>([]),
+        leviathan: useRef<Leviathan | null>(null), nextLeviathan: useRef<number>(0),
+        lightShafts: useRef<LightShaft[]>([]), caustics: useRef<CausticNode[]>([]),
+        bubbles: useRef<Bubble[]>([]), hidden: useRef(false),
+    };
+    const isActive = resolved.id === 'underwater' && prefersMotion;
+    useUnderwaterAnimation(isActive, canvasRef, refs, animRef);
+
+    return <canvas ref={canvasRef} className={`fixed inset-0 w-full h-full pointer-events-none z-0${isActive ? '' : ' hidden'}`} aria-hidden="true" />;
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[], canvas: HTMLCanvasElement) {
@@ -156,6 +144,29 @@ function drawSchools(ctx: CanvasRenderingContext2D, schools: FishSchool[], canva
     }
 }
 
+function spawnLeviathan(canvas: HTMLCanvasElement): Leviathan {
+    const direction = Math.random() > 0.5 ? 1 : -1 as 1 | -1;
+    const width = rand(200, 400);
+    return {
+        x: direction === 1 ? -width : canvas.width + width,
+        y: rand(canvas.height * 0.2, canvas.height * 0.8),
+        width, height: width * rand(0.15, 0.25),
+        speed: rand(0.8, 1.5), opacity: 0, direction,
+        maxOpacity: rand(0.08, 0.14),
+    };
+}
+
+function tickLeviathan(lev: Leviathan, canvasWidth: number) {
+    lev.x += lev.speed * lev.direction;
+    const distFromEdge = lev.direction === 1 ? lev.x + lev.width / 2 : canvasWidth - (lev.x - lev.width / 2);
+    if (distFromEdge < canvasWidth * 0.3) lev.opacity = Math.min(lev.opacity + 0.001, lev.maxOpacity);
+    else lev.opacity = Math.max(lev.opacity - 0.0006, 0);
+}
+
+function isLeviathanOffscreen(lev: Leviathan, canvasWidth: number) {
+    return lev.direction === 1 ? lev.x - lev.width / 2 > canvasWidth + 50 : lev.x + lev.width / 2 < -50;
+}
+
 function updateLeviathan(
     ctx: CanvasRenderingContext2D,
     leviathanRef: React.MutableRefObject<Leviathan | null>,
@@ -164,35 +175,12 @@ function updateLeviathan(
     now: number,
 ) {
     if (!leviathanRef.current && now >= nextLeviathanRef.current) {
-        const direction = Math.random() > 0.5 ? 1 : -1 as 1 | -1;
-        const width = rand(200, 400);
-        leviathanRef.current = {
-            x: direction === 1 ? -width : canvas.width + width,
-            y: rand(canvas.height * 0.2, canvas.height * 0.8),
-            width,
-            height: width * rand(0.15, 0.25),
-            speed: rand(0.8, 1.5),
-            opacity: 0,
-            direction,
-            maxOpacity: rand(0.08, 0.14),
-        };
+        leviathanRef.current = spawnLeviathan(canvas);
     }
     if (leviathanRef.current) {
-        const lev = leviathanRef.current;
-        lev.x += lev.speed * lev.direction;
-        const distFromEdge = lev.direction === 1
-            ? lev.x + lev.width / 2
-            : canvas.width - (lev.x - lev.width / 2);
-        if (distFromEdge < canvas.width * 0.3) {
-            lev.opacity = Math.min(lev.opacity + 0.001, lev.maxOpacity);
-        } else {
-            lev.opacity = Math.max(lev.opacity - 0.0006, 0);
-        }
-        drawLeviathan(ctx, lev);
-        const offscreen = lev.direction === 1
-            ? lev.x - lev.width / 2 > canvas.width + 50
-            : lev.x + lev.width / 2 < -50;
-        if (offscreen) {
+        tickLeviathan(leviathanRef.current, canvas.width);
+        drawLeviathan(ctx, leviathanRef.current);
+        if (isLeviathanOffscreen(leviathanRef.current, canvas.width)) {
             leviathanRef.current = null;
             nextLeviathanRef.current = now + rand(LEVIATHAN_MIN_INTERVAL, LEVIATHAN_MAX_INTERVAL);
         }

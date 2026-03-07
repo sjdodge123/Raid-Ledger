@@ -5,6 +5,13 @@ interface DashboardStatsRowProps {
     onNeedsAttentionClick?: () => void;
 }
 
+function handleStatKeyDown(e: React.KeyboardEvent, onClick?: () => void) {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick?.();
+    }
+}
+
 function StatCard({
     label,
     value,
@@ -22,17 +29,13 @@ function StatCard({
             role={interactive ? 'button' : undefined}
             tabIndex={interactive ? 0 : undefined}
             onClick={interactive ? onClick : undefined}
-            onKeyDown={interactive ? (e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
-            } : undefined}
+            onKeyDown={interactive ? (e) => handleStatKeyDown(e, onClick) : undefined}
             className={`bg-surface rounded-lg border border-edge p-4 ${
                 interactive ? 'cursor-pointer hover:border-amber-500/50 transition-colors' : ''
             }`}
         >
             <p className="text-sm text-muted mb-1">{label}</p>
-            <p
-                className={`text-2xl font-bold ${accent ? 'text-amber-400' : 'text-foreground'}`}
-            >
+            <p className={`text-2xl font-bold ${accent ? 'text-amber-400' : 'text-foreground'}`}>
                 {value}
             </p>
         </div>

@@ -14,6 +14,16 @@ interface AvatarWithFallbackProps {
     gameId?: string;
 }
 
+function InitialsFallback({ username, sizeClassName }: { username: string; sizeClassName: string }) {
+    return (
+        <div
+            className={`${sizeClassName} flex-shrink-0 overflow-hidden rounded-full bg-overlay flex items-center justify-center text-xs font-semibold text-muted`}
+        >
+            {username.charAt(0).toUpperCase()}
+        </div>
+    );
+}
+
 /**
  * Avatar component with automatic fallback to initials on load error.
  * ROK-194: Gracefully handles broken image URLs by showing initials.
@@ -28,21 +38,10 @@ export function AvatarWithFallback({
 }: AvatarWithFallbackProps) {
     const [hasError, setHasError] = useState(false);
 
-    // ROK-222: Use resolveAvatar when user prop is provided
-    const effectiveUrl = user
-        ? resolveAvatar(user, gameId).url
-        : (avatarUrl ?? null);
+    const effectiveUrl = user ? resolveAvatar(user, gameId).url : (avatarUrl ?? null);
 
-    const showInitials = !effectiveUrl || hasError;
-
-    if (showInitials) {
-        return (
-            <div
-                className={`${sizeClassName} flex-shrink-0 overflow-hidden rounded-full bg-overlay flex items-center justify-center text-xs font-semibold text-muted`}
-            >
-                {username.charAt(0).toUpperCase()}
-            </div>
-        );
+    if (!effectiveUrl || hasError) {
+        return <InitialsFallback username={username} sizeClassName={sizeClassName} />;
     }
 
     return (

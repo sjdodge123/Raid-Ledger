@@ -13,49 +13,61 @@ import {
     LEFT_SLOTS, RIGHT_SLOTS, BOTTOM_SLOTS,
 } from './equipment-constants';
 
+function EmptySlot({ slotName }: { slotName: string }) {
+    return (
+        <div className="flex items-center gap-3 p-2 rounded bg-overlay/30 border border-edge/50 min-h-[52px]">
+            <div className="w-8 h-8 rounded bg-faint/50 flex items-center justify-center text-xs text-muted/50">--</div>
+            <div className="min-w-0">
+                <div className="text-xs text-muted/50">{SLOT_LABELS[slotName] ?? slotName}</div>
+                <div className="text-xs text-muted/30">Empty</div>
+            </div>
+        </div>
+    );
+}
+
+function SlotIcon({ item, iconBorderClass }: { item: EquipmentItemDto; iconBorderClass: string }) {
+    return (
+        <>
+            {item.iconUrl ? (
+                <img src={item.iconUrl} alt={item.name} className={`w-8 h-8 rounded border ${iconBorderClass} flex-shrink-0`}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+            ) : null}
+            <div className={`w-8 h-8 rounded bg-faint flex items-center justify-center text-xs text-muted font-mono flex-shrink-0${item.iconUrl ? ' hidden' : ''}`}>
+                {item.itemLevel > 0 ? item.itemLevel : '--'}
+            </div>
+        </>
+    );
+}
+
 /** Single equipment slot with item display or empty placeholder */
 export function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: {
     item: EquipmentItemDto | undefined; slotName: string;
     gameVariant: string | null; onItemClick?: () => void;
 }) {
     const [showFallback, setShowFallback] = useState(false);
-
-    if (!item) {
-        return (
-            <div className="flex items-center gap-3 p-2 rounded bg-overlay/30 border border-edge/50 min-h-[52px]">
-                <div className="w-8 h-8 rounded bg-faint/50 flex items-center justify-center text-xs text-muted/50">--</div>
-                <div className="min-w-0">
-                    <div className="text-xs text-muted/50">{SLOT_LABELS[slotName] ?? slotName}</div>
-                    <div className="text-xs text-muted/30">Empty</div>
-                </div>
-            </div>
-        );
-    }
+    if (!item) return <EmptySlot slotName={slotName} />;
 
     const qualityClass = QUALITY_COLORS[item.quality.toUpperCase()] ?? 'text-gray-300';
     const iconBorderClass = QUALITY_BORDERS[item.quality.toUpperCase()] ?? 'border-gray-500';
 
     return (
-        <div
-            className="relative flex items-center gap-3 p-2 rounded bg-overlay border border-edge min-h-[52px] cursor-pointer hover:bg-overlay/80 transition-colors"
-            onClick={onItemClick}
-            onMouseEnter={() => setShowFallback(true)}
-            onMouseLeave={() => setShowFallback(false)}
-        >
-            {item.iconUrl ? (
-                <img src={item.iconUrl} alt={item.name}
-                    className={`w-8 h-8 rounded border ${iconBorderClass} flex-shrink-0`}
-                    onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                    }}
-                />
-            ) : null}
-            <div className={`w-8 h-8 rounded bg-faint flex items-center justify-center text-xs text-muted font-mono flex-shrink-0${item.iconUrl ? ' hidden' : ''}`}>
-                {item.itemLevel > 0 ? item.itemLevel : '--'}
-            </div>
+        <div className="relative flex items-center gap-3 p-2 rounded bg-overlay border border-edge min-h-[52px] cursor-pointer hover:bg-overlay/80 transition-colors"
+            onClick={onItemClick} onMouseEnter={() => setShowFallback(true)} onMouseLeave={() => setShowFallback(false)}>
+            <SlotIcon item={item} iconBorderClass={iconBorderClass} />
             <SlotItemDetails item={item} qualityClass={qualityClass} gameVariant={gameVariant} />
             {showFallback && !isWowheadLoaded() && <ItemFallbackTooltip item={item} />}
+        </div>
+    );
+}
+
+function SlotSockets({ sockets }: { sockets: EquipmentItemDto['sockets'] }) {
+    if (!sockets || sockets.length === 0) return null;
+    return (
+        <div className="flex items-center gap-1">
+            {sockets.map((s, i) => (
+                <span key={i} className={`w-3 h-3 rounded-full border ${s.itemId ? 'bg-blue-500/40 border-blue-500/60' : 'bg-faint border-edge'}`}
+                    title={`${s.socketType}${s.itemId ? ' (filled)' : ' (empty)'}`} />
+            ))}
         </div>
     );
 }
@@ -66,30 +78,30 @@ function SlotItemDetails({ item, qualityClass, gameVariant }: {
 }) {
     return (
         <div className="min-w-0 flex-1">
-            <a href={getWowheadItemUrl(item.itemId, gameVariant)}
-                data-wowhead={getWowheadItemData(item.itemId, gameVariant)}
-                target="_blank" rel="noopener noreferrer"
-                className={`text-sm font-medium truncate block ${qualityClass} hover:underline`}
-                onClick={(e) => e.preventDefault()}>
-                {item.name}
-            </a>
+            <a href={getWowheadItemUrl(item.itemId, gameVariant)} data-wowhead={getWowheadItemData(item.itemId, gameVariant)}
+                target="_blank" rel="noopener noreferrer" className={`text-sm font-medium truncate block ${qualityClass} hover:underline`}
+                onClick={(e) => e.preventDefault()}>{item.name}</a>
             <div className="flex items-center gap-2 text-xs text-muted">
                 <span>{SLOT_LABELS[item.slot] ?? item.slot}</span>
                 {item.itemSubclass && (<><span>·</span><span>{item.itemSubclass}</span></>)}
             </div>
-            {item.enchantments && item.enchantments.length > 0 && (
-                <div className="text-xs text-green-400 truncate">{item.enchantments[0].displayString}</div>
-            )}
-            {item.sockets && item.sockets.length > 0 && (
-                <div className="flex items-center gap-1">
-                    {item.sockets.map((s, i) => (
-                        <span key={i}
-                            className={`w-3 h-3 rounded-full border ${s.itemId ? 'bg-blue-500/40 border-blue-500/60' : 'bg-faint border-edge'}`}
-                            title={`${s.socketType}${s.itemId ? ' (filled)' : ' (empty)'}`}
-                        />
-                    ))}
-                </div>
-            )}
+            {item.enchantments && item.enchantments.length > 0 && <div className="text-xs text-green-400 truncate">{item.enchantments[0].displayString}</div>}
+            <SlotSockets sockets={item.sockets} />
+        </div>
+    );
+}
+
+function SlotColumn({ slots, itemsBySlot, gameVariant, onItemClick }: {
+    slots: string[]; itemsBySlot: Map<string, EquipmentItemDto>;
+    gameVariant: string | null; onItemClick: (item: EquipmentItemDto) => void;
+}) {
+    return (
+        <div className="space-y-2">
+            {slots.map((slot) => (
+                <EquipmentSlot key={slot} item={itemsBySlot.get(slot)} slotName={slot}
+                    gameVariant={gameVariant}
+                    onItemClick={itemsBySlot.get(slot) ? () => onItemClick(itemsBySlot.get(slot)!) : undefined} />
+            ))}
         </div>
     );
 }
@@ -100,34 +112,22 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }
     renderUrl: string | null; onItemClick: (item: EquipmentItemDto) => void;
 }) {
     const itemsBySlot = new Map(equipment.items.map((i) => [i.slot, i]));
-
-    const renderSlotColumn = (slots: string[]) => (
-        <div className="space-y-2">
-            {slots.map((slot) => (
-                <EquipmentSlot key={slot} item={itemsBySlot.get(slot)} slotName={slot}
-                    gameVariant={gameVariant}
-                    onItemClick={itemsBySlot.get(slot) ? () => onItemClick(itemsBySlot.get(slot)!) : undefined}
-                />
-            ))}
-        </div>
-    );
+    const columnProps = { itemsBySlot, gameVariant, onItemClick };
 
     return (
         <div className="space-y-4">
             {renderUrl ? (
-                <EquipmentWithRender renderUrl={renderUrl} renderSlotColumn={renderSlotColumn} />
+                <EquipmentWithRender renderUrl={renderUrl} renderSlotColumn={(slots: string[]) => <SlotColumn slots={slots} {...columnProps} />} />
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {renderSlotColumn(LEFT_SLOTS)}
-                    {renderSlotColumn(RIGHT_SLOTS)}
+                    <SlotColumn slots={LEFT_SLOTS} {...columnProps} />
+                    <SlotColumn slots={RIGHT_SLOTS} {...columnProps} />
                 </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {BOTTOM_SLOTS.map((slot) => (
                     <EquipmentSlot key={slot} item={itemsBySlot.get(slot)} slotName={slot}
-                        gameVariant={gameVariant}
-                        onItemClick={itemsBySlot.get(slot) ? () => onItemClick(itemsBySlot.get(slot)!) : undefined}
-                    />
+                        gameVariant={gameVariant} onItemClick={itemsBySlot.get(slot) ? () => onItemClick(itemsBySlot.get(slot)!) : undefined} />
                 ))}
             </div>
         </div>

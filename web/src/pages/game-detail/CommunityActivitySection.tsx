@@ -7,7 +7,6 @@ import type { ActivityPeriod } from '@raid-ledger/contract';
 import { PlayerAvatar } from './PlayerAvatar';
 
 /** ROK-443: Community activity section for game detail page */
-// eslint-disable-next-line max-lines-per-function
 export function CommunityActivitySection({ gameId }: { gameId: number }): JSX.Element | null {
     const [period, setPeriod] = useState<ActivityPeriod>('week');
     const { data: activityData, isLoading: activityLoading } = useGameActivity(gameId, period);
@@ -23,30 +22,31 @@ export function CommunityActivitySection({ gameId }: { gameId: number }): JSX.El
 
     return (
         <section className="mb-8">
-            <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold text-foreground">Community Activity</h2>
-                <div className="flex gap-1">
-                    {PERIOD_LABELS.map((p) => (
-                        <button key={p.value} onClick={() => setPeriod(p.value)}
-                            className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                                period === p.value ? 'bg-emerald-600 text-white' : 'bg-overlay text-muted hover:text-foreground'
-                            }`}>
-                            {p.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
+            <ActivityHeader period={period} onPeriodChange={setPeriod} />
             <NowPlayingRow players={nowPlaying} count={nowPlayingCount} />
-
             {totalSeconds > 0 && (
-                <div className="text-sm text-muted mb-3">
-                    {formatPlaytime(totalSeconds)} total community playtime
-                </div>
+                <div className="text-sm text-muted mb-3">{formatPlaytime(totalSeconds)} total community playtime</div>
             )}
-
             <TopPlayersList players={topPlayers} isLoading={activityLoading} />
         </section>
+    );
+}
+
+function ActivityHeader({ period, onPeriodChange }: { period: ActivityPeriod; onPeriodChange: (p: ActivityPeriod) => void }): JSX.Element {
+    return (
+        <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-foreground">Community Activity</h2>
+            <div className="flex gap-1">
+                {PERIOD_LABELS.map((p) => (
+                    <button key={p.value} onClick={() => onPeriodChange(p.value)}
+                        className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                            period === p.value ? 'bg-emerald-600 text-white' : 'bg-overlay text-muted hover:text-foreground'
+                        }`}>
+                        {p.label}
+                    </button>
+                ))}
+            </div>
+        </div>
     );
 }
 
@@ -73,7 +73,6 @@ function NowPlayingRow({ players, count }: {
 }
 
 /** Top players leaderboard list */
-// eslint-disable-next-line max-lines-per-function
 function TopPlayersList({ players, isLoading }: {
     players: { userId: number; username: string; totalSeconds: number; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[];
     isLoading: boolean;

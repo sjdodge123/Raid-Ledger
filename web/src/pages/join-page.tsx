@@ -19,85 +19,57 @@ import { API_BASE_URL } from '../lib/config';
  * Graceful fallback: if token is invalid/expired, redirect to event page
  * with manual signup prompt.
  */
+function redirectToDiscord(intent: string | null, eventId: string | null, token: string | null) {
+    sessionStorage.setItem('join_intent', JSON.stringify({ intent, eventId, token }));
+    window.location.href = `${API_BASE_URL}/auth/discord`;
+}
+
+async function redeemAndNavigate(token: string, eventId: string | null, navigate: ReturnType<typeof useNavigate>) {
+    try {
+        const result = await redeemIntent(token);
+        if (result.success) toast.success("You're signed up!", { description: 'Your signup has been confirmed.' });
+        else toast.info('Join link expired', { description: 'You can still sign up manually on the event page.' });
+    } catch { /* fall through */ }
+    navigate(`/events/${eventId}`, { replace: true });
+}
+
+function useJoinEffect(authLoading: boolean, isAuthenticated: boolean, isValid: boolean, intent: string | null, eventId: string | null, token: string | null, navigate: ReturnType<typeof useNavigate>) {
+    const processedRef = useRef(false);
+    useEffect(() => {
+        if (authLoading || processedRef.current || !isValid) return;
+        processedRef.current = true;
+        if (!isAuthenticated) { redirectToDiscord(intent, eventId, token); return; }
+        void redeemAndNavigate(token!, eventId, navigate);
+    }, [authLoading, isAuthenticated, isValid, intent, eventId, token, navigate]);
+}
+
+function JoinInvalidState({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+            <h1 className="text-xl font-semibold text-foreground">Invalid Link</h1>
+            <p className="text-muted">This join link is invalid or has expired.</p>
+            <button onClick={() => navigate('/calendar')} className="btn btn-secondary">Go to Calendar</button>
+        </div>
+    );
+}
+
 export function JoinPage() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { isAuthenticated, isLoading: authLoading } = useAuth();
-    const processedRef = useRef(false);
 
     const intent = searchParams.get('intent');
     const eventId = searchParams.get('eventId');
     const token = searchParams.get('token');
+    const isValid = useMemo(() => intent === 'signup' && !!eventId && !!token, [intent, eventId, token]);
 
-    const isValid = useMemo(
-        () => intent === 'signup' && !!eventId && !!token,
-        [intent, eventId, token],
-    );
+    useJoinEffect(authLoading, isAuthenticated, isValid, intent, eventId, token, navigate);
 
-    useEffect(() => {
-        if (authLoading || processedRef.current) return;
-        if (!isValid) return;
-
-        if (!isAuthenticated) {
-            processedRef.current = true;
-            // Store intent params in sessionStorage for post-auth redirect
-            sessionStorage.setItem(
-                'join_intent',
-                JSON.stringify({ intent, eventId, token }),
-            );
-            window.location.href = `${API_BASE_URL}/auth/discord`;
-            return;
-        }
-
-        // User is authenticated — try to redeem the intent token
-        processedRef.current = true;
-        redeemIntent(token!)
-            .then((result) => {
-                if (result.success) {
-                    toast.success("You're signed up!", {
-                        description: 'Your signup has been confirmed.',
-                    });
-                } else {
-                    toast.info('Join link expired', {
-                        description: 'You can still sign up manually on the event page.',
-                    });
-                }
-                navigate(`/events/${eventId}`, { replace: true });
-            })
-            .catch(() => {
-                navigate(`/events/${eventId}`, { replace: true });
-            });
-    }, [authLoading, isAuthenticated, isValid, intent, eventId, token, navigate]);
-
-    if (!isValid) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-                <h1 className="text-xl font-semibold text-foreground">
-                    Invalid Link
-                </h1>
-                <p className="text-muted">
-                    This join link is invalid or has expired.
-                </p>
-                <button
-                    onClick={() => navigate('/calendar')}
-                    className="btn btn-secondary"
-                >
-                    Go to Calendar
-                </button>
-            </div>
-        );
-    }
-
-    // When not authenticated, processedRef is set before redirect — show redirect text.
-    // When authenticated, show processing text.
-    const statusText = !isAuthenticated
-        ? 'Redirecting to Discord login...'
-        : 'Processing your signup...';
-
+    if (!isValid) return <JoinInvalidState navigate={navigate} />;
     return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
             <LoadingSpinner />
-            <p className="text-muted">{statusText}</p>
+            <p className="text-muted">{!isAuthenticated ? 'Redirecting to Discord login...' : 'Processing your signup...'}</p>
         </div>
     );
 }

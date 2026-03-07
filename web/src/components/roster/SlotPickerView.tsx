@@ -79,6 +79,14 @@ export function ReassignSlotPickerView({
     );
 }
 
+function slotBtnStyle(colors: { bg: string; border: string; text: string }, isLocked: boolean): React.CSSProperties {
+    return {
+        '--slot-bg': isLocked ? 'rgba(30, 41, 59, 0.6)' : colors.bg,
+        '--slot-border': isLocked ? 'rgba(51, 65, 85, 0.4)' : colors.border,
+        '--slot-text': isLocked ? '#475569' : colors.text,
+    } as React.CSSProperties;
+}
+
 function SlotRoleGroup({
     role, label, slots, playerRole, onSlotPick,
 }: {
@@ -87,26 +95,16 @@ function SlotRoleGroup({
 }) {
     return (
         <div className="assignment-popup__section">
-            <h4 className="assignment-popup__section-title">
-                <RoleIcon role={role} size="w-4 h-4" /> {label}
-            </h4>
+            <h4 className="assignment-popup__section-title"><RoleIcon role={role} size="w-4 h-4" /> {label}</h4>
             <div className="assignment-popup__slot-grid">
                 {slots.map(slot => {
                     const colors = ROLE_SLOT_COLORS[slot.role] ?? ROLE_SLOT_COLORS.player;
                     const isMatch = !slot.occupantName && playerRole === slot.role;
                     const isLocked = !!slot.occupantName;
                     return (
-                        <button
-                            key={`${slot.role}-${slot.position}`}
-                            onClick={() => !isLocked && onSlotPick(slot.role, slot.position)}
-                            disabled={isLocked}
-                            className={`assignment-popup__slot-btn ${isLocked ? 'assignment-popup__slot-btn--locked' : isMatch ? 'assignment-popup__slot-btn--match' : ''}`}
-                            style={{
-                                '--slot-bg': isLocked ? 'rgba(30, 41, 59, 0.6)' : colors.bg,
-                                '--slot-border': isLocked ? 'rgba(51, 65, 85, 0.4)' : colors.border,
-                                '--slot-text': isLocked ? '#475569' : colors.text,
-                            } as React.CSSProperties}
-                        >
+                        <button key={`${slot.role}-${slot.position}`} onClick={() => !isLocked && onSlotPick(slot.role, slot.position)}
+                            disabled={isLocked} className={`assignment-popup__slot-btn ${isLocked ? 'assignment-popup__slot-btn--locked' : isMatch ? 'assignment-popup__slot-btn--match' : ''}`}
+                            style={slotBtnStyle(colors, isLocked)}>
                             <span className="assignment-popup__slot-label">{formatRole(slot.role)} {slot.position}</span>
                             {isLocked && <span className="assignment-popup__slot-occupant">{slot.occupantName}</span>}
                         </button>
@@ -114,6 +112,40 @@ function SlotRoleGroup({
                 })}
             </div>
         </div>
+    );
+}
+
+function reassignSlotStyle(isCurrent: boolean, isOccupied: boolean, colors: { bg: string; border: string; text: string }): React.CSSProperties {
+    return {
+        '--slot-bg': isCurrent ? 'rgba(30, 41, 59, 0.6)' : isOccupied ? 'rgba(245, 158, 11, 0.08)' : colors.bg,
+        '--slot-border': isCurrent ? 'rgba(51, 65, 85, 0.4)' : isOccupied ? 'rgba(245, 158, 11, 0.4)' : colors.border,
+        '--slot-text': isCurrent ? '#475569' : isOccupied ? '#fbbf24' : colors.text,
+    } as React.CSSProperties;
+}
+
+function reassignSlotClass(isCurrent: boolean, isOccupied: boolean, isMatch: boolean) {
+    if (isCurrent) return 'assignment-popup__slot-btn assignment-popup__slot-btn--locked';
+    if (isOccupied) return 'assignment-popup__slot-btn assignment-popup__slot-btn--swap';
+    if (isMatch) return 'assignment-popup__slot-btn assignment-popup__slot-btn--match';
+    return 'assignment-popup__slot-btn';
+}
+
+function ReassignSlotButton({ slot, slotRole, slotPosition, occupantRole, onSlotPick }: {
+    slot: AvailableSlot; slotRole: RosterRole | null; slotPosition: number;
+    occupantRole?: string | null; onSlotPick: (role: RosterRole, position: number) => void;
+}) {
+    const colors = ROLE_SLOT_COLORS[slot.role] ?? ROLE_SLOT_COLORS.player;
+    const isCurrent = slot.role === slotRole && slot.position === slotPosition;
+    const isOccupied = !!slot.occupantName && !isCurrent;
+    const isMatch = !slot.occupantName && occupantRole === slot.role;
+    return (
+        <button key={`${slot.role}-${slot.position}`} onClick={() => !isCurrent && onSlotPick(slot.role, slot.position)}
+            disabled={isCurrent} className={reassignSlotClass(isCurrent, isOccupied, isMatch)}
+            style={reassignSlotStyle(isCurrent, isOccupied, colors)}>
+            <span className="assignment-popup__slot-label">{formatRole(slot.role)} {slot.position}</span>
+            {isCurrent && <span className="assignment-popup__slot-occupant">(current)</span>}
+            {isOccupied && <span className="assignment-popup__slot-occupant">&harr; {slot.occupantName}</span>}
+        </button>
     );
 }
 
@@ -127,34 +159,9 @@ function ReassignSlotRoleGroup({
 }) {
     return (
         <div className="assignment-popup__section">
-            <h4 className="assignment-popup__section-title">
-                <RoleIcon role={role} size="w-4 h-4" /> {label}
-            </h4>
+            <h4 className="assignment-popup__section-title"><RoleIcon role={role} size="w-4 h-4" /> {label}</h4>
             <div className="assignment-popup__slot-grid">
-                {slots.map(slot => {
-                    const colors = ROLE_SLOT_COLORS[slot.role] ?? ROLE_SLOT_COLORS.player;
-                    const isCurrent = slot.role === slotRole && slot.position === slotPosition;
-                    const isOccupied = !!slot.occupantName && !isCurrent;
-                    const isEmpty = !slot.occupantName;
-                    const isMatch = isEmpty && currentOccupant.character?.role === slot.role;
-                    return (
-                        <button
-                            key={`${slot.role}-${slot.position}`}
-                            onClick={() => !isCurrent && onSlotPick(slot.role, slot.position)}
-                            disabled={isCurrent}
-                            className={`assignment-popup__slot-btn ${isCurrent ? 'assignment-popup__slot-btn--locked' : isOccupied ? 'assignment-popup__slot-btn--swap' : isMatch ? 'assignment-popup__slot-btn--match' : ''}`}
-                            style={{
-                                '--slot-bg': isCurrent ? 'rgba(30, 41, 59, 0.6)' : isOccupied ? 'rgba(245, 158, 11, 0.08)' : colors.bg,
-                                '--slot-border': isCurrent ? 'rgba(51, 65, 85, 0.4)' : isOccupied ? 'rgba(245, 158, 11, 0.4)' : colors.border,
-                                '--slot-text': isCurrent ? '#475569' : isOccupied ? '#fbbf24' : colors.text,
-                            } as React.CSSProperties}
-                        >
-                            <span className="assignment-popup__slot-label">{formatRole(slot.role)} {slot.position}</span>
-                            {isCurrent && <span className="assignment-popup__slot-occupant">(current)</span>}
-                            {isOccupied && <span className="assignment-popup__slot-occupant">&harr; {slot.occupantName}</span>}
-                        </button>
-                    );
-                })}
+                {slots.map(slot => <ReassignSlotButton key={`${slot.role}-${slot.position}`} slot={slot} slotRole={slotRole} slotPosition={slotPosition} occupantRole={currentOccupant.character?.role} onSlotPick={onSlotPick} />)}
             </div>
         </div>
     );

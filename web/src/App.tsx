@@ -68,8 +68,7 @@ function ScrollToTop() {
   return null;
 }
 
-function App() {
-  const isDark = useThemeStore((s) => s.resolved.isDark);
+function useAppBootstrap() {
   const startPolling = useConnectivityStore((s) => s.startPolling);
 
   useEffect(() => {
@@ -90,6 +89,11 @@ function App() {
       });
     }
   }, []);
+}
+
+function App() {
+  const isDark = useThemeStore((s) => s.resolved.isDark);
+  useAppBootstrap();
 
   return (
     <StartupGate>

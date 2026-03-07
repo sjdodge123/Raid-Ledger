@@ -46,44 +46,47 @@ export function getEventStatus(startTime: string, endTime: string): EventStatus 
     return 'ended';
 }
 
+function pluralize(n: number, unit: string): string {
+    return `${n} ${n === 1 ? unit : `${unit}s`}`;
+}
+
+function getLiveRelativeTime(now: Date, start: Date): string {
+    const elapsedMins = Math.round((now.getTime() - start.getTime()) / 60000);
+    if (elapsedMins < 1) return 'just started';
+    if (elapsedMins < 60) return `started ${pluralize(elapsedMins, 'minute')} ago`;
+    return `started ${pluralize(Math.round(elapsedMins / 60), 'hour')} ago`;
+}
+
+function getEndedRelativeTime(now: Date, end: Date): string {
+    const diffMs = now.getTime() - end.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    const diffHours = Math.round(diffMs / 3600000);
+    const diffDays = Math.round(diffMs / 86400000);
+    if (diffDays >= 1) return `ended ${pluralize(diffDays, 'day')} ago`;
+    if (diffHours >= 1) return `ended ${pluralize(diffHours, 'hour')} ago`;
+    if (diffMins < 1) return 'just ended';
+    return `ended ${pluralize(diffMins, 'minute')} ago`;
+}
+
+function getUpcomingRelativeTime(now: Date, start: Date): string {
+    const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+    const diffMs = start.getTime() - now.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    const diffHours = Math.round(diffMs / 3600000);
+    const diffDays = Math.round(diffMs / 86400000);
+    if (diffMins < 1) return 'starting now';
+    if (diffDays >= 1) return rtf.format(diffDays, 'day');
+    if (diffHours >= 1) return rtf.format(diffHours, 'hour');
+    return rtf.format(diffMins, 'minute');
+}
+
 /**
  * Get relative time string (e.g., "in 2 hours", "started 30 min ago")
  */
 export function getRelativeTime(startTime: string, endTime: string): string {
     const now = new Date();
-    const start = new Date(startTime);
-    const end = new Date(endTime);
     const status = getEventStatus(startTime, endTime);
-
-    const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-
-    if (status === 'live') {
-        const elapsedMins = Math.round((now.getTime() - start.getTime()) / 60000);
-        if (elapsedMins < 1) return 'just started';
-        if (elapsedMins < 60) return `started ${elapsedMins} ${elapsedMins === 1 ? 'minute' : 'minutes'} ago`;
-        const elapsedHours = Math.round(elapsedMins / 60);
-        return `started ${elapsedHours} ${elapsedHours === 1 ? 'hour' : 'hours'} ago`;
-    }
-
-    if (status === 'ended') {
-        const diffMs = now.getTime() - end.getTime();
-        const diffMins = Math.round(diffMs / 60000);
-        const diffHours = Math.round(diffMs / 3600000);
-        const diffDays = Math.round(diffMs / 86400000);
-        if (diffDays >= 1) return `ended ${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
-        if (diffHours >= 1) return `ended ${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
-        if (diffMins < 1) return 'just ended';
-        return `ended ${diffMins} ${diffMins === 1 ? 'minute' : 'minutes'} ago`;
-    }
-
-    // Upcoming - use Intl for natural language
-    const diffMs = start.getTime() - now.getTime();
-    const diffMins = Math.round(diffMs / 60000);
-    const diffHours = Math.round(diffMs / 3600000);
-    const diffDays = Math.round(diffMs / 86400000);
-
-    if (diffMins < 1) return 'starting now';
-    if (diffDays >= 1) return rtf.format(diffDays, 'day');
-    if (diffHours >= 1) return rtf.format(diffHours, 'hour');
-    return rtf.format(diffMins, 'minute');
+    if (status === 'live') return getLiveRelativeTime(now, new Date(startTime));
+    if (status === 'ended') return getEndedRelativeTime(now, new Date(endTime));
+    return getUpcomingRelativeTime(now, new Date(startTime));
 }

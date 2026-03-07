@@ -19,6 +19,16 @@ export interface BossLootBodyProps {
     hasCharacter: boolean;
 }
 
+function LootFilterToggle({ filterUsable, onToggle }: { filterUsable: boolean; onToggle: () => void }) {
+    return (
+        <div className="boss-loot-filter">
+            <button className={`boss-loot-filter__toggle ${filterUsable ? 'boss-loot-filter__toggle--active' : ''}`} onClick={onToggle}>
+                {filterUsable ? 'Show all classes' : 'Show my class only'}
+            </button>
+        </div>
+    );
+}
+
 /** Loot table rendered under an expanded boss row */
 export function BossLootBody({
     loot, isLoading, wowheadVariant,
@@ -26,57 +36,34 @@ export function BossLootBody({
 }: BossLootBodyProps) {
     const [filterUsable, setFilterUsable] = useState(false);
 
-    if (isLoading) {
-        return (
-            <div className="boss-loot-body">
-                <div className="boss-loot-body__loading">Loading loot&hellip;</div>
-            </div>
-        );
-    }
+    if (isLoading) return <div className="boss-loot-body"><div className="boss-loot-body__loading">Loading loot&hellip;</div></div>;
+    if (!loot || loot.length === 0) return <div className="boss-loot-body"><div className="boss-loot-body__empty">No loot data available</div></div>;
 
-    if (!loot || loot.length === 0) {
-        return (
-            <div className="boss-loot-body">
-                <div className="boss-loot-body__empty">No loot data available</div>
-            </div>
-        );
-    }
-
-    const hasClassRestrictions = loot.some(
-        (item) => item.classRestrictions && item.classRestrictions.length > 0,
-    );
-
-    const displayLoot = filterUsable
-        ? loot.filter((item) => isUsableByClass(item, characterClass))
-        : loot;
+    const hasClassRestrictions = loot.some((item) => item.classRestrictions && item.classRestrictions.length > 0);
+    const displayLoot = filterUsable ? loot.filter((item) => isUsableByClass(item, characterClass)) : loot;
 
     return (
         <div className="boss-loot-body">
-            {hasCharacter && hasClassRestrictions && (
-                <div className="boss-loot-filter">
-                    <button
-                        className={`boss-loot-filter__toggle ${filterUsable ? 'boss-loot-filter__toggle--active' : ''}`}
-                        onClick={() => setFilterUsable((v) => !v)}
-                    >
-                        {filterUsable ? 'Show all classes' : 'Show my class only'}
-                    </button>
-                </div>
-            )}
-
+            {hasCharacter && hasClassRestrictions && <LootFilterToggle filterUsable={filterUsable} onToggle={() => setFilterUsable((v) => !v)} />}
             <div className="quest-rewards">
                 {displayLoot.map((item) => (
-                    <LootItemRow
-                        key={item.id}
-                        item={item}
-                        usable={isUsableByClass(item, characterClass)}
-                        filterUsable={filterUsable}
-                        wowheadVariant={wowheadVariant}
-                        equippedBySlot={equippedBySlot}
-                        characterClass={characterClass}
-                        hasCharacter={hasCharacter}
-                    />
+                    <LootItemRow key={item.id} item={item} usable={isUsableByClass(item, characterClass)}
+                        filterUsable={filterUsable} wowheadVariant={wowheadVariant}
+                        equippedBySlot={equippedBySlot} characterClass={characterClass} hasCharacter={hasCharacter} />
                 ))}
             </div>
+        </div>
+    );
+}
+
+function LootItemMeta({ item }: { item: BossLootDto }) {
+    if (!item.classRestrictions?.length && !item.dropRate) return null;
+    return (
+        <div className="boss-loot-item-meta">
+            {item.classRestrictions && item.classRestrictions.length > 0 && (
+                <span className="quest-badge-restriction quest-badge-class">{item.classRestrictions.join(', ')}</span>
+            )}
+            {item.dropRate && <span className="boss-loot-item-meta__drop-rate">{(parseFloat(item.dropRate) * 100).toFixed(0)}% drop</span>}
         </div>
     );
 }
@@ -89,38 +76,18 @@ function LootItemRow({ item, usable, filterUsable, wowheadVariant, equippedBySlo
 }) {
     const equipSlot = item.slot ? LOOT_TO_EQUIP_SLOT[item.slot] ?? item.slot : null;
     const equippedItem = equipSlot ? equippedBySlot.get(equipSlot) : undefined;
-
     return (
-        <div
-            className={`quest-reward-item-wrapper ${!usable && !filterUsable ? 'quest-card--dimmed' : ''}`}
-        >
-            <WowItemCard
-                itemId={item.itemId} name={item.itemName} quality={item.quality}
+        <div className={`quest-reward-item-wrapper ${!usable && !filterUsable ? 'quest-card--dimmed' : ''}`}>
+            <WowItemCard itemId={item.itemId} name={item.itemName} quality={item.quality}
                 slot={item.slot} itemLevel={item.itemLevel} iconUrl={item.iconUrl}
                 wowheadUrl={getWowheadItemUrlForExpansion(item.itemId, item.expansion)}
-                wowheadData={`item=${item.itemId}&${getWowheadDataSuffixForExpansion(item.expansion)}`}
-            />
+                wowheadData={`item=${item.itemId}&${getWowheadDataSuffixForExpansion(item.expansion)}`} />
             {equipSlot && hasCharacter && (
-                <ItemComparison
-                    rewardItemLevel={item.itemLevel} equippedItem={equippedItem}
+                <ItemComparison rewardItemLevel={item.itemLevel} equippedItem={equippedItem}
                     gameVariant={wowheadVariant} characterClass={characterClass}
-                    lootItemSubclass={item.itemSubclass} lootSlot={item.slot}
-                />
+                    lootItemSubclass={item.itemSubclass} lootSlot={item.slot} />
             )}
-            {(item.classRestrictions?.length || item.dropRate) && (
-                <div className="boss-loot-item-meta">
-                    {item.classRestrictions && item.classRestrictions.length > 0 && (
-                        <span className="quest-badge-restriction quest-badge-class">
-                            {item.classRestrictions.join(', ')}
-                        </span>
-                    )}
-                    {item.dropRate && (
-                        <span className="boss-loot-item-meta__drop-rate">
-                            {(parseFloat(item.dropRate) * 100).toFixed(0)}% drop
-                        </span>
-                    )}
-                </div>
-            )}
+            <LootItemMeta item={item} />
         </div>
     );
 }

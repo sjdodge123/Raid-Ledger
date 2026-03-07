@@ -6,13 +6,10 @@ import { ProfileSidebar } from './profile-sidebar';
 import { toast } from '../../lib/toast';
 import './integration-hub.css';
 
-export function ProfileLayout() {
-    const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
-    const location = useLocation();
+function useDiscordLinkCallback(refetch: () => void) {
     const [searchParams, setSearchParams] = useSearchParams();
-
-    // Handle Discord link callback search params (?linked=success/error)
     const processedRef = useRef(false);
+
     useEffect(() => {
         if (processedRef.current) return;
         const linked = searchParams.get('linked');
@@ -28,45 +25,43 @@ export function ProfileLayout() {
             setSearchParams({});
         }
     }, [searchParams, setSearchParams, refetch]);
+}
 
-    // Redirect bare /profile to the default panel
-    if (location.pathname === '/profile' || location.pathname === '/profile/') {
-        return <Navigate to="/profile/identity" replace />;
-    }
-
-    if (authLoading) {
-        return (
-            <div className="max-w-6xl mx-auto px-4 py-8">
-                <div className="animate-pulse">
-                    <div className="h-8 bg-overlay rounded w-48 mb-4" />
-                    <div className="h-4 bg-overlay rounded w-64 mb-8" />
-                    <div className="bg-panel/50 rounded-xl h-96" />
-                </div>
+function ProfileLoadingSkeleton() {
+    return (
+        <div className="max-w-6xl mx-auto px-4 py-8">
+            <div className="animate-pulse">
+                <div className="h-8 bg-overlay rounded w-48 mb-4" />
+                <div className="h-4 bg-overlay rounded w-64 mb-8" />
+                <div className="bg-panel/50 rounded-xl h-96" />
             </div>
-        );
-    }
+        </div>
+    );
+}
 
-    if (!isAuthenticated || !user) {
-        return <Navigate to="/" replace />;
-    }
-
+function ProfileShell() {
     return (
         <div className="profile-page relative md:min-h-screen px-4">
             <div className="relative z-10 max-w-6xl mx-auto pt-6">
                 <h1 className="text-lg font-bold text-foreground mb-6 md:hidden">My Profile</h1>
-
                 <div className="flex gap-6">
                     <aside className="hidden md:block w-56 flex-shrink-0">
-                        <div className="sticky top-8">
-                            <ProfileSidebar />
-                        </div>
+                        <div className="sticky top-8"><ProfileSidebar /></div>
                     </aside>
-
-                    <main className="flex-1 min-w-0">
-                        <Outlet />
-                    </main>
+                    <main className="flex-1 min-w-0"><Outlet /></main>
                 </div>
             </div>
         </div>
     );
+}
+
+export function ProfileLayout() {
+    const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
+    const location = useLocation();
+    useDiscordLinkCallback(refetch);
+
+    if (location.pathname === '/profile' || location.pathname === '/profile/') return <Navigate to="/profile/identity" replace />;
+    if (authLoading) return <ProfileLoadingSkeleton />;
+    if (!isAuthenticated || !user) return <Navigate to="/" replace />;
+    return <ProfileShell />;
 }

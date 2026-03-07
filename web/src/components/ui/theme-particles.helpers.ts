@@ -24,39 +24,31 @@ export function rand(min: number, max: number) {
     return min + Math.random() * (max - min);
 }
 
-export function spawnParticle(cfg: ParticleConfig, w: number, h: number): Particle {
-    const speed = rand(cfg.minSpeed, cfg.maxSpeed);
-    const x = rand(0, w);
-    let y: number;
-    let vy: number;
-    let vx = rand(-cfg.drift, cfg.drift);
-
-    if (cfg.behavior === 'fall') {
-        y = rand(0, h); vy = speed;
-    } else if (cfg.behavior === 'rise') {
-        y = rand(0, h); vy = -speed;
-    } else if (cfg.behavior === 'firefly') {
+function spawnMotion(cfg: ParticleConfig, _w: number, h: number, speed: number) {
+    let y: number, vy: number, vx = rand(-cfg.drift, cfg.drift);
+    if (cfg.behavior === 'fall') { y = rand(0, h); vy = speed; }
+    else if (cfg.behavior === 'rise') { y = rand(0, h); vy = -speed; }
+    else if (cfg.behavior === 'firefly') {
         const angle = rand(0, Math.PI * 2);
         y = rand(h * 0.2, h * 0.9);
         vx = Math.cos(angle) * speed; vy = Math.sin(angle) * speed;
-    } else if (cfg.behavior === 'panel-edge') {
-        y = rand(0, h); vy = 0;
-    } else {
-        y = rand(0, h); vy = rand(-speed, speed) * 0.5; vx = rand(-cfg.drift, cfg.drift);
-    }
+    } else if (cfg.behavior === 'panel-edge') { y = rand(0, h); vy = 0; }
+    else { y = rand(0, h); vy = rand(-speed, speed) * 0.5; vx = rand(-cfg.drift, cfg.drift); }
+    return { y, vy, vx };
+}
 
+export function spawnParticle(cfg: ParticleConfig, w: number, h: number): Particle {
+    const speed = rand(cfg.minSpeed, cfg.maxSpeed);
+    const { y, vy, vx } = spawnMotion(cfg, w, h, speed);
     return {
-        x, y, vx, vy,
+        x: rand(0, w), y, vx, vy,
         size: rand(cfg.minSize, cfg.maxSize),
         colorIdx: Math.floor(Math.random() * cfg.colors.length),
         alpha: (cfg.behavior === 'firefly' || cfg.behavior === 'panel-edge') ? 0 : rand(0.4, 1.0) * cfg.baseOpacity,
         phase: rand(0, Math.PI * 2),
         phaseSpeed: rand(0.01, 0.04),
         ...(cfg.behavior === 'firefly' ? {
-            turnRate: rand(-0.07, 0.07),
-            idleTimer: rand(0, 600),
-            lifeTimer: 0,
-            maxLife: rand(20, 45),
+            turnRate: rand(-0.07, 0.07), idleTimer: rand(0, 600), lifeTimer: 0, maxLife: rand(20, 45),
         } : {}),
     };
 }
@@ -111,17 +103,30 @@ export function positionOnEdge(p: Particle, r: DOMRect) {
     }
 }
 
-export function placePanelEdgeParticle(p: Particle, cfg: ParticleConfig, elements: Element[]) {
-    let el: Element | null = null;
-    if (elements.length > 0) {
-        const start = Math.floor(Math.random() * elements.length);
-        for (let i = 0; i < elements.length; i++) {
-            const candidate = elements[(start + i) % elements.length];
-            const r = candidate.getBoundingClientRect();
-            if (r.width > 80 && r.height > 40) { el = candidate; break; }
-        }
+function pickPanelElement(elements: Element[]): Element | null {
+    if (elements.length === 0) return null;
+    const start = Math.floor(Math.random() * elements.length);
+    for (let i = 0; i < elements.length; i++) {
+        const candidate = elements[(start + i) % elements.length];
+        const r = candidate.getBoundingClientRect();
+        if (r.width > 80 && r.height > 40) return candidate;
     }
+    return null;
+}
 
+function positionOnViewport(p: Particle, edge: EdgeType, t: number, perp: number) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    switch (edge) {
+        case 'top':    p.x = t * vw;  p.y = Math.abs(perp);       break;
+        case 'bottom': p.x = t * vw;  p.y = vh - Math.abs(perp);  break;
+        case 'left':   p.x = Math.abs(perp);       p.y = t * vh;  break;
+        case 'right':  p.x = vw - Math.abs(perp);  p.y = t * vh;  break;
+    }
+}
+
+export function placePanelEdgeParticle(p: Particle, cfg: ParticleConfig, elements: Element[]) {
+    const el = pickPanelElement(elements);
     const edge = EDGES[Math.floor(Math.random() * 4)];
     const t = Math.random();
     const perp = (Math.random() - 0.5) * 8;
@@ -138,16 +143,6 @@ export function placePanelEdgeParticle(p: Particle, cfg: ParticleConfig, element
     p.vx = rand(cfg.minSpeed, cfg.maxSpeed) * (Math.random() < 0.5 ? 1 : -1);
     p.vy = 0;
 
-    if (el) {
-        positionOnEdge(p, el.getBoundingClientRect());
-    } else {
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        switch (edge) {
-            case 'top':    p.x = t * vw;  p.y = Math.abs(perp);       break;
-            case 'bottom': p.x = t * vw;  p.y = vh - Math.abs(perp);  break;
-            case 'left':   p.x = Math.abs(perp);       p.y = t * vh;  break;
-            case 'right':  p.x = vw - Math.abs(perp);  p.y = t * vh;  break;
-        }
-    }
+    if (el) positionOnEdge(p, el.getBoundingClientRect());
+    else positionOnViewport(p, edge, t, perp);
 }

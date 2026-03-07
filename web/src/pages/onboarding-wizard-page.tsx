@@ -19,26 +19,11 @@ import type { GameRegistryDto } from '@raid-ledger/contract';
 import type { StepDef } from './onboarding-wizard/onboarding-types';
 import { OnboardingBreadcrumbs } from './onboarding-wizard/OnboardingBreadcrumbs';
 
-/**
- * FTE Onboarding Wizard Page (ROK-219 redesign).
- * Step flow: Connect (conditional) -> Games -> Character x N -> Game Time -> Personalize
- * Centered modal overlay. All steps are skippable. Escape dismisses.
- * Re-runnable from settings via /onboarding?rerun=1.
- */
-// eslint-disable-next-line max-lines-per-function
-export function OnboardingWizardPage(): JSX.Element | null {
-    const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    const { user } = useAuth();
-    const completeOnboarding = useCompleteOnboardingFte();
-    const { games: registryGames } = useGameRegistry();
-    const { data: heartedGamesData } = useUserHeartedGames(user?.id);
+/** Determines which conditional steps are needed based on user/discord state */
+function useConditionalStepFlags(user: { discordId: string } | null): {
+    needsConnect: boolean; needsDiscordJoin: boolean;
+} {
     const { data: systemStatus } = useSystemStatus();
-
-    const [currentStep, setCurrentStep] = useState(0);
-    const [extraCharCounts, setExtraCharCounts] = useState<Record<string, number>>({});
-
-    const isRerun = searchParams.get('rerun') === '1';
     const discordConfigured = systemStatus?.discordConfigured ?? false;
 
     const needsConnect = useMemo(() => {
@@ -56,7 +41,14 @@ export function OnboardingWizardPage(): JSX.Element | null {
         return !guildMembership.isMember;
     }, [discordConfigured, user, guildMembership]);
 
-    const qualifyingGames = useMemo(() => {
+    return { needsConnect, needsDiscordJoin };
+}
+
+/** Resolves hearted games against the game registry to find qualifying games */
+function useQualifyingGames(userId: number | undefined): GameRegistryDto[] {
+    const { games: registryGames } = useGameRegistry();
+    const { data: heartedGamesData } = useUserHeartedGames(userId);
+    return useMemo(() => {
         const hearted = heartedGamesData?.data ?? [];
         if (hearted.length === 0 || registryGames.length === 0) return [];
         const registryByName = new Map(registryGames.map((g) => [g.name.toLowerCase(), g]));
@@ -64,46 +56,61 @@ export function OnboardingWizardPage(): JSX.Element | null {
             .map((h) => registryByName.get(h.name.toLowerCase()))
             .filter((g): g is GameRegistryDto => !!g && g.hasRoles);
     }, [heartedGamesData, registryGames]);
+}
 
-    const steps: StepDef[] = useMemo(() => {
-        const s: StepDef[] = [];
-        if (needsConnect) s.push({ key: 'connect', label: 'Connect' });
-        s.push({ key: 'games', label: 'Games' });
-        qualifyingGames.forEach((game) => {
-            const total = 1 + (extraCharCounts[game.id] ?? 0);
-            for (let j = 0; j < total; j++) {
-                const displayName = game.shortName || game.name;
-                s.push({
-                    key: `character-${game.id}-${j}`,
-                    label: total > 1 ? `${displayName} (${j + 1})` : displayName,
-                    registryGame: game, charIndex: j,
-                });
-            }
-        });
-        s.push({ key: 'gametime', label: 'Game Time' });
-        s.push({ key: 'avatar', label: 'Personalize' });
-        if (needsDiscordJoin) s.push({ key: 'discord-join', label: 'Discord' });
-        return s;
-    }, [needsConnect, needsDiscordJoin, qualifyingGames, extraCharCounts]);
+/** Builds the ordered list of wizard steps from flags and qualifying games */
+function buildSteps(
+    needsConnect: boolean, needsDiscordJoin: boolean,
+    qualifyingGames: GameRegistryDto[], extraCharCounts: Record<string, number>,
+): StepDef[] {
+    const s: StepDef[] = [];
+    if (needsConnect) s.push({ key: 'connect', label: 'Connect' });
+    s.push({ key: 'games', label: 'Games' });
+    qualifyingGames.forEach((game) => {
+        const total = 1 + (extraCharCounts[game.id] ?? 0);
+        for (let j = 0; j < total; j++) {
+            const displayName = game.shortName || game.name;
+            s.push({
+                key: `character-${game.id}-${j}`,
+                label: total > 1 ? `${displayName} (${j + 1})` : displayName,
+                registryGame: game, charIndex: j,
+            });
+        }
+    });
+    s.push({ key: 'gametime', label: 'Game Time' });
+    s.push({ key: 'avatar', label: 'Personalize' });
+    if (needsDiscordJoin) s.push({ key: 'discord-join', label: 'Discord' });
+    return s;
+}
 
-    const maxStep = steps.length - 1;
-    const currentStepDef = steps[currentStep];
-    const stepValidatorRef = useRef<(() => boolean) | null>(null);
-
+/** Navigation: go next with validation, go back */
+function useNavCallbacks(
+    stepValidatorRef: React.MutableRefObject<(() => boolean) | null>,
+    setCurrentStep: React.Dispatch<React.SetStateAction<number>>,
+    maxStep: number,
+): { goNext: () => void; goBack: () => void } {
     const goNext = useCallback(() => {
         if (stepValidatorRef.current && !stepValidatorRef.current()) return;
         stepValidatorRef.current = null;
         setCurrentStep((prev) => Math.min(prev + 1, maxStep));
-    }, [maxStep]);
+    }, [maxStep, stepValidatorRef, setCurrentStep]);
 
     const goBack = useCallback(() => {
         setCurrentStep((prev) => Math.max(prev - 1, 0));
-    }, []);
+    }, [setCurrentStep]);
 
+    return { goNext, goBack };
+}
+
+/** Add/remove dynamic character steps */
+function useCharacterStepActions(
+    setExtraCharCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>,
+    setCurrentStep: React.Dispatch<React.SetStateAction<number>>,
+): { addCharacterStep: (gameId: number) => void; removeCharacterStep: (gameId: number) => void } {
     const addCharacterStep = useCallback((gameId: number) => {
         setExtraCharCounts((prev) => ({ ...prev, [gameId]: (prev[gameId] ?? 0) + 1 }));
         setCurrentStep((prev) => prev + 1);
-    }, []);
+    }, [setExtraCharCounts, setCurrentStep]);
 
     const removeCharacterStep = useCallback((gameId: number) => {
         setExtraCharCounts((prev) => {
@@ -112,17 +119,26 @@ export function OnboardingWizardPage(): JSX.Element | null {
             return { ...prev, [gameId]: current - 1 };
         });
         setCurrentStep((prev) => Math.max(prev - 1, 0));
-    }, []);
+    }, [setExtraCharCounts, setCurrentStep]);
 
-    const getPostOnboardingRedirect = useCallback(() => {
-        const pendingInvite = sessionStorage.getItem('invite_code');
-        if (pendingInvite) {
-            sessionStorage.removeItem('invite_code');
-            return `/i/${pendingInvite}?claim=1`;
-        }
-        return '/calendar';
-    }, []);
+    return { addCharacterStep, removeCharacterStep };
+}
 
+/** Returns the post-onboarding redirect path (pending invite or calendar) */
+function getPostOnboardingRedirect(): string {
+    const pendingInvite = sessionStorage.getItem('invite_code');
+    if (pendingInvite) {
+        sessionStorage.removeItem('invite_code');
+        return `/i/${pendingInvite}?claim=1`;
+    }
+    return '/calendar';
+}
+
+/** Completion callbacks: skip all and complete */
+function useCompletionHandlers(completeOnboarding: ReturnType<typeof useCompleteOnboardingFte>): {
+    handleSkipAll: () => void; handleComplete: () => void;
+} {
+    const navigate = useNavigate();
     const handleSkipAll = useCallback(() => {
         completeOnboarding.mutate(undefined, {
             onSuccess: () => {
@@ -130,34 +146,82 @@ export function OnboardingWizardPage(): JSX.Element | null {
                 navigate(getPostOnboardingRedirect(), { replace: true });
             },
         });
-    }, [completeOnboarding, navigate, getPostOnboardingRedirect]);
+    }, [completeOnboarding, navigate]);
 
     const handleComplete = useCallback(() => {
         completeOnboarding.mutate(undefined, {
             onSuccess: () => { navigate(getPostOnboardingRedirect(), { replace: true }); },
         });
-    }, [completeOnboarding, navigate, getPostOnboardingRedirect]);
+    }, [completeOnboarding, navigate]);
 
+    return { handleSkipAll, handleComplete };
+}
+
+/**
+ * FTE Onboarding Wizard Page (ROK-219 redesign).
+ * Step flow: Connect (conditional) -> Games -> Character x N -> Game Time -> Personalize
+ * Centered modal overlay. All steps are skippable. Escape dismisses.
+ * Re-runnable from settings via /onboarding?rerun=1.
+ */
+export function OnboardingWizardPage(): JSX.Element | null {
+    const [searchParams] = useSearchParams();
+    const { user } = useAuth();
+    const completeOnboarding = useCompleteOnboardingFte();
+    const isRerun = searchParams.get('rerun') === '1';
+    const { needsConnect, needsDiscordJoin } = useConditionalStepFlags(user ?? null);
+    const qualifyingGames = useQualifyingGames(user?.id);
+    const [currentStep, setCurrentStep] = useState(0);
+    const [extraCharCounts, setExtraCharCounts] = useState<Record<string, number>>({});
+    const stepValidatorRef = useRef<(() => boolean) | null>(null);
+
+    const steps = useMemo(
+        () => buildSteps(needsConnect, needsDiscordJoin, qualifyingGames, extraCharCounts),
+        [needsConnect, needsDiscordJoin, qualifyingGames, extraCharCounts],
+    );
+    const { goNext, goBack } = useNavCallbacks(stepValidatorRef, setCurrentStep, steps.length - 1);
+    const { addCharacterStep, removeCharacterStep } = useCharacterStepActions(setExtraCharCounts, setCurrentStep);
+    const { handleSkipAll, handleComplete } = useCompletionHandlers(completeOnboarding);
+    useEscapeDismiss(handleSkipAll);
+
+    const shouldRedirect = !isRerun && ((user && isAdmin(user)) || user?.onboardingCompletedAt);
+    if (shouldRedirect) return <Navigate to="/calendar" replace />;
+
+    return (
+        <WizardShell currentStep={currentStep} steps={steps} isFinalStep={currentStep === steps.length - 1}
+            onSkipAll={handleSkipAll} setCurrentStep={setCurrentStep}
+            removeCharacterStep={removeCharacterStep} user={user ?? null}
+            currentStepDef={steps[currentStep]} stepValidatorRef={stepValidatorRef}
+            addCharacterStep={addCharacterStep} goBack={goBack} goNext={goNext}
+            handleComplete={handleComplete} isPending={completeOnboarding.isPending} />
+    );
+}
+
+/** Dismiss wizard on Escape key */
+function useEscapeDismiss(onDismiss: () => void): void {
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') handleSkipAll(); };
+        const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onDismiss(); };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleSkipAll]);
+    }, [onDismiss]);
+}
 
-    if (user && isAdmin(user) && !isRerun) return <Navigate to="/calendar" replace />;
-    if (user?.onboardingCompletedAt && !isRerun) return <Navigate to="/calendar" replace />;
-
-    const isFirstStep = currentStep === 0;
-    const isFinalStep = currentStep === maxStep;
-    const isCharacterStep = currentStepDef?.key.startsWith('character-');
-
+/** Full wizard dialog shell */
+function WizardShell({ currentStep, steps, isFinalStep, onSkipAll, setCurrentStep, removeCharacterStep, user, currentStepDef, stepValidatorRef, addCharacterStep, goBack, goNext, handleComplete, isPending }: {
+    currentStep: number; steps: StepDef[]; isFinalStep: boolean; onSkipAll: () => void;
+    setCurrentStep: (n: number) => void; removeCharacterStep: (gameId: number) => void;
+    user: { avatar: string | null; displayName: string | null; username: string; discordId: string } | null;
+    currentStepDef: StepDef | undefined; stepValidatorRef: React.MutableRefObject<(() => boolean) | null>;
+    addCharacterStep: (gameId: number) => void; goBack: () => void; goNext: () => void;
+    handleComplete: () => void; isPending: boolean;
+}): JSX.Element {
+    const isCharacterStep = currentStepDef?.key.startsWith('character-') ?? false;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="relative w-full max-w-2xl mx-4 h-[90vh] flex flex-col bg-surface border border-edge/50 rounded-2xl shadow-2xl" role="dialog" aria-label="Onboarding wizard">
-                <WizardHeader currentStep={currentStep} totalSteps={steps.length} isFinalStep={isFinalStep} onSkipAll={handleSkipAll} />
-                <OnboardingBreadcrumbs steps={steps} currentStep={currentStep} setCurrentStep={setCurrentStep} removeCharacterStep={removeCharacterStep} user={user ?? null} />
+                <WizardHeader currentStep={currentStep} totalSteps={steps.length} isFinalStep={isFinalStep} onSkipAll={onSkipAll} />
+                <OnboardingBreadcrumbs steps={steps} currentStep={currentStep} setCurrentStep={setCurrentStep} removeCharacterStep={removeCharacterStep} user={user} />
                 <WizardContent currentStepDef={currentStepDef} isCharacterStep={isCharacterStep} stepValidatorRef={stepValidatorRef} addCharacterStep={addCharacterStep} removeCharacterStep={removeCharacterStep} />
-                <WizardFooter isFirstStep={isFirstStep} isFinalStep={isFinalStep} goBack={goBack} goNext={goNext} handleComplete={handleComplete} isPending={completeOnboarding.isPending} />
+                <WizardFooter isFirstStep={currentStep === 0} isFinalStep={isFinalStep} goBack={goBack} goNext={goNext} handleComplete={handleComplete} isPending={isPending} />
             </div>
         </div>
     );
