@@ -10,7 +10,7 @@ const defaultProps = {
     onRemove: vi.fn(),
 };
 
-describe('AvatarUploadZone', () => {
+describe('AvatarUploadZone — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -27,8 +27,8 @@ describe('AvatarUploadZone', () => {
         });
     });
 
-    function removeButtonBehaviorGroup1() {
-it('shows remove button when currentCustomUrl is set and not uploading', () => {
+    describe('Remove button behavior', () => {
+        it('shows remove button when currentCustomUrl is set and not uploading', () => {
             render(
                 <AvatarUploadZone
                     {...defaultProps}
@@ -39,15 +39,12 @@ it('shows remove button when currentCustomUrl is set and not uploading', () => {
             expect(screen.getByText('Remove custom avatar')).toBeInTheDocument();
         });
 
-it('does not show remove button when currentCustomUrl is null', () => {
+        it('does not show remove button when currentCustomUrl is null', () => {
             render(<AvatarUploadZone {...defaultProps} currentCustomUrl={null} />);
             expect(screen.queryByText('Remove custom avatar')).not.toBeInTheDocument();
         });
 
-    }
-
-    function removeButtonBehaviorGroup2() {
-it('does not show remove button while uploading', () => {
+        it('does not show remove button while uploading', () => {
             render(
                 <AvatarUploadZone
                     {...defaultProps}
@@ -58,7 +55,7 @@ it('does not show remove button while uploading', () => {
             expect(screen.queryByText('Remove custom avatar')).not.toBeInTheDocument();
         });
 
-it('calls onRemove when remove button is clicked', () => {
+        it('calls onRemove when remove button is clicked', () => {
             const onRemove = vi.fn();
             render(
                 <AvatarUploadZone
@@ -70,12 +67,13 @@ it('calls onRemove when remove button is clicked', () => {
             fireEvent.click(screen.getByText('Remove custom avatar'));
             expect(onRemove).toHaveBeenCalledOnce();
         });
+    });
 
-    }
+});
 
-    describe('Remove button behavior', () => {
-        removeButtonBehaviorGroup1();
-        removeButtonBehaviorGroup2();
+describe('AvatarUploadZone — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
     describe('File validation', () => {
@@ -130,6 +128,13 @@ it('calls onRemove when remove button is clicked', () => {
         });
     });
 
+});
+
+describe('AvatarUploadZone — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('Label and accessibility', () => {
         it('renders the Upload Custom Avatar label', () => {
             render(<AvatarUploadZone {...defaultProps} />);
@@ -143,4 +148,5 @@ it('calls onRemove when remove button is clicked', () => {
             expect(input).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp,image/gif');
         });
     });
+
 });

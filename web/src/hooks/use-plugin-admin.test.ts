@@ -38,8 +38,12 @@ function createWrapper() {
     };
 }
 
-function usepluginadminGroup1() {
-it('should fetch plugins on mount', async () => {
+describe('usePluginAdmin — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should fetch plugins on mount', async () => {
         const plugins = [
             {
                 slug: 'test',
@@ -68,10 +72,7 @@ it('should fetch plugins on mount', async () => {
         expect(mockGetPlugins).toHaveBeenCalledOnce();
     });
 
-}
-
-function usepluginadminGroup2() {
-it('should call installPlugin on install mutation', async () => {
+    it('should call installPlugin on install mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockInstallPlugin.mockResolvedValue(undefined);
 
@@ -90,10 +91,7 @@ it('should call installPlugin on install mutation', async () => {
         expect(mockInstallPlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
 
-}
-
-function usepluginadminGroup3() {
-it('should call uninstallPlugin on uninstall mutation', async () => {
+    it('should call uninstallPlugin on uninstall mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockUninstallPlugin.mockResolvedValue(undefined);
 
@@ -112,10 +110,14 @@ it('should call uninstallPlugin on uninstall mutation', async () => {
         expect(mockUninstallPlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
 
-}
+});
 
-function usepluginadminGroup4() {
-it('should call activatePlugin on activate mutation', async () => {
+describe('usePluginAdmin — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should call activatePlugin on activate mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockActivatePlugin.mockResolvedValue(undefined);
 
@@ -134,10 +136,7 @@ it('should call activatePlugin on activate mutation', async () => {
         expect(mockActivatePlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
 
-}
-
-function usepluginadminGroup5() {
-it('should call deactivatePlugin on deactivate mutation', async () => {
+    it('should call deactivatePlugin on deactivate mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockDeactivatePlugin.mockResolvedValue(undefined);
 
@@ -156,16 +155,4 @@ it('should call deactivatePlugin on deactivate mutation', async () => {
         expect(mockDeactivatePlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
 
-}
-
-describe('usePluginAdmin', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    usepluginadminGroup1();
-    usepluginadminGroup2();
-    usepluginadminGroup3();
-    usepluginadminGroup4();
-    usepluginadminGroup5();
 });

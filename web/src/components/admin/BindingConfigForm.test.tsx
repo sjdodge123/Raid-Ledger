@@ -21,463 +21,189 @@ function makeBinding(overrides: Partial<ChannelBindingDto> = {}): ChannelBinding
 
 const onSave = vi.fn();
 const onCancel = vi.fn();
-function bindingconfigformGroup1() {
-it('renders the channel name in the form heading', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({ channelName: 'raid-announcements' })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
 
+function renderBindingForm(overrides: Partial<ChannelBindingDto> = {}, isSaving = false) {
+  return render(
+    <BindingConfigForm
+      binding={makeBinding(overrides)}
+      onSave={onSave}
+      onCancel={onCancel}
+      isSaving={isSaving}
+    />,
+  );
+}
+
+function getSpinbuttonValues() {
+  return screen.getAllByRole('spinbutton').map((el) => (el as HTMLInputElement).value);
+}
+
+describe('BindingConfigForm — general rendering', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('renders the channel name in the form heading', () => {
+    renderBindingForm({ channelName: 'raid-announcements' });
     expect(screen.getByText(/Edit Config: #raid-announcements/)).toBeInTheDocument();
   });
 
-it('falls back to channelId in heading when channelName is undefined', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({ channelName: undefined, channelId: 'ch-789' })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('falls back to channelId in heading when channelName is undefined', () => {
+    renderBindingForm({ channelName: undefined, channelId: 'ch-789' });
     expect(screen.getByText(/Edit Config: #ch-789/)).toBeInTheDocument();
   });
 
-}
-
-function bindingconfigformGroup2() {
-it('renders Save and Cancel buttons', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding()}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('renders Save and Cancel buttons', () => {
+    renderBindingForm();
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
+});
 
-}
+describe('BindingConfigForm — voice monitor fields', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
 
-function bindingconfigformGroup3() {
-it('shows voice monitor fields when bindingPurpose is game-voice-monitor', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({ bindingPurpose: 'game-voice-monitor' })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('shows voice monitor fields when bindingPurpose is game-voice-monitor', () => {
+    renderBindingForm({ bindingPurpose: 'game-voice-monitor' });
     expect(screen.getByText(/Minimum Players/)).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/Auto-close event when voice empties/),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Auto-close event when voice empties/)).toBeInTheDocument();
     expect(screen.getByText(/Grace Period/)).toBeInTheDocument();
   });
 
-}
-
-function bindingconfigformGroup4() {
-it('initializes minPlayers from binding config', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 7, autoClose: true, gracePeriod: 120 },
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    // Find by value since there are multiple spinbuttons (minPlayers and gracePeriod)
-    const inputs = screen
-      .getAllByRole('spinbutton')
-      .map((el) => (el as HTMLInputElement).value);
-    expect(inputs).toContain('7');
+  it('initializes minPlayers from binding config', () => {
+    renderBindingForm({
+      bindingPurpose: 'game-voice-monitor',
+      config: { minPlayers: 7, autoClose: true, gracePeriod: 120 },
+    });
+    expect(getSpinbuttonValues()).toContain('7');
   });
 
-}
-
-function bindingconfigformGroup5() {
-it('initializes gracePeriod from binding config', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 2, autoClose: true, gracePeriod: 180 },
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    const inputs = screen
-      .getAllByRole('spinbutton')
-      .map((el) => (el as HTMLInputElement).value);
-    expect(inputs).toContain('180');
+  it('initializes gracePeriod from binding config', () => {
+    renderBindingForm({
+      bindingPurpose: 'game-voice-monitor',
+      config: { minPlayers: 2, autoClose: true, gracePeriod: 180 },
+    });
+    expect(getSpinbuttonValues()).toContain('180');
   });
 
-}
-
-function bindingconfigformGroup6() {
-it('initializes autoClose checkbox from binding config', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 2, autoClose: false, gracePeriod: 5 },
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    const checkbox = screen.getByLabelText(
-      /Auto-close event when voice empties/,
-    ) as HTMLInputElement;
+  it('initializes autoClose checkbox from binding config', () => {
+    renderBindingForm({
+      bindingPurpose: 'game-voice-monitor',
+      config: { minPlayers: 2, autoClose: false, gracePeriod: 5 },
+    });
+    const checkbox = screen.getByLabelText(/Auto-close event when voice empties/) as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
   });
+});
 
-}
+describe('BindingConfigForm — voice monitor defaults', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
 
-function bindingconfigformGroup7() {
-it('uses default minPlayers of 2 when config is null', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          bindingPurpose: 'game-voice-monitor',
-          config: null,
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    const inputs = screen
-      .getAllByRole('spinbutton')
-      .map((el) => (el as HTMLInputElement).value);
-    expect(inputs).toContain('2');
+  it('uses default minPlayers of 2 when config is null', () => {
+    renderBindingForm({ bindingPurpose: 'game-voice-monitor', config: null });
+    expect(getSpinbuttonValues()).toContain('2');
   });
 
-}
-
-function bindingconfigformGroup8() {
-it('uses default gracePeriod of 5 when config is null', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          bindingPurpose: 'game-voice-monitor',
-          config: null,
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    const inputs = screen
-      .getAllByRole('spinbutton')
-      .map((el) => (el as HTMLInputElement).value);
-    expect(inputs).toContain('5');
+  it('uses default gracePeriod of 5 when config is null', () => {
+    renderBindingForm({ bindingPurpose: 'game-voice-monitor', config: null });
+    expect(getSpinbuttonValues()).toContain('5');
   });
 
-}
-
-function bindingconfigformGroup9() {
-it('defaults autoClose to true when config is null', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          bindingPurpose: 'game-voice-monitor',
-          config: null,
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    const checkbox = screen.getByLabelText(
-      /Auto-close event when voice empties/,
-    ) as HTMLInputElement;
+  it('defaults autoClose to true when config is null', () => {
+    renderBindingForm({ bindingPurpose: 'game-voice-monitor', config: null });
+    const checkbox = screen.getByLabelText(/Auto-close event when voice empties/) as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
   });
 
-}
-
-function bindingconfigformGroup10() {
-it('displays grace period label with minutes unit', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 2, autoClose: true, gracePeriod: 10 },
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('displays grace period label with minutes unit', () => {
+    renderBindingForm({
+      bindingPurpose: 'game-voice-monitor',
+      config: { minPlayers: 2, autoClose: true, gracePeriod: 10 },
+    });
     expect(screen.getByText(/minutes before closing/)).toBeInTheDocument();
   });
+});
 
-}
+describe('BindingConfigForm — non-voice-monitor mode', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
 
-function bindingconfigformGroup11() {
-it('does not show voice monitor config fields for game-announcements', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({ bindingPurpose: 'game-announcements' })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('does not show voice monitor config fields for game-announcements', () => {
+    renderBindingForm({ bindingPurpose: 'game-announcements' });
     expect(screen.queryByText(/Minimum Players/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Grace Period/)).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText(/Auto-close event when voice empties/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Auto-close event when voice empties/)).not.toBeInTheDocument();
   });
 
-}
-
-function bindingconfigformGroup12() {
-it('shows "no additional configuration" message for announcement channels', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({ bindingPurpose: 'game-announcements' })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    expect(
-      screen.getByText(
-        /No additional configuration needed for announcement channels/,
-      ),
-    ).toBeInTheDocument();
+  it('shows "no additional configuration" message for announcement channels', () => {
+    renderBindingForm({ bindingPurpose: 'game-announcements' });
+    expect(screen.getByText(/No additional configuration needed for announcement channels/)).toBeInTheDocument();
   });
 
-}
-
-function bindingconfigformGroup13() {
-it('shows voice fields for general-lobby (ROK-515)', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({ bindingPurpose: 'general-lobby' })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('shows voice fields for general-lobby (ROK-515)', () => {
+    renderBindingForm({ bindingPurpose: 'general-lobby' });
     expect(screen.queryByText(/Minimum Players/)).toBeInTheDocument();
   });
+});
 
-}
+describe('BindingConfigForm — form submission', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
 
-function bindingconfigformGroup14() {
-it('calls onSave with binding id and config on submit', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          id: 'uuid-1',
-          bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 3, autoClose: true, gracePeriod: 10 },
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('calls onSave with binding id and config on submit', () => {
+    renderBindingForm({
+      id: 'uuid-1', bindingPurpose: 'game-voice-monitor',
+      config: { minPlayers: 3, autoClose: true, gracePeriod: 10 },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
     expect(onSave).toHaveBeenCalledWith('uuid-1', {
-      config: {
-        minPlayers: 3,
-        autoClose: true,
-        gracePeriod: 10,
-      },
+      config: { minPlayers: 3, autoClose: true, gracePeriod: 10 },
     });
   });
 
-}
-
-function bindingconfigformGroup15() {
-it('submits updated minPlayers value after user input', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          id: 'uuid-1',
-          bindingPurpose: 'game-voice-monitor',
-          config: null,
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('submits updated minPlayers value after user input', () => {
+    renderBindingForm({ id: 'uuid-1', bindingPurpose: 'game-voice-monitor', config: null });
     const inputs = screen.getAllByRole('spinbutton');
-    // minPlayers is the first number input
     fireEvent.change(inputs[0], { target: { value: '10' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
     const callArg = onSave.mock.calls[0][1] as { config: { minPlayers: number } };
     expect(callArg.config.minPlayers).toBe(10);
   });
 
-}
-
-function bindingconfigformGroup16() {
-it('submits toggled autoClose value', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          id: 'uuid-1',
-          bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 2, autoClose: true, gracePeriod: 5 },
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    const checkbox = screen.getByLabelText(/Auto-close event when voice empties/);
-    fireEvent.click(checkbox);
+  it('submits toggled autoClose value', () => {
+    renderBindingForm({
+      id: 'uuid-1', bindingPurpose: 'game-voice-monitor',
+      config: { minPlayers: 2, autoClose: true, gracePeriod: 5 },
+    });
+    fireEvent.click(screen.getByLabelText(/Auto-close event when voice empties/));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
     const callArg = onSave.mock.calls[0][1] as { config: { autoClose: boolean } };
     expect(callArg.config.autoClose).toBe(false);
   });
+});
 
-}
+describe('BindingConfigForm — cancel & saving state', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
 
-function bindingconfigformGroup17() {
-it('calls onCancel when Cancel button is clicked', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding()}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('calls onCancel when Cancel button is clicked', () => {
+    renderBindingForm();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
-}
-
-function bindingconfigformGroup18() {
-it('does not call onSave when Cancel is clicked', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding()}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('does not call onSave when Cancel is clicked', () => {
+    renderBindingForm();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
     expect(onSave).not.toHaveBeenCalled();
   });
 
-}
-
-function bindingconfigformGroup19() {
-it('disables Save button when isSaving is true', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding()}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={true}
-      />,
-    );
-
+  it('disables Save button when isSaving is true', () => {
+    renderBindingForm({}, true);
     expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
   });
 
-it('shows "Saving..." text when isSaving is true', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding()}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={true}
-      />,
-    );
-
+  it('shows "Saving..." text when isSaving is true', () => {
+    renderBindingForm({}, true);
     expect(screen.getByText('Saving...')).toBeInTheDocument();
   });
 
-}
-
-function bindingconfigformGroup20() {
-it('shows "Save" text when isSaving is false', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding()}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
+  it('shows "Save" text when isSaving is false', () => {
+    renderBindingForm();
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
-
-}
-
-describe('BindingConfigForm', () => {
-beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-    bindingconfigformGroup1();
-    bindingconfigformGroup2();
-    bindingconfigformGroup3();
-    bindingconfigformGroup4();
-    bindingconfigformGroup5();
-    bindingconfigformGroup6();
-    bindingconfigformGroup7();
-    bindingconfigformGroup8();
-    bindingconfigformGroup9();
-    bindingconfigformGroup10();
-    bindingconfigformGroup11();
-    bindingconfigformGroup12();
-    bindingconfigformGroup13();
-    bindingconfigformGroup14();
-    bindingconfigformGroup15();
-    bindingconfigformGroup16();
-    bindingconfigformGroup17();
-    bindingconfigformGroup18();
-    bindingconfigformGroup19();
-    bindingconfigformGroup20();
 });

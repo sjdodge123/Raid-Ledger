@@ -12,15 +12,23 @@ function TestComponent2(props: { message?: string }) {
     return <div data-testid="test-component-2">{props.message ?? 'second'}</div>;
 }
 
-function pluginslotGroup1() {
-it('renders nothing when no registrations exist and no fallback', () => {
+describe('PluginSlot — part 1', () => {
+    beforeEach(() => {
+        clearRegistry();
+        usePluginStore.setState({
+            activeSlugs: new Set<string>(),
+            initialized: false,
+        });
+    });
+
+    it('renders nothing when no registrations exist and no fallback', () => {
         const { container } = render(
             <PluginSlot name="character-detail:sections" />,
         );
         expect(container.innerHTML).toBe('');
     });
 
-it('renders fallback when no active plugin fills the slot', () => {
+    it('renders fallback when no active plugin fills the slot', () => {
         render(
             <PluginSlot
                 name="character-detail:sections"
@@ -30,10 +38,7 @@ it('renders fallback when no active plugin fills the slot', () => {
         expect(screen.getByTestId('fallback')).toBeInTheDocument();
     });
 
-}
-
-function pluginslotGroup2() {
-it('renders fallback when registrations exist but plugin is inactive', () => {
+    it('renders fallback when registrations exist but plugin is inactive', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:sections',
@@ -51,10 +56,7 @@ it('renders fallback when registrations exist but plugin is inactive', () => {
         expect(screen.queryByTestId('test-component')).not.toBeInTheDocument();
     });
 
-}
-
-function pluginslotGroup3() {
-it('renders registered component when plugin is active', () => {
+    it('renders registered component when plugin is active', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:sections',
@@ -68,10 +70,18 @@ it('renders registered component when plugin is active', () => {
         expect(screen.getByTestId('test-component')).toBeInTheDocument();
     });
 
-}
+});
 
-function pluginslotGroup4() {
-it('passes context props to the rendered component', () => {
+describe('PluginSlot — part 2', () => {
+    beforeEach(() => {
+        clearRegistry();
+        usePluginStore.setState({
+            activeSlugs: new Set<string>(),
+            initialized: false,
+        });
+    });
+
+    it('passes context props to the rendered component', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:sections',
@@ -90,10 +100,7 @@ it('passes context props to the rendered component', () => {
         expect(screen.getByTestId('test-component')).toHaveTextContent('hello from context');
     });
 
-}
-
-function pluginslotGroup5() {
-it('renders multiple components stacked by priority', () => {
+    it('renders multiple components stacked by priority', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:header-badges',
@@ -117,10 +124,18 @@ it('renders multiple components stacked by priority', () => {
         expect(components[1]).toHaveTextContent('default');
     });
 
-}
+});
 
-function pluginslotGroup6() {
-it('wraps content in div with className when provided', () => {
+describe('PluginSlot — part 3', () => {
+    beforeEach(() => {
+        clearRegistry();
+        usePluginStore.setState({
+            activeSlugs: new Set<string>(),
+            initialized: false,
+        });
+    });
+
+    it('wraps content in div with className when provided', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
             slotName: 'character-detail:sections',
@@ -141,10 +156,7 @@ it('wraps content in div with className when provided', () => {
         expect(wrapper?.querySelector('[data-testid="test-component"]')).toBeInTheDocument();
     });
 
-}
-
-function pluginslotGroup7() {
-it('wraps fallback in div with className when provided', () => {
+    it('wraps fallback in div with className when provided', () => {
         const { container } = render(
             <PluginSlot
                 name="character-detail:sections"
@@ -157,10 +169,7 @@ it('wraps fallback in div with className when provided', () => {
         expect(wrapper?.textContent).toBe('Fallback content');
     });
 
-}
-
-function pluginslotGroup8() {
-it('does not render badges on user-facing slots (badges are admin-only)', () => {
+    it('does not render badges on user-facing slots (badges are admin-only)', () => {
         registerPlugin('blizzard', {
             icon: 'W',
             color: 'blue',
@@ -183,23 +192,4 @@ it('does not render badges on user-facing slots (badges are admin-only)', () => 
         expect(container.querySelector('[title="WoW Plugin"]')).toBeNull();
     });
 
-}
-
-describe('PluginSlot', () => {
-beforeEach(() => {
-        clearRegistry();
-        usePluginStore.setState({
-            activeSlugs: new Set<string>(),
-            initialized: false,
-        });
-    });
-
-    pluginslotGroup1();
-    pluginslotGroup2();
-    pluginslotGroup3();
-    pluginslotGroup4();
-    pluginslotGroup5();
-    pluginslotGroup6();
-    pluginslotGroup7();
-    pluginslotGroup8();
 });

@@ -8,72 +8,79 @@ import { SettingsService } from '../settings/settings.service';
 import { IgdbService } from '../igdb/igdb.service';
 import { DemoDataService } from './demo-data.service';
 
-function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
-  let controller: AdminSettingsController;
-  let mockIgdbService: Partial<IgdbService>;
-  let mockSettingsService: Partial<SettingsService>;
-
-  async function beforeEachHelper() {
-    mockIgdbService = {
-      hideGame: jest.fn().mockResolvedValue({
-        success: true,
-        message: 'Game "Valheim" hidden from users.',
-        name: 'Valheim',
-      }),
-      unhideGame: jest.fn().mockResolvedValue({
-        success: true,
-        message: 'Game "Valheim" is now visible to users.',
-        name: 'Valheim',
-      }),
-      banGame: jest.fn().mockResolvedValue({
-        success: true,
-        message: 'Game "Valheim" has been banned.',
-        name: 'Valheim',
-      }),
-      unbanGame: jest.fn().mockResolvedValue({
-        success: true,
-        message: 'Game "Valheim" has been unbanned and restored.',
-        name: 'Valheim',
-      }),
-      isAdultFilterEnabled: jest.fn().mockResolvedValue(false),
-      hideAdultGames: jest.fn().mockResolvedValue(0),
-      getSyncStatus: jest.fn().mockResolvedValue({
-        lastSyncAt: null,
-        gameCount: 0,
-        syncInProgress: false,
-      }),
-      getHealthStatus: jest.fn().mockReturnValue({
-        tokenStatus: 'not_fetched',
-        tokenExpiresAt: null,
-        lastApiCallAt: null,
-        lastApiCallSuccess: null,
-      }),
-      syncAllGames: jest
-        .fn()
-        .mockResolvedValue({ refreshed: 0, discovered: 0, backfilled: 0 }),
-      database: {
-        select: jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue([]),
-              orderBy: jest.fn().mockReturnValue({
-                limit: jest.fn().mockReturnValue({
-                  offset: jest.fn().mockResolvedValue([]),
-                }),
+function createMockIgdbService(): Partial<IgdbService> {
+  return {
+    hideGame: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Game "Valheim" hidden from users.',
+      name: 'Valheim',
+    }),
+    unhideGame: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Game "Valheim" is now visible to users.',
+      name: 'Valheim',
+    }),
+    banGame: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Game "Valheim" has been banned.',
+      name: 'Valheim',
+    }),
+    unbanGame: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Game "Valheim" has been unbanned and restored.',
+      name: 'Valheim',
+    }),
+    isAdultFilterEnabled: jest.fn().mockResolvedValue(false),
+    hideAdultGames: jest.fn().mockResolvedValue(0),
+    getSyncStatus: jest.fn().mockResolvedValue({
+      lastSyncAt: null,
+      gameCount: 0,
+      syncInProgress: false,
+    }),
+    getHealthStatus: jest.fn().mockReturnValue({
+      tokenStatus: 'not_fetched',
+      tokenExpiresAt: null,
+      lastApiCallAt: null,
+      lastApiCallSuccess: null,
+    }),
+    syncAllGames: jest
+      .fn()
+      .mockResolvedValue({ refreshed: 0, discovered: 0, backfilled: 0 }),
+    database: {
+      select: jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+            orderBy: jest.fn().mockReturnValue({
+              limit: jest.fn().mockReturnValue({
+                offset: jest.fn().mockResolvedValue([]),
               }),
             }),
           }),
         }),
-      } as any,
-    };
+      }),
+    } as any,
+  };
+}
 
-    mockSettingsService = {
-      set: jest.fn().mockResolvedValue(undefined),
-      get: jest.fn().mockResolvedValue(null),
-      isIgdbConfigured: jest.fn().mockResolvedValue(false),
-      getDiscordOAuthConfig: jest.fn().mockResolvedValue(null),
-      isBlizzardConfigured: jest.fn().mockResolvedValue(false),
-    } as any;
+function createMockSettingsService(): Partial<SettingsService> {
+  return {
+    set: jest.fn().mockResolvedValue(undefined),
+    get: jest.fn().mockResolvedValue(null),
+    isIgdbConfigured: jest.fn().mockResolvedValue(false),
+    getDiscordOAuthConfig: jest.fn().mockResolvedValue(null),
+    isBlizzardConfigured: jest.fn().mockResolvedValue(false),
+  } as any;
+}
+
+describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', () => {
+  let controller: AdminSettingsController;
+  let mockIgdbService: Partial<IgdbService>;
+  let mockSettingsService: Partial<SettingsService>;
+
+  beforeEach(async () => {
+    mockIgdbService = createMockIgdbService();
+    mockSettingsService = createMockSettingsService();
 
     const mockDemoDataService = {
       getStatus: jest.fn().mockResolvedValue({ demoMode: false }),
@@ -91,8 +98,7 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
     }).compile();
 
     controller = module.get<AdminSettingsController>(AdminSettingsController);
-  }
-  beforeEach(() => beforeEachHelper());
+  });
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -101,7 +107,7 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
   // ============================================================
   // POST /admin/settings/games/:id/hide
   // ============================================================
-  function describeHideGame() {
+  describe('hideGame', () => {
     it('returns success when game is hidden', async () => {
       const result = await controller.hideGame(1);
 
@@ -145,8 +151,7 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
         expect(response.message).toBe('Game not found');
       }
     });
-  }
-  describe('hideGame', () => describeHideGame());
+  });
 
   // ============================================================
   // POST /admin/settings/games/:id/unhide
@@ -262,7 +267,7 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
   // ============================================================
   // PUT /admin/settings/igdb/adult-filter
   // ============================================================
-  function describeSetAdultFilter() {
+  describe('setAdultFilter', () => {
     it('saves the setting to true when enabling', async () => {
       (mockIgdbService.hideAdultGames as jest.Mock).mockResolvedValue(5);
 
@@ -327,14 +332,13 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
       expect(mockIgdbService.hideAdultGames).not.toHaveBeenCalled();
       expect(result.success).toBe(true);
     });
-  }
-  describe('setAdultFilter', () => describeSetAdultFilter());
+  });
 
   // ============================================================
   // GET /admin/settings/games — listGames with showHidden filter
   // ============================================================
-  function describeListGamesShowHiddenFilter() {
-    async function testReturnsVisibleGamesOnlyWhenShowHiddenIsUndefined() {
+  describe('listGames — showHidden filter', () => {
+    it('returns visible games only when showHidden is undefined', async () => {
       const rows = [
         {
           id: 1,
@@ -372,11 +376,9 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
       const result = await controller.listGames(undefined, undefined);
       expect(result.data.length).toBeGreaterThanOrEqual(0);
       expect(result.meta).toBeDefined();
-    }
-    it('returns visible games only when showHidden is undefined', () =>
-      testReturnsVisibleGamesOnlyWhenShowHiddenIsUndefined());
+    });
 
-    async function testReturnsOnlyHiddenGamesWhenShowHiddenIsOnly() {
+    it('returns only hidden games when showHidden is "only"', async () => {
       let callCount = 0;
       const hiddenRow = {
         id: 2,
@@ -410,11 +412,9 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
 
       const result = await controller.listGames(undefined, 'only');
       expect(result.data.length).toBeGreaterThanOrEqual(0);
-    }
-    it('returns only hidden games when showHidden is "only"', () =>
-      testReturnsOnlyHiddenGamesWhenShowHiddenIsOnly());
+    });
 
-    async function testIncludesHiddenFieldInResponseData() {
+    it('includes hidden field in response data', async () => {
       const rows = [
         {
           id: 1,
@@ -463,9 +463,7 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
       result.data.forEach((game) => {
         expect(typeof game.hidden).toBe('boolean');
       });
-    }
-    it('includes hidden field in response data', () =>
-      testIncludesHiddenFieldInResponseData());
+    });
 
     it('respects page and limit parameters', async () => {
       let callCount = 0;
@@ -544,9 +542,5 @@ function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
 
       expect(result.meta.limit).toBe(100);
     });
-  }
-  describe('listGames — showHidden filter', () =>
-    describeListGamesShowHiddenFilter());
-}
-describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', () =>
-  describeAdminSettingsControllerROK231GameHideBanAndAdultF());
+  });
+});

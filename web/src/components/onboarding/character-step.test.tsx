@@ -73,7 +73,7 @@ function renderWithProviders(ui: React.ReactElement) {
     );
 }
 
-describe('CharacterStep', () => {
+describe('CharacterStep — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
@@ -81,8 +81,8 @@ describe('CharacterStep', () => {
         mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
     });
 
-    function renderingGroup1() {
-it('renders the character creation form when no character exists', () => {
+    describe('Rendering', () => {
+        it('renders the character creation form when no character exists', () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
             );
@@ -90,14 +90,14 @@ it('renders the character creation form when no character exists', () => {
             expect(screen.getByText(/world of warcraft/i)).toBeInTheDocument();
         });
 
-it('renders the character name input', () => {
+        it('renders the character name input', () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
             );
             expect(screen.getByPlaceholderText(/character name/i)).toBeInTheDocument();
         });
 
-it('shows Class and Spec fields for MMO games with roles', () => {
+        it('shows Class and Spec fields for MMO games with roles', () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
             );
@@ -105,10 +105,7 @@ it('shows Class and Spec fields for MMO games with roles', () => {
             expect(screen.getByPlaceholderText(/arms/i)).toBeInTheDocument();
         });
 
-    }
-
-    function renderingGroup2() {
-it('does not show Class and Spec fields for non-MMO games', () => {
+        it('does not show Class and Spec fields for non-MMO games', () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={nonMmoGame} charIndex={0} />
             );
@@ -116,29 +113,33 @@ it('does not show Class and Spec fields for non-MMO games', () => {
             expect(screen.queryByPlaceholderText(/arms/i)).not.toBeInTheDocument();
         });
 
-it('shows Role dropdown for MMO games', () => {
+        it('shows Role dropdown for MMO games', () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
             );
             expect(screen.getByRole('combobox')).toBeInTheDocument();
         });
 
-it('shows Realm input for MMO games', () => {
+        it('shows Realm input for MMO games', () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
             );
             expect(screen.getByPlaceholderText(/illidan/i)).toBeInTheDocument();
         });
-
-    }
-
-    describe('Rendering', () => {
-        renderingGroup1();
-        renderingGroup2();
     });
 
-    function formInteractionGroup1() {
-it('shows validation error when submitting without a name', async () => {
+});
+
+describe('CharacterStep — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Form interaction', () => {
+        it('shows validation error when submitting without a name', async () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
             );
@@ -149,10 +150,7 @@ it('shows validation error when submitting without a name', async () => {
             });
         });
 
-    }
-
-    function formInteractionGroup2() {
-it('calls createMutation.mutate when form is submitted with valid name', async () => {
+        it('calls createMutation.mutate when form is submitted with valid name', async () => {
             const mockMutate = vi.fn();
             mockUseCreateCharacter.mockReturnValue({ mutate: mockMutate, isPending: false });
 
@@ -172,7 +170,7 @@ it('calls createMutation.mutate when form is submitted with valid name', async (
             );
         });
 
-it('shows pending state on submit button while creating', () => {
+        it('shows pending state on submit button while creating', () => {
             mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: true });
 
             renderWithProviders(
@@ -181,10 +179,7 @@ it('shows pending state on submit button while creating', () => {
             expect(screen.getByText(/creating/i)).toBeInTheDocument();
         });
 
-    }
-
-    function formInteractionGroup3() {
-it('role dropdown has tank, healer, dps options', () => {
+        it('role dropdown has tank, healer, dps options', () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
             );
@@ -192,17 +187,18 @@ it('role dropdown has tank, healer, dps options', () => {
             expect(screen.getByRole('option', { name: /healer/i })).toBeInTheDocument();
             expect(screen.getByRole('option', { name: /dps/i })).toBeInTheDocument();
         });
-
-    }
-
-    describe('Form interaction', () => {
-        formInteractionGroup1();
-        formInteractionGroup2();
-        formInteractionGroup3();
     });
 
-    function savedCharacterDisplayGroup1() {
-it('shows saved character card when character exists at charIndex', () => {
+});
+
+describe('Saved character display — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+        it('shows saved character card when character exists at charIndex', () => {
             mockUseMyCharacters.mockReturnValue({
                 data: {
                     data: [
@@ -230,10 +226,7 @@ it('shows saved character card when character exists at charIndex', () => {
             expect(screen.getByText('Thrall')).toBeInTheDocument();
         });
 
-    }
-
-    function savedCharacterDisplayGroup2() {
-it('shows Add Another Character button when character is saved', () => {
+        it('shows Add Another Character button when character is saved', () => {
             mockUseMyCharacters.mockReturnValue({
                 data: {
                     data: [
@@ -262,10 +255,18 @@ it('shows Add Another Character button when character is saved', () => {
             expect(addButton).toBeInTheDocument();
         });
 
-    }
+});
 
-    function savedCharacterDisplayGroup3() {
-it('calls onAddAnother when Add Another Character is clicked', () => {
+describe('CharacterStep — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Saved character display — part 2', () => {
+        it('calls onAddAnother when Add Another Character is clicked', () => {
             const mockOnAddAnother = vi.fn();
             mockUseMyCharacters.mockReturnValue({
                 data: {
@@ -299,10 +300,20 @@ it('calls onAddAnother when Add Another Character is clicked', () => {
             expect(mockOnAddAnother).toHaveBeenCalledOnce();
         });
 
-    }
+    });
 
-    function savedCharacterDisplayGroup4() {
-it('calls onRemoveStep when delete button is clicked on extra step (charIndex > 0)', async () => {
+});
+
+describe('CharacterStep — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Saved character display — part 3', () => {
+        it('calls onRemoveStep when delete button is clicked on extra step (charIndex > 0)', async () => {
             const mockOnRemoveStep = vi.fn();
             const mockDeleteMutate = vi.fn((_id, options) => {
                 options?.onSuccess?.();
@@ -334,17 +345,20 @@ it('calls onRemoveStep when delete button is clicked on extra step (charIndex > 
             });
         });
 
-    }
-
-    describe('Saved character display', () => {
-        savedCharacterDisplayGroup1();
-        savedCharacterDisplayGroup2();
-        savedCharacterDisplayGroup3();
-        savedCharacterDisplayGroup4();
     });
 
-    function edgeCasesGroup1() {
-it('renders with empty character list (no data)', () => {
+});
+
+describe('CharacterStep — part 6', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Edge cases', () => {
+        it('renders with empty character list (no data)', () => {
             mockUseMyCharacters.mockReturnValue({ data: undefined });
 
             renderWithProviders(
@@ -354,10 +368,7 @@ it('renders with empty character list (no data)', () => {
             expect(screen.getByText(/create a character/i)).toBeInTheDocument();
         });
 
-    }
-
-    function edgeCasesGroup2() {
-it('first character becomes main (isMain: true)', () => {
+        it('first character becomes main (isMain: true)', () => {
             const mockMutate = vi.fn();
             mockUseCreateCharacter.mockReturnValue({ mutate: mockMutate, isPending: false });
             mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
@@ -378,10 +389,7 @@ it('first character becomes main (isMain: true)', () => {
             );
         });
 
-    }
-
-    function edgeCasesGroup3() {
-it('shows general error message on creation failure', async () => {
+        it('shows general error message on creation failure', async () => {
             const mockMutate = vi.fn((_data, options) => {
                 options?.onError?.();
             });
@@ -401,12 +409,6 @@ it('shows general error message on creation failure', async () => {
                 expect(screen.getByText(/failed to create character/i)).toBeInTheDocument();
             });
         });
-
-    }
-
-    describe('Edge cases', () => {
-        edgeCasesGroup1();
-        edgeCasesGroup2();
-        edgeCasesGroup3();
     });
+
 });

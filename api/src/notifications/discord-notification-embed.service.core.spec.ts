@@ -2,111 +2,11 @@ import { DiscordNotificationEmbedService } from './discord-notification-embed.se
 import { SettingsService } from '../settings/settings.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 
-// Mock discord.js so we can test without real Discord connections
-jest.mock('discord.js', () => {
-  class MockEmbedBuilder {
-    private data: Record<string, unknown> = {};
-
-    setAuthor(author: unknown) {
-      this.data.author = author;
-      return this;
-    }
-    setTitle(title: string) {
-      this.data.title = title;
-      return this;
-    }
-    setDescription(description: string) {
-      this.data.description = description;
-      return this;
-    }
-    setColor(color: number) {
-      this.data.color = color;
-      return this;
-    }
-    setFooter(footer: unknown) {
-      this.data.footer = footer;
-      return this;
-    }
-    setTimestamp(ts?: Date) {
-      this.data.timestamp = ts ?? new Date();
-      return this;
-    }
-    addFields(...fields: unknown[]) {
-      if (!this.data.fields) this.data.fields = [];
-      (this.data.fields as unknown[]).push(...fields);
-      return this;
-    }
-    toJSON() {
-      return this.data;
-    }
-  }
-
-  class MockButtonBuilder {
-    private data: Record<string, unknown> = {};
-
-    setCustomId(customId: string) {
-      this.data.customId = customId;
-      return this;
-    }
-    setLabel(label: string) {
-      this.data.label = label;
-      return this;
-    }
-    setStyle(style: number) {
-      this.data.style = style;
-      return this;
-    }
-    setURL(url: string) {
-      this.data.url = url;
-      return this;
-    }
-    setEmoji(emoji: string) {
-      this.data.emoji = emoji;
-      return this;
-    }
-    setDisabled(disabled: boolean) {
-      this.data.disabled = disabled;
-      return this;
-    }
-    toJSON() {
-      return this.data;
-    }
-  }
-
-  class MockActionRowBuilder {
-    private components: Array<{ toJSON: () => unknown }> = [];
-
-    addComponents(
-      ...args: Array<
-        { toJSON: () => unknown } | Array<{ toJSON: () => unknown }>
-      >
-    ) {
-      for (const arg of args) {
-        if (Array.isArray(arg)) {
-          this.components.push(...arg);
-        } else {
-          this.components.push(arg);
-        }
-      }
-      return this;
-    }
-    toJSON() {
-      return { components: this.components.map((c) => c.toJSON()) };
-    }
-  }
-
-  return {
-    EmbedBuilder: MockEmbedBuilder,
-    ButtonBuilder: MockButtonBuilder,
-    ActionRowBuilder: MockActionRowBuilder,
-    ButtonStyle: {
-      Link: 5,
-      Danger: 4,
-      Secondary: 2,
-      Success: 3,
-    },
-  };
-});
+// Mock discord.js — uses shared mock from common/testing
+jest.mock(
+  'discord.js',
+  () => jest.requireActual('../common/testing/discord-js-mock').discordJsMock,
+);
 
 describe('DiscordNotificationEmbedService — core', () => {
   let service: DiscordNotificationEmbedService;

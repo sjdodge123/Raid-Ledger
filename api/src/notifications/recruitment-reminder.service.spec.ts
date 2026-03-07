@@ -7,111 +7,12 @@ import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
-// Mock discord.js to avoid requiring a real Discord connection.
-// Includes PermissionsBitField because discord-bot-client.service.ts references
-// PermissionsBitField.Flags.* at module load time (outside any constructor/method).
-jest.mock('discord.js', () => {
-  class MockClient {
-    login = jest.fn().mockResolvedValue(undefined);
-    destroy = jest.fn().mockResolvedValue(undefined);
-    isReady = jest.fn().mockReturnValue(false);
-  }
-
-  class MockEmbedBuilder {
-    private data: Record<string, unknown> = {};
-    setTitle(title: string) {
-      this.data.title = title;
-      return this;
-    }
-    setDescription(desc: string) {
-      this.data.description = desc;
-      return this;
-    }
-    setColor(color: number) {
-      this.data.color = color;
-      return this;
-    }
-    setTimestamp(ts?: Date) {
-      this.data.timestamp = ts ?? new Date();
-      return this;
-    }
-    toJSON() {
-      return this.data;
-    }
-  }
-
-  class MockButtonBuilder {
-    private data: Record<string, unknown> = {};
-    setLabel(label: string) {
-      this.data.label = label;
-      return this;
-    }
-    setStyle(style: number) {
-      this.data.style = style;
-      return this;
-    }
-    setURL(url: string) {
-      this.data.url = url;
-      return this;
-    }
-    toJSON() {
-      return this.data;
-    }
-  }
-
-  class MockActionRowBuilder {
-    private components: Array<{ toJSON: () => unknown }> = [];
-    addComponents(
-      ...args: Array<
-        { toJSON: () => unknown } | Array<{ toJSON: () => unknown }>
-      >
-    ) {
-      for (const arg of args) {
-        if (Array.isArray(arg)) {
-          this.components.push(...arg);
-        } else {
-          this.components.push(arg);
-        }
-      }
-      return this;
-    }
-    toJSON() {
-      return { components: this.components.map((c) => c.toJSON()) };
-    }
-  }
-
-  return {
-    Client: MockClient,
-    GatewayIntentBits: {
-      Guilds: 1,
-      GuildMessages: 2,
-      GuildMembers: 4,
-      DirectMessages: 64,
-    },
-    Events: { ClientReady: 'ready', Error: 'error' },
-    PermissionsBitField: {
-      Flags: {
-        ManageRoles: BigInt(268435456),
-        ManageChannels: BigInt(16),
-        CreateInstantInvite: BigInt(1),
-        ViewChannel: BigInt(1024),
-        SendMessages: BigInt(2048),
-        EmbedLinks: BigInt(16384),
-        ReadMessageHistory: BigInt(65536),
-        SendPolls: BigInt(0),
-        AttachFiles: BigInt(32768),
-        AddReactions: BigInt(64),
-        UseExternalEmojis: BigInt(262144),
-        MentionEveryone: BigInt(131072),
-        ManageMessages: BigInt(8192),
-      },
-    },
-    EmbedBuilder: MockEmbedBuilder,
-    ButtonBuilder: MockButtonBuilder,
-    ActionRowBuilder: MockActionRowBuilder,
-    ButtonStyle: { Link: 5, Danger: 4, Secondary: 2, Success: 3 },
-  };
-});
+// Mock discord.js — uses shared mock (includes Client + PermissionsBitField)
+jest.mock(
+  'discord.js',
+  () =>
+    jest.requireActual('../common/testing/discord-js-mock').discordJsFullMock,
+);
 
 /**
  * Helper to build a minimal EligibleEvent-shaped row returned from db.execute

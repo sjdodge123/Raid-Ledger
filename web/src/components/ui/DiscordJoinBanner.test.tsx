@@ -76,7 +76,7 @@ function renderBanner(route = '/events') {
     );
 }
 
-describe('DiscordJoinBanner', () => {
+describe('DiscordJoinBanner — part 1', () => {
     beforeEach(() => {
         sessionStorage.clear();
         vi.clearAllMocks();
@@ -85,17 +85,18 @@ describe('DiscordJoinBanner', () => {
         mockUseAuth.mockReturnValue(authWithDiscord);
         mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
     });
-
     afterEach(() => {
         sessionStorage.clear();
     });
 
     // =========================================================
+
     // Visibility — SHOULD show banner
+
     // =========================================================
 
-    function rendersTheBannerGroup1() {
-it('shows banner for authenticated user not in the guild', () => {
+    describe('renders the banner', () => {
+        it('shows banner for authenticated user not in the guild', () => {
             renderBanner('/events');
 
             expect(
@@ -103,13 +104,13 @@ it('shows banner for authenticated user not in the guild', () => {
             ).toBeInTheDocument();
         });
 
-it('shows the guild name in the banner text', () => {
+        it('shows the guild name in the banner text', () => {
             renderBanner('/events');
 
             expect(screen.getByText('Test Guild')).toBeInTheDocument();
         });
 
-it('renders the "Join Server" button with correct href', () => {
+        it('renders the "Join Server" button with correct href', () => {
             renderBanner('/events');
 
             const link = screen.getByRole('link', { name: 'Join Server' });
@@ -117,7 +118,7 @@ it('renders the "Join Server" button with correct href', () => {
             expect(link).toHaveAttribute('href', 'https://discord.gg/invite123');
         });
 
-it('opens the invite link in a new tab', () => {
+        it('opens the invite link in a new tab', () => {
             renderBanner('/events');
 
             const link = screen.getByRole('link', { name: 'Join Server' });
@@ -125,10 +126,7 @@ it('opens the invite link in a new tab', () => {
             expect(link).toHaveAttribute('rel', 'noopener noreferrer');
         });
 
-    }
-
-    function rendersTheBannerGroup2() {
-it('renders a dismiss button with accessible label', () => {
+        it('renders a dismiss button with accessible label', () => {
             renderBanner('/events');
 
             expect(
@@ -138,7 +136,7 @@ it('renders a dismiss button with accessible label', () => {
             ).toBeInTheDocument();
         });
 
-it('does NOT show "Join Server" button when inviteUrl is missing', () => {
+        it('does NOT show "Join Server" button when inviteUrl is missing', () => {
             mockUseDiscordMembership.mockReturnValue({
                 data: { botConnected: true, guildName: 'Test Guild', isMember: false },
             });
@@ -150,17 +148,28 @@ it('does NOT show "Join Server" button when inviteUrl is missing', () => {
             // Banner itself is still shown
             expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
         });
-
-    }
-
-    describe('renders the banner', () => {
-        rendersTheBannerGroup1();
-        rendersTheBannerGroup2();
     });
 
     // =========================================================
+
     // Visibility — SHOULD NOT show banner
+
     // =========================================================
+
+});
+
+describe('DiscordJoinBanner — part 2', () => {
+    beforeEach(() => {
+        sessionStorage.clear();
+        vi.clearAllMocks();
+
+        // Sensible defaults: authenticated with Discord, bot online, not a member
+        mockUseAuth.mockReturnValue(authWithDiscord);
+        mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
+    });
+    afterEach(() => {
+        sessionStorage.clear();
+    });
 
     describe('hidden conditions', () => {
         it('is hidden when the user is NOT authenticated', () => {
@@ -205,100 +214,134 @@ it('does NOT show "Join Server" button when inviteUrl is missing', () => {
     });
 
     // =========================================================
+
     // Route suppression
+
     // =========================================================
 
-    function routeSuppressionGroup1() {
-it('is NOT shown on the root path ("/")', () => {
-            const { container } = renderBanner('/');
-            expect(container.firstChild).toBeNull();
-        });
+});
 
-it('is NOT shown on /login', () => {
-            const { container } = renderBanner('/login');
-            expect(container.firstChild).toBeNull();
-        });
+describe('route suppression — sub 1', () => {
+    beforeEach(() => {
+        sessionStorage.clear();
+        vi.clearAllMocks();
 
-it('is NOT shown on /auth/success', () => {
-            const { container } = renderBanner('/auth/success');
-            expect(container.firstChild).toBeNull();
-        });
+        // Sensible defaults: authenticated with Discord, bot online, not a member
+        mockUseAuth.mockReturnValue(authWithDiscord);
+        mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
+    });
+    afterEach(() => {
+        sessionStorage.clear();
+    });
 
-it('is NOT shown on /join', () => {
-            const { container } = renderBanner('/join');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on the root path ("/")', () => {
+        const { container } = renderBanner('/');
+        expect(container.firstChild).toBeNull();
+    });
 
-it('is NOT shown on PUG claim flow (/i/:code)', () => {
-            const { container } = renderBanner('/i/abc123');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on /login', () => {
+        const { container } = renderBanner('/login');
+        expect(container.firstChild).toBeNull();
+    });
 
-    }
+    it('is NOT shown on /auth/success', () => {
+        const { container } = renderBanner('/auth/success');
+        expect(container.firstChild).toBeNull();
+    });
 
-    function routeSuppressionGroup2() {
-it('is NOT shown on any /i/* path', () => {
-            const { container } = renderBanner('/i/some-pug-code');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on /join', () => {
+        const { container } = renderBanner('/join');
+        expect(container.firstChild).toBeNull();
+    });
 
-it('is NOT shown on /onboarding', () => {
-            const { container } = renderBanner('/onboarding');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on PUG claim flow (/i/:code)', () => {
+        const { container } = renderBanner('/i/abc123');
+        expect(container.firstChild).toBeNull();
+    });
 
-it('is NOT shown on /onboarding/* sub-routes', () => {
-            const { container } = renderBanner('/onboarding/character');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on any /i/* path', () => {
+        const { container } = renderBanner('/i/some-pug-code');
+        expect(container.firstChild).toBeNull();
+    });
 
-it('is NOT shown on /admin/setup', () => {
-            const { container } = renderBanner('/admin/setup');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on /onboarding', () => {
+        const { container } = renderBanner('/onboarding');
+        expect(container.firstChild).toBeNull();
+    });
 
-it('is NOT shown on /admin/setup/* sub-routes', () => {
-            const { container } = renderBanner('/admin/setup/step-2');
-            expect(container.firstChild).toBeNull();
-        });
+});
 
-    }
+describe('route suppression — sub 2', () => {
+    beforeEach(() => {
+        sessionStorage.clear();
+        vi.clearAllMocks();
 
-    function routeSuppressionGroup3() {
-it('IS shown on a normal app route (/events)', () => {
-            renderBanner('/events');
-            expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
-        });
+        // Sensible defaults: authenticated with Discord, bot online, not a member
+        mockUseAuth.mockReturnValue(authWithDiscord);
+        mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
+    });
+    afterEach(() => {
+        sessionStorage.clear();
+    });
 
-it('IS shown on /players', () => {
-            renderBanner('/players');
-            expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
-        });
+    it('is NOT shown on /onboarding/* sub-routes', () => {
+        const { container } = renderBanner('/onboarding/character');
+        expect(container.firstChild).toBeNull();
+    });
 
-it('IS shown on /profile', () => {
-            renderBanner('/profile');
-            expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
-        });
+    it('is NOT shown on /admin/setup', () => {
+        const { container } = renderBanner('/admin/setup');
+        expect(container.firstChild).toBeNull();
+    });
 
-it('IS shown on /admin (not /admin/setup)', () => {
-            renderBanner('/admin');
-            expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
-        });
+    it('is NOT shown on /admin/setup/* sub-routes', () => {
+        const { container } = renderBanner('/admin/setup/step-2');
+        expect(container.firstChild).toBeNull();
+    });
 
-    }
+    it('IS shown on a normal app route (/events)', () => {
+        renderBanner('/events');
+        expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
+    });
 
-    describe('route suppression', () => {
-        routeSuppressionGroup1();
-        routeSuppressionGroup2();
-        routeSuppressionGroup3();
+    it('IS shown on /players', () => {
+        renderBanner('/players');
+        expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
+    });
+
+    it('IS shown on /profile', () => {
+        renderBanner('/profile');
+        expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
+    });
+
+    it('IS shown on /admin (not /admin/setup)', () => {
+        renderBanner('/admin');
+        expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
+    });
+
+});
+
+describe('DiscordJoinBanner — part 4', () => {
+    beforeEach(() => {
+        sessionStorage.clear();
+        vi.clearAllMocks();
+
+        // Sensible defaults: authenticated with Discord, bot online, not a member
+        mockUseAuth.mockReturnValue(authWithDiscord);
+        mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
+    });
+    afterEach(() => {
+        sessionStorage.clear();
     });
 
     // =========================================================
+
     // Dismiss behavior
+
     // =========================================================
 
-    function dismissBehaviorGroup1() {
-it('hides the banner when the dismiss button is clicked', () => {
+    describe('dismiss behavior', () => {
+        it('hides the banner when the dismiss button is clicked', () => {
             renderBanner('/events');
 
             const btn = screen.getByRole('button', {
@@ -311,7 +354,7 @@ it('hides the banner when the dismiss button is clicked', () => {
             ).not.toBeInTheDocument();
         });
 
-it('persists dismissal in sessionStorage', () => {
+        it('persists dismissal in sessionStorage', () => {
             renderBanner('/events');
 
             const btn = screen.getByRole('button', {
@@ -322,10 +365,7 @@ it('persists dismissal in sessionStorage', () => {
             expect(sessionStorage.getItem(DISMISS_KEY)).toBe('true');
         });
 
-    }
-
-    function dismissBehaviorGroup2() {
-it('reads dismissed state from sessionStorage on mount and hides banner', () => {
+        it('reads dismissed state from sessionStorage on mount and hides banner', () => {
             sessionStorage.setItem(DISMISS_KEY, 'true');
 
             const { container } = renderBanner('/events');
@@ -333,30 +373,26 @@ it('reads dismissed state from sessionStorage on mount and hides banner', () => 
             expect(container.firstChild).toBeNull();
         });
 
-it('shows the banner when sessionStorage dismiss key is absent', () => {
+        it('shows the banner when sessionStorage dismiss key is absent', () => {
             // sessionStorage is cleared in beforeEach — key is absent
             renderBanner('/events');
 
             expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
         });
 
-it('shows the banner when sessionStorage dismiss value is not "true"', () => {
+        it('shows the banner when sessionStorage dismiss value is not "true"', () => {
             sessionStorage.setItem(DISMISS_KEY, 'false');
 
             renderBanner('/events');
 
             expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
         });
-
-    }
-
-    describe('dismiss behavior', () => {
-        dismissBehaviorGroup1();
-        dismissBehaviorGroup2();
     });
 
     // =========================================================
+
     // Edge cases
+
     // =========================================================
 
     describe('edge cases', () => {
@@ -376,4 +412,5 @@ it('shows the banner when sessionStorage dismiss value is not "true"', () => {
             expect(() => renderBanner('/events')).not.toThrow();
         });
     });
+
 });

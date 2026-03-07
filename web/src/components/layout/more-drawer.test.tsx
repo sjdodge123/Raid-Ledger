@@ -61,76 +61,78 @@ function renderDrawer(isOpen = true, initialRoute = '/') {
     return { onClose };
 }
 
-function moredrawerGroup1() {
-it('shows user avatar and username when authenticated', () => {
+describe('MoreDrawer — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('shows user avatar and username when authenticated', () => {
         renderDrawer();
         expect(screen.getByText('TestUser')).toBeInTheDocument();
     });
 
-it('shows initials fallback when no avatar', () => {
+    it('shows initials fallback when no avatar', () => {
         renderDrawer();
         expect(screen.getByText('T')).toBeInTheDocument();
     });
 
-it('avatar row is an accordion toggle button', () => {
+    it('avatar row is an accordion toggle button', () => {
         renderDrawer();
         const toggleBtn = screen.getByTestId('more-drawer-profile-toggle');
         expect(toggleBtn.tagName).toBe('BUTTON');
         expect(toggleBtn).toBeInTheDocument();
     });
 
-it('hides Admin Settings link for non-admin users', () => {
+    it('hides Admin Settings link for non-admin users', () => {
         renderDrawer();
         expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument();
     });
 
-}
-
-function moredrawerGroup2() {
-it('renders logout button', () => {
+    it('renders logout button', () => {
         renderDrawer();
         const logoutBtn = screen.getByTestId('more-drawer-logout');
         expect(logoutBtn).toBeInTheDocument();
     });
 
-it('renders close button with aria-label', () => {
+    it('renders close button with aria-label', () => {
         renderDrawer();
         const closeBtn = screen.getByLabelText('Close menu');
         expect(closeBtn).toBeInTheDocument();
     });
 
-it('renders "More" header text', () => {
+    it('renders "More" header text', () => {
         renderDrawer();
         expect(screen.getByText('More')).toBeInTheDocument();
     });
 
-it('calls onClose when backdrop is clicked', () => {
+    it('calls onClose when backdrop is clicked', () => {
         const { onClose } = renderDrawer();
         const backdrop = screen.getByTestId('more-drawer-backdrop');
         fireEvent.click(backdrop);
         expect(onClose).toHaveBeenCalledOnce();
     });
 
-}
-
-function moredrawerGroup3() {
-it('calls onClose when close button is clicked', () => {
+    it('calls onClose when close button is clicked', () => {
         const { onClose } = renderDrawer();
         const closeBtn = screen.getByLabelText('Close menu');
         fireEvent.click(closeBtn);
         expect(onClose).toHaveBeenCalledOnce();
     });
 
-it('renders theme toggle button', () => {
+    it('renders theme toggle button', () => {
         renderDrawer();
         const themeToggle = screen.getByTestId('more-drawer-theme-toggle');
         expect(themeToggle).toBeInTheDocument();
     });
 
-}
+});
 
-function moredrawerGroup4() {
-it('calls onFeedbackClick and closes drawer when Send Feedback is clicked', () => {
+describe('MoreDrawer — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('calls onFeedbackClick and closes drawer when Send Feedback is clicked', () => {
         const onClose = vi.fn();
         const onFeedbackClick = vi.fn();
         render(
@@ -146,29 +148,28 @@ it('calls onFeedbackClick and closes drawer when Send Feedback is clicked', () =
         expect(onFeedbackClick).toHaveBeenCalledOnce();
     });
 
-it('hides Send Feedback button when onFeedbackClick is not provided', () => {
+    it('hides Send Feedback button when onFeedbackClick is not provided', () => {
         renderDrawer();
         expect(screen.queryByTestId('more-drawer-feedback')).not.toBeInTheDocument();
     });
 
-}
-
-function moredrawerGroup5() {
-it('has aria dialog role on panel', () => {
+    it('has aria dialog role on panel', () => {
         renderDrawer();
         const panel = screen.getByTestId('more-drawer-panel');
         expect(panel).toHaveAttribute('role', 'dialog');
         expect(panel).toHaveAttribute('aria-modal', 'true');
     });
 
-it('expands profile submenu on toggle click', () => {
+    // Profile accordion tests
+
+    it('expands profile submenu on toggle click', () => {
         renderDrawer();
         expect(screen.queryByTestId('profile-submenu')).not.toBeInTheDocument();
         fireEvent.click(screen.getByTestId('more-drawer-profile-toggle'));
         expect(screen.getByTestId('profile-submenu')).toBeInTheDocument();
     });
 
-it('collapses profile submenu on second toggle click', () => {
+    it('collapses profile submenu on second toggle click', () => {
         renderDrawer();
         const toggle = screen.getByTestId('more-drawer-profile-toggle');
         fireEvent.click(toggle);
@@ -177,49 +178,40 @@ it('collapses profile submenu on second toggle click', () => {
         expect(screen.queryByTestId('profile-submenu')).not.toBeInTheDocument();
     });
 
-}
-
-function moredrawerGroup6() {
-it('auto-expands profile submenu when on a profile page', () => {
+    it('auto-expands profile submenu when on a profile page', () => {
         renderDrawer(true, '/profile/identity');
         expect(screen.getByTestId('profile-submenu')).toBeInTheDocument();
     });
 
-it('does not auto-expand profile submenu on non-profile pages', () => {
+    it('does not auto-expand profile submenu on non-profile pages', () => {
         renderDrawer(true, '/events');
         expect(screen.queryByTestId('profile-submenu')).not.toBeInTheDocument();
     });
 
-it('shows Re-run Setup Wizard in profile submenu', () => {
+    it('shows Re-run Setup Wizard in profile submenu', () => {
         renderDrawer(true, '/profile/identity');
         expect(screen.getByText('Re-run Setup Wizard')).toBeInTheDocument();
     });
 
-it('profile toggle has aria-expanded=false when collapsed', () => {
+});
+
+describe('MoreDrawer — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('profile toggle has aria-expanded=false when collapsed', () => {
         renderDrawer(true, '/events');
         const toggle = screen.getByTestId('more-drawer-profile-toggle');
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
     });
 
-it('profile toggle has aria-expanded=true when expanded', () => {
+    it('profile toggle has aria-expanded=true when expanded', () => {
         renderDrawer(true, '/profile/identity');
         const toggle = screen.getByTestId('more-drawer-profile-toggle');
         expect(toggle).toHaveAttribute('aria-expanded', 'true');
     });
 
-}
-
-describe('MoreDrawer', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    moredrawerGroup1();
-    moredrawerGroup2();
-    moredrawerGroup3();
-    moredrawerGroup4();
-    moredrawerGroup5();
-    moredrawerGroup6();
 });
 
 // Admin user tests

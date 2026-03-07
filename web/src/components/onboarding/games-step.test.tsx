@@ -161,14 +161,13 @@ const DEFAULT_DISCOVER_DATA = {
     isLoading: false,
 };
 
-describe('GamesStep', () => {
+describe('GamesStep — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Restore default mock implementations after each test
         mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
         mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
     });
-
     afterEach(() => {
         activeQueryClient?.clear();
     });
@@ -201,14 +200,27 @@ describe('GamesStep', () => {
         });
     });
 
-    function genreFilteringGroup1() {
-it('shows all games when "All" is selected', () => {
+});
+
+describe('GamesStep — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    describe('Genre filtering', () => {
+        it('shows all games when "All" is selected', () => {
             renderWithProviders(<GamesStep />);
             expect(screen.getByText('World of Warcraft')).toBeInTheDocument();
             expect(screen.getByText('Counter-Strike')).toBeInTheDocument();
         });
 
-it('filters games by MMORPG genre chip', () => {
+        it('filters games by MMORPG genre chip', () => {
             const { container } = renderWithProviders(<GamesStep />);
             // Find the MMORPG <button> chip inside the genre container (not div[role=button])
             const genreContainer = container.querySelector('.flex.flex-wrap.gap-2');
@@ -222,10 +234,7 @@ it('filters games by MMORPG genre chip', () => {
             expect(screen.queryByText('Counter-Strike')).not.toBeInTheDocument();
         });
 
-    }
-
-    function genreFilteringGroup2() {
-it('deselects genre filter when clicked again', () => {
+        it('deselects genre filter when clicked again', () => {
             const { container } = renderWithProviders(<GamesStep />);
             const genreContainer = container.querySelector('.flex.flex-wrap.gap-2');
             const mmorpgChip = Array.from(genreContainer!.querySelectorAll('button')).find(
@@ -238,18 +247,25 @@ it('deselects genre filter when clicked again', () => {
             expect(screen.getByText('Counter-Strike')).toBeInTheDocument();
         });
 
-it('hides genre chips when search query is active', () => {
+        it('hides genre chips when search query is active', () => {
             renderWithProviders(<GamesStep />);
             const searchInput = screen.getByPlaceholderText(/search for a game/i);
             fireEvent.change(searchInput, { target: { value: 'world' } });
             expect(screen.queryByRole('button', { name: /mmorpg/i })).not.toBeInTheDocument();
         });
+    });
 
-    }
+});
 
-    describe('Genre filtering', () => {
-        genreFilteringGroup1();
-        genreFilteringGroup2();
+describe('GamesStep — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     describe('Search', () => {
@@ -282,10 +298,26 @@ it('hides genre chips when search query is active', () => {
     });
 
     // ============================================================
+
     // ROK-375: Local source warning banner
+
     // ============================================================
-    describe('ROK-375: local source warning banner', () => {
-        function testShowsExternalSearchUnavailableWarning() {
+
+});
+
+describe('GamesStep — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    describe('ROK-375: local source warning banner — part 1', () => {
+        it('shows "external search unavailable" warning when search source is "local"', () => {
             mockUseGameSearch.mockReturnValue({
                 data: {
                     data: [
@@ -320,11 +352,25 @@ it('hides genre chips when search query is active', () => {
             fireEvent.change(searchInput, { target: { value: 'fallback' } });
 
             expect(screen.getByText(/external search unavailable/i)).toBeInTheDocument();
-        
-        }
-        it('shows "external search unavailable" warning when search source is "local"', () => { testShowsExternalSearchUnavailableWarning(); });
+        });
 
-        function testDoesNOTShowWarningWhen2() {
+    });
+
+});
+
+describe('GamesStep — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    describe('ROK-375: local source warning banner — part 2', () => {
+        it('does NOT show warning when search source is "igdb"', () => {
             mockUseGameSearch.mockReturnValue({
                 data: {
                     data: [
@@ -359,11 +405,25 @@ it('hides genre chips when search query is active', () => {
             fireEvent.change(searchInput, { target: { value: 'igdb game' } });
 
             expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
-        
-        }
-        it('does NOT show warning when search source is "igdb"', () => { testDoesNOTShowWarningWhen2(); });
+        });
 
-        function testDoesNOTShowWarningWhen() {
+    });
+
+});
+
+describe('GamesStep — part 6', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    describe('ROK-375: local source warning banner — part 3', () => {
+        it('does NOT show warning when search source is "database"', () => {
             mockUseGameSearch.mockReturnValue({
                 data: {
                     data: [
@@ -398,9 +458,7 @@ it('hides genre chips when search query is active', () => {
             fireEvent.change(searchInput, { target: { value: 'db game' } });
 
             expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
-        
-        }
-        it('does NOT show warning when search source is "database"', () => { testDoesNOTShowWarningWhen(); });
+        });
 
         it('does NOT show warning when not searching', () => {
             mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
@@ -411,4 +469,5 @@ it('hides genre chips when search query is active', () => {
         });
 
     });
+
 });

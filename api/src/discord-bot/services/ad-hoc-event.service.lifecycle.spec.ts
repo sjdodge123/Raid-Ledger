@@ -22,10 +22,9 @@ describe('AdHocEventService — lifecycle', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  /** Helper: create an active event on a binding for subsequent tests. */
   async function createActiveEvent(bindingId: string, eventId: number) {
     mocks.settingsService.get.mockResolvedValue('true');
-    mocks.db.limit.mockResolvedValueOnce([]); // scheduled overlap check
+    mocks.db.limit.mockResolvedValueOnce([]);
     mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
     mocks.db.returning.mockResolvedValueOnce([{ id: eventId }]);
     mocks.db.limit.mockResolvedValueOnce([
@@ -41,12 +40,12 @@ describe('AdHocEventService — lifecycle', () => {
   }
 
   describe('finalizeEvent', () => {
-    it('finalizes event when status is grace_period', async () => {
+    function mockGracePeriodEvent(id: number, bindingId: string) {
       mocks.db.returning.mockResolvedValueOnce([
         {
-          id: 500,
+          id,
           adHocStatus: 'grace_period',
-          channelBindingId: 'binding-fin',
+          channelBindingId: bindingId,
           gameId: 1,
           duration: [
             new Date('2026-02-10T18:00:00Z'),
@@ -55,6 +54,10 @@ describe('AdHocEventService — lifecycle', () => {
         },
       ]);
       mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+    }
+
+    it('finalizes event when status is grace_period', async () => {
+      mockGracePeriodEvent(500, 'binding-fin');
       await service.finalizeEvent(500);
       expect(mocks.participantService.finalizeAll).toHaveBeenCalledWith(500);
       expect(mocks.db.update).toHaveBeenCalled();
@@ -78,16 +81,7 @@ describe('AdHocEventService — lifecycle', () => {
     it('removes binding from active events map', async () => {
       await createActiveEvent('binding-cleanup', 600);
       expect(service.getActiveState('binding-cleanup', 1)).toBeDefined();
-      mocks.db.returning.mockResolvedValueOnce([
-        {
-          id: 600,
-          adHocStatus: 'grace_period',
-          channelBindingId: 'binding-cleanup',
-          gameId: 1,
-          duration: [new Date(), new Date()],
-        },
-      ]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+      mockGracePeriodEvent(600, 'binding-cleanup');
       await service.finalizeEvent(600);
       expect(service.getActiveState('binding-cleanup', 1)).toBeUndefined();
     });

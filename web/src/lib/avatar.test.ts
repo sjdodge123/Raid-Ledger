@@ -6,9 +6,9 @@ vi.mock('./config', () => ({
     API_BASE_URL: 'http://localhost:3000',
 }));
 
-describe('resolveAvatar', () => {
-    function avatarPreferenceROK352Group1() {
-it('honors discord preference over custom avatar', () => {
+describe('resolveAvatar — part 1', () => {
+    describe('Avatar Preference (ROK-352) — part 1', () => {
+        it('honors discord preference over custom avatar', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: '/avatars/custom.png',
@@ -23,10 +23,7 @@ it('honors discord preference over custom avatar', () => {
             });
         });
 
-    }
-
-    function avatarPreferenceROK352Group2() {
-it('honors character preference over custom avatar', () => {
+        it('honors character preference over custom avatar', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: '/avatars/custom.png',
@@ -44,10 +41,7 @@ it('honors character preference over custom avatar', () => {
             });
         });
 
-    }
-
-    function avatarPreferenceROK352Group3() {
-it('honors custom preference explicitly', () => {
+        it('honors custom preference explicitly', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: '/avatars/custom.png',
@@ -62,10 +56,7 @@ it('honors custom preference explicitly', () => {
             });
         });
 
-    }
-
-    function avatarPreferenceROK352Group4() {
-it('falls through when preferred discord source is unavailable', () => {
+        it('falls through when preferred discord source is unavailable', () => {
             const user: AvatarUser = {
                 avatar: null,
                 customAvatarUrl: '/avatars/custom.png',
@@ -80,10 +71,13 @@ it('falls through when preferred discord source is unavailable', () => {
             });
         });
 
-    }
+    });
 
-    function avatarPreferenceROK352Group5() {
-it('falls through when preferred character is not found', () => {
+});
+
+describe('resolveAvatar — part 2', () => {
+    describe('Avatar Preference (ROK-352) — part 2', () => {
+        it('falls through when preferred character is not found', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
@@ -101,10 +95,7 @@ it('falls through when preferred character is not found', () => {
             });
         });
 
-    }
-
-    function avatarPreferenceROK352Group6() {
-it('falls through when preferred custom is unavailable', () => {
+        it('falls through when preferred custom is unavailable', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
@@ -119,10 +110,7 @@ it('falls through when preferred custom is unavailable', () => {
             });
         });
 
-    }
-
-    function avatarPreferenceROK352Group7() {
-it('uses default priority when avatarPreference is null', () => {
+        it('uses default priority when avatarPreference is null', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: '/avatars/custom.png',
@@ -137,18 +125,11 @@ it('uses default priority when avatarPreference is null', () => {
             });
         });
 
-    }
-
-    describe('Avatar Preference (ROK-352)', () => {
-        avatarPreferenceROK352Group1();
-        avatarPreferenceROK352Group2();
-        avatarPreferenceROK352Group3();
-        avatarPreferenceROK352Group4();
-        avatarPreferenceROK352Group5();
-        avatarPreferenceROK352Group6();
-        avatarPreferenceROK352Group7();
     });
 
+});
+
+describe('resolveAvatar — part 3', () => {
     describe('Character Portrait Resolution', () => {
         it('returns character portrait when gameId matches and avatarUrl exists', () => {
             const user: AvatarUser = {
@@ -185,8 +166,11 @@ it('uses default priority when avatarPreference is null', () => {
         });
     });
 
-    function discordAvatarFallbackGroup1() {
-it('falls back to Discord avatar when no character for game', () => {
+});
+
+describe('resolveAvatar — part 4', () => {
+    describe('Discord Avatar Fallback — part 1', () => {
+        it('falls back to Discord avatar when no character for game', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 characters: [
@@ -202,10 +186,7 @@ it('falls back to Discord avatar when no character for game', () => {
             });
         });
 
-    }
-
-    function discordAvatarFallbackGroup2() {
-it('falls back to Discord avatar when character has no avatarUrl', () => {
+        it('falls back to Discord avatar when character has no avatarUrl', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 characters: [
@@ -221,10 +202,7 @@ it('falls back to Discord avatar when character has no avatarUrl', () => {
             });
         });
 
-    }
-
-    function discordAvatarFallbackGroup3() {
-it('returns Discord avatar when no gameId provided', () => {
+        it('returns Discord avatar when no gameId provided', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 characters: [
@@ -240,10 +218,7 @@ it('returns Discord avatar when no gameId provided', () => {
             });
         });
 
-    }
-
-    function discordAvatarFallbackGroup4() {
-it('returns Discord avatar when characters array is empty', () => {
+        it('returns Discord avatar when characters array is empty', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 characters: [],
@@ -257,7 +232,13 @@ it('returns Discord avatar when characters array is empty', () => {
             });
         });
 
-it('returns Discord avatar when characters is undefined', () => {
+    });
+
+});
+
+describe('resolveAvatar — part 5', () => {
+    describe('Discord Avatar Fallback — part 2', () => {
+        it('returns Discord avatar when characters is undefined', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
             };
@@ -270,13 +251,6 @@ it('returns Discord avatar when characters is undefined', () => {
             });
         });
 
-    }
-
-    describe('Discord Avatar Fallback', () => {
-        discordAvatarFallbackGroup1();
-        discordAvatarFallbackGroup2();
-        discordAvatarFallbackGroup3();
-        discordAvatarFallbackGroup4();
     });
 
     describe('Initials Fallback', () => {
@@ -311,6 +285,9 @@ it('returns Discord avatar when characters is undefined', () => {
         });
     });
 
+});
+
+describe('resolveAvatar — part 6', () => {
     describe('Null/Undefined Handling', () => {
         it('handles null user gracefully', () => {
             const result = resolveAvatar(null);
@@ -375,4 +352,5 @@ it('returns Discord avatar when characters is undefined', () => {
             });
         });
     });
+
 });

@@ -39,8 +39,16 @@ const renderWithRouter = (component: React.ReactNode) => {
     return render(<BrowserRouter>{component}</BrowserRouter>);
 };
 
-function newmemberssectionGroup1() {
-it('renders player cards when data is available', () => {
+describe('NewMembersSection — part 1', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('renders player cards when data is available', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: {
                 data: [
@@ -57,7 +65,7 @@ it('renders player cards when data is available', () => {
         expect(screen.getByText('Bob')).toBeInTheDocument();
     });
 
-it('shows loading state with skeleton placeholders', () => {
+    it('shows loading state with skeleton placeholders', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: undefined,
             isLoading: true,
@@ -68,10 +76,7 @@ it('shows loading state with skeleton placeholders', () => {
         expect(screen.getByText('New Members')).toBeInTheDocument();
     });
 
-}
-
-function newmemberssectionGroup2() {
-it('returns null when no recent members (empty array)', () => {
+    it('returns null when no recent members (empty array)', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: { data: [] },
             isLoading: false,
@@ -82,7 +87,7 @@ it('returns null when no recent members (empty array)', () => {
         expect(container.innerHTML).toBe('');
     });
 
-it('returns null when data is undefined and not loading', () => {
+    it('returns null when data is undefined and not loading', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: undefined,
             isLoading: false,
@@ -94,10 +99,18 @@ it('returns null when data is undefined and not loading', () => {
         expect(container.innerHTML).toBe('');
     });
 
-}
+});
 
-function newmemberssectionGroup3() {
-it('each card links to user profile', () => {
+describe('NewMembersSection — part 2', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('each card links to user profile', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: {
                 data: [
@@ -113,10 +126,7 @@ it('each card links to user profile', () => {
         expect(link).toHaveAttribute('href', '/users/42');
     });
 
-}
-
-function newmemberssectionGroup4() {
-it('displays relative time (e.g. "2 days ago")', () => {
+    it('displays relative time (e.g. "2 days ago")', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: {
                 data: [
@@ -136,10 +146,7 @@ it('displays relative time (e.g. "2 days ago")', () => {
         expect(screen.getByText(/2 days ago/)).toBeInTheDocument();
     });
 
-}
-
-function newmemberssectionGroup5() {
-it('renders the "New Members" heading when players exist', () => {
+    it('renders the "New Members" heading when players exist', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: {
                 data: [createMockPlayer()],
@@ -152,7 +159,18 @@ it('renders the "New Members" heading when players exist', () => {
         expect(screen.getByText('New Members')).toBeInTheDocument();
     });
 
-it('shows first letter initial for players without avatar', () => {
+});
+
+describe('NewMembersSection — part 3', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('shows first letter initial for players without avatar', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: {
                 data: [
@@ -167,21 +185,4 @@ it('shows first letter initial for players without avatar', () => {
         expect(screen.getByText('Z')).toBeInTheDocument();
     });
 
-}
-
-describe('NewMembersSection', () => {
-beforeEach(() => {
-        vi.useFakeTimers();
-        vi.setSystemTime(MOCK_NOW);
-    });
-
-afterEach(() => {
-        vi.useRealTimers();
-    });
-
-    newmemberssectionGroup1();
-    newmemberssectionGroup2();
-    newmemberssectionGroup3();
-    newmemberssectionGroup4();
-    newmemberssectionGroup5();
 });

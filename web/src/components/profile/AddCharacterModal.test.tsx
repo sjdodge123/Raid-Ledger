@@ -138,74 +138,79 @@ function renderModal(props: Partial<Parameters<typeof AddCharacterModal>[0]> = {
     );
 }
 
-function addcharactermodalArmorySyncedCharacterGroup1() {
-it('shows the edit character modal title', () => {
+describe('AddCharacterModal — armory-synced character — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('shows the edit character modal title', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         expect(screen.getByText('Edit Character')).toBeInTheDocument();
     });
 
-it('displays the armory sync info banner for synced characters', () => {
+    it('displays the armory sync info banner for synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         expect(
             screen.getByText(/This character is synced from the Blizzard Armory\. Some fields are read-only\./i)
         ).toBeInTheDocument();
     });
 
-it('disables the Name field for armory-synced characters', () => {
+    it('disables the Name field for armory-synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const nameInput = screen.getByPlaceholderText('Character name');
         expect(nameInput).toBeDisabled();
     });
 
-it('sets tooltip on Name field explaining sync', () => {
+    it('sets tooltip on Name field explaining sync', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const nameInput = screen.getByPlaceholderText('Character name');
         expect(nameInput).toHaveAttribute('title', 'This field is synced from the Blizzard Armory');
     });
 
-}
-
-function addcharactermodalArmorySyncedCharacterGroup2() {
-it('disables the Class field for armory-synced characters', () => {
+    it('disables the Class field for armory-synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const classInput = screen.getByPlaceholderText('e.g. Warrior');
         expect(classInput).toBeDisabled();
     });
 
-it('sets tooltip on Class field explaining sync', () => {
+    it('sets tooltip on Class field explaining sync', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const classInput = screen.getByPlaceholderText('e.g. Warrior');
         expect(classInput).toHaveAttribute('title', 'This field is synced from the Blizzard Armory');
     });
 
-it('disables the Spec field for armory-synced characters', () => {
+    it('disables the Spec field for armory-synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const specInput = screen.getByPlaceholderText('e.g. Arms');
         expect(specInput).toBeDisabled();
     });
 
-it('disables the Realm field for armory-synced characters', () => {
+    it('disables the Realm field for armory-synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const realmInput = screen.getByPlaceholderText('e.g. Illidan');
         expect(realmInput).toBeDisabled();
     });
 
-}
-
-function addcharactermodalArmorySyncedCharacterGroup3() {
-it('sets tooltip on Realm field explaining sync', () => {
+    it('sets tooltip on Realm field explaining sync', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const realmInput = screen.getByPlaceholderText('e.g. Illidan');
         expect(realmInput).toHaveAttribute('title', 'This field is synced from the Blizzard Armory');
     });
 
-it('keeps the Role dropdown enabled for armory-synced characters', () => {
+    it('keeps the Role dropdown enabled for armory-synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const roleSelect = screen.getByRole('combobox');
         expect(roleSelect).not.toBeDisabled();
     });
 
-it('keeps the Main character checkbox enabled for armory-synced characters (when not already main)', () => {
+});
+
+describe('AddCharacterModal — armory-synced character — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('keeps the Main character checkbox enabled for armory-synced characters (when not already main)', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter({ isMain: false }) });
         const mainCheckbox = screen.getByRole('checkbox');
         // The checkbox is disabled only if editingCharacter.isMain is true (already main)
@@ -213,7 +218,7 @@ it('keeps the Main character checkbox enabled for armory-synced characters (when
         expect(mainCheckbox).not.toBeDisabled();
     });
 
-it('shows LockClosedIcon on Name label for synced characters', () => {
+    it('shows LockClosedIcon on Name label for synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         // The Name label contains a lock icon SVG
         const nameLabel = screen.getByText(/^Name/).closest('label');
@@ -222,10 +227,7 @@ it('shows LockClosedIcon on Name label for synced characters', () => {
         expect(svgInLabel).toBeInTheDocument();
     });
 
-}
-
-function addcharactermodalArmorySyncedCharacterGroup4() {
-it('shows LockClosedIcon on Class label for synced characters', () => {
+    it('shows LockClosedIcon on Class label for synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const classLabel = screen.getByText(/^Class/).closest('label');
         expect(classLabel).toBeInTheDocument();
@@ -233,7 +235,7 @@ it('shows LockClosedIcon on Class label for synced characters', () => {
         expect(svgInLabel).toBeInTheDocument();
     });
 
-it('shows LockClosedIcon on Spec label for synced characters', () => {
+    it('shows LockClosedIcon on Spec label for synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const specLabel = screen.getByText(/^Spec/).closest('label');
         expect(specLabel).toBeInTheDocument();
@@ -241,7 +243,7 @@ it('shows LockClosedIcon on Spec label for synced characters', () => {
         expect(svgInLabel).toBeInTheDocument();
     });
 
-it('shows LockClosedIcon on Realm label for synced characters', () => {
+    it('shows LockClosedIcon on Realm label for synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const realmLabel = screen.getByText(/^Realm\/Server/).closest('label');
         expect(realmLabel).toBeInTheDocument();
@@ -249,10 +251,7 @@ it('shows LockClosedIcon on Realm label for synced characters', () => {
         expect(svgInLabel).toBeInTheDocument();
     });
 
-}
-
-function addcharactermodalArmorySyncedCharacterGroup5() {
-it('pre-fills form fields with character data for synced characters', () => {
+    it('pre-fills form fields with character data for synced characters', () => {
         const char = createArmorySyncedCharacter({
             name: 'Thrall',
             class: 'Shaman',
@@ -266,62 +265,51 @@ it('pre-fills form fields with character data for synced characters', () => {
         expect(screen.getByPlaceholderText('e.g. Illidan')).toHaveValue('Illidan');
     });
 
-}
+});
 
-describe('AddCharacterModal — armory-synced character', () => {
-beforeEach(() => {
+describe('AddCharacterModal — manually-created character — part 1', () => {
+    beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    addcharactermodalArmorySyncedCharacterGroup1();
-    addcharactermodalArmorySyncedCharacterGroup2();
-    addcharactermodalArmorySyncedCharacterGroup3();
-    addcharactermodalArmorySyncedCharacterGroup4();
-    addcharactermodalArmorySyncedCharacterGroup5();
-});
-
-function addcharactermodalManuallyCreatedCharacterGroup1() {
-it('does not show the armory sync info banner for manual characters', () => {
+    it('does not show the armory sync info banner for manual characters', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         expect(
             screen.queryByText(/This character is synced from the Blizzard Armory/i)
         ).not.toBeInTheDocument();
     });
 
-it('keeps the Name field enabled for manually-created characters', () => {
+    it('keeps the Name field enabled for manually-created characters', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         const nameInput = screen.getByPlaceholderText('Character name');
         expect(nameInput).not.toBeDisabled();
     });
 
-it('keeps the Class field enabled for manually-created characters', () => {
+    it('keeps the Class field enabled for manually-created characters', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         const classInput = screen.getByPlaceholderText('e.g. Warrior');
         expect(classInput).not.toBeDisabled();
     });
 
-it('keeps the Spec field enabled for manually-created characters', () => {
+    it('keeps the Spec field enabled for manually-created characters', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         const specInput = screen.getByPlaceholderText('e.g. Arms');
         expect(specInput).not.toBeDisabled();
     });
 
-}
-
-function addcharactermodalManuallyCreatedCharacterGroup2() {
-it('keeps the Realm field enabled for manually-created characters', () => {
+    it('keeps the Realm field enabled for manually-created characters', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         const realmInput = screen.getByPlaceholderText('e.g. Illidan');
         expect(realmInput).not.toBeDisabled();
     });
 
-it('keeps the Role dropdown enabled for manually-created characters', () => {
+    it('keeps the Role dropdown enabled for manually-created characters', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         const roleSelect = screen.getByRole('combobox');
         expect(roleSelect).not.toBeDisabled();
     });
 
-it('does not show LockClosedIcon on Name label for manual characters', () => {
+    it('does not show LockClosedIcon on Name label for manual characters', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         const nameLabel = screen.getByText(/^Name/).closest('label');
         expect(nameLabel).toBeInTheDocument();
@@ -329,16 +317,20 @@ it('does not show LockClosedIcon on Name label for manual characters', () => {
         expect(svgInLabel).toBeNull();
     });
 
-it('does not set tooltip on Name field for manual characters', () => {
+    it('does not set tooltip on Name field for manual characters', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         const nameInput = screen.getByPlaceholderText('Character name');
         expect(nameInput).not.toHaveAttribute('title');
     });
 
-}
+});
 
-function addcharactermodalManuallyCreatedCharacterGroup3() {
-it('pre-fills form fields with character data for manual characters', () => {
+describe('AddCharacterModal — manually-created character — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('pre-fills form fields with character data for manual characters', () => {
         const char = createManualCharacter({
             name: 'Jaina',
             class: 'Mage',
@@ -352,16 +344,6 @@ it('pre-fills form fields with character data for manual characters', () => {
         expect(screen.getByPlaceholderText('e.g. Illidan')).toHaveValue('Stormwind');
     });
 
-}
-
-describe('AddCharacterModal — manually-created character', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    addcharactermodalManuallyCreatedCharacterGroup1();
-    addcharactermodalManuallyCreatedCharacterGroup2();
-    addcharactermodalManuallyCreatedCharacterGroup3();
 });
 
 describe('AddCharacterModal — general edit behavior', () => {

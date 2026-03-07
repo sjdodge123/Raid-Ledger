@@ -41,104 +41,83 @@ function extractBadgeOverlayBlock(): string {
 }
 
 const block = extractBadgeOverlayBlock();
-function badgeOverlayCSSRulesROKGroup1() {
-it('badge-overlay rules exist in index.css', () => {
+
+function getDeclarations(prop: string) {
+    return block.split('\n').filter((line) => line.includes(prop) && line.includes('.badge-overlay'));
+}
+
+describe('badge-overlay CSS — no !important (ROK-493)', () => {
+    it('badge-overlay rules exist in index.css', () => {
         expect(block.length).toBeGreaterThan(0);
         expect(block).toContain('.badge-overlay');
     });
 
-it('badge-overlay rules do NOT use !important on color property', () => {
-        // Extract only the property declarations within the badge-overlay block
-        const declarations = block
-            .split('\n')
-            .filter((line) => line.includes('color:') && line.includes('.badge-overlay'));
+    it('badge-overlay rules do NOT use !important on color property', () => {
+        const declarations = getDeclarations('color:');
         expect(declarations.length).toBeGreaterThan(0);
         for (const decl of declarations) {
             expect(decl).not.toContain('!important');
         }
     });
 
-it('badge-overlay rules do NOT use !important on background-color property', () => {
-        const declarations = block
-            .split('\n')
-            .filter((line) => line.includes('background-color:') && line.includes('.badge-overlay'));
+    it('badge-overlay rules do NOT use !important on background-color property', () => {
+        const declarations = getDeclarations('background-color:');
         expect(declarations.length).toBeGreaterThan(0);
         for (const decl of declarations) {
             expect(decl).not.toContain('!important');
         }
     });
 
-}
-
-function badgeOverlayCSSRulesROKGroup2() {
-it('badge-overlay rules do NOT use !important on border-color property', () => {
-        const declarations = block
-            .split('\n')
-            .filter((line) => line.includes('border-color:') && line.includes('.badge-overlay'));
+    it('badge-overlay rules do NOT use !important on border-color property', () => {
+        const declarations = getDeclarations('border-color:');
         expect(declarations.length).toBeGreaterThan(0);
         for (const decl of declarations) {
             expect(decl).not.toContain('!important');
         }
     });
 
-it('badge-overlay rules contain zero !important declarations overall', () => {
-        // Strip multi-line comments, then check remaining rule lines for !important
+    it('badge-overlay rules contain zero !important declarations overall', () => {
         const withoutComments = block.replace(/\/\*[\s\S]*?\*\//g, '');
-        const ruleLines = withoutComments
-            .split('\n')
-            .filter((line) => line.trim().length > 0);
+        const ruleLines = withoutComments.split('\n').filter((line) => line.trim().length > 0);
         expect(ruleLines.length).toBeGreaterThan(0);
         for (const line of ruleLines) {
             expect(line).not.toContain('!important');
         }
     });
+});
 
-it('uses :is(.badge-overlay, .badge-overlay *) selector pattern for specificity', () => {
+describe('badge-overlay CSS — selectors & coverage (ROK-493)', () => {
+    it('uses :is(.badge-overlay, .badge-overlay *) selector pattern for specificity', () => {
         expect(block).toContain(':is(.badge-overlay, .badge-overlay *)');
     });
 
-}
-
-function badgeOverlayCSSRulesROKGroup3() {
-it('covers text-color overrides for all four status colors', () => {
+    it('covers text-color overrides for all four status colors', () => {
         expect(block).toContain('.text-emerald-400');
         expect(block).toContain('.text-yellow-400');
         expect(block).toContain('.text-red-400');
         expect(block).toContain('.text-cyan-300');
     });
 
-it('covers background-color overrides for all four status colors', () => {
+    it('covers background-color overrides for all four status colors', () => {
         expect(block).toContain('.bg-emerald-500\\/20');
         expect(block).toContain('.bg-yellow-500\\/20');
         expect(block).toContain('.bg-red-500\\/20');
         expect(block).toContain('.bg-cyan-500\\/20');
     });
 
-it('covers border-color overrides for all four status colors', () => {
+    it('covers border-color overrides for all four status colors', () => {
         expect(block).toContain('.border-emerald-500\\/30');
         expect(block).toContain('.border-yellow-500\\/30');
         expect(block).toContain('.border-red-500\\/30');
         expect(block).toContain('.border-cyan-500\\/30');
     });
 
-}
-
-function badgeOverlayCSSRulesROKGroup4() {
-it('rules are scoped under [data-scheme="light"]', () => {
-        const selectorLines = block
-            .split('\n')
+    it('rules are scoped under [data-scheme="light"]', () => {
+        const selectorLines = block.split('\n')
             .filter((line) => line.includes('.badge-overlay') && line.includes('{'));
         expect(selectorLines.length).toBeGreaterThan(0);
         for (const line of selectorLines) {
             expect(line).toContain('[data-scheme="light"]');
         }
     });
-
-}
-
-describe('badge-overlay CSS rules (ROK-493)', () => {
-    badgeOverlayCSSRulesROKGroup1();
-    badgeOverlayCSSRulesROKGroup2();
-    badgeOverlayCSSRulesROKGroup3();
-    badgeOverlayCSSRulesROKGroup4();
 });

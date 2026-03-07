@@ -4,8 +4,12 @@ import { registerSlotComponent, getSlotRegistrations, clearRegistry, registerPlu
 function StubComponent() { return null; }
 function StubComponent2() { return null; }
 
-function pluginRegistryGroup1() {
-it('registers a component and retrieves it by slot name', () => {
+describe('plugin-registry — part 1', () => {
+    beforeEach(() => {
+        clearRegistry();
+    });
+
+    it('registers a component and retrieves it by slot name', () => {
         registerSlotComponent({
             pluginSlug: 'test-plugin',
             slotName: 'character-detail:sections',
@@ -19,15 +23,12 @@ it('registers a component and retrieves it by slot name', () => {
         expect(registrations[0].component).toBe(StubComponent);
     });
 
-it('returns empty array for slots with no registrations', () => {
+    it('returns empty array for slots with no registrations', () => {
         const registrations = getSlotRegistrations('admin-settings:integration-cards');
         expect(registrations).toHaveLength(0);
     });
 
-}
-
-function pluginRegistryGroup2() {
-it('filters registrations by slot name', () => {
+    it('filters registrations by slot name', () => {
         registerSlotComponent({
             pluginSlug: 'test-plugin',
             slotName: 'character-detail:sections',
@@ -45,10 +46,7 @@ it('filters registrations by slot name', () => {
         expect(getSlotRegistrations('event-create:content-browser')).toHaveLength(1);
     });
 
-}
-
-function pluginRegistryGroup3() {
-it('sorts registrations by priority (ascending)', () => {
+    it('sorts registrations by priority (ascending)', () => {
         registerSlotComponent({
             pluginSlug: 'plugin-b',
             slotName: 'character-detail:sections',
@@ -68,10 +66,14 @@ it('sorts registrations by priority (ascending)', () => {
         expect(registrations[1].pluginSlug).toBe('plugin-b');
     });
 
-}
+});
 
-function pluginRegistryGroup4() {
-it('clearRegistry removes all registrations', () => {
+describe('plugin-registry — part 2', () => {
+    beforeEach(() => {
+        clearRegistry();
+    });
+
+    it('clearRegistry removes all registrations', () => {
         registerSlotComponent({
             pluginSlug: 'test-plugin',
             slotName: 'character-detail:sections',
@@ -86,10 +88,7 @@ it('clearRegistry removes all registrations', () => {
         expect(getSlotRegistrations('character-detail:sections')).toHaveLength(0);
     });
 
-}
-
-function pluginRegistryGroup5() {
-it('supports multiple plugins registering the same slot', () => {
+    it('supports multiple plugins registering the same slot', () => {
         registerSlotComponent({
             pluginSlug: 'plugin-a',
             slotName: 'character-detail:header-badges',
@@ -109,20 +108,17 @@ it('supports multiple plugins registering the same slot', () => {
         expect(registrations[1].pluginSlug).toBe('plugin-b');
     });
 
-}
-
-function pluginRegistryGroup6() {
-it('registerPlugin stores badge metadata', () => {
+    it('registerPlugin stores badge metadata', () => {
         registerPlugin('my-plugin', { icon: 'X', color: 'blue', label: 'My Plugin' });
         const badge = getPluginBadge('my-plugin');
         expect(badge).toEqual({ icon: 'X', color: 'blue', label: 'My Plugin' });
     });
 
-it('getPluginBadge returns undefined for unregistered plugin', () => {
+    it('getPluginBadge returns undefined for unregistered plugin', () => {
         expect(getPluginBadge('nonexistent')).toBeUndefined();
     });
 
-it('clearRegistry also clears badge metadata', () => {
+    it('clearRegistry also clears badge metadata', () => {
         registerPlugin('test', { icon: 'T', color: 'red', label: 'Test' });
         expect(getPluginBadge('test')).toBeDefined();
 
@@ -131,7 +127,7 @@ it('clearRegistry also clears badge metadata', () => {
         expect(getPluginBadge('test')).toBeUndefined();
     });
 
-it('registerPlugin overwrites badge for same slug (HMR safe)', () => {
+    it('registerPlugin overwrites badge for same slug (HMR safe)', () => {
         registerPlugin('plug', { icon: 'A', color: 'blue', label: 'First' });
         registerPlugin('plug', { icon: 'B', color: 'red', label: 'Second' });
 
@@ -139,17 +135,4 @@ it('registerPlugin overwrites badge for same slug (HMR safe)', () => {
         expect(badge).toEqual({ icon: 'B', color: 'red', label: 'Second' });
     });
 
-}
-
-describe('plugin-registry', () => {
-beforeEach(() => {
-        clearRegistry();
-    });
-
-    pluginRegistryGroup1();
-    pluginRegistryGroup2();
-    pluginRegistryGroup3();
-    pluginRegistryGroup4();
-    pluginRegistryGroup5();
-    pluginRegistryGroup6();
 });

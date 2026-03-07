@@ -12,7 +12,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { RecentPlayersResponseSchema } from '@raid-ledger/contract';
 
-function describeUsersController() {
+describe('UsersController', () => {
   let controller: UsersController;
   let meController: UsersMeController;
   let usersService: UsersService;
@@ -53,92 +53,83 @@ function describeUsersController() {
     total: 1,
   };
 
-  async function beforeEachHelper() {
+  function buildTestProviders() {
+    return [
+      {
+        provide: UsersService,
+        useValue: {
+          findById: jest.fn(),
+          findRecent: jest.fn(),
+          findAll: jest.fn(),
+          getHeartedGames: jest.fn(),
+          unlinkDiscord: jest.fn(),
+          setCustomAvatar: jest.fn(),
+          findAllWithRoles: jest.fn(),
+          setRole: jest.fn(),
+          checkDisplayNameAvailability: jest.fn(),
+          setDisplayName: jest.fn(),
+          completeOnboarding: jest.fn(),
+          resetOnboarding: jest.fn(),
+        },
+      },
+      {
+        provide: AvatarService,
+        useValue: {
+          checkRateLimit: jest.fn(),
+          validateAndProcess: jest.fn(),
+          save: jest.fn(),
+          delete: jest.fn(),
+        },
+      },
+      {
+        provide: PreferencesService,
+        useValue: {
+          getUserPreferences: jest.fn(),
+          setUserPreference: jest.fn(),
+        },
+      },
+      {
+        provide: GameTimeService,
+        useValue: {
+          getCompositeView: jest.fn(),
+          saveTemplate: jest.fn(),
+          saveOverrides: jest.fn(),
+          createAbsence: jest.fn(),
+          deleteAbsence: jest.fn(),
+          getAbsences: jest.fn(),
+        },
+      },
+      { provide: CharactersService, useValue: { findAllForUser: jest.fn() } },
+      { provide: EventsService, useValue: { findUpcomingByUser: jest.fn() } },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(false),
+          getGuildInfo: jest.fn().mockReturnValue(null),
+          getClient: jest.fn().mockReturnValue(null),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveChannelForEvent: jest.fn().mockResolvedValue(null) },
+      },
+    ];
+  }
+
+  beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController, UsersMeController],
-      providers: [
-        {
-          provide: UsersService,
-          useValue: {
-            findById: jest.fn(),
-            findRecent: jest.fn(),
-            findAll: jest.fn(),
-            getHeartedGames: jest.fn(),
-            unlinkDiscord: jest.fn(),
-            setCustomAvatar: jest.fn(),
-            findAllWithRoles: jest.fn(),
-            setRole: jest.fn(),
-            checkDisplayNameAvailability: jest.fn(),
-            setDisplayName: jest.fn(),
-            completeOnboarding: jest.fn(),
-            resetOnboarding: jest.fn(),
-          },
-        },
-        {
-          provide: AvatarService,
-          useValue: {
-            checkRateLimit: jest.fn(),
-            validateAndProcess: jest.fn(),
-            save: jest.fn(),
-            delete: jest.fn(),
-          },
-        },
-        {
-          provide: PreferencesService,
-          useValue: {
-            getUserPreferences: jest.fn(),
-            setUserPreference: jest.fn(),
-          },
-        },
-        {
-          provide: GameTimeService,
-          useValue: {
-            getCompositeView: jest.fn(),
-            saveTemplate: jest.fn(),
-            saveOverrides: jest.fn(),
-            createAbsence: jest.fn(),
-            deleteAbsence: jest.fn(),
-            getAbsences: jest.fn(),
-          },
-        },
-        {
-          provide: CharactersService,
-          useValue: {
-            findAllForUser: jest.fn(),
-          },
-        },
-        {
-          provide: EventsService,
-          useValue: {
-            findUpcomingByUser: jest.fn(),
-          },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(false),
-            getGuildInfo: jest.fn().mockReturnValue(null),
-            getClient: jest.fn().mockReturnValue(null),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveChannelForEvent: jest.fn().mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildTestProviders(),
     }).compile();
 
     controller = module.get<UsersController>(UsersController);
     meController = module.get<UsersMeController>(UsersMeController);
     usersService = module.get<UsersService>(UsersService);
     eventsService = module.get<EventsService>(EventsService);
-  }
-  beforeEach(() => beforeEachHelper());
+  });
 
-  function describeListRecentPlayers() {
-    async function testReturn200WithCorrectShape() {
+  describe('listRecentPlayers', () => {
+    it('should return 200 with correct shape', async () => {
       const mockRows = [
         {
           id: 1,
@@ -173,9 +164,7 @@ function describeUsersController() {
         customAvatarUrl: null,
         createdAt: '2026-02-10T12:00:00.000Z',
       });
-    }
-    it('should return 200 with correct shape', () =>
-      testReturn200WithCorrectShape());
+    });
 
     it('should convert Date createdAt to ISO string', async () => {
       const mockRows = [
@@ -225,10 +214,9 @@ function describeUsersController() {
 
       expect(result.data).toEqual([]);
     });
-  }
-  describe('listRecentPlayers', () => describeListRecentPlayers());
+  });
 
-  function describeGetUserEventSignups() {
+  describe('getUserEventSignups (ROK-299)', () => {
     it('should return upcoming events for valid user', async () => {
       const findByIdSpy = jest
         .spyOn(usersService, 'findById')
@@ -303,11 +291,9 @@ function describeUsersController() {
       expect(result.data.length).toBe(6);
       expect(result.total).toBe(10);
     });
-  }
-  describe('getUserEventSignups (ROK-299)', () =>
-    describeGetUserEventSignups());
+  });
 
-  function describeCheckDisplayName() {
+  describe('checkDisplayName (ROK-219)', () => {
     const mockRequest = { user: { id: 1, role: 'member' } };
 
     it('should return available:true when display name is available', async () => {
@@ -365,10 +351,9 @@ function describeUsersController() {
 
       expect(checkSpy).toHaveBeenCalledWith('TestName', 1);
     });
-  }
-  describe('checkDisplayName (ROK-219)', () => describeCheckDisplayName());
+  });
 
-  function describeUpdateMyProfile() {
+  describe('updateMyProfile (ROK-219)', () => {
     const mockRequest = { user: { id: 1, role: 'member' } };
 
     it('should update user display name when available', async () => {
@@ -449,10 +434,9 @@ function describeUsersController() {
       expect(result.data).toHaveProperty('username', 'testuser');
       expect(result.data).toHaveProperty('displayName', 'ValidName');
     });
-  }
-  describe('updateMyProfile (ROK-219)', () => describeUpdateMyProfile());
+  });
 
-  function describeCompleteOnboarding() {
+  describe('completeOnboarding (ROK-219)', () => {
     const mockRequest = { user: { id: 1, role: 'member' } };
 
     it('should mark onboarding as completed', async () => {
@@ -508,8 +492,7 @@ function describeUsersController() {
       expect(result).toHaveProperty('onboardingCompletedAt');
       expect(typeof result.onboardingCompletedAt).toBe('string');
     });
-  }
-  describe('completeOnboarding (ROK-219)', () => describeCompleteOnboarding());
+  });
 
   describe('resetOnboarding (ROK-312)', () => {
     const mockRequest = { user: { id: 1, role: 'member' } };
@@ -525,5 +508,4 @@ function describeUsersController() {
       expect(resetSpy).toHaveBeenCalledWith(1);
     });
   });
-}
-describe('UsersController', () => describeUsersController());
+});

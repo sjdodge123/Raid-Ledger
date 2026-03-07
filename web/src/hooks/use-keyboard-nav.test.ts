@@ -40,13 +40,13 @@ function makeKeyboardEvent(
     } as unknown as React.KeyboardEvent<HTMLElement> & { preventDefault: ReturnType<typeof vi.fn> };
 }
 
-describe('useKeyboardNav', () => {
+describe('useKeyboardNav — part 1', () => {
     afterEach(() => {
         document.body.innerHTML = '';
     });
 
-    function verticalOrientationDefaultGroup1() {
-it('ArrowDown moves focus to next item', () => {
+    describe('vertical orientation (default)', () => {
+        it('ArrowDown moves focus to next item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -59,7 +59,7 @@ it('ArrowDown moves focus to next item', () => {
             expect(event.preventDefault).toHaveBeenCalled();
         });
 
-it('ArrowDown wraps from last item to first', () => {
+        it('ArrowDown wraps from last item to first', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[2].focus();
@@ -71,10 +71,7 @@ it('ArrowDown wraps from last item to first', () => {
             expect(document.activeElement).toBe(items[0]);
         });
 
-    }
-
-    function verticalOrientationDefaultGroup2() {
-it('ArrowUp moves focus to previous item', () => {
+        it('ArrowUp moves focus to previous item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[2].focus();
@@ -87,7 +84,7 @@ it('ArrowUp moves focus to previous item', () => {
             expect(event.preventDefault).toHaveBeenCalled();
         });
 
-it('ArrowUp wraps from first item to last', () => {
+        it('ArrowUp wraps from first item to last', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -99,10 +96,7 @@ it('ArrowUp wraps from first item to last', () => {
             expect(document.activeElement).toBe(items[2]);
         });
 
-    }
-
-    function verticalOrientationDefaultGroup3() {
-it('ArrowLeft and ArrowRight have no effect in vertical mode', () => {
+        it('ArrowLeft and ArrowRight have no effect in vertical mode', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -117,17 +111,17 @@ it('ArrowLeft and ArrowRight have no effect in vertical mode', () => {
             result.current.onKeyDown(rightEvent);
             expect(document.activeElement).toBe(items[0]);
         });
-
-    }
-
-    describe('vertical orientation (default)', () => {
-        verticalOrientationDefaultGroup1();
-        verticalOrientationDefaultGroup2();
-        verticalOrientationDefaultGroup3();
     });
 
-    function horizontalOrientationGroup1() {
-it('ArrowRight moves focus to next item', () => {
+});
+
+describe('useKeyboardNav — part 2', () => {
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    describe('horizontal orientation', () => {
+        it('ArrowRight moves focus to next item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -139,7 +133,7 @@ it('ArrowRight moves focus to next item', () => {
             expect(document.activeElement).toBe(items[1]);
         });
 
-it('ArrowLeft moves focus to previous item', () => {
+        it('ArrowLeft moves focus to previous item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[2].focus();
@@ -151,10 +145,7 @@ it('ArrowLeft moves focus to previous item', () => {
             expect(document.activeElement).toBe(items[1]);
         });
 
-    }
-
-    function horizontalOrientationGroup2() {
-it('ArrowRight wraps from last to first', () => {
+        it('ArrowRight wraps from last to first', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[2].focus();
@@ -166,7 +157,7 @@ it('ArrowRight wraps from last to first', () => {
             expect(document.activeElement).toBe(items[0]);
         });
 
-it('ArrowUp and ArrowDown have no effect in horizontal mode', () => {
+        it('ArrowUp and ArrowDown have no effect in horizontal mode', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             items[0].focus();
@@ -177,12 +168,13 @@ it('ArrowUp and ArrowDown have no effect in horizontal mode', () => {
             result.current.onKeyDown(downEvent);
             expect(document.activeElement).toBe(items[0]);
         });
+    });
 
-    }
+});
 
-    describe('horizontal orientation', () => {
-        horizontalOrientationGroup1();
-        horizontalOrientationGroup2();
+describe('useKeyboardNav — part 3', () => {
+    afterEach(() => {
+        document.body.innerHTML = '';
     });
 
     describe('Home and End keys', () => {
@@ -254,6 +246,13 @@ it('ArrowUp and ArrowDown have no effect in horizontal mode', () => {
         });
     });
 
+});
+
+describe('useKeyboardNav — part 4', () => {
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
     describe('Escape key', () => {
         it('Escape calls onEscape', () => {
             const onEscape = vi.fn();
@@ -320,4 +319,5 @@ it('ArrowUp and ArrowDown have no effect in horizontal mode', () => {
             expect(event.preventDefault).not.toHaveBeenCalled();
         });
     });
+
 });

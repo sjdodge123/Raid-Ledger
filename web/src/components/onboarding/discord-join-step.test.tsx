@@ -15,7 +15,7 @@ vi.mock('../icons/DiscordIcon', () => ({
 import { useServerInvite } from '../../hooks/use-discord-onboarding';
 const mockUseServerInvite = useServerInvite as unknown as ReturnType<typeof vi.fn>;
 
-describe('DiscordJoinStep', () => {
+describe('DiscordJoinStep — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -39,14 +39,21 @@ describe('DiscordJoinStep', () => {
         });
     });
 
-    function withInviteURLAvailableGroup1() {
-it('renders the "Join Server" link when invite URL is available', () => {
+    describe('With invite URL available', () => {
+        beforeEach(() => {
+            mockUseServerInvite.mockReturnValue({
+                data: { url: 'https://discord.gg/abc123', guildName: 'Test Guild' },
+                isLoading: false,
+            });
+        });
+
+        it('renders the "Join Server" link when invite URL is available', () => {
             render(<DiscordJoinStep />);
 
             expect(screen.getByText(/join server/i)).toBeInTheDocument();
         });
 
-it('renders the invite URL as an anchor tag', () => {
+        it('renders the invite URL as an anchor tag', () => {
             render(<DiscordJoinStep />);
 
             const link = screen.getByRole('link', { name: /join server/i });
@@ -54,48 +61,40 @@ it('renders the invite URL as an anchor tag', () => {
             expect(link).toHaveAttribute('href', 'https://discord.gg/abc123');
         });
 
-it('opens invite link in a new tab', () => {
+        it('opens invite link in a new tab', () => {
             render(<DiscordJoinStep />);
 
             const link = screen.getByRole('link', { name: /join server/i });
             expect(link).toHaveAttribute('target', '_blank');
         });
 
-it('has rel="noopener noreferrer" for security', () => {
+        it('has rel="noopener noreferrer" for security', () => {
             render(<DiscordJoinStep />);
 
             const link = screen.getByRole('link', { name: /join server/i });
             expect(link).toHaveAttribute('rel', 'noopener noreferrer');
         });
 
-    }
-
-    function withInviteURLAvailableGroup2() {
-it('shows the guild name in the heading', () => {
+        it('shows the guild name in the heading', () => {
             render(<DiscordJoinStep />);
 
             expect(screen.getByText(/test guild/i)).toBeInTheDocument();
         });
 
-it('shows a Discord icon', () => {
+        it('shows a Discord icon', () => {
             render(<DiscordJoinStep />);
 
             const icons = screen.getAllByTestId('discord-icon');
             expect(icons.length).toBeGreaterThan(0);
         });
 
-    }
+    });
 
-    describe('With invite URL available', () => {
-beforeEach(() => {
-            mockUseServerInvite.mockReturnValue({
-                data: { url: 'https://discord.gg/abc123', guildName: 'Test Guild' },
-                isLoading: false,
-            });
-        });
+});
 
-        withInviteURLAvailableGroup1();
-        withInviteURLAvailableGroup2();
+describe('DiscordJoinStep — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
     describe('With no invite URL available (null)', () => {
@@ -159,6 +158,13 @@ beforeEach(() => {
         });
     });
 
+});
+
+describe('DiscordJoinStep — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('Informational text', () => {
         beforeEach(() => {
             mockUseServerInvite.mockReturnValue({
@@ -179,4 +185,5 @@ beforeEach(() => {
             expect(screen.getByText(/join the server later/i)).toBeInTheDocument();
         });
     });
+
 });

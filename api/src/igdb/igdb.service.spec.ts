@@ -36,7 +36,7 @@ function thenableResult(data: unknown[]): ThenableQuery {
   return obj;
 }
 
-function describeIgdbService() {
+describe('IgdbService', () => {
   let service: IgdbService;
   let mockDb: Record<string, jest.Mock>;
   let mockRedis: Record<string, jest.Mock>;
@@ -92,12 +92,8 @@ function describeIgdbService() {
     },
   ];
 
-  async function beforeEachHelper() {
-    // Default select results — tests can override selectResults before calling service
-    selectResults = mockGames;
-
-    // Mock database operations using thenable pattern
-    mockDb = {
+  function createMockDb() {
+    return {
       select: jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: jest
@@ -114,15 +110,17 @@ function describeIgdbService() {
         }),
       }),
     };
+  }
 
-    // Mock Redis operations
+  beforeEach(async () => {
+    selectResults = mockGames;
+    mockDb = createMockDb();
     mockRedis = {
-      get: jest.fn().mockResolvedValue(null), // Default: cache miss
+      get: jest.fn().mockResolvedValue(null),
       setex: jest.fn().mockResolvedValue('OK'),
       keys: jest.fn().mockResolvedValue([]),
       del: jest.fn().mockResolvedValue(0),
     };
-
     mockConfigService = {
       get: jest.fn((key: string) => {
         const config: Record<string, string> = {
@@ -133,25 +131,27 @@ function describeIgdbService() {
       }),
     };
 
-    const mockSettingsService = {
-      get: jest.fn().mockResolvedValue(null),
-      getIgdbConfig: jest.fn().mockResolvedValue(null), // Fall through to env vars
-      isIgdbConfigured: jest.fn().mockResolvedValue(false),
-    };
-
-    const mockSyncQueue = {
-      add: jest.fn().mockResolvedValue({ id: 'test-job-id' }),
-      name: 'igdb-sync',
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         IgdbService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: REDIS_CLIENT, useValue: mockRedis },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: SettingsService, useValue: mockSettingsService },
-        { provide: getQueueToken(IGDB_SYNC_QUEUE), useValue: mockSyncQueue },
+        {
+          provide: SettingsService,
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            getIgdbConfig: jest.fn().mockResolvedValue(null),
+            isIgdbConfigured: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: getQueueToken(IGDB_SYNC_QUEUE),
+          useValue: {
+            add: jest.fn().mockResolvedValue({ id: 'test-job-id' }),
+            name: 'igdb-sync',
+          },
+        },
         {
           provide: CronJobService,
           useValue: {
@@ -164,14 +164,13 @@ function describeIgdbService() {
     }).compile();
 
     service = module.get<IgdbService>(IgdbService);
-  }
-  beforeEach(() => beforeEachHelper());
+  });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  function describeSearchGames() {
+  describe('searchGames', () => {
     it('should return Redis-cached games when available', async () => {
       // ROK-660: Redis now stores full GameDetailDto objects and returns them
       // directly without a DB re-query
@@ -201,7 +200,7 @@ function describeIgdbService() {
       expect(mockRedis.setex).toHaveBeenCalled();
     });
 
-    async function testFetchFromIGDBWhenBothCachesMiss() {
+    it('should fetch from IGDB when both caches miss', async () => {
       // Both caches miss, then return games after upsert
       mockRedis.get.mockResolvedValueOnce(null);
       let callCount = 0;
@@ -241,11 +240,9 @@ function describeIgdbService() {
       expect(result.cached).toBe(false);
       expect(result.source).toBe('igdb');
       expect(mockFetch).toHaveBeenCalledTimes(2); // Token + search
-    }
-    it('should fetch from IGDB when both caches miss', () =>
-      testFetchFromIGDBWhenBothCachesMiss());
+    });
 
-    async function testRetryOn429WithExponentialBackoff() {
+    it('should retry on 429 with exponential backoff', async () => {
       jest.useFakeTimers();
 
       // Both caches miss
@@ -300,11 +297,9 @@ function describeIgdbService() {
       expect(mockFetch).toHaveBeenCalledTimes(3); // Token + 429 + success
 
       jest.useRealTimers();
-    }
-    it('should retry on 429 with exponential backoff', () =>
-      testRetryOn429WithExponentialBackoff());
+    });
 
-    async function testFallBackToLocalSearchWhenIGDBFailsAfterRetries() {
+    it('should fall back to local search when IGDB fails after retries', async () => {
       jest.useFakeTimers();
 
       // Redis miss
@@ -346,9 +341,7 @@ function describeIgdbService() {
       expect(result.games).toEqual(mockGameDetails);
 
       jest.useRealTimers();
-    }
-    it('should fall back to local search when IGDB fails after retries', () =>
-      testFallBackToLocalSearchWhenIGDBFailsAfterRetries());
+    });
 
     it('should escape LIKE special characters in query', async () => {
       // Redis hit to avoid going through the whole chain
@@ -381,7 +374,7 @@ function describeIgdbService() {
       expect(result.source).toBe('database');
     });
 
-    async function testUpsertGamesFromIGDBWithFullData() {
+    it('should upsert games from IGDB with full data', async () => {
       mockRedis.get.mockResolvedValueOnce(null);
       let callCount = 0;
       mockDb.select = jest.fn().mockImplementation(() => ({
@@ -419,11 +412,8 @@ function describeIgdbService() {
 
       // upsertGamesFromApi inserts each game individually (2 games, neither banned)
       expect(mockDb.insert).toHaveBeenCalledTimes(2);
-    }
-    it('should upsert games from IGDB with full data', () =>
-      testUpsertGamesFromIGDBWithFullData());
-  }
-  describe('searchGames', () => describeSearchGames());
+    });
+  });
 
   describe('getGameById', () => {
     it('should return game when found', async () => {
@@ -451,7 +441,7 @@ function describeIgdbService() {
     });
   });
 
-  function describeSyncAllGamesCoverArtBackfill() {
+  describe('syncAllGames — cover art backfill (Phase 3)', () => {
     /**
      * Helper to wire up the mock DB and fetch so that syncAllGames' Phase 1
      * (refresh existing) and Phase 2 (discover popular) complete quickly,
@@ -545,11 +535,9 @@ function describeIgdbService() {
       // Only token + Phase 2 (discover) — no Phase 3 IGDB call
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
-  }
-  describe('syncAllGames — cover art backfill (Phase 3)', () =>
-    describeSyncAllGamesCoverArtBackfill());
+  });
 
-  function describeErrorHandling() {
+  describe('error handling', () => {
     it('should throw when IGDB credentials not configured', async () => {
       mockConfigService.get = jest.fn().mockReturnValue(undefined);
       mockRedis.get.mockResolvedValueOnce(null);
@@ -560,7 +548,7 @@ function describeIgdbService() {
       expect(result.source).toBe('local');
     });
 
-    async function testRetryWithFreshTokenOn401AndSucceed() {
+    it('should retry with fresh token on 401 and succeed', async () => {
       mockRedis.get.mockResolvedValueOnce(null);
       let callCount = 0;
       mockDb.select = jest.fn().mockImplementation(() => ({
@@ -612,11 +600,9 @@ function describeIgdbService() {
       expect(result.source).toBe('igdb');
       // Token + 401 + fresh token + successful search = 4 calls
       expect(mockFetch).toHaveBeenCalledTimes(4);
-    }
-    it('should retry with fresh token on 401 and succeed', () =>
-      testRetryWithFreshTokenOn401AndSucceed());
+    });
 
-    async function testFallBackToLocalWhen401RetryAlsoFails() {
+    it('should fall back to local when 401 retry also fails', async () => {
       mockRedis.get.mockResolvedValueOnce(null);
       selectResults = [];
 
@@ -654,10 +640,6 @@ function describeIgdbService() {
       expect(result.games).toEqual([]);
       // Token + 401 + fresh token + 401 = 4 calls
       expect(mockFetch).toHaveBeenCalledTimes(4);
-    }
-    it('should fall back to local when 401 retry also fails', () =>
-      testFallBackToLocalWhen401RetryAlsoFails());
-  }
-  describe('error handling', () => describeErrorHandling());
-}
-describe('IgdbService', () => describeIgdbService());
+    });
+  });
+});

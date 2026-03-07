@@ -46,8 +46,12 @@ const renderWithRouter = (ui: React.ReactElement) => {
     return render(<BrowserRouter>{ui}</BrowserRouter>);
 };
 
-function loginpageGroup1() {
-it('renders login form with username field when no auth providers configured', () => {
+describe('LoginPage — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('renders login form with username field when no auth providers configured', () => {
         mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
@@ -57,7 +61,7 @@ it('renders login form with username field when no auth providers configured', (
         expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
     });
 
-it('hides Discord button when no auth providers configured', () => {
+    it('hides Discord button when no auth providers configured', () => {
         mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
@@ -65,7 +69,7 @@ it('hides Discord button when no auth providers configured', () => {
         expect(screen.queryByText(/continue with discord/i)).not.toBeInTheDocument();
     });
 
-it('shows Discord button when Discord auth provider is configured', () => {
+    it('shows Discord button when Discord auth provider is configured', () => {
         mockSystemStatus({
             isFirstRun: false,
             discordConfigured: true,
@@ -77,10 +81,7 @@ it('shows Discord button when Discord auth provider is configured', () => {
         expect(screen.getByText(/continue with discord/i)).toBeInTheDocument();
     });
 
-}
-
-function loginpageGroup2() {
-it('hides local login form by default when auth providers are configured', () => {
+    it('hides local login form by default when auth providers are configured', () => {
         mockSystemStatus({
             isFirstRun: false,
             discordConfigured: true,
@@ -94,10 +95,7 @@ it('hides local login form by default when auth providers are configured', () =>
         expect(screen.getByText(/sign in with username instead/i)).toBeInTheDocument();
     });
 
-}
-
-function loginpageGroup3() {
-it('shows local login form when toggle is clicked', () => {
+    it('shows local login form when toggle is clicked', () => {
         mockSystemStatus({
             isFirstRun: false,
             discordConfigured: true,
@@ -115,10 +113,14 @@ it('shows local login form when toggle is clicked', () => {
         expect(screen.getByText(/hide username login/i)).toBeInTheDocument();
     });
 
-}
+});
 
-function loginpageGroup4() {
-it('auto-expands local login on first run with auth providers configured', () => {
+describe('LoginPage — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('auto-expands local login on first run with auth providers configured', () => {
         mockSystemStatus({
             isFirstRun: true,
             discordConfigured: true,
@@ -133,7 +135,7 @@ it('auto-expands local login on first run with auth providers configured', () =>
         expect(screen.getByLabelText('Password')).toBeInTheDocument();
     });
 
-it('displays community name from env variable', () => {
+    it('displays community name from env variable', () => {
         mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
@@ -142,7 +144,7 @@ it('displays community name from env variable', () => {
         expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/raid\s*ledger/i);
     });
 
-it('shows first-run hint when isFirstRun is true', () => {
+    it('shows first-run hint when isFirstRun is true', () => {
         mockSystemStatus({ isFirstRun: true, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
@@ -151,10 +153,7 @@ it('shows first-run hint when isFirstRun is true', () => {
         expect(screen.getByText(/container logs/i)).toBeInTheDocument();
     });
 
-}
-
-function loginpageGroup5() {
-it('hides first-run hint when isFirstRun is false', () => {
+    it('hides first-run hint when isFirstRun is false', () => {
         mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
@@ -162,7 +161,7 @@ it('hides first-run hint when isFirstRun is false', () => {
         expect(screen.queryByText(/first time/i)).not.toBeInTheDocument();
     });
 
-it('displays tagline below login card', () => {
+    it('displays tagline below login card', () => {
         mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
@@ -170,10 +169,7 @@ it('displays tagline below login card', () => {
         expect(screen.getByText(/coordinate raids\. track attendance\. conquer together\./i)).toBeInTheDocument();
     });
 
-}
-
-function loginpageGroup6() {
-it('renders multiple auth providers when configured (ROK-267)', () => {
+    it('renders multiple auth providers when configured (ROK-267)', () => {
         const secondProvider = {
             key: 'github',
             label: 'Continue with GitHub',
@@ -191,17 +187,4 @@ it('renders multiple auth providers when configured (ROK-267)', () => {
         expect(screen.getByText(/continue with github/i)).toBeInTheDocument();
     });
 
-}
-
-describe('LoginPage', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    loginpageGroup1();
-    loginpageGroup2();
-    loginpageGroup3();
-    loginpageGroup4();
-    loginpageGroup5();
-    loginpageGroup6();
 });

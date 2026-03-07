@@ -11,8 +11,12 @@ vi.mock('./config', () => ({
     API_BASE_URL: 'http://localhost:3000',
 }));
 
-function toavataruserCurrentUserOverlayROKGroup1() {
-it('overlays avatarPreference when user id matches current user', () => {
+describe('toAvatarUser — current user overlay (ROK-352) — part 1', () => {
+    afterEach(() => {
+        setCurrentUserAvatarData(null);
+    });
+
+    it('overlays avatarPreference when user id matches current user', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -28,10 +32,7 @@ it('overlays avatarPreference when user id matches current user', () => {
         expect(result.avatarPreference).toEqual({ type: 'discord' });
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup2() {
-it('builds synthetic characters entry from resolvedAvatarUrl when character preference is set (ROK-414)', () => {
+    it('builds synthetic characters entry from resolvedAvatarUrl when character preference is set (ROK-414)', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'character', characterName: 'Thrall' },
@@ -49,10 +50,7 @@ it('builds synthetic characters entry from resolvedAvatarUrl when character pref
         ]);
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup3() {
-it('overlays customAvatarUrl when field is omitted from DTO', () => {
+    it('overlays customAvatarUrl when field is omitted from DTO', () => {
         setCurrentUserAvatarData({
             id: 42,
             customAvatarUrl: '/avatars/current-user.webp',
@@ -67,10 +65,7 @@ it('overlays customAvatarUrl when field is omitted from DTO', () => {
         expect(result.customAvatarUrl).toBe('/avatars/current-user.webp');
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup4() {
-it('overlay wins over caller customAvatarUrl for current user', () => {
+    it('overlay wins over caller customAvatarUrl for current user', () => {
         setCurrentUserAvatarData({
             id: 42,
             customAvatarUrl: '/avatars/current-user.webp',
@@ -86,10 +81,14 @@ it('overlay wins over caller customAvatarUrl for current user', () => {
         expect(result.customAvatarUrl).toBe('/avatars/current-user.webp');
     });
 
-}
+});
 
-function toavataruserCurrentUserOverlayROKGroup5() {
-it('does NOT overlay when user id does not match current user', () => {
+describe('toAvatarUser — current user overlay (ROK-352) — part 2', () => {
+    afterEach(() => {
+        setCurrentUserAvatarData(null);
+    });
+
+    it('does NOT overlay when user id does not match current user', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -106,10 +105,7 @@ it('does NOT overlay when user id does not match current user', () => {
         expect(result.characters).toBeUndefined();
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup6() {
-it('does NOT overlay when no current user data is set', () => {
+    it('does NOT overlay when no current user data is set', () => {
         const result = toAvatarUser({
             id: 42,
             avatar: null,
@@ -120,7 +116,7 @@ it('does NOT overlay when no current user data is set', () => {
         expect(result.characters).toBeUndefined();
     });
 
-it('does NOT overlay when user has no id', () => {
+    it('does NOT overlay when user has no id', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -134,10 +130,7 @@ it('does NOT overlay when user has no id', () => {
         expect(result.avatarPreference).toBeUndefined();
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup7() {
-it('overlay wins over caller avatarPreference for current user', () => {
+    it('overlay wins over caller avatarPreference for current user', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -153,10 +146,14 @@ it('overlay wins over caller avatarPreference for current user', () => {
         expect(result.avatarPreference).toEqual({ type: 'discord' });
     });
 
-}
+});
 
-function toavataruserCurrentUserOverlayROKGroup8() {
-it('overlay wins over caller null avatarPreference for current user', () => {
+describe('toAvatarUser — current user overlay (ROK-352) — part 3', () => {
+    afterEach(() => {
+        setCurrentUserAvatarData(null);
+    });
+
+    it('overlay wins over caller null avatarPreference for current user', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -172,10 +169,7 @@ it('overlay wins over caller null avatarPreference for current user', () => {
         expect(result.avatarPreference).toEqual({ type: 'discord' });
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup9() {
-it('end-to-end: current user discord preference honored in resolveAvatar', () => {
+    it('end-to-end: current user discord preference honored in resolveAvatar', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -193,10 +187,7 @@ it('end-to-end: current user discord preference honored in resolveAvatar', () =>
         expect(result.url).toBe('https://cdn.discordapp.com/avatars/111222333/abc123.png');
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup10() {
-it('end-to-end: current user character preference honored via resolvedAvatarUrl (ROK-414)', () => {
+    it('end-to-end: current user character preference honored via resolvedAvatarUrl (ROK-414)', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'character', characterName: 'Thrall' },
@@ -215,10 +206,14 @@ it('end-to-end: current user character preference honored via resolvedAvatarUrl 
         expect(result.url).toBe('https://example.com/thrall.png');
     });
 
-}
+});
 
-function toavataruserCurrentUserOverlayROKGroup11() {
-it('end-to-end: resolvedAvatarUrl overlay fixes signupsPreview without character names (ROK-414)', () => {
+describe('toAvatarUser — current user overlay (ROK-352) — part 4', () => {
+    afterEach(() => {
+        setCurrentUserAvatarData(null);
+    });
+
+    it('end-to-end: resolvedAvatarUrl overlay fixes signupsPreview without character names (ROK-414)', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'character', characterName: 'Thrall' },
@@ -240,10 +235,7 @@ it('end-to-end: resolvedAvatarUrl overlay fixes signupsPreview without character
         expect(result.url).toBe('https://example.com/thrall.png');
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup12() {
-it('end-to-end: other user is not affected by current user overlay', () => {
+    it('end-to-end: other user is not affected by current user overlay', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -261,10 +253,7 @@ it('end-to-end: other user is not affected by current user overlay', () => {
         expect(result.url).toBe('http://localhost:3000/avatars/other-custom.png');
     });
 
-}
-
-function toavataruserCurrentUserOverlayROKGroup13() {
-describe('setCurrentUserAvatarData / getCurrentUserAvatarData', () => {
+    describe('setCurrentUserAvatarData / getCurrentUserAvatarData', () => {
         it('sets and gets current user data', () => {
             const data = { id: 42, avatarPreference: { type: 'discord' as const } };
             setCurrentUserAvatarData(data);
@@ -278,24 +267,4 @@ describe('setCurrentUserAvatarData / getCurrentUserAvatarData', () => {
         });
     });
 
-}
-
-describe('toAvatarUser — current user overlay (ROK-352)', () => {
-afterEach(() => {
-        setCurrentUserAvatarData(null);
-    });
-
-    toavataruserCurrentUserOverlayROKGroup1();
-    toavataruserCurrentUserOverlayROKGroup2();
-    toavataruserCurrentUserOverlayROKGroup3();
-    toavataruserCurrentUserOverlayROKGroup4();
-    toavataruserCurrentUserOverlayROKGroup5();
-    toavataruserCurrentUserOverlayROKGroup6();
-    toavataruserCurrentUserOverlayROKGroup7();
-    toavataruserCurrentUserOverlayROKGroup8();
-    toavataruserCurrentUserOverlayROKGroup9();
-    toavataruserCurrentUserOverlayROKGroup10();
-    toavataruserCurrentUserOverlayROKGroup11();
-    toavataruserCurrentUserOverlayROKGroup12();
-    toavataruserCurrentUserOverlayROKGroup13();
 });

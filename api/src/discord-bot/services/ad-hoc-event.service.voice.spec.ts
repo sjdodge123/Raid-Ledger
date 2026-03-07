@@ -22,6 +22,25 @@ describe('AdHocEventService — voice', () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  function mockNewEventCreation(
+    id: number,
+    bindingId: string,
+    gameName: string,
+  ) {
+    mocks.db.limit.mockResolvedValueOnce([]);
+    mocks.db.limit.mockResolvedValueOnce([{ name: gameName }]);
+    mocks.db.returning.mockResolvedValueOnce([{ id }]);
+    mocks.db.limit.mockResolvedValueOnce([
+      {
+        id,
+        title: `${gameName} — Quick Play`,
+        gameId: 1,
+        channelBindingId: bindingId,
+      },
+    ]);
+    mocks.db.limit.mockResolvedValueOnce([{ name: gameName }]);
+  }
+
   describe('isEnabled', () => {
     it('returns true when setting is "true"', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
@@ -43,7 +62,7 @@ describe('AdHocEventService — voice', () => {
     });
   });
 
-  describe('handleVoiceJoin', () => {
+  describe('handleVoiceJoin — disabled and suppressed', () => {
     it('does nothing when feature is disabled', async () => {
       mocks.settingsService.get.mockResolvedValue('false');
       await service.handleVoiceJoin('binding-1', baseMember, baseBinding);
@@ -51,7 +70,7 @@ describe('AdHocEventService — voice', () => {
       expect(mocks.participantService.addParticipant).not.toHaveBeenCalled();
     });
 
-    it('suppresses ad-hoc creation when a scheduled event is active on the binding', async () => {
+    it('suppresses ad-hoc creation when a scheduled event is active', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
       mocks.db.limit.mockResolvedValueOnce([
         {
@@ -71,21 +90,12 @@ describe('AdHocEventService — voice', () => {
       expect(mocks.participantService.addParticipant).not.toHaveBeenCalled();
       expect(mocks.db.update).toHaveBeenCalled();
     });
+  });
 
+  describe('handleVoiceJoin — event creation', () => {
     it('creates a new ad-hoc event when no active event exists', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
-      mocks.db.limit.mockResolvedValueOnce([]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'World of Warcraft' }]);
-      mocks.db.returning.mockResolvedValueOnce([{ id: 100 }]);
-      mocks.db.limit.mockResolvedValueOnce([
-        {
-          id: 100,
-          title: 'World of Warcraft — Quick Play',
-          gameId: 1,
-          channelBindingId: 'binding-1',
-        },
-      ]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'World of Warcraft' }]);
+      mockNewEventCreation(100, 'binding-1', 'World of Warcraft');
       await service.handleVoiceJoin('binding-1', baseMember, baseBinding);
       expect(mocks.db.insert).toHaveBeenCalled();
       expect(mocks.participantService.addParticipant).toHaveBeenCalledWith(
@@ -113,6 +123,23 @@ describe('AdHocEventService — voice', () => {
       );
     });
 
+    it('sets event reminders to false for ad-hoc events', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(300, 'binding-6', 'Game');
+      await service.handleVoiceJoin('binding-6', baseMember, baseBinding);
+      expect(mocks.db.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isAdHoc: true,
+          adHocStatus: 'live',
+          reminder15min: false,
+          reminder1hour: false,
+          reminder24hour: false,
+        }),
+      );
+    });
+  });
+
+  describe('handleVoiceJoin — anonymous and existing events', () => {
     it('falls back to admin user when member has no linked account', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
       const anonymousMember = { ...baseMember, userId: null };
@@ -147,20 +174,9 @@ describe('AdHocEventService — voice', () => {
       expect(mocks.participantService.addParticipant).not.toHaveBeenCalled();
     });
 
-    async function testAddsjoinertoexistingliveeventandcancels() {
+    it('adds joiner to existing live event and cancels grace period', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
-      mocks.db.limit.mockResolvedValueOnce([]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
-      mocks.db.returning.mockResolvedValueOnce([{ id: 200 }]);
-      mocks.db.limit.mockResolvedValueOnce([
-        {
-          id: 200,
-          title: 'WoW — Quick Play',
-          gameId: 1,
-          channelBindingId: 'binding-5',
-        },
-      ]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+      mockNewEventCreation(200, 'binding-5', 'WoW');
       await service.handleVoiceJoin('binding-5', baseMember, baseBinding);
       mocks.settingsService.get.mockResolvedValue('true');
       const secondMember = {
@@ -178,36 +194,6 @@ describe('AdHocEventService — voice', () => {
         200,
         secondMember,
       );
-    }
-
-    it('adds joiner to existing live event and cancels grace period', async () => {
-      await testAddsjoinertoexistingliveeventandcancels();
-    });
-
-    it('sets event reminders to false for ad-hoc events', async () => {
-      mocks.settingsService.get.mockResolvedValue('true');
-      mocks.db.limit.mockResolvedValueOnce([]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'Game' }]);
-      mocks.db.returning.mockResolvedValueOnce([{ id: 300 }]);
-      mocks.db.limit.mockResolvedValueOnce([
-        {
-          id: 300,
-          title: 'Game — Quick Play',
-          gameId: 1,
-          channelBindingId: 'binding-6',
-        },
-      ]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'Game' }]);
-      await service.handleVoiceJoin('binding-6', baseMember, baseBinding);
-      expect(mocks.db.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          isAdHoc: true,
-          adHocStatus: 'live',
-          reminder15min: false,
-          reminder1hour: false,
-          reminder24hour: false,
-        }),
-      );
     });
   });
 
@@ -217,20 +203,9 @@ describe('AdHocEventService — voice', () => {
       expect(mocks.participantService.markLeave).not.toHaveBeenCalled();
     });
 
-    async function testMarksparticipantasleftandstartsgraceperiod() {
+    it('marks participant as left and starts grace period when channel empties', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
-      mocks.db.limit.mockResolvedValueOnce([]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
-      mocks.db.returning.mockResolvedValueOnce([{ id: 400 }]);
-      mocks.db.limit.mockResolvedValueOnce([
-        {
-          id: 400,
-          title: 'WoW — Quick Play',
-          gameId: 1,
-          channelBindingId: 'binding-leave',
-        },
-      ]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+      mockNewEventCreation(400, 'binding-leave', 'WoW');
       await service.handleVoiceJoin('binding-leave', baseMember, baseBinding);
       mocks.db.limit.mockResolvedValueOnce([
         { id: 400, adHocStatus: 'live', channelBindingId: 'binding-leave' },
@@ -248,26 +223,11 @@ describe('AdHocEventService — voice', () => {
         400,
         5 * 60 * 1000,
       );
-    }
-
-    it('marks participant as left and starts grace period when channel empties', async () => {
-      await testMarksparticipantasleftandstartsgraceperiod();
     });
 
-    async function testUsesdefault5minutegraceperiodwhennot() {
+    it('uses default 5 minute grace period when not configured', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
-      mocks.db.limit.mockResolvedValueOnce([]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
-      mocks.db.returning.mockResolvedValueOnce([{ id: 401 }]);
-      mocks.db.limit.mockResolvedValueOnce([
-        {
-          id: 401,
-          title: 'WoW — Quick Play',
-          gameId: 1,
-          channelBindingId: 'binding-default-grace',
-        },
-      ]);
-      mocks.db.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+      mockNewEventCreation(401, 'binding-default-grace', 'WoW');
       await service.handleVoiceJoin(
         'binding-default-grace',
         baseMember,
@@ -289,10 +249,6 @@ describe('AdHocEventService — voice', () => {
         401,
         5 * 60 * 1000,
       );
-    }
-
-    it('uses default 5 minute grace period when not configured', async () => {
-      await testUsesdefault5minutegraceperiodwhennot();
     });
   });
 });

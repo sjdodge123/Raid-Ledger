@@ -41,15 +41,23 @@ const mockUsers = [
     },
 ];
 
-function reliabilityleaderboardGroup1() {
-it('renders Reliability Leaderboard heading', async () => {
+describe('ReliabilityLeaderboard — part 1', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
+    });
+
+    it('renders Reliability Leaderboard heading', async () => {
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => {
             expect(screen.getByText('Reliability Leaderboard')).toBeInTheDocument();
         });
     });
 
-it('renders column headers', async () => {
+    it('renders column headers', async () => {
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => {
             expect(screen.getByText('Player')).toBeInTheDocument();
@@ -59,10 +67,7 @@ it('renders column headers', async () => {
         });
     });
 
-}
-
-function reliabilityleaderboardGroup2() {
-it('renders usernames', async () => {
+    it('renders usernames', async () => {
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => {
             expect(screen.getByText('Alice')).toBeInTheDocument();
@@ -71,7 +76,7 @@ it('renders usernames', async () => {
         });
     });
 
-it('renders attendance percentages (90%, 50%, 40%)', async () => {
+    it('renders attendance percentages (90%, 50%, 40%)', async () => {
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => {
             expect(screen.getByText('90%')).toBeInTheDocument();
@@ -80,10 +85,7 @@ it('renders attendance percentages (90%, 50%, 40%)', async () => {
         });
     });
 
-}
-
-function reliabilityleaderboardGroup3() {
-it('renders rank numbers in rank column', async () => {
+    it('renders rank numbers in rank column', async () => {
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => screen.getByText('Alice'));
 
@@ -97,7 +99,18 @@ it('renders rank numbers in rank column', async () => {
         expect(cellTexts).toContain('3');
     });
 
-it('shows empty state when no users', async () => {
+});
+
+describe('ReliabilityLeaderboard — part 2', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
+    });
+
+    it('shows empty state when no users', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
                 HttpResponse.json({ users: [], totalUsers: 0 }),
@@ -110,10 +123,7 @@ it('shows empty state when no users', async () => {
         });
     });
 
-}
-
-function reliabilityleaderboardGroup4() {
-it('shows error state when request fails', async () => {
+    it('shows error state when request fails', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
                 HttpResponse.json({ message: 'Forbidden' }, { status: 403 }),
@@ -126,7 +136,7 @@ it('shows error state when request fails', async () => {
         });
     });
 
-it('default sort is by attendanceRate descending', async () => {
+    it('default sort is by attendanceRate descending', async () => {
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => screen.getByText('Alice'));
 
@@ -136,10 +146,7 @@ it('default sort is by attendanceRate descending', async () => {
         expect(rows[1].textContent).toContain('Alice');
     });
 
-}
-
-function reliabilityleaderboardGroup5() {
-it('clicking Attendance % header re-sorts to ascending', async () => {
+    it('clicking Attendance % header re-sorts to ascending', async () => {
         const user = userEvent.setup();
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => screen.getByText('Alice'));
@@ -154,7 +161,7 @@ it('clicking Attendance % header re-sorts to ascending', async () => {
         });
     });
 
-it('clicking Player header sorts by username', async () => {
+    it('clicking Player header sorts by username', async () => {
         const user = userEvent.setup();
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => screen.getByText('Alice'));
@@ -169,10 +176,18 @@ it('clicking Player header sorts by username', async () => {
         });
     });
 
-}
+});
 
-function reliabilityleaderboardGroup6() {
-it('clicking same header again toggles sort direction', async () => {
+describe('ReliabilityLeaderboard — part 3', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
+    });
+
+    it('clicking same header again toggles sort direction', async () => {
         const user = userEvent.setup();
         renderWithProviders(<ReliabilityLeaderboard />);
         await waitFor(() => screen.getByText('Alice'));
@@ -192,10 +207,7 @@ it('clicking same header again toggles sort direction', async () => {
         });
     });
 
-}
-
-function reliabilityleaderboardGroup7() {
-it('shows loading skeleton while data is fetching', () => {
+    it('shows loading skeleton while data is fetching', () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, async () => {
                 await new Promise((r) => setTimeout(r, 100));
@@ -208,22 +220,4 @@ it('shows loading skeleton while data is fetching', () => {
         expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
 
-}
-
-describe('ReliabilityLeaderboard', () => {
-beforeEach(() => {
-        server.use(
-            http.get(`${API_BASE}/analytics/attendance/users`, () =>
-                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
-            ),
-        );
-    });
-
-    reliabilityleaderboardGroup1();
-    reliabilityleaderboardGroup2();
-    reliabilityleaderboardGroup3();
-    reliabilityleaderboardGroup4();
-    reliabilityleaderboardGroup5();
-    reliabilityleaderboardGroup6();
-    reliabilityleaderboardGroup7();
 });

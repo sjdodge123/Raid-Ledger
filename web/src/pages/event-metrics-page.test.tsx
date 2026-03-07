@@ -67,7 +67,7 @@ const mockMetrics: EventMetricsResponseDto = {
     ],
 };
 
-describe('EventMetricsPage', () => {
+describe('EventMetricsPage — part 1', () => {
     beforeEach(() => {
         server.use(
             http.get(`${API_BASE}/events/:id/metrics`, () =>
@@ -131,6 +131,17 @@ describe('EventMetricsPage', () => {
         });
     });
 
+});
+
+describe('EventMetricsPage — part 2', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
+
     it('does NOT render voice timeline section when voiceSummary is null', async () => {
         renderWithProviders(<EventMetricsPage />, {
             initialEntries: ['/events/10/metrics'],
@@ -139,7 +150,18 @@ describe('EventMetricsPage', () => {
         expect(screen.queryByText('Voice Timeline')).not.toBeInTheDocument();
     });
 
-    async function testRendersVoiceTimelineSectionWhen() {
+});
+
+describe('EventMetricsPage — part 3', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
+
+    it('renders voice timeline section when voiceSummary has sessions', async () => {
         const metricsWithVoice: EventMetricsResponseDto = {
             ...mockMetrics,
             voiceSummary: {
@@ -184,9 +206,18 @@ describe('EventMetricsPage', () => {
         await waitFor(() => {
             expect(screen.getByText('Voice Timeline')).toBeInTheDocument();
         });
-    
-    }
-    it('renders voice timeline section when voiceSummary has sessions', async () => { await testRendersVoiceTimelineSectionWhen(); });
+    });
+
+});
+
+describe('EventMetricsPage — part 4', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
 
     it('shows error state when metrics request fails', async () => {
         server.use(
@@ -234,6 +265,17 @@ describe('EventMetricsPage', () => {
         });
     });
 
+});
+
+describe('EventMetricsPage — part 5', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
+
     it('shows loading skeleton while data is fetching', () => {
         server.use(
             http.get(`${API_BASE}/events/:id/metrics`, async () => {
@@ -262,7 +304,18 @@ describe('EventMetricsPage', () => {
         expect(screen.queryByText('World of Warcraft')).not.toBeInTheDocument();
     });
 
-    async function testRendersVoiceStatusColumnsIn() {
+});
+
+describe('EventMetricsPage — part 6', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
+
+    it('renders voice status columns in roster when voice data is present', async () => {
         const metricsWithVoice: EventMetricsResponseDto = {
             ...mockMetrics,
             voiceSummary: {
@@ -313,9 +366,18 @@ describe('EventMetricsPage', () => {
             expect(screen.getByText('Voice Status')).toBeInTheDocument();
             expect(screen.getByText('Voice Duration')).toBeInTheDocument();
         });
-    
-    }
-    it('renders voice status columns in roster when voice data is present', async () => { await testRendersVoiceStatusColumnsIn(); });
+    });
+
+});
+
+describe('EventMetricsPage — part 7', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
 
     it('does not render voice status columns in roster when no voice data', async () => {
         renderWithProviders(<EventMetricsPage />, {
@@ -325,4 +387,5 @@ describe('EventMetricsPage', () => {
         expect(screen.queryByText('Voice Status')).not.toBeInTheDocument();
         expect(screen.queryByText('Voice Duration')).not.toBeInTheDocument();
     });
+
 });

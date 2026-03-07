@@ -4,8 +4,8 @@ import { computeAutoFill } from './roster-auto-fill';
 import { makePlayer } from './RosterBuilder.test-helpers';
 import type { RosterRole } from '@raid-ledger/contract';
 
-function computeautofillUnitGroup1() {
-it('MMO: assigns by character role matching', () => {
+describe('computeAutoFill (unit) — part 1', () => {
+    it('MMO: assigns by character role matching', () => {
         const pool = [
             makePlayer(1, 'tank', 'TankA'),
             makePlayer(2, 'healer', 'HealerA'),
@@ -28,10 +28,7 @@ it('MMO: assigns by character role matching', () => {
         expect(result.newAssignments.find(a => a.username === 'DpsA')?.slot).toBe('dps');
     });
 
-}
-
-function computeautofillUnitGroup2() {
-it('MMO: overflows unmatched players to flex', () => {
+    it('MMO: overflows unmatched players to flex', () => {
         const pool = [makePlayer(1, null, 'NoRole')];
         const roleSlots = [
             { role: 'tank' as RosterRole, label: 'Tank' },
@@ -50,10 +47,7 @@ it('MMO: overflows unmatched players to flex', () => {
         expect(assigned?.isOverride).toBe(true);
     });
 
-}
-
-function computeautofillUnitGroup3() {
-it('MMO: backfills empty role slots when flex is full', () => {
+    it('MMO: backfills empty role slots when flex is full', () => {
         const pool = Array.from({ length: 8 }, (_, i) => makePlayer(i + 1, null, `P${i + 1}`));
         const roleSlots = [
             { role: 'tank' as RosterRole, label: 'Tank' },
@@ -71,10 +65,10 @@ it('MMO: backfills empty role slots when flex is full', () => {
         expect(result.newPool.length).toBe(3); // 8 - 5 = 3 remaining
     });
 
-}
+});
 
-function computeautofillUnitGroup4() {
-it('MMO: fills bench overflow', () => {
+describe('computeAutoFill (unit) — part 2', () => {
+    it('MMO: fills bench overflow', () => {
         const pool = Array.from({ length: 3 }, (_, i) => makePlayer(i + 1, null, `P${i + 1}`));
         const roleSlots = [
             { role: 'tank' as RosterRole, label: 'Tank' },
@@ -92,10 +86,7 @@ it('MMO: fills bench overflow', () => {
         expect(result.newAssignments.every(a => a.slot === 'bench')).toBe(true);
     });
 
-}
-
-function computeautofillUnitGroup5() {
-it('Generic: fills player slots sequentially', () => {
+    it('Generic: fills player slots sequentially', () => {
         const pool = [
             makePlayer(1, null, 'Alpha'),
             makePlayer(2, null, 'Bravo'),
@@ -115,10 +106,7 @@ it('Generic: fills player slots sequentially', () => {
         expect(result.newAssignments[2].position).toBe(3);
     });
 
-}
-
-function computeautofillUnitGroup6() {
-it('skips occupied positions', () => {
+    it('skips occupied positions', () => {
         const pool = [makePlayer(1, 'tank', 'NewTank')];
         const existing = [{ ...makePlayer(99, 'tank', 'OldTank'), slot: 'tank' as RosterRole, position: 1 }];
         const roleSlots = [
@@ -138,13 +126,4 @@ it('skips occupied positions', () => {
         expect(newTank?.position).toBe(2); // Position 1 is occupied
     });
 
-}
-
-describe('computeAutoFill (unit)', () => {
-    computeautofillUnitGroup1();
-    computeautofillUnitGroup2();
-    computeautofillUnitGroup3();
-    computeautofillUnitGroup4();
-    computeautofillUnitGroup5();
-    computeautofillUnitGroup6();
 });

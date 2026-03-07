@@ -97,7 +97,7 @@ function renderWithRouter(ui: React.ReactElement) {
     );
 }
 
-describe('AdminSetupWizard', () => {
+describe('AdminSetupWizard — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockUseAuth.mockReturnValue({
@@ -149,6 +149,23 @@ describe('AdminSetupWizard', () => {
         });
     });
 
+});
+
+describe('AdminSetupWizard — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'admin',
+                role: 'admin',
+                discordId: 'local:admin',
+            },
+        });
+        mockIsAdmin.mockReturnValue(true);
+        mockUseOnboarding.mockReturnValue(defaultOnboarding);
+    });
+
     describe('Mobile stepper ("Step X of Y")', () => {
         it('renders mobile "Step X of Y" text on step 1', () => {
             renderWithRouter(<AdminSetupWizard />);
@@ -187,13 +204,30 @@ describe('AdminSetupWizard', () => {
         });
     });
 
-    function stepContentRenderingGroup1() {
-it('renders SecureAccountStep on step 0', () => {
+});
+
+describe('AdminSetupWizard — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'admin',
+                role: 'admin',
+                discordId: 'local:admin',
+            },
+        });
+        mockIsAdmin.mockReturnValue(true);
+        mockUseOnboarding.mockReturnValue(defaultOnboarding);
+    });
+
+    describe('Step content rendering', () => {
+        it('renders SecureAccountStep on step 0', () => {
             renderWithRouter(<AdminSetupWizard />);
             expect(screen.getByTestId('secure-account-step')).toBeInTheDocument();
         });
 
-it('renders CommunityIdentityStep on step 1', () => {
+        it('renders CommunityIdentityStep on step 1', () => {
             mockUseOnboarding.mockReturnValue({
                 ...defaultOnboarding,
                 statusQuery: {
@@ -206,10 +240,7 @@ it('renders CommunityIdentityStep on step 1', () => {
             expect(screen.getByTestId('community-identity-step')).toBeInTheDocument();
         });
 
-    }
-
-    function stepContentRenderingGroup2() {
-it('renders ConnectPluginsStep on step 2', () => {
+        it('renders ConnectPluginsStep on step 2', () => {
             mockUseOnboarding.mockReturnValue({
                 ...defaultOnboarding,
                 statusQuery: {
@@ -222,7 +253,7 @@ it('renders ConnectPluginsStep on step 2', () => {
             expect(screen.getByTestId('connect-plugins-step')).toBeInTheDocument();
         });
 
-it('renders DoneStep on step 3', () => {
+        it('renders DoneStep on step 3', () => {
             mockUseOnboarding.mockReturnValue({
                 ...defaultOnboarding,
                 statusQuery: {
@@ -234,12 +265,23 @@ it('renders DoneStep on step 3', () => {
             renderWithRouter(<AdminSetupWizard />);
             expect(screen.getByTestId('done-step')).toBeInTheDocument();
         });
+    });
 
-    }
+});
 
-    describe('Step content rendering', () => {
-        stepContentRenderingGroup1();
-        stepContentRenderingGroup2();
+describe('AdminSetupWizard — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'admin',
+                role: 'admin',
+                discordId: 'local:admin',
+            },
+        });
+        mockIsAdmin.mockReturnValue(true);
+        mockUseOnboarding.mockReturnValue(defaultOnboarding);
     });
 
     describe('Step number display', () => {
@@ -270,4 +312,5 @@ it('renders DoneStep on step 3', () => {
             expect(screen.getByText(/step 4 of 4/i)).toBeInTheDocument();
         });
     });
+
 });

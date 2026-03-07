@@ -82,9 +82,9 @@ describe('nameToSlug (via buildWowheadTalentString slug matching)', () => {
 // buildWowheadTalentString — full class talent string build (Druid)
 // ---------------------------------------------------------------------------
 
-describe('buildWowheadTalentString', () => {
+describe('buildWowheadTalentString — part 1', () => {
     describe('full Druid talent string build', () => {
-        function testProducesCorrectWowheadTalentString() {
+        it('produces correct Wowhead talent string for a Balance/Resto Druid', () => {
             // Build a Druid with points in Balance and Restoration, none in Feral.
             // Balance tree (21 talents sorted by position):
             //   a1:starlight-wrath(5), a2:natures-grasp(1), a3:improved-natures-grasp(0)
@@ -137,9 +137,7 @@ describe('buildWowheadTalentString', () => {
             // Restoration: furor is at a3 (3rd position): 0,5 → "05"
             // Trailing tree trimming: Restoration is non-zero, so all 3 trees present
             expect(result).toBe('510005010500135001-0-05');
-        
-        }
-        it('produces correct Wowhead talent string for a Balance/Resto Druid', () => { testProducesCorrectWowheadTalentString(); });
+        });
 
         it('produces correct string for a Feral-only Druid', () => {
             const trees = [
@@ -172,6 +170,9 @@ describe('buildWowheadTalentString', () => {
         });
     });
 
+});
+
+describe('buildWowheadTalentString — part 2', () => {
     describe('empty/zero talent handling', () => {
         it('returns all-zero trees as "0" when no talents are spent', () => {
             const trees = [
@@ -223,8 +224,11 @@ describe('buildWowheadTalentString', () => {
         });
     });
 
-    function apiPositionFallbackGroup1() {
-it('uses tierIndex/columnIndex when available (API path)', () => {
+});
+
+describe('buildWowheadTalentString — part 3', () => {
+    describe('API-position fallback — part 1', () => {
+        it('uses tierIndex/columnIndex when available (API path)', () => {
             // Provide talents with tier/column indices matching known positions.
             // For Druid Balance:
             //   starlight-wrath is at a1 → tierIndex=0, columnIndex=0
@@ -257,10 +261,7 @@ it('uses tierIndex/columnIndex when available (API path)', () => {
             expect(balanceString).not.toBe('0');
         });
 
-    }
-
-    function apiPositionFallbackGroup2() {
-it('falls back to slug matching when tierIndex/columnIndex are absent', () => {
+        it('falls back to slug matching when tierIndex/columnIndex are absent', () => {
             // No tierIndex/columnIndex → slug-based path
             const trees = [
                 {
@@ -281,10 +282,13 @@ it('falls back to slug matching when tierIndex/columnIndex are absent', () => {
             expect(result!.startsWith('5')).toBe(true);
         });
 
-    }
+    });
 
-    function apiPositionFallbackGroup3() {
-it('API positions produce same result as slug matching for known talents', () => {
+});
+
+describe('buildWowheadTalentString — part 4', () => {
+    describe('API-position fallback — part 2', () => {
+        it('API positions produce same result as slug matching for known talents', () => {
             // Build the same talent set both ways and compare
             const slugTrees = [
                 {
@@ -320,10 +324,7 @@ it('API positions produce same result as slug matching for known talents', () =>
             expect(slugResult).toBe(apiResult);
         });
 
-    }
-
-    function apiPositionFallbackGroup4() {
-it('partial API positions falls back to slug matching', () => {
+        it('partial API positions falls back to slug matching', () => {
             // When only some talents have tierIndex/columnIndex, hasApiPositions
             // returns false (it requires ALL ranked talents to have positions)
             const trees = [
@@ -346,17 +347,13 @@ it('partial API positions falls back to slug matching', () => {
             expect(result!.startsWith('51')).toBe(true); // starlight-wrath(5) + natures-grasp(1)
         });
 
-    }
-
-    describe('API-position fallback', () => {
-        apiPositionFallbackGroup1();
-        apiPositionFallbackGroup2();
-        apiPositionFallbackGroup3();
-        apiPositionFallbackGroup4();
     });
 
-    function trailingTreeTrimmingGroup1() {
-it('trims trailing zero trees', () => {
+});
+
+describe('buildWowheadTalentString — part 5', () => {
+    describe('trailing tree trimming', () => {
+        it('trims trailing zero trees', () => {
             const trees = [
                 {
                     name: 'Balance',
@@ -374,10 +371,7 @@ it('trims trailing zero trees', () => {
             expect(result).toBe('5');
         });
 
-    }
-
-    function trailingTreeTrimmingGroup2() {
-it('keeps middle zero tree when later tree has points', () => {
+        it('keeps middle zero tree when later tree has points', () => {
             const trees = [
                 {
                     name: 'Balance',
@@ -397,14 +391,11 @@ it('keeps middle zero tree when later tree has points', () => {
             // All three trees present: Balance-Feral-Restoration
             expect(result).toBe('5-0-05');
         });
-
-    }
-
-    describe('trailing tree trimming', () => {
-        trailingTreeTrimmingGroup1();
-        trailingTreeTrimmingGroup2();
     });
 
+});
+
+describe('buildWowheadTalentString — part 6', () => {
     describe('all classes have position maps', () => {
         it.each([
             'Druid', 'Hunter', 'Mage', 'Paladin', 'Priest',
@@ -456,6 +447,7 @@ it('keeps middle zero tree when later tree has points', () => {
             expect(result).toBe('32');
         });
     });
+
 });
 
 // ---------------------------------------------------------------------------

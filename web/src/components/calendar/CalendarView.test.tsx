@@ -29,7 +29,7 @@ const renderWithProviders = (ui: React.ReactElement, initialRoute = '/calendar')
     );
 };
 
-describe('CalendarView', () => {
+describe('CalendarView — part 1', () => {
     beforeEach(() => {
         localStorage.clear();
         // Reset Zustand store to default (week) after clearing localStorage
@@ -37,20 +37,19 @@ describe('CalendarView', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-02-10T12:00:00Z'));
     });
-
     afterEach(() => {
         vi.useRealTimers();
     });
 
-    function viewToggleGroup1() {
-it('renders week view by default', () => {
+    describe('View Toggle', () => {
+        it('renders week view by default', () => {
             renderWithProviders(<CalendarView />);
 
             const weekBtn = screen.getByRole('button', { name: 'Week' });
             expect(weekBtn).toHaveAttribute('aria-pressed', 'true');
         });
 
-it('clicking Week button activates week view', () => {
+        it('clicking Week button activates week view', () => {
             renderWithProviders(<CalendarView />);
 
             const weekBtn = screen.getByRole('button', { name: 'Week' });
@@ -59,7 +58,7 @@ it('clicking Week button activates week view', () => {
             expect(weekBtn).toHaveAttribute('aria-pressed', 'true');
         });
 
-it('view toggle has proper accessibility attributes', () => {
+        it('view toggle has proper accessibility attributes', () => {
             renderWithProviders(<CalendarView />);
 
             const group = screen.getByRole('group', { name: 'Calendar view' });
@@ -72,10 +71,7 @@ it('view toggle has proper accessibility attributes', () => {
             expect(weekBtn).toHaveAttribute('type', 'button');
         });
 
-    }
-
-    function viewToggleGroup2() {
-it('persists view preference to localStorage', () => {
+        it('persists view preference to localStorage', () => {
             renderWithProviders(<CalendarView />);
 
             const dayBtn = screen.getByRole('button', { name: 'Day' });
@@ -84,7 +80,7 @@ it('persists view preference to localStorage', () => {
             expect(localStorage.getItem('raid_ledger_calendar_view')).toBe('day');
         });
 
-it('respects stored preference on mount', () => {
+        it('respects stored preference on mount', () => {
             localStorage.setItem('raid_ledger_calendar_view', 'month');
             useCalendarViewStore.setState({ viewPref: 'month' });
             renderWithProviders(<CalendarView />);
@@ -93,19 +89,27 @@ it('respects stored preference on mount', () => {
             expect(monthBtn).toHaveAttribute('aria-pressed', 'true');
         });
 
-it('respects URL param over localStorage', () => {
+        it('respects URL param over localStorage', () => {
             localStorage.setItem('raid_ledger_calendar_view', 'day');
             renderWithProviders(<CalendarView />, '/calendar?view=month');
 
             const monthBtn = screen.getByRole('button', { name: 'Month' });
             expect(monthBtn).toHaveAttribute('aria-pressed', 'true');
         });
+    });
 
-    }
+});
 
-    describe('View Toggle', () => {
-        viewToggleGroup1();
-        viewToggleGroup2();
+describe('CalendarView — part 2', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        // Reset Zustand store to default (week) after clearing localStorage
+        useCalendarViewStore.setState({ viewPref: 'week' });
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-02-10T12:00:00Z'));
+    });
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     describe('Empty State', () => {
@@ -169,4 +173,5 @@ it('respects URL param over localStorage', () => {
         });
 
     });
+
 });

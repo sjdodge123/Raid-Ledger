@@ -21,20 +21,20 @@ function createParticipant(
   };
 }
 
-function adhocrosterGroup1() {
-it('renders roster heading', () => {
+describe('AdHocRoster — part 1', () => {
+  it('renders roster heading', () => {
     render(<AdHocRoster participants={[]} activeCount={0} />);
 
     expect(screen.getByText('Voice Channel Roster')).toBeInTheDocument();
   });
 
-it('shows empty state when no participants', () => {
+  it('shows empty state when no participants', () => {
     render(<AdHocRoster participants={[]} activeCount={0} />);
 
     expect(screen.getByText('No participants yet')).toBeInTheDocument();
   });
 
-it('shows active/total count', () => {
+  it('shows active/total count', () => {
     const participants = [
       createParticipant({ id: 'uuid-1', discordUsername: 'Player1' }),
       createParticipant({
@@ -50,10 +50,7 @@ it('shows active/total count', () => {
     expect(screen.getByText('1 active / 2 total')).toBeInTheDocument();
   });
 
-}
-
-function adhocrosterGroup2() {
-it('separates active and left participants', () => {
+  it('separates active and left participants', () => {
     const active = createParticipant({
       id: 'uuid-active',
       discordUsername: 'ActivePlayer',
@@ -75,10 +72,7 @@ it('separates active and left participants', () => {
     expect(screen.getByText(/Left \(1\)/)).toBeInTheDocument();
   });
 
-}
-
-function adhocrosterGroup3() {
-it('renders participant with discord avatar', () => {
+  it('renders participant with discord avatar', () => {
     const withAvatar = createParticipant({
       discordAvatarHash: 'abc123',
       discordUserId: 'discord-avatar',
@@ -93,7 +87,10 @@ it('renders participant with discord avatar', () => {
     expect(img?.src).toContain('cdn.discordapp.com/avatars/discord-avatar/abc123');
   });
 
-it('renders fallback initial when no avatar', () => {
+});
+
+describe('AdHocRoster — part 2', () => {
+  it('renders fallback initial when no avatar', () => {
     const noAvatar = createParticipant({
       discordAvatarHash: null,
       discordUsername: 'NoAvatarUser',
@@ -104,10 +101,7 @@ it('renders fallback initial when no avatar', () => {
     expect(screen.getByText('N')).toBeInTheDocument();
   });
 
-}
-
-function adhocrosterGroup4() {
-it('shows "(guest)" label for unlinked participants', () => {
+  it('shows "(guest)" label for unlinked participants', () => {
     const guest = createParticipant({
       userId: null,
       discordUsername: 'GuestUser',
@@ -118,7 +112,7 @@ it('shows "(guest)" label for unlinked participants', () => {
     expect(screen.getByText('(guest)')).toBeInTheDocument();
   });
 
-it('does not show "(guest)" for linked participants', () => {
+  it('does not show "(guest)" for linked participants', () => {
     const linked = createParticipant({
       userId: 1,
       discordUsername: 'LinkedUser',
@@ -129,10 +123,7 @@ it('does not show "(guest)" for linked participants', () => {
     expect(screen.queryByText('(guest)')).not.toBeInTheDocument();
   });
 
-}
-
-function adhocrosterGroup5() {
-it('shows join time for participants', () => {
+  it('shows join time for participants', () => {
     const participant = createParticipant({
       joinedAt: '2026-02-10T18:00:00Z',
     });
@@ -144,7 +135,7 @@ it('shows join time for participants', () => {
     expect(screen.getByText(/joined/)).toBeInTheDocument();
   });
 
-it('shows duration for participants with totalDurationSeconds', () => {
+  it('shows duration for participants with totalDurationSeconds', () => {
     const withDuration = createParticipant({
       leftAt: '2026-02-10T19:30:00Z',
       totalDurationSeconds: 5400, // 1h 30m
@@ -155,10 +146,7 @@ it('shows duration for participants with totalDurationSeconds', () => {
     expect(screen.getByText('1h 30m')).toBeInTheDocument();
   });
 
-}
-
-function adhocrosterGroup6() {
-it('formats duration less than 1 minute as "<1m"', () => {
+  it('formats duration less than 1 minute as "<1m"', () => {
     const shortDuration = createParticipant({
       leftAt: '2026-02-10T18:00:30Z',
       totalDurationSeconds: 30,
@@ -169,7 +157,7 @@ it('formats duration less than 1 minute as "<1m"', () => {
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });
 
-it('formats duration in minutes only', () => {
+  it('formats duration in minutes only', () => {
     const minDuration = createParticipant({
       leftAt: '2026-02-10T18:45:00Z',
       totalDurationSeconds: 2700, // 45 min
@@ -180,10 +168,10 @@ it('formats duration in minutes only', () => {
     expect(screen.getByText('45m')).toBeInTheDocument();
   });
 
-}
+});
 
-function adhocrosterGroup7() {
-it('formats exact hour duration without minutes', () => {
+describe('AdHocRoster — part 3', () => {
+  it('formats exact hour duration without minutes', () => {
     const exactHour = createParticipant({
       leftAt: '2026-02-10T19:00:00Z',
       totalDurationSeconds: 3600, // 1h
@@ -194,7 +182,7 @@ it('formats exact hour duration without minutes', () => {
     expect(screen.getByText('1h')).toBeInTheDocument();
   });
 
-it('does not show duration when totalDurationSeconds is null', () => {
+  it('does not show duration when totalDurationSeconds is null', () => {
     const noDuration = createParticipant({
       totalDurationSeconds: null,
     });
@@ -205,10 +193,7 @@ it('does not show duration when totalDurationSeconds is null', () => {
     expect(screen.queryByText(/<1m/)).not.toBeInTheDocument();
   });
 
-}
-
-function adhocrosterGroup8() {
-it('does not show "In Channel" section when all have left', () => {
+  it('does not show "In Channel" section when all have left', () => {
     const left = createParticipant({
       leftAt: '2026-02-10T18:30:00Z',
       totalDurationSeconds: 1800,
@@ -220,7 +205,7 @@ it('does not show "In Channel" section when all have left', () => {
     expect(screen.getByText(/Left \(1\)/)).toBeInTheDocument();
   });
 
-it('does not show "Left" section when all are still active', () => {
+  it('does not show "Left" section when all are still active', () => {
     const active = createParticipant({ leftAt: null });
 
     render(<AdHocRoster participants={[active]} activeCount={1} />);
@@ -229,10 +214,7 @@ it('does not show "Left" section when all are still active', () => {
     expect(screen.getByText(/In Channel \(1\)/)).toBeInTheDocument();
   });
 
-}
-
-function adhocrosterGroup9() {
-it('handles formatDuration with 0 seconds', () => {
+  it('handles formatDuration with 0 seconds', () => {
     const zeroDuration = createParticipant({
       leftAt: '2026-02-10T18:00:00Z',
       totalDurationSeconds: 0,
@@ -243,16 +225,4 @@ it('handles formatDuration with 0 seconds', () => {
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });
 
-}
-
-describe('AdHocRoster', () => {
-    adhocrosterGroup1();
-    adhocrosterGroup2();
-    adhocrosterGroup3();
-    adhocrosterGroup4();
-    adhocrosterGroup5();
-    adhocrosterGroup6();
-    adhocrosterGroup7();
-    adhocrosterGroup8();
-    adhocrosterGroup9();
 });

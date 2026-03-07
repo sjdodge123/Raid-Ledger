@@ -103,7 +103,7 @@ const mockRefetch = vi.fn();
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('IdentityPanel — auto-heart toggle (ROK-444)', () => {
+describe('IdentityPanel — auto-heart toggle (ROK-444) — Visibility (AC #2)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
@@ -166,6 +166,36 @@ describe('IdentityPanel — auto-heart toggle (ROK-444)', () => {
 
     // ── Toggle state (AC #2) ─────────────────────────────────────────────────
 
+});
+
+describe('IdentityPanel — auto-heart toggle (ROK-444) — Toggle interaction', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
+            user: discordUser,
+            isAuthenticated: true,
+            refetch: mockRefetch,
+        } as Parameters<typeof vi.spyOn<typeof useAuthHook, 'useAuth'>>[0][keyof typeof useAuthHook]);
+
+        vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
+            data: { data: [] },
+            isLoading: false,
+        } as ReturnType<typeof useCharactersHook.useMyCharacters>);
+
+        vi.spyOn(useAvatarUploadHook, 'useAvatarUpload').mockReturnValue({
+            upload: mockUpload,
+            deleteAvatar: mockDeleteAvatar,
+            isUploading: false,
+            uploadProgress: 0,
+        } as ReturnType<typeof useAvatarUploadHook.useAvatarUpload>);
+
+        vi.spyOn(useSystemStatusHook, 'useSystemStatus').mockReturnValue({
+            data: { isFirstRun: false, discordConfigured: true, blizzardConfigured: false },
+            isLoading: false,
+        } as ReturnType<typeof useSystemStatusHook.useSystemStatus>);
+    });
+
     describe('Toggle state reflects preference', () => {
         it('toggle is checked (aria-checked=true) when autoHeartGames is true', () => {
             render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: true }) });
@@ -189,78 +219,153 @@ describe('IdentityPanel — auto-heart toggle (ROK-444)', () => {
 
     // ── Toggle interaction ────────────────────────────────────────────────────
 
-    function toggleInteractionGroup1() {
-it('calls updatePreference with false when toggling off from enabled state', async () => {
-            const user = userEvent.setup();
-            render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: true }) });
+});
 
-            const toggle = screen.getByRole('switch');
-            await user.click(toggle);
+describe('Toggle interaction — sub 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
 
-            await waitFor(() => {
-                expect(apiClient.updatePreference).toHaveBeenCalledWith('autoHeartGames', false);
-            });
+        vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
+            user: discordUser,
+            isAuthenticated: true,
+            refetch: mockRefetch,
+        } as Parameters<typeof vi.spyOn<typeof useAuthHook, 'useAuth'>>[0][keyof typeof useAuthHook]);
+
+        vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
+            data: { data: [] },
+            isLoading: false,
+        } as ReturnType<typeof useCharactersHook.useMyCharacters>);
+
+        vi.spyOn(useAvatarUploadHook, 'useAvatarUpload').mockReturnValue({
+            upload: mockUpload,
+            deleteAvatar: mockDeleteAvatar,
+            isUploading: false,
+            uploadProgress: 0,
+        } as ReturnType<typeof useAvatarUploadHook.useAvatarUpload>);
+
+        vi.spyOn(useSystemStatusHook, 'useSystemStatus').mockReturnValue({
+            data: { isFirstRun: false, discordConfigured: true, blizzardConfigured: false },
+            isLoading: false,
+        } as ReturnType<typeof useSystemStatusHook.useSystemStatus>);
+    });
+
+    it('calls updatePreference with false when toggling off from enabled state', async () => {
+        const user = userEvent.setup();
+        render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: true }) });
+
+        const toggle = screen.getByRole('switch');
+        await user.click(toggle);
+
+        await waitFor(() => {
+            expect(apiClient.updatePreference).toHaveBeenCalledWith('autoHeartGames', false);
         });
+    });
 
-it('calls updatePreference with true when toggling on from disabled state', async () => {
-            const user = userEvent.setup();
-            render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: false }) });
+    it('calls updatePreference with true when toggling on from disabled state', async () => {
+        const user = userEvent.setup();
+        render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: false }) });
 
-            const toggle = screen.getByRole('switch');
-            await user.click(toggle);
+        const toggle = screen.getByRole('switch');
+        await user.click(toggle);
 
-            await waitFor(() => {
-                expect(apiClient.updatePreference).toHaveBeenCalledWith('autoHeartGames', true);
-            });
+        await waitFor(() => {
+            expect(apiClient.updatePreference).toHaveBeenCalledWith('autoHeartGames', true);
         });
+    });
 
-    }
+});
 
-    function toggleInteractionGroup2() {
-it('shows error toast when updatePreference fails', async () => {
-            vi.mocked(apiClient.updatePreference).mockRejectedValueOnce(
-                new Error('Network error'),
+describe('Toggle interaction — sub 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
+            user: discordUser,
+            isAuthenticated: true,
+            refetch: mockRefetch,
+        } as Parameters<typeof vi.spyOn<typeof useAuthHook, 'useAuth'>>[0][keyof typeof useAuthHook]);
+
+        vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
+            data: { data: [] },
+            isLoading: false,
+        } as ReturnType<typeof useCharactersHook.useMyCharacters>);
+
+        vi.spyOn(useAvatarUploadHook, 'useAvatarUpload').mockReturnValue({
+            upload: mockUpload,
+            deleteAvatar: mockDeleteAvatar,
+            isUploading: false,
+            uploadProgress: 0,
+        } as ReturnType<typeof useAvatarUploadHook.useAvatarUpload>);
+
+        vi.spyOn(useSystemStatusHook, 'useSystemStatus').mockReturnValue({
+            data: { isFirstRun: false, discordConfigured: true, blizzardConfigured: false },
+            isLoading: false,
+        } as ReturnType<typeof useSystemStatusHook.useSystemStatus>);
+    });
+
+    it('shows error toast when updatePreference fails', async () => {
+        vi.mocked(apiClient.updatePreference).mockRejectedValueOnce(
+            new Error('Network error'),
+        );
+
+        const user = userEvent.setup();
+        render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: true }) });
+
+        const toggle = screen.getByRole('switch');
+        await user.click(toggle);
+
+        await waitFor(() => {
+            expect((toast.toast as { error: ReturnType<typeof vi.fn> }).error).toHaveBeenCalledWith(
+                'Failed to update auto-heart preference',
             );
-
-            const user = userEvent.setup();
-            render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: true }) });
-
-            const toggle = screen.getByRole('switch');
-            await user.click(toggle);
-
-            await waitFor(() => {
-                expect((toast.toast as { error: ReturnType<typeof vi.fn> }).error).toHaveBeenCalledWith(
-                    'Failed to update auto-heart preference',
-                );
-            });
         });
+    });
 
-    }
+    it('toggle is disabled while mutation is pending', async () => {
+        // Simulate slow response
+        vi.mocked(apiClient.updatePreference).mockImplementationOnce(
+            () => new Promise(() => {}), // never resolves
+        );
 
-    function toggleInteractionGroup3() {
-it('toggle is disabled while mutation is pending', async () => {
-            // Simulate slow response
-            vi.mocked(apiClient.updatePreference).mockImplementationOnce(
-                () => new Promise(() => {}), // never resolves
-            );
+        const user = userEvent.setup();
+        render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: true }) });
 
-            const user = userEvent.setup();
-            render(<IdentityPanel />, { wrapper: createWrapper({ autoHeartGames: true }) });
+        const toggle = screen.getByRole('switch');
+        await user.click(toggle);
 
-            const toggle = screen.getByRole('switch');
-            await user.click(toggle);
-
-            await waitFor(() => {
-                expect(toggle).toBeDisabled();
-            });
+        await waitFor(() => {
+            expect(toggle).toBeDisabled();
         });
+    });
 
-    }
+});
 
-    describe('Toggle interaction', () => {
-        toggleInteractionGroup1();
-        toggleInteractionGroup2();
-        toggleInteractionGroup3();
+describe('IdentityPanel — auto-heart toggle (ROK-444) — No localStorage usage', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
+            user: discordUser,
+            isAuthenticated: true,
+            refetch: mockRefetch,
+        } as Parameters<typeof vi.spyOn<typeof useAuthHook, 'useAuth'>>[0][keyof typeof useAuthHook]);
+
+        vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
+            data: { data: [] },
+            isLoading: false,
+        } as ReturnType<typeof useCharactersHook.useMyCharacters>);
+
+        vi.spyOn(useAvatarUploadHook, 'useAvatarUpload').mockReturnValue({
+            upload: mockUpload,
+            deleteAvatar: mockDeleteAvatar,
+            isUploading: false,
+            uploadProgress: 0,
+        } as ReturnType<typeof useAvatarUploadHook.useAvatarUpload>);
+
+        vi.spyOn(useSystemStatusHook, 'useSystemStatus').mockReturnValue({
+            data: { isFirstRun: false, discordConfigured: true, blizzardConfigured: false },
+            isLoading: false,
+        } as ReturnType<typeof useSystemStatusHook.useSystemStatus>);
     });
 
     // ── No localStorage usage ────────────────────────────────────────────────
@@ -277,4 +382,5 @@ it('toggle is disabled while mutation is pending', async () => {
             expect(autoHeartCalls).toHaveLength(0);
         });
     });
+
 });

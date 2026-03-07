@@ -33,21 +33,29 @@ const mockTrendsData = {
     },
 };
 
-function attendancetrendschartGroup1() {
-it('renders Attendance Trends heading', async () => {
+describe('AttendanceTrendsChart — part 1', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance`, () =>
+                HttpResponse.json(mockTrendsData),
+            ),
+        );
+    });
+
+    it('renders Attendance Trends heading', async () => {
         renderWithProviders(<AttendanceTrendsChart />);
         await waitFor(() => {
             expect(screen.getByText('Attendance Trends')).toBeInTheDocument();
         });
     });
 
-it('shows period toggle buttons (30 Days, 90 Days)', async () => {
+    it('shows period toggle buttons (30 Days, 90 Days)', async () => {
         renderWithProviders(<AttendanceTrendsChart />);
         expect(screen.getByRole('button', { name: '30 Days' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '90 Days' })).toBeInTheDocument();
     });
 
-it('renders summary stats after data loads', async () => {
+    it('renders summary stats after data loads', async () => {
         renderWithProviders(<AttendanceTrendsChart />);
         await waitFor(() => {
             expect(screen.getByText('82%')).toBeInTheDocument(); // 0.82 * 100
@@ -56,10 +64,7 @@ it('renders summary stats after data loads', async () => {
         });
     });
 
-}
-
-function attendancetrendschartGroup2() {
-it('renders summary stat labels', async () => {
+    it('renders summary stat labels', async () => {
         renderWithProviders(<AttendanceTrendsChart />);
         await waitFor(() => {
             expect(screen.getByText('Avg Attendance')).toBeInTheDocument();
@@ -68,17 +73,14 @@ it('renders summary stat labels', async () => {
         });
     });
 
-it('renders line chart when data is loaded', async () => {
+    it('renders line chart when data is loaded', async () => {
         renderWithProviders(<AttendanceTrendsChart />);
         await waitFor(() => {
             expect(screen.getByTestId('line-chart')).toBeInTheDocument();
         });
     });
 
-}
-
-function attendancetrendschartGroup3() {
-it('shows empty state when no data points', async () => {
+    it('shows empty state when no data points', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance`, () =>
                 HttpResponse.json({
@@ -95,10 +97,18 @@ it('shows empty state when no data points', async () => {
         });
     });
 
-}
+});
 
-function attendancetrendschartGroup4() {
-it('shows error state when request fails', async () => {
+describe('AttendanceTrendsChart — part 2', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance`, () =>
+                HttpResponse.json(mockTrendsData),
+            ),
+        );
+    });
+
+    it('shows error state when request fails', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance`, () =>
                 HttpResponse.json({ message: 'Forbidden' }, { status: 403 }),
@@ -111,10 +121,7 @@ it('shows error state when request fails', async () => {
         });
     });
 
-}
-
-function attendancetrendschartGroup5() {
-it('clicking 90 Days button requests 90d period', async () => {
+    it('clicking 90 Days button requests 90d period', async () => {
         const user = userEvent.setup();
         let capturedUrl = '';
 
@@ -137,10 +144,7 @@ it('clicking 90 Days button requests 90d period', async () => {
         });
     });
 
-}
-
-function attendancetrendschartGroup6() {
-it('clicking 30 Days button keeps 30d period', async () => {
+    it('clicking 30 Days button keeps 30d period', async () => {
         const user = userEvent.setup();
         renderWithProviders(<AttendanceTrendsChart />);
 
@@ -154,7 +158,7 @@ it('clicking 30 Days button keeps 30d period', async () => {
         });
     });
 
-it('shows loading state while data is being fetched', () => {
+    it('shows loading state while data is being fetched', () => {
         // Use slow response to catch loading state
         server.use(
             http.get(`${API_BASE}/analytics/attendance`, async () => {
@@ -167,21 +171,4 @@ it('shows loading state while data is being fetched', () => {
         expect(screen.getByText('Loading chart data...')).toBeInTheDocument();
     });
 
-}
-
-describe('AttendanceTrendsChart', () => {
-beforeEach(() => {
-        server.use(
-            http.get(`${API_BASE}/analytics/attendance`, () =>
-                HttpResponse.json(mockTrendsData),
-            ),
-        );
-    });
-
-    attendancetrendschartGroup1();
-    attendancetrendschartGroup2();
-    attendancetrendschartGroup3();
-    attendancetrendschartGroup4();
-    attendancetrendschartGroup5();
-    attendancetrendschartGroup6();
 });

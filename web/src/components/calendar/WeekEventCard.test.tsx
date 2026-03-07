@@ -53,7 +53,7 @@ function renderCard(event?: CalendarEvent, overlapFn?: (s: Date, e: Date) => boo
 
 // --- Tests ---
 
-describe('WeekEventCard', () => {
+describe('WeekEventCard — part 1', () => {
     describe('tier selection', () => {
         it('selects minimal tier for events under 150 minutes', () => {
             const { container } = renderCard(eventWithDuration(120));
@@ -119,15 +119,19 @@ describe('WeekEventCard', () => {
         });
     });
 
-const mockSignups = [
+});
+
+describe('WeekEventCard — part 2', () => {
+    describe('avatar rendering', () => {
+        const mockSignups = [
             { id: 1, username: 'Player1', avatar: null, discordId: '1' },
             { id: 2, username: 'Player2', avatar: null, discordId: '2' },
             { id: 3, username: 'Player3', avatar: null, discordId: '3' },
             { id: 4, username: 'Player4', avatar: null, discordId: '4' },
             { id: 5, username: 'Player5', avatar: null, discordId: '5' },
         ];
-    function avatarRenderingGroup1() {
-it('hides avatars on minimal tier even with signupsPreview', () => {
+
+        it('hides avatars on minimal tier even with signupsPreview', () => {
             renderCard(eventWithDuration(120, {
                 signupCount: 5,
                 signupsPreview: mockSignups,
@@ -137,7 +141,7 @@ it('hides avatars on minimal tier even with signupsPreview', () => {
             expect(screen.queryByTitle('Player1')).not.toBeInTheDocument();
         });
 
-it('shows avatars on compact tier', () => {
+        it('shows avatars on compact tier', () => {
             renderCard(eventWithDuration(180, {
                 signupCount: 5,
                 signupsPreview: mockSignups,
@@ -147,10 +151,7 @@ it('shows avatars on compact tier', () => {
             expect(screen.getByTitle('Player1')).toBeInTheDocument();
         });
 
-    }
-
-    function avatarRenderingGroup2() {
-it('shows avatars on standard tier', () => {
+        it('shows avatars on standard tier', () => {
             renderCard(eventWithDuration(300, {
                 signupCount: 5,
                 signupsPreview: mockSignups,
@@ -158,12 +159,6 @@ it('shows avatars on standard tier', () => {
             expect(screen.queryByTestId('signup-badge')).not.toBeInTheDocument();
             expect(screen.getByTitle('Player1')).toBeInTheDocument();
         });
-
-    }
-
-    describe('avatar rendering', () => {
-        avatarRenderingGroup1();
-        avatarRenderingGroup2();
     });
 
     describe('overlap indicator', () => {

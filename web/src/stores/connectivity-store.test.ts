@@ -15,8 +15,17 @@ function resetStore() {
     });
 }
 
-function useconnectivitystoreGroup1() {
-describe('check() — successful response', () => {
+describe('useConnectivityStore — part 1', () => {
+    beforeEach(() => {
+        resetStore();
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    describe('check() — successful response', () => {
         it('sets status to "online" on successful fetch', async () => {
             vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
 
@@ -58,10 +67,19 @@ describe('check() — successful response', () => {
         });
     });
 
-}
+});
 
-function useconnectivitystoreGroup2() {
-describe('check() — failed response (non-ok HTTP)', () => {
+describe('useConnectivityStore — part 2', () => {
+    beforeEach(() => {
+        resetStore();
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    describe('check() — failed response (non-ok HTTP)', () => {
         it('increments consecutiveFailures on non-ok response', async () => {
             vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
 
@@ -101,10 +119,7 @@ describe('check() — failed response (non-ok HTTP)', () => {
         });
     });
 
-}
-
-function useconnectivitystoreGroup3() {
-describe('check() — fetch throws (network error)', () => {
+    describe('check() — fetch throws (network error)', () => {
         it('increments consecutiveFailures on thrown error', async () => {
             vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
@@ -133,10 +148,19 @@ describe('check() — fetch throws (network error)', () => {
         });
     });
 
-}
+});
 
-function useconnectivitystoreGroup4() {
-describe('check() — recovery from offline', () => {
+describe('useConnectivityStore — part 3', () => {
+    beforeEach(() => {
+        resetStore();
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    describe('check() — recovery from offline', () => {
         it('resets consecutiveFailures on recovery after being offline', async () => {
             // Prime with failures
             vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
@@ -153,10 +177,19 @@ describe('check() — recovery from offline', () => {
         });
     });
 
-}
+});
 
-function useconnectivitystoreGroup5() {
-describe('startPolling()', () => {
+describe('useConnectivityStore — part 4', () => {
+    beforeEach(() => {
+        resetStore();
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    describe('startPolling() — part 1', () => {
         it('calls check() immediately on start', async () => {
             const mockFetch = vi.fn().mockResolvedValue({ ok: true });
             vi.stubGlobal('fetch', mockFetch);
@@ -227,7 +260,22 @@ describe('startPolling()', () => {
             stop();
         });
 
-        async function testAppliesExponentialBackoffForOffline() {
+    });
+
+});
+
+describe('useConnectivityStore — part 5', () => {
+    beforeEach(() => {
+        resetStore();
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    describe('startPolling() — part 2', () => {
+        it('applies exponential backoff for offline polls (3s, 6s, 12s, 24s, capped at 30s)', async () => {
             useConnectivityStore.setState({
                 status: 'offline',
                 consecutiveFailures: 2,
@@ -282,11 +330,24 @@ describe('startPolling()', () => {
             expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 5);
 
             stop();
-        
-        }
-        it('applies exponential backoff for offline polls (3s, 6s, 12s, 24s, capped at 30s)', async () => { await testAppliesExponentialBackoffForOffline(); });
+        });
 
-        async function testResetsBackoffWhenRecoveringTo() {
+    });
+
+});
+
+describe('useConnectivityStore — part 6', () => {
+    beforeEach(() => {
+        resetStore();
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    describe('startPolling() — part 3', () => {
+        it('resets backoff when recovering to online', async () => {
             useConnectivityStore.setState({
                 status: 'offline',
                 consecutiveFailures: 2,
@@ -354,10 +415,23 @@ describe('startPolling()', () => {
             expect(mockFetch.mock.calls.length).toBeGreaterThan(callsAfterOffline);
 
             stop();
-        
-        }
-        it('resets backoff when recovering to online', async () => { await testResetsBackoffWhenRecoveringTo(); });
+        });
 
+    });
+
+});
+
+describe('useConnectivityStore — part 7', () => {
+    beforeEach(() => {
+        resetStore();
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    describe('startPolling() — part 4', () => {
         it('returns a cleanup function that stops polling', async () => {
             const mockFetch = vi.fn().mockResolvedValue({ ok: true });
             vi.stubGlobal('fetch', mockFetch);
@@ -376,24 +450,7 @@ describe('startPolling()', () => {
             await vi.advanceTimersByTimeAsync(60_000);
             expect(mockFetch.mock.calls.length).toBe(callCountAtStop);
         });
+
     });
 
-}
-
-describe('useConnectivityStore', () => {
-beforeEach(() => {
-        resetStore();
-        vi.useFakeTimers();
-    });
-
-afterEach(() => {
-        vi.restoreAllMocks();
-        vi.useRealTimers();
-    });
-
-    useconnectivitystoreGroup1();
-    useconnectivitystoreGroup2();
-    useconnectivitystoreGroup3();
-    useconnectivitystoreGroup4();
-    useconnectivitystoreGroup5();
 });

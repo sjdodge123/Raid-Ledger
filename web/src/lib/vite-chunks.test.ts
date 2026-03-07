@@ -17,35 +17,32 @@ const manualChunks: Record<string, string[]> = {
     'socket': ['socket.io-client'],
 };
 
-function viteManualChunksConfigurationROK343Group1() {
-it('defines exactly 5 vendor chunks', () => {
+describe('vite manualChunks configuration (ROK-343) — part 1', () => {
+    it('defines exactly 5 vendor chunks', () => {
         expect(Object.keys(manualChunks).length).toBe(5);
     });
 
-it('defines react-vendor chunk', () => {
+    it('defines react-vendor chunk', () => {
         expect(manualChunks).toHaveProperty('react-vendor');
     });
 
-it('defines query-vendor chunk', () => {
+    it('defines query-vendor chunk', () => {
         expect(manualChunks).toHaveProperty('query-vendor');
     });
 
-it('defines calendar-vendor chunk', () => {
+    it('defines calendar-vendor chunk', () => {
         expect(manualChunks).toHaveProperty('calendar-vendor');
     });
 
-it('defines sentry chunk', () => {
+    it('defines sentry chunk', () => {
         expect(manualChunks).toHaveProperty('sentry');
     });
 
-it('defines socket chunk', () => {
+    it('defines socket chunk', () => {
         expect(manualChunks).toHaveProperty('socket');
     });
 
-}
-
-function viteManualChunksConfigurationROK343Group2() {
-describe('react-vendor chunk', () => {
+    describe('react-vendor chunk', () => {
         const chunk = manualChunks['react-vendor'];
 
         it('includes react', () => {
@@ -65,10 +62,7 @@ describe('react-vendor chunk', () => {
         });
     });
 
-}
-
-function viteManualChunksConfigurationROK343Group3() {
-describe('query-vendor chunk', () => {
+    describe('query-vendor chunk', () => {
         const chunk = manualChunks['query-vendor'];
 
         it('includes @tanstack/react-query', () => {
@@ -84,10 +78,10 @@ describe('query-vendor chunk', () => {
         });
     });
 
-}
+});
 
-function viteManualChunksConfigurationROK343Group4() {
-describe('calendar-vendor chunk', () => {
+describe('vite manualChunks configuration (ROK-343) — part 2', () => {
+    describe('calendar-vendor chunk', () => {
         const chunk = manualChunks['calendar-vendor'];
 
         it('includes react-big-calendar', () => {
@@ -103,7 +97,7 @@ describe('calendar-vendor chunk', () => {
         });
     });
 
-describe('sentry chunk', () => {
+    describe('sentry chunk', () => {
         const chunk = manualChunks['sentry'];
 
         it('includes @sentry/react', () => {
@@ -115,10 +109,7 @@ describe('sentry chunk', () => {
         });
     });
 
-}
-
-function viteManualChunksConfigurationROK343Group5() {
-describe('socket chunk', () => {
+    describe('socket chunk', () => {
         const chunk = manualChunks['socket'];
 
         it('includes socket.io-client', () => {
@@ -130,35 +121,23 @@ describe('socket chunk', () => {
         });
     });
 
-it('no module appears in more than one chunk', () => {
+    it('no module appears in more than one chunk', () => {
         const allModules = Object.values(manualChunks).flat();
         const unique = new Set(allModules);
         expect(unique.size).toBe(allModules.length);
     });
 
-it('chunk names follow kebab-case naming convention', () => {
+    it('chunk names follow kebab-case naming convention', () => {
         const kebabCase = /^[a-z]+(-[a-z]+)*$/;
         for (const name of Object.keys(manualChunks)) {
             expect(name).toMatch(kebabCase);
         }
     });
 
-}
-
-function viteManualChunksConfigurationROK343Group6() {
-it('all chunk module arrays are non-empty', () => {
+    it('all chunk module arrays are non-empty', () => {
         for (const [name, modules] of Object.entries(manualChunks)) {
             expect(modules.length, `chunk ${name} should not be empty`).toBeGreaterThan(0);
         }
     });
 
-}
-
-describe('vite manualChunks configuration (ROK-343)', () => {
-    viteManualChunksConfigurationROK343Group1();
-    viteManualChunksConfigurationROK343Group2();
-    viteManualChunksConfigurationROK343Group3();
-    viteManualChunksConfigurationROK343Group4();
-    viteManualChunksConfigurationROK343Group5();
-    viteManualChunksConfigurationROK343Group6();
 });

@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { GameTimeGrid } from './GameTimeGrid';
 import type { GameTimeSlot, HeatmapCell } from './GameTimeGrid';
 
-describe('GameTimeGrid', () => {
+describe('GameTimeGrid — part 1', () => {
     it('renders 7 day headers (Sunday first)', () => {
         render(<GameTimeGrid slots={[]} />);
         expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sun');
@@ -66,6 +66,9 @@ describe('GameTimeGrid', () => {
         ]);
     });
 
+});
+
+describe('GameTimeGrid — part 2', () => {
     it('click toggles cell from available to inactive (erase)', () => {
         const slots: GameTimeSlot[] = [
             { dayOfWeek: 1, hour: 10, status: 'available' },
@@ -138,7 +141,11 @@ describe('GameTimeGrid', () => {
         expect(cells).toHaveLength(7 * 18);
     });
 
-const mockEvents = [
+});
+
+describe('GameTimeGrid — part 3', () => {
+    describe('event block overlays', () => {
+        const mockEvents = [
             {
                 eventId: 1,
                 title: 'Raid Night',
@@ -152,14 +159,14 @@ const mockEvents = [
                 endHour: 21,
             },
         ];
-    function eventBlockOverlaysGroup1() {
-it('renders event block overlays when events prop is provided', () => {
+
+        it('renders event block overlays when events prop is provided', () => {
             render(<GameTimeGrid slots={[]} events={mockEvents} />);
             expect(screen.getByTestId('event-block-1-0')).toBeInTheDocument();
             expect(screen.getByText('Raid Night')).toBeInTheDocument();
         });
 
-it('clicking event block calls onEventClick', () => {
+        it('clicking event block calls onEventClick', () => {
             const onEventClick = vi.fn();
             render(<GameTimeGrid slots={[]} events={mockEvents} onEventClick={onEventClick} />);
 
@@ -168,24 +175,18 @@ it('clicking event block calls onEventClick', () => {
             expect(onEventClick.mock.calls[0][0]).toMatchObject({ eventId: 1 });
         });
 
-    }
-
-    function eventBlockOverlaysGroup2() {
-it('event blocks do not interfere with drag-to-paint', () => {
+        it('event blocks do not interfere with drag-to-paint', () => {
             const onChange = vi.fn();
             render(<GameTimeGrid slots={[]} events={mockEvents} onChange={onChange} />);
 
             fireEvent.pointerDown(screen.getByTestId('cell-3-10'));
             expect(onChange).toHaveBeenCalledTimes(1);
         });
-
-    }
-
-    describe('event block overlays', () => {
-        eventBlockOverlaysGroup1();
-        eventBlockOverlaysGroup2();
     });
 
+});
+
+describe('GameTimeGrid — part 4', () => {
     describe('preview block overlays', () => {
         it('renders preview blocks', () => {
             const previewBlocks = [
@@ -215,8 +216,11 @@ it('event blocks do not interfere with drag-to-paint', () => {
         });
     });
 
-    function fulldaynamesPropROK301Group1() {
-it('renders abbreviated day names by default', () => {
+});
+
+describe('GameTimeGrid — part 5', () => {
+    describe('fullDayNames prop (ROK-301)', () => {
+        it('renders abbreviated day names by default', () => {
             render(<GameTimeGrid slots={[]} />);
 
             expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sun');
@@ -228,7 +232,7 @@ it('renders abbreviated day names by default', () => {
             expect(screen.getByTestId('day-header-6')).toHaveTextContent('Sat');
         });
 
-it('renders full day names when fullDayNames=true', () => {
+        it('renders full day names when fullDayNames=true', () => {
             render(<GameTimeGrid slots={[]} fullDayNames={true} />);
 
             expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sunday');
@@ -240,10 +244,7 @@ it('renders full day names when fullDayNames=true', () => {
             expect(screen.getByTestId('day-header-6')).toHaveTextContent('Saturday');
         });
 
-    }
-
-    function fulldaynamesPropROK301Group2() {
-it('renders abbreviated day names when fullDayNames=false', () => {
+        it('renders abbreviated day names when fullDayNames=false', () => {
             render(<GameTimeGrid slots={[]} fullDayNames={false} />);
 
             expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sun');
@@ -251,7 +252,7 @@ it('renders abbreviated day names when fullDayNames=false', () => {
             expect(screen.getByTestId('day-header-6')).toHaveTextContent('Sat');
         });
 
-it('full day names work with weekStart dates', () => {
+        it('full day names work with weekStart dates', () => {
             render(<GameTimeGrid slots={[]} fullDayNames={true} weekStart="2026-02-08" />);
 
             const header0 = screen.getByTestId('day-header-0');
@@ -259,16 +260,13 @@ it('full day names work with weekStart dates', () => {
             // Should also show the date (2/8)
             expect(header0).toHaveTextContent('2/8');
         });
-
-    }
-
-    describe('fullDayNames prop (ROK-301)', () => {
-        fulldaynamesPropROK301Group1();
-        fulldaynamesPropROK301Group2();
     });
 
     // === ROK-370: Fix reschedule modal grid click offset ===
 
+});
+
+describe('GameTimeGrid — part 6', () => {
     describe('compact prop (ROK-370)', () => {
         it('compact mode does not affect slot status rendering', () => {
             const slots: GameTimeSlot[] = [
@@ -321,6 +319,9 @@ it('full day names work with weekStart dates', () => {
         });
     });
 
+});
+
+describe('GameTimeGrid — part 7', () => {
     describe('heatmap overlay with compact grid (ROK-370)', () => {
         const heatmapCells: HeatmapCell[] = [
             { dayOfWeek: 0, hour: 10, availableCount: 3, totalCount: 4 },
@@ -373,4 +374,5 @@ it('full day names work with weekStart dates', () => {
             expect(screen.queryByTestId('cell-0-18')).not.toBeInTheDocument();
         });
     });
+
 });

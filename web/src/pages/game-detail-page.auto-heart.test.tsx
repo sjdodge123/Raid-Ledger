@@ -110,8 +110,25 @@ function renderDetailPage(gameId = '42') {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-function gamedetailpageDiscordAutoHeartTooltipGroup1() {
-it('shows title tooltip when source is discord', () => {
+describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — AC #4: Tooltip on discord-sourced hearts', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+            data: mockGame,
+            isLoading: false,
+            error: null,
+        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+
+        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
+            isAuthenticated: true,
+        } as ReturnType<typeof useAuthHook.useAuth>);
+    });
+
+    // ── AC #4: Tooltip on discord-sourced hearts ─────────────────────────────
+
+    it('shows title tooltip when source is discord', () => {
         vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
             wantToPlay: true,
             count: 3,
@@ -131,10 +148,7 @@ it('shows title tooltip when source is discord', () => {
         );
     });
 
-}
-
-function gamedetailpageDiscordAutoHeartTooltipGroup2() {
-it('does NOT show tooltip when source is manual', () => {
+    it('does NOT show tooltip when source is manual', () => {
         vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
             wantToPlay: true,
             count: 1,
@@ -151,10 +165,25 @@ it('does NOT show tooltip when source is manual', () => {
         expect(heartButton).not.toHaveAttribute('title');
     });
 
-}
+});
 
-function gamedetailpageDiscordAutoHeartTooltipGroup3() {
-it('does NOT show tooltip when source is undefined (not hearted)', () => {
+describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Button text (regression)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+            data: mockGame,
+            isLoading: false,
+            error: null,
+        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+
+        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
+            isAuthenticated: true,
+        } as ReturnType<typeof useAuthHook.useAuth>);
+    });
+
+    it('does NOT show tooltip when source is undefined (not hearted)', () => {
         vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
             wantToPlay: false,
             count: 0,
@@ -171,10 +200,7 @@ it('does NOT show tooltip when source is undefined (not hearted)', () => {
         expect(heartButton).not.toHaveAttribute('title');
     });
 
-}
-
-function gamedetailpageDiscordAutoHeartTooltipGroup4() {
-it('does NOT show tooltip when source is steam', () => {
+    it('does NOT show tooltip when source is steam', () => {
         vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
             wantToPlay: true,
             count: 2,
@@ -192,10 +218,9 @@ it('does NOT show tooltip when source is steam', () => {
         expect(heartButton.title).not.toBe('Auto-hearted based on your playtime');
     });
 
-}
+    // ── Button text (regression) ─────────────────────────────────────────────
 
-function gamedetailpageDiscordAutoHeartTooltipGroup5() {
-it('shows "Remove from List" when wantToPlay is true', () => {
+    it('shows "Remove from List" when wantToPlay is true', () => {
         vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
             wantToPlay: true,
             count: 1,
@@ -210,10 +235,25 @@ it('shows "Remove from List" when wantToPlay is true', () => {
         expect(screen.getByRole('button', { name: /remove from list/i })).toBeInTheDocument();
     });
 
-}
+});
 
-function gamedetailpageDiscordAutoHeartTooltipGroup6() {
-it('shows "Want to Play" when wantToPlay is false', () => {
+describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Heart button not rendered when not authenticated', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+            data: mockGame,
+            isLoading: false,
+            error: null,
+        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+
+        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
+            isAuthenticated: true,
+        } as ReturnType<typeof useAuthHook.useAuth>);
+    });
+
+    it('shows "Want to Play" when wantToPlay is false', () => {
         vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
             wantToPlay: false,
             count: 0,
@@ -228,10 +268,9 @@ it('shows "Want to Play" when wantToPlay is false', () => {
         expect(screen.getByRole('button', { name: /want to play/i })).toBeInTheDocument();
     });
 
-}
+    // ── Heart button not rendered when not authenticated ─────────────────────
 
-function gamedetailpageDiscordAutoHeartTooltipGroup7() {
-it('does not render the heart button when user is not authenticated', () => {
+    it('does not render the heart button when user is not authenticated', () => {
         vi.mocked(useAuthHook.useAuth).mockReturnValue({
             user: null,
             isAuthenticated: false,
@@ -253,77 +292,12 @@ it('does not render the heart button when user is not authenticated', () => {
         expect(screen.queryByRole('button', { name: /remove from list/i })).not.toBeInTheDocument();
     });
 
-}
-
-describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4)', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
-            data: mockGame,
-            isLoading: false,
-            error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
-
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
-            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
-            isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
-    });
-
-    gamedetailpageDiscordAutoHeartTooltipGroup1();
-    gamedetailpageDiscordAutoHeartTooltipGroup2();
-    gamedetailpageDiscordAutoHeartTooltipGroup3();
-    gamedetailpageDiscordAutoHeartTooltipGroup4();
-    gamedetailpageDiscordAutoHeartTooltipGroup5();
-    gamedetailpageDiscordAutoHeartTooltipGroup6();
-    gamedetailpageDiscordAutoHeartTooltipGroup7();
 });
 
 // ─── GameDetailPage — loading and error states (regression) ─────────────────
 
-function gamedetailpageLoadingAndErrorStatesGroup1() {
-it('shows loading skeleton when game data is loading', () => {
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
-            data: undefined,
-            isLoading: true,
-            error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
-
-        const { container } = renderDetailPage();
-        // Skeleton has animate-pulse class
-        expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
-    });
-
-it('shows error state when game is not found', () => {
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
-            data: undefined,
-            isLoading: false,
-            error: new Error('Not found'),
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
-
-        renderDetailPage();
-        expect(screen.getByText(/game not found/i)).toBeInTheDocument();
-    });
-
-}
-
-function gamedetailpageLoadingAndErrorStatesGroup2() {
-it('renders game name when data is available', () => {
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
-            data: mockGame,
-            isLoading: false,
-            error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
-
-        renderDetailPage();
-        expect(screen.getByText('Valheim')).toBeInTheDocument();
-    });
-
-}
-
 describe('GameDetailPage — loading and error states', () => {
-beforeEach(() => {
+    beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(useAuthHook.useAuth).mockReturnValue({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
@@ -340,6 +314,37 @@ beforeEach(() => {
         });
     });
 
-    gamedetailpageLoadingAndErrorStatesGroup1();
-    gamedetailpageLoadingAndErrorStatesGroup2();
+    it('shows loading skeleton when game data is loading', () => {
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+            data: undefined,
+            isLoading: true,
+            error: null,
+        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+
+        const { container } = renderDetailPage();
+        // Skeleton has animate-pulse class
+        expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    });
+
+    it('shows error state when game is not found', () => {
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: new Error('Not found'),
+        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+
+        renderDetailPage();
+        expect(screen.getByText(/game not found/i)).toBeInTheDocument();
+    });
+
+    it('renders game name when data is available', () => {
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+            data: mockGame,
+            isLoading: false,
+            error: null,
+        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+
+        renderDetailPage();
+        expect(screen.getByText('Valheim')).toBeInTheDocument();
+    });
 });

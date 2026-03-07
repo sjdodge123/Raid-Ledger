@@ -91,7 +91,7 @@ function setupDefaultMocks(
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('UserProfilePage — ActivitySection (ROK-443)', () => {
+describe('UserProfilePage — ActivitySection (ROK-443) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -158,6 +158,13 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
         });
     });
 
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('loading state', () => {
         it('shows loading skeletons when activity is loading', () => {
             const profile = createMockProfile();
@@ -176,8 +183,15 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
         });
     });
 
-    function activityEntriesGroup1() {
-it('renders game name for each activity entry', () => {
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('activity entries — part 1', () => {
+        it('renders game name for each activity entry', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -197,10 +211,7 @@ it('renders game name for each activity entry', () => {
             expect(screen.getByText('Elden Ring')).toBeInTheDocument();
         });
 
-    }
-
-    function activityEntriesGroup2() {
-it('renders playtime as formatted string', () => {
+        it('renders playtime as formatted string', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -219,10 +230,7 @@ it('renders playtime as formatted string', () => {
             expect(screen.getByText('2h')).toBeInTheDocument();
         });
 
-    }
-
-    function activityEntriesGroup3() {
-it('renders playtime with hours and minutes', () => {
+        it('renders playtime with hours and minutes', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -241,10 +249,17 @@ it('renders playtime with hours and minutes', () => {
             expect(screen.getByText('1h 30m')).toBeInTheDocument();
         });
 
-    }
+    });
 
-    function activityEntriesGroup4() {
-it('renders playtime in minutes only for sub-hour entries', () => {
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('activity entries — part 2', () => {
+        it('renders playtime in minutes only for sub-hour entries', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -263,10 +278,7 @@ it('renders playtime in minutes only for sub-hour entries', () => {
             expect(screen.getByText('30m')).toBeInTheDocument();
         });
 
-    }
-
-    function activityEntriesGroup5() {
-it('shows Most Played badge on first entry', () => {
+        it('shows Most Played badge on first entry', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -285,10 +297,7 @@ it('shows Most Played badge on first entry', () => {
             expect(screen.getByText('Most Played')).toBeInTheDocument();
         });
 
-    }
-
-    function activityEntriesGroup6() {
-it('does not show Most Played badge when isMostPlayed is false', () => {
+        it('does not show Most Played badge when isMostPlayed is false', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -306,10 +315,17 @@ it('does not show Most Played badge when isMostPlayed is false', () => {
             expect(screen.queryByText('Most Played')).not.toBeInTheDocument();
         });
 
-    }
+    });
 
-    function activityEntriesGroup7() {
-it('links each activity entry to the game detail page', () => {
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('activity entries — part 3', () => {
+        it('links each activity entry to the game detail page', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -328,10 +344,7 @@ it('links each activity entry to the game detail page', () => {
             expect(link).toHaveAttribute('href', '/games/42');
         });
 
-    }
-
-    function activityEntriesGroup8() {
-it('shows placeholder box when coverUrl is null', () => {
+        it('shows placeholder box when coverUrl is null', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -350,10 +363,7 @@ it('shows placeholder box when coverUrl is null', () => {
             expect(screen.getByText('?')).toBeInTheDocument();
         });
 
-    }
-
-    function activityEntriesGroup9() {
-it('shows game cover image when coverUrl is present', () => {
+        it('shows game cover image when coverUrl is present', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -378,22 +388,17 @@ it('shows game cover image when coverUrl is present', () => {
             expect(img).toHaveAttribute('src', 'https://example.com/cover.jpg');
         });
 
-    }
-
-    describe('activity entries', () => {
-        activityEntriesGroup1();
-        activityEntriesGroup2();
-        activityEntriesGroup3();
-        activityEntriesGroup4();
-        activityEntriesGroup5();
-        activityEntriesGroup6();
-        activityEntriesGroup7();
-        activityEntriesGroup8();
-        activityEntriesGroup9();
     });
 
-    function periodSelectorGroup1() {
-it('calls useUserActivity with the correct period initially (week)', () => {
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 6', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('period selector', () => {
+        it('calls useUserActivity with the correct period initially (week)', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
                 data: profile,
@@ -409,10 +414,7 @@ it('calls useUserActivity with the correct period initially (week)', () => {
             expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(1, 'week');
         });
 
-    }
-
-    function periodSelectorGroup2() {
-it('changes period when a different button is clicked', async () => {
+        it('changes period when a different button is clicked', async () => {
             const user = userEvent.setup();
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
@@ -429,10 +431,7 @@ it('changes period when a different button is clicked', async () => {
             expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(1, 'month');
         });
 
-    }
-
-    function periodSelectorGroup3() {
-it('changes period to All Time', async () => {
+        it('changes period to All Time', async () => {
             const user = userEvent.setup();
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
@@ -448,12 +447,6 @@ it('changes period to All Time', async () => {
 
             expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(1, 'all');
         });
-
-    }
-
-    describe('period selector', () => {
-        periodSelectorGroup1();
-        periodSelectorGroup2();
-        periodSelectorGroup3();
     });
+
 });

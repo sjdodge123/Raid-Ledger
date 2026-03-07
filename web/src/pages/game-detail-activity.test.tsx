@@ -142,7 +142,7 @@ function setupDefaultMocks(
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -198,8 +198,15 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
         });
     });
 
-    function nowPlayingGroup1() {
-it('shows now-playing count when players are active', () => {
+});
+
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('now playing', () => {
+        it('shows now-playing count when players are active', () => {
             setupDefaultMocks(
                 { topPlayers: [createMockTopPlayer()], totalSeconds: 7200 },
                 { players: [createMockNowPlaying()], count: 1 },
@@ -210,10 +217,7 @@ it('shows now-playing count when players are active', () => {
             expect(screen.getByText('1 playing now')).toBeInTheDocument();
         });
 
-    }
-
-    function nowPlayingGroup2() {
-it('shows correct count for multiple active players', () => {
+        it('shows correct count for multiple active players', () => {
             setupDefaultMocks(
                 { topPlayers: [createMockTopPlayer()], totalSeconds: 7200 },
                 {
@@ -231,10 +235,7 @@ it('shows correct count for multiple active players', () => {
             expect(screen.getByText('3 playing now')).toBeInTheDocument();
         });
 
-    }
-
-    function nowPlayingGroup3() {
-it('does not show now-playing section when count is 0', () => {
+        it('does not show now-playing section when count is 0', () => {
             setupDefaultMocks(
                 { topPlayers: [createMockTopPlayer()], totalSeconds: 7200 },
                 { players: [], count: 0 },
@@ -245,7 +246,7 @@ it('does not show now-playing section when count is 0', () => {
             expect(screen.queryByText(/playing now/)).not.toBeInTheDocument();
         });
 
-it('links now-playing avatars to user profiles', () => {
+        it('links now-playing avatars to user profiles', () => {
             setupDefaultMocks(
                 { topPlayers: [createMockTopPlayer()], totalSeconds: 7200 },
                 { players: [createMockNowPlaying({ userId: 99 })], count: 1 },
@@ -257,13 +258,13 @@ it('links now-playing avatars to user profiles', () => {
             const playerLink = links.find(l => l.getAttribute('href') === '/users/99');
             expect(playerLink).toBeTruthy();
         });
+    });
 
-    }
+});
 
-    describe('now playing', () => {
-        nowPlayingGroup1();
-        nowPlayingGroup2();
-        nowPlayingGroup3();
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
     describe('community playtime', () => {
@@ -299,8 +300,15 @@ it('links now-playing avatars to user profiles', () => {
         });
     });
 
-    function topPlayersGroup1() {
-it('renders player names in the leaderboard', () => {
+});
+
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('top players', () => {
+        it('renders player names in the leaderboard', () => {
             const players = [
                 createMockTopPlayer({ userId: 1, username: 'TopPlayer', totalSeconds: 10000 }),
                 createMockTopPlayer({ userId: 2, username: 'RunnerUp', totalSeconds: 5000 }),
@@ -313,7 +321,7 @@ it('renders player names in the leaderboard', () => {
             expect(screen.getByText('RunnerUp')).toBeInTheDocument();
         });
 
-it('renders rank numbers for top players', () => {
+        it('renders rank numbers for top players', () => {
             const players = [
                 createMockTopPlayer({ userId: 1, username: 'First', totalSeconds: 10000 }),
                 createMockTopPlayer({ userId: 2, username: 'Second', totalSeconds: 5000 }),
@@ -326,10 +334,7 @@ it('renders rank numbers for top players', () => {
             expect(screen.getByText('#2')).toBeInTheDocument();
         });
 
-    }
-
-    function topPlayersGroup2() {
-it('renders formatted playtime for each player', () => {
+        it('renders formatted playtime for each player', () => {
             const players = [
                 createMockTopPlayer({ userId: 1, username: 'HeavyPlayer', totalSeconds: 7200 }),
             ];
@@ -342,7 +347,7 @@ it('renders formatted playtime for each player', () => {
             expect(twoHourTexts.length).toBeGreaterThanOrEqual(1);
         });
 
-it('links each player row to their profile', () => {
+        it('links each player row to their profile', () => {
             const players = [
                 createMockTopPlayer({ userId: 77, username: 'LinkedPlayer', totalSeconds: 3600 }),
             ];
@@ -354,10 +359,7 @@ it('links each player row to their profile', () => {
             expect(link).toHaveAttribute('href', '/users/77');
         });
 
-    }
-
-    function topPlayersGroup3() {
-it('renders player playtime in minutes for sub-hour entries', () => {
+        it('renders player playtime in minutes for sub-hour entries', () => {
             const players = [
                 createMockTopPlayer({ userId: 1, username: 'QuickPlayer', totalSeconds: 1800 }),
             ];
@@ -367,13 +369,13 @@ it('renders player playtime in minutes for sub-hour entries', () => {
 
             expect(screen.getByText('30m')).toBeInTheDocument();
         });
+    });
 
-    }
+});
 
-    describe('top players', () => {
-        topPlayersGroup1();
-        topPlayersGroup2();
-        topPlayersGroup3();
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
     describe('period selector', () => {
@@ -411,4 +413,5 @@ it('renders player playtime in minutes for sub-hour entries', () => {
             expect(useGamesDiscoverHook.useGameActivity).toHaveBeenCalledWith(42, 'all');
         });
     });
+
 });

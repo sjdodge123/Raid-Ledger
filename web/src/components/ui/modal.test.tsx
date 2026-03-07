@@ -3,11 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { axe } from 'vitest-axe';
 import { Modal } from './modal';
 
-describe('Modal', () => {
+describe('Modal — part 1', () => {
     beforeEach(() => {
         document.body.style.overflow = '';
     });
-
     afterEach(() => {
         document.body.style.overflow = '';
     });
@@ -48,8 +47,16 @@ describe('Modal', () => {
         expect(screen.getByText('My Dialog Title')).toBeInTheDocument();
     });
 
-    function ariaSemanticsROK342Group1() {
-it('dialog has role="dialog"', () => {
+});
+
+describe('ARIA semantics (ROK-342) — part 1', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+        it('dialog has role="dialog"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="ARIA Test">
                     <p>Content</p>
@@ -59,7 +66,7 @@ it('dialog has role="dialog"', () => {
             expect(dialog).toHaveAttribute('role', 'dialog');
         });
 
-it('dialog has aria-modal="true"', () => {
+        it('dialog has aria-modal="true"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="ARIA Test">
                     <p>Content</p>
@@ -69,10 +76,7 @@ it('dialog has aria-modal="true"', () => {
             expect(dialog).toHaveAttribute('aria-modal', 'true');
         });
 
-    }
-
-    function ariaSemanticsROK342Group2() {
-it('dialog has aria-labelledby pointing to title element', () => {
+        it('dialog has aria-labelledby pointing to title element', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Labeled Title">
                     <p>Content</p>
@@ -87,10 +91,7 @@ it('dialog has aria-labelledby pointing to title element', () => {
             expect(titleEl?.textContent).toBe('Labeled Title');
         });
 
-    }
-
-    function ariaSemanticsROK342Group3() {
-it('title element is an h2', () => {
+        it('title element is an h2', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="H2 Title">
                     <p>Content</p>
@@ -102,7 +103,7 @@ it('title element is an h2', () => {
             expect(titleEl?.tagName).toBe('H2');
         });
 
-it('close button has aria-label="Close modal"', () => {
+        it('close button has aria-label="Close modal"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Test">
                     <p>Content</p>
@@ -112,10 +113,18 @@ it('close button has aria-label="Close modal"', () => {
             expect(closeBtn).toBeInTheDocument();
         });
 
-    }
+});
 
-    function ariaSemanticsROK342Group4() {
-it('backdrop has aria-hidden="true"', () => {
+describe('Modal — part 3', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+
+    describe('ARIA semantics (ROK-342) — part 2', () => {
+        it('backdrop has aria-hidden="true"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Test">
                     <p>Content</p>
@@ -126,17 +135,10 @@ it('backdrop has aria-hidden="true"', () => {
             expect(backdrop).toBeInTheDocument();
         });
 
-    }
-
-    describe('ARIA semantics (ROK-342)', () => {
-        ariaSemanticsROK342Group1();
-        ariaSemanticsROK342Group2();
-        ariaSemanticsROK342Group3();
-        ariaSemanticsROK342Group4();
     });
 
-    function escapeKeyClosesModalROKGroup1() {
-it('calls onClose when Escape key is pressed', () => {
+    describe('Escape key closes modal (ROK-342 AC)', () => {
+        it('calls onClose when Escape key is pressed', () => {
             const onClose = vi.fn();
             render(
                 <Modal isOpen={true} onClose={onClose} title="Escape Test">
@@ -147,7 +149,7 @@ it('calls onClose when Escape key is pressed', () => {
             expect(onClose).toHaveBeenCalledOnce();
         });
 
-it('does not call onClose for non-Escape keys', () => {
+        it('does not call onClose for non-Escape keys', () => {
             const onClose = vi.fn();
             render(
                 <Modal isOpen={true} onClose={onClose} title="Escape Test">
@@ -159,10 +161,7 @@ it('does not call onClose for non-Escape keys', () => {
             expect(onClose).not.toHaveBeenCalled();
         });
 
-    }
-
-    function escapeKeyClosesModalROKGroup2() {
-it('does not register Escape listener when modal is closed', () => {
+        it('does not register Escape listener when modal is closed', () => {
             const onClose = vi.fn();
             render(
                 <Modal isOpen={false} onClose={onClose} title="Closed Modal">
@@ -172,12 +171,16 @@ it('does not register Escape listener when modal is closed', () => {
             fireEvent.keyDown(document, { key: 'Escape' });
             expect(onClose).not.toHaveBeenCalled();
         });
+    });
 
-    }
+});
 
-    describe('Escape key closes modal (ROK-342 AC)', () => {
-        escapeKeyClosesModalROKGroup1();
-        escapeKeyClosesModalROKGroup2();
+describe('Modal — part 4', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
     });
 
     describe('backdrop click closes modal', () => {
@@ -208,8 +211,18 @@ it('does not register Escape listener when modal is closed', () => {
         });
     });
 
-    function bodyScrollLockingGroup1() {
-it('locks body scroll when modal opens', () => {
+});
+
+describe('Modal — part 5', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+
+    describe('body scroll locking', () => {
+        it('locks body scroll when modal opens', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Scroll Test">
                     <p>Content</p>
@@ -218,7 +231,7 @@ it('locks body scroll when modal opens', () => {
             expect(document.body.style.overflow).toBe('hidden');
         });
 
-it('restores body scroll when modal closes', () => {
+        it('restores body scroll when modal closes', () => {
             const { rerender } = render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Scroll Test">
                     <p>Content</p>
@@ -234,10 +247,7 @@ it('restores body scroll when modal closes', () => {
             expect(document.body.style.overflow).toBe('');
         });
 
-    }
-
-    function bodyScrollLockingGroup2() {
-it('restores body scroll on unmount', () => {
+        it('restores body scroll on unmount', () => {
             const { unmount } = render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Scroll Test">
                     <p>Content</p>
@@ -246,12 +256,16 @@ it('restores body scroll on unmount', () => {
             unmount();
             expect(document.body.style.overflow).toBe('');
         });
+    });
 
-    }
+});
 
-    describe('body scroll locking', () => {
-        bodyScrollLockingGroup1();
-        bodyScrollLockingGroup2();
+describe('Modal — part 6', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
     });
 
     describe('custom props', () => {
@@ -307,6 +321,16 @@ it('restores body scroll on unmount', () => {
         });
     });
 
+});
+
+describe('Modal — part 7', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+
     describe('accessibility', () => {
         it('has no accessibility violations when open', async () => {
             const { container } = render(
@@ -317,4 +341,5 @@ it('restores body scroll on unmount', () => {
             expect(await axe(container)).toHaveNoViolations();
         });
     });
+
 });

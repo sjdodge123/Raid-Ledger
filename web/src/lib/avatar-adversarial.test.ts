@@ -6,9 +6,9 @@ vi.mock('./config', () => ({
     API_BASE_URL: 'http://localhost:3000',
 }));
 
-describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
-    function malformedInvalidAvatarPreferenceObjectsGroup1() {
-it('falls through to default when preference type is an unrecognized string', () => {
+describe('resolveAvatar — adversarial edge cases (ROK-352) — part 1', () => {
+    describe('Malformed / invalid avatarPreference objects', () => {
+        it('falls through to default when preference type is an unrecognized string', () => {
             const user = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: '/avatars/custom.png',
@@ -23,10 +23,7 @@ it('falls through to default when preference type is an unrecognized string', ()
             });
         });
 
-    }
-
-    function malformedInvalidAvatarPreferenceObjectsGroup2() {
-it('falls through when avatarPreference has type="character" but no characterName', () => {
+        it('falls through when avatarPreference has type="character" but no characterName', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
@@ -44,10 +41,7 @@ it('falls through when avatarPreference has type="character" but no characterNam
             });
         });
 
-    }
-
-    function malformedInvalidAvatarPreferenceObjectsGroup3() {
-it('falls through when preferred character exists but has null avatarUrl', () => {
+        it('falls through when preferred character exists but has null avatarUrl', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
@@ -65,10 +59,7 @@ it('falls through when preferred character exists but has null avatarUrl', () =>
             });
         });
 
-    }
-
-    function malformedInvalidAvatarPreferenceObjectsGroup4() {
-it('falls through to initials when all sources unavailable and preference set', () => {
+        it('falls through to initials when all sources unavailable and preference set', () => {
             const user: AvatarUser = {
                 avatar: null,
                 customAvatarUrl: null,
@@ -80,18 +71,13 @@ it('falls through to initials when all sources unavailable and preference set', 
 
             expect(result).toEqual({ url: null, type: 'initials' });
         });
-
-    }
-
-    describe('Malformed / invalid avatarPreference objects', () => {
-        malformedInvalidAvatarPreferenceObjectsGroup1();
-        malformedInvalidAvatarPreferenceObjectsGroup2();
-        malformedInvalidAvatarPreferenceObjectsGroup3();
-        malformedInvalidAvatarPreferenceObjectsGroup4();
     });
 
-    function preferenceForCharacterThatNoGroup1() {
-it('falls through when character was deleted (no longer in characters array)', () => {
+});
+
+describe('resolveAvatar — adversarial edge cases (ROK-352) — part 2', () => {
+    describe('Preference for character that no longer exists', () => {
+        it('falls through when character was deleted (no longer in characters array)', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: '/avatars/custom.png',
@@ -107,10 +93,7 @@ it('falls through when character was deleted (no longer in characters array)', (
             });
         });
 
-    }
-
-    function preferenceForCharacterThatNoGroup2() {
-it('falls through when characters array is undefined and character pref has no avatarUrl', () => {
+        it('falls through when characters array is undefined and character pref has no avatarUrl', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
@@ -125,10 +108,7 @@ it('falls through when characters array is undefined and character pref has no a
             });
         });
 
-    }
-
-    function preferenceForCharacterThatNoGroup3() {
-it('falls through to discord when characters array is undefined and character pref set', () => {
+        it('falls through to discord when characters array is undefined and character pref set', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
@@ -143,10 +123,7 @@ it('falls through to discord when characters array is undefined and character pr
             });
         });
 
-    }
-
-    function preferenceForCharacterThatNoGroup4() {
-it('uses discord when preferred character is deleted and no custom fallback', () => {
+        it('uses discord when preferred character is deleted and no custom fallback', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
@@ -163,16 +140,11 @@ it('uses discord when preferred character is deleted and no custom fallback', ()
                 type: 'discord',
             });
         });
-
-    }
-
-    describe('Preference for character that no longer exists', () => {
-        preferenceForCharacterThatNoGroup1();
-        preferenceForCharacterThatNoGroup2();
-        preferenceForCharacterThatNoGroup3();
-        preferenceForCharacterThatNoGroup4();
     });
 
+});
+
+describe('resolveAvatar — adversarial edge cases (ROK-352) — part 3', () => {
     describe('Custom avatar URL edge cases', () => {
         it('custom preference builds correct full URL with API_BASE_URL prefix', () => {
             const user: AvatarUser = {
@@ -201,8 +173,8 @@ it('uses discord when preferred character is deleted and no custom fallback', ()
         });
     });
 
-    function preferenceDoesNotBypassGameIdGroup1() {
-it('preference lookup uses characterName not gameId — finds by name', () => {
+    describe('Preference does not bypass gameId-based character lookup', () => {
+        it('preference lookup uses characterName not gameId — finds by name', () => {
             const user: AvatarUser = {
                 avatar: null,
                 customAvatarUrl: null,
@@ -221,10 +193,7 @@ it('preference lookup uses characterName not gameId — finds by name', () => {
             });
         });
 
-    }
-
-    function preferenceDoesNotBypassGameIdGroup2() {
-it('preference is case-sensitive for characterName', () => {
+        it('preference is case-sensitive for characterName', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
@@ -241,18 +210,13 @@ it('preference is case-sensitive for characterName', () => {
                 type: 'discord',
             });
         });
-
-    }
-
-    describe('Preference does not bypass gameId-based character lookup', () => {
-        preferenceDoesNotBypassGameIdGroup1();
-        preferenceDoesNotBypassGameIdGroup2();
     });
+
 });
 
-describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
-    function avatarpreferencePassthroughGroup1() {
-it('passes through avatarPreference: null as null', () => {
+describe('toAvatarUser — adversarial edge cases (ROK-352) — part 1', () => {
+    describe('avatarPreference passthrough', () => {
+        it('passes through avatarPreference: null as null', () => {
             const result = toAvatarUser({
                 avatar: null,
                 discordId: null,
@@ -263,7 +227,7 @@ it('passes through avatarPreference: null as null', () => {
             expect(result.avatarPreference).toBeNull();
         });
 
-it('passes through avatarPreference: undefined as undefined', () => {
+        it('passes through avatarPreference: undefined as undefined', () => {
             const result = toAvatarUser({
                 avatar: null,
                 discordId: null,
@@ -273,10 +237,7 @@ it('passes through avatarPreference: undefined as undefined', () => {
             expect(result.avatarPreference).toBeUndefined();
         });
 
-    }
-
-    function avatarpreferencePassthroughGroup2() {
-it('passes through character preference with characterName intact', () => {
+        it('passes through character preference with characterName intact', () => {
             const result = toAvatarUser({
                 avatar: null,
                 discordId: 'discord-123',
@@ -287,7 +248,7 @@ it('passes through character preference with characterName intact', () => {
             expect(result.avatarPreference).toEqual({ type: 'character', characterName: 'Thrall' });
         });
 
-it('passes through discord preference intact', () => {
+        it('passes through discord preference intact', () => {
             const result = toAvatarUser({
                 avatar: 'abc123',
                 discordId: 'discord-123',
@@ -298,10 +259,7 @@ it('passes through discord preference intact', () => {
             expect(result.avatarPreference).toEqual({ type: 'discord' });
         });
 
-    }
-
-    function avatarpreferencePassthroughGroup3() {
-it('passes through custom preference intact', () => {
+        it('passes through custom preference intact', () => {
             const result = toAvatarUser({
                 avatar: null,
                 discordId: null,
@@ -311,17 +269,13 @@ it('passes through custom preference intact', () => {
 
             expect(result.avatarPreference).toEqual({ type: 'custom' });
         });
-
-    }
-
-    describe('avatarPreference passthrough', () => {
-        avatarpreferencePassthroughGroup1();
-        avatarpreferencePassthroughGroup2();
-        avatarpreferencePassthroughGroup3();
     });
 
-    function discordAvatarURLConstructionGroup1() {
-it('builds Discord CDN URL from discordId + avatar hash', () => {
+});
+
+describe('toAvatarUser — adversarial edge cases (ROK-352) — part 2', () => {
+    describe('Discord avatar URL construction', () => {
+        it('builds Discord CDN URL from discordId + avatar hash', () => {
             const result = toAvatarUser({
                 avatar: 'abc123hash',
                 discordId: '111222333',
@@ -331,7 +285,7 @@ it('builds Discord CDN URL from discordId + avatar hash', () => {
             expect(result.avatar).toBe('https://cdn.discordapp.com/avatars/111222333/abc123hash.png');
         });
 
-it('returns null avatar when discordId is null even if avatar hash is set', () => {
+        it('returns null avatar when discordId is null even if avatar hash is set', () => {
             const result = toAvatarUser({
                 avatar: 'abc123hash',
                 discordId: null,
@@ -341,10 +295,7 @@ it('returns null avatar when discordId is null even if avatar hash is set', () =
             expect(result.avatar).toBeNull();
         });
 
-    }
-
-    function discordAvatarURLConstructionGroup2() {
-it('returns null avatar when avatar hash is null', () => {
+        it('returns null avatar when avatar hash is null', () => {
             const result = toAvatarUser({
                 avatar: null,
                 discordId: '111222333',
@@ -354,7 +305,7 @@ it('returns null avatar when avatar hash is null', () => {
             expect(result.avatar).toBeNull();
         });
 
-it('preserves full Discord URL passed as avatar field (already a URL)', () => {
+        it('preserves full Discord URL passed as avatar field (already a URL)', () => {
             const fullUrl = 'https://cdn.discordapp.com/avatars/111/hash.png';
             const result = toAvatarUser({
                 avatar: fullUrl,
@@ -365,10 +316,7 @@ it('preserves full Discord URL passed as avatar field (already a URL)', () => {
             expect(result.avatar).toBe(fullUrl);
         });
 
-    }
-
-    function discordAvatarURLConstructionGroup3() {
-it('passes through characters array unchanged when no overlay', () => {
+        it('passes through characters array unchanged when no overlay', () => {
             const chars = [
                 { gameId: 'world-of-warcraft', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
             ];
@@ -381,17 +329,13 @@ it('passes through characters array unchanged when no overlay', () => {
 
             expect(result.characters).toBe(chars);
         });
-
-    }
-
-    describe('Discord avatar URL construction', () => {
-        discordAvatarURLConstructionGroup1();
-        discordAvatarURLConstructionGroup2();
-        discordAvatarURLConstructionGroup3();
     });
 
-    function integrationToAvatarUserResolveAvatarWithPreferenceGroup1() {
-it('resolves correct avatar end-to-end with character preference', () => {
+});
+
+describe('toAvatarUser — adversarial edge cases (ROK-352) — part 3', () => {
+    describe('Integration: toAvatarUser -> resolveAvatar with preference', () => {
+        it('resolves correct avatar end-to-end with character preference', () => {
             const rawUser = {
                 avatar: 'abc123',
                 discordId: '111222333',
@@ -411,10 +355,7 @@ it('resolves correct avatar end-to-end with character preference', () => {
             });
         });
 
-    }
-
-    function integrationToAvatarUserResolveAvatarWithPreferenceGroup2() {
-it('falls through to discord end-to-end when character pref name does not match', () => {
+        it('falls through to discord end-to-end when character pref name does not match', () => {
             const rawUser = {
                 avatar: 'abc123',
                 discordId: '111222333',
@@ -431,11 +372,6 @@ it('falls through to discord end-to-end when character pref name does not match'
             expect(result.type).toBe('discord');
             expect(result.url).toBe('https://cdn.discordapp.com/avatars/111222333/abc123.png');
         });
-
-    }
-
-    describe('Integration: toAvatarUser -> resolveAvatar with preference', () => {
-        integrationToAvatarUserResolveAvatarWithPreferenceGroup1();
-        integrationToAvatarUserResolveAvatarWithPreferenceGroup2();
     });
+
 });

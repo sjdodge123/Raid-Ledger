@@ -178,7 +178,9 @@ function testReRegistrationAfterDeactivation() {
 }
 
 describe('CronManagerService — activation', () => {
-  beforeEach(async () => { await setupEach(); });
+  beforeEach(async () => {
+    await setupEach();
+  });
   afterEach(() => {
     createdJobs.forEach((j) => j.stop());
     createdJobs.length = 0;
@@ -203,7 +205,9 @@ describe('CronManagerService — activation', () => {
 });
 
 describe('CronManagerService — bootstrap & deactivation', () => {
-  beforeEach(async () => { await setupEach(); });
+  beforeEach(async () => {
+    await setupEach();
+  });
   afterEach(() => {
     createdJobs.forEach((j) => j.stop());
     createdJobs.length = 0;

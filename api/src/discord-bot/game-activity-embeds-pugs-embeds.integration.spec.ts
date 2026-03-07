@@ -1,734 +1,603 @@
 /**
  * Discord Game-Activity, Embed Scheduling & PUG Invites Integration Tests (ROK-527)
  *
- * Verifies game activity session persistence (buffered flush, close with duration,
- * stale sweep, orphaned cleanup), daily rollup aggregations, embed scheduler's
- * LEFT JOIN detection, embed poster's live roster enrichment, and PUG slot
- * atomic claim/update patterns against a real PostgreSQL database.
- *
- * Uses direct DB operations and service-level calls since these services are
- * triggered by Discord bot events, not HTTP endpoints.
+ * Verifies embed scheduler's LEFT JOIN detection, embed poster's live roster
+ * enrichment, and PUG slot atomic claim/update patterns against a real PostgreSQL
+ * database.
  */
 import { eq, and, isNull } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 
-describe('Game Activity, Embed Scheduling & PUG Invites (integration) — embeds-pugs', () => {
-  let testApp: TestApp;
+let testApp: TestApp;
 
-  beforeAll(async () => {
-    testApp = await getTestApp();
+beforeAll(async () => {
+  testApp = await getTestApp();
+});
+
+afterEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+});
+
+/** Create a future event for embed/PUG tests. */
+async function createFutureEvent(title: string, gameId?: number | null) {
+  const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
+  const [event] = await testApp.db
+    .insert(schema.events)
+    .values({
+      title,
+      creatorId: testApp.seed.adminUser.id,
+      duration: [futureStart, futureEnd],
+      ...(gameId !== undefined ? { gameId } : {}),
+    })
+    .returning();
+  return event;
+}
+
+// ===================================================================
+// Embed Scheduler — LEFT JOIN detection
+// ===================================================================
+
+describe('embed scheduler — events without embeds', () => {
+  it('should identify events without embed rows via LEFT JOIN', async () => {
+    const db = testApp.db;
+    const event = await createFutureEvent('No Embed Event');
+
+    const eventsWithoutEmbeds = await db
+      .select({
+        id: schema.events.id,
+        title: schema.events.title,
+        embedId: schema.discordEventMessages.id,
+      })
+      .from(schema.events)
+      .leftJoin(
+        schema.discordEventMessages,
+        eq(schema.events.id, schema.discordEventMessages.eventId),
+      )
+      .where(
+        and(
+          isNull(schema.events.cancelledAt),
+          isNull(schema.discordEventMessages.id),
+        ),
+      );
+
+    const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
+    expect(match).toBeDefined();
+    expect(match?.embedId).toBeNull();
+  });
+});
+
+describe('embed scheduler — events with embeds', () => {
+  it('should exclude events that already have an embed row', async () => {
+    const db = testApp.db;
+    const event = await createFutureEvent('Has Embed Event');
+
+    await db.insert(schema.discordEventMessages).values({
+      eventId: event.id,
+      guildId: '111222333444',
+      channelId: '555666777888',
+      messageId: 'msg-001',
+      embedState: 'posted',
+    });
+
+    const eventsWithoutEmbeds = await db
+      .select({
+        id: schema.events.id,
+        embedId: schema.discordEventMessages.id,
+      })
+      .from(schema.events)
+      .leftJoin(
+        schema.discordEventMessages,
+        eq(schema.events.id, schema.discordEventMessages.eventId),
+      )
+      .where(
+        and(
+          isNull(schema.events.cancelledAt),
+          isNull(schema.discordEventMessages.id),
+        ),
+      );
+
+    const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
+    expect(match).toBeUndefined();
   });
 
-  afterEach(async () => {
-    testApp.seed = await truncateAllTables(testApp.db);
+  it('should exclude cancelled events', async () => {
+    const db = testApp.db;
+    const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
+
+    const [event] = await db
+      .insert(schema.events)
+      .values({
+        title: 'Cancelled Event',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [futureStart, futureEnd],
+        cancelledAt: new Date(),
+        cancellationReason: 'Testing cancellation',
+      })
+      .returning();
+
+    const eventsWithoutEmbeds = await db
+      .select({
+        id: schema.events.id,
+        embedId: schema.discordEventMessages.id,
+      })
+      .from(schema.events)
+      .leftJoin(
+        schema.discordEventMessages,
+        eq(schema.events.id, schema.discordEventMessages.eventId),
+      )
+      .where(
+        and(
+          isNull(schema.events.cancelledAt),
+          isNull(schema.discordEventMessages.id),
+        ),
+      );
+
+    const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
+    expect(match).toBeUndefined();
   });
+});
 
-  // ===================================================================
-  // Game Activity Sessions — Flush & Close
-  // ===================================================================
+// ===================================================================
+// Embed Poster — Live Roster Enrichment
+// ===================================================================
 
-  describe('embed scheduler', () => {
-    async function testShouldidentifyeventswithoutembedrowsvialeft() {
-      const db = testApp.db;
-      const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000); // 2 days from now
-      const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
+describe('embed poster roster enrichment — multi-JOIN', () => {
+  it('should return correct signup counts and role data via multi-JOIN', async () => {
+    const db = testApp.db;
+    const event = await createFutureEvent(
+      'Roster Enrichment Test',
+      testApp.seed.game.id,
+    );
 
-      // Create a future event
-      const [event] = await db
-        .insert(schema.events)
-        .values({
-          title: 'No Embed Event',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [futureStart, futureEnd],
-        })
-        .returning();
-
-      // Query using the same LEFT JOIN pattern as EmbedSchedulerService
-      const eventsWithoutEmbeds = await db
-        .select({
-          id: schema.events.id,
-          title: schema.events.title,
-          embedId: schema.discordEventMessages.id,
-        })
-        .from(schema.events)
-        .leftJoin(
-          schema.discordEventMessages,
-          eq(schema.events.id, schema.discordEventMessages.eventId),
-        )
-        .where(
-          and(
-            isNull(schema.events.cancelledAt),
-            isNull(schema.discordEventMessages.id),
-          ),
-        );
-
-      const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
-      expect(match).toBeDefined();
-      expect(match?.embedId).toBeNull();
-    }
-
-    it('should identify events without embed rows via LEFT JOIN', async () => {
-      await testShouldidentifyeventswithoutembedrowsvialeft();
-    });
-
-    async function testShouldexcludeeventsthatalreadyhaveanembed() {
-      const db = testApp.db;
-      const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-      const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
-
-      // Create event + embed message row
-      const [event] = await db
-        .insert(schema.events)
-        .values({
-          title: 'Has Embed Event',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [futureStart, futureEnd],
-        })
-        .returning();
-
-      await db.insert(schema.discordEventMessages).values({
-        eventId: event.id,
-        guildId: '111222333444',
-        channelId: '555666777888',
-        messageId: 'msg-001',
-        embedState: 'posted',
-      });
-
-      // LEFT JOIN query should NOT include this event
-      const eventsWithoutEmbeds = await db
-        .select({
-          id: schema.events.id,
-          embedId: schema.discordEventMessages.id,
-        })
-        .from(schema.events)
-        .leftJoin(
-          schema.discordEventMessages,
-          eq(schema.events.id, schema.discordEventMessages.eventId),
-        )
-        .where(
-          and(
-            isNull(schema.events.cancelledAt),
-            isNull(schema.discordEventMessages.id),
-          ),
-        );
-
-      const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
-      expect(match).toBeUndefined();
-    }
-
-    it('should exclude events that already have an embed row', async () => {
-      await testShouldexcludeeventsthatalreadyhaveanembed();
-    });
-
-    async function testShouldexcludecancelledevents() {
-      const db = testApp.db;
-      const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-      const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
-
-      // Create a cancelled future event with no embed
-      const [event] = await db
-        .insert(schema.events)
-        .values({
-          title: 'Cancelled Event',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [futureStart, futureEnd],
-          cancelledAt: new Date(),
-          cancellationReason: 'Testing cancellation',
-        })
-        .returning();
-
-      const eventsWithoutEmbeds = await db
-        .select({
-          id: schema.events.id,
-          embedId: schema.discordEventMessages.id,
-        })
-        .from(schema.events)
-        .leftJoin(
-          schema.discordEventMessages,
-          eq(schema.events.id, schema.discordEventMessages.eventId),
-        )
-        .where(
-          and(
-            isNull(schema.events.cancelledAt),
-            isNull(schema.discordEventMessages.id),
-          ),
-        );
-
-      const match = eventsWithoutEmbeds.find((e) => e.id === event.id);
-      expect(match).toBeUndefined();
-    }
-
-    it('should exclude cancelled events', async () => {
-      await testShouldexcludecancelledevents();
-    });
-  });
-
-  // ===================================================================
-  // Embed Poster — Live Roster Enrichment
-  // ===================================================================
-
-  describe('embed poster roster enrichment', () => {
-    async function testShouldreturncorrectsignupcountsandroledata() {
-      const db = testApp.db;
-      const futureStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
-
-      // Create an event
-      const [event] = await db
-        .insert(schema.events)
-        .values({
-          title: 'Roster Enrichment Test',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [futureStart, futureEnd],
-          gameId: testApp.seed.game.id,
-        })
-        .returning();
-
-      // Create two signups
-      const [signup1] = await db
-        .insert(schema.eventSignups)
-        .values({
-          eventId: event.id,
-          userId: testApp.seed.adminUser.id,
-          status: 'signed_up',
-          confirmationStatus: 'pending',
-        })
-        .returning();
-
-      // Create a second user for the second signup
-      const [user2] = await db
-        .insert(schema.users)
-        .values({
-          discordId: 'local:player2@test.local',
-          username: 'player2',
-          role: 'member',
-        })
-        .returning();
-
-      // Create a character for user2
-      const [char2] = await db
-        .insert(schema.characters)
-        .values({
-          userId: user2.id,
-          gameId: testApp.seed.game.id,
-          name: 'TestTank',
-          class: 'Warrior',
-          role: 'tank',
-        })
-        .returning();
-
-      const [signup2] = await db
-        .insert(schema.eventSignups)
-        .values({
-          eventId: event.id,
-          userId: user2.id,
-          characterId: char2.id,
-          status: 'signed_up',
-          confirmationStatus: 'confirmed',
-        })
-        .returning();
-
-      // Create roster assignments
-      await db.insert(schema.rosterAssignments).values([
-        {
-          eventId: event.id,
-          signupId: signup1.id,
-          role: 'dps',
-          position: 1,
-        },
-        {
-          eventId: event.id,
-          signupId: signup2.id,
-          role: 'tank',
-          position: 1,
-        },
-      ]);
-
-      // Execute the multi-JOIN query (mirrors enrichWithLiveRoster)
-      const signupRows = await db
-        .select({
-          username: schema.users.username,
-          role: schema.rosterAssignments.role,
-          status: schema.eventSignups.status,
-          className: schema.characters.class,
-        })
-        .from(schema.eventSignups)
-        .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
-        .leftJoin(
-          schema.rosterAssignments,
-          eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
-        )
-        .leftJoin(
-          schema.characters,
-          eq(schema.eventSignups.characterId, schema.characters.id),
-        )
-        .where(eq(schema.eventSignups.eventId, event.id));
-
-      expect(signupRows.length).toBe(2);
-
-      // Verify role counts via GROUP BY
-      const roleRows = await db
-        .select({
-          role: schema.rosterAssignments.role,
-        })
-        .from(schema.rosterAssignments)
-        .innerJoin(
-          schema.eventSignups,
-          eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
-        )
-        .where(eq(schema.rosterAssignments.eventId, event.id));
-
-      const roleCounts: Record<string, number> = {};
-      for (const row of roleRows) {
-        if (row.role) {
-          roleCounts[row.role] = (roleCounts[row.role] ?? 0) + 1;
-        }
-      }
-
-      expect(roleCounts['tank']).toBe(1);
-      expect(roleCounts['dps']).toBe(1);
-
-      // Verify character class is resolved for signup with character
-      const tankRow = signupRows.find((r) => r.role === 'tank');
-      expect(tankRow?.className).toBe('Warrior');
-
-      // Signup without character should have null className
-      const dpsRow = signupRows.find((r) => r.role === 'dps');
-      expect(dpsRow?.className).toBeNull();
-    }
-
-    it('should return correct signup counts and role data via multi-JOIN', async () => {
-      await testShouldreturncorrectsignupcountsandroledata();
-    });
-
-    async function testShouldexcludedeclinedsignupsfromactivecount() {
-      const db = testApp.db;
-      const futureStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
-
-      const [event] = await db
-        .insert(schema.events)
-        .values({
-          title: 'Declined Signup Test',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [futureStart, futureEnd],
-        })
-        .returning();
-
-      // Active signup
-      await db.insert(schema.eventSignups).values({
+    const [signup1] = await db
+      .insert(schema.eventSignups)
+      .values({
         eventId: event.id,
         userId: testApp.seed.adminUser.id,
         status: 'signed_up',
         confirmationStatus: 'pending',
-      });
+      })
+      .returning();
 
-      // Create second user for declined signup
-      const [user2] = await db
-        .insert(schema.users)
-        .values({
-          discordId: 'local:declined@test.local',
-          username: 'declined',
-          role: 'member',
-        })
-        .returning();
+    const [user2] = await db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:player2@test.local',
+        username: 'player2',
+        role: 'member',
+      })
+      .returning();
 
-      // Declined signup
-      await db.insert(schema.eventSignups).values({
+    const [char2] = await db
+      .insert(schema.characters)
+      .values({
+        userId: user2.id,
+        gameId: testApp.seed.game.id,
+        name: 'TestTank',
+        class: 'Warrior',
+        role: 'tank',
+      })
+      .returning();
+
+    const [signup2] = await db
+      .insert(schema.eventSignups)
+      .values({
         eventId: event.id,
         userId: user2.id,
-        status: 'declined',
-        confirmationStatus: 'pending',
-      });
+        characterId: char2.id,
+        status: 'signed_up',
+        confirmationStatus: 'confirmed',
+      })
+      .returning();
 
-      // Query and filter like enrichWithLiveRoster
-      const signupRows = await db
-        .select({
-          status: schema.eventSignups.status,
-        })
-        .from(schema.eventSignups)
-        .where(eq(schema.eventSignups.eventId, event.id));
+    await db.insert(schema.rosterAssignments).values([
+      { eventId: event.id, signupId: signup1.id, role: 'dps', position: 1 },
+      { eventId: event.id, signupId: signup2.id, role: 'tank', position: 1 },
+    ]);
 
-      const activeSignups = signupRows.filter(
-        (r) =>
-          r.status !== 'declined' &&
-          r.status !== 'roached_out' &&
-          r.status !== 'departed',
-      );
+    const signupRows = await db
+      .select({
+        username: schema.users.username,
+        role: schema.rosterAssignments.role,
+        status: schema.eventSignups.status,
+        className: schema.characters.class,
+      })
+      .from(schema.eventSignups)
+      .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
+      .leftJoin(
+        schema.rosterAssignments,
+        eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+      )
+      .leftJoin(
+        schema.characters,
+        eq(schema.eventSignups.characterId, schema.characters.id),
+      )
+      .where(eq(schema.eventSignups.eventId, event.id));
 
-      expect(signupRows.length).toBe(2);
-      expect(activeSignups.length).toBe(1);
-    }
+    expect(signupRows.length).toBe(2);
 
-    it('should exclude declined signups from active count', async () => {
-      await testShouldexcludedeclinedsignupsfromactivecount();
-    });
-  });
+    const roleRows = await db
+      .select({ role: schema.rosterAssignments.role })
+      .from(schema.rosterAssignments)
+      .innerJoin(
+        schema.eventSignups,
+        eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
+      )
+      .where(eq(schema.rosterAssignments.eventId, event.id));
 
-  // ===================================================================
-  // PUG Slot — Atomic Claim & Lifecycle
-  // ===================================================================
-
-  describe('pug slot lifecycle', () => {
-    let testEventId: number;
-
-    beforeEach(async () => {
-      const now = new Date();
-      const futureEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      const [event] = await testApp.db
-        .insert(schema.events)
-        .values({
-          title: 'PUG Test Event',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [now, futureEnd],
-        })
-        .returning();
-      testEventId = event.id;
-    });
-
-    it('should create a PUG slot with pending status', async () => {
-      const db = testApp.db;
-
-      const [slot] = await db
-        .insert(schema.pugSlots)
-        .values({
-          eventId: testEventId,
-          discordUsername: 'pugplayer',
-          role: 'dps',
-          createdBy: testApp.seed.adminUser.id,
-        })
-        .returning();
-
-      expect(slot.status).toBe('pending');
-      expect(slot.discordUsername).toBe('pugplayer');
-      expect(slot.role).toBe('dps');
-      expect(slot.discordUserId).toBeNull();
-      expect(slot.invitedAt).toBeNull();
-    });
-
-    async function testShouldatomicallyclaimpendingslotsviaupdatereturning() {
-      const db = testApp.db;
-
-      // Create two pending slots for the same username across different events
-      const now2 = new Date();
-      const [event2] = await db
-        .insert(schema.events)
-        .values({
-          title: 'PUG Event 2',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [now2, new Date(now2.getTime() + 24 * 60 * 60 * 1000)],
-        })
-        .returning();
-
-      await db.insert(schema.pugSlots).values([
-        {
-          eventId: testEventId,
-          discordUsername: 'newmember',
-          role: 'tank',
-          createdBy: testApp.seed.adminUser.id,
-        },
-        {
-          eventId: event2.id,
-          discordUsername: 'newmember',
-          role: 'healer',
-          createdBy: testApp.seed.adminUser.id,
-        },
-      ]);
-
-      // Atomic claim (mirrors handleNewGuildMember)
-      const claimedSlots = await db
-        .update(schema.pugSlots)
-        .set({
-          discordUserId: '999888777666',
-          discordAvatarHash: 'avatar-hash-123',
-          status: 'invited',
-          invitedAt: new Date(),
-          serverInviteUrl: null,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(schema.pugSlots.discordUsername, 'newmember'),
-            eq(schema.pugSlots.status, 'pending'),
-          ),
-        )
-        .returning();
-
-      // Both slots should be claimed atomically
-      expect(claimedSlots.length).toBe(2);
-      for (const slot of claimedSlots) {
-        expect(slot.status).toBe('invited');
-        expect(slot.discordUserId).toBe('999888777666');
-        expect(slot.invitedAt).not.toBeNull();
+    const roleCounts: Record<string, number> = {};
+    for (const row of roleRows) {
+      if (row.role) {
+        roleCounts[row.role] = (roleCounts[row.role] ?? 0) + 1;
       }
     }
 
-    it('should atomically claim pending slots via UPDATE RETURNING (handleNewGuildMember)', async () => {
-      await testShouldatomicallyclaimpendingslotsviaupdatereturning();
+    expect(roleCounts['tank']).toBe(1);
+    expect(roleCounts['dps']).toBe(1);
+
+    const tankRow = signupRows.find((r) => r.role === 'tank');
+    expect(tankRow?.className).toBe('Warrior');
+
+    const dpsRow = signupRows.find((r) => r.role === 'dps');
+    expect(dpsRow?.className).toBeNull();
+  });
+});
+
+describe('embed poster roster enrichment — declined filter', () => {
+  it('should exclude declined signups from active count', async () => {
+    const db = testApp.db;
+    const event = await createFutureEvent('Declined Signup Test');
+
+    await db.insert(schema.eventSignups).values({
+      eventId: event.id,
+      userId: testApp.seed.adminUser.id,
+      status: 'signed_up',
+      confirmationStatus: 'pending',
     });
 
-    it('should prevent duplicate DMs by only claiming pending slots', async () => {
-      const db = testApp.db;
+    const [user2] = await db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:declined@test.local',
+        username: 'declined',
+        role: 'member',
+      })
+      .returning();
 
-      // Create a slot and mark it as already invited
-      await db.insert(schema.pugSlots).values({
+    await db.insert(schema.eventSignups).values({
+      eventId: event.id,
+      userId: user2.id,
+      status: 'declined',
+      confirmationStatus: 'pending',
+    });
+
+    const signupRows = await db
+      .select({ status: schema.eventSignups.status })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, event.id));
+
+    const activeSignups = signupRows.filter(
+      (r) =>
+        r.status !== 'declined' &&
+        r.status !== 'roached_out' &&
+        r.status !== 'departed',
+    );
+
+    expect(signupRows.length).toBe(2);
+    expect(activeSignups.length).toBe(1);
+  });
+});
+
+// ===================================================================
+// PUG Slot — Atomic Claim & Lifecycle
+// ===================================================================
+
+/** Create a PUG test event and return its ID. */
+async function createPugEvent(title = 'PUG Test Event') {
+  const now = new Date();
+  const futureEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const [event] = await testApp.db
+    .insert(schema.events)
+    .values({
+      title,
+      creatorId: testApp.seed.adminUser.id,
+      duration: [now, futureEnd],
+    })
+    .returning();
+  return event.id;
+}
+
+describe('pug slot lifecycle — create and constraints', () => {
+  it('should create a PUG slot with pending status', async () => {
+    const db = testApp.db;
+    const testEventId = await createPugEvent();
+
+    const [slot] = await db
+      .insert(schema.pugSlots)
+      .values({
         eventId: testEventId,
-        discordUsername: 'alreadyinvited',
-        discordUserId: '111222333',
-        role: 'dps',
-        status: 'invited',
-        invitedAt: new Date(),
-        createdBy: testApp.seed.adminUser.id,
-      });
-
-      // Try to claim again — should return nothing (already invited)
-      const claimedSlots = await db
-        .update(schema.pugSlots)
-        .set({
-          discordUserId: '111222333',
-          status: 'invited',
-          invitedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(schema.pugSlots.discordUsername, 'alreadyinvited'),
-            eq(schema.pugSlots.status, 'pending'),
-          ),
-        )
-        .returning();
-
-      expect(claimedSlots.length).toBe(0);
-    });
-
-    it('should skip cancelled events when processing claimed slots', async () => {
-      const db = testApp.db;
-
-      // Cancel the event
-      await db
-        .update(schema.events)
-        .set({ cancelledAt: new Date() })
-        .where(eq(schema.events.id, testEventId));
-
-      // Verify the event is cancelled
-      const [event] = await db
-        .select()
-        .from(schema.events)
-        .where(eq(schema.events.id, testEventId))
-        .limit(1);
-
-      expect(event.cancelledAt).not.toBeNull();
-    });
-
-    async function testShouldclaimpugslotsbydiscorduseridorinvitecode() {
-      const db = testApp.db;
-
-      // Create a second user who will claim
-      const [claimUser] = await db
-        .insert(schema.users)
-        .values({
-          discordId: 'discord:claimuser',
-          username: 'claimuser',
-          role: 'member',
-        })
-        .returning();
-
-      // Slot matched by discordUserId
-      await db.insert(schema.pugSlots).values({
-        eventId: testEventId,
-        discordUsername: 'byid',
-        discordUserId: 'discord:claimuser',
-        role: 'tank',
-        status: 'invited',
-        createdBy: testApp.seed.adminUser.id,
-      });
-
-      // Slot matched by inviteCode (anonymous)
-      const now3 = new Date();
-      const [event3] = await db
-        .insert(schema.events)
-        .values({
-          title: 'Invite Code Event',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [now3, new Date(now3.getTime() + 24 * 60 * 60 * 1000)],
-        })
-        .returning();
-
-      await db.insert(schema.pugSlots).values({
-        eventId: event3.id,
-        role: 'healer',
-        inviteCode: 'ABC12345',
-        status: 'pending',
-        createdBy: testApp.seed.adminUser.id,
-      });
-
-      // Claim by discordUserId (mirrors claimPugSlots OR condition)
-      const byIdResult = await db
-        .update(schema.pugSlots)
-        .set({
-          claimedByUserId: claimUser.id,
-          status: 'claimed',
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(schema.pugSlots.discordUserId, 'discord:claimuser'),
-            isNull(schema.pugSlots.claimedByUserId),
-          ),
-        )
-        .returning();
-
-      expect(byIdResult.length).toBe(1);
-      expect(byIdResult[0].claimedByUserId).toBe(claimUser.id);
-      expect(byIdResult[0].status).toBe('claimed');
-
-      // Claim by inviteCode
-      const byCodeResult = await db
-        .update(schema.pugSlots)
-        .set({
-          claimedByUserId: claimUser.id,
-          status: 'claimed',
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(schema.pugSlots.inviteCode, 'ABC12345'),
-            isNull(schema.pugSlots.claimedByUserId),
-          ),
-        )
-        .returning();
-
-      expect(byCodeResult.length).toBe(1);
-      expect(byCodeResult[0].claimedByUserId).toBe(claimUser.id);
-    }
-
-    it('should claim PUG slots by discordUserId OR inviteCode', async () => {
-      await testShouldclaimpugslotsbydiscorduseridorinvitecode();
-    });
-
-    it('should enforce unique constraint on (eventId, discordUsername)', async () => {
-      const db = testApp.db;
-
-      await db.insert(schema.pugSlots).values({
-        eventId: testEventId,
-        discordUsername: 'uniquepug',
+        discordUsername: 'pugplayer',
         role: 'dps',
         createdBy: testApp.seed.adminUser.id,
-      });
+      })
+      .returning();
 
-      // Duplicate should fail
-      await expect(
-        db.insert(schema.pugSlots).values({
-          eventId: testEventId,
-          discordUsername: 'uniquepug',
-          role: 'healer',
-          createdBy: testApp.seed.adminUser.id,
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('should cascade delete PUG slots when event is deleted', async () => {
-      const db = testApp.db;
-
-      await db.insert(schema.pugSlots).values({
-        eventId: testEventId,
-        discordUsername: 'cascadepug',
-        role: 'tank',
-        createdBy: testApp.seed.adminUser.id,
-      });
-
-      // Delete the event
-      await db.delete(schema.events).where(eq(schema.events.id, testEventId));
-
-      // PUG slots should be gone
-      const remaining = await db
-        .select()
-        .from(schema.pugSlots)
-        .where(eq(schema.pugSlots.eventId, testEventId));
-
-      expect(remaining.length).toBe(0);
-    });
+    expect(slot.status).toBe('pending');
+    expect(slot.discordUsername).toBe('pugplayer');
+    expect(slot.role).toBe('dps');
+    expect(slot.discordUserId).toBeNull();
+    expect(slot.invitedAt).toBeNull();
   });
 
-  // ===================================================================
-  // Discord Event Messages — Tracking Rows
-  // ===================================================================
+  it('should enforce unique constraint on (eventId, discordUsername)', async () => {
+    const db = testApp.db;
+    const testEventId = await createPugEvent();
 
-  describe('discord event messages', () => {
-    async function testShouldinsertandqueryembedtrackingrows() {
-      const db = testApp.db;
-      const futureStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
-
-      const [event] = await db
-        .insert(schema.events)
-        .values({
-          title: 'Embed Tracking Test',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [futureStart, futureEnd],
-        })
-        .returning();
-
-      const [msg] = await db
-        .insert(schema.discordEventMessages)
-        .values({
-          eventId: event.id,
-          guildId: '111222333444',
-          channelId: '555666777888',
-          messageId: 'msg-123',
-          embedState: 'posted',
-        })
-        .returning();
-
-      expect(msg.eventId).toBe(event.id);
-      expect(msg.embedState).toBe('posted');
-
-      // Verify hasEmbed pattern (SELECT ... WHERE eventId LIMIT 1)
-      const rows = await db
-        .select({ id: schema.discordEventMessages.id })
-        .from(schema.discordEventMessages)
-        .where(eq(schema.discordEventMessages.eventId, event.id))
-        .limit(1);
-
-      expect(rows.length).toBe(1);
-    }
-
-    it('should insert and query embed tracking rows', async () => {
-      await testShouldinsertandqueryembedtrackingrows();
+    await db.insert(schema.pugSlots).values({
+      eventId: testEventId,
+      discordUsername: 'uniquepug',
+      role: 'dps',
+      createdBy: testApp.seed.adminUser.id,
     });
 
-    it('should cascade delete embed rows when event is deleted', async () => {
-      const db = testApp.db;
-      const futureStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
+    await expect(
+      db.insert(schema.pugSlots).values({
+        eventId: testEventId,
+        discordUsername: 'uniquepug',
+        role: 'healer',
+        createdBy: testApp.seed.adminUser.id,
+      }),
+    ).rejects.toThrow();
+  });
 
-      const [event] = await db
-        .insert(schema.events)
-        .values({
-          title: 'Cascade Embed Test',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [futureStart, futureEnd],
-        })
-        .returning();
+  it('should cascade delete PUG slots when event is deleted', async () => {
+    const db = testApp.db;
+    const testEventId = await createPugEvent();
 
-      await db.insert(schema.discordEventMessages).values({
+    await db.insert(schema.pugSlots).values({
+      eventId: testEventId,
+      discordUsername: 'cascadepug',
+      role: 'tank',
+      createdBy: testApp.seed.adminUser.id,
+    });
+
+    await db.delete(schema.events).where(eq(schema.events.id, testEventId));
+
+    const remaining = await db
+      .select()
+      .from(schema.pugSlots)
+      .where(eq(schema.pugSlots.eventId, testEventId));
+
+    expect(remaining.length).toBe(0);
+  });
+});
+
+describe('pug slot lifecycle — atomic claim', () => {
+  it('should atomically claim pending slots via UPDATE RETURNING', async () => {
+    const db = testApp.db;
+    const testEventId = await createPugEvent();
+    const event2Id = await createPugEvent('PUG Event 2');
+
+    await db.insert(schema.pugSlots).values([
+      {
+        eventId: testEventId,
+        discordUsername: 'newmember',
+        role: 'tank',
+        createdBy: testApp.seed.adminUser.id,
+      },
+      {
+        eventId: event2Id,
+        discordUsername: 'newmember',
+        role: 'healer',
+        createdBy: testApp.seed.adminUser.id,
+      },
+    ]);
+
+    const claimedSlots = await db
+      .update(schema.pugSlots)
+      .set({
+        discordUserId: '999888777666',
+        discordAvatarHash: 'avatar-hash-123',
+        status: 'invited',
+        invitedAt: new Date(),
+        serverInviteUrl: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.pugSlots.discordUsername, 'newmember'),
+          eq(schema.pugSlots.status, 'pending'),
+        ),
+      )
+      .returning();
+
+    expect(claimedSlots.length).toBe(2);
+    for (const slot of claimedSlots) {
+      expect(slot.status).toBe('invited');
+      expect(slot.discordUserId).toBe('999888777666');
+      expect(slot.invitedAt).not.toBeNull();
+    }
+  });
+
+  it('should prevent duplicate DMs by only claiming pending slots', async () => {
+    const db = testApp.db;
+    const testEventId = await createPugEvent();
+
+    await db.insert(schema.pugSlots).values({
+      eventId: testEventId,
+      discordUsername: 'alreadyinvited',
+      discordUserId: '111222333',
+      role: 'dps',
+      status: 'invited',
+      invitedAt: new Date(),
+      createdBy: testApp.seed.adminUser.id,
+    });
+
+    const claimedSlots = await db
+      .update(schema.pugSlots)
+      .set({
+        discordUserId: '111222333',
+        status: 'invited',
+        invitedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.pugSlots.discordUsername, 'alreadyinvited'),
+          eq(schema.pugSlots.status, 'pending'),
+        ),
+      )
+      .returning();
+
+    expect(claimedSlots.length).toBe(0);
+  });
+
+  it('should skip cancelled events when processing claimed slots', async () => {
+    const db = testApp.db;
+    const testEventId = await createPugEvent();
+
+    await db
+      .update(schema.events)
+      .set({ cancelledAt: new Date() })
+      .where(eq(schema.events.id, testEventId));
+
+    const [event] = await db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, testEventId))
+      .limit(1);
+
+    expect(event.cancelledAt).not.toBeNull();
+  });
+});
+
+describe('pug slot lifecycle — claim by ID or invite code', () => {
+  it('should claim PUG slots by discordUserId OR inviteCode', async () => {
+    const db = testApp.db;
+    const testEventId = await createPugEvent();
+
+    const [claimUser] = await db
+      .insert(schema.users)
+      .values({
+        discordId: 'discord:claimuser',
+        username: 'claimuser',
+        role: 'member',
+      })
+      .returning();
+
+    await db.insert(schema.pugSlots).values({
+      eventId: testEventId,
+      discordUsername: 'byid',
+      discordUserId: 'discord:claimuser',
+      role: 'tank',
+      status: 'invited',
+      createdBy: testApp.seed.adminUser.id,
+    });
+
+    const event3Id = await createPugEvent('Invite Code Event');
+
+    await db.insert(schema.pugSlots).values({
+      eventId: event3Id,
+      role: 'healer',
+      inviteCode: 'ABC12345',
+      status: 'pending',
+      createdBy: testApp.seed.adminUser.id,
+    });
+
+    const byIdResult = await db
+      .update(schema.pugSlots)
+      .set({
+        claimedByUserId: claimUser.id,
+        status: 'claimed',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.pugSlots.discordUserId, 'discord:claimuser'),
+          isNull(schema.pugSlots.claimedByUserId),
+        ),
+      )
+      .returning();
+
+    expect(byIdResult.length).toBe(1);
+    expect(byIdResult[0].claimedByUserId).toBe(claimUser.id);
+    expect(byIdResult[0].status).toBe('claimed');
+
+    const byCodeResult = await db
+      .update(schema.pugSlots)
+      .set({
+        claimedByUserId: claimUser.id,
+        status: 'claimed',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.pugSlots.inviteCode, 'ABC12345'),
+          isNull(schema.pugSlots.claimedByUserId),
+        ),
+      )
+      .returning();
+
+    expect(byCodeResult.length).toBe(1);
+    expect(byCodeResult[0].claimedByUserId).toBe(claimUser.id);
+  });
+});
+
+// ===================================================================
+// Discord Event Messages — Tracking Rows
+// ===================================================================
+
+describe('discord event messages — insert and query', () => {
+  it('should insert and query embed tracking rows', async () => {
+    const db = testApp.db;
+    const event = await createFutureEvent('Embed Tracking Test');
+
+    const [msg] = await db
+      .insert(schema.discordEventMessages)
+      .values({
         eventId: event.id,
         guildId: '111222333444',
         channelId: '555666777888',
-        messageId: 'msg-cascade',
+        messageId: 'msg-123',
         embedState: 'posted',
-      });
+      })
+      .returning();
 
-      await db.delete(schema.events).where(eq(schema.events.id, event.id));
+    expect(msg.eventId).toBe(event.id);
+    expect(msg.embedState).toBe('posted');
 
-      const remaining = await db
-        .select()
-        .from(schema.discordEventMessages)
-        .where(eq(schema.discordEventMessages.eventId, event.id));
+    const rows = await db
+      .select({ id: schema.discordEventMessages.id })
+      .from(schema.discordEventMessages)
+      .where(eq(schema.discordEventMessages.eventId, event.id))
+      .limit(1);
 
-      expect(remaining.length).toBe(0);
+    expect(rows.length).toBe(1);
+  });
+
+  it('should cascade delete embed rows when event is deleted', async () => {
+    const db = testApp.db;
+    const event = await createFutureEvent('Cascade Embed Test');
+
+    await db.insert(schema.discordEventMessages).values({
+      eventId: event.id,
+      guildId: '111222333444',
+      channelId: '555666777888',
+      messageId: 'msg-cascade',
+      embedState: 'posted',
     });
+
+    await db.delete(schema.events).where(eq(schema.events.id, event.id));
+
+    const remaining = await db
+      .select()
+      .from(schema.discordEventMessages)
+      .where(eq(schema.discordEventMessages.eventId, event.id));
+
+    expect(remaining.length).toBe(0);
   });
 });

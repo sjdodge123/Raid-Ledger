@@ -164,8 +164,13 @@ function renderWithRouter(ui: React.ReactElement, initialEntries = ['/onboarding
     );
 }
 
-function onboardingwizardpageGroup1() {
-it('redirects admin users to calendar', () => {
+describe('OnboardingWizardPage — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
+    });
+
+    it('redirects admin users to calendar', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -182,10 +187,7 @@ it('redirects admin users to calendar', () => {
         expect(screen.getByText('Calendar Page')).toBeInTheDocument();
     });
 
-}
-
-function onboardingwizardpageGroup2() {
-it('allows admin to access wizard with ?rerun=1', () => {
+    it('allows admin to access wizard with ?rerun=1', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -203,10 +205,7 @@ it('allows admin to access wizard with ?rerun=1', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-}
-
-function onboardingwizardpageGroup3() {
-it('redirects users who already completed onboarding', () => {
+    it('redirects users who already completed onboarding', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -222,10 +221,15 @@ it('redirects users who already completed onboarding', () => {
         expect(screen.getByText('Calendar Page')).toBeInTheDocument();
     });
 
-}
+});
 
-function onboardingwizardpageGroup4() {
-it('allows re-run when ?rerun=1 even if onboarding completed', () => {
+describe('OnboardingWizardPage — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
+    });
+
+    it('allows re-run when ?rerun=1 even if onboarding completed', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -243,10 +247,7 @@ it('allows re-run when ?rerun=1 even if onboarding completed', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-}
-
-function onboardingwizardpageGroup5() {
-it('renders wizard for new users with Discord (skips connect step)', () => {
+    it('renders wizard for new users with Discord (skips connect step)', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -265,10 +266,7 @@ it('renders wizard for new users with Discord (skips connect step)', () => {
         expect(screen.getByText(/what do you play\?/i)).toBeInTheDocument();
     });
 
-}
-
-function onboardingwizardpageGroup6() {
-it('shows connect step for local-auth user without Discord', () => {
+    it('shows connect step for local-auth user without Discord', () => {
         mockUseSystemStatus.mockReturnValue({
             data: { discordConfigured: true },
         });
@@ -290,10 +288,15 @@ it('shows connect step for local-auth user without Discord', () => {
         expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
     });
 
-}
+});
 
-function onboardingwizardpageGroup7() {
-it('shows Skip All button on non-final steps', () => {
+describe('OnboardingWizardPage — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
+    });
+
+    it('shows Skip All button on non-final steps', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -309,10 +312,7 @@ it('shows Skip All button on non-final steps', () => {
         expect(screen.getByText(/skip all/i)).toBeInTheDocument();
     });
 
-}
-
-function onboardingwizardpageGroup8() {
-it('dismisses wizard on Escape key', async () => {
+    it('dismisses wizard on Escape key', async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -332,10 +332,7 @@ it('dismisses wizard on Escape key', async () => {
         });
     });
 
-}
-
-function onboardingwizardpageGroup9() {
-it('dismisses wizard on Skip All click', async () => {
+    it('dismisses wizard on Skip All click', async () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
@@ -355,21 +352,4 @@ it('dismisses wizard on Skip All click', async () => {
         });
     });
 
-}
-
-describe('OnboardingWizardPage', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-        mockIsAdmin.mockReturnValue(false);
-    });
-
-    onboardingwizardpageGroup1();
-    onboardingwizardpageGroup2();
-    onboardingwizardpageGroup3();
-    onboardingwizardpageGroup4();
-    onboardingwizardpageGroup5();
-    onboardingwizardpageGroup6();
-    onboardingwizardpageGroup7();
-    onboardingwizardpageGroup8();
-    onboardingwizardpageGroup9();
 });

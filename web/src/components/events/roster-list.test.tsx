@@ -30,7 +30,7 @@ const mockSignups = [
     },
 ];
 
-describe('RosterList', () => {
+describe('RosterList — part 1', () => {
     it('renders empty state when no signups', () => {
         render(<RosterList signups={[]} />);
         expect(screen.getByText(/No signups yet/)).toBeInTheDocument();
@@ -97,7 +97,10 @@ describe('RosterList', () => {
         expect(screen.getByAltText('dps')).toBeInTheDocument();
     });
 
-    function testSortsSignupsAlphabeticallyByUsername() {
+});
+
+describe('RosterList — part 2', () => {
+    it('sorts signups alphabetically by username (case-insensitive)', () => {
         const unsortedSignups = [
             {
                 id: 3,
@@ -132,10 +135,11 @@ describe('RosterList', () => {
         expect(items[0]).toHaveTextContent('alice');
         expect(items[1]).toHaveTextContent('Bob');
         expect(items[2]).toHaveTextContent('charlie');
-    
-    }
-    it('sorts signups alphabetically by username (case-insensitive)', () => { testSortsSignupsAlphabeticallyByUsername(); });
+    });
 
+});
+
+describe('RosterList — part 3', () => {
     it('does not mutate the original signups array', () => {
         const signups = [
             {
@@ -206,6 +210,9 @@ describe('RosterList', () => {
         expect(desktopMainBadge?.textContent).toContain('⭐');
     });
 
+});
+
+describe('RosterList — part 4', () => {
     it('does not render mobile secondary line when character has no class, spec, or iLevel', () => {
         const minimalSignup = {
             id: 3,
@@ -252,4 +259,5 @@ describe('RosterList', () => {
         expect(desktopDetails?.textContent).toContain('485');
         expect(desktopDetails?.textContent).not.toContain('iLvl');
     });
+
 });

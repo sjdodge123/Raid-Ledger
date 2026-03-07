@@ -148,30 +148,37 @@ function renderCard(event?: CalendarEvent, overlapFn?: (s: Date, e: Date) => boo
 
 // --- Tests ---
 
-function dayeventcardGroup1() {
-it('renders event title and game name', () => {
+describe('DayEventCard — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = null;
+        mockIsAuthenticated = false;
+        mockRosterData = null;
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
+    });
+
+    it('renders event title and game name', () => {
         renderCard();
         expect(screen.getByText('Test Raid')).toBeInTheDocument();
         expect(screen.getByText('World of Warcraft')).toBeInTheDocument();
     });
 
-it('shows "Login to join" when unauthenticated', () => {
+    it('shows "Login to join" when unauthenticated', () => {
         mockRosterData = createMMORoster();
         renderCard();
         expect(screen.getByText('Login to join')).toBeInTheDocument();
     });
 
-it('renders login link pointing to /login with redirect', () => {
+    it('renders login link pointing to /login with redirect', () => {
         mockRosterData = createMMORoster();
         renderCard();
         const link = screen.getByText('Login to join');
         expect(link).toHaveAttribute('href', '/login?redirect=/calendar');
     });
 
-}
-
-function dayeventcardGroup2() {
-it('shows role buttons for MMO game when authenticated and not signed up', () => {
+    it('shows role buttons for MMO game when authenticated and not signed up', () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterData = createMMORoster({
@@ -188,7 +195,7 @@ it('shows role buttons for MMO game when authenticated and not signed up', () =>
         expect(screen.getByText('Flex 0/5')).toBeInTheDocument();
     });
 
-it('shows generic Join button for non-MMO game', () => {
+    it('shows generic Join button for non-MMO game', () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterData = createGenericRoster({ playerCount: 3 });
@@ -198,10 +205,7 @@ it('shows generic Join button for non-MMO game', () => {
         expect(screen.getByText('Join (3/12 players)')).toBeInTheDocument();
     });
 
-}
-
-function dayeventcardGroup3() {
-it('shows Leave button when user is signed up', () => {
+    it('shows Leave button when user is signed up', () => {
         mockUser = { id: 200, username: 'Player1' };
         mockIsAuthenticated = true;
         mockRosterData = createGenericRoster({ playerCount: 3 });
@@ -211,7 +215,20 @@ it('shows Leave button when user is signed up', () => {
         expect(screen.getByText('Leave')).toBeInTheDocument();
     });
 
-it('shows no action buttons for ended events', () => {
+});
+
+describe('DayEventCard — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = null;
+        mockIsAuthenticated = false;
+        mockRosterData = null;
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
+    });
+
+    it('shows no action buttons for ended events', () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterData = createGenericRoster();
@@ -228,10 +245,7 @@ it('shows no action buttons for ended events', () => {
         expect(screen.queryByText('Login to join')).not.toBeInTheDocument();
     });
 
-}
-
-function dayeventcardGroup4() {
-it('disables full role buttons', () => {
+    it('disables full role buttons', () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterData = createMMORoster({
@@ -247,10 +261,20 @@ it('disables full role buttons', () => {
         expect(tankBtn.closest('button')).toBeDisabled();
     });
 
-}
+});
 
-function dayeventcardGroup5() {
-it('button clicks stop propagation', () => {
+describe('DayEventCard — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = null;
+        mockIsAuthenticated = false;
+        mockRosterData = null;
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
+    });
+
+    it('button clicks stop propagation', () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterData = createGenericRoster({ playerCount: 0 });
@@ -279,10 +303,7 @@ it('button clicks stop propagation', () => {
         expect(parentClick).not.toHaveBeenCalled();
     });
 
-}
-
-function dayeventcardGroup6() {
-it('shows shimmer placeholder while roster is loading', () => {
+    it('shows shimmer placeholder while roster is loading', () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterLoading = true;
@@ -292,7 +313,7 @@ it('shows shimmer placeholder while roster is loading', () => {
         expect(container.querySelector('.day-event-actions-shimmer')).toBeInTheDocument();
     });
 
-it('opens confirmation modal on MMO role click when game has id (selection-first)', async () => {
+    it('opens confirmation modal on MMO role click when game has id (selection-first)', async () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterData = createMMORoster();
@@ -311,10 +332,20 @@ it('opens confirmation modal on MMO role click when game has id (selection-first
         expect(mockSignupMutateAsync).not.toHaveBeenCalled();
     });
 
-}
+});
 
-function dayeventcardGroup7() {
-it('calls signup directly for MMO role click when game has no id', async () => {
+describe('DayEventCard — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = null;
+        mockIsAuthenticated = false;
+        mockRosterData = null;
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
+    });
+
+    it('calls signup directly for MMO role click when game has no id', async () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterData = createMMORoster();
@@ -335,10 +366,7 @@ it('calls signup directly for MMO role click when game has no id', async () => {
         });
     });
 
-}
-
-function dayeventcardGroup8() {
-it('calls cancelSignup on Leave click', () => {
+    it('calls cancelSignup on Leave click', () => {
         mockUser = { id: 200, username: 'Player1' };
         mockIsAuthenticated = true;
         mockRosterData = createGenericRoster({ playerCount: 3 });
@@ -352,40 +380,19 @@ it('calls cancelSignup on Leave click', () => {
         expect(mockCancelMutateAsync).toHaveBeenCalled();
     });
 
-it('renders duration string', () => {
+    it('renders duration string', () => {
         renderCard();
         expect(screen.getByText('3h')).toBeInTheDocument();
     });
 
-it('renders description preview', () => {
+    it('renders description preview', () => {
         renderCard();
         expect(screen.getByText('A test event')).toBeInTheDocument();
     });
 
-it('renders creator name', () => {
+    it('renders creator name', () => {
         renderCard();
         expect(screen.getByText('by RaidLeader')).toBeInTheDocument();
     });
 
-}
-
-describe('DayEventCard', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-        mockUser = null;
-        mockIsAuthenticated = false;
-        mockRosterData = null;
-        mockRosterLoading = false;
-        mockSignupIsPending = false;
-        mockCancelIsPending = false;
-    });
-
-    dayeventcardGroup1();
-    dayeventcardGroup2();
-    dayeventcardGroup3();
-    dayeventcardGroup4();
-    dayeventcardGroup5();
-    dayeventcardGroup6();
-    dayeventcardGroup7();
-    dayeventcardGroup8();
 });

@@ -24,8 +24,12 @@ function createWrapper() {
     };
 }
 
-function useserverinviteGroup1() {
-it('should fetch server invite when enabled=true (default)', async () => {
+describe('useServerInvite', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should fetch server invite when enabled=true (default)', async () => {
         const mockResponse = { url: 'https://discord.gg/abc123', guildName: 'Test Guild' };
         mockFetchApi.mockResolvedValue(mockResponse);
 
@@ -41,7 +45,7 @@ it('should fetch server invite when enabled=true (default)', async () => {
         expect(mockFetchApi).toHaveBeenCalledWith('/discord/server-invite');
     });
 
-it('should not fetch when enabled=false', async () => {
+    it('should not fetch when enabled=false', async () => {
         const { result } = renderHook(() => useServerInvite(false), {
             wrapper: createWrapper(),
         });
@@ -53,10 +57,7 @@ it('should not fetch when enabled=false', async () => {
         expect(result.current.data).toBeUndefined();
     });
 
-}
-
-function useserverinviteGroup2() {
-it('should return null url and guildName when API returns nulls', async () => {
+    it('should return null url and guildName when API returns nulls', async () => {
         mockFetchApi.mockResolvedValue({ url: null, guildName: null });
 
         const { result } = renderHook(() => useServerInvite(), {
@@ -70,7 +71,7 @@ it('should return null url and guildName when API returns nulls', async () => {
         expect(result.current.data).toEqual({ url: null, guildName: null });
     });
 
-it('should use queryKey ["discord", "server-invite"]', async () => {
+    it('should use queryKey ["discord", "server-invite"]', async () => {
         mockFetchApi.mockResolvedValue({ url: 'https://discord.gg/test', guildName: 'Guild' });
 
         const { result } = renderHook(() => useServerInvite(), {
@@ -85,10 +86,7 @@ it('should use queryKey ["discord", "server-invite"]', async () => {
         expect(mockFetchApi).toHaveBeenCalledWith('/discord/server-invite');
     });
 
-}
-
-function useserverinviteGroup3() {
-it('should enter error state when API call fails', async () => {
+    it('should enter error state when API call fails', async () => {
         mockFetchApi.mockRejectedValue(new Error('Network error'));
 
         const { result } = renderHook(() => useServerInvite(), {
@@ -99,21 +97,14 @@ it('should enter error state when API call fails', async () => {
             expect(result.current.isError).toBe(true);
         });
     });
+});
 
-}
-
-describe('useServerInvite', () => {
-beforeEach(() => {
+describe('useGuildMembership — fetch behavior', () => {
+    beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    useserverinviteGroup1();
-    useserverinviteGroup2();
-    useserverinviteGroup3();
-});
-
-function useguildmembershipGroup1() {
-it('should fetch guild membership when enabled=true (default)', async () => {
+    it('should fetch guild membership when enabled=true (default)', async () => {
         const mockResponse = { isMember: true };
         mockFetchApi.mockResolvedValue(mockResponse);
 
@@ -129,7 +120,7 @@ it('should fetch guild membership when enabled=true (default)', async () => {
         expect(mockFetchApi).toHaveBeenCalledWith('/discord/guild-membership');
     });
 
-it('should not fetch when enabled=false', async () => {
+    it('should not fetch when enabled=false', async () => {
         const { result } = renderHook(() => useGuildMembership(false), {
             wrapper: createWrapper(),
         });
@@ -140,10 +131,7 @@ it('should not fetch when enabled=false', async () => {
         expect(result.current.data).toBeUndefined();
     });
 
-}
-
-function useguildmembershipGroup2() {
-it('should return isMember=false when user is not in guild', async () => {
+    it('should return isMember=false when user is not in guild', async () => {
         mockFetchApi.mockResolvedValue({ isMember: false });
 
         const { result } = renderHook(() => useGuildMembership(), {
@@ -156,8 +144,14 @@ it('should return isMember=false when user is not in guild', async () => {
 
         expect(result.current.data).toEqual({ isMember: false });
     });
+});
 
-it('should use queryKey ["discord", "guild-membership"]', async () => {
+describe('useGuildMembership — edge cases', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should use queryKey ["discord", "guild-membership"]', async () => {
         mockFetchApi.mockResolvedValue({ isMember: false });
 
         const { result } = renderHook(() => useGuildMembership(), {
@@ -171,10 +165,7 @@ it('should use queryKey ["discord", "guild-membership"]', async () => {
         expect(mockFetchApi).toHaveBeenCalledWith('/discord/guild-membership');
     });
 
-}
-
-function useguildmembershipGroup3() {
-it('should enter error state when API call fails', async () => {
+    it('should enter error state when API call fails', async () => {
         mockFetchApi.mockRejectedValue(new Error('Unauthorized'));
 
         const { result } = renderHook(() => useGuildMembership(), {
@@ -186,10 +177,9 @@ it('should enter error state when API call fails', async () => {
         });
     });
 
-it('should accept enabled flag as a boolean to conditionally fetch', async () => {
+    it('should accept enabled flag as a boolean to conditionally fetch', async () => {
         mockFetchApi.mockResolvedValue({ isMember: true });
 
-        // enabled=true should fetch
         const { result } = renderHook(() => useGuildMembership(true), {
             wrapper: createWrapper(),
         });
@@ -200,15 +190,4 @@ it('should accept enabled flag as a boolean to conditionally fetch', async () =>
 
         expect(mockFetchApi).toHaveBeenCalledTimes(1);
     });
-
-}
-
-describe('useGuildMembership', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    useguildmembershipGroup1();
-    useguildmembershipGroup2();
-    useguildmembershipGroup3();
 });

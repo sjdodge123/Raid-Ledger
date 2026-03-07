@@ -10,7 +10,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { DiscordMembershipResponseSchema } from '@raid-ledger/contract';
 
-function describeUsersControllerGetDiscordMembership() {
+describe('UsersController — getDiscordMembership (ROK-425)', () => {
   let controller: UsersMeController;
   let usersService: UsersService;
   let discordBotClientService: DiscordBotClientService;
@@ -56,83 +56,75 @@ function describeUsersControllerGetDiscordMembership() {
     },
   });
 
-  async function beforeEachHelper() {
+  function buildTestProviders() {
+    return [
+      {
+        provide: UsersService,
+        useValue: {
+          findById: jest.fn(),
+          findRecent: jest.fn(),
+          findAll: jest.fn(),
+          getHeartedGames: jest.fn(),
+          unlinkDiscord: jest.fn(),
+          setCustomAvatar: jest.fn(),
+          findAllWithRoles: jest.fn(),
+          setRole: jest.fn(),
+          checkDisplayNameAvailability: jest.fn(),
+          setDisplayName: jest.fn(),
+          completeOnboarding: jest.fn(),
+          resetOnboarding: jest.fn(),
+          findAdmin: jest.fn(),
+          deleteUser: jest.fn(),
+        },
+      },
+      {
+        provide: AvatarService,
+        useValue: {
+          checkRateLimit: jest.fn(),
+          validateAndProcess: jest.fn(),
+          save: jest.fn(),
+          delete: jest.fn(),
+        },
+      },
+      {
+        provide: PreferencesService,
+        useValue: {
+          getUserPreferences: jest.fn(),
+          setUserPreference: jest.fn(),
+        },
+      },
+      {
+        provide: GameTimeService,
+        useValue: {
+          getCompositeView: jest.fn(),
+          saveTemplate: jest.fn(),
+          saveOverrides: jest.fn(),
+          createAbsence: jest.fn(),
+          deleteAbsence: jest.fn(),
+          getAbsences: jest.fn(),
+        },
+      },
+      { provide: CharactersService, useValue: { findAllForUser: jest.fn() } },
+      { provide: EventsService, useValue: { findUpcomingByUser: jest.fn() } },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn(),
+          getGuildInfo: jest.fn(),
+          getClient: jest.fn(),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveChannelForEvent: jest.fn() },
+      },
+    ];
+  }
+
+  beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersMeController],
-      providers: [
-        {
-          provide: UsersService,
-          useValue: {
-            findById: jest.fn(),
-            findRecent: jest.fn(),
-            findAll: jest.fn(),
-            getHeartedGames: jest.fn(),
-            unlinkDiscord: jest.fn(),
-            setCustomAvatar: jest.fn(),
-            findAllWithRoles: jest.fn(),
-            setRole: jest.fn(),
-            checkDisplayNameAvailability: jest.fn(),
-            setDisplayName: jest.fn(),
-            completeOnboarding: jest.fn(),
-            resetOnboarding: jest.fn(),
-            findAdmin: jest.fn(),
-            deleteUser: jest.fn(),
-          },
-        },
-        {
-          provide: AvatarService,
-          useValue: {
-            checkRateLimit: jest.fn(),
-            validateAndProcess: jest.fn(),
-            save: jest.fn(),
-            delete: jest.fn(),
-          },
-        },
-        {
-          provide: PreferencesService,
-          useValue: {
-            getUserPreferences: jest.fn(),
-            setUserPreference: jest.fn(),
-          },
-        },
-        {
-          provide: GameTimeService,
-          useValue: {
-            getCompositeView: jest.fn(),
-            saveTemplate: jest.fn(),
-            saveOverrides: jest.fn(),
-            createAbsence: jest.fn(),
-            deleteAbsence: jest.fn(),
-            getAbsences: jest.fn(),
-          },
-        },
-        {
-          provide: CharactersService,
-          useValue: {
-            findAllForUser: jest.fn(),
-          },
-        },
-        {
-          provide: EventsService,
-          useValue: {
-            findUpcomingByUser: jest.fn(),
-          },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn(),
-            getGuildInfo: jest.fn(),
-            getClient: jest.fn(),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveChannelForEvent: jest.fn(),
-          },
-        },
-      ],
+      providers: buildTestProviders(),
     }).compile();
 
     controller = module.get<UsersMeController>(UsersMeController);
@@ -143,12 +135,11 @@ function describeUsersControllerGetDiscordMembership() {
     channelResolver = module.get<ChannelResolverService>(
       ChannelResolverService,
     );
-  }
-  beforeEach(() => beforeEachHelper());
+  });
 
   const mockRequest = { user: { id: 1, role: 'member' } };
 
-  function describeWhenBotIsOfflineNotConnected() {
+  describe('when bot is offline / not connected', () => {
     it('returns botConnected: false when isConnected() is false', async () => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(false);
 
@@ -201,11 +192,9 @@ function describeUsersControllerGetDiscordMembership() {
 
       expect(result).toEqual({ botConnected: false });
     });
-  }
-  describe('when bot is offline / not connected', () =>
-    describeWhenBotIsOfflineNotConnected());
+  });
 
-  function describeWhenUserHasNoLinkedDiscordAccount() {
+  describe('when user has no linked Discord account', () => {
     beforeEach(() => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(true);
       (discordBotClientService.getGuildInfo as jest.Mock).mockReturnValue(
@@ -269,11 +258,9 @@ function describeUsersControllerGetDiscordMembership() {
 
       expect(getClientSpy).not.toHaveBeenCalled();
     });
-  }
-  describe('when user has no linked Discord account', () =>
-    describeWhenUserHasNoLinkedDiscordAccount());
+  });
 
-  function describeWhenUserISAMemberOfTheGuild() {
+  describe('when user IS a member of the guild', () => {
     it('returns isMember: true when guild.members.fetch succeeds', async () => {
       const guild = makeMockGuild('found');
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(true);
@@ -314,11 +301,9 @@ function describeUsersControllerGetDiscordMembership() {
 
       expect(result.inviteUrl).toBeUndefined();
     });
-  }
-  describe('when user IS a member of the guild', () =>
-    describeWhenUserISAMemberOfTheGuild());
+  });
 
-  function describeWhenUserIsNOTAMemberOfTheGuild() {
+  describe('when user is NOT a member of the guild', () => {
     let guild: ReturnType<typeof makeMockGuild>;
 
     beforeEach(() => {
@@ -479,11 +464,9 @@ function describeUsersControllerGetDiscordMembership() {
 
       expect(result.inviteUrl).toBeUndefined();
     });
-  }
-  describe('when user is NOT a member of the guild', () =>
-    describeWhenUserIsNOTAMemberOfTheGuild());
+  });
 
-  function describeResponseSchemaValidation() {
+  describe('response schema validation', () => {
     it('validates botConnected: false response against schema', async () => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(false);
 
@@ -546,9 +529,5 @@ function describeUsersControllerGetDiscordMembership() {
       const parseResult = DiscordMembershipResponseSchema.safeParse(result);
       expect(parseResult.success).toBe(true);
     });
-  }
-  describe('response schema validation', () =>
-    describeResponseSchemaValidation());
-}
-describe('UsersController — getDiscordMembership (ROK-425)', () =>
-  describeUsersControllerGetDiscordMembership());
+  });
+});

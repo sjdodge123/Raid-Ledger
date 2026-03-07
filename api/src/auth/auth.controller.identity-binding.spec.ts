@@ -33,12 +33,8 @@ function buildMockRequest(userId = 1): AuthenticatedRequest {
   };
 }
 
-async function buildModule(overrides: {
-  mockUsersService?: Record<string, jest.Mock>;
-  mockSignupsService?: Record<string, jest.Mock>;
-  mockIntentTokenService?: Record<string, jest.Mock>;
-}) {
-  const mockUsersService = overrides.mockUsersService ?? {
+function defaultUsersService(): Record<string, jest.Mock> {
+  return {
     findById: jest.fn().mockResolvedValue({
       id: 1,
       username: 'testuser',
@@ -49,8 +45,10 @@ async function buildModule(overrides: {
     createOrUpdate: jest.fn(),
     relinkDiscord: jest.fn(),
   };
+}
 
-  const mockSignupsService = overrides.mockSignupsService ?? {
+function defaultSignupsService(): Record<string, jest.Mock> {
+  return {
     signup: jest.fn().mockResolvedValue({ id: 1, eventId: 42 }),
     claimAnonymousSignups: jest.fn().mockResolvedValue(0),
     cancel: jest.fn(),
@@ -60,71 +58,87 @@ async function buildModule(overrides: {
     updateStatus: jest.fn(),
     cancelByDiscordUser: jest.fn(),
   };
+}
 
-  const mockIntentTokenService = overrides.mockIntentTokenService ?? {
+function buildProviders(
+  users: Record<string, jest.Mock>,
+  signups: Record<string, jest.Mock>,
+  intents: Record<string, jest.Mock>,
+) {
+  return [
+    {
+      provide: AuthService,
+      useValue: { login: jest.fn().mockReturnValue({ access_token: 'tok' }) },
+    },
+    { provide: IntentTokenService, useValue: intents },
+    { provide: UsersService, useValue: users },
+    {
+      provide: PreferencesService,
+      useValue: {
+        getUserPreference: jest.fn().mockResolvedValue(null),
+        getUserPreferences: jest.fn().mockResolvedValue([]),
+        setUserPreference: jest.fn().mockResolvedValue(undefined),
+      },
+    },
+    { provide: SignupsService, useValue: signups },
+    {
+      provide: ConfigService,
+      useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },
+    },
+    {
+      provide: JwtService,
+      useValue: {
+        verify: jest.fn().mockReturnValue({ sub: 1 }),
+        sign: jest.fn(),
+      },
+    },
+    {
+      provide: SettingsService,
+      useValue: { getDiscordOAuthConfig: jest.fn(), getBranding: jest.fn() },
+    },
+    {
+      provide: CharactersService,
+      useValue: {
+        findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+        getAvatarUrlByName: jest.fn().mockResolvedValue(null),
+      },
+    },
+    { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+    {
+      provide: REDIS_CLIENT,
+      useValue: {
+        get: jest.fn(),
+        set: jest.fn(),
+        setex: jest.fn(),
+        del: jest.fn(),
+      },
+    },
+  ];
+}
+
+async function buildModule(overrides: {
+  mockUsersService?: Record<string, jest.Mock>;
+  mockSignupsService?: Record<string, jest.Mock>;
+  mockIntentTokenService?: Record<string, jest.Mock>;
+}) {
+  const users = overrides.mockUsersService ?? defaultUsersService();
+  const signups = overrides.mockSignupsService ?? defaultSignupsService();
+  const intents = overrides.mockIntentTokenService ?? {
     generate: jest.fn(),
     validate: jest.fn(),
   };
 
   const module: TestingModule = await Test.createTestingModule({
     controllers: [AuthController],
-    providers: [
-      {
-        provide: AuthService,
-        useValue: { login: jest.fn().mockReturnValue({ access_token: 'tok' }) },
-      },
-      { provide: IntentTokenService, useValue: mockIntentTokenService },
-      { provide: UsersService, useValue: mockUsersService },
-      {
-        provide: PreferencesService,
-        useValue: {
-          getUserPreference: jest.fn().mockResolvedValue(null),
-          getUserPreferences: jest.fn().mockResolvedValue([]),
-          setUserPreference: jest.fn().mockResolvedValue(undefined),
-        },
-      },
-      { provide: SignupsService, useValue: mockSignupsService },
-      {
-        provide: ConfigService,
-        useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },
-      },
-      {
-        provide: JwtService,
-        useValue: {
-          verify: jest.fn().mockReturnValue({ sub: 1 }),
-          sign: jest.fn(),
-        },
-      },
-      {
-        provide: SettingsService,
-        useValue: { getDiscordOAuthConfig: jest.fn(), getBranding: jest.fn() },
-      },
-      {
-        provide: CharactersService,
-        useValue: {
-          findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
-          getAvatarUrlByName: jest.fn().mockResolvedValue(null),
-        },
-      },
-      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
-      {
-        provide: REDIS_CLIENT,
-        useValue: {
-          get: jest.fn(),
-          set: jest.fn(),
-          setex: jest.fn(),
-          del: jest.fn(),
-        },
-      },
-    ],
+    providers: buildProviders(users, signups, intents),
   }).compile();
 
   return module.get<AuthController>(AuthController);
 }
 
-function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
-  function describeDiscordIdNullUndefinedScenariosAllowRedemption() {
-    async function testProceedWhenPayloadDiscordIdIsNull() {
+describe('AuthController — redeemIntent identity binding edge cases (ROK-373)', () => {
+  describe('discordId null/undefined scenarios — should allow redemption (no binding enforced)', () => {
+    it('should proceed when payload.discordId is null (token was created before Discord link)', async () => {
       const mockIntentTokenService = {
         generate: jest.fn(),
         validate: jest.fn().mockReturnValue({
@@ -170,11 +184,9 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
       // No mismatch: payload.discordId is null, so the check is skipped
       expect(result.success).toBe(true);
       expect(mockSignupsService.signup).toHaveBeenCalledWith(42, 1);
-    }
-    it('should proceed when payload.discordId is null (token was created before Discord link)', () =>
-      testProceedWhenPayloadDiscordIdIsNull());
+    });
 
-    async function testProceedWhenPayloadDiscordIdIsUndefined() {
+    it('should proceed when payload.discordId is undefined', async () => {
       const mockIntentTokenService = {
         generate: jest.fn(),
         validate: jest.fn().mockReturnValue({
@@ -219,11 +231,9 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
 
       expect(result.success).toBe(true);
       expect(mockSignupsService.signup).toHaveBeenCalledWith(10, 1);
-    }
-    it('should proceed when payload.discordId is undefined', () =>
-      testProceedWhenPayloadDiscordIdIsUndefined());
+    });
 
-    async function testProceedWhenCurrentUserDiscordIdIsNull() {
+    it('should proceed when currentUser.discordId is null (user has not yet linked Discord)', async () => {
       const mockIntentTokenService = {
         generate: jest.fn(),
         validate: jest.fn().mockReturnValue({
@@ -269,11 +279,9 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
       // currentUser.discordId is null → check is short-circuited → allowed
       expect(result.success).toBe(true);
       expect(mockSignupsService.signup).toHaveBeenCalledWith(20, 1);
-    }
-    it('should proceed when currentUser.discordId is null (user has not yet linked Discord)', () =>
-      testProceedWhenCurrentUserDiscordIdIsNull());
+    });
 
-    async function testProceedWhenBothPayloadDiscordIdAndCurrentUserDiscordI() {
+    it('should proceed when both payload.discordId and currentUser.discordId are null', async () => {
       const mockIntentTokenService = {
         generate: jest.fn(),
         validate: jest.fn().mockReturnValue({
@@ -318,15 +326,11 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
 
       expect(result.success).toBe(true);
       expect(mockSignupsService.signup).toHaveBeenCalledWith(30, 1);
-    }
-    it('should proceed when both payload.discordId and currentUser.discordId are null', () =>
-      testProceedWhenBothPayloadDiscordIdAndCurrentUserDiscordI());
-  }
-  describe('discordId null/undefined scenarios — should allow redemption (no binding enforced)', () =>
-    describeDiscordIdNullUndefinedScenariosAllowRedemption());
+    });
+  });
 
-  function describeDiscordIdMismatchScenariosReject() {
-    async function testRejectWhenPayloadDiscordIdDiffersFromCurrentUserDisco() {
+  describe('discordId mismatch scenarios — should reject', () => {
+    it('should reject when payload.discordId differs from currentUser.discordId (both non-null)', async () => {
       const mockIntentTokenService = {
         generate: jest.fn(),
         validate: jest.fn().mockReturnValue({
@@ -372,11 +376,9 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
       expect(result.success).toBe(false);
       expect(result.message).toContain('different Discord user');
       expect(mockSignupsService.signup).not.toHaveBeenCalled();
-    }
-    it('should reject when payload.discordId differs from currentUser.discordId (both non-null)', () =>
-      testRejectWhenPayloadDiscordIdDiffersFromCurrentUserDisco());
+    });
 
-    async function testRejectTokenTheftAttackerWithDifferentRLAccountTries() {
+    it('should reject token theft: attacker with different RL account tries to use victim discordId token', async () => {
       // Attacker is logged in as user 99. Token was generated for discord-user-victim.
       const mockIntentTokenService = {
         generate: jest.fn(),
@@ -423,15 +425,11 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
       expect(result.success).toBe(false);
       expect(result.message).toContain('different Discord user');
       expect(mockSignupsService.signup).not.toHaveBeenCalled();
-    }
-    it('should reject token theft: attacker with different RL account tries to use victim discordId token', () =>
-      testRejectTokenTheftAttackerWithDifferentRLAccountTries());
-  }
-  describe('discordId mismatch scenarios — should reject', () =>
-    describeDiscordIdMismatchScenariosReject());
+    });
+  });
 
-  function describeCurrentUserNotFoundScenario() {
-    async function testReturnFailureGracefullyWhenSignupThrowsAfterDiscordId() {
+  describe('currentUser not found scenario', () => {
+    it('should return failure gracefully when signup throws after discordId passes', async () => {
       // This tests that an error in signup is caught and returned, not thrown
       const mockIntentTokenService = {
         generate: jest.fn(),
@@ -478,15 +476,11 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
       expect(result.success).toBe(false);
       expect(result.eventId).toBe(99);
       expect(result.message).toContain('Event not found');
-    }
-    it('should return failure gracefully when signup throws after discordId passes', () =>
-      testReturnFailureGracefullyWhenSignupThrowsAfterDiscordId());
-  }
-  describe('currentUser not found scenario', () =>
-    describeCurrentUserNotFoundScenario());
+    });
+  });
 
-  function describeIdentityBindingDoesNotBreakAnonymousSignupClaims() {
-    async function testStillClaimAnonymousSignupsWhenDiscordIdsMatch() {
+  describe('identity binding does not break anonymous signup claims', () => {
+    it('should still claim anonymous signups when discordIds match', async () => {
       const mockIntentTokenService = {
         generate: jest.fn(),
         validate: jest.fn().mockReturnValue({
@@ -534,11 +528,9 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
         'discord-123',
         1,
       );
-    }
-    it('should still claim anonymous signups when discordIds match', () =>
-      testStillClaimAnonymousSignupsWhenDiscordIdsMatch());
+    });
 
-    async function testNOTCallClaimAnonymousSignupsWhenDiscordIdCheckFails() {
+    it('should NOT call claimAnonymousSignups when discordId check fails (mismatch)', async () => {
       const mockIntentTokenService = {
         generate: jest.fn(),
         validate: jest.fn().mockReturnValue({
@@ -583,12 +575,6 @@ function describeAuthControllerRedeemIntentIdentityBindingEdgeCases() {
 
       expect(result.success).toBe(false);
       expect(mockSignupsService.claimAnonymousSignups).not.toHaveBeenCalled();
-    }
-    it('should NOT call claimAnonymousSignups when discordId check fails (mismatch)', () =>
-      testNOTCallClaimAnonymousSignupsWhenDiscordIdCheckFails());
-  }
-  describe('identity binding does not break anonymous signup claims', () =>
-    describeIdentityBindingDoesNotBreakAnonymousSignupClaims());
-}
-describe('AuthController — redeemIntent identity binding edge cases (ROK-373)', () =>
-  describeAuthControllerRedeemIntentIdentityBindingEdgeCases());
+    });
+  });
+});

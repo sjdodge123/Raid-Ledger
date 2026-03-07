@@ -69,8 +69,12 @@ const mockNowPlayingResponse = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-function usegameactivityROK443Group1() {
-it('should fetch game activity with correct gameId and period', async () => {
+describe('useGameActivity (ROK-443) — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should fetch game activity with correct gameId and period', async () => {
         mockGetGameActivity.mockResolvedValue(mockActivityResponse);
 
         const { result } = renderHook(() => useGameActivity(42, 'week'), {
@@ -85,7 +89,7 @@ it('should fetch game activity with correct gameId and period', async () => {
         expect(mockGetGameActivity).toHaveBeenCalledWith(42, 'week');
     });
 
-it('should not fetch when gameId is undefined', async () => {
+    it('should not fetch when gameId is undefined', async () => {
         const { result } = renderHook(() => useGameActivity(undefined, 'week'), {
             wrapper: createWrapper(),
         });
@@ -96,10 +100,7 @@ it('should not fetch when gameId is undefined', async () => {
         expect(mockGetGameActivity).not.toHaveBeenCalled();
     });
 
-}
-
-function usegameactivityROK443Group2() {
-it('should fetch with period=month', async () => {
+    it('should fetch with period=month', async () => {
         mockGetGameActivity.mockResolvedValue({ ...mockActivityResponse, period: 'month' });
 
         const { result } = renderHook(() => useGameActivity(10, 'month'), {
@@ -113,7 +114,7 @@ it('should fetch with period=month', async () => {
         expect(mockGetGameActivity).toHaveBeenCalledWith(10, 'month');
     });
 
-it('should fetch with period=all', async () => {
+    it('should fetch with period=all', async () => {
         mockGetGameActivity.mockResolvedValue({ ...mockActivityResponse, period: 'all' });
 
         const { result } = renderHook(() => useGameActivity(10, 'all'), {
@@ -127,10 +128,7 @@ it('should fetch with period=all', async () => {
         expect(mockGetGameActivity).toHaveBeenCalledWith(10, 'all');
     });
 
-}
-
-function usegameactivityROK443Group3() {
-it('should return topPlayers array from response', async () => {
+    it('should return topPlayers array from response', async () => {
         mockGetGameActivity.mockResolvedValue(mockActivityResponse);
 
         const { result } = renderHook(() => useGameActivity(42, 'week'), {
@@ -145,7 +143,14 @@ it('should return topPlayers array from response', async () => {
         expect(result.current.data?.topPlayers[0].username).toBe('PlayerOne');
     });
 
-it('should return totalSeconds from response', async () => {
+});
+
+describe('useGameActivity (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should return totalSeconds from response', async () => {
         mockGetGameActivity.mockResolvedValue(mockActivityResponse);
 
         const { result } = renderHook(() => useGameActivity(42, 'week'), {
@@ -159,10 +164,7 @@ it('should return totalSeconds from response', async () => {
         expect(result.current.data?.totalSeconds).toBe(7200);
     });
 
-}
-
-function usegameactivityROK443Group4() {
-it('should handle empty topPlayers', async () => {
+    it('should handle empty topPlayers', async () => {
         mockGetGameActivity.mockResolvedValue({
             topPlayers: [],
             totalSeconds: 0,
@@ -181,10 +183,7 @@ it('should handle empty topPlayers', async () => {
         expect(result.current.data?.totalSeconds).toBe(0);
     });
 
-}
-
-function usegameactivityROK443Group5() {
-it('should handle API errors', async () => {
+    it('should handle API errors', async () => {
         mockGetGameActivity.mockRejectedValue(new Error('Game not found'));
 
         const { result } = renderHook(() => useGameActivity(999, 'week'), {
@@ -198,22 +197,14 @@ it('should handle API errors', async () => {
         expect(result.current.error).toBeInstanceOf(Error);
     });
 
-}
+});
 
-describe('useGameActivity (ROK-443)', () => {
-beforeEach(() => {
+describe('useGameNowPlaying (ROK-443) — part 1', () => {
+    beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    usegameactivityROK443Group1();
-    usegameactivityROK443Group2();
-    usegameactivityROK443Group3();
-    usegameactivityROK443Group4();
-    usegameactivityROK443Group5();
-});
-
-function usegamenowplayingROK443Group1() {
-it('should fetch now-playing for a game', async () => {
+    it('should fetch now-playing for a game', async () => {
         mockGetGameNowPlaying.mockResolvedValue(mockNowPlayingResponse);
 
         const { result } = renderHook(() => useGameNowPlaying(42), {
@@ -228,7 +219,7 @@ it('should fetch now-playing for a game', async () => {
         expect(mockGetGameNowPlaying).toHaveBeenCalledWith(42);
     });
 
-it('should not fetch when gameId is undefined', async () => {
+    it('should not fetch when gameId is undefined', async () => {
         const { result } = renderHook(() => useGameNowPlaying(undefined), {
             wrapper: createWrapper(),
         });
@@ -239,10 +230,7 @@ it('should not fetch when gameId is undefined', async () => {
         expect(mockGetGameNowPlaying).not.toHaveBeenCalled();
     });
 
-}
-
-function usegamenowplayingROK443Group2() {
-it('should return players array from response', async () => {
+    it('should return players array from response', async () => {
         mockGetGameNowPlaying.mockResolvedValue(mockNowPlayingResponse);
 
         const { result } = renderHook(() => useGameNowPlaying(42), {
@@ -257,7 +245,7 @@ it('should return players array from response', async () => {
         expect(result.current.data?.players[0].username).toBe('ActivePlayer');
     });
 
-it('should return count from response', async () => {
+    it('should return count from response', async () => {
         mockGetGameNowPlaying.mockResolvedValue(mockNowPlayingResponse);
 
         const { result } = renderHook(() => useGameNowPlaying(42), {
@@ -271,10 +259,7 @@ it('should return count from response', async () => {
         expect(result.current.data?.count).toBe(1);
     });
 
-}
-
-function usegamenowplayingROK443Group3() {
-it('should handle empty players list (nobody playing)', async () => {
+    it('should handle empty players list (nobody playing)', async () => {
         mockGetGameNowPlaying.mockResolvedValue({ players: [], count: 0 });
 
         const { result } = renderHook(() => useGameNowPlaying(42), {
@@ -289,7 +274,14 @@ it('should handle empty players list (nobody playing)', async () => {
         expect(result.current.data?.count).toBe(0);
     });
 
-it('should handle API errors', async () => {
+});
+
+describe('useGameNowPlaying (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should handle API errors', async () => {
         mockGetGameNowPlaying.mockRejectedValue(new Error('Network error'));
 
         const { result } = renderHook(() => useGameNowPlaying(1), {
@@ -303,14 +295,4 @@ it('should handle API errors', async () => {
         expect(result.current.error).toBeInstanceOf(Error);
     });
 
-}
-
-describe('useGameNowPlaying (ROK-443)', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    usegamenowplayingROK443Group1();
-    usegamenowplayingROK443Group2();
-    usegamenowplayingROK443Group3();
 });
