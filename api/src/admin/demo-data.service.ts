@@ -348,6 +348,28 @@ export class DemoDataService {
   ) {
     const igdbIdsByDbId = new Map(allGames.map((g) => [g.igdbId, g.id]));
     const origEvents = (await this.db.select().from(schema.events)).slice(0, 6);
+    const counts = await this.installSecondaryData(
+      allUsers,
+      userByName,
+      origEvents,
+      generated,
+    );
+    await this.installPreferences(userByName, allUsers, generated.notifPrefs);
+    await this.installGameInterests(
+      userByName,
+      igdbIdsByDbId,
+      generated.interests,
+    );
+    return counts;
+  }
+
+  /** Install availability, game time, and notifications. */
+  private async installSecondaryData(
+    allUsers: (typeof schema.users.$inferSelect)[],
+    userByName: Map<string, typeof schema.users.$inferSelect>,
+    origEvents: (typeof schema.events.$inferSelect)[],
+    generated: ReturnType<DemoDataService['generateAllData']>,
+  ) {
     const allAvailValues = await this.installAvailability(
       userByName,
       generated.avail,
@@ -362,12 +384,6 @@ export class DemoDataService {
       origEvents,
       generated.notifs,
       generated.notifPrefs,
-    );
-    await this.installPreferences(userByName, allUsers, generated.notifPrefs);
-    await this.installGameInterests(
-      userByName,
-      igdbIdsByDbId,
-      generated.interests,
     );
     return {
       availability: allAvailValues.length,
@@ -1085,16 +1101,9 @@ export class DemoDataService {
     return this.countDemoEntities(demoUserIds);
   }
 
-  /** Count all demo entity types in parallel. */
-  private async countDemoEntities(ids: number[]): Promise<DemoDataCountsDto> {
-    const [
-      events,
-      characters,
-      signups,
-      availability,
-      gameTimeSlots,
-      notifications,
-    ] = await Promise.all([
+  /** Build the parallel count queries for demo entities. */
+  private buildDemoCountQueries(ids: number[]) {
+    return [
       this.countRows(schema.events, inArray(schema.events.creatorId, ids)),
       this.countRows(schema.characters, inArray(schema.characters.userId, ids)),
       this.countRows(
@@ -1113,7 +1122,19 @@ export class DemoDataService {
         schema.notifications,
         inArray(schema.notifications.userId, ids),
       ),
-    ]);
+    ] as const;
+  }
+
+  /** Count all demo entity types in parallel. */
+  private async countDemoEntities(ids: number[]): Promise<DemoDataCountsDto> {
+    const [
+      events,
+      characters,
+      signups,
+      availability,
+      gameTimeSlots,
+      notifications,
+    ] = await Promise.all(this.buildDemoCountQueries(ids));
     return {
       users: ids.length,
       events,

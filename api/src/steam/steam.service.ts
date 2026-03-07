@@ -113,6 +113,63 @@ export class SteamService {
     return new Set(rows.map((i) => i.gameId));
   }
 
+  /** Row types for partition results. */
+  private buildInsertRow(
+    userId: number,
+    gameId: number,
+    playtimeForever: number,
+    playtime2weeks: number | null,
+    now: Date,
+  ) {
+    return {
+      userId,
+      gameId,
+      source: 'steam_library' as const,
+      playtimeForever,
+      playtime2weeks,
+      lastSyncedAt: now,
+    };
+  }
+
+  /** Classify a single owned game as insert or update. */
+  private classifySteamGame(
+    steamGame: {
+      appid: number;
+      playtime_forever: number;
+      playtime_2weeks?: number;
+    },
+    gameByAppId: Map<number, { id: number }>,
+    existingGameIds: Set<number>,
+    userId: number,
+    now: Date,
+    toInsert: ReturnType<SteamService['buildInsertRow']>[],
+    toUpdate: Array<{
+      gameId: number;
+      playtimeForever: number;
+      playtime2weeks: number | null;
+    }>,
+  ): void {
+    const dbGame = gameByAppId.get(steamGame.appid);
+    if (!dbGame) return;
+    const pt2w = steamGame.playtime_2weeks ?? null;
+    if (existingGameIds.has(dbGame.id))
+      toUpdate.push({
+        gameId: dbGame.id,
+        playtimeForever: steamGame.playtime_forever,
+        playtime2weeks: pt2w,
+      });
+    else
+      toInsert.push(
+        this.buildInsertRow(
+          userId,
+          dbGame.id,
+          steamGame.playtime_forever,
+          pt2w,
+          now,
+        ),
+      );
+  }
+
   private async partitionGames(
     userId: number,
     ownedGames: Awaited<ReturnType<typeof getOwnedGames>>,
@@ -121,41 +178,22 @@ export class SteamService {
     const gameByAppId = new Map(matchedGames.map((g) => [g.steamAppId!, g]));
     const existingGameIds = await this.fetchExistingSteamInterests(userId);
     const now = new Date();
-    type InsertRow = {
-      userId: number;
-      gameId: number;
-      source: string;
-      playtimeForever: number;
-      playtime2weeks: number | null;
-      lastSyncedAt: Date;
-    };
-    type UpdateRow = {
+    const toInsert: ReturnType<SteamService['buildInsertRow']>[] = [];
+    const toUpdate: Array<{
       gameId: number;
       playtimeForever: number;
       playtime2weeks: number | null;
-    };
-    const toInsert: InsertRow[] = [];
-    const toUpdate: UpdateRow[] = [];
-    for (const steamGame of ownedGames) {
-      const dbGame = gameByAppId.get(steamGame.appid);
-      if (!dbGame) continue;
-      const pt2w = steamGame.playtime_2weeks ?? null;
-      if (existingGameIds.has(dbGame.id))
-        toUpdate.push({
-          gameId: dbGame.id,
-          playtimeForever: steamGame.playtime_forever,
-          playtime2weeks: pt2w,
-        });
-      else
-        toInsert.push({
-          userId,
-          gameId: dbGame.id,
-          source: 'steam_library',
-          playtimeForever: steamGame.playtime_forever,
-          playtime2weeks: pt2w,
-          lastSyncedAt: now,
-        });
-    }
+    }> = [];
+    for (const steamGame of ownedGames)
+      this.classifySteamGame(
+        steamGame,
+        gameByAppId,
+        existingGameIds,
+        userId,
+        now,
+        toInsert,
+        toUpdate,
+      );
     return { toInsert, toUpdate };
   }
 
@@ -198,6 +236,24 @@ export class SteamService {
     return { foreverCases, weeksCases };
   }
 
+  /** Build the SET clause for batch playtime updates. */
+  private buildPlaytimeSetClause(
+    toUpdate: Array<{
+      gameId: number;
+      playtimeForever: number;
+      playtime2weeks: number | null;
+    }>,
+  ) {
+    const { foreverCases, weeksCases } = this.buildPlaytimeCases(toUpdate);
+    return {
+      playtimeForever: sql.raw(
+        `CASE ${foreverCases} ELSE playtime_forever END`,
+      ),
+      playtime2weeks: sql.raw(`CASE ${weeksCases} ELSE playtime_2weeks END`),
+      lastSyncedAt: new Date(),
+    };
+  }
+
   private async updateExistingPlaytime(
     userId: number,
     toUpdate: Array<{
@@ -207,16 +263,9 @@ export class SteamService {
     }>,
   ): Promise<number> {
     if (toUpdate.length === 0) return 0;
-    const { foreverCases, weeksCases } = this.buildPlaytimeCases(toUpdate);
     const result = await this.db
       .update(schema.gameInterests)
-      .set({
-        playtimeForever: sql.raw(
-          `CASE ${foreverCases} ELSE playtime_forever END`,
-        ),
-        playtime2weeks: sql.raw(`CASE ${weeksCases} ELSE playtime_2weeks END`),
-        lastSyncedAt: new Date(),
-      })
+      .set(this.buildPlaytimeSetClause(toUpdate))
       .where(
         and(
           eq(schema.gameInterests.userId, userId),

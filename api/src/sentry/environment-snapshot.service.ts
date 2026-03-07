@@ -184,36 +184,35 @@ export class EnvironmentSnapshotService implements OnModuleInit {
     }
   }
 
+  /** Setting keys to collect for the environment snapshot. */
+  private static readonly SETTINGS_KEYS = [
+    SETTING_KEYS.DEMO_MODE,
+    SETTING_KEYS.ONBOARDING_COMPLETED,
+    SETTING_KEYS.DEFAULT_TIMEZONE,
+    SETTING_KEYS.COMMUNITY_NAME,
+    SETTING_KEYS.RELAY_ENABLED,
+    SETTING_KEYS.IGDB_FILTER_ADULT,
+    SETTING_KEYS.DISCORD_BOT_ENABLED,
+    SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED,
+  ] as const;
+
   private async collectAppSettings(): Promise<EnvironmentSnapshot['settings']> {
-    const keys = [
-      SETTING_KEYS.DEMO_MODE,
-      SETTING_KEYS.ONBOARDING_COMPLETED,
-      SETTING_KEYS.DEFAULT_TIMEZONE,
-      SETTING_KEYS.COMMUNITY_NAME,
-      SETTING_KEYS.RELAY_ENABLED,
-      SETTING_KEYS.IGDB_FILTER_ADULT,
-      SETTING_KEYS.DISCORD_BOT_ENABLED,
-      SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED,
-    ] as const;
-    const [
-      demoMode,
-      onboardingCompleted,
-      defaultTimezone,
-      communityName,
-      relayEnabled,
-      igdbFilterAdult,
-      discordBotEnabled,
-      discordBotSetupCompleted,
-    ] = await Promise.all(keys.map((k) => this.settingsService.get(k)));
+    const values = await Promise.all(
+      EnvironmentSnapshotService.SETTINGS_KEYS.map((k) =>
+        this.settingsService.get(k),
+      ),
+    );
+    const [demoMode, onboarding, tz, name, relay, igdb, botEnabled, botSetup] =
+      values;
     return {
       demoMode: demoMode === 'true',
-      onboardingCompleted: onboardingCompleted === 'true',
-      defaultTimezone,
-      communityName,
-      relayEnabled: relayEnabled === 'true',
-      igdbFilterAdult: igdbFilterAdult === 'true',
-      discordBotEnabled: discordBotEnabled === 'true',
-      discordBotSetupCompleted: discordBotSetupCompleted === 'true',
+      onboardingCompleted: onboarding === 'true',
+      defaultTimezone: tz,
+      communityName: name,
+      relayEnabled: relay === 'true',
+      igdbFilterAdult: igdb === 'true',
+      discordBotEnabled: botEnabled === 'true',
+      discordBotSetupCompleted: botSetup === 'true',
     };
   }
 

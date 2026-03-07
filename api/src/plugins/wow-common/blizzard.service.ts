@@ -94,6 +94,18 @@ export class BlizzardService {
     throw new Error(`Blizzard API error (${status}). Please try again later.`);
   }
 
+  /** Build the Blizzard profile URL (retail only). */
+  private static buildProfileUrl(
+    gameVariant: WowGameVariant,
+    region: string,
+    realmSlug: string,
+    charName: string,
+  ): string | null {
+    return gameVariant === 'retail'
+      ? `https://worldofwarcraft.blizzard.com/en-${region}/character/${realmSlug}/${charName}`
+      : null;
+  }
+
   /** Build profile result from raw API data. */
   private buildProfileResult(
     profile: {
@@ -114,10 +126,6 @@ export class BlizzardService {
     charName: string,
   ): BlizzardCharacterProfile {
     const specName = profile.active_spec?.name ?? null;
-    const profileUrl =
-      gameVariant === 'retail'
-        ? `https://worldofwarcraft.blizzard.com/en-${region}/character/${realmSlug}/${charName}`
-        : null;
     return {
       name: profile.name,
       realm: profile.realm.name,
@@ -130,9 +138,26 @@ export class BlizzardService {
       itemLevel,
       avatarUrl,
       renderUrl,
-      profileUrl,
+      profileUrl: BlizzardService.buildProfileUrl(
+        gameVariant,
+        region,
+        realmSlug,
+        charName,
+      ),
     };
   }
+
+  /** Raw profile response type. */
+  private static readonly PROFILE_SHAPE = {} as {
+    name: string;
+    level: number;
+    character_class: { name: string };
+    active_spec?: { name: string };
+    race: { name: string };
+    faction: { type: string };
+    realm: { name: string };
+    equipped_item_level?: number;
+  };
 
   /** Fetch raw profile from Blizzard API. */
   private async fetchRawProfile(
@@ -155,16 +180,19 @@ export class BlizzardService {
         realm,
         region,
       );
-    return (await profileRes.json()) as {
-      name: string;
-      level: number;
-      character_class: { name: string };
-      active_spec?: { name: string };
-      race: { name: string };
-      faction: { type: string };
-      realm: { name: string };
-      equipped_item_level?: number;
-    };
+    return (await profileRes.json()) as typeof BlizzardService.PROFILE_SHAPE;
+  }
+
+  /** Resolve item level from profile or equipment endpoint. */
+  private async resolveItemLevel(
+    profile: { equipped_item_level?: number },
+    profileUrl: string,
+    namespace: string,
+    token: string,
+  ): Promise<number | null> {
+    const itemLevel = profile.equipped_item_level ?? null;
+    if (itemLevel !== null) return itemLevel;
+    return this.fetchEquipItemLevel(profileUrl, namespace, token);
   }
 
   /** Fetch a WoW character profile from the Blizzard API. */
@@ -195,9 +223,12 @@ export class BlizzardService {
       namespace,
       token,
     );
-    let itemLevel: number | null = profile.equipped_item_level ?? null;
-    if (itemLevel === null)
-      itemLevel = await this.fetchEquipItemLevel(profileUrl, namespace, token);
+    const itemLevel = await this.resolveItemLevel(
+      profile,
+      profileUrl,
+      namespace,
+      token,
+    );
     return this.buildProfileResult(
       profile,
       avatarUrl,
@@ -247,6 +278,40 @@ export class BlizzardService {
     );
   }
 
+  /** Fetch raw equipment data from the Blizzard API. */
+  private async fetchRawEquipment(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant: WowGameVariant,
+  ) {
+    const token = await this.getAccessToken(region);
+    const { realmSlug, charName, namespace, baseUrl } = buildCharacterParams(
+      name,
+      realm,
+      region,
+      gameVariant,
+    );
+    const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/equipment?namespace=${namespace}&locale=en_US`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      this.logger.warn(
+        `Equipment fetch failed for ${charName}-${realmSlug}: ${res.status}`,
+      );
+      return null;
+    }
+    const data = (await res.json()) as {
+      equipped_item_level?: number;
+      equipped_items?: Array<{
+        item: { id: number };
+        media?: { key?: { href: string } };
+      }>;
+    };
+    return { data, token, charName };
+  }
+
   /** Fetch a WoW character's equipped items from the Blizzard API. */
   async fetchCharacterEquipment(
     name: string,
@@ -255,39 +320,22 @@ export class BlizzardService {
     gameVariant: WowGameVariant = 'retail',
   ): Promise<BlizzardCharacterEquipment | null> {
     try {
-      const token = await this.getAccessToken(region);
-      const { realmSlug, charName, namespace, baseUrl } = buildCharacterParams(
+      const raw = await this.fetchRawEquipment(
         name,
         realm,
         region,
         gameVariant,
       );
-      const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/equipment?namespace=${namespace}&locale=en_US`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        this.logger.warn(
-          `Equipment fetch failed for ${charName}-${realmSlug}: ${res.status}`,
-        );
-        return null;
-      }
-      const data = (await res.json()) as {
-        equipped_item_level?: number;
-        equipped_items?: Array<{
-          item: { id: number };
-          media?: { key?: { href: string } };
-        }>;
-      };
-      const iconUrls = await this.fetchItemIconUrls(data, token);
+      if (!raw) return null;
+      const iconUrls = await this.fetchItemIconUrls(raw.data, raw.token);
       const result = buildEquipmentResult(
-        data as {
+        raw.data as {
           equipped_item_level?: number;
           equipped_items?: Record<string, unknown>[];
         },
         iconUrls,
       );
-      this.logEquipmentSample(charName, result);
+      this.logEquipmentSample(raw.charName, result);
       return result;
     } catch (err) {
       this.logger.warn(`Failed to fetch character equipment: ${err}`);
@@ -374,6 +422,18 @@ export class BlizzardService {
     talents: null,
   };
 
+  /** Parse specialization data from API response. */
+  private parseSpecData(
+    data: Record<string, unknown>,
+    characterClass: string,
+  ): InferredSpecialization {
+    if ((data.active_specialization as { name: string } | undefined)?.name)
+      return this.buildRetailSpecResult(data);
+    const trees = this.extractClassicTrees(data);
+    if (trees.length === 0) return BlizzardService.NO_SPEC;
+    return inferClassicSpec(trees, characterClass);
+  }
+
   async fetchCharacterSpecializations(
     name: string,
     realm: string,
@@ -395,11 +455,7 @@ export class BlizzardService {
       });
       if (!res.ok) return BlizzardService.NO_SPEC;
       const data = (await res.json()) as Record<string, unknown>;
-      if ((data.active_specialization as { name: string } | undefined)?.name)
-        return this.buildRetailSpecResult(data);
-      const trees = this.extractClassicTrees(data);
-      if (trees.length === 0) return BlizzardService.NO_SPEC;
-      return inferClassicSpec(trees, characterClass);
+      return this.parseSpecData(data, characterClass);
     } catch (err) {
       this.logger.debug(`Failed to fetch specializations: ${err}`);
       return BlizzardService.NO_SPEC;

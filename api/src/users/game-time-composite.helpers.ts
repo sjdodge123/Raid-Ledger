@@ -84,12 +84,12 @@ export async function fetchSignupsPreview(
   return signupsMap;
 }
 
-/** Fetch raw signup rows and counts for given event IDs. */
-async function fetchRawSignupData(
+/** Fetch signup rows with row numbers for given event IDs. */
+async function fetchSignupRows(
   db: PostgresJsDatabase<typeof schema>,
   eventIds: number[],
 ) {
-  const allSignups = await db
+  return db
     .select({
       eventId: schema.eventSignups.eventId,
       signupId: schema.eventSignups.id,
@@ -104,6 +104,13 @@ async function fetchRawSignupData(
     .from(schema.eventSignups)
     .innerJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
     .where(inArray(schema.eventSignups.eventId, eventIds));
+}
+
+/** Fetch signup counts grouped by event ID. */
+async function fetchSignupCounts(
+  db: PostgresJsDatabase<typeof schema>,
+  eventIds: number[],
+): Promise<Map<number, number>> {
   const allCounts = await db
     .select({
       eventId: schema.eventSignups.eventId,
@@ -112,10 +119,46 @@ async function fetchRawSignupData(
     .from(schema.eventSignups)
     .where(inArray(schema.eventSignups.eventId, eventIds))
     .groupBy(schema.eventSignups.eventId);
-  return {
-    allSignups,
-    countMap: new Map(allCounts.map((c) => [c.eventId, c.count])),
-  };
+  return new Map(allCounts.map((c) => [c.eventId, c.count]));
+}
+
+/** Fetch raw signup rows and counts for given event IDs. */
+async function fetchRawSignupData(
+  db: PostgresJsDatabase<typeof schema>,
+  eventIds: number[],
+) {
+  const [allSignups, countMap] = await Promise.all([
+    fetchSignupRows(db, eventIds),
+    fetchSignupCounts(db, eventIds),
+  ]);
+  return { allSignups, countMap };
+}
+
+/** Build preview entries for a single event. */
+function buildEventPreview(
+  allSignups: Array<{
+    eventId: number;
+    userId: number | null;
+    username: string;
+    avatar: string | null;
+    rowNum: number;
+  }>,
+  eventId: number,
+) {
+  const eventSignups = allSignups.filter(
+    (s) => s.eventId === eventId && s.rowNum <= 6,
+  );
+  const userIds = eventSignups
+    .filter((s) => s.userId !== null)
+    .map((s) => s.userId as number);
+  const preview = eventSignups
+    .filter((s) => s.userId !== null)
+    .map((s) => ({
+      id: s.userId as number,
+      username: s.username,
+      avatar: s.avatar,
+    }));
+  return { userIds, preview };
 }
 
 /** Populate the signups preview map and return all signup user IDs. */
@@ -133,22 +176,9 @@ function buildSignupPreviewMap(
 ): number[] {
   const allSignupUsers: number[] = [];
   for (const eventId of eventIds) {
-    const eventSignups = allSignups.filter(
-      (s) => s.eventId === eventId && s.rowNum <= 6,
-    );
-    for (const s of eventSignups) {
-      if (s.userId !== null) allSignupUsers.push(s.userId);
-    }
-    signupsMap.set(eventId, {
-      preview: eventSignups
-        .filter((s) => s.userId !== null)
-        .map((s) => ({
-          id: s.userId as number,
-          username: s.username,
-          avatar: s.avatar,
-        })),
-      count: countMap.get(eventId) ?? 0,
-    });
+    const { userIds, preview } = buildEventPreview(allSignups, eventId);
+    allSignupUsers.push(...userIds);
+    signupsMap.set(eventId, { preview, count: countMap.get(eventId) ?? 0 });
   }
   return allSignupUsers;
 }
@@ -397,21 +427,43 @@ function computeDayHours(
   return dayHours;
 }
 
+/** Extract game-related fields from an event row. */
+function extractEventGameFields(event: SignedUpEventRow) {
+  return {
+    gameSlug: event.gameSlug ?? null,
+    gameName: event.gameName ?? null,
+    gameId: event.gameId ?? null,
+    coverUrl: event.gameCoverUrl ?? null,
+    description: event.description ?? null,
+    creatorUsername: event.creatorUsername ?? null,
+  };
+}
+
+/** Signups data shape for block building. */
+type SignupsBlockData =
+  | {
+      preview: Array<{
+        id: number;
+        username: string;
+        avatar: string | null;
+        characters?: Array<{ gameId: number; avatarUrl: string | null }>;
+      }>;
+      count: number;
+    }
+  | undefined;
+
 /** Build a single event block descriptor. */
 function buildSingleBlock(
   event: SignedUpEventRow,
   dayOfWeek: number,
   hours: number[],
-  signupsData: { preview: Array<{ id: number; username: string; avatar: string | null; characters?: Array<{ gameId: number; avatarUrl: string | null }> }>; count: number } | undefined,
+  signupsData: SignupsBlockData,
 ): EventBlockDescriptor {
   hours.sort((a, b) => a - b);
   return {
     eventId: event.eventId,
     title: event.title,
-    gameSlug: event.gameSlug ?? null,
-    gameName: event.gameName ?? null,
-    gameId: event.gameId ?? null,
-    coverUrl: event.gameCoverUrl ?? null,
+    ...extractEventGameFields(event),
     signupId: event.signupId,
     confirmationStatus: event.confirmationStatus as
       | 'pending'
@@ -420,8 +472,6 @@ function buildSingleBlock(
     dayOfWeek,
     startHour: hours[0],
     endHour: hours[hours.length - 1] + 1,
-    description: event.description ?? null,
-    creatorUsername: event.creatorUsername ?? null,
     signupsPreview: signupsData?.preview ?? [],
     signupCount: signupsData?.count ?? 0,
   };
@@ -479,6 +529,29 @@ function buildOverrideMap(overrideRows: OverrideRecord[]): Map<string, string> {
   return map;
 }
 
+/** Build intermediate lookup sets for composite view assembly. */
+function buildCompositeLookups(
+  remapped: Array<{ dayOfWeek: number; hour: number }>,
+  signedUpEvents: SignedUpEventRow[],
+  overrideRows: OverrideRecord[],
+  absenceRows: AbsenceRecord[],
+  weekStart: Date,
+  weekEnd: Date,
+  tzOffset: number,
+) {
+  return {
+    templateSet: new Set(remapped.map((s) => `${s.dayOfWeek}:${s.hour}`)),
+    committedSet: buildCommittedSet(
+      signedUpEvents,
+      weekStart,
+      weekEnd,
+      tzOffset,
+    ),
+    absenceDates: buildAbsenceDateSet(absenceRows),
+    overrideMap: buildOverrideMap(overrideRows),
+  };
+}
+
 /** Assemble the full composite view result from all fetched data. */
 export function assembleCompositeView(
   remapped: Array<{ dayOfWeek: number; hour: number }>,
@@ -490,21 +563,21 @@ export function assembleCompositeView(
   weekEnd: Date,
   tzOffset: number,
 ): CompositeViewResult {
-  const templateSet = new Set(remapped.map((s) => `${s.dayOfWeek}:${s.hour}`));
-  const committedSet = buildCommittedSet(
+  const lookups = buildCompositeLookups(
+    remapped,
     signedUpEvents,
+    overrideRows,
+    absenceRows,
     weekStart,
     weekEnd,
     tzOffset,
   );
-  const absenceDates = buildAbsenceDateSet(absenceRows);
-  const overrideMap = buildOverrideMap(overrideRows);
   const slots = buildCompositeSlots(
     remapped,
-    templateSet,
-    committedSet,
-    absenceDates,
-    overrideMap,
+    lookups.templateSet,
+    lookups.committedSet,
+    lookups.absenceDates,
+    lookups.overrideMap,
     weekStart,
   );
   const events = buildEventBlocks(

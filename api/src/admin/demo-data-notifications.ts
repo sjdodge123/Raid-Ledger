@@ -70,38 +70,68 @@ function buildUnreadNotifications(
   );
 }
 
+/** Helper: event title with fallback. */
+function eventTitle(
+  events: { id: number; title: string }[],
+  i: number,
+  fb: string,
+) {
+  return events[i]?.title || fb;
+}
+
 /** Build read notification tuple definitions. */
 function readDefs(
   events: { id: number; title: string }[],
   hoursAgo: (h: number) => Date,
   daysAgo: (d: number) => Date,
 ): [string, string, string, Record<string, unknown>, Date, Date][] {
-  const e = (i: number, fb: string) => events[i]?.title || fb;
   return [
-    [
-      'subscribed_game',
-      'New Event for Your Favorite Game',
-      `A new Valheim event has been scheduled: "${e(3, 'Boss Rush')}"`,
-      { eventId: events[3]?.id, gameId: 'valheim' },
-      daysAgo(1),
-      hoursAgo(20),
-    ],
-    [
-      'slot_vacated',
-      'Healer Needed',
-      `A Healer slot is available in "${e(4, 'Mythic Raid')}"`,
-      { eventId: events[4]?.id, role: 'Healer', position: 2 },
-      daysAgo(2),
-      daysAgo(1),
-    ],
-    [
-      'event_reminder',
-      'Event Tomorrow',
-      `Don't forget about "${e(0, 'Raid Night')}" tomorrow at 8 PM`,
-      { eventId: events[0]?.id },
-      daysAgo(3),
-      daysAgo(2),
-    ],
+    readSubscribedGameDef(events, daysAgo, hoursAgo),
+    readSlotVacatedDef(events, daysAgo),
+    readEventReminderDef(events, daysAgo),
+  ];
+}
+
+function readSubscribedGameDef(
+  events: { id: number; title: string }[],
+  daysAgo: (d: number) => Date,
+  hoursAgo: (h: number) => Date,
+): [string, string, string, Record<string, unknown>, Date, Date] {
+  return [
+    'subscribed_game',
+    'New Event for Your Favorite Game',
+    `A new Valheim event has been scheduled: "${eventTitle(events, 3, 'Boss Rush')}"`,
+    { eventId: events[3]?.id, gameId: 'valheim' },
+    daysAgo(1),
+    hoursAgo(20),
+  ];
+}
+
+function readSlotVacatedDef(
+  events: { id: number; title: string }[],
+  daysAgo: (d: number) => Date,
+): [string, string, string, Record<string, unknown>, Date, Date] {
+  return [
+    'slot_vacated',
+    'Healer Needed',
+    `A Healer slot is available in "${eventTitle(events, 4, 'Mythic Raid')}"`,
+    { eventId: events[4]?.id, role: 'Healer', position: 2 },
+    daysAgo(2),
+    daysAgo(1),
+  ];
+}
+
+function readEventReminderDef(
+  events: { id: number; title: string }[],
+  daysAgo: (d: number) => Date,
+): [string, string, string, Record<string, unknown>, Date, Date] {
+  return [
+    'event_reminder',
+    'Event Tomorrow',
+    `Don't forget about "${eventTitle(events, 0, 'Raid Night')}" tomorrow at 8 PM`,
+    { eventId: events[0]?.id },
+    daysAgo(3),
+    daysAgo(2),
   ];
 }
 

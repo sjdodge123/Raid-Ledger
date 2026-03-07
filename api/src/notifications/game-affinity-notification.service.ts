@@ -90,19 +90,24 @@ export class GameAffinityNotificationService {
     return recipientIds;
   }
 
-  /** Build and dispatch notifications to all recipients. */
-  private async dispatchAffinityNotifications(
-    input: GameAffinityNotificationInput,
-    recipientIds: number[],
-  ): Promise<void> {
+  /** Format the event date for affinity notification messages. */
+  private async formatEventDate(startTime: string): Promise<string> {
     const defaultTimezone =
       (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-    const eventDate = new Date(input.startTime).toLocaleDateString('en-US', {
+    return new Date(startTime).toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       timeZone: defaultTimezone,
     });
+  }
+
+  /** Build and dispatch notifications to all recipients. */
+  private async dispatchAffinityNotifications(
+    input: GameAffinityNotificationInput,
+    recipientIds: number[],
+  ): Promise<void> {
+    const eventDate = await this.formatEventDate(input.startTime);
     const message = `New event for ${input.gameName}: ${input.eventTitle} on ${eventDate}`;
     const payload = await this.buildAffinityPayload(input);
     const results = await Promise.allSettled(

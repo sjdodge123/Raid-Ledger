@@ -364,6 +364,32 @@ export class CharactersService {
     return game;
   }
 
+  /** Build import insert values from profile and sync fields. */
+  private buildImportInsertValues(
+    userId: number,
+    gameId: number,
+    profile: { name: string; realm: string; [k: string]: unknown },
+    dto: ImportWowCharacterDto,
+    equipment: unknown,
+    talents: unknown,
+    shouldBeMain: boolean,
+  ) {
+    const syncFields = buildSyncUpdateFields(
+      profile as never,
+      equipment,
+      talents,
+      { region: dto.region, gameVariant: dto.gameVariant },
+    );
+    return {
+      userId,
+      gameId,
+      name: profile.name,
+      realm: profile.realm,
+      ...syncFields,
+      isMain: shouldBeMain,
+    };
+  }
+
   /** Insert an imported character in a transaction with main-swap. */
   private async insertImportedCharacter(
     userId: number,
@@ -389,22 +415,18 @@ export class CharactersService {
       );
       if (shouldBeMain && charCount > 0)
         await demoteExistingMain(tx, userId, gameId);
-      const syncFields = buildSyncUpdateFields(
-        profile as never,
+      const values = this.buildImportInsertValues(
+        userId,
+        gameId,
+        profile,
+        dto,
         equipment,
         talents,
-        { region: dto.region, gameVariant: dto.gameVariant },
+        shouldBeMain,
       );
       const [character] = await tx
         .insert(schema.characters)
-        .values({
-          userId,
-          gameId,
-          name: profile.name,
-          realm: profile.realm,
-          ...syncFields,
-          isMain: shouldBeMain,
-        })
+        .values(values)
         .returning();
       this.logger.log(
         `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
@@ -458,13 +480,23 @@ export class CharactersService {
       region: dto.region,
       gameVariant: dto.gameVariant,
     });
+    return this.applyMerge(userId, existing.id, profile, fields);
+  }
+
+  /** Apply merge update and return DTO. */
+  private async applyMerge(
+    userId: number,
+    existingId: string,
+    profile: { name: string; realm: string },
+    fields: Record<string, unknown>,
+  ): Promise<CharacterDto> {
     const [merged] = await this.db
       .update(schema.characters)
       .set(fields)
-      .where(eq(schema.characters.id, existing.id))
+      .where(eq(schema.characters.id, existingId))
       .returning();
     this.logger.log(
-      `User ${userId} merged import into existing character ${existing.id} (${profile.name}-${profile.realm})`,
+      `User ${userId} merged import into existing character ${existingId} (${profile.name}-${profile.realm})`,
     );
     return mapCharacterToDto(merged);
   }
@@ -482,13 +514,11 @@ export class CharactersService {
     };
   }
 
-  /** Refresh a character's data from an external game API (ROK-234, ROK-237). */
-  async refreshExternal(
-    userId: number,
-    characterId: string,
+  /** Validate and prepare refresh parameters. */
+  private prepareRefresh(
+    character: CharacterDto,
     dto: RefreshCharacterDto,
-  ): Promise<CharacterDto> {
-    const character = await this.findOne(userId, characterId);
+  ): { region: string; gameVariant: string; adapter: CharacterSyncAdapter } {
     if (!character.realm)
       throw new NotFoundException(
         'Character has no realm — cannot refresh from external source',
@@ -500,10 +530,24 @@ export class CharactersService {
       throw new NotFoundException(
         'No character sync adapter found for this game variant',
       );
+    return { region, gameVariant, adapter };
+  }
+
+  /** Refresh a character's data from an external game API (ROK-234, ROK-237). */
+  async refreshExternal(
+    userId: number,
+    characterId: string,
+    dto: RefreshCharacterDto,
+  ): Promise<CharacterDto> {
+    const character = await this.findOne(userId, characterId);
+    const { region, gameVariant, adapter } = this.prepareRefresh(
+      character,
+      dto,
+    );
     const { profile, talents, equipment } = await fetchFullProfile(
       adapter,
       character.name,
-      character.realm,
+      character.realm!,
       region,
       gameVariant,
     );
@@ -603,31 +647,38 @@ export class CharactersService {
     return { synced, failed };
   }
 
+  /** Perform sync for a single character (no error handling). */
+  private async performCharacterSync(
+    char: typeof schema.characters.$inferSelect,
+  ): Promise<'synced' | 'skipped'> {
+    const variant = char.gameVariant as string;
+    const adapter = this.findCharacterSyncAdapter(variant);
+    if (!adapter) {
+      this.logger.debug(
+        `No adapter for character ${char.id} (variant: ${variant}), skipping`,
+      );
+      return 'skipped';
+    }
+    const { profile, talents, equipment } = await fetchFullProfile(
+      adapter,
+      char.name,
+      char.realm!,
+      char.region!,
+      variant,
+    );
+    await this.db
+      .update(schema.characters)
+      .set(buildSyncUpdateFields(profile, equipment, talents))
+      .where(eq(schema.characters.id, char.id));
+    return 'synced';
+  }
+
   /** Sync a single external character. Returns 'synced', 'failed', or 'skipped'. */
   private async syncSingleCharacter(
     char: typeof schema.characters.$inferSelect,
   ): Promise<'synced' | 'failed' | 'skipped'> {
     try {
-      const variant = char.gameVariant as string;
-      const adapter = this.findCharacterSyncAdapter(variant);
-      if (!adapter) {
-        this.logger.debug(
-          `No adapter for character ${char.id} (variant: ${variant}), skipping`,
-        );
-        return 'skipped';
-      }
-      const { profile, talents, equipment } = await fetchFullProfile(
-        adapter,
-        char.name,
-        char.realm!,
-        char.region!,
-        variant,
-      );
-      await this.db
-        .update(schema.characters)
-        .set(buildSyncUpdateFields(profile, equipment, talents))
-        .where(eq(schema.characters.id, char.id));
-      return 'synced';
+      return await this.performCharacterSync(char);
     } catch (err) {
       this.logger.warn(
         `Auto-sync failed for character ${char.id} (${char.name}): ${err}`,

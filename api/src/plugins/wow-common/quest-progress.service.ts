@@ -73,12 +73,12 @@ export class QuestProgressService {
    * Update (upsert) a user's progress on a quest for an event.
    * Invalidates the coverage cache for the event on mutation.
    */
-  async updateProgress(
+  /** Find an existing quest progress entry. */
+  private async findExistingProgress(
     eventId: number,
     userId: number,
     questId: number,
-    update: { pickedUp?: boolean; completed?: boolean },
-  ): Promise<QuestProgressDto> {
+  ) {
     const [existing] = await this.db
       .select()
       .from(wowClassicQuestProgress)
@@ -90,6 +90,16 @@ export class QuestProgressService {
         ),
       )
       .limit(1);
+    return existing ?? null;
+  }
+
+  async updateProgress(
+    eventId: number,
+    userId: number,
+    questId: number,
+    update: { pickedUp?: boolean; completed?: boolean },
+  ): Promise<QuestProgressDto> {
+    const existing = await this.findExistingProgress(eventId, userId, questId);
     const row = existing
       ? await this.updateExistingProgress(existing.id, update)
       : await this.insertNewProgress(eventId, userId, questId, update);
@@ -167,15 +177,13 @@ export class QuestProgressService {
     });
   }
 
-  private async fetchCoverageForEvent(
-    eventId: number,
-  ): Promise<QuestCoverageEntry[]> {
-    const rows = await this.db
+  /** Query picked-up quest progress rows for an event. */
+  private async queryPickedUpRows(eventId: number) {
+    return this.db
       .select({
         questId: wowClassicQuestProgress.questId,
         userId: wowClassicQuestProgress.userId,
         username: schema.users.username,
-        pickedUp: wowClassicQuestProgress.pickedUp,
       })
       .from(wowClassicQuestProgress)
       .innerJoin(
@@ -188,6 +196,12 @@ export class QuestProgressService {
           eq(wowClassicQuestProgress.pickedUp, true),
         ),
       );
+  }
+
+  private async fetchCoverageForEvent(
+    eventId: number,
+  ): Promise<QuestCoverageEntry[]> {
+    const rows = await this.queryPickedUpRows(eventId);
     const coverageMap = new Map<
       number,
       { userId: number; username: string }[]

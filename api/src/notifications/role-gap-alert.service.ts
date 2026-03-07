@@ -110,11 +110,9 @@ export class RoleGapAlertService {
       );
   }
 
-  /** Fetch critical role counts for the given event IDs. */
-  private async fetchRoleCounts(
-    eventIds: number[],
-  ): Promise<Map<number, Map<string, number>>> {
-    const roleCounts = await this.db
+  /** Query critical role count rows from the DB. */
+  private async queryRoleCounts(eventIds: number[]) {
+    return this.db
       .select({
         eventId: schema.rosterAssignments.eventId,
         role: schema.rosterAssignments.role,
@@ -136,6 +134,13 @@ export class RoleGapAlertService {
         ),
       )
       .groupBy(schema.rosterAssignments.eventId, schema.rosterAssignments.role);
+  }
+
+  /** Fetch critical role counts for the given event IDs. */
+  private async fetchRoleCounts(
+    eventIds: number[],
+  ): Promise<Map<number, Map<string, number>>> {
+    const roleCounts = await this.queryRoleCounts(eventIds);
     const countMap = new Map<number, Map<string, number>>();
     for (const row of roleCounts) {
       if (!countMap.has(row.eventId)) countMap.set(row.eventId, new Map());
@@ -166,6 +171,25 @@ export class RoleGapAlertService {
     return gaps;
   }
 
+  /** Format a time string in the creator's timezone. */
+  private async formatAlertTime(
+    startTime: Date,
+    creatorId: number,
+    defaultTimezone: string,
+  ): Promise<string> {
+    const timezone = await this.resolveCreatorTimezone(
+      creatorId,
+      defaultTimezone,
+    );
+    return startTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+      timeZone: timezone,
+    });
+  }
+
   /** Send a role gap alert to the event creator. Deduplicates via event_reminders_sent. */
   async sendRoleGapAlert(
     result: RoleGapResult,
@@ -174,17 +198,11 @@ export class RoleGapAlertService {
     if (!(await this.insertAlertDedup(result))) return false;
     const { gapSummary, rosterSummary, suggestedReason } =
       this.buildGapSummaries(result.gaps);
-    const timezone = await this.resolveCreatorTimezone(
+    const timeStr = await this.formatAlertTime(
+      result.startTime,
       result.creatorId,
       defaultTimezone,
     );
-    const timeStr = result.startTime.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZoneName: 'short',
-      timeZone: timezone,
-    });
     await this.notificationService.create({
       userId: result.creatorId,
       type: 'role_gap_alert',

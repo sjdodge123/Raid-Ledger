@@ -71,6 +71,19 @@ export class SystemController {
     };
   }
 
+  /** Fetch all status data in parallel. */
+  private async fetchStatusData(adapterEntries: [string, AuthProvider][]) {
+    return Promise.all([
+      this.usersService.count(),
+      this.settingsService.isDiscordConfigured(),
+      this.settingsService.isBlizzardConfigured(),
+      this.settingsService.getBranding(),
+      this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
+      this.settingsService.getDemoMode(),
+      ...adapterEntries.map(([, provider]) => provider.isConfigured()),
+    ]);
+  }
+
   @Get('status')
   async getStatus(): Promise<SystemStatusDto> {
     const authAdapters =
@@ -86,15 +99,7 @@ export class SystemController {
       onboardingCompletedRaw,
       demoMode,
       ...adapterConfigured
-    ] = await Promise.all([
-      this.usersService.count(),
-      this.settingsService.isDiscordConfigured(),
-      this.settingsService.isBlizzardConfigured(),
-      this.settingsService.getBranding(),
-      this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
-      this.settingsService.getDemoMode(),
-      ...adapterEntries.map(([, provider]) => provider.isConfigured()),
-    ]);
+    ] = await this.fetchStatusData(adapterEntries);
     return this.buildStatusDto(
       userCount,
       discordConfigured,

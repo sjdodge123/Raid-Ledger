@@ -103,6 +103,22 @@ export function getOriginUrl(req: Request): string {
 const DISCORD_USER_AGENT =
   'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)';
 
+/** Build the token exchange request body. */
+function buildTokenParams(
+  code: string,
+  redirectUri: string,
+  clientId: string,
+  clientSecret: string,
+): URLSearchParams {
+  return new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+  });
+}
+
 /** Exchange Discord OAuth code for access token. */
 export async function exchangeCodeForToken(
   code: string,
@@ -119,13 +135,7 @@ export async function exchangeCodeForToken(
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': DISCORD_USER_AGENT,
       },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri,
-      }),
+      body: buildTokenParams(code, redirectUri, clientId, clientSecret),
     },
   );
   if (!tokenResponse.ok) {

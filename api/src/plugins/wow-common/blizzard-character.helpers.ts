@@ -112,19 +112,9 @@ function mapWeapon(w: WeaponData | undefined) {
     : undefined;
 }
 
-/** Map a single raw equipment item to a BlizzardEquipmentItem. */
-function mapSingleItem(
-  item: Record<string, unknown>,
-  iconUrls: Map<number, string>,
-): BlizzardEquipmentItem {
-  const f = extractItemFields(item);
+/** Map enchantments, sockets, and stats from extracted fields. */
+function mapItemArrayFields(f: ReturnType<typeof extractItemFields>) {
   return {
-    slot: f.slot.type,
-    name: (item.name as string) ?? 'Unknown',
-    itemId: f.itemObj.id,
-    quality: (f.quality?.type ?? 'COMMON').toUpperCase(),
-    itemLevel: f.level?.value ?? 0,
-    itemSubclass: f.itemSubclass?.name ?? null,
     enchantments: f.enchantments?.map((e) => ({
       displayString: e.display_string,
       enchantmentId: e.enchantment_id,
@@ -138,6 +128,24 @@ function mapSingleItem(
       name: s.type.name,
       value: s.value,
     })),
+  };
+}
+
+/** Map a single raw equipment item to a BlizzardEquipmentItem. */
+function mapSingleItem(
+  item: Record<string, unknown>,
+  iconUrls: Map<number, string>,
+): BlizzardEquipmentItem {
+  const f = extractItemFields(item);
+  const arrays = mapItemArrayFields(f);
+  return {
+    slot: f.slot.type,
+    name: (item.name as string) ?? 'Unknown',
+    itemId: f.itemObj.id,
+    quality: (f.quality?.type ?? 'COMMON').toUpperCase(),
+    itemLevel: f.level?.value ?? 0,
+    itemSubclass: f.itemSubclass?.name ?? null,
+    ...arrays,
     armor: f.armor?.value,
     binding: f.binding?.type,
     requiredLevel: f.requirements?.level?.value,
