@@ -8,6 +8,7 @@ import { useAggregateGameTime, useRescheduleEvent } from '../../hooks/use-resche
 import { useConvertEventToPlan } from '../../hooks/use-event-plans';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DAYS, DURATION_PRESETS, formatHour, toLocalInput, nextOccurrence } from './reschedule-utils';
+import { PollBanner, GridLegend, StartTimeInput, DurationSelector, ConfirmationBar } from './reschedule-controls';
 import type { GameTimePreviewBlock, GameTimeEventBlock } from '../features/game-time/GameTimeGrid';
 
 interface RescheduleModalProps {
@@ -26,217 +27,168 @@ interface RescheduleModalProps {
     initialReason?: string;
 }
 
-/**
- * RescheduleModal (ROK-223)
- */
-export function RescheduleModal({
-    isOpen, onClose, eventId, currentStartTime, currentEndTime, eventTitle,
-    gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount,
-}: RescheduleModalProps) {
-    const { data: gameTimeData, isLoading } = useAggregateGameTime(eventId, isOpen);
-    const reschedule = useRescheduleEvent(eventId);
-    const convertToPlan = useConvertEventToPlan();
-    const navigate = useNavigate();
-    const isMobile = useMediaQuery('(max-width: 767px)');
-
-    const [newStartTime, setNewStartTime] = useState<string | null>(null);
-    const [gridSelection, setGridSelection] = useState<{ day: number; hour: number } | null>(null);
-
+function useRescheduleState(currentStartTime: string, currentEndTime: string) {
     const currentStart = useMemo(() => new Date(currentStartTime), [currentStartTime]);
     const currentEnd = useMemo(() => new Date(currentEndTime), [currentEndTime]);
     const originalDurationMinutes = useMemo(
         () => Math.max(60, Math.round((currentEnd.getTime() - currentStart.getTime()) / (1000 * 60))),
         [currentStart, currentEnd],
     );
-    const currentDayOfWeek = currentStart.getDay();
-    const currentHour = currentStart.getHours();
 
+    const [newStartTime, setNewStartTime] = useState<string | null>(null);
+    const [gridSelection, setGridSelection] = useState<{ day: number; hour: number } | null>(null);
     const [durationMinutes, setDurationMinutes] = useState(originalDurationMinutes);
     const [customDuration, setCustomDuration] = useState(
         () => !DURATION_PRESETS.some(p => p.minutes === originalDurationMinutes),
     );
 
-    const durationMs = durationMinutes * 60 * 1000;
-    const durationHours = Math.max(1, Math.round(durationMinutes / 60));
+    return {
+        currentStart, newStartTime, setNewStartTime, gridSelection, setGridSelection,
+        durationMinutes, setDurationMinutes, customDuration, setCustomDuration,
+    };
+}
 
-    const currentEventBlocks = useMemo((): GameTimeEventBlock[] => [{
-        eventId, title: eventTitle, gameSlug: gameSlug ?? null, gameName: gameName ?? null,
-        coverUrl: coverUrl ?? null, signupId: 0, confirmationStatus: 'confirmed',
-        dayOfWeek: currentDayOfWeek, startHour: currentHour, endHour: currentHour + durationHours,
-        description: description ?? null, creatorUsername: creatorUsername ?? null, signupCount: eventSignupCount,
-    }], [eventId, eventTitle, gameSlug, gameName, coverUrl, currentDayOfWeek, currentHour, durationHours, description, creatorUsername, eventSignupCount]);
+function useCurrentEventBlocks(props: {
+    eventId: number; eventTitle: string; gameSlug?: string | null; gameName?: string | null;
+    coverUrl?: string | null; description?: string | null; creatorUsername?: string;
+    signupCount?: number; dayOfWeek: number; hour: number; durationHours: number;
+}) {
+    return useMemo((): GameTimeEventBlock[] => [{
+        eventId: props.eventId, title: props.eventTitle, gameSlug: props.gameSlug ?? null,
+        gameName: props.gameName ?? null, coverUrl: props.coverUrl ?? null, signupId: 0,
+        confirmationStatus: 'confirmed', dayOfWeek: props.dayOfWeek,
+        startHour: props.hour, endHour: props.hour + props.durationHours,
+        description: props.description ?? null, creatorUsername: props.creatorUsername ?? null,
+        signupCount: props.signupCount,
+    }], [props.eventId, props.eventTitle, props.gameSlug, props.gameName, props.coverUrl,
+        props.dayOfWeek, props.hour, props.durationHours, props.description, props.creatorUsername, props.signupCount]);
+}
 
-    const previewBlocks = useMemo(() => {
+function usePreviewBlocks(gridSelection: { day: number; hour: number } | null, durationHours: number, eventTitle: string, gameName?: string | null, gameSlug?: string | null, coverUrl?: string | null) {
+    return useMemo((): GameTimePreviewBlock[] | undefined => {
         if (!gridSelection) return undefined;
-        const blocks: GameTimePreviewBlock[] = [{
-            dayOfWeek: gridSelection.day, startHour: gridSelection.hour,
-            endHour: gridSelection.hour + durationHours, label: 'New Time', variant: 'selected',
+        return [{ dayOfWeek: gridSelection.day, startHour: gridSelection.hour,
+            endHour: gridSelection.hour + durationHours, label: 'New Time', variant: 'selected' as const,
             title: eventTitle, gameName: gameName ?? undefined, gameSlug: gameSlug ?? undefined, coverUrl: coverUrl,
         }];
-        return blocks;
     }, [gridSelection, durationHours, eventTitle, gameName, gameSlug, coverUrl]);
+}
 
-    const handleCellClick = (dayOfWeek: number, hour: number) => {
-        if (dayOfWeek === currentDayOfWeek && hour === currentHour) return;
-        setGridSelection({ day: dayOfWeek, hour });
-        setNewStartTime(toLocalInput(nextOccurrence(dayOfWeek, hour)));
-    };
+function GridBody(props: {
+    isLoading: boolean; signupCount: number;
+    currentEventBlocks: GameTimeEventBlock[]; previewBlocks: GameTimePreviewBlock[] | undefined;
+    heatmapOverlay: unknown; onCellClick: (day: number, hour: number) => void;
+}) {
+    if (props.isLoading) {
+        return <div className="flex items-center justify-center py-12 text-muted">Loading availability data...</div>;
+    }
+    if (props.signupCount === 0) {
+        return <div className="flex items-center justify-center py-12 text-muted">No players signed up yet -- no availability data to display.</div>;
+    }
+    return (
+        <>
+            <p className="shrink-0 text-sm text-muted">
+                Click a cell to select a new time, or enter it manually below. Green intensity shows player availability ({props.signupCount} signed up).
+            </p>
+            <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
+                <GameTimeGrid slots={[]} readOnly compact noStickyOffset events={props.currentEventBlocks}
+                    previewBlocks={props.previewBlocks} heatmapOverlay={props.heatmapOverlay} onCellClick={props.onCellClick} />
+            </div>
+        </>
+    );
+}
 
-    const handleStartChange = (value: string) => { setNewStartTime(value); setGridSelection(null); };
-
+function parseTimes(newStartTime: string | null, durationMs: number) {
     const parsedStart = newStartTime ? new Date(newStartTime) : null;
     const parsedEnd = parsedStart && !isNaN(parsedStart.getTime()) ? new Date(parsedStart.getTime() + durationMs) : null;
-    const hasSelection = !!newStartTime;
-    const isValid = parsedStart && parsedEnd && !isNaN(parsedStart.getTime()) && parsedStart < parsedEnd && parsedStart > new Date();
-
-    const handleConfirm = async () => {
-        if (!parsedStart || !parsedEnd || !isValid) return;
-        try {
-            await reschedule.mutateAsync({ startTime: parsedStart.toISOString(), endTime: parsedEnd.toISOString() });
-            toast.success('Event rescheduled', { description: `Moved to ${DAYS[parsedStart.getDay()]} at ${formatHour(parsedStart.getHours())}` });
-            setNewStartTime(null); setGridSelection(null); onClose();
-        } catch (err) {
-            toast.error('Failed to reschedule', { description: err instanceof Error ? err.message : 'Please try again.' });
-        }
-    };
-
-    const handleClose = () => { setNewStartTime(null); setGridSelection(null); onClose(); };
-
-    const handlePollForBestTime = async () => {
-        try {
-            await convertToPlan.mutateAsync({ eventId, options: { cancelOriginal: true } });
-            handleClose(); navigate('/events?tab=plans');
-        } catch { /* Error toast handled by mutation */ }
-    };
-
-    const signupCount = gameTimeData?.totalUsers ?? 0;
-    const selectionSummary = parsedStart && !isNaN(parsedStart.getTime())
+    const isValid = !!(parsedStart && parsedEnd && !isNaN(parsedStart.getTime()) && parsedStart < parsedEnd && parsedStart > new Date());
+    const summary = parsedStart && !isNaN(parsedStart.getTime())
         ? `${DAYS[parsedStart.getDay()]} at ${formatHour(parsedStart.getHours())}` : null;
+    return { parsedStart, parsedEnd, isValid, summary };
+}
 
-    const content = (
+/**
+ * RescheduleModal (ROK-223)
+ */
+function useRescheduleModalData(eventId: number, isOpen: boolean, currentStartTime: string, currentEndTime: string, props: {
+    eventTitle?: string; gameSlug?: string; gameName?: string; coverUrl?: string;
+    description?: string; creatorUsername?: string; signupCount?: number;
+}) {
+    const { data: gameTimeData, isLoading } = useAggregateGameTime(eventId, isOpen);
+    const s = useRescheduleState(currentStartTime, currentEndTime);
+    const durationHours = Math.max(1, Math.round(s.durationMinutes / 60));
+    const currentDayOfWeek = s.currentStart.getDay();
+    const currentHour = s.currentStart.getHours();
+    const signupCount = gameTimeData?.totalUsers ?? 0;
+    const currentEventBlocks = useCurrentEventBlocks({
+        eventId, eventTitle: props.eventTitle, gameSlug: props.gameSlug, gameName: props.gameName,
+        coverUrl: props.coverUrl, description: props.description, creatorUsername: props.creatorUsername,
+        signupCount: props.signupCount, dayOfWeek: currentDayOfWeek, hour: currentHour, durationHours,
+    });
+    const previewBlocks = usePreviewBlocks(s.gridSelection, durationHours, props.eventTitle, props.gameName, props.gameSlug, props.coverUrl);
+    const parsed = parseTimes(s.newStartTime, s.durationMinutes * 60 * 1000);
+    return { s, isLoading, signupCount, currentEventBlocks, previewBlocks, gameTimeData, currentDayOfWeek, currentHour, ...parsed };
+}
+
+async function handleRescheduleConfirm(
+    d: ReturnType<typeof useRescheduleModalData>, reschedule: ReturnType<typeof useRescheduleEvent>, handleClose: () => void,
+) {
+    if (!d.parsedStart || !d.parsedEnd || !d.isValid) return;
+    try { await reschedule.mutateAsync({ startTime: d.parsedStart.toISOString(), endTime: d.parsedEnd.toISOString() }); toast.success('Event rescheduled', { description: `Moved to ${d.summary}` }); handleClose(); }
+    catch (err) { toast.error('Failed to reschedule', { description: err instanceof Error ? err.message : 'Please try again.' }); }
+}
+
+function RescheduleContent({ d, eventId, eventTitle, onClose, navigate }: {
+    d: ReturnType<typeof useRescheduleModalData>; eventId: number; eventTitle?: string;
+    onClose: () => void; navigate: ReturnType<typeof useNavigate>;
+}) {
+    const reschedule = useRescheduleEvent(eventId);
+    const convertToPlan = useConvertEventToPlan();
+    const handleClose = () => { d.s.setNewStartTime(null); d.s.setGridSelection(null); onClose(); };
+    const handlePoll = async () => {
+        try { await convertToPlan.mutateAsync({ eventId, options: { cancelOriginal: true } }); handleClose(); navigate('/events?tab=plans'); }
+        catch { /* Error toast handled by mutation */ }
+    };
+
+    return (
+        <RescheduleContentBody d={d} eventTitle={eventTitle} reschedule={reschedule}
+            convertToPlan={convertToPlan} handleClose={handleClose} handlePoll={handlePoll} />
+    );
+}
+
+function RescheduleContentBody({ d, eventTitle, reschedule, convertToPlan, handleClose, handlePoll }: {
+    d: ReturnType<typeof useRescheduleModalData>; eventTitle?: string;
+    reschedule: ReturnType<typeof useRescheduleEvent>; convertToPlan: ReturnType<typeof useConvertEventToPlan>;
+    handleClose: () => void; handlePoll: () => void;
+}) {
+    return (
         <div className="flex flex-col gap-3 min-h-0 h-full">
-            <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5">
-                <p className="text-sm text-foreground flex-1">Let your community decide -- post a Discord poll for the best time</p>
-                <button onClick={handlePollForBestTime} disabled={convertToPlan.isPending}
-                    className="shrink-0 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 text-sm font-medium text-white transition-colors">
-                    {convertToPlan.isPending ? 'Converting...' : 'Poll for Best Time'}
-                </button>
-            </div>
-
-            <div className="shrink-0 flex items-center gap-4 text-xs text-muted">
-                {gridSelection && (
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-sm border-2 border-solid" style={{ borderColor: 'rgba(6, 182, 212, 0.95)' }} />
-                        <span>New time</span>
-                    </div>
-                )}
-                <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.4)' }} /><span>Few</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(234, 179, 8, 0.45)' }} /><span>Some</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(34, 197, 94, 0.55)' }} /><span>All available</span>
-                </div>
-            </div>
-
-            {isLoading ? (
-                <div className="flex items-center justify-center py-12 text-muted">Loading availability data...</div>
-            ) : signupCount === 0 ? (
-                <div className="flex items-center justify-center py-12 text-muted">No players signed up yet -- no availability data to display.</div>
-            ) : (
-                <>
-                    <p className="shrink-0 text-sm text-muted">
-                        Click a cell to select a new time, or enter it manually below. Green intensity shows player availability ({signupCount} signed up).
-                    </p>
-                    <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
-                        <GameTimeGrid slots={[]} readOnly compact noStickyOffset events={currentEventBlocks}
-                            previewBlocks={previewBlocks} heatmapOverlay={gameTimeData?.cells} onCellClick={handleCellClick} />
-                    </div>
-                </>
-            )}
-
+            <PollBanner onPoll={handlePoll} isPending={convertToPlan.isPending} />
+            <GridLegend hasSelection={!!d.s.gridSelection} />
+            <GridBody isLoading={d.isLoading} signupCount={d.signupCount} currentEventBlocks={d.currentEventBlocks}
+                previewBlocks={d.previewBlocks} heatmapOverlay={d.gameTimeData?.cells}
+                onCellClick={(day, hour) => { if (day === d.currentDayOfWeek && hour === d.currentHour) return; d.s.setGridSelection({ day, hour }); d.s.setNewStartTime(toLocalInput(nextOccurrence(day, hour))); }} />
             <div className="shrink-0 pt-2 border-t border-border space-y-3">
                 <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
-                    <div className="flex-1">
-                        <label htmlFor="reschedule-start" className="block text-xs text-muted mb-1">New start</label>
-                        <input id="reschedule-start" type="datetime-local" value={newStartTime ?? ''}
-                            onChange={(e) => handleStartChange(e.target.value)}
-                            className="w-full bg-panel border border-edge rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
-                    </div>
-                    <div className="flex-1">
-                        <label className="block text-xs text-muted mb-1">Duration</label>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                            {DURATION_PRESETS.map((p) => (
-                                <button key={p.minutes} type="button"
-                                    onClick={() => { setDurationMinutes(p.minutes); setCustomDuration(false); }}
-                                    className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${!customDuration && durationMinutes === p.minutes
-                                        ? 'bg-emerald-600 text-white' : 'bg-panel border border-edge text-secondary hover:text-foreground'}`}>
-                                    {p.label}
-                                </button>
-                            ))}
-                            <button type="button" onClick={() => setCustomDuration(true)}
-                                className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${customDuration
-                                    ? 'bg-emerald-600 text-white' : 'bg-panel border border-edge text-secondary hover:text-foreground'}`}>
-                                Custom
-                            </button>
-                        </div>
-                        {customDuration && (
-                            <div className="flex items-center gap-2 mt-1.5">
-                                <input type="number" min={0} max={23} value={Math.floor(durationMinutes / 60)}
-                                    onChange={(e) => setDurationMinutes(Number(e.target.value) * 60 + (durationMinutes % 60))}
-                                    className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary" />
-                                <span className="text-xs text-muted">hr</span>
-                                <input type="number" min={0} max={59} step={15} value={durationMinutes % 60}
-                                    onChange={(e) => setDurationMinutes(Math.floor(durationMinutes / 60) * 60 + Number(e.target.value))}
-                                    className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary" />
-                                <span className="text-xs text-muted">min</span>
-                            </div>
-                        )}
-                    </div>
+                    <StartTimeInput newStartTime={d.s.newStartTime} onStartChange={(v) => { d.s.setNewStartTime(v); d.s.setGridSelection(null); }} />
+                    <DurationSelector durationMinutes={d.s.durationMinutes} setDurationMinutes={d.s.setDurationMinutes} customDuration={d.s.customDuration} setCustomDuration={d.s.setCustomDuration} />
                 </div>
-
-                {hasSelection && (
-                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
-                        <p className="text-sm text-foreground">
-                            {isValid ? (
-                                <>Move <span className="font-semibold">{eventTitle}</span> to{' '}
-                                    <span className="font-semibold text-emerald-400">{selectionSummary}</span>?
-                                    {signupCount > 0 && (
-                                        <span className="text-muted"> All {signupCount} signed-up member{signupCount !== 1 ? 's' : ''} will be notified.</span>
-                                    )}
-                                </>
-                            ) : (
-                                <span className="text-red-400">
-                                    {parsedStart && parsedEnd && parsedStart >= parsedEnd ? 'Start time must be before end time' : 'Start time must be in the future'}
-                                </span>
-                            )}
-                        </p>
-                        <div className="flex gap-2 shrink-0">
-                            <button onClick={() => { setNewStartTime(null); setGridSelection(null); }} className="btn btn-secondary btn-sm">Clear</button>
-                            <button onClick={handleConfirm} disabled={reschedule.isPending || !isValid} className="btn btn-primary btn-sm">
-                                {reschedule.isPending ? 'Rescheduling...' : 'Confirm'}
-                            </button>
-                        </div>
-                    </div>
-                )}
+                {!!d.s.newStartTime && <ConfirmationBar eventTitle={eventTitle} isValid={d.isValid} parsedStart={d.parsedStart} parsedEnd={d.parsedEnd} selectionSummary={d.summary} signupCount={d.signupCount} isPending={reschedule.isPending} onClear={() => { d.s.setNewStartTime(null); d.s.setGridSelection(null); }} onConfirm={() => handleRescheduleConfirm(d, reschedule, handleClose)} />}
             </div>
         </div>
     );
+}
 
-    if (isMobile) {
-        return (
-            <BottomSheet isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxHeight="85vh">
-                {content}
-            </BottomSheet>
-        );
-    }
+export function RescheduleModal({
+    isOpen, onClose, eventId, currentStartTime, currentEndTime, eventTitle,
+    gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount,
+}: RescheduleModalProps) {
+    const navigate = useNavigate();
+    const isMobile = useMediaQuery('(max-width: 767px)');
+    const d = useRescheduleModalData(eventId, isOpen, currentStartTime, currentEndTime, { eventTitle, gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount });
+    const handleClose = () => { d.s.setNewStartTime(null); d.s.setGridSelection(null); onClose(); };
+    const content = <RescheduleContent d={d} eventId={eventId} eventTitle={eventTitle} onClose={onClose} navigate={navigate} />;
 
-    return (
-        <Modal isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxWidth="max-w-4xl"
-            bodyClassName="p-4 flex flex-col max-h-[calc(90vh-4rem)]">
-            {content}
-        </Modal>
-    );
+    if (isMobile) return <BottomSheet isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxHeight="85vh">{content}</BottomSheet>;
+    return <Modal isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxWidth="max-w-4xl" bodyClassName="p-4 flex flex-col max-h-[calc(90vh-4rem)]">{content}</Modal>;
 }

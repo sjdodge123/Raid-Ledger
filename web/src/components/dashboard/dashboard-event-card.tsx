@@ -37,42 +37,71 @@ function formatTime(dateString: string, timeZone?: string): string {
   }).format(new Date(dateString));
 }
 
-export function DashboardEventCard({
-  event,
-  highlighted,
-}: DashboardEventCardProps) {
+function EventCardHeader({ event, status }: { event: DashboardEventDto; status: string }) {
+  return (
+    <div className="flex items-start justify-between mb-2">
+      <Link
+        to={`/events/${event.id}`}
+        className="font-semibold text-foreground hover:text-emerald-400 transition-colors line-clamp-1"
+      >
+        {event.title}
+      </Link>
+      {status === "live" && (
+        <span className="text-xs text-yellow-400 font-medium shrink-0 ml-2">● Live</span>
+      )}
+    </div>
+  );
+}
+
+function MissingRolesBadges({ roles }: { roles: string[] }) {
+  if (roles.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mb-2">
+      {roles.map((role) => (
+        <span key={role} className="px-2 py-0.5 text-xs bg-amber-500/15 text-amber-400 rounded-full">
+          need {role}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function EventCardActions({ eventId }: { eventId: number }) {
+  return (
+    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-edge-subtle">
+      <Link
+        to={`/events/${eventId}`}
+        className="px-3 py-2.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-foreground rounded-md transition-colors"
+      >
+        View
+      </Link>
+      <Link
+        to={`/events/${eventId}/edit`}
+        className="px-3 py-2.5 text-xs font-medium bg-panel hover:bg-overlay text-secondary hover:text-foreground rounded-md border border-edge transition-colors"
+      >
+        Edit
+      </Link>
+    </div>
+  );
+}
+
+function cardBorderClass(highlighted?: boolean) {
+  return highlighted
+    ? "border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10"
+    : "border-edge hover:border-dim";
+}
+
+export function DashboardEventCard({ event, highlighted }: DashboardEventCardProps) {
   const resolved = useTimezoneStore((s) => s.resolved);
   const status = getEventStatus(event.startTime, event.endTime);
   const relativeTime = getRelativeTime(event.startTime, event.endTime);
 
   return (
-    <div
-      className={`bg-surface rounded-lg border p-4 transition-all ${
-        highlighted
-          ? "border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10"
-          : "border-edge hover:border-dim"
-      }`}
-    >
-      <div className="flex items-start justify-between mb-2">
-        <Link
-          to={`/events/${event.id}`}
-          className="font-semibold text-foreground hover:text-emerald-400 transition-colors line-clamp-1"
-        >
-          {event.title}
-        </Link>
-        {status === "live" && (
-          <span className="text-xs text-yellow-400 font-medium shrink-0 ml-2">
-            ● Live
-          </span>
-        )}
-      </div>
-
+    <div className={`bg-surface rounded-lg border p-4 transition-all ${cardBorderClass(highlighted)}`}>
+      <EventCardHeader event={event} status={status} />
       <p className="text-sm text-muted mb-3">
-        {formatTime(event.startTime, resolved)}{" "}
-        <span className="text-dim">· {relativeTime}</span>
+        {formatTime(event.startTime, resolved)} <span className="text-dim">· {relativeTime}</span>
       </p>
-
-      {/* Fill bar */}
       <div className="mb-2">
         <div className="flex items-center justify-between text-xs text-muted mb-1">
           <span>{event.signupCount} signed up</span>
@@ -80,43 +109,11 @@ export function DashboardEventCard({
         </div>
         <FillBar percent={event.rosterFillPercent} />
       </div>
-
-      {/* Missing roles */}
-      {event.missingRoles.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {event.missingRoles.map((role) => (
-            <span
-              key={role}
-              className="px-2 py-0.5 text-xs bg-amber-500/15 text-amber-400 rounded-full"
-            >
-              need {role}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Unconfirmed */}
+      <MissingRolesBadges roles={event.missingRoles} />
       {event.unconfirmedCount > 0 && (
-        <p className="text-xs text-muted">
-          {event.unconfirmedCount} unconfirmed
-        </p>
+        <p className="text-xs text-muted">{event.unconfirmedCount} unconfirmed</p>
       )}
-
-      {/* Quick links */}
-      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-edge-subtle">
-        <Link
-          to={`/events/${event.id}`}
-          className="px-3 py-2.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-foreground rounded-md transition-colors"
-        >
-          View
-        </Link>
-        <Link
-          to={`/events/${event.id}/edit`}
-          className="px-3 py-2.5 text-xs font-medium bg-panel hover:bg-overlay text-secondary hover:text-foreground rounded-md border border-edge transition-colors"
-        >
-          Edit
-        </Link>
-      </div>
+      <EventCardActions eventId={event.id} />
     </div>
   );
 }

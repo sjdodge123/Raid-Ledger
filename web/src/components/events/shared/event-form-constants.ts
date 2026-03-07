@@ -44,6 +44,10 @@ export function getCompositionForCap(cap: number): Pick<SlotState, 'slotTank' | 
         40: { slotTank: 4, slotHealer: 10, slotDps: 22, slotFlex: 4 },
     };
     if (known[cap]) return known[cap];
+    return computeProportionalSlots(cap);
+}
+
+function computeProportionalSlots(cap: number): Pick<SlotState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex'> {
     const tank = Math.max(1, Math.round(cap * 0.1));
     const healer = Math.max(1, Math.round(cap * 0.2));
     const flex = Math.round(cap * 0.15);
@@ -58,46 +62,43 @@ interface EventTypeInfo {
     requiresComposition?: boolean | null;
 }
 
-/**
- * Compute partial form state updates when event type changes.
- * Returns the slot/duration/capacity defaults for the given event type,
- * or reset-to-generic defaults for "custom" selection.
- */
-export function applyEventTypeDefaults(
-    eventType: EventTypeInfo | null,
-): Partial<SlotState> {
-    // "Custom" selection — reset to generic defaults
-    if (!eventType) {
-        return {
-            durationMinutes: 120,
-            customDuration: false,
-            slotType: 'generic',
-            slotTank: MMO_DEFAULTS.tank!,
-            slotHealer: MMO_DEFAULTS.healer!,
-            slotDps: MMO_DEFAULTS.dps!,
-            slotFlex: MMO_DEFAULTS.flex!,
-            slotPlayer: GENERIC_DEFAULTS.player!,
-            maxAttendees: '',
-        };
-    }
-
-    const updates: Partial<SlotState> = {};
-
+function applyDurationDefaults(eventType: EventTypeInfo, updates: Partial<SlotState>) {
     if (eventType.defaultDurationMinutes) {
         updates.durationMinutes = eventType.defaultDurationMinutes;
         updates.customDuration = !DURATION_PRESETS.some((p) => p.minutes === eventType.defaultDurationMinutes);
     }
+}
 
-    if (eventType.defaultPlayerCap) {
-        updates.maxAttendees = String(eventType.defaultPlayerCap);
-        if (eventType.requiresComposition) {
-            updates.slotType = 'mmo';
-            Object.assign(updates, getCompositionForCap(eventType.defaultPlayerCap));
-        } else {
-            updates.slotType = 'generic';
-            updates.slotPlayer = eventType.defaultPlayerCap;
-        }
+function applyCapDefaults(eventType: EventTypeInfo, updates: Partial<SlotState>) {
+    if (!eventType.defaultPlayerCap) return;
+    updates.maxAttendees = String(eventType.defaultPlayerCap);
+    if (eventType.requiresComposition) {
+        updates.slotType = 'mmo';
+        Object.assign(updates, getCompositionForCap(eventType.defaultPlayerCap));
+    } else {
+        updates.slotType = 'generic';
+        updates.slotPlayer = eventType.defaultPlayerCap;
     }
+}
+
+function getResetDefaults(): Partial<SlotState> {
+    return {
+        durationMinutes: 120, customDuration: false, slotType: 'generic',
+        slotTank: MMO_DEFAULTS.tank!, slotHealer: MMO_DEFAULTS.healer!,
+        slotDps: MMO_DEFAULTS.dps!, slotFlex: MMO_DEFAULTS.flex!,
+        slotPlayer: GENERIC_DEFAULTS.player!, maxAttendees: '',
+    };
+}
+
+/**
+ * Compute partial form state updates when event type changes.
+ */
+export function applyEventTypeDefaults(eventType: EventTypeInfo | null): Partial<SlotState> {
+    if (!eventType) return getResetDefaults();
+
+    const updates: Partial<SlotState> = {};
+    applyDurationDefaults(eventType, updates);
+    applyCapDefaults(eventType, updates);
 
     if (eventType.requiresComposition && !eventType.defaultPlayerCap) {
         updates.slotType = 'mmo';

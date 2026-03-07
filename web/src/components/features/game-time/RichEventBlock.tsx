@@ -32,73 +32,45 @@ interface RichEventBlockProps {
     spanHours: number;
 }
 
+function LargeTier({ event, spanHours, colors }: RichEventBlockProps & { colors: ReturnType<typeof getGameColors> }) {
+    return (
+        <div className="px-1.5 py-1 h-full flex flex-col gap-0.5 min-w-0 overflow-hidden">
+            <div className="flex items-center gap-1">
+                <DurationBadge hours={spanHours} />
+                <span className="text-[10px] font-semibold leading-tight truncate text-foreground">{event.title}</span>
+            </div>
+            {event.gameName && <span className="text-[9px] text-foreground/60 leading-tight truncate">{event.gameName}</span>}
+            {event.creatorUsername && spanHours >= 4 && <span className="text-[8px] text-foreground/40 leading-tight truncate">by {event.creatorUsername}</span>}
+            {event.description && spanHours >= 5 && <span className="text-[8px] text-foreground/40 leading-tight line-clamp-2">{event.description}</span>}
+            {event.signupsPreview && event.signupsPreview.length > 0 && (
+                <div className="mt-auto">
+                    <AttendeeAvatars signups={event.signupsPreview} totalCount={event.signupCount ?? event.signupsPreview.length} maxVisible={3} size="xs" accentColor={colors.border} gameId={event.gameId ?? undefined} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+function MediumTier({ event, spanHours }: Pick<RichEventBlockProps, 'event' | 'spanHours'>) {
+    return (
+        <div className="px-1 py-0.5 h-full flex flex-col gap-0.5 min-w-0 overflow-hidden">
+            <div className="flex items-center gap-1">
+                <DurationBadge hours={spanHours} />
+                <span className="text-[10px] font-semibold leading-tight truncate text-foreground">{event.title}</span>
+            </div>
+            {event.gameName && <span className="text-[9px] text-foreground/60 leading-tight truncate">{event.gameName}</span>}
+        </div>
+    );
+}
+
 /** Rich event block content — adaptive tiers based on span */
 export function RichEventBlock({ event, spanHours }: RichEventBlockProps) {
     const colors = getGameColors(event.gameSlug ?? undefined);
-
-    if (spanHours >= 3) {
-        return (
-            <div className="px-1.5 py-1 h-full flex flex-col gap-0.5 min-w-0 overflow-hidden">
-                <div className="flex items-center gap-1">
-                    <DurationBadge hours={spanHours} />
-                    <span className="text-[10px] font-semibold leading-tight truncate text-foreground">
-                        {event.title}
-                    </span>
-                </div>
-                {event.gameName && (
-                    <span className="text-[9px] text-foreground/60 leading-tight truncate">
-                        {event.gameName}
-                    </span>
-                )}
-                {event.creatorUsername && spanHours >= 4 && (
-                    <span className="text-[8px] text-foreground/40 leading-tight truncate">
-                        by {event.creatorUsername}
-                    </span>
-                )}
-                {event.description && spanHours >= 5 && (
-                    <span className="text-[8px] text-foreground/40 leading-tight line-clamp-2">
-                        {event.description}
-                    </span>
-                )}
-                {event.signupsPreview && event.signupsPreview.length > 0 && (
-                    <div className="mt-auto">
-                        <AttendeeAvatars
-                            signups={event.signupsPreview}
-                            totalCount={event.signupCount ?? event.signupsPreview.length}
-                            maxVisible={3}
-                            size="xs"
-                            accentColor={colors.border}
-                            gameId={event.gameId ?? undefined}
-                        />
-                    </div>
-                )}
-            </div>
-        );
-    }
-
-    if (spanHours === 2) {
-        return (
-            <div className="px-1 py-0.5 h-full flex flex-col gap-0.5 min-w-0 overflow-hidden">
-                <div className="flex items-center gap-1">
-                    <DurationBadge hours={spanHours} />
-                    <span className="text-[10px] font-semibold leading-tight truncate text-foreground">
-                        {event.title}
-                    </span>
-                </div>
-                {event.gameName && (
-                    <span className="text-[9px] text-foreground/60 leading-tight truncate">
-                        {event.gameName}
-                    </span>
-                )}
-            </div>
-        );
-    }
-
+    if (spanHours >= 3) return <LargeTier event={event} spanHours={spanHours} colors={colors} />;
+    if (spanHours === 2) return <MediumTier event={event} spanHours={spanHours} />;
     return (
         <div className="px-1 py-0.5 h-full flex items-center min-w-0 overflow-hidden">
-            <span className="text-[10px] font-medium leading-tight truncate text-foreground">
-                {event.title}
-            </span>
+            <span className="text-[10px] font-medium leading-tight truncate text-foreground">{event.title}</span>
         </div>
     );
 }

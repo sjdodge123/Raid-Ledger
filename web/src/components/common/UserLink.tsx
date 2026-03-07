@@ -21,6 +21,24 @@ interface UserLinkProps {
  * Uses e.stopPropagation() to prevent parent click handlers.
  * ROK-222: Supports resolveAvatar() via user/gameId props with initials fallback.
  */
+function UserAvatar({ url, username }: { url: string | null; username: string }) {
+    if (url) {
+        return (
+            <img
+                src={url}
+                alt=""
+                className="user-link__avatar"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+        );
+    }
+    return (
+        <span className="user-link__avatar user-link__avatar--initials">
+            {username.charAt(0).toUpperCase()}
+        </span>
+    );
+}
+
 export function UserLink({
     userId,
     username,
@@ -32,11 +50,7 @@ export function UserLink({
     gameId,
 }: UserLinkProps) {
     const sizeClass = size === 'sm' ? 'user-link--sm' : 'user-link--md';
-
-    // ROK-222: Use resolveAvatar when user prop is provided, else fall back to avatarUrl
-    const effectiveUrl = user
-        ? resolveAvatar(user, gameId).url
-        : (avatarUrl ?? null);
+    const effectiveUrl = user ? resolveAvatar(user, gameId).url : (avatarUrl ?? null);
 
     return (
         <Link
@@ -45,22 +59,7 @@ export function UserLink({
             onClick={(e) => e.stopPropagation()}
             title={`View ${username}'s profile`}
         >
-            {showAvatar && (
-                effectiveUrl ? (
-                    <img
-                        src={effectiveUrl}
-                        alt=""
-                        className="user-link__avatar"
-                        onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                        }}
-                    />
-                ) : (
-                    <span className="user-link__avatar user-link__avatar--initials">
-                        {username.charAt(0).toUpperCase()}
-                    </span>
-                )
-            )}
+            {showAvatar && <UserAvatar url={effectiveUrl} username={username} />}
             <span className="user-link__name">{username}</span>
         </Link>
     );

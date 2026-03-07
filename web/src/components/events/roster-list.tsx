@@ -17,9 +17,6 @@ interface RosterListProps {
     gameId?: string;
 }
 
-/**
- * Format the signup time relative to now
- */
 function formatSignupTime(dateString: string): string {
     const date = new Date(dateString);
     const now = new Date();
@@ -32,226 +29,139 @@ function formatSignupTime(dateString: string): string {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-
-    return new Intl.DateTimeFormat('en-US', {
-        month: 'short',
-        day: 'numeric',
-    }).format(date);
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
 }
 
-/**
- * Roster list component displaying signed-up users with avatars
- * and character info when confirmed (ROK-131 AC-6, AC-7).
- * ROK-222: Uses resolveAvatar() for unified avatar resolution.
- */
 export function RosterList({ signups, isLoading, gameId }: RosterListProps) {
     if (isLoading) {
         return (
             <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                    <RosterItemSkeleton key={i} />
-                ))}
+                {Array.from({ length: 5 }).map((_, i) => <RosterItemSkeleton key={i} />)}
             </div>
         );
     }
-
     if (signups.length === 0) {
-        return (
-            <div className="text-center py-8 text-dim">
-                No signups yet. Be the first to join!
-            </div>
-        );
+        return <div className="text-center py-8 text-dim">No signups yet. Be the first to join!</div>;
     }
-
     const sorted = [...signups].sort((a, b) =>
         a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' }),
     );
-
     return (
         <div className="space-y-2">
-            {sorted.map((signup) => (
-                <RosterItem key={signup.id} signup={signup} gameId={gameId} />
-            ))}
+            {sorted.map((signup) => <RosterItem key={signup.id} signup={signup} gameId={gameId} />)}
         </div>
     );
 }
 
 interface RosterItemProps {
     signup: {
-        id: number;
-        user: SignupUserDto;
-        signedUpAt: string;
-        character?: SignupCharacterDto | null;
-        confirmationStatus?: ConfirmationStatus;
+        id: number; user: SignupUserDto; signedUpAt: string;
+        character?: SignupCharacterDto | null; confirmationStatus?: ConfirmationStatus;
     };
-    /** Game ID for context-aware avatar resolution (ROK-222) */
     gameId?: string;
 }
 
-/**
- * Individual roster item with character info when confirmed (ROK-131).
- * ROK-222: Uses resolveAvatar(toAvatarUser()) for avatar resolution.
- */
+function RosterAvatar({ user, gameId, isPending }: { user: SignupUserDto; gameId?: string; isPending: boolean }) {
+    const avatarResolved = resolveAvatar(toAvatarUser(user), gameId);
+    return (
+        <div className="relative">
+            {avatarResolved.url ? (
+                <img src={avatarResolved.url} alt={user.username} className="w-10 h-10 rounded-full bg-overlay"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            ) : (
+                <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-sm font-semibold text-muted">
+                    {user.username.charAt(0).toUpperCase()}
+                </div>
+            )}
+            {isPending && <span className="absolute -bottom-1 -right-1 text-sm" title="Character not confirmed">&#10067;</span>}
+        </div>
+    );
+}
+
+function ConfirmedCharacterDesktop({ character, username }: { character: SignupCharacterDto; username: string }) {
+    return (
+        <span className="hidden sm:flex items-center gap-2 text-sm text-dim">
+            <span className="text-faint">&#183;</span>
+            <span className="truncate text-dim">{username}</span>
+            {character.class && (
+                <>
+                    <span className="text-faint">&#183;</span>
+                    <span className="inline-flex items-center gap-1 text-muted">
+                        {getClassIconUrl(character.class) && <img src={getClassIconUrl(character.class)!} alt="" className="w-4 h-4 rounded-sm" />}
+                        {character.class}
+                    </span>
+                </>
+            )}
+            {character.spec && (<><span className="text-faint">/</span><span className="text-muted">{character.spec}</span></>)}
+            {character.itemLevel && (<><span className="text-faint">&#183;</span><span className="text-purple-400">{character.itemLevel}</span></>)}
+        </span>
+    );
+}
+
+function ConfirmedCharacterMobile({ character }: { character: SignupCharacterDto }) {
+    if (!character.class && !character.spec && !character.itemLevel) return null;
+    return (
+        <div className="flex sm:hidden items-center gap-1.5 text-xs text-muted">
+            {character.class && (
+                <span className="inline-flex items-center gap-1">
+                    {getClassIconUrl(character.class) && <img src={getClassIconUrl(character.class)!} alt="" className="w-3.5 h-3.5 rounded-sm" />}
+                    {character.class}
+                </span>
+            )}
+            {character.spec && (<><span className="text-faint">/</span><span>{character.spec}</span></>)}
+            {character.itemLevel && (<><span className="text-faint">&#183;</span><span className="text-purple-400">{character.itemLevel} iLvl</span></>)}
+        </div>
+    );
+}
+
+function UnconfirmedDisplay({ username, signedUpAt, isPending }: { username: string; signedUpAt: string; isPending: boolean }) {
+    return (
+        <>
+            <p className="font-medium text-foreground truncate">{username}</p>
+            <p className="text-sm text-dim">
+                Signed up {formatSignupTime(signedUpAt)}
+                {isPending && <span className="text-amber-500/80 ml-2">&#183; Awaiting confirmation</span>}
+            </p>
+        </>
+    );
+}
+
+function ConfirmedRosterContent({ character, username }: { character: SignupCharacterDto; username: string }) {
+    return (
+        <>
+            <div className="flex items-center gap-2">
+                <p className="font-medium text-foreground truncate">{character.name}</p>
+                {character.role && <span className="text-xs" title={character.role}><RoleIcon role={character.role} size="w-3.5 h-3.5" /></span>}
+                {character.isMain && <span className="hidden sm:inline text-yellow-400 text-xs" title="Main Character">&#11088;</span>}
+                <ConfirmedCharacterDesktop character={character} username={username} />
+            </div>
+            <ConfirmedCharacterMobile character={character} />
+            <div className="flex sm:hidden items-center gap-2 text-xs text-dim">
+                <span>@{username}</span>
+                {character.isMain && <span className="text-yellow-400" title="Main Character">&#11088;</span>}
+            </div>
+        </>
+    );
+}
+
 function RosterItem({ signup, gameId }: RosterItemProps) {
     const { user, character, confirmationStatus } = signup;
-    // ROK-457: Anonymous Discord users (id=0) can't confirm characters — never show as pending
     const canConfirm = user.id !== 0;
     const isPending = canConfirm && (confirmationStatus === 'pending' || !confirmationStatus);
     const isConfirmed = confirmationStatus === 'confirmed' || confirmationStatus === 'changed';
-    const roleBorderClass = character?.role
-        ? ROLE_BORDER_CLASSES[character.role] || ''
-        : '';
-
-    // ROK-222: Resolve avatar through unified pipeline
-    const avatarResolved = resolveAvatar(toAvatarUser(user), gameId);
+    const roleBorderClass = character?.role ? ROLE_BORDER_CLASSES[character.role] || '' : '';
 
     return (
-        <div
-            className={`flex items-start sm:items-center gap-3 p-3 bg-panel/50 rounded-lg hover:bg-panel transition-colors border-l-4 ${roleBorderClass || 'border-l-transparent'
-                }`}
-        >
-            {/* Avatar */}
-            <div className="relative">
-                {avatarResolved.url ? (
-                    <img
-                        src={avatarResolved.url}
-                        alt={user.username}
-                        className="w-10 h-10 rounded-full bg-overlay"
-                        onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                        }}
-                    />
-                ) : (
-                    <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-sm font-semibold text-muted">
-                        {user.username.charAt(0).toUpperCase()}
-                    </div>
-                )}
-                {/* Pending confirmation badge (AC-7) */}
-                {isPending && (
-                    <span
-                        className="absolute -bottom-1 -right-1 text-sm"
-                        title="Character not confirmed"
-                    >
-                        &#10067;
-                    </span>
-                )}
-            </div>
-
-            {/* User and character info */}
+        <div className={`flex items-start sm:items-center gap-3 p-3 bg-panel/50 rounded-lg hover:bg-panel transition-colors border-l-4 ${roleBorderClass || 'border-l-transparent'}`}>
+            <RosterAvatar user={user} gameId={gameId} isPending={isPending} />
             <div className="flex-1 min-w-0">
-                {/* Character name shown when confirmed (AC-6) */}
-                {isConfirmed && character ? (
-                    <>
-                        {/* Primary line: Character name + role */}
-                        <div className="flex items-center gap-2">
-                            <p className="font-medium text-foreground truncate">
-                                {character.name}
-                            </p>
-                            {character.role && (
-                                <span className="text-xs" title={character.role}>
-                                    <RoleIcon role={character.role} size="w-3.5 h-3.5" />
-                                </span>
-                            )}
-                            {/* Desktop: inline main badge + details */}
-                            {character.isMain && (
-                                <span className="hidden sm:inline text-yellow-400 text-xs" title="Main Character">
-                                    &#11088;
-                                </span>
-                            )}
-                            <span className="hidden sm:flex items-center gap-2 text-sm text-dim">
-                                <span className="text-faint">&#183;</span>
-                                <span className="truncate text-dim">{user.username}</span>
-                                {character.class && (
-                                    <>
-                                        <span className="text-faint">&#183;</span>
-                                        <span className="inline-flex items-center gap-1 text-muted">
-                                            {getClassIconUrl(character.class) && (
-                                                <img
-                                                    src={getClassIconUrl(character.class)!}
-                                                    alt=""
-                                                    className="w-4 h-4 rounded-sm"
-                                                />
-                                            )}
-                                            {character.class}
-                                        </span>
-                                    </>
-                                )}
-                                {character.spec && (
-                                    <>
-                                        <span className="text-faint">/</span>
-                                        <span className="text-muted">{character.spec}</span>
-                                    </>
-                                )}
-                                {character.itemLevel && (
-                                    <>
-                                        <span className="text-faint">&#183;</span>
-                                        <span className="text-purple-400">{character.itemLevel}</span>
-                                    </>
-                                )}
-                            </span>
-                        </div>
-                        {/* Mobile secondary line: Class / Spec / iLevel */}
-                        {(character.class || character.spec || character.itemLevel) && (
-                            <div className="flex sm:hidden items-center gap-1.5 text-xs text-muted">
-                                {character.class && (
-                                    <span className="inline-flex items-center gap-1">
-                                        {getClassIconUrl(character.class) && (
-                                            <img
-                                                src={getClassIconUrl(character.class)!}
-                                                alt=""
-                                                className="w-3.5 h-3.5 rounded-sm"
-                                            />
-                                        )}
-                                        {character.class}
-                                    </span>
-                                )}
-                                {character.spec && (
-                                    <>
-                                        <span className="text-faint">/</span>
-                                        <span>{character.spec}</span>
-                                    </>
-                                )}
-                                {character.itemLevel && (
-                                    <>
-                                        <span className="text-faint">&#183;</span>
-                                        <span className="text-purple-400">{character.itemLevel} iLvl</span>
-                                    </>
-                                )}
-                            </div>
-                        )}
-                        {/* Mobile tertiary line: @Username + Main badge */}
-                        <div className="flex sm:hidden items-center gap-2 text-xs text-dim">
-                            <span>@{user.username}</span>
-                            {character.isMain && (
-                                <span className="text-yellow-400" title="Main Character">
-                                    &#11088;
-                                </span>
-                            )}
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <p className="font-medium text-foreground truncate">
-                            {user.username}
-                        </p>
-                        <p className="text-sm text-dim">
-                            Signed up {formatSignupTime(signup.signedUpAt)}
-                            {isPending && (
-                                <span className="text-amber-500/80 ml-2">
-                                    &#183; Awaiting confirmation
-                                </span>
-                            )}
-                        </p>
-                    </>
-                )}
+                {isConfirmed && character
+                    ? <ConfirmedRosterContent character={character} username={user.username} />
+                    : <UnconfirmedDisplay username={user.username} signedUpAt={signup.signedUpAt} isPending={isPending} />}
             </div>
-
-            {/* Confirmation status indicator */}
             {isConfirmed && (
-                <span
-                    className="text-green-500 text-xs font-medium flex items-center justify-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
-                    title={confirmationStatus === 'changed' ? 'Changed selection' : 'Confirmed'}
-                >
+                <span className="text-green-500 text-xs font-medium flex items-center justify-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+                    title={confirmationStatus === 'changed' ? 'Changed selection' : 'Confirmed'}>
                     {confirmationStatus === 'changed' ? '\u{1F504}' : '\u2713'}
                 </span>
             )}
@@ -259,9 +169,6 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
     );
 }
 
-/**
- * Skeleton loader for roster items
- */
 function RosterItemSkeleton() {
     return (
         <div className="flex items-center gap-3 p-3 bg-panel/50 rounded-lg animate-pulse">

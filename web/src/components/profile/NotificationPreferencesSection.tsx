@@ -165,116 +165,99 @@ function PreferencesSkeleton() {
  * Shows a per-type-per-channel toggle matrix with icon buttons.
  * Discord column is only shown when user has Discord linked AND bot is connected (AC-7).
  */
-export function NotificationPreferencesSection() {
-    const { preferences, isLoading, updatePreferences, channelAvailability } =
-        useNotificationPreferences();
+function ColumnHeaders({ visibleChannels }: { visibleChannels: { channel: Channel; label: string }[] }) {
+    return (
+        <div className="flex items-center mb-2">
+            <div className="flex-1" />
+            <div className="flex gap-2 sm:gap-4">
+                {visibleChannels.map(({ channel, label }) => (
+                    <div key={channel} className="w-10 sm:w-12 flex flex-col items-center">
+                        <span className="text-[10px] sm:text-xs font-medium text-muted uppercase tracking-wider">{label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
-    // ROK-180 AC-7: Filter channels based on availability
+function ChannelToggle({ channel, active, label, onToggle }: {
+    channel: Channel; active: boolean; label: string; onToggle: () => void;
+}) {
+    return (
+        <div className="w-10 sm:w-12 flex justify-center">
+            <button type="button" onClick={onToggle}
+                className={`w-10 h-10 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all ${
+                    active ? 'text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25' : 'text-muted hover:text-secondary hover:bg-panel'
+                }`}
+                aria-label={`${active ? 'Disable' : 'Enable'} ${label} ${channel} notifications`}>
+                <ChannelIcon channel={channel} active={active} />
+            </button>
+        </div>
+    );
+}
+
+function NotificationRow({ type, label, description, visibleChannels, preferences, onToggle }: {
+    type: NotificationType; label: string; description: string;
+    visibleChannels: { channel: Channel; label: string }[];
+    preferences: ReturnType<typeof useNotificationPreferences>['preferences'];
+    onToggle: (type: NotificationType, channel: Channel) => void;
+}) {
+    return (
+        <div className="flex items-center py-3 hover:bg-panel/50 rounded-lg transition-colors -mx-2 px-2">
+            <div className="flex-1 min-w-0 mr-3">
+                <div className="text-sm font-medium text-foreground truncate">{label}</div>
+                <div className="text-xs text-muted truncate">{description}</div>
+            </div>
+            <div className="flex gap-2 sm:gap-4 shrink-0">
+                {visibleChannels.map(({ channel }) => (
+                    <ChannelToggle key={channel} channel={channel} active={preferences?.channelPrefs[type]?.[channel] ?? false}
+                        label={label} onToggle={() => onToggle(type, channel)} />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function NotificationPreferencesContent({ preferences, visibleChannels, handleToggle, channelAvailability }: {
+    preferences: ReturnType<typeof useNotificationPreferences>['preferences'];
+    visibleChannels: { channel: Channel; label: string }[];
+    handleToggle: (type: NotificationType, channel: Channel) => void;
+    channelAvailability: ReturnType<typeof useNotificationPreferences>['channelAvailability'];
+}) {
+    return (
+        <div>
+            <ColumnHeaders visibleChannels={visibleChannels} />
+            <div className="border-t border-edge-subtle mb-1" />
+            <div className="divide-y divide-edge-subtle">
+                {NOTIFICATION_TYPE_META.map((meta) => (
+                    <NotificationRow key={meta.type} {...meta} visibleChannels={visibleChannels} preferences={preferences} onToggle={handleToggle} />
+                ))}
+            </div>
+            {channelAvailability?.discord && !channelAvailability.discord.available && channelAvailability.discord.reason && (
+                <p className="text-xs text-muted mt-4 italic">{channelAvailability.discord.reason}</p>
+            )}
+        </div>
+    );
+}
+
+export function NotificationPreferencesSection() {
+    const { preferences, isLoading, updatePreferences, channelAvailability } = useNotificationPreferences();
     const visibleChannels = useMemo(() => {
         const discordAvailable = channelAvailability?.discord?.available ?? false;
-        return ALL_CHANNEL_META.filter(
-            ({ channel }) => channel !== 'discord' || discordAvailable,
-        );
+        return ALL_CHANNEL_META.filter(({ channel }) => channel !== 'discord' || discordAvailable);
     }, [channelAvailability]);
-
-    function handleToggle(type: NotificationType, channel: Channel) {
+    const handleToggle = (type: NotificationType, channel: Channel) => {
         if (!preferences) return;
         const current = preferences.channelPrefs[type]?.[channel] ?? true;
-        updatePreferences({
-            channelPrefs: { [type]: { [channel]: !current } },
-        });
-    }
+        updatePreferences({ channelPrefs: { [type]: { [channel]: !current } } });
+    };
 
     return (
         <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-foreground mb-1">
-                Notifications
-            </h2>
-            <p className="text-sm text-muted mb-5">
-                Choose how and when you get notified
-            </p>
-
-            {isLoading || !preferences ? (
-                <PreferencesSkeleton />
-            ) : (
-                <div>
-                    {/* Column headers */}
-                    <div className="flex items-center mb-2">
-                        <div className="flex-1" />
-                        <div className="flex gap-2 sm:gap-4">
-                            {visibleChannels.map(({ channel, label }) => (
-                                <div
-                                    key={channel}
-                                    className="w-10 sm:w-12 flex flex-col items-center"
-                                >
-                                    <span className="text-[10px] sm:text-xs font-medium text-muted uppercase tracking-wider">
-                                        {label}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="border-t border-edge-subtle mb-1" />
-
-                    {/* Notification type rows */}
-                    <div className="divide-y divide-edge-subtle">
-                        {NOTIFICATION_TYPE_META.map(({ type, label, description }) => (
-                            <div
-                                key={type}
-                                className="flex items-center py-3 hover:bg-panel/50 rounded-lg transition-colors -mx-2 px-2"
-                            >
-                                {/* Label + description */}
-                                <div className="flex-1 min-w-0 mr-3">
-                                    <div className="text-sm font-medium text-foreground truncate">
-                                        {label}
-                                    </div>
-                                    <div className="text-xs text-muted truncate">
-                                        {description}
-                                    </div>
-                                </div>
-
-                                {/* Channel toggles */}
-                                <div className="flex gap-2 sm:gap-4 shrink-0">
-                                    {visibleChannels.map(({ channel }) => {
-                                        const active =
-                                            preferences.channelPrefs[type]?.[channel] ?? false;
-                                        return (
-                                            <div
-                                                key={channel}
-                                                className="w-10 sm:w-12 flex justify-center"
-                                            >
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggle(type, channel)}
-                                                    className={`w-10 h-10 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all ${
-                                                        active
-                                                            ? 'text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25'
-                                                            : 'text-muted hover:text-secondary hover:bg-panel'
-                                                    }`}
-                                                    aria-label={`${active ? 'Disable' : 'Enable'} ${label} ${channel} notifications`}
-                                                >
-                                                    <ChannelIcon
-                                                        channel={channel}
-                                                        active={active}
-                                                    />
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Discord availability hint (ROK-180 AC-7) */}
-                    {channelAvailability?.discord && !channelAvailability.discord.available && channelAvailability.discord.reason && (
-                        <p className="text-xs text-muted mt-4 italic">
-                            {channelAvailability.discord.reason}
-                        </p>
-                    )}
-                </div>
+            <h2 className="text-xl font-semibold text-foreground mb-1">Notifications</h2>
+            <p className="text-sm text-muted mb-5">Choose how and when you get notified</p>
+            {isLoading || !preferences ? <PreferencesSkeleton /> : (
+                <NotificationPreferencesContent preferences={preferences} visibleChannels={visibleChannels} handleToggle={handleToggle} channelAvailability={channelAvailability} />
             )}
         </div>
     );

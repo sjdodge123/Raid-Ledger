@@ -23,125 +23,88 @@ export interface RosterSectionProps {
     onAutoUnbenchChange: (v: boolean) => void;
 }
 
-export function RosterSection({
-    slotType,
-    slotTank,
-    slotHealer,
-    slotDps,
-    slotFlex,
-    slotPlayer,
-    maxAttendees,
-    autoUnbench,
-    maxAttendeesError,
-    maxAttendeesId = 'maxAttendees',
-    onSlotTypeChange,
-    onSlotTankChange,
-    onSlotHealerChange,
-    onSlotDpsChange,
-    onSlotFlexChange,
-    onSlotPlayerChange,
-    onMaxAttendeesChange,
-    onAutoUnbenchChange,
-}: RosterSectionProps) {
+function SlotTypeToggle({ slotType, onChange }: { slotType: 'mmo' | 'generic'; onChange: (t: 'mmo' | 'generic') => void }) {
+    const btnClass = (active: boolean) =>
+        `flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${active ? 'bg-emerald-600 text-white' : 'bg-panel border border-edge text-secondary hover:text-foreground'}`;
+    return (
+        <div>
+            <label className="block text-sm font-medium text-secondary mb-2">Slot Type</label>
+            <div className="flex gap-2">
+                <button type="button" onClick={() => onChange('mmo')} className={btnClass(slotType === 'mmo')}>MMO Roles</button>
+                <button type="button" onClick={() => onChange('generic')} className={btnClass(slotType === 'generic')}>Generic Slots</button>
+            </div>
+        </div>
+    );
+}
+
+function SlotSteppers(props: RosterSectionProps) {
+    return (
+        <div className="bg-panel/50 border border-edge-subtle rounded-lg px-4 divide-y divide-edge-subtle">
+            {props.slotType === 'mmo' ? (
+                <>
+                    <SlotStepper label="Tank" value={props.slotTank} onChange={props.onSlotTankChange} color="bg-blue-500" />
+                    <SlotStepper label="Healer" value={props.slotHealer} onChange={props.onSlotHealerChange} color="bg-green-500" />
+                    <SlotStepper label="DPS" value={props.slotDps} onChange={props.onSlotDpsChange} color="bg-red-500" />
+                    <SlotStepper label="Flex" value={props.slotFlex} onChange={props.onSlotFlexChange} color="bg-purple-500" />
+                </>
+            ) : (
+                <SlotStepper label="Players" value={props.slotPlayer} onChange={props.onSlotPlayerChange} color="bg-indigo-500" />
+            )}
+        </div>
+    );
+}
+
+function MaxAttendeesField({ maxAttendees, maxAttendeesError, maxAttendeesId, onChange }: {
+    maxAttendees: string; maxAttendeesError?: string; maxAttendeesId: string; onChange: (v: string) => void;
+}) {
+    return (
+        <div>
+            <label htmlFor={maxAttendeesId} className="block text-sm font-medium text-secondary mb-2">Max Attendees</label>
+            <input id={maxAttendeesId} type="number" min={1} value={maxAttendees} onChange={(e) => onChange(e.target.value)}
+                placeholder="Unlimited"
+                className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${maxAttendeesError ? 'border-red-500' : 'border-edge'}`} />
+            <p className="mt-1 text-xs text-dim">Leave empty for unlimited</p>
+            {maxAttendeesError && <p className="mt-1 text-sm text-red-400">{maxAttendeesError}</p>}
+        </div>
+    );
+}
+
+function AutoUnbenchToggle({ autoUnbench, onChange }: { autoUnbench: boolean; onChange: (v: boolean) => void }) {
+    return (
+        <div className="flex items-center justify-between gap-3">
+            <div>
+                <span className="text-sm font-medium text-secondary">Auto-promote benched players</span>
+                <p className="text-xs text-dim mt-0.5">When a roster slot opens, automatically move the next benched player in</p>
+            </div>
+            <div className="event-detail-autosub-toggle shrink-0">
+                <div className="event-detail-autosub-toggle__track" role="switch" aria-checked={autoUnbench}
+                    aria-label="Auto-promote benched players" tabIndex={0}
+                    onClick={() => onChange(!autoUnbench)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(!autoUnbench); } }}>
+                    <span className={`event-detail-autosub-toggle__option ${autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                    <span className={`event-detail-autosub-toggle__option ${!autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function RosterSection(props: RosterSectionProps) {
+    const { maxAttendeesId = 'maxAttendees' } = props;
     const totalSlots = useMemo(() => {
-        if (slotType === 'mmo') {
-            return slotTank + slotHealer + slotDps + slotFlex;
-        }
-        return slotPlayer;
-    }, [slotType, slotTank, slotHealer, slotDps, slotFlex, slotPlayer]);
+        return props.slotType === 'mmo'
+            ? props.slotTank + props.slotHealer + props.slotDps + props.slotFlex
+            : props.slotPlayer;
+    }, [props.slotType, props.slotTank, props.slotHealer, props.slotDps, props.slotFlex, props.slotPlayer]);
 
     return (
         <>
-            {/* Slot Type Toggle */}
-            <div>
-                <label className="block text-sm font-medium text-secondary mb-2">Slot Type</label>
-                <div className="flex gap-2">
-                    <button
-                        type="button"
-                        onClick={() => onSlotTypeChange('mmo')}
-                        className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                            slotType === 'mmo'
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-panel border border-edge text-secondary hover:text-foreground'
-                        }`}
-                    >
-                        MMO Roles
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => onSlotTypeChange('generic')}
-                        className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                            slotType === 'generic'
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-panel border border-edge text-secondary hover:text-foreground'
-                        }`}
-                    >
-                        Generic Slots
-                    </button>
-                </div>
-            </div>
-
-            {/* Slot Steppers */}
-            <div className="bg-panel/50 border border-edge-subtle rounded-lg px-4 divide-y divide-edge-subtle">
-                {slotType === 'mmo' ? (
-                    <>
-                        <SlotStepper label="Tank" value={slotTank} onChange={onSlotTankChange} color="bg-blue-500" />
-                        <SlotStepper label="Healer" value={slotHealer} onChange={onSlotHealerChange} color="bg-green-500" />
-                        <SlotStepper label="DPS" value={slotDps} onChange={onSlotDpsChange} color="bg-red-500" />
-                        <SlotStepper label="Flex" value={slotFlex} onChange={onSlotFlexChange} color="bg-purple-500" />
-                    </>
-                ) : (
-                    <SlotStepper label="Players" value={slotPlayer} onChange={onSlotPlayerChange} color="bg-indigo-500" />
-                )}
-            </div>
-
-            <div className="text-sm text-muted">
-                Total slots: <span className="text-emerald-400 font-medium">{totalSlots}</span>
-            </div>
-
-            {/* Max Attendees */}
-            <div>
-                <label htmlFor={maxAttendeesId} className="block text-sm font-medium text-secondary mb-2">
-                    Max Attendees
-                </label>
-                <input
-                    id={maxAttendeesId}
-                    type="number"
-                    min={1}
-                    value={maxAttendees}
-                    onChange={(e) => onMaxAttendeesChange(e.target.value)}
-                    placeholder="Unlimited"
-                    className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${maxAttendeesError ? 'border-red-500' : 'border-edge'}`}
-                />
-                <p className="mt-1 text-xs text-dim">Leave empty for unlimited</p>
-                {maxAttendeesError && (
-                    <p className="mt-1 text-sm text-red-400">{maxAttendeesError}</p>
-                )}
-            </div>
-
-            {/* Auto-Unbench Toggle */}
-            <div className="flex items-center justify-between gap-3">
-                <div>
-                    <span className="text-sm font-medium text-secondary">Auto-promote benched players</span>
-                    <p className="text-xs text-dim mt-0.5">
-                        When a roster slot opens, automatically move the next benched player in
-                    </p>
-                </div>
-                <div className="event-detail-autosub-toggle shrink-0">
-                    <div
-                        className="event-detail-autosub-toggle__track"
-                        role="switch"
-                        aria-checked={autoUnbench}
-                        aria-label="Auto-promote benched players"
-                        tabIndex={0}
-                        onClick={() => onAutoUnbenchChange(!autoUnbench)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAutoUnbenchChange(!autoUnbench); } }}
-                    >
-                        <span className={`event-detail-autosub-toggle__option ${autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
-                        <span className={`event-detail-autosub-toggle__option ${!autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
-                    </div>
-                </div>
-            </div>
+            <SlotTypeToggle slotType={props.slotType} onChange={props.onSlotTypeChange} />
+            <SlotSteppers {...props} />
+            <div className="text-sm text-muted">Total slots: <span className="text-emerald-400 font-medium">{totalSlots}</span></div>
+            <MaxAttendeesField maxAttendees={props.maxAttendees} maxAttendeesError={props.maxAttendeesError}
+                maxAttendeesId={maxAttendeesId} onChange={props.onMaxAttendeesChange} />
+            <AutoUnbenchToggle autoUnbench={props.autoUnbench} onChange={props.onAutoUnbenchChange} />
         </>
     );
 }

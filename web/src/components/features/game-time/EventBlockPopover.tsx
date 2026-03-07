@@ -33,145 +33,92 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-export function EventBlockPopover({ event, anchorRect, onClose }: EventBlockPopoverProps) {
-    const navigate = useNavigate();
-    const cancelSignup = useCancelSignup(event.eventId);
-    const confirmSignup = useConfirmSignup(event.eventId);
-    const popoverRef = useRef<HTMLDivElement>(null);
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
+function computePopoverPosition(anchorRect: DOMRect) {
+    const popoverHeight = 200;
+    const spaceBelow = window.innerHeight - anchorRect.bottom;
+    const top = spaceBelow >= popoverHeight ? anchorRect.bottom + 4 : anchorRect.top - popoverHeight - 4;
+    const left = Math.min(Math.max(anchorRect.left, 8), window.innerWidth - 260);
+    return { top, left };
+}
 
-    // Position: below anchor if space, above if not
-    const position = useMemo(() => {
-        const popoverHeight = 200;
-        const spaceBelow = window.innerHeight - anchorRect.bottom;
-        const top = spaceBelow >= popoverHeight
-            ? anchorRect.bottom + 4
-            : anchorRect.top - popoverHeight - 4;
-        const left = Math.min(
-            Math.max(anchorRect.left, 8),
-            window.innerWidth - 260,
-        );
-        return { top, left };
-    }, [anchorRect]);
-
-    // Close on click outside
+function useClickOutside(ref: React.RefObject<HTMLDivElement | null>, onClose: () => void) {
     useEffect(() => {
         const handler = (e: PointerEvent) => {
-            if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-                onClose();
-            }
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
         };
         document.addEventListener('pointerdown', handler);
         return () => document.removeEventListener('pointerdown', handler);
-    }, [onClose]);
+    }, [ref, onClose]);
+}
 
-    // Close on page scroll so popover doesn't float away from its anchor.
-    // Small delay prevents immediate close from layout scroll events on open.
+function useCloseOnScroll(onClose: () => void) {
     useEffect(() => {
         let armed = false;
         const timer = setTimeout(() => { armed = true; }, 100);
         const handler = () => { if (armed) onClose(); };
         window.addEventListener('scroll', handler);
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener('scroll', handler);
-        };
+        return () => { clearTimeout(timer); window.removeEventListener('scroll', handler); };
     }, [onClose]);
+}
 
-    const handleConfirm = async (selection: { characterId: string; role?: CharacterRole }) => {
-        try {
-            await confirmSignup.mutateAsync({ signupId: event.signupId, characterId: selection.characterId });
-            toast.success('Signup confirmed!');
-            setShowConfirmModal(false);
-        } catch {
-            toast.error('Failed to confirm signup');
-        }
-    };
+async function handlePopoverConfirm(confirmSignup: ReturnType<typeof useConfirmSignup>, event: GameTimeEventBlock, selection: { characterId: string; role?: CharacterRole }, setShowModal: (v: boolean) => void) {
+    try {
+        await confirmSignup.mutateAsync({ signupId: event.signupId, characterId: selection.characterId });
+        toast.success('Signup confirmed!');
+        setShowModal(false);
+    } catch { toast.error('Failed to confirm signup'); }
+}
 
-    const handleSkip = () => {
-        // Already signed up, just close the modal
-        setShowConfirmModal(false);
-    };
+async function handlePopoverLeave(cancelSignup: ReturnType<typeof useCancelSignup>, onClose: () => void) {
+    try { await cancelSignup.mutateAsync(); toast.success('Left event'); onClose(); }
+    catch { toast.error('Failed to leave event'); }
+}
 
-    const handleLeave = async () => {
-        try {
-            await cancelSignup.mutateAsync();
-            toast.success('Left event');
-            onClose();
-        } catch {
-            toast.error('Failed to leave event');
-        }
-    };
+function PopoverActions({ event, onClose }: { event: GameTimeEventBlock; onClose: () => void }) {
+    const navigate = useNavigate();
+    const cancelSignup = useCancelSignup(event.eventId);
+    const confirmSignup = useConfirmSignup(event.eventId);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     return (
         <>
-            <div
-                ref={popoverRef}
-                className="fixed z-50 w-60 bg-panel border border-edge-strong rounded-lg shadow-xl"
-                style={{ top: position.top, left: position.left }}
-                data-testid="event-block-popover"
-            >
-                <div className="p-3 space-y-2">
-                    {/* Title + game */}
-                    <div>
-                        <h3 className="text-sm font-semibold text-foreground truncate">{event.title}</h3>
-                        {event.gameName && (
-                            <p className="text-xs text-muted truncate">{event.gameName}</p>
-                        )}
-                    </div>
-
-                    {/* Time + status */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-xs text-secondary">
-                            {formatHourRange(event.startHour, event.endHour)}
-                        </span>
-                        <StatusBadge status={event.confirmationStatus} />
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-2 pt-1">
-                        <button
-                            onClick={() => {
-                                navigate(`/events/${event.eventId}`);
-                                onClose();
-                            }}
-                            className="flex-1 px-2 py-1.5 text-xs font-medium text-foreground bg-overlay hover:bg-faint rounded transition-colors"
-                        >
-                            View Event
-                        </button>
-                        {event.confirmationStatus === 'pending' && (
-                            <button
-                                onClick={() => setShowConfirmModal(true)}
-                                className="flex-1 px-2 py-1.5 text-xs font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded transition-colors"
-                            >
-                                Confirm
-                            </button>
-                        )}
-                        <button
-                            onClick={handleLeave}
-                            disabled={cancelSignup.isPending}
-                            className="px-2 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50"
-                        >
-                            {cancelSignup.isPending ? '...' : 'Leave'}
-                        </button>
-                    </div>
-                </div>
+            <div className="flex gap-2 pt-1">
+                <button onClick={() => { navigate(`/events/${event.eventId}`); onClose(); }} className="flex-1 px-2 py-1.5 text-xs font-medium text-foreground bg-overlay hover:bg-faint rounded transition-colors">View Event</button>
+                {event.confirmationStatus === 'pending' && (
+                    <button onClick={() => setShowConfirmModal(true)} className="flex-1 px-2 py-1.5 text-xs font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded transition-colors">Confirm</button>
+                )}
+                <button onClick={() => handlePopoverLeave(cancelSignup, onClose)} disabled={cancelSignup.isPending} className="px-2 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50">
+                    {cancelSignup.isPending ? '...' : 'Leave'}
+                </button>
             </div>
-
-            {/* Character confirmation modal */}
             {showConfirmModal && (
-                <SignupConfirmationModal
-                    isOpen={showConfirmModal}
-                    onClose={() => setShowConfirmModal(false)}
-                    onConfirm={handleConfirm}
-                    onSkip={handleSkip}
-                    isConfirming={confirmSignup.isPending}
-                    gameId={event.gameId ?? undefined}
-                    gameName={event.gameName ?? undefined}
-                    gameSlug={event.gameSlug ?? undefined}
-                    eventId={event.eventId}
-                />
+                <SignupConfirmationModal isOpen={showConfirmModal} onClose={() => setShowConfirmModal(false)}
+                    onConfirm={(sel) => handlePopoverConfirm(confirmSignup, event, sel, setShowConfirmModal)} onSkip={() => setShowConfirmModal(false)}
+                    isConfirming={confirmSignup.isPending} gameId={event.gameId ?? undefined} gameName={event.gameName ?? undefined} gameSlug={event.gameSlug ?? undefined} eventId={event.eventId} />
             )}
         </>
+    );
+}
+
+export function EventBlockPopover({ event, anchorRect, onClose }: EventBlockPopoverProps) {
+    const popoverRef = useRef<HTMLDivElement>(null);
+    const position = useMemo(() => computePopoverPosition(anchorRect), [anchorRect]);
+    useClickOutside(popoverRef, onClose);
+    useCloseOnScroll(onClose);
+
+    return (
+        <div ref={popoverRef} className="fixed z-50 w-60 bg-panel border border-edge-strong rounded-lg shadow-xl" style={{ top: position.top, left: position.left }} data-testid="event-block-popover">
+            <div className="p-3 space-y-2">
+                <div>
+                    <h3 className="text-sm font-semibold text-foreground truncate">{event.title}</h3>
+                    {event.gameName && <p className="text-xs text-muted truncate">{event.gameName}</p>}
+                </div>
+                <div className="flex items-center justify-between">
+                    <span className="text-xs text-secondary">{formatHourRange(event.startHour, event.endHour)}</span>
+                    <StatusBadge status={event.confirmationStatus} />
+                </div>
+                <PopoverActions event={event} onClose={onClose} />
+            </div>
+        </div>
     );
 }

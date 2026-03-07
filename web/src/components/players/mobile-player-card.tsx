@@ -10,34 +10,27 @@ interface MobilePlayerCardProps {
  * Mobile-optimized player card — vertical layout with 64px avatar.
  * Renders below md breakpoint in a 2-column grid.
  */
+function PlayerAvatar({ url, username }: { url?: string; username: string }) {
+    return (
+        <>
+            {url ? (
+                <img src={url} alt={username} className="w-16 h-16 rounded-full bg-overlay object-cover"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+            ) : null}
+            <div className={`w-16 h-16 rounded-full bg-overlay flex items-center justify-center text-2xl text-muted ${url ? 'hidden' : ''}`}>
+                {username.charAt(0).toUpperCase()}
+            </div>
+        </>
+    );
+}
+
 export function MobilePlayerCard({ player }: MobilePlayerCardProps) {
     const avatar = resolveAvatar(toAvatarUser(player));
 
     return (
-        <Link
-            to={`/users/${player.id}`}
-            data-testid="mobile-player-card"
-            className="flex flex-col items-center gap-2 p-4 bg-surface rounded-lg border border-edge hover:bg-overlay hover:border-dim transition-colors text-center group"
-        >
-            {/* 64px avatar */}
-            {avatar.url ? (
-                <img
-                    src={avatar.url}
-                    alt={player.username}
-                    className="w-16 h-16 rounded-full bg-overlay object-cover"
-                    onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                    }}
-                />
-            ) : null}
-            <div
-                className={`w-16 h-16 rounded-full bg-overlay flex items-center justify-center text-2xl text-muted ${avatar.url ? 'hidden' : ''}`}
-            >
-                {player.username.charAt(0).toUpperCase()}
-            </div>
-
-            {/* Username */}
+        <Link to={`/users/${player.id}`} data-testid="mobile-player-card"
+            className="flex flex-col items-center gap-2 p-4 bg-surface rounded-lg border border-edge hover:bg-overlay hover:border-dim transition-colors text-center group">
+            <PlayerAvatar url={avatar.url} username={player.username} />
             <div className="min-w-0 w-full">
                 <h3 className="font-medium text-sm text-foreground group-hover:text-emerald-400 transition-colors truncate">
                     {player.username}
