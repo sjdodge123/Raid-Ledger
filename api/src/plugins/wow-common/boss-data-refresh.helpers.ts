@@ -105,42 +105,38 @@ export async function upsertBoss(
   return bossRows[0]?.id ?? null;
 }
 
-/** Fetch, process, and upsert a single loot item. Returns true if item was upserted. */
-export async function processLootItem(
-  db: PostgresJsDatabase<typeof schema>,
-  blizzardService: BlizzardService,
+/** Build loot item values for upsert. */
+function buildLootValues(
   bossId: number,
   item: { id: number; name?: string },
+  itemDetail: ItemDetail,
+  media: ItemMedia | null,
+  quality: string,
   expansion: string,
-): Promise<boolean> {
-  const itemDetail = await blizzardService.fetchBlizzardApi<ItemDetail>(
-    `${BASE_URL}/data/wow/item/${item.id}?namespace=${NAMESPACE}&locale=en_US`,
-  );
-  if (!itemDetail) return false;
+) {
+  return {
+    bossId,
+    itemId: item.id,
+    itemName: item.name || itemDetail.name || `Item ${item.id}`,
+    slot: SLOT_MAP[itemDetail.inventory_type?.type || ''] || null,
+    quality,
+    itemLevel: itemDetail.level || null,
+    dropRate: null,
+    expansion,
+    classRestrictions: null,
+    iconUrl: media?.assets?.[0]?.value || null,
+    itemSubclass: itemDetail.item_subclass?.name || null,
+  };
+}
 
-  const quality = QUALITY_MAP[itemDetail.quality?.type || ''] || 'Common';
-  if (quality === 'Poor' || quality === 'Common') return false;
-
-  const slot = SLOT_MAP[itemDetail.inventory_type?.type || ''] || null;
-  const media = await blizzardService.fetchBlizzardApi<ItemMedia>(
-    `${BASE_URL}/data/wow/media/item/${item.id}?namespace=${NAMESPACE}&locale=en_US`,
-  );
-
+/** Upsert a loot item into the database. */
+async function upsertLootItem(
+  db: PostgresJsDatabase<typeof schema>,
+  values: ReturnType<typeof buildLootValues>,
+): Promise<void> {
   await db
     .insert(wowClassicBossLoot)
-    .values({
-      bossId,
-      itemId: item.id,
-      itemName: item.name || itemDetail.name || `Item ${item.id}`,
-      slot,
-      quality,
-      itemLevel: itemDetail.level || null,
-      dropRate: null,
-      expansion,
-      classRestrictions: null,
-      iconUrl: media?.assets?.[0]?.value || null,
-      itemSubclass: itemDetail.item_subclass?.name || null,
-    })
+    .values(values)
     .onConflictDoUpdate({
       target: [
         wowClassicBossLoot.bossId,
@@ -156,5 +152,28 @@ export async function processLootItem(
         itemSubclass: sql`excluded.item_subclass`,
       },
     });
+}
+
+/** Fetch, process, and upsert a single loot item. Returns true if item was upserted. */
+export async function processLootItem(
+  db: PostgresJsDatabase<typeof schema>,
+  blizzardService: BlizzardService,
+  bossId: number,
+  item: { id: number; name?: string },
+  expansion: string,
+): Promise<boolean> {
+  const itemDetail = await blizzardService.fetchBlizzardApi<ItemDetail>(
+    `${BASE_URL}/data/wow/item/${item.id}?namespace=${NAMESPACE}&locale=en_US`,
+  );
+  if (!itemDetail) return false;
+  const quality = QUALITY_MAP[itemDetail.quality?.type || ''] || 'Common';
+  if (quality === 'Poor' || quality === 'Common') return false;
+  const media = await blizzardService.fetchBlizzardApi<ItemMedia>(
+    `${BASE_URL}/data/wow/media/item/${item.id}?namespace=${NAMESPACE}&locale=en_US`,
+  );
+  await upsertLootItem(
+    db,
+    buildLootValues(bossId, item, itemDetail, media, quality, expansion),
+  );
   return true;
 }

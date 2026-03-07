@@ -56,6 +56,31 @@ export class LiveNoShowService {
     );
   }
 
+  /** Send a single Phase 1 no-show reminder. */
+  private async sendPhase1Reminder(
+    event: LiveEvent,
+    userId: number,
+    voiceChannelId: string | null,
+  ): Promise<void> {
+    if (!(await this.insertReminderDedup(event.id, userId, 'noshow_reminder')))
+      return;
+    await this.notificationService.create({
+      userId,
+      type: 'event_reminder',
+      title: 'Are you joining?',
+      message: `Your event **${event.title}** started 5 minutes ago — hop in the voice channel!`,
+      payload: {
+        eventId: event.id,
+        startTime: event.startTime.toISOString(),
+        voiceChannelId,
+        noshowReminder: true,
+      },
+    });
+    this.logger.debug(
+      `Phase 1: Sent no-show reminder to user ${userId} for event ${event.id}`,
+    );
+  }
+
   /** Phase 1: Send reminder DM to absent signed-up players. */
   private async checkPhase1(event: LiveEvent): Promise<void> {
     const absentPlayers = await getAbsentSignedUpPlayers(
@@ -68,38 +93,20 @@ export class LiveNoShowService {
       await this.notificationService.resolveVoiceChannelForEvent(event.id);
     for (const player of absentPlayers) {
       if (!player.userId) continue;
-      const inserted = await this.insertReminderDedup(
-        event.id,
-        player.userId,
-        'noshow_reminder',
-      );
-      if (!inserted) continue;
-      await this.notificationService.create({
-        userId: player.userId,
-        type: 'event_reminder',
-        title: 'Are you joining?',
-        message: `Your event **${event.title}** started 5 minutes ago — hop in the voice channel!`,
-        payload: {
-          eventId: event.id,
-          startTime: event.startTime.toISOString(),
-          voiceChannelId,
-          noshowReminder: true,
-        },
-      });
-      this.logger.debug(
-        `Phase 1: Sent no-show reminder to user ${player.userId} for event ${event.id}`,
-      );
+      await this.sendPhase1Reminder(event, player.userId, voiceChannelId);
     }
   }
 
   /** Phase 2: Batch DM the creator about still-absent players. */
   private async checkPhase2(event: LiveEvent): Promise<void> {
-    const alreadyEscalated = await this.hasReminderBeenSent(
-      event.id,
-      event.creatorId,
-      'noshow_escalation',
-    );
-    if (alreadyEscalated) return;
+    if (
+      await this.hasReminderBeenSent(
+        event.id,
+        event.creatorId,
+        'noshow_escalation',
+      )
+    )
+      return;
     const phase1Reminded = await getPhase1RemindedUserIds(this.db, event.id);
     if (phase1Reminded.length === 0) return;
     const stillAbsent = await this.findStillAbsentPlayers(
@@ -112,6 +119,18 @@ export class LiveNoShowService {
       event.creatorId,
       'noshow_escalation',
     );
+    await this.sendEscalationNotification(event, stillAbsent);
+  }
+
+  /** Send the escalation notification to the event creator. */
+  private async sendEscalationNotification(
+    event: LiveEvent,
+    stillAbsent: Array<{
+      userId: number;
+      displayName: string;
+      role: string | null;
+    }>,
+  ): Promise<void> {
     const message = this.buildEscalationMessage(event.title, stillAbsent);
     await this.notificationService.create({
       userId: event.creatorId,

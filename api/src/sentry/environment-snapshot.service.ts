@@ -160,18 +160,11 @@ export class EnvironmentSnapshotService implements OnModuleInit {
   private async collectMigrationHistory(): Promise<
     EnvironmentSnapshot['migrations']
   > {
-    if (this.migrationTableMissing) {
-      return [];
-    }
-
+    if (this.migrationTableMissing) return [];
     try {
-      const rows = await this.db.execute<{
-        hash: string;
-        created_at: string;
-      }>(
+      const rows = await this.db.execute<{ hash: string; created_at: string }>(
         sql`SELECT hash, created_at FROM "drizzle"."__drizzle_migrations" ORDER BY created_at DESC LIMIT 10`,
       );
-
       return Array.from(rows).map((row) => ({
         tag: row.hash,
         appliedAt: row.created_at,
@@ -181,20 +174,27 @@ export class EnvironmentSnapshotService implements OnModuleInit {
         err instanceof Error &&
         'code' in err &&
         (err as Error & { code: string }).code === '42P01';
-
       if (isTableMissing) {
         this.logger.debug(
           '__drizzle_migrations table not found — skipping migration snapshot',
         );
         this.migrationTableMissing = true;
-      } else {
-        this.logger.warn('Failed to query migration history', err);
-      }
+      } else this.logger.warn('Failed to query migration history', err);
       return [];
     }
   }
 
   private async collectAppSettings(): Promise<EnvironmentSnapshot['settings']> {
+    const keys = [
+      SETTING_KEYS.DEMO_MODE,
+      SETTING_KEYS.ONBOARDING_COMPLETED,
+      SETTING_KEYS.DEFAULT_TIMEZONE,
+      SETTING_KEYS.COMMUNITY_NAME,
+      SETTING_KEYS.RELAY_ENABLED,
+      SETTING_KEYS.IGDB_FILTER_ADULT,
+      SETTING_KEYS.DISCORD_BOT_ENABLED,
+      SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED,
+    ] as const;
     const [
       demoMode,
       onboardingCompleted,
@@ -204,17 +204,7 @@ export class EnvironmentSnapshotService implements OnModuleInit {
       igdbFilterAdult,
       discordBotEnabled,
       discordBotSetupCompleted,
-    ] = await Promise.all([
-      this.settingsService.get(SETTING_KEYS.DEMO_MODE),
-      this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
-      this.settingsService.get(SETTING_KEYS.DEFAULT_TIMEZONE),
-      this.settingsService.get(SETTING_KEYS.COMMUNITY_NAME),
-      this.settingsService.get(SETTING_KEYS.RELAY_ENABLED),
-      this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT),
-      this.settingsService.get(SETTING_KEYS.DISCORD_BOT_ENABLED),
-      this.settingsService.get(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED),
-    ]);
-
+    ] = await Promise.all(keys.map((k) => this.settingsService.get(k)));
     return {
       demoMode: demoMode === 'true',
       onboardingCompleted: onboardingCompleted === 'true',

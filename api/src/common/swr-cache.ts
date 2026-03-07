@@ -138,48 +138,69 @@ interface RedisSwrEnvelope {
  * determine whether the entry is in the stale window without an extra
  * Redis TTL query.
  */
-export async function redisSwr<T>(opts: RedisSwrOptions): Promise<T | null> {
-  const { redis, key, ttlSec, staleRatio = 0.2, fetcher } = opts;
-
-  try {
-    const raw = await redis.get(key);
-    if (raw) {
-      const envelope = JSON.parse(raw) as RedisSwrEnvelope;
-      const ageMs = Date.now() - envelope.storedAt;
-      const ttlMs = ttlSec * 1000;
-      const staleAfterMs = ttlMs * (1 - staleRatio);
-
-      if (ageMs < staleAfterMs) {
-        // Fresh
-        return envelope.data as T;
-      }
-
-      // Stale but Redis hasn't expired it yet — return + background refresh
-      triggerBackgroundRefresh(key, fetcher, async (freshData: unknown) => {
-        try {
-          const newEnvelope: RedisSwrEnvelope = {
-            storedAt: Date.now(),
-            data: freshData,
-          };
-          await redis.setex(key, ttlSec, JSON.stringify(newEnvelope));
-        } catch (err) {
-          logger.warn(`SWR Redis write failed for ${key}: ${err}`);
-        }
-      });
-      return envelope.data as T;
+/** Try reading from Redis cache; returns cached data or null on miss/error. */
+function tryRedisRead<T>(
+  raw: string | null,
+  key: string,
+  ttlSec: number,
+  staleRatio: number,
+  fetcher: () => Promise<unknown>,
+  redis: RedisLike,
+): T | null {
+  if (!raw) return null;
+  const envelope = JSON.parse(raw) as RedisSwrEnvelope;
+  const staleAfterMs = ttlSec * 1000 * (1 - staleRatio);
+  if (Date.now() - envelope.storedAt < staleAfterMs) return envelope.data as T;
+  triggerBackgroundRefresh(key, fetcher, async (freshData: unknown) => {
+    try {
+      await redis.setex(
+        key,
+        ttlSec,
+        JSON.stringify({ storedAt: Date.now(), data: freshData }),
+      );
+    } catch (err) {
+      logger.warn(`SWR Redis write failed for ${key}: ${err}`);
     }
-  } catch (err) {
-    logger.warn(`SWR Redis read failed for ${key}: ${err}`);
-  }
+  });
+  return envelope.data as T;
+}
 
-  // Cache miss or error — blocking fetch
-  const data = await fetcher();
+/** Write a fetched value to Redis, swallowing errors. */
+async function writeRedisEnvelope(
+  redis: RedisLike,
+  key: string,
+  ttlSec: number,
+  data: unknown,
+): Promise<void> {
   try {
-    const envelope: RedisSwrEnvelope = { storedAt: Date.now(), data };
-    await redis.setex(key, ttlSec, JSON.stringify(envelope));
+    await redis.setex(
+      key,
+      ttlSec,
+      JSON.stringify({ storedAt: Date.now(), data }),
+    );
   } catch (err) {
     logger.warn(`SWR Redis write failed for ${key}: ${err}`);
   }
+}
+
+export async function redisSwr<T>(opts: RedisSwrOptions): Promise<T | null> {
+  const { redis, key, ttlSec, staleRatio = 0.2, fetcher } = opts;
+  try {
+    const raw = await redis.get(key);
+    const cached = tryRedisRead<T>(
+      raw,
+      key,
+      ttlSec,
+      staleRatio,
+      fetcher,
+      redis,
+    );
+    if (cached !== null) return cached;
+  } catch (err) {
+    logger.warn(`SWR Redis read failed for ${key}: ${err}`);
+  }
+  const data = await fetcher();
+  await writeRedisEnvelope(redis, key, ttlSec, data);
   return data as T;
 }
 

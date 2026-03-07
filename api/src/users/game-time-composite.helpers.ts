@@ -14,6 +14,22 @@ import type {
   AbsenceRecord,
 } from './game-time.types';
 
+/** Select columns for signed-up event queries. */
+const SIGNED_UP_EVENT_COLUMNS = {
+  eventId: schema.events.id,
+  title: schema.events.title,
+  description: schema.events.description,
+  duration: schema.events.duration,
+  signupId: schema.eventSignups.id,
+  confirmationStatus: schema.eventSignups.confirmationStatus,
+  gameId: schema.games.id,
+  gameSlug: schema.games.slug,
+  gameName: schema.games.name,
+  gameCoverUrl: schema.games.coverUrl,
+  creatorId: schema.events.creatorId,
+  creatorUsername: schema.users.username,
+} as const;
+
 /** Fetch signed-up events for a specific week with game/creator data. */
 export async function fetchWeekSignedUpEvents(
   db: PostgresJsDatabase<typeof schema>,
@@ -23,20 +39,7 @@ export async function fetchWeekSignedUpEvents(
 ): Promise<SignedUpEventRow[]> {
   const weekRange = `[${weekStart.toISOString()},${weekEnd.toISOString()})`;
   return db
-    .select({
-      eventId: schema.events.id,
-      title: schema.events.title,
-      description: schema.events.description,
-      duration: schema.events.duration,
-      signupId: schema.eventSignups.id,
-      confirmationStatus: schema.eventSignups.confirmationStatus,
-      gameId: schema.games.id,
-      gameSlug: schema.games.slug,
-      gameName: schema.games.name,
-      gameCoverUrl: schema.games.coverUrl,
-      creatorId: schema.events.creatorId,
-      creatorUsername: schema.users.username,
-    })
+    .select(SIGNED_UP_EVENT_COLUMNS)
     .from(schema.eventSignups)
     .innerJoin(schema.events, eq(schema.eventSignups.eventId, schema.events.id))
     .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
@@ -101,7 +104,6 @@ async function fetchRawSignupData(
     .from(schema.eventSignups)
     .innerJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
     .where(inArray(schema.eventSignups.eventId, eventIds));
-
   const allCounts = await db
     .select({
       eventId: schema.eventSignups.eventId,
@@ -110,7 +112,6 @@ async function fetchRawSignupData(
     .from(schema.eventSignups)
     .where(inArray(schema.eventSignups.eventId, eventIds))
     .groupBy(schema.eventSignups.eventId);
-
   return {
     allSignups,
     countMap: new Map(allCounts.map((c) => [c.eventId, c.count])),
@@ -152,6 +153,32 @@ function buildSignupPreviewMap(
   return allSignupUsers;
 }
 
+/** Build a map of userId -> character avatar data. */
+async function fetchCharactersByUser(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Map<number, Array<{ gameId: number; avatarUrl: string | null }>>> {
+  const data = await db
+    .select({
+      userId: schema.characters.userId,
+      gameId: schema.characters.gameId,
+      avatarUrl: schema.characters.avatarUrl,
+    })
+    .from(schema.characters)
+    .where(inArray(schema.characters.userId, userIds));
+  const map = new Map<
+    number,
+    Array<{ gameId: number; avatarUrl: string | null }>
+  >();
+  for (const char of data) {
+    if (!map.has(char.userId)) map.set(char.userId, []);
+    map
+      .get(char.userId)!
+      .push({ gameId: char.gameId, avatarUrl: char.avatarUrl });
+  }
+  return map;
+}
+
 /** Attach character avatar data to signup preview entries. */
 async function attachCharactersToSignups(
   db: PostgresJsDatabase<typeof schema>,
@@ -168,34 +195,22 @@ async function attachCharactersToSignups(
 ): Promise<void> {
   const uniqueUserIds = [...new Set(userIds)];
   if (uniqueUserIds.length === 0) return;
-
-  const charactersData = await db
-    .select({
-      userId: schema.characters.userId,
-      gameId: schema.characters.gameId,
-      avatarUrl: schema.characters.avatarUrl,
-    })
-    .from(schema.characters)
-    .where(inArray(schema.characters.userId, uniqueUserIds));
-
-  const charactersByUser = new Map<
-    number,
-    Array<{ gameId: number; avatarUrl: string | null }>
-  >();
-  for (const char of charactersData) {
-    if (!charactersByUser.has(char.userId))
-      charactersByUser.set(char.userId, []);
-    charactersByUser
-      .get(char.userId)!
-      .push({ gameId: char.gameId, avatarUrl: char.avatarUrl });
-  }
-
+  const charactersByUser = await fetchCharactersByUser(db, uniqueUserIds);
   for (const entry of signupsMap.values()) {
     for (const signup of entry.preview) {
       const chars = charactersByUser.get(signup.id);
       if (chars) signup.characters = chars;
     }
   }
+}
+
+/** Check if error is a missing table error (42P01). */
+function isMissingTableError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    'code' in err &&
+    (err as { code: string }).code === '42P01'
+  );
 }
 
 /** Fetch overrides for a week range (gracefully degrades if table missing). */
@@ -221,12 +236,7 @@ export async function fetchOverrides(
         ),
       );
   } catch (err: unknown) {
-    if (
-      err instanceof Error &&
-      'code' in err &&
-      (err as { code: string }).code === '42P01'
-    )
-      return [];
+    if (isMissingTableError(err)) return [];
     throw err;
   }
 }
@@ -255,12 +265,7 @@ export async function fetchAbsences(
         ),
       );
   } catch (err: unknown) {
-    if (
-      err instanceof Error &&
-      'code' in err &&
-      (err as { code: string }).code === '42P01'
-    )
-      return [];
+    if (isMissingTableError(err)) return [];
     throw err;
   }
 }
@@ -295,7 +300,46 @@ export function buildCommittedSet(
   return committedSet;
 }
 
+/** Determine status for a single template slot. */
+function resolveTemplateSlotStatus(
+  dateStr: string,
+  hour: number,
+  key: string,
+  absenceDates: Set<string>,
+  overrideMap: Map<string, string>,
+  committedSet: Set<string>,
+): CompositeSlot['status'] {
+  if (absenceDates.has(dateStr)) return 'blocked';
+  const overrideStatus = overrideMap.get(`${dateStr}:${hour}`);
+  if (overrideStatus) return overrideStatus as CompositeSlot['status'];
+  return committedSet.has(key) ? 'committed' : 'available';
+}
+
 /** Build merged composite slots from template, overrides, absences, and committed events. */
+/** Build template-based composite slots. */
+function buildTemplateSlots(
+  templateSlots: Array<{ dayOfWeek: number; hour: number }>,
+  absenceDates: Set<string>,
+  overrideMap: Map<string, string>,
+  committedSet: Set<string>,
+  weekStart: Date,
+): CompositeSlot[] {
+  return templateSlots.map((s) => {
+    const dayDate = new Date(weekStart);
+    dayDate.setDate(dayDate.getDate() + s.dayOfWeek);
+    const dateStr = dayDate.toISOString().split('T')[0];
+    const status = resolveTemplateSlotStatus(
+      dateStr,
+      s.hour,
+      `${s.dayOfWeek}:${s.hour}`,
+      absenceDates,
+      overrideMap,
+      committedSet,
+    );
+    return { dayOfWeek: s.dayOfWeek, hour: s.hour, status, fromTemplate: true };
+  });
+}
+
 export function buildCompositeSlots(
   templateSlots: Array<{ dayOfWeek: number; hour: number }>,
   templateSet: Set<string>,
@@ -304,38 +348,13 @@ export function buildCompositeSlots(
   overrideMap: Map<string, string>,
   weekStart: Date,
 ): CompositeSlot[] {
-  const slots: CompositeSlot[] = [];
-  for (const s of templateSlots) {
-    const key = `${s.dayOfWeek}:${s.hour}`;
-    const dayDate = new Date(weekStart);
-    dayDate.setDate(dayDate.getDate() + s.dayOfWeek);
-    const dateStr = dayDate.toISOString().split('T')[0];
-    if (absenceDates.has(dateStr)) {
-      slots.push({
-        dayOfWeek: s.dayOfWeek,
-        hour: s.hour,
-        status: 'blocked',
-        fromTemplate: true,
-      });
-    } else {
-      const overrideStatus = overrideMap.get(`${dateStr}:${s.hour}`);
-      if (overrideStatus) {
-        slots.push({
-          dayOfWeek: s.dayOfWeek,
-          hour: s.hour,
-          status: overrideStatus as CompositeSlot['status'],
-          fromTemplate: true,
-        });
-      } else {
-        slots.push({
-          dayOfWeek: s.dayOfWeek,
-          hour: s.hour,
-          status: committedSet.has(key) ? 'committed' : 'available',
-          fromTemplate: true,
-        });
-      }
-    }
-  }
+  const slots = buildTemplateSlots(
+    templateSlots,
+    absenceDates,
+    overrideMap,
+    committedSet,
+    weekStart,
+  );
   for (const key of committedSet) {
     if (!templateSet.has(key)) {
       const [day, hour] = key.split(':').map(Number);
@@ -378,6 +397,36 @@ function computeDayHours(
   return dayHours;
 }
 
+/** Build a single event block descriptor. */
+function buildSingleBlock(
+  event: SignedUpEventRow,
+  dayOfWeek: number,
+  hours: number[],
+  signupsData: { preview: Array<{ id: number; username: string; avatar: string | null; characters?: Array<{ gameId: number; avatarUrl: string | null }> }>; count: number } | undefined,
+): EventBlockDescriptor {
+  hours.sort((a, b) => a - b);
+  return {
+    eventId: event.eventId,
+    title: event.title,
+    gameSlug: event.gameSlug ?? null,
+    gameName: event.gameName ?? null,
+    gameId: event.gameId ?? null,
+    coverUrl: event.gameCoverUrl ?? null,
+    signupId: event.signupId,
+    confirmationStatus: event.confirmationStatus as
+      | 'pending'
+      | 'confirmed'
+      | 'changed',
+    dayOfWeek,
+    startHour: hours[0],
+    endHour: hours[hours.length - 1] + 1,
+    description: event.description ?? null,
+    creatorUsername: event.creatorUsername ?? null,
+    signupsPreview: signupsData?.preview ?? [],
+    signupCount: signupsData?.count ?? 0,
+  };
+}
+
 /** Build event block descriptors for the weekly grid. */
 export function buildEventBlocks(
   events: SignedUpEventRow[],
@@ -400,27 +449,7 @@ export function buildEventBlocks(
     const signupsData = signupsMap.get(event.eventId);
     for (const [dayOfWeek, hours] of dayHours) {
       if (hours.length === 0) continue;
-      hours.sort((a, b) => a - b);
-      eventBlocks.push({
-        eventId: event.eventId,
-        title: event.title,
-        gameSlug: event.gameSlug ?? null,
-        gameName: event.gameName ?? null,
-        gameId: event.gameId ?? null,
-        coverUrl: event.gameCoverUrl ?? null,
-        signupId: event.signupId,
-        confirmationStatus: event.confirmationStatus as
-          | 'pending'
-          | 'confirmed'
-          | 'changed',
-        dayOfWeek,
-        startHour: hours[0],
-        endHour: hours[hours.length - 1] + 1,
-        description: event.description ?? null,
-        creatorUsername: event.creatorUsername ?? null,
-        signupsPreview: signupsData?.preview ?? [],
-        signupCount: signupsData?.count ?? 0,
-      });
+      eventBlocks.push(buildSingleBlock(event, dayOfWeek, hours, signupsData));
     }
   }
   return eventBlocks;
@@ -443,6 +472,13 @@ export function buildAbsenceDateSet(
   return absenceDates;
 }
 
+/** Build override lookup map from override rows. */
+function buildOverrideMap(overrideRows: OverrideRecord[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const o of overrideRows) map.set(`${o.date}:${o.hour}`, o.status);
+  return map;
+}
+
 /** Assemble the full composite view result from all fetched data. */
 export function assembleCompositeView(
   remapped: Array<{ dayOfWeek: number; hour: number }>,
@@ -462,10 +498,7 @@ export function assembleCompositeView(
     tzOffset,
   );
   const absenceDates = buildAbsenceDateSet(absenceRows);
-  const overrideMap = new Map<string, string>();
-  for (const o of overrideRows)
-    overrideMap.set(`${o.date}:${o.hour}`, o.status);
-
+  const overrideMap = buildOverrideMap(overrideRows);
   const slots = buildCompositeSlots(
     remapped,
     templateSet,
@@ -481,7 +514,6 @@ export function assembleCompositeView(
     tzOffset,
     signupsMap,
   );
-
   return {
     slots,
     events,

@@ -70,76 +70,90 @@ export async function fetchCharacterMedia(
   return { avatarUrl, renderUrl };
 }
 
+type EnchantmentEntry = { display_string: string; enchantment_id?: number };
+type SocketEntry = { socket_type: { type: string }; item?: { id: number } };
+type StatEntry = { type: { type: string; name: string }; value: number };
+type WeaponData = {
+  damage: { min_value: number; max_value: number };
+  attack_speed: { value: number };
+  dps: { value: number };
+};
+
+/** Extract typed fields from a raw equipment item. */
+function extractItemFields(item: Record<string, unknown>) {
+  return {
+    slot: item.slot as { type: string },
+    itemObj: item.item as { id: number },
+    quality: item.quality as { type: string } | undefined,
+    level: item.level as { value: number } | undefined,
+    itemSubclass: item.item_subclass as { name: string } | undefined,
+    enchantments: item.enchantments as EnchantmentEntry[] | undefined,
+    sockets: item.sockets as SocketEntry[] | undefined,
+    stats: item.stats as StatEntry[] | undefined,
+    armor: item.armor as { value: number } | undefined,
+    binding: item.binding as { type: string } | undefined,
+    requirements: item.requirements as
+      | { level?: { value: number } }
+      | undefined,
+    weapon: item.weapon as WeaponData | undefined,
+    setObj: item.set as { item_set?: { name: string } } | undefined,
+  };
+}
+
+/** Map weapon data to the output format. */
+function mapWeapon(w: WeaponData | undefined) {
+  return w
+    ? {
+        damageMin: w.damage.min_value,
+        damageMax: w.damage.max_value,
+        attackSpeed: w.attack_speed.value,
+        dps: w.dps.value,
+      }
+    : undefined;
+}
+
+/** Map a single raw equipment item to a BlizzardEquipmentItem. */
+function mapSingleItem(
+  item: Record<string, unknown>,
+  iconUrls: Map<number, string>,
+): BlizzardEquipmentItem {
+  const f = extractItemFields(item);
+  return {
+    slot: f.slot.type,
+    name: (item.name as string) ?? 'Unknown',
+    itemId: f.itemObj.id,
+    quality: (f.quality?.type ?? 'COMMON').toUpperCase(),
+    itemLevel: f.level?.value ?? 0,
+    itemSubclass: f.itemSubclass?.name ?? null,
+    enchantments: f.enchantments?.map((e) => ({
+      displayString: e.display_string,
+      enchantmentId: e.enchantment_id,
+    })),
+    sockets: f.sockets?.map((s) => ({
+      socketType: s.socket_type?.type ?? 'UNKNOWN',
+      itemId: s.item?.id,
+    })),
+    stats: f.stats?.map((s) => ({
+      type: s.type.type,
+      name: s.type.name,
+      value: s.value,
+    })),
+    armor: f.armor?.value,
+    binding: f.binding?.type,
+    requiredLevel: f.requirements?.level?.value,
+    weapon: mapWeapon(f.weapon),
+    description: item.description as string | undefined,
+    setName: f.setObj?.item_set?.name,
+    iconUrl: iconUrls.get(f.itemObj.id),
+  };
+}
+
 /** Map raw equipment items from Blizzard API response. */
 export function mapEquipmentItems(
   rawItems: Array<Record<string, unknown>>,
   iconUrls: Map<number, string>,
 ): BlizzardEquipmentItem[] {
-  return rawItems.map((item: Record<string, unknown>) => {
-    const slot = item.slot as { type: string };
-    const itemObj = item.item as { id: number };
-    const quality = item.quality as { type: string } | undefined;
-    const level = item.level as { value: number } | undefined;
-    const itemSubclass = item.item_subclass as { name: string } | undefined;
-    const enchantments = item.enchantments as
-      | Array<{ display_string: string; enchantment_id?: number }>
-      | undefined;
-    const sockets = item.sockets as
-      | Array<{ socket_type: { type: string }; item?: { id: number } }>
-      | undefined;
-    const stats = item.stats as
-      | Array<{ type: { type: string; name: string }; value: number }>
-      | undefined;
-    const armor = item.armor as { value: number } | undefined;
-    const binding = item.binding as { type: string } | undefined;
-    const requirements = item.requirements as
-      | { level?: { value: number } }
-      | undefined;
-    const weapon = item.weapon as
-      | {
-          damage: { min_value: number; max_value: number };
-          attack_speed: { value: number };
-          dps: { value: number };
-        }
-      | undefined;
-    const setObj = item.set as { item_set?: { name: string } } | undefined;
-
-    return {
-      slot: slot.type,
-      name: (item.name as string) ?? 'Unknown',
-      itemId: itemObj.id,
-      quality: (quality?.type ?? 'COMMON').toUpperCase(),
-      itemLevel: level?.value ?? 0,
-      itemSubclass: itemSubclass?.name ?? null,
-      enchantments: enchantments?.map((e) => ({
-        displayString: e.display_string,
-        enchantmentId: e.enchantment_id,
-      })),
-      sockets: sockets?.map((s) => ({
-        socketType: s.socket_type?.type ?? 'UNKNOWN',
-        itemId: s.item?.id,
-      })),
-      stats: stats?.map((s) => ({
-        type: s.type.type,
-        name: s.type.name,
-        value: s.value,
-      })),
-      armor: armor?.value,
-      binding: binding?.type,
-      requiredLevel: requirements?.level?.value,
-      weapon: weapon
-        ? {
-            damageMin: weapon.damage.min_value,
-            damageMax: weapon.damage.max_value,
-            attackSpeed: weapon.attack_speed.value,
-            dps: weapon.dps.value,
-          }
-        : undefined,
-      description: item.description as string | undefined,
-      setName: setObj?.item_set?.name,
-      iconUrl: iconUrls.get(itemObj.id),
-    };
-  });
+  return rawItems.map((item) => mapSingleItem(item, iconUrls));
 }
 
 /** Build equipment result from raw API data and icon URLs. */
@@ -164,13 +178,29 @@ export function buildEquipmentResult(
   };
 }
 
+type TalentTreeInput = Array<{
+  specialization_name?: string;
+  spent_points?: number;
+  talents?: Array<Record<string, unknown>>;
+}>;
+
+/** Find the tree with the most spent points. */
+function findBestTree(
+  trees: TalentTreeInput,
+): { name: string; points: number } | null {
+  let best: { name: string; points: number } | null = null;
+  for (const tree of trees) {
+    const treeName = tree.specialization_name;
+    const points = tree.spent_points ?? tree.talents?.length ?? 0;
+    if (treeName && (!best || points > best.points))
+      best = { name: treeName, points };
+  }
+  return best;
+}
+
 /** Infer classic spec from talent trees. */
 export function inferClassicSpec(
-  trees: Array<{
-    specialization_name?: string;
-    spent_points?: number;
-    talents?: Array<Record<string, unknown>>;
-  }>,
+  trees: TalentTreeInput,
   characterClass: string,
 ): {
   spec: string | null;
@@ -178,16 +208,7 @@ export function inferClassicSpec(
   talents: unknown;
 } {
   const classicTalents = buildClassicTalentData(trees);
-
-  let bestTree: { name: string; points: number } | null = null;
-  for (const tree of trees) {
-    const treeName = tree.specialization_name;
-    const points = tree.spent_points ?? tree.talents?.length ?? 0;
-    if (treeName && (!bestTree || points > bestTree.points)) {
-      bestTree = { name: treeName, points };
-    }
-  }
-
+  const bestTree = findBestTree(trees);
   if (!bestTree || bestTree.points === 0) {
     return {
       spec: null,
@@ -195,11 +216,48 @@ export function inferClassicSpec(
       talents: classicTalents.trees.length > 0 ? classicTalents : null,
     };
   }
-
   const classRoles = CLASSIC_TALENT_TREE_ROLES[characterClass];
   const role = classRoles?.[bestTree.name] ?? specToRole(bestTree.name);
-
   return { spec: bestTree.name, role, talents: classicTalents };
+}
+
+type ClassicTalentTree = {
+  name: string;
+  spentPoints: number;
+  talents: Array<Record<string, unknown>>;
+};
+type ClassicTalentResult = {
+  format: 'classic';
+  trees: ClassicTalentTree[];
+  summary: string;
+};
+
+/** Map raw talents to cleaned talent objects. */
+function mapClassicTalents(
+  rawTalents: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return rawTalents
+    .filter((t) => {
+      const talent = t.talent as { name?: string } | undefined;
+      const spell = t.spell_tooltip as
+        | { spell?: { name?: string } }
+        | undefined;
+      return talent?.name || spell?.spell?.name;
+    })
+    .map((t) => {
+      const talent = t.talent as { name?: string; id?: number } | undefined;
+      const spell = t.spell_tooltip as
+        | { spell?: { name?: string; id?: number } }
+        | undefined;
+      return {
+        name: talent?.name ?? spell?.spell?.name ?? 'Unknown',
+        id: talent?.id,
+        spellId: spell?.spell?.id,
+        rank: t.talent_rank,
+        tierIndex: t.tier_index,
+        columnIndex: t.column_index,
+      };
+    });
 }
 
 /** Build classic talent data structure from talent trees. */
@@ -209,60 +267,22 @@ function buildClassicTalentData(
     spent_points?: number;
     talents?: Array<Record<string, unknown>>;
   }>,
-): {
-  format: 'classic';
-  trees: Array<{
-    name: string;
-    spentPoints: number;
-    talents: Array<Record<string, unknown>>;
-  }>;
-  summary: string;
-} {
-  const result = {
-    format: 'classic' as const,
-    trees: [] as Array<{
-      name: string;
-      spentPoints: number;
-      talents: Array<Record<string, unknown>>;
-    }>,
-    summary: '',
-  };
-
+): ClassicTalentResult {
+  const resultTrees: ClassicTalentTree[] = [];
   for (const tree of trees) {
     const treeName = tree.specialization_name;
     const points = tree.spent_points ?? tree.talents?.length ?? 0;
     if (treeName) {
-      result.trees.push({
+      resultTrees.push({
         name: treeName,
         spentPoints: points,
-        talents: (tree.talents ?? [])
-          .filter((t: Record<string, unknown>) => {
-            const talent = t.talent as { name?: string } | undefined;
-            const spell = t.spell_tooltip as
-              | { spell?: { name?: string } }
-              | undefined;
-            return talent?.name || spell?.spell?.name;
-          })
-          .map((t: Record<string, unknown>) => {
-            const talent = t.talent as
-              | { name?: string; id?: number }
-              | undefined;
-            const spell = t.spell_tooltip as
-              | { spell?: { name?: string; id?: number } }
-              | undefined;
-            return {
-              name: talent?.name ?? spell?.spell?.name ?? 'Unknown',
-              id: talent?.id,
-              spellId: spell?.spell?.id,
-              rank: t.talent_rank,
-              tierIndex: t.tier_index,
-              columnIndex: t.column_index,
-            };
-          }),
+        talents: mapClassicTalents(tree.talents ?? []),
       });
     }
   }
-
-  result.summary = result.trees.map((t) => t.spentPoints).join('/');
-  return result;
+  return {
+    format: 'classic',
+    trees: resultTrees,
+    summary: resultTrees.map((t) => t.spentPoints).join('/'),
+  };
 }

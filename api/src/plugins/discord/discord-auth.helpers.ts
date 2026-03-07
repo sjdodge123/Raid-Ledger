@@ -52,6 +52,19 @@ export function signOAuthState(payload: object, secret: string): string {
   return Buffer.from(JSON.stringify({ data, signature })).toString('base64');
 }
 
+/** Verify HMAC signature on state data. Returns null if invalid. */
+function verifySignature(
+  data: string,
+  signature: string,
+  secret: string,
+): boolean {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(data)
+    .digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
 /** Verify and decode signed OAuth state parameter. */
 export function verifyOAuthState(
   state: string,
@@ -62,18 +75,7 @@ export function verifyOAuthState(
     const { data, signature } = JSON.parse(
       Buffer.from(state, 'base64').toString(),
     ) as { data: string; signature: string };
-    const expectedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(data)
-      .digest('hex');
-    if (
-      !crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expectedSignature),
-      )
-    )
-      return null;
-
+    if (!verifySignature(data, signature, secret)) return null;
     const parsed = JSON.parse(data) as Record<string, unknown>;
     const MAX_STATE_AGE_MS = 10 * 60 * 1000;
     const timestamp = parsed.timestamp as number | undefined;
@@ -97,6 +99,10 @@ export function getOriginUrl(req: Request): string {
   return `${proto}://${host}`;
 }
 
+/** Common User-Agent header for Discord API requests. */
+const DISCORD_USER_AGENT =
+  'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)';
+
 /** Exchange Discord OAuth code for access token. */
 export async function exchangeCodeForToken(
   code: string,
@@ -111,8 +117,7 @@ export async function exchangeCodeForToken(
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent':
-          'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
+        'User-Agent': DISCORD_USER_AGENT,
       },
       body: new URLSearchParams({
         client_id: clientId,
@@ -140,8 +145,7 @@ export async function fetchDiscordProfile(
   const userResponse = await discordFetch('https://discord.com/api/users/@me', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'User-Agent':
-        'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
+      'User-Agent': DISCORD_USER_AGENT,
     },
   });
   if (!userResponse.ok) throw new Error('Failed to fetch Discord profile');

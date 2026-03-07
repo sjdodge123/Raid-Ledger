@@ -131,20 +131,18 @@ export class EventReminderService {
     now: Date,
     defaultTimezone: string,
   ): Promise<void> {
-    const eventIds = events.map((e) => e.id);
-    const signupsByEvent = await fetchSignupsByEvent(this.db, eventIds);
+    const signupsByEvent = await fetchSignupsByEvent(
+      this.db,
+      events.map((e) => e.id),
+    );
     const allUserIds = [...new Set(Array.from(signupsByEvent.values()).flat())];
     if (allUserIds.length === 0) return;
-
-    const userMap = await fetchUserMap(this.db, allUserIds);
-    const tzMap = new Map(
-      (await fetchUserTimezones(this.db, allUserIds)).map((ut) => [
-        ut.userId,
-        ut.timezone,
-      ]),
-    );
-    const charsByUser = await fetchCharactersByUser(this.db, allUserIds);
-
+    const [userMap, tzEntries, charsByUser] = await Promise.all([
+      fetchUserMap(this.db, allUserIds),
+      fetchUserTimezones(this.db, allUserIds),
+      fetchCharactersByUser(this.db, allUserIds),
+    ]);
+    const tzMap = new Map(tzEntries.map((ut) => [ut.userId, ut.timezone]));
     for (const event of events) {
       await this.sendRemindersForEvent(
         event,
@@ -191,13 +189,10 @@ export class EventReminderService {
       0,
       Math.round((startTime.getTime() - now.getTime()) / 60000),
     );
-    const discordUrl = await this.notificationService.getDiscordEmbedUrl(
-      event.id,
-    );
-    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
-      event.gameId,
-    );
-
+    const [discordUrl, voiceChannelId] = await Promise.all([
+      this.notificationService.getDiscordEmbedUrl(event.id),
+      this.notificationService.resolveVoiceChannelId(event.gameId),
+    ]);
     for (const userId of userIds) {
       if (!userMap.get(userId)) continue;
       await this.sendReminder({
@@ -217,6 +212,25 @@ export class EventReminderService {
     }
   }
 
+  /** Build the notification payload for a reminder. */
+  private buildReminderPayload(input: {
+    eventId: number;
+    windowType: string;
+    characterDisplay: string | null;
+    startTime: Date;
+    discordUrl?: string | null;
+    voiceChannelId?: string | null;
+  }): Record<string, unknown> {
+    return {
+      eventId: input.eventId,
+      reminderWindow: input.windowType,
+      characterDisplay: input.characterDisplay,
+      startTime: input.startTime.toISOString(),
+      ...(input.discordUrl ? { discordUrl: input.discordUrl } : {}),
+      ...(input.voiceChannelId ? { voiceChannelId: input.voiceChannelId } : {}),
+    };
+  }
+
   /** Send a single reminder notification with duplicate prevention. */
   async sendReminder(input: {
     eventId: number;
@@ -233,6 +247,24 @@ export class EventReminderService {
     voiceChannelId?: string | null;
     gameId?: number | null;
   }): Promise<boolean> {
+    if (!(await this.insertReminderDedup(input))) return false;
+    const { messageText, titleTimeLabel } = this.buildReminderStrings(input);
+    await this.notificationService.create({
+      userId: input.userId,
+      type: 'event_reminder',
+      title: `Event Starting ${titleTimeLabel}!`,
+      message: messageText,
+      payload: this.buildReminderPayload(input),
+    });
+    return true;
+  }
+
+  /** Insert dedup record — returns true if this is the first send. */
+  private async insertReminderDedup(input: {
+    eventId: number;
+    userId: number;
+    windowType: string;
+  }): Promise<boolean> {
     const result = await this.db
       .insert(schema.eventRemindersSent)
       .values({
@@ -248,8 +280,17 @@ export class EventReminderService {
         ],
       })
       .returning();
-    if (result.length === 0) return false;
+    return result.length > 0;
+  }
 
+  /** Build reminder message text and title label. */
+  private buildReminderStrings(input: {
+    title: string;
+    startTime: Date;
+    minutesUntil: number;
+    timezone?: string;
+    defaultTimezone?: string;
+  }): { messageText: string; titleTimeLabel: string } {
     const timezone = input.timezone ?? input.defaultTimezone ?? 'UTC';
     const timeStr = input.startTime.toLocaleTimeString('en-US', {
       hour: 'numeric',
@@ -258,30 +299,14 @@ export class EventReminderService {
       timeZoneName: 'short',
       timeZone: timezone,
     });
-    const messageText = buildReminderMessage(
-      input.title,
-      timeStr,
-      input.minutesUntil,
-    );
-    const titleTimeLabel = buildTitleTimeLabel(input.minutesUntil);
-
-    await this.notificationService.create({
-      userId: input.userId,
-      type: 'event_reminder',
-      title: `Event Starting ${titleTimeLabel}!`,
-      message: messageText,
-      payload: {
-        eventId: input.eventId,
-        reminderWindow: input.windowType,
-        characterDisplay: input.characterDisplay,
-        startTime: input.startTime.toISOString(),
-        ...(input.discordUrl ? { discordUrl: input.discordUrl } : {}),
-        ...(input.voiceChannelId
-          ? { voiceChannelId: input.voiceChannelId }
-          : {}),
-      },
-    });
-    return true;
+    return {
+      messageText: buildReminderMessage(
+        input.title,
+        timeStr,
+        input.minutesUntil,
+      ),
+      titleTimeLabel: buildTitleTimeLabel(input.minutesUntil),
+    };
   }
 
   /** Fetch user timezones (public for test access). */

@@ -72,22 +72,29 @@ export class RecruitmentReminderService {
 
   /** Process a single eligible event for bumps and DMs. */
   private async processEvent(event: EligibleEvent): Promise<void> {
+    await this.maybeBumpChannel(event);
     const hoursUntilStart =
       (new Date(event.startTime).getTime() - Date.now()) / (1000 * 60 * 60);
-
-    const bumpKey = `recruitment-bump:event:${event.id}`;
-    if (!(await this.redis.get(bumpKey))) {
-      await this.redis.set(bumpKey, '1', 'EX', DEDUP_TTL_SECONDS);
-      await this.postChannelBump(event);
-    }
-
     if (hoursUntilStart > 24) {
       this.logger.debug(
         `Event ${event.id} starts in ${hoursUntilStart.toFixed(1)}h — bump sent, DMs deferred`,
       );
       return;
     }
+    await this.maybeSendDMs(event);
+  }
 
+  /** Post channel bump if not already done. */
+  private async maybeBumpChannel(event: EligibleEvent): Promise<void> {
+    const bumpKey = `recruitment-bump:event:${event.id}`;
+    if (!(await this.redis.get(bumpKey))) {
+      await this.redis.set(bumpKey, '1', 'EX', DEDUP_TTL_SECONDS);
+      await this.postChannelBump(event);
+    }
+  }
+
+  /** Send recruitment DMs if not already done. */
+  private async maybeSendDMs(event: EligibleEvent): Promise<void> {
     const dmKey = `recruitment-dm:event:${event.id}`;
     if (await this.redis.get(dmKey)) {
       this.logger.debug(
@@ -95,7 +102,6 @@ export class RecruitmentReminderService {
       );
       return;
     }
-
     let recipientIds = await findRecipients(
       this.db,
       event.gameId,
@@ -104,7 +110,6 @@ export class RecruitmentReminderService {
     );
     recipientIds = await this.filterAbsentUsers(recipientIds, event);
     await this.redis.set(dmKey, '1', 'EX', DEDUP_TTL_SECONDS);
-
     if (recipientIds.length > 0) {
       await this.sendRecruitmentDMs(event, recipientIds);
     } else {
@@ -134,15 +139,15 @@ export class RecruitmentReminderService {
     return recipientIds;
   }
 
-  /** Send recruitment reminder DMs to all eligible recipients. */
-  private async sendRecruitmentDMs(
-    event: EligibleEvent,
-    recipientIds: number[],
-  ): Promise<void> {
-    const defaultTimezone =
-      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-    const clientUrl =
-      (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
+  /** Resolve context needed for recruitment DMs. */
+  private async resolveRecruitmentContext(event: EligibleEvent) {
+    const [defaultTimezone, clientUrl, voiceChannelId] = await Promise.all([
+      this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
+      this.settingsService
+        .getClientUrl()
+        .then((u) => u ?? 'http://localhost:5173'),
+      this.notificationService.resolveVoiceChannelId(event.gameId),
+    ]);
     const eventDate = new Date(event.startTime).toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
@@ -150,12 +155,23 @@ export class RecruitmentReminderService {
       timeZone: defaultTimezone,
     });
     const signupSummary = buildSignupSummary(event);
-    const message = `Spots available for ${event.gameName}: ${event.title} on ${eventDate}. ${signupSummary} — sign up now!`;
-    const discordUrl = buildDiscordUrl(event);
-    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
-      event.gameId,
-    );
+    return { clientUrl, voiceChannelId, eventDate, signupSummary };
+  }
 
+  /** Send recruitment reminder DMs to all eligible recipients. */
+  private async sendRecruitmentDMs(
+    event: EligibleEvent,
+    recipientIds: number[],
+  ): Promise<void> {
+    const { clientUrl, voiceChannelId, eventDate, signupSummary } =
+      await this.resolveRecruitmentContext(event);
+    const message = `Spots available for ${event.gameName}: ${event.title} on ${eventDate}. ${signupSummary} — sign up now!`;
+    const payload = this.buildRecruitmentPayload(
+      event,
+      signupSummary,
+      clientUrl,
+      voiceChannelId,
+    );
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
         this.notificationService.create({
@@ -163,26 +179,35 @@ export class RecruitmentReminderService {
           type: 'recruitment_reminder',
           title: `Spots Available — ${event.title}`,
           message,
-          payload: {
-            eventId: event.id,
-            eventTitle: event.title,
-            gameId: event.gameId,
-            gameName: event.gameName,
-            signupSummary,
-            startTime: event.startTime,
-            url: `${clientUrl}/events/${event.id}`,
-            discordUrl,
-            ...(voiceChannelId ? { voiceChannelId } : {}),
-          },
+          payload,
         }),
       ),
     );
-
     const succeeded = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.filter((r) => r.status === 'rejected').length;
     this.logger.log(
       `Recruitment reminders for event ${event.id}: ${succeeded} sent, ${failed} failed (${recipientIds.length} recipients)`,
     );
+  }
+
+  /** Build the recruitment notification payload. */
+  private buildRecruitmentPayload(
+    event: EligibleEvent,
+    signupSummary: string,
+    clientUrl: string,
+    voiceChannelId: string | null,
+  ): Record<string, unknown> {
+    return {
+      eventId: event.id,
+      eventTitle: event.title,
+      gameId: event.gameId,
+      gameName: event.gameName,
+      signupSummary,
+      startTime: event.startTime,
+      url: `${clientUrl}/events/${event.id}`,
+      discordUrl: buildDiscordUrl(event),
+      ...(voiceChannelId ? { voiceChannelId } : {}),
+    };
   }
 
   /** Post a bump message in the event's Discord channel. */

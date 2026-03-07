@@ -182,44 +182,44 @@ export class LocalAuthService {
       role: UserRole;
     };
   }> {
-    // Look up target user
+    const target = await this.findImpersonationTarget(targetUserId);
+    this.logger.log(
+      `IMPERSONATION: Admin "${adminUser.username}" (id:${adminUser.id}) -> "${target.username}" (id:${target.id})`,
+    );
+    return this.buildImpersonationTokens(adminUser, target);
+  }
+
+  private async findImpersonationTarget(targetUserId: number) {
     const [target] = await this.db
       .select()
       .from(users)
       .where(eq(users.id, targetUserId))
       .limit(1);
-
-    if (!target) {
-      throw new UnauthorizedException('Target user not found');
-    }
-
-    if (target.role === 'admin') {
+    if (!target) throw new UnauthorizedException('Target user not found');
+    if (target.role === 'admin')
       throw new UnauthorizedException('Cannot impersonate admin users');
-    }
+    return target;
+  }
 
-    this.logger.log(
-      `IMPERSONATION: Admin "${adminUser.username}" (id:${adminUser.id}) -> "${target.username}" (id:${target.id})`,
-    );
-
-    // Issue JWT for target user with impersonatedBy claim (1hr expiry)
-    const impersonatedPayload = {
-      username: target.username,
-      sub: target.id,
-      role: target.role,
-      impersonatedBy: adminUser.id,
-    };
-
-    const originalPayload = {
-      username: adminUser.username,
-      sub: adminUser.id,
-      role: adminUser.role,
-    };
-
+  private buildImpersonationTokens(
+    adminUser: { id: number; username: string; role: UserRole },
+    target: typeof users.$inferSelect,
+  ) {
     return {
-      access_token: this.jwtService.sign(impersonatedPayload, {
-        expiresIn: '1h',
+      access_token: this.jwtService.sign(
+        {
+          username: target.username,
+          sub: target.id,
+          role: target.role,
+          impersonatedBy: adminUser.id,
+        },
+        { expiresIn: '1h' },
+      ),
+      original_token: this.jwtService.sign({
+        username: adminUser.username,
+        sub: adminUser.id,
+        role: adminUser.role,
       }),
-      original_token: this.jwtService.sign(originalPayload),
       user: {
         id: target.id,
         username: target.username,

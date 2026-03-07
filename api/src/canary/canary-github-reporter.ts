@@ -83,7 +83,21 @@ function handleFailure(
   reason?: string,
   details?: string,
 ): void {
-  const body = [
+  const body = buildFailureBody(name, reason, details);
+  const existingIssue = findOpenIssue(title);
+  if (existingIssue) {
+    commentOnExisting(existingIssue, title, reason);
+  } else {
+    createNewIssue(title, body);
+  }
+}
+
+function buildFailureBody(
+  name: string,
+  reason?: string,
+  details?: string,
+): string {
+  return [
     `## ${name} Canary Failure`,
     '',
     `**Reason:** ${reason ?? 'Unknown'}`,
@@ -96,28 +110,30 @@ function handleFailure(
   ]
     .filter(Boolean)
     .join('\n');
+}
 
-  const existingIssue = findOpenIssue(title);
+function commentOnExisting(
+  issueNum: number,
+  title: string,
+  reason?: string,
+): void {
+  const comment = `Still failing at ${new Date().toISOString()}.\n\n**Reason:** ${reason ?? 'Unknown'}`;
+  gh(['issue', 'comment', String(issueNum), '--body', comment]);
+  console.log(`Commented on existing issue #${issueNum}: ${title}`);
+}
 
-  if (existingIssue) {
-    // Add a comment — don't create a duplicate
-    const comment = `Still failing at ${new Date().toISOString()}.\n\n**Reason:** ${reason ?? 'Unknown'}`;
-    gh(['issue', 'comment', String(existingIssue), '--body', comment]);
-    console.log(`Commented on existing issue #${existingIssue}: ${title}`);
-  } else {
-    // Create new issue
-    gh([
-      'issue',
-      'create',
-      '--title',
-      title,
-      '--body',
-      body,
-      '--label',
-      CANARY_LABEL,
-    ]);
-    console.log(`Created issue: ${title}`);
-  }
+function createNewIssue(title: string, body: string): void {
+  gh([
+    'issue',
+    'create',
+    '--title',
+    title,
+    '--body',
+    body,
+    '--label',
+    CANARY_LABEL,
+  ]);
+  console.log(`Created issue: ${title}`);
 }
 
 function handleRecovery(title: string, name: string): void {

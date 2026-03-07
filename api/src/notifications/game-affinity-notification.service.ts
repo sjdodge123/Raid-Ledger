@@ -53,48 +53,48 @@ export class GameAffinityNotificationService {
     input: GameAffinityNotificationInput,
   ): Promise<void> {
     const dedupKey = `game-alert:event:${input.eventId}`;
-
-    // Check if we already sent alerts for this event
-    const alreadySent = await this.redis.get(dedupKey);
-    if (alreadySent) {
+    if (await this.redis.get(dedupKey)) {
       this.logger.debug(
         `Game affinity alerts already sent for event ${input.eventId}, skipping`,
       );
       return;
     }
-
-    // Find recipients: users who hearted the game OR attended past events for this game
     let recipientIds = await this.findRecipients(input.gameId, input.creatorId);
-
     if (recipientIds.length === 0) {
       this.logger.debug(
         `No game affinity recipients for event ${input.eventId} (game ${input.gameId})`,
       );
       return;
     }
+    recipientIds = await this.excludeAbsentUsers(recipientIds, input);
+    if (recipientIds.length === 0) return;
+    await this.redis.set(dedupKey, '1', 'EX', GAME_ALERT_TTL_SECONDS);
+    await this.dispatchAffinityNotifications(input, recipientIds);
+  }
 
-    // ROK-503: Skip users who have an active absence covering the event's start date
+  /** Exclude users with active absences covering the event date. */
+  private async excludeAbsentUsers(
+    recipientIds: number[],
+    input: GameAffinityNotificationInput,
+  ): Promise<number[]> {
     const absentUserIds = await this.findAbsentUsers(
       recipientIds,
       input.startTime,
     );
     if (absentUserIds.size > 0) {
-      recipientIds = recipientIds.filter((id) => !absentUserIds.has(id));
       this.logger.debug(
         `Excluded ${absentUserIds.size} absent users from game affinity alerts for event ${input.eventId}`,
       );
-      if (recipientIds.length === 0) {
-        this.logger.debug(
-          `All recipients absent for event ${input.eventId}, skipping`,
-        );
-        return;
-      }
+      return recipientIds.filter((id) => !absentUserIds.has(id));
     }
+    return recipientIds;
+  }
 
-    // Mark as sent before dispatching to prevent duplicates on retries
-    await this.redis.set(dedupKey, '1', 'EX', GAME_ALERT_TTL_SECONDS);
-
-    // Format the event date for the notification message
+  /** Build and dispatch notifications to all recipients. */
+  private async dispatchAffinityNotifications(
+    input: GameAffinityNotificationInput,
+    recipientIds: number[],
+  ): Promise<void> {
     const defaultTimezone =
       (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
     const eventDate = new Date(input.startTime).toLocaleDateString('en-US', {
@@ -103,23 +103,8 @@ export class GameAffinityNotificationService {
       day: 'numeric',
       timeZone: defaultTimezone,
     });
-
     const message = `New event for ${input.gameName}: ${input.eventTitle} on ${eventDate}`;
-    const eventUrl = input.clientUrl
-      ? `${input.clientUrl}/events/${input.eventId}`
-      : null;
-
-    // ROK-504: Build Discord channel URL if message info is available
-    const discordUrl = input.discordMessage
-      ? `https://discord.com/channels/${input.discordMessage.guildId}/${input.discordMessage.channelId}/${input.discordMessage.messageId}`
-      : null;
-
-    // ROK-507: Resolve voice channel for the event's game
-    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
-      input.gameId,
-    );
-
-    // Dispatch notifications in parallel (NotificationService handles prefs + Discord DM)
+    const payload = await this.buildAffinityPayload(input);
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
         this.notificationService.create({
@@ -127,24 +112,38 @@ export class GameAffinityNotificationService {
           type: 'subscribed_game',
           title: `New ${input.gameName} Event`,
           message,
-          payload: {
-            eventId: input.eventId,
-            gameId: input.gameId,
-            startTime: input.startTime,
-            ...(eventUrl ? { url: eventUrl } : {}),
-            ...(discordUrl ? { discordUrl } : {}),
-            ...(voiceChannelId ? { voiceChannelId } : {}),
-          },
+          payload,
         }),
       ),
     );
-
     const succeeded = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.filter((r) => r.status === 'rejected').length;
-
     this.logger.log(
       `Game affinity notifications for event ${input.eventId}: ${succeeded} sent, ${failed} failed (${recipientIds.length} recipients)`,
     );
+  }
+
+  /** Build the notification payload with optional URLs and voice channel. */
+  private async buildAffinityPayload(
+    input: GameAffinityNotificationInput,
+  ): Promise<Record<string, unknown>> {
+    const eventUrl = input.clientUrl
+      ? `${input.clientUrl}/events/${input.eventId}`
+      : null;
+    const discordUrl = input.discordMessage
+      ? `https://discord.com/channels/${input.discordMessage.guildId}/${input.discordMessage.channelId}/${input.discordMessage.messageId}`
+      : null;
+    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
+      input.gameId,
+    );
+    return {
+      eventId: input.eventId,
+      gameId: input.gameId,
+      startTime: input.startTime,
+      ...(eventUrl ? { url: eventUrl } : {}),
+      ...(discordUrl ? { discordUrl } : {}),
+      ...(voiceChannelId ? { voiceChannelId } : {}),
+    };
   }
 
   /**

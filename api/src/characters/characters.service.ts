@@ -142,6 +142,58 @@ export class CharactersService {
     return mapCharacterToDto(character);
   }
 
+  /** Build insert values for a new character from the DTO. */
+  private buildCreateValues(
+    userId: number,
+    dto: CreateCharacterDto,
+    shouldBeMain: boolean,
+  ) {
+    return {
+      userId,
+      gameId: dto.gameId,
+      name: dto.name,
+      realm: dto.realm ?? null,
+      class: dto.class ?? null,
+      spec: dto.spec ?? null,
+      role: dto.role ?? null,
+      isMain: shouldBeMain,
+      itemLevel: dto.itemLevel ?? null,
+      avatarUrl: dto.avatarUrl ?? null,
+    };
+  }
+
+  /** Execute the create transaction (main-swap + insert). */
+  private async executeCreateTx(
+    userId: number,
+    dto: CreateCharacterDto,
+  ): Promise<CharacterDto> {
+    return this.db.transaction(async (tx) => {
+      await this.checkDuplicateClaim(
+        tx,
+        dto.gameId,
+        userId,
+        dto.name,
+        dto.realm,
+      );
+      const { shouldBeMain, charCount } = await resolveMainStatus(
+        tx,
+        userId,
+        dto.gameId,
+        dto.isMain,
+      );
+      if (shouldBeMain && charCount > 0)
+        await demoteExistingMain(tx, userId, dto.gameId);
+      const [character] = await tx
+        .insert(schema.characters)
+        .values(this.buildCreateValues(userId, dto, shouldBeMain))
+        .returning();
+      this.logger.log(
+        `User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`,
+      );
+      return mapCharacterToDto(character);
+    });
+  }
+
   /** Create a new character with main-swap behavior (ROK-206). */
   async create(userId: number, dto: CreateCharacterDto): Promise<CharacterDto> {
     const [game] = await this.db
@@ -151,42 +203,7 @@ export class CharactersService {
       .limit(1);
     if (!game) throw new NotFoundException(`Game ${dto.gameId} not found`);
     try {
-      return await this.db.transaction(async (tx) => {
-        await this.checkDuplicateClaim(
-          tx,
-          dto.gameId,
-          userId,
-          dto.name,
-          dto.realm,
-        );
-        const { shouldBeMain, charCount } = await resolveMainStatus(
-          tx,
-          userId,
-          dto.gameId,
-          dto.isMain,
-        );
-        if (shouldBeMain && charCount > 0)
-          await demoteExistingMain(tx, userId, dto.gameId);
-        const [character] = await tx
-          .insert(schema.characters)
-          .values({
-            userId,
-            gameId: dto.gameId,
-            name: dto.name,
-            realm: dto.realm ?? null,
-            class: dto.class ?? null,
-            spec: dto.spec ?? null,
-            role: dto.role ?? null,
-            isMain: shouldBeMain,
-            itemLevel: dto.itemLevel ?? null,
-            avatarUrl: dto.avatarUrl ?? null,
-          })
-          .returning();
-        this.logger.log(
-          `User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`,
-        );
-        return mapCharacterToDto(character);
-      });
+      return await this.executeCreateTx(userId, dto);
     } catch (error: unknown) {
       if (this.isUniqueViolation(error, 'unique_user_game_character'))
         throw new ConflictException(
@@ -276,7 +293,7 @@ export class CharactersService {
       throw new NotFoundException(
         'No character sync adapter found for this game variant',
       );
-    const { profile, talents, equipment } = await fetchFullProfile(
+    const fetched = await fetchFullProfile(
       adapter,
       dto.name,
       dto.realm,
@@ -285,26 +302,35 @@ export class CharactersService {
     );
     await this.validateUserExists(userId);
     const game = await this.resolveGameByVariant(adapter, dto.gameVariant);
+    return this.insertOrMergeImport(userId, game.id, fetched, dto);
+  }
+
+  /** Try inserting an imported character; fall back to merge on conflict. */
+  private async insertOrMergeImport(
+    userId: number,
+    gameId: number,
+    fetched: Awaited<ReturnType<typeof fetchFullProfile>>,
+    dto: ImportWowCharacterDto,
+  ): Promise<CharacterDto> {
     try {
       return await this.insertImportedCharacter(
         userId,
-        game.id,
-        profile,
+        gameId,
+        fetched.profile,
         dto,
-        equipment,
-        talents,
+        fetched.equipment,
+        fetched.talents,
       );
     } catch (error: unknown) {
-      if (this.isUniqueViolation(error, 'unique_user_game_character')) {
+      if (this.isUniqueViolation(error, 'unique_user_game_character'))
         return this.mergeIntoExisting(
           userId,
-          game.id,
-          profile,
+          gameId,
+          fetched.profile,
           dto,
-          equipment,
-          talents,
+          fetched.equipment,
+          fetched.talents,
         );
-      }
       throw error;
     }
   }
@@ -363,6 +389,12 @@ export class CharactersService {
       );
       if (shouldBeMain && charCount > 0)
         await demoteExistingMain(tx, userId, gameId);
+      const syncFields = buildSyncUpdateFields(
+        profile as never,
+        equipment,
+        talents,
+        { region: dto.region, gameVariant: dto.gameVariant },
+      );
       const [character] = await tx
         .insert(schema.characters)
         .values({
@@ -370,10 +402,7 @@ export class CharactersService {
           gameId,
           name: profile.name,
           realm: profile.realm,
-          ...buildSyncUpdateFields(profile as never, equipment, talents, {
-            region: dto.region,
-            gameVariant: dto.gameVariant,
-          }),
+          ...syncFields,
           isMain: shouldBeMain,
         })
         .returning();
@@ -382,6 +411,28 @@ export class CharactersService {
       );
       return mapCharacterToDto(character);
     });
+  }
+
+  /** Find an existing character by user+game+name+realm. */
+  private async findExistingByProfile(
+    userId: number,
+    gameId: number,
+    name: string,
+    realm: string,
+  ) {
+    const [existing] = await this.db
+      .select()
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.userId, userId),
+          eq(schema.characters.gameId, gameId),
+          ilike(schema.characters.name, name),
+          eq(schema.characters.realm, realm),
+        ),
+      )
+      .limit(1);
+    return existing;
   }
 
   /** Merge imported data into an existing local character (ROK-578). */
@@ -393,36 +444,42 @@ export class CharactersService {
     equipment: unknown,
     talents: unknown,
   ): Promise<CharacterDto> {
-    const [existing] = await this.db
-      .select()
-      .from(schema.characters)
-      .where(
-        and(
-          eq(schema.characters.userId, userId),
-          eq(schema.characters.gameId, gameId),
-          ilike(schema.characters.name, profile.name),
-          eq(schema.characters.realm, profile.realm),
-        ),
-      )
-      .limit(1);
+    const existing = await this.findExistingByProfile(
+      userId,
+      gameId,
+      profile.name,
+      profile.realm,
+    );
     if (!existing)
       throw new ConflictException(
         `Character ${profile.name} on ${profile.realm} already exists`,
       );
+    const fields = buildSyncUpdateFields(profile as never, equipment, talents, {
+      region: dto.region,
+      gameVariant: dto.gameVariant,
+    });
     const [merged] = await this.db
       .update(schema.characters)
-      .set(
-        buildSyncUpdateFields(profile as never, equipment, talents, {
-          region: dto.region,
-          gameVariant: dto.gameVariant,
-        }),
-      )
+      .set(fields)
       .where(eq(schema.characters.id, existing.id))
       .returning();
     this.logger.log(
       `User ${userId} merged import into existing character ${existing.id} (${profile.name}-${profile.realm})`,
     );
     return mapCharacterToDto(merged);
+  }
+
+  /** Resolve region/variant for a refresh, falling back to DTO values. */
+  private resolveRefreshParams(
+    character: CharacterDto,
+    dto: RefreshCharacterDto,
+  ) {
+    return {
+      region: character.region ?? dto.region,
+      gameVariant:
+        (character.gameVariant as RefreshCharacterDto['gameVariant']) ??
+        dto.gameVariant,
+    };
   }
 
   /** Refresh a character's data from an external game API (ROK-234, ROK-237). */
@@ -437,10 +494,7 @@ export class CharactersService {
         'Character has no realm — cannot refresh from external source',
       );
     this.enforceCooldown(character.lastSyncedAt);
-    const region = character.region ?? dto.region;
-    const gameVariant =
-      (character.gameVariant as RefreshCharacterDto['gameVariant']) ??
-      dto.gameVariant;
+    const { region, gameVariant } = this.resolveRefreshParams(character, dto);
     const adapter = this.findCharacterSyncAdapter(gameVariant);
     if (!adapter)
       throw new NotFoundException(
@@ -453,14 +507,13 @@ export class CharactersService {
       region,
       gameVariant,
     );
+    const fields = buildSyncUpdateFields(profile, equipment, talents, {
+      region,
+      gameVariant,
+    });
     const [updated] = await this.db
       .update(schema.characters)
-      .set(
-        buildSyncUpdateFields(profile, equipment, talents, {
-          region,
-          gameVariant,
-        }),
-      )
+      .set(fields)
       .where(eq(schema.characters.id, characterId))
       .returning();
     this.logger.log(
@@ -559,7 +612,7 @@ export class CharactersService {
       const adapter = this.findCharacterSyncAdapter(variant);
       if (!adapter) {
         this.logger.debug(
-          `No adapter found for character ${char.id} (variant: ${variant}), skipping`,
+          `No adapter for character ${char.id} (variant: ${variant}), skipping`,
         );
         return 'skipped';
       }

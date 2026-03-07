@@ -69,87 +69,79 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     this.pluginRegistry.registerManifest(WOW_COMMON_MANIFEST);
     await this.pluginRegistry.ensureInstalled(WOW_COMMON_MANIFEST.id);
     this.registerAdapters();
+    await this.seedOnBoot();
+    this.registerEventHandlers();
+  }
 
-    // Seed dungeon quests on first boot
+  /** Seed data on first boot (non-fatal on failure). */
+  private async seedOnBoot(): Promise<void> {
+    await this.safeSeed('Dungeon quest', () =>
+      this.dungeonQuestsService.seedQuests(),
+    );
+    await this.safeSeed('Boss encounter', () =>
+      this.bossEncountersService.seedBosses(),
+    );
+  }
+
+  /** Run a seed function with error handling for missing tables. */
+  private async safeSeed(
+    label: string,
+    fn: () => Promise<unknown>,
+  ): Promise<void> {
     try {
-      await this.dungeonQuestsService.seedQuests();
+      await fn();
     } catch (err) {
       const msg = String(err);
       if (msg.includes('relation') && msg.includes('does not exist')) {
         this.logger.error(
-          `Dungeon quest seed FAILED — table does not exist. Migrations may not have run: ${err}`,
+          `${label} seed FAILED — table does not exist. Migrations may not have run: ${err}`,
         );
       } else {
-        this.logger.warn(
-          `Dungeon quest seed skipped (may already exist): ${err}`,
-        );
+        this.logger.warn(`${label} seed skipped (may already exist): ${err}`);
       }
     }
+  }
 
-    // Seed boss encounters on first boot
-    try {
-      await this.bossEncountersService.seedBosses();
-    } catch (err) {
-      const msg = String(err);
-      if (msg.includes('relation') && msg.includes('does not exist')) {
+  /** Handle plugin install: register adapters + seed data. */
+  private handleInstalled(payload: { slug: string }): void {
+    if (payload.slug !== WOW_COMMON_MANIFEST.id) return;
+    this.registerAdapters();
+    this.dungeonQuestsService
+      .seedQuests()
+      .catch((err) =>
+        this.logger.error(`Failed to seed dungeon quests on install: ${err}`),
+      );
+    this.bossEncountersService
+      .seedBosses()
+      .catch((err) =>
+        this.logger.error(`Failed to seed boss encounters on install: ${err}`),
+      );
+  }
+
+  /** Handle plugin uninstall: drop seed data. */
+  private handleUninstalled(payload: { slug: string }): void {
+    if (payload.slug !== WOW_COMMON_MANIFEST.id) return;
+    this.dungeonQuestsService
+      .dropQuests()
+      .catch((err) =>
+        this.logger.error(`Failed to drop dungeon quests on uninstall: ${err}`),
+      );
+    this.bossEncountersService
+      .dropBosses()
+      .catch((err) =>
         this.logger.error(
-          `Boss encounter seed FAILED — table does not exist. Migrations may not have run: ${err}`,
-        );
-      } else {
-        this.logger.warn(
-          `Boss encounter seed skipped (may already exist): ${err}`,
-        );
-      }
-    }
+          `Failed to drop boss encounters on uninstall: ${err}`,
+        ),
+      );
+  }
 
-    const reRegister = (payload: { slug: string }) => {
-      if (payload.slug === WOW_COMMON_MANIFEST.id) {
-        this.registerAdapters();
-      }
+  /** Register event handlers for plugin lifecycle events. */
+  private registerEventHandlers(): void {
+    this.activatedHandler = (payload) => {
+      if (payload.slug === WOW_COMMON_MANIFEST.id) this.registerAdapters();
     };
-
-    const handleInstall = (payload: { slug: string }) => {
-      if (payload.slug === WOW_COMMON_MANIFEST.id) {
-        this.registerAdapters();
-        this.dungeonQuestsService
-          .seedQuests()
-          .catch((err) =>
-            this.logger.error(
-              `Failed to seed dungeon quests on install: ${err}`,
-            ),
-          );
-        this.bossEncountersService
-          .seedBosses()
-          .catch((err) =>
-            this.logger.error(
-              `Failed to seed boss encounters on install: ${err}`,
-            ),
-          );
-      }
-    };
-
-    const handleUninstall = (payload: { slug: string }) => {
-      if (payload.slug === WOW_COMMON_MANIFEST.id) {
-        this.dungeonQuestsService
-          .dropQuests()
-          .catch((err) =>
-            this.logger.error(
-              `Failed to drop dungeon quests on uninstall: ${err}`,
-            ),
-          );
-        this.bossEncountersService
-          .dropBosses()
-          .catch((err) =>
-            this.logger.error(
-              `Failed to drop boss encounters on uninstall: ${err}`,
-            ),
-          );
-      }
-    };
-
-    this.activatedHandler = reRegister;
-    this.installedHandler = handleInstall;
-    this.uninstalledHandler = handleUninstall;
+    this.installedHandler = (payload) => this.handleInstalled(payload);
+    this.uninstalledHandler = (payload) => this.handleUninstalled(payload);
     this.eventEmitter.on(PLUGIN_EVENTS.ACTIVATED, this.activatedHandler);
     this.eventEmitter.on(PLUGIN_EVENTS.INSTALLED, this.installedHandler);
     this.eventEmitter.on(PLUGIN_EVENTS.UNINSTALLED, this.uninstalledHandler);

@@ -314,8 +314,9 @@ export class GameTimeService {
       fetchOverrides(this.db, userId, startDate, endDate),
       fetchAbsences(this.db, userId, startDate, endDate),
     ]);
-    const eventIds = [...new Set(signedUpEvents.map((e) => e.eventId))];
-    const signupsMap = await fetchSignupsPreview(this.db, eventIds);
+    const signupsMap = await fetchSignupsPreview(this.db, [
+      ...new Set(signedUpEvents.map((e) => e.eventId)),
+    ]);
     return assembleCompositeView(
       remapped,
       signedUpEvents,

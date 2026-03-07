@@ -57,31 +57,17 @@ export class FeedbackController {
     @Req() req: AuthRequest,
   ): Promise<FeedbackResponseDto> {
     const parsed = CreateFeedbackSchema.safeParse(body);
-    if (!parsed.success) {
+    if (!parsed.success)
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
-    }
-
     const userId = req.user.id;
     const { category, message, pageUrl } = parsed.data;
-
-    // Insert feedback into local DB
     const [inserted] = await this.db
       .insert(schema.feedback)
-      .values({
-        userId,
-        category,
-        message,
-        pageUrl: pageUrl ?? null,
-      })
+      .values({ userId, category, message, pageUrl: pageUrl ?? null })
       .returning();
-
     this.logger.log(
       `Feedback submitted: id=${inserted.id} category=${category} user=${userId}`,
     );
-
-    // Sentry feedback capture is handled client-side via Sentry.captureFeedback().
-    // The local DB save serves as the persistent record.
-
     return {
       id: inserted.id,
       category: inserted.category as FeedbackResponseDto['category'],
@@ -98,39 +84,47 @@ export class FeedbackController {
    */
   @Get()
   @UseGuards(AuthGuard('jwt'), AdminGuard)
-  async listFeedback(
-    @Query('page') pageParam?: string,
-    @Query('limit') limitParam?: string,
-  ): Promise<FeedbackListResponseDto> {
+  /** Parse and clamp pagination params. */
+  private parsePagination(pageParam?: string, limitParam?: string) {
     const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
     const limit = Math.min(
       100,
       Math.max(1, parseInt(limitParam ?? '20', 10) || 20),
     );
-    const offset = (page - 1) * limit;
+    return { page, limit, offset: (page - 1) * limit };
+  }
 
+  /** Query feedback rows with user join. */
+  private async queryFeedbackRows(limit: number, offset: number) {
+    return this.db
+      .select({
+        id: schema.feedback.id,
+        userId: schema.feedback.userId,
+        category: schema.feedback.category,
+        message: schema.feedback.message,
+        pageUrl: schema.feedback.pageUrl,
+        githubIssueUrl: schema.feedback.githubIssueUrl,
+        createdAt: schema.feedback.createdAt,
+        username: schema.users.username,
+      })
+      .from(schema.feedback)
+      .innerJoin(schema.users, eq(schema.feedback.userId, schema.users.id))
+      .orderBy(desc(schema.feedback.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async listFeedback(
+    @Query('page') pageParam?: string,
+    @Query('limit') limitParam?: string,
+  ): Promise<FeedbackListResponseDto> {
+    const { page, limit, offset } = this.parsePagination(pageParam, limitParam);
     const [rows, countResult] = await Promise.all([
-      this.db
-        .select({
-          id: schema.feedback.id,
-          userId: schema.feedback.userId,
-          category: schema.feedback.category,
-          message: schema.feedback.message,
-          pageUrl: schema.feedback.pageUrl,
-          githubIssueUrl: schema.feedback.githubIssueUrl,
-          createdAt: schema.feedback.createdAt,
-          username: schema.users.username,
-        })
-        .from(schema.feedback)
-        .innerJoin(schema.users, eq(schema.feedback.userId, schema.users.id))
-        .orderBy(desc(schema.feedback.createdAt))
-        .limit(limit)
-        .offset(offset),
+      this.queryFeedbackRows(limit, offset),
       this.db
         .select({ count: sql<number>`count(*)::int` })
         .from(schema.feedback),
     ]);
-
     return {
       data: rows.map((row) => ({
         id: row.id,
@@ -143,11 +137,7 @@ export class FeedbackController {
         githubIssueUrl: row.githubIssueUrl,
         createdAt: row.createdAt.toISOString(),
       })),
-      meta: {
-        total: countResult[0]?.count ?? 0,
-        page,
-        limit,
-      },
+      meta: { total: countResult[0]?.count ?? 0, page, limit },
     };
   }
 }

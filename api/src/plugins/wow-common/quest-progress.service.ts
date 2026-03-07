@@ -90,42 +90,46 @@ export class QuestProgressService {
         ),
       )
       .limit(1);
+    const row = existing
+      ? await this.updateExistingProgress(existing.id, update)
+      : await this.insertNewProgress(eventId, userId, questId, update);
+    this.coverageCache.delete(`coverage:${eventId}`);
+    const username = await this.fetchUsername(userId);
+    return {
+      id: row.id,
+      eventId: row.eventId,
+      userId: row.userId,
+      username,
+      questId: row.questId,
+      pickedUp: row.pickedUp,
+      completed: row.completed,
+    };
+  }
 
-    if (existing) {
-      const [updated] = await this.db
-        .update(wowClassicQuestProgress)
-        .set({
-          ...(update.pickedUp !== undefined && { pickedUp: update.pickedUp }),
-          ...(update.completed !== undefined && {
-            completed: update.completed,
-          }),
-          updatedAt: new Date(),
-        })
-        .where(eq(wowClassicQuestProgress.id, existing.id))
-        .returning();
+  /** Update an existing progress entry. */
+  private async updateExistingProgress(
+    id: number,
+    update: { pickedUp?: boolean; completed?: boolean },
+  ) {
+    const [updated] = await this.db
+      .update(wowClassicQuestProgress)
+      .set({
+        ...(update.pickedUp !== undefined && { pickedUp: update.pickedUp }),
+        ...(update.completed !== undefined && { completed: update.completed }),
+        updatedAt: new Date(),
+      })
+      .where(eq(wowClassicQuestProgress.id, id))
+      .returning();
+    return updated;
+  }
 
-      // Fetch username for response
-      const [user] = await this.db
-        .select({ username: schema.users.username })
-        .from(schema.users)
-        .where(eq(schema.users.id, userId))
-        .limit(1);
-
-      // Invalidate coverage cache for this event
-      this.coverageCache.delete(`coverage:${eventId}`);
-
-      return {
-        id: updated.id,
-        eventId: updated.eventId,
-        userId: updated.userId,
-        username: user?.username ?? 'Unknown',
-        questId: updated.questId,
-        pickedUp: updated.pickedUp,
-        completed: updated.completed,
-      };
-    }
-
-    // Insert new progress entry
+  /** Insert a new progress entry. */
+  private async insertNewProgress(
+    eventId: number,
+    userId: number,
+    questId: number,
+    update: { pickedUp?: boolean; completed?: boolean },
+  ) {
     const [inserted] = await this.db
       .insert(wowClassicQuestProgress)
       .values({
@@ -136,25 +140,17 @@ export class QuestProgressService {
         completed: update.completed ?? false,
       })
       .returning();
+    return inserted;
+  }
 
+  /** Fetch username for a user ID. */
+  private async fetchUsername(userId: number): Promise<string> {
     const [user] = await this.db
       .select({ username: schema.users.username })
       .from(schema.users)
       .where(eq(schema.users.id, userId))
       .limit(1);
-
-    // Invalidate coverage cache for this event
-    this.coverageCache.delete(`coverage:${eventId}`);
-
-    return {
-      id: inserted.id,
-      eventId: inserted.eventId,
-      userId: inserted.userId,
-      username: user?.username ?? 'Unknown',
-      questId: inserted.questId,
-      pickedUp: inserted.pickedUp,
-      completed: inserted.completed,
-    };
+    return user?.username ?? 'Unknown';
   }
 
   /**
@@ -192,8 +188,6 @@ export class QuestProgressService {
           eq(wowClassicQuestProgress.pickedUp, true),
         ),
       );
-
-    // Group by questId
     const coverageMap = new Map<
       number,
       { userId: number; username: string }[]
@@ -203,7 +197,6 @@ export class QuestProgressService {
       existing.push({ userId: row.userId, username: row.username });
       coverageMap.set(row.questId, existing);
     }
-
     return Array.from(coverageMap.entries()).map(([questId, coveredBy]) => ({
       questId,
       coveredBy,

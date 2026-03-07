@@ -16,8 +16,9 @@ export async function testIgdbCredentials(config: {
   clientId: string;
   clientSecret: string;
 }): Promise<TestResult> {
-  try {
-    const response = await fetch('https://id.twitch.tv/oauth2/token', {
+  return testOAuthToken(
+    'https://id.twitch.tv/oauth2/token',
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -25,25 +26,11 @@ export async function testIgdbCredentials(config: {
         client_secret: config.clientSecret,
         grant_type: 'client_credentials',
       }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.warn(`IGDB test failed: ${response.status} ${errorText}`);
-      return { success: false, message: 'Invalid Client ID or Client Secret' };
-    }
-
-    return {
-      success: true,
-      message: 'Credentials verified! IGDB / Twitch API is ready.',
-    };
-  } catch (error) {
-    logger.error('Failed to test IGDB credentials:', error);
-    return {
-      success: false,
-      message: 'Failed to connect to Twitch API. Please check your network.',
-    };
-  }
+    },
+    'IGDB',
+    'Credentials verified! IGDB / Twitch API is ready.',
+    'Twitch API',
+  );
 }
 
 /** Test Blizzard credentials by fetching an OAuth token. */
@@ -76,6 +63,31 @@ export async function testBlizzardCredentials(config: {
     return {
       success: false,
       message: 'Failed to connect to Blizzard API. Please check your network.',
+    };
+  }
+}
+
+/** Shared OAuth token test with error handling. */
+async function testOAuthToken(
+  url: string,
+  init: RequestInit,
+  label: string,
+  successMsg: string,
+  apiName: string,
+): Promise<TestResult> {
+  try {
+    const response = await fetch(url, init);
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.warn(`${label} test failed: ${response.status} ${errorText}`);
+      return { success: false, message: 'Invalid Client ID or Client Secret' };
+    }
+    return { success: true, message: successMsg };
+  } catch (error) {
+    logger.error(`Failed to test ${label} credentials:`, error);
+    return {
+      success: false,
+      message: `Failed to connect to ${apiName}. Please check your network.`,
     };
   }
 }

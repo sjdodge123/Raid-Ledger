@@ -7,10 +7,8 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 
-/** Map a character database row to a CharacterDto. */
-export function mapCharacterToDto(
-  row: typeof schema.characters.$inferSelect,
-): CharacterDto {
+/** Map core identity fields from a character row. */
+function mapCoreFields(row: typeof schema.characters.$inferSelect) {
   const roleOverride = row.roleOverride as CharacterDto['role'];
   const role = row.role as CharacterDto['role'];
   return {
@@ -27,6 +25,12 @@ export function mapCharacterToDto(
     isMain: row.isMain,
     itemLevel: row.itemLevel,
     externalId: row.externalId,
+  };
+}
+
+/** Map extended/optional fields from a character row. */
+function mapExtendedFields(row: typeof schema.characters.$inferSelect) {
+  return {
     avatarUrl: row.avatarUrl,
     renderUrl: row.renderUrl ?? null,
     level: row.level,
@@ -42,6 +46,13 @@ export function mapCharacterToDto(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/** Map a character database row to a CharacterDto. */
+export function mapCharacterToDto(
+  row: typeof schema.characters.$inferSelect,
+): CharacterDto {
+  return { ...mapCoreFields(row), ...mapExtendedFields(row) };
 }
 
 /** Count existing characters and determine if new character should be main. */

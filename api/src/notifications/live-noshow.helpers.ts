@@ -24,6 +24,26 @@ export interface LiveEvent {
   recurrenceGroupId: string | null;
 }
 
+/** Map a raw event row to the LiveEvent shape. */
+function mapToLiveEvent(r: {
+  id: number;
+  title: string;
+  creatorId: number;
+  gameId: number | null;
+  recurrenceGroupId: string | null;
+  duration: [Date, Date];
+}): LiveEvent {
+  return {
+    id: r.id,
+    title: r.title,
+    creatorId: r.creatorId,
+    gameId: r.gameId,
+    recurrenceGroupId: r.recurrenceGroupId,
+    startTime: r.duration[0],
+    endTime: r.duration[1],
+  };
+}
+
 /** Find live scheduled events where now >= startTime + 5 min. */
 export async function findLiveEventsInNoShowWindow(
   db: PostgresJsDatabase<typeof schema>,
@@ -48,30 +68,21 @@ export async function findLiveEventsInNoShowWindow(
         sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
       ),
     );
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    creatorId: r.creatorId,
-    gameId: r.gameId,
-    recurrenceGroupId: r.recurrenceGroupId,
-    startTime: r.duration[0],
-    endTime: r.duration[1],
-  }));
+  return rows.map(mapToLiveEvent);
 }
 
-/** Get signed-up players who have no meaningful voice presence. */
-export async function getAbsentSignedUpPlayers(
+type AbsentPlayer = {
+  userId: number | null;
+  discordUserId: string | null;
+  discordUsername: string | null;
+};
+
+/** Fetch non-bench signed-up players for an event. */
+async function fetchNonBenchSignups(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
-  isUserActive: (eventId: number, discordId: string) => boolean,
-): Promise<
-  Array<{
-    userId: number | null;
-    discordUserId: string | null;
-    discordUsername: string | null;
-  }>
-> {
-  const signups = await db
+) {
+  return db
     .select({
       userId: schema.eventSignups.userId,
       discordUserId: schema.eventSignups.discordUserId,
@@ -85,35 +96,57 @@ export async function getAbsentSignedUpPlayers(
         sql`NOT EXISTS (SELECT 1 FROM ${schema.rosterAssignments} WHERE ${schema.rosterAssignments.eventId} = ${schema.eventSignups.eventId} AND ${schema.rosterAssignments.signupId} = ${schema.eventSignups.id} AND ${schema.rosterAssignments.role} = 'bench')`,
       ),
     );
-  const absent: Array<{
-    userId: number | null;
-    discordUserId: string | null;
-    discordUsername: string | null;
-  }> = [];
+}
+
+/** Resolve discord ID for a signup, falling back to user table. */
+async function resolveDiscordId(
+  db: PostgresJsDatabase<typeof schema>,
+  signup: AbsentPlayer,
+): Promise<string | null> {
+  if (signup.discordUserId) return signup.discordUserId;
+  if (!signup.userId) return null;
+  const [user] = await db
+    .select({ discordId: schema.users.discordId })
+    .from(schema.users)
+    .where(eq(schema.users.id, signup.userId))
+    .limit(1);
+  return user?.discordId ?? null;
+}
+
+/** Check if a user has meaningful voice presence for an event. */
+async function hasVoicePresence(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  discordUserId: string,
+): Promise<boolean> {
+  const [voiceSession] = await db
+    .select({ totalDurationSec: schema.eventVoiceSessions.totalDurationSec })
+    .from(schema.eventVoiceSessions)
+    .where(
+      and(
+        eq(schema.eventVoiceSessions.eventId, eventId),
+        eq(schema.eventVoiceSessions.discordUserId, discordUserId),
+      ),
+    )
+    .limit(1);
+  return (
+    !!voiceSession && voiceSession.totalDurationSec >= PRESENCE_THRESHOLD_SEC
+  );
+}
+
+/** Get signed-up players who have no meaningful voice presence. */
+export async function getAbsentSignedUpPlayers(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  isUserActive: (eventId: number, discordId: string) => boolean,
+): Promise<AbsentPlayer[]> {
+  const signups = await fetchNonBenchSignups(db, eventId);
+  const absent: AbsentPlayer[] = [];
   for (const signup of signups) {
-    let discordUserId = signup.discordUserId;
-    if (!discordUserId && signup.userId) {
-      const [user] = await db
-        .select({ discordId: schema.users.discordId })
-        .from(schema.users)
-        .where(eq(schema.users.id, signup.userId))
-        .limit(1);
-      discordUserId = user?.discordId ?? null;
-    }
+    const discordUserId = await resolveDiscordId(db, signup);
     if (!discordUserId) continue;
     if (isUserActive(eventId, discordUserId)) continue;
-    const [voiceSession] = await db
-      .select({ totalDurationSec: schema.eventVoiceSessions.totalDurationSec })
-      .from(schema.eventVoiceSessions)
-      .where(
-        and(
-          eq(schema.eventVoiceSessions.eventId, eventId),
-          eq(schema.eventVoiceSessions.discordUserId, discordUserId),
-        ),
-      )
-      .limit(1);
-    if (voiceSession && voiceSession.totalDurationSec >= PRESENCE_THRESHOLD_SEC)
-      continue;
+    if (await hasVoicePresence(db, eventId, discordUserId)) continue;
     absent.push({ ...signup, discordUserId });
   }
   return absent;
@@ -174,22 +207,24 @@ export async function fetchPhase2Data(
   eventId: number,
   userIds: number[],
 ) {
-  const usersWithDiscord = await db
-    .select({ id: schema.users.id, discordId: schema.users.discordId })
-    .from(schema.users)
-    .where(inArray(schema.users.id, userIds));
+  const [usersWithDiscord, allVoiceSessions] = await Promise.all([
+    db
+      .select({ id: schema.users.id, discordId: schema.users.discordId })
+      .from(schema.users)
+      .where(inArray(schema.users.id, userIds)),
+    db
+      .select({
+        discordUserId: schema.eventVoiceSessions.discordUserId,
+        totalDurationSec: schema.eventVoiceSessions.totalDurationSec,
+      })
+      .from(schema.eventVoiceSessions)
+      .where(eq(schema.eventVoiceSessions.eventId, eventId)),
+  ]);
   const discordIdByUserId = new Map(
     usersWithDiscord
       .filter((u) => u.discordId !== null)
       .map((u) => [u.id, u.discordId!]),
   );
-  const allVoiceSessions = await db
-    .select({
-      discordUserId: schema.eventVoiceSessions.discordUserId,
-      totalDurationSec: schema.eventVoiceSessions.totalDurationSec,
-    })
-    .from(schema.eventVoiceSessions)
-    .where(eq(schema.eventVoiceSessions.eventId, eventId));
   const voiceSessionByDiscordId = new Map(
     allVoiceSessions.map((s) => [s.discordUserId, s.totalDurationSec]),
   );

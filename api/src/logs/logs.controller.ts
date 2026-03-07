@@ -34,6 +34,20 @@ export class LogsController {
     return { files, total: files.length };
   }
 
+  /** Resolve which filenames to export from query params. */
+  private resolveExportFilenames(
+    service?: string,
+    fileList?: string,
+  ): string[] {
+    if (fileList)
+      return fileList
+        .split(',')
+        .map((f) => f.trim())
+        .filter(Boolean);
+    const validService = this.isValidService(service) ? service : undefined;
+    return this.logsService.listLogFiles(validService).map((f) => f.filename);
+  }
+
   @Get('export')
   @RateLimit('export')
   exportLogs(
@@ -45,35 +59,20 @@ export class LogsController {
     this.logger.log(
       `Log export requested by ${req?.user?.username ?? 'unknown'} (ID: ${req?.user?.id ?? 'unknown'})`,
     );
-
-    let filenames: string[];
-    if (fileList) {
-      filenames = fileList
-        .split(',')
-        .map((f) => f.trim())
-        .filter(Boolean);
-    } else {
-      const validService = this.isValidService(service) ? service : undefined;
-      const files = this.logsService.listLogFiles(validService);
-      filenames = files.map((f) => f.filename);
-    }
-
+    const filenames = this.resolveExportFilenames(service, fileList);
     if (filenames.length === 0) {
       res.status(200).json({ files: [], total: 0 });
       return;
     }
-
     const stream = this.logsService.createExportStream(filenames);
     const timestamp = new Date()
       .toISOString()
       .replace(/[:.]/g, '-')
       .slice(0, 19);
-
     res.set({
       'Content-Type': 'application/gzip',
       'Content-Disposition': `attachment; filename="logs-${timestamp}.tar.gz"`,
     });
-
     stream.pipe(res);
   }
 

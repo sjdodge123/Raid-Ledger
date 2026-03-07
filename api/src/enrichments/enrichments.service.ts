@@ -90,11 +90,7 @@ export class EnrichmentsService {
           schema.enrichments.entityId,
           schema.enrichments.enricherKey,
         ],
-        set: {
-          data,
-          fetchedAt: now,
-          updatedAt: now,
-        },
+        set: { data, fetchedAt: now, updatedAt: now },
       });
   }
 
@@ -102,6 +98,14 @@ export class EnrichmentsService {
    * Enqueue enrichment jobs for a character.
    * Finds all DataEnrichers registered for the character's game slug.
    */
+  /** Default job options for enrichment queue. */
+  private readonly enrichJobOpts = {
+    attempts: 3,
+    backoff: { type: 'exponential' as const, delay: 5000 },
+    removeOnComplete: 100,
+    removeOnFail: 50,
+  };
+
   async enqueueCharacterEnrichments(
     characterId: string,
     gameSlug: string,
@@ -110,36 +114,24 @@ export class EnrichmentsService {
       EXTENSION_POINTS.DATA_ENRICHER,
       gameSlug,
     );
-
     let enqueued = 0;
     for (const enricher of enrichers) {
       if (!enricher.enrichCharacter) continue;
-
-      const jobData: EnrichCharacterJobData = {
-        characterId,
-        enricherKey: enricher.key,
-        gameSlug,
-      };
-
       await this.enrichmentQueue.add(
         `enrich-character:${enricher.key}`,
-        jobData,
         {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 5000 },
-          removeOnComplete: 100,
-          removeOnFail: 50,
-        },
+          characterId,
+          enricherKey: enricher.key,
+          gameSlug,
+        } satisfies EnrichCharacterJobData,
+        this.enrichJobOpts,
       );
       enqueued++;
     }
-
-    if (enqueued > 0) {
+    if (enqueued > 0)
       this.logger.debug(
         `Enqueued ${enqueued} enrichment job(s) for character ${characterId} (game: ${gameSlug})`,
       );
-    }
-
     return enqueued;
   }
 
@@ -154,17 +146,14 @@ export class EnrichmentsService {
       EXTENSION_POINTS.DATA_ENRICHER,
       gameSlug,
     );
-
     let enqueued = 0;
     for (const enricher of enrichers) {
       if (!enricher.enrichEvent) continue;
-
       const jobData: EnrichEventJobData = {
         eventId,
         enricherKey: enricher.key,
         gameSlug,
       };
-
       await this.enrichmentQueue.add(`enrich-event:${enricher.key}`, jobData, {
         attempts: 3,
         backoff: { type: 'exponential', delay: 5000 },
@@ -173,54 +162,51 @@ export class EnrichmentsService {
       });
       enqueued++;
     }
-
-    if (enqueued > 0) {
+    if (enqueued > 0)
       this.logger.debug(
         `Enqueued ${enqueued} enrichment job(s) for event ${eventId} (game: ${gameSlug})`,
       );
-    }
-
     return enqueued;
   }
 
   /**
    * Execute a single enricher for a character (called by the processor).
    */
+  /** Find an enricher by key from the registered adapters. */
+  private findEnricher(
+    gameSlug: string,
+    enricherKey: string,
+  ): DataEnricher | undefined {
+    return this.pluginRegistry
+      .getMultiAdapters<DataEnricher>(EXTENSION_POINTS.DATA_ENRICHER, gameSlug)
+      .find((e) => e.key === enricherKey);
+  }
+
   async runCharacterEnrichment(
     characterId: string,
     enricherKey: string,
     gameSlug: string,
   ): Promise<void> {
-    const enrichers = this.pluginRegistry.getMultiAdapters<DataEnricher>(
-      EXTENSION_POINTS.DATA_ENRICHER,
-      gameSlug,
-    );
-
-    const enricher = enrichers.find((e) => e.key === enricherKey);
+    const enricher = this.findEnricher(gameSlug, enricherKey);
     if (!enricher?.enrichCharacter) {
       this.logger.warn(
         `Enricher "${enricherKey}" not found or has no enrichCharacter method`,
       );
       return;
     }
-
-    // Fetch the character row as a plain record
     const [character] = await this.db
       .select()
       .from(schema.characters)
       .where(eq(schema.characters.id, characterId))
       .limit(1);
-
     if (!character) {
       this.logger.warn(
         `Character ${characterId} not found — skipping enrichment`,
       );
       return;
     }
-
     const data = await enricher.enrichCharacter(toEnricherInput(character));
     await this.upsertEnrichment('character', characterId, enricherKey, data);
-
     this.logger.debug(
       `Enrichment "${enricherKey}" completed for character ${characterId}`,
     );
@@ -234,33 +220,24 @@ export class EnrichmentsService {
     enricherKey: string,
     gameSlug: string,
   ): Promise<void> {
-    const enrichers = this.pluginRegistry.getMultiAdapters<DataEnricher>(
-      EXTENSION_POINTS.DATA_ENRICHER,
-      gameSlug,
-    );
-
-    const enricher = enrichers.find((e) => e.key === enricherKey);
+    const enricher = this.findEnricher(gameSlug, enricherKey);
     if (!enricher?.enrichEvent) {
       this.logger.warn(
         `Enricher "${enricherKey}" not found or has no enrichEvent method`,
       );
       return;
     }
-
     const [event] = await this.db
       .select()
       .from(schema.events)
       .where(eq(schema.events.id, Number(eventId)))
       .limit(1);
-
     if (!event) {
       this.logger.warn(`Event ${eventId} not found — skipping enrichment`);
       return;
     }
-
     const data = await enricher.enrichEvent(toEnricherInput(event));
     await this.upsertEnrichment('event', eventId, enricherKey, data);
-
     this.logger.debug(
       `Enrichment "${enricherKey}" completed for event ${eventId}`,
     );

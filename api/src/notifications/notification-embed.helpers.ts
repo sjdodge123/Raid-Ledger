@@ -118,6 +118,38 @@ function addVoiceChannelField(
     });
 }
 
+/** Field definitions per notification type: [payloadKey, fieldName] pairs + voice flag. */
+const TYPE_FIELD_DEFS: Partial<
+  Record<NotificationType, { fields: [string, string][]; voice: boolean }>
+> = {
+  event_reminder: { fields: [['eventTitle', 'Event']], voice: true },
+  new_event: { fields: [['gameName', 'Game']], voice: true },
+  subscribed_game: { fields: [], voice: true },
+  slot_vacated: { fields: [['slotName', 'Slot']], voice: true },
+  member_returned: { fields: [['slotName', 'Slot']], voice: true },
+  event_cancelled: { fields: [['eventTitle', 'Event']], voice: false },
+  event_rescheduled: { fields: [], voice: true },
+  bench_promoted: { fields: [], voice: true },
+  tentative_displaced: { fields: [], voice: true },
+  missed_event_nudge: { fields: [['eventTitle', 'Event']], voice: false },
+  role_gap_alert: {
+    fields: [
+      ['eventTitle', 'Event'],
+      ['gapSummary', 'Missing Roles'],
+      ['rosterSummary', 'Roster'],
+    ],
+    voice: false,
+  },
+  recruitment_reminder: {
+    fields: [
+      ['eventTitle', 'Event'],
+      ['signupSummary', 'Signups'],
+      ['gameName', 'Game'],
+    ],
+    voice: true,
+  },
+};
+
 /** Add type-specific fields to a notification embed. */
 export function addTypeSpecificFields(
   embed: EmbedBuilder,
@@ -125,54 +157,25 @@ export function addTypeSpecificFields(
   payload?: Record<string, unknown>,
 ): void {
   if (!payload) return;
-  switch (type) {
-    case 'event_reminder':
-      addFieldIf(embed, payload, 'eventTitle', 'Event');
-      addVoiceChannelField(embed, payload);
-      break;
-    case 'new_event':
-      addFieldIf(embed, payload, 'gameName', 'Game');
-      addVoiceChannelField(embed, payload);
-      break;
-    case 'subscribed_game':
-      addVoiceChannelField(embed, payload);
-      break;
-    case 'slot_vacated':
-    case 'member_returned':
-      addFieldIf(embed, payload, 'slotName', 'Slot');
-      addVoiceChannelField(embed, payload);
-      break;
-    case 'event_cancelled':
-      addFieldIf(embed, payload, 'eventTitle', 'Event');
-      break;
-    case 'event_rescheduled':
-      addVoiceChannelField(embed, payload);
-      break;
-    case 'roster_reassigned':
-      addFieldIf(embed, payload, 'oldRole', 'Previous Role');
-      if (payload.newRole && payload.newRole !== 'player')
-        addFieldIf(embed, payload, 'newRole', 'New Role');
-      addVoiceChannelField(embed, payload);
-      break;
-    case 'bench_promoted':
-    case 'tentative_displaced':
-      addVoiceChannelField(embed, payload);
-      break;
-    case 'missed_event_nudge':
-      addFieldIf(embed, payload, 'eventTitle', 'Event');
-      break;
-    case 'role_gap_alert':
-      addFieldIf(embed, payload, 'eventTitle', 'Event');
-      addFieldIf(embed, payload, 'gapSummary', 'Missing Roles');
-      addFieldIf(embed, payload, 'rosterSummary', 'Roster');
-      break;
-    case 'recruitment_reminder':
-      addFieldIf(embed, payload, 'eventTitle', 'Event');
-      addFieldIf(embed, payload, 'signupSummary', 'Signups');
-      addFieldIf(embed, payload, 'gameName', 'Game');
-      addVoiceChannelField(embed, payload);
-      break;
+  if (type === 'roster_reassigned') {
+    addRosterReassignedFields(embed, payload);
+    return;
   }
+  const def = TYPE_FIELD_DEFS[type];
+  if (!def) return;
+  for (const [key, name] of def.fields) addFieldIf(embed, payload, key, name);
+  if (def.voice) addVoiceChannelField(embed, payload);
+}
+
+/** Handle roster_reassigned with conditional newRole field. */
+function addRosterReassignedFields(
+  embed: EmbedBuilder,
+  payload: Record<string, unknown>,
+): void {
+  addFieldIf(embed, payload, 'oldRole', 'Previous Role');
+  if (payload.newRole && payload.newRole !== 'player')
+    addFieldIf(embed, payload, 'newRole', 'New Role');
+  addVoiceChannelField(embed, payload);
 }
 
 /** Build extra action rows for specific notification types (ROK-378, ROK-536). */
@@ -264,6 +267,24 @@ function buildRoleGapExtraRows(
   ];
 }
 
+/** Notification types that use event-based primary buttons. */
+const EVENT_BUTTON_TYPES = new Set<NotificationType>([
+  'event_reminder',
+  'new_event',
+  'subscribed_game',
+  'event_rescheduled',
+  'event_cancelled',
+  'recruitment_reminder',
+  'role_gap_alert',
+]);
+const ROSTER_BUTTON_TYPES = new Set<NotificationType>([
+  'slot_vacated',
+  'member_returned',
+  'bench_promoted',
+  'roster_reassigned',
+  'tentative_displaced',
+]);
+
 /** Build the primary action button for a notification. */
 export function buildPrimaryButton(
   type: NotificationType,
@@ -273,37 +294,20 @@ export function buildPrimaryButton(
 ): ButtonBuilder | null {
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
   if (!eventId) return null;
-  const eventTypes: NotificationType[] = [
-    'event_reminder',
-    'new_event',
-    'subscribed_game',
-    'event_rescheduled',
-    'event_cancelled',
-    'recruitment_reminder',
-    'role_gap_alert',
-  ];
-  const rosterTypes: NotificationType[] = [
-    'slot_vacated',
-    'member_returned',
-    'bench_promoted',
-    'roster_reassigned',
-    'tentative_displaced',
-  ];
+  if (
+    !EVENT_BUTTON_TYPES.has(type) &&
+    !ROSTER_BUTTON_TYPES.has(type) &&
+    type !== 'missed_event_nudge'
+  )
+    return null;
   const label =
     type === 'new_event'
       ? 'Sign Up'
-      : rosterTypes.includes(type)
+      : ROSTER_BUTTON_TYPES.has(type)
         ? 'View Roster'
         : 'View Event';
-  if (
-    eventTypes.includes(type) ||
-    rosterTypes.includes(type) ||
-    type === 'missed_event_nudge'
-  ) {
-    return new ButtonBuilder()
-      .setLabel(label)
-      .setStyle(ButtonStyle.Link)
-      .setURL(`${clientUrl}/events/${eventId}?notif=${notificationId}`);
-  }
-  return null;
+  return new ButtonBuilder()
+    .setLabel(label)
+    .setStyle(ButtonStyle.Link)
+    .setURL(`${clientUrl}/events/${eventId}?notif=${notificationId}`);
 }

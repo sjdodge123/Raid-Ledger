@@ -60,14 +60,37 @@ export class RoleGapAlertService {
    * Sends a one-time alert to the event creator.
    */
   async checkRoleGaps(now: Date, defaultTimezone: string): Promise<void> {
+    const candidates = await this.fetchCandidateEvents(now);
+    if (candidates.length === 0) return;
+
+    const countMap = await this.fetchRoleCounts(candidates.map((e) => e.id));
+
+    for (const event of candidates) {
+      const gaps = this.detectRoleGaps(event, countMap.get(event.id));
+      if (gaps.length === 0) continue;
+      await this.sendRoleGapAlert(
+        {
+          eventId: event.id,
+          creatorId: event.creatorId,
+          title: event.title,
+          startTime: event.duration[0],
+          gameId: event.gameId,
+          gaps,
+        },
+        defaultTimezone,
+      );
+    }
+  }
+
+  /** Fetch MMO events within the role gap window. */
+  private async fetchCandidateEvents(now: Date) {
     const lowerBound = new Date(
       now.getTime() + ROLE_GAP_WINDOW.centerMs - ROLE_GAP_WINDOW.halfWidthMs,
     );
     const upperBound = new Date(
       now.getTime() + ROLE_GAP_WINDOW.centerMs + ROLE_GAP_WINDOW.halfWidthMs,
     );
-
-    const candidates = await this.db
+    return this.db
       .select({
         id: schema.events.id,
         title: schema.events.title,
@@ -85,11 +108,12 @@ export class RoleGapAlertService {
           sql`lower(${schema.events.duration}) <= ${upperBound.toISOString()}::timestamptz`,
         ),
       );
+  }
 
-    if (candidates.length === 0) return;
-
-    const eventIds = candidates.map((e) => e.id);
-
+  /** Fetch critical role counts for the given event IDs. */
+  private async fetchRoleCounts(
+    eventIds: number[],
+  ): Promise<Map<number, Map<string, number>>> {
     const roleCounts = await this.db
       .select({
         eventId: schema.rosterAssignments.eventId,
@@ -112,29 +136,12 @@ export class RoleGapAlertService {
         ),
       )
       .groupBy(schema.rosterAssignments.eventId, schema.rosterAssignments.role);
-
     const countMap = new Map<number, Map<string, number>>();
     for (const row of roleCounts) {
       if (!countMap.has(row.eventId)) countMap.set(row.eventId, new Map());
       countMap.get(row.eventId)!.set(row.role!, Number(row.count));
     }
-
-    for (const event of candidates) {
-      const gaps = this.detectRoleGaps(event, countMap.get(event.id));
-      if (gaps.length === 0) continue;
-
-      await this.sendRoleGapAlert(
-        {
-          eventId: event.id,
-          creatorId: event.creatorId,
-          title: event.title,
-          startTime: event.duration[0],
-          gameId: event.gameId,
-          gaps,
-        },
-        defaultTimezone,
-      );
-    }
+    return countMap;
   }
 
   /**
@@ -159,14 +166,44 @@ export class RoleGapAlertService {
     return gaps;
   }
 
-  /**
-   * Send a role gap alert to the event creator.
-   * Deduplicates via event_reminders_sent with reminderType 'role_gap_4h'.
-   */
+  /** Send a role gap alert to the event creator. Deduplicates via event_reminders_sent. */
   async sendRoleGapAlert(
     result: RoleGapResult,
     defaultTimezone: string,
   ): Promise<boolean> {
+    if (!(await this.insertAlertDedup(result))) return false;
+    const { gapSummary, rosterSummary, suggestedReason } =
+      this.buildGapSummaries(result.gaps);
+    const timezone = await this.resolveCreatorTimezone(
+      result.creatorId,
+      defaultTimezone,
+    );
+    const timeStr = result.startTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+      timeZone: timezone,
+    });
+    await this.notificationService.create({
+      userId: result.creatorId,
+      type: 'role_gap_alert',
+      title: 'Role Gap Alert',
+      message: `Your event "${result.title}" starts in ~4 hours at ${timeStr} and still needs roles filled. ${gapSummary}.`,
+      payload: {
+        eventId: result.eventId,
+        eventTitle: result.title,
+        startTime: result.startTime.toISOString(),
+        gapSummary,
+        rosterSummary,
+        suggestedReason,
+      },
+    });
+    return true;
+  }
+
+  /** Insert dedup record for role gap alert. Returns true if first time. */
+  private async insertAlertDedup(result: RoleGapResult): Promise<boolean> {
     const dedup = await this.db
       .insert(schema.eventRemindersSent)
       .values({
@@ -182,41 +219,7 @@ export class RoleGapAlertService {
         ],
       })
       .returning();
-
-    if (dedup.length === 0) return false;
-
-    const { gapSummary, rosterSummary, suggestedReason } =
-      this.buildGapSummaries(result.gaps);
-
-    const timezone = await this.resolveCreatorTimezone(
-      result.creatorId,
-      defaultTimezone,
-    );
-
-    const timeStr = result.startTime.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZoneName: 'short',
-      timeZone: timezone,
-    });
-
-    await this.notificationService.create({
-      userId: result.creatorId,
-      type: 'role_gap_alert',
-      title: 'Role Gap Alert',
-      message: `Your event "${result.title}" starts in ~4 hours at ${timeStr} and still needs roles filled. ${gapSummary}.`,
-      payload: {
-        eventId: result.eventId,
-        eventTitle: result.title,
-        startTime: result.startTime.toISOString(),
-        gapSummary,
-        rosterSummary,
-        suggestedReason,
-      },
-    });
-
-    return true;
+    return dedup.length > 0;
   }
 
   /**

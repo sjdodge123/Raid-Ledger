@@ -10,44 +10,46 @@ registerCanary({
   probe: async () => {
     const clientId = process.env.CANARY_BLIZZARD_CLIENT_ID!;
     const clientSecret = process.env.CANARY_BLIZZARD_CLIENT_SECRET!;
-
-    // Step 1: Battle.net OAuth token exchange
-    const tokenResponse = await fetch('https://us.battle.net/oauth/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-      },
-      body: new URLSearchParams({ grant_type: 'client_credentials' }),
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!tokenResponse.ok) {
-      const text = await tokenResponse.text().catch(() => '');
-      return {
-        status: 'FAIL',
-        reason: `Battle.net OAuth failed: HTTP ${tokenResponse.status}`,
-        details: text,
-      };
-    }
-
-    const tokenData = (await tokenResponse.json()) as { access_token: string };
-
-    // Step 2: Fetch realm list (minimal API call to verify token works)
-    const realmResponse = await fetch(
-      `https://us.api.blizzard.com/data/wow/realm/index?namespace=dynamic-us&locale=en_US&access_token=${tokenData.access_token}`,
-      { signal: AbortSignal.timeout(10_000) },
-    );
-
-    if (!realmResponse.ok) {
-      const text = await realmResponse.text().catch(() => '');
-      return {
-        status: 'FAIL',
-        reason: `Blizzard Realm API failed: HTTP ${realmResponse.status}`,
-        details: text,
-      };
-    }
-
-    return { status: 'PASS' };
+    const token = await fetchBlizzardToken(clientId, clientSecret);
+    if (token.status === 'FAIL') return token;
+    return verifyBlizzardToken((token as { accessToken: string }).accessToken);
   },
 });
+
+async function fetchBlizzardToken(clientId: string, clientSecret: string) {
+  const resp = await fetch('https://us.battle.net/oauth/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+    },
+    body: new URLSearchParams({ grant_type: 'client_credentials' }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    return {
+      status: 'FAIL' as const,
+      reason: `Battle.net OAuth failed: HTTP ${resp.status}`,
+      details: text,
+    };
+  }
+  const data = (await resp.json()) as { access_token: string };
+  return { status: 'OK' as const, accessToken: data.access_token };
+}
+
+async function verifyBlizzardToken(accessToken: string) {
+  const resp = await fetch(
+    `https://us.api.blizzard.com/data/wow/realm/index?namespace=dynamic-us&locale=en_US&access_token=${accessToken}`,
+    { signal: AbortSignal.timeout(10_000) },
+  );
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    return {
+      status: 'FAIL' as const,
+      reason: `Blizzard Realm API failed: HTTP ${resp.status}`,
+      details: text,
+    };
+  }
+  return { status: 'PASS' as const };
+}

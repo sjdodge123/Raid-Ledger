@@ -8,6 +8,8 @@ import * as schema from '../../drizzle/schema';
 import { wowClassicBosses, wowClassicBossLoot } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 
+const BATCH_SIZE = 100;
+
 interface BossEntry {
   instanceId: number;
   name: string;
@@ -54,65 +56,86 @@ export class BossEncounterSeeder {
    * files are applied to existing rows on restart.
    */
   async seed(): Promise<{ bossesInserted: number; lootInserted: number }> {
-    // --- Phase 1: Seed bosses ---
+    const bossesInserted = await this.seedBossEncounters();
+    const lootInserted = await this.seedLootItems();
+    return { bossesInserted, lootInserted };
+  }
+
+  /** Upsert a batch of boss encounters. */
+  private async upsertBossBatch(batch: BossEntry[]): Promise<number> {
+    const result = await this.db
+      .insert(wowClassicBosses)
+      .values(
+        batch.map((b) => ({
+          instanceId: b.instanceId,
+          name: b.name,
+          order: b.order,
+          expansion: b.expansion,
+          sodModified: b.sodModified,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [
+          wowClassicBosses.instanceId,
+          wowClassicBosses.name,
+          wowClassicBosses.expansion,
+        ],
+        set: {
+          order: sql`excluded.order`,
+          sodModified: sql`excluded.sod_modified`,
+        },
+      })
+      .returning({ id: wowClassicBosses.id });
+    return result.length;
+  }
+
+  /** Seed boss encounters from bundled JSON data. */
+  private async seedBossEncounters(): Promise<number> {
     const bossPath = join(__dirname, 'data', 'boss-encounter-data.json');
-    const bossRaw = await readFile(bossPath, 'utf-8');
-    const bosses = JSON.parse(bossRaw) as BossEntry[];
-
+    const bosses = JSON.parse(await readFile(bossPath, 'utf-8')) as BossEntry[];
     this.logger.log(`Seeding ${bosses.length} boss encounters...`);
-
-    const BATCH_SIZE = 100;
-    let bossesInserted = 0;
-
+    let inserted = 0;
     for (let i = 0; i < bosses.length; i += BATCH_SIZE) {
-      const batch = bosses.slice(i, i + BATCH_SIZE);
-      const result = await this.db
-        .insert(wowClassicBosses)
-        .values(
-          batch.map((b) => ({
-            instanceId: b.instanceId,
-            name: b.name,
-            order: b.order,
-            expansion: b.expansion,
-            sodModified: b.sodModified,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [
-            wowClassicBosses.instanceId,
-            wowClassicBosses.name,
-            wowClassicBosses.expansion,
-          ],
-          set: {
-            order: sql`excluded.order`,
-            sodModified: sql`excluded.sod_modified`,
-          },
-        })
-        .returning({ id: wowClassicBosses.id });
-
-      bossesInserted += result.length;
+      inserted += await this.upsertBossBatch(bosses.slice(i, i + BATCH_SIZE));
     }
+    this.logger.log(`Seeded ${inserted}/${bosses.length} boss encounters`);
+    return inserted;
+  }
 
-    this.logger.log(
-      `Seeded ${bossesInserted}/${bosses.length} boss encounters`,
-    );
-
-    // --- Phase 2: Seed loot (resolve boss FKs by name+expansion) ---
+  /** Seed loot items from bundled JSON data. */
+  private async seedLootItems(): Promise<number> {
     const lootPath = join(__dirname, 'data', 'boss-loot-data.json');
-    const lootRaw = await readFile(lootPath, 'utf-8');
-    const lootEntries = JSON.parse(lootRaw) as LootEntry[];
-
+    const lootEntries = JSON.parse(
+      await readFile(lootPath, 'utf-8'),
+    ) as LootEntry[];
     this.logger.log(`Seeding ${lootEntries.length} loot items...`);
-
-    // Build a lookup map of boss name+expansion → DB id
-    const allBosses = await this.db.select().from(wowClassicBosses);
-    const bossLookup = new Map<string, number>();
-    for (const b of allBosses) {
-      bossLookup.set(`${b.name}::${b.expansion}`, b.id);
+    const bossLookup = await this.buildBossLookup();
+    const lootToInsert = this.mapLootEntries(lootEntries, bossLookup);
+    let inserted = 0;
+    for (let i = 0; i < lootToInsert.length; i += BATCH_SIZE) {
+      const result = await this.upsertLootBatch(
+        lootToInsert.slice(i, i + BATCH_SIZE),
+      );
+      inserted += result;
     }
+    this.logger.log(`Seeded ${inserted}/${lootEntries.length} loot items`);
+    return inserted;
+  }
 
-    let lootInserted = 0;
-    const lootToInsert = lootEntries
+  /** Build boss name+expansion → DB id lookup map. */
+  private async buildBossLookup(): Promise<Map<string, number>> {
+    const allBosses = await this.db.select().from(wowClassicBosses);
+    const lookup = new Map<string, number>();
+    for (const b of allBosses) lookup.set(`${b.name}::${b.expansion}`, b.id);
+    return lookup;
+  }
+
+  /** Map loot entries to insert values, resolving boss FKs. */
+  private mapLootEntries(
+    entries: LootEntry[],
+    bossLookup: Map<string, number>,
+  ) {
+    return entries
       .map((l) => {
         const bossId = bossLookup.get(`${l.bossName}::${l.expansion}`);
         if (!bossId) {
@@ -136,37 +159,34 @@ export class BossEncounterSeeder {
         };
       })
       .filter((v): v is NonNullable<typeof v> => v !== null);
+  }
 
-    for (let i = 0; i < lootToInsert.length; i += BATCH_SIZE) {
-      const batch = lootToInsert.slice(i, i + BATCH_SIZE);
-      const result = await this.db
-        .insert(wowClassicBossLoot)
-        .values(batch)
-        .onConflictDoUpdate({
-          target: [
-            wowClassicBossLoot.bossId,
-            wowClassicBossLoot.itemId,
-            wowClassicBossLoot.expansion,
-          ],
-          set: {
-            itemName: sql`excluded.item_name`,
-            slot: sql`excluded.slot`,
-            quality: sql`excluded.quality`,
-            itemLevel: sql`excluded.item_level`,
-            dropRate: sql`excluded.drop_rate`,
-            classRestrictions: sql`excluded.class_restrictions`,
-            iconUrl: sql`excluded.icon_url`,
-            itemSubclass: sql`excluded.item_subclass`,
-          },
-        })
-        .returning({ id: wowClassicBossLoot.id });
-
-      lootInserted += result.length;
-    }
-
-    this.logger.log(`Seeded ${lootInserted}/${lootEntries.length} loot items`);
-
-    return { bossesInserted, lootInserted };
+  /** Upsert a batch of loot items. */
+  private async upsertLootBatch(
+    batch: Array<Record<string, unknown>>,
+  ): Promise<number> {
+    const result = await this.db
+      .insert(wowClassicBossLoot)
+      .values(batch as never)
+      .onConflictDoUpdate({
+        target: [
+          wowClassicBossLoot.bossId,
+          wowClassicBossLoot.itemId,
+          wowClassicBossLoot.expansion,
+        ],
+        set: {
+          itemName: sql`excluded.item_name`,
+          slot: sql`excluded.slot`,
+          quality: sql`excluded.quality`,
+          itemLevel: sql`excluded.item_level`,
+          dropRate: sql`excluded.drop_rate`,
+          classRestrictions: sql`excluded.class_restrictions`,
+          iconUrl: sql`excluded.icon_url`,
+          itemSubclass: sql`excluded.item_subclass`,
+        },
+      })
+      .returning({ id: wowClassicBossLoot.id });
+    return result.length;
   }
 
   /**

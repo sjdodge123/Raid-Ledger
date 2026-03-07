@@ -240,42 +240,36 @@ export class DungeonQuestsService {
     }
   }
 
+  /** Walk one direction of a quest chain, fetching missing links from DB. */
+  private async walkChainDirection(
+    startId: number | null,
+    direction: 'prev' | 'next',
+    questLookup: Map<number, DungeonQuestDto>,
+  ): Promise<void> {
+    let cur = startId;
+    while (
+      cur !== null &&
+      !questLookup.has(cur) &&
+      questLookup.size < MAX_CHAIN_DEPTH
+    ) {
+      const [row] = await this.db
+        .select()
+        .from(wowClassicDungeonQuests)
+        .where(eq(wowClassicDungeonQuests.questId, cur))
+        .limit(1);
+      if (!row) break;
+      const dto = toDto(row);
+      questLookup.set(dto.questId, dto);
+      cur = direction === 'prev' ? dto.prevQuestId : dto.nextQuestId;
+    }
+  }
+
   /** Fetch chain quest links for a single quest's chain walk. */
   private async fetchChainQuests(
     dto: DungeonQuestDto,
     questLookup: Map<number, DungeonQuestDto>,
   ): Promise<void> {
-    let currentPrev = dto.prevQuestId;
-    while (
-      currentPrev !== null &&
-      !questLookup.has(currentPrev) &&
-      questLookup.size < MAX_CHAIN_DEPTH
-    ) {
-      const [prev] = await this.db
-        .select()
-        .from(wowClassicDungeonQuests)
-        .where(eq(wowClassicDungeonQuests.questId, currentPrev))
-        .limit(1);
-      if (!prev) break;
-      const prevDto = toDto(prev);
-      questLookup.set(prevDto.questId, prevDto);
-      currentPrev = prevDto.prevQuestId;
-    }
-    let currentNext = dto.nextQuestId;
-    while (
-      currentNext !== null &&
-      !questLookup.has(currentNext) &&
-      questLookup.size < MAX_CHAIN_DEPTH
-    ) {
-      const [next] = await this.db
-        .select()
-        .from(wowClassicDungeonQuests)
-        .where(eq(wowClassicDungeonQuests.questId, currentNext))
-        .limit(1);
-      if (!next) break;
-      const nextDto = toDto(next);
-      questLookup.set(nextDto.questId, nextDto);
-      currentNext = nextDto.nextQuestId;
-    }
+    await this.walkChainDirection(dto.prevQuestId, 'prev', questLookup);
+    await this.walkChainDirection(dto.nextQuestId, 'next', questLookup);
   }
 }

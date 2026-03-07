@@ -10,13 +10,60 @@ function roundToHour(date: Date): Date {
   return rounded;
 }
 
-/** Generate availability definitions (time-relative) */
-export function getAvailabilityDefinitions(): {
+type AvailabilityDef = {
   username: string;
   start: Date;
   end: Date;
   status: 'available' | 'blocked';
-}[] {
+};
+
+/** Raw slot tuples: [username, startOffset, endOffset]. */
+const AVAILABLE_TUPLES: [string, number, number][] = [
+  ['ShadowMage', -2, 4],
+  ['DragonSlayer99', -1, 6],
+  ['HealzForDayz', 0, 3],
+  ['TankMaster', -3, 5],
+  ['ProRaider', 1, 8],
+];
+
+/** Build the "available" slots relative to the given base hour. */
+function buildAvailableSlots(
+  hoursFromNow: (h: number) => Date,
+): AvailabilityDef[] {
+  return AVAILABLE_TUPLES.map(([username, s, e]) => ({
+    username,
+    start: hoursFromNow(s),
+    end: hoursFromNow(e),
+    status: 'available' as const,
+  }));
+}
+
+type TimeFn = (n: number) => Date;
+
+/** Raw blocked tuples: [username, startOffset, endOffset, useHours]. */
+const BLOCKED_TUPLES: [string, number, number, boolean][] = [
+  ['HealzForDayz', 3, 6, true],
+  ['CasualCarl', -1, 2, true],
+  ['NightOwlGamer', 0, 4, true],
+  ['DragonSlayer99', 2, 4, false],
+  ['TankMaster', 5, 7, false],
+];
+
+/** Build the "blocked" slots relative to the given base hour. */
+function buildBlockedSlots(
+  hoursFromNow: TimeFn,
+  daysFromNow: TimeFn,
+): AvailabilityDef[] {
+  return BLOCKED_TUPLES.map(([username, s, e, useHours]) => ({
+    username,
+    start: (useHours ? hoursFromNow : daysFromNow)(s),
+    end: (useHours ? hoursFromNow : daysFromNow)(e),
+    status: 'blocked' as const,
+  }));
+}
+
+/** Generate availability definitions (time-relative) */
+export function getAvailabilityDefinitions(): AvailabilityDef[] {
   const now = new Date();
   const baseHour = roundToHour(now);
 
@@ -26,65 +73,7 @@ export function getAvailabilityDefinitions(): {
     new Date(baseHour.getTime() + days * 24 * 60 * 60 * 1000);
 
   return [
-    {
-      username: 'ShadowMage',
-      start: hoursFromNow(-2),
-      end: hoursFromNow(4),
-      status: 'available',
-    },
-    {
-      username: 'DragonSlayer99',
-      start: hoursFromNow(-1),
-      end: hoursFromNow(6),
-      status: 'available',
-    },
-    {
-      username: 'HealzForDayz',
-      start: hoursFromNow(0),
-      end: hoursFromNow(3),
-      status: 'available',
-    },
-    {
-      username: 'TankMaster',
-      start: hoursFromNow(-3),
-      end: hoursFromNow(5),
-      status: 'available',
-    },
-    {
-      username: 'ProRaider',
-      start: hoursFromNow(1),
-      end: hoursFromNow(8),
-      status: 'available',
-    },
-    {
-      username: 'HealzForDayz',
-      start: hoursFromNow(3),
-      end: hoursFromNow(6),
-      status: 'blocked',
-    },
-    {
-      username: 'CasualCarl',
-      start: hoursFromNow(-1),
-      end: hoursFromNow(2),
-      status: 'blocked',
-    },
-    {
-      username: 'NightOwlGamer',
-      start: hoursFromNow(0),
-      end: hoursFromNow(4),
-      status: 'blocked',
-    },
-    {
-      username: 'DragonSlayer99',
-      start: daysFromNow(2),
-      end: daysFromNow(4),
-      status: 'blocked',
-    },
-    {
-      username: 'TankMaster',
-      start: daysFromNow(5),
-      end: daysFromNow(7),
-      status: 'blocked',
-    },
+    ...buildAvailableSlots(hoursFromNow),
+    ...buildBlockedSlots(hoursFromNow, daysFromNow),
   ];
 }

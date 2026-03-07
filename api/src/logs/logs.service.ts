@@ -145,59 +145,57 @@ export class LogsService {
     });
   }
 
-  /**
-   * Create a gzipped tar stream of multiple log files.
-   * Validates total size before starting.
-   */
-  createExportStream(filenames: string[]): Readable {
+  /** Validate filenames and check total size. */
+  private validateExportFiles(
+    filenames: string[],
+  ): { filepath: string; filename: string; size: number }[] {
     const validatedFiles: {
       filepath: string;
       filename: string;
       size: number;
     }[] = [];
     let totalSize = 0;
-
     for (const filename of filenames) {
       const filepath = this.getValidatedPath(filename);
       const stat = fs.statSync(filepath);
       totalSize += stat.size;
       validatedFiles.push({ filepath, filename, size: stat.size });
     }
-
     if (totalSize > MAX_ARCHIVE_BYTES) {
       throw new PayloadTooLargeException(
         `Total log size (${(totalSize / 1024 / 1024).toFixed(1)} MB) exceeds maximum of 100 MB`,
       );
     }
+    return validatedFiles;
+  }
 
-    // Build a minimal tar archive in memory, then gzip-stream it
+  /** Write tar entries for validated files into a passthrough stream. */
+  private writeTarEntries(
+    passthrough: PassThrough,
+    files: { filepath: string; filename: string }[],
+  ): void {
+    try {
+      for (const file of files) {
+        const content = fs.readFileSync(file.filepath, 'utf-8');
+        const scrubbed = Buffer.from(this.scrubContent(content), 'utf-8');
+        passthrough.write(this.createTarHeader(file.filename, scrubbed.length));
+        passthrough.write(scrubbed);
+        const padding = 512 - (scrubbed.length % 512);
+        if (padding < 512) passthrough.write(Buffer.alloc(padding));
+      }
+      passthrough.write(Buffer.alloc(1024));
+      passthrough.end();
+    } catch (err) {
+      passthrough.destroy(err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
+  /** Create a gzipped tar stream of multiple log files. */
+  createExportStream(filenames: string[]): Readable {
+    const validatedFiles = this.validateExportFiles(filenames);
     const passthrough = new PassThrough();
     const gzip = createGzip();
-
-    setImmediate(() => {
-      try {
-        for (const file of validatedFiles) {
-          const content = fs.readFileSync(file.filepath, 'utf-8');
-          const scrubbed = Buffer.from(this.scrubContent(content), 'utf-8');
-          const header = this.createTarHeader(file.filename, scrubbed.length);
-          passthrough.write(header);
-          passthrough.write(scrubbed);
-          // Tar entries are padded to 512-byte blocks
-          const padding = 512 - (scrubbed.length % 512);
-          if (padding < 512) {
-            passthrough.write(Buffer.alloc(padding));
-          }
-        }
-        // End-of-archive marker: two 512-byte zero blocks
-        passthrough.write(Buffer.alloc(1024));
-        passthrough.end();
-      } catch (err) {
-        passthrough.destroy(
-          err instanceof Error ? err : new Error(String(err)),
-        );
-      }
-    });
-
+    setImmediate(() => this.writeTarEntries(passthrough, validatedFiles));
     passthrough.pipe(gzip);
     return gzip;
   }

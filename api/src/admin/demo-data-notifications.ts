@@ -3,6 +3,121 @@
  * Extracted from demo-data.constants.ts for file size compliance.
  */
 
+type NotifEntry = {
+  userId: number;
+  type: string;
+  title: string;
+  message: string;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+  readAt: Date | null;
+};
+
+/** Helper to build a single notification entry. */
+function entry(
+  userId: number,
+  type: string,
+  title: string,
+  message: string,
+  payload: Record<string, unknown>,
+  createdAt: Date,
+  readAt: Date | null,
+): NotifEntry {
+  return { userId, type, title, message, payload, createdAt, readAt };
+}
+
+/** Build unread notification tuple definitions. */
+function unreadDefs(
+  events: { id: number; title: string }[],
+  fakeUsers: { username: string }[],
+): [string, string, string, Record<string, unknown>, number][] {
+  const e = (i: number, fb: string) => events[i]?.title || fb;
+  const u = fakeUsers[0]?.username || 'A player';
+  return [
+    [
+      'slot_vacated',
+      'Roster Slot Available',
+      `A Tank slot opened up in "${e(0, 'Raid Night')}" - claim it now!`,
+      { eventId: events[0]?.id, role: 'Tank', position: 1 },
+      2,
+    ],
+    [
+      'event_reminder',
+      'Event Starting Soon',
+      `"${e(1, 'Weekly Dungeon Run')}" starts in 24 hours. Don't forget to sign up!`,
+      { eventId: events[1]?.id },
+      5,
+    ],
+    [
+      'new_event',
+      'New Event Created',
+      `${u} created a new event: "${e(2, 'PvP Tournament')}"`,
+      { eventId: events[2]?.id },
+      12,
+    ],
+  ];
+}
+
+/** Build the unread notification entries. */
+function buildUnreadNotifications(
+  uid: number,
+  events: { id: number; title: string }[],
+  fakeUsers: { username: string }[],
+  hoursAgo: (h: number) => Date,
+): NotifEntry[] {
+  return unreadDefs(events, fakeUsers).map(([type, title, msg, payload, h]) =>
+    entry(uid, type, title, msg, payload, hoursAgo(h), null),
+  );
+}
+
+/** Build read notification tuple definitions. */
+function readDefs(
+  events: { id: number; title: string }[],
+  hoursAgo: (h: number) => Date,
+  daysAgo: (d: number) => Date,
+): [string, string, string, Record<string, unknown>, Date, Date][] {
+  const e = (i: number, fb: string) => events[i]?.title || fb;
+  return [
+    [
+      'subscribed_game',
+      'New Event for Your Favorite Game',
+      `A new Valheim event has been scheduled: "${e(3, 'Boss Rush')}"`,
+      { eventId: events[3]?.id, gameId: 'valheim' },
+      daysAgo(1),
+      hoursAgo(20),
+    ],
+    [
+      'slot_vacated',
+      'Healer Needed',
+      `A Healer slot is available in "${e(4, 'Mythic Raid')}"`,
+      { eventId: events[4]?.id, role: 'Healer', position: 2 },
+      daysAgo(2),
+      daysAgo(1),
+    ],
+    [
+      'event_reminder',
+      'Event Tomorrow',
+      `Don't forget about "${e(0, 'Raid Night')}" tomorrow at 8 PM`,
+      { eventId: events[0]?.id },
+      daysAgo(3),
+      daysAgo(2),
+    ],
+  ];
+}
+
+/** Build the read notification entries. */
+function buildReadNotifications(
+  uid: number,
+  events: { id: number; title: string }[],
+  hoursAgo: (h: number) => Date,
+  daysAgo: (d: number) => Date,
+): NotifEntry[] {
+  return readDefs(events, hoursAgo, daysAgo).map(
+    ([type, title, msg, payload, created, read]) =>
+      entry(uid, type, title, msg, payload, created, read),
+  );
+}
+
 /** Generate notification definitions (needs user/event IDs) */
 export function getNotificationTemplates(
   adminUserId: number,
@@ -16,59 +131,7 @@ export function getNotificationTemplates(
     new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
   return [
-    {
-      userId: adminUserId,
-      type: 'slot_vacated' as const,
-      title: 'Roster Slot Available',
-      message: `A Tank slot opened up in "${events[0]?.title || 'Raid Night'}" - claim it now!`,
-      payload: { eventId: events[0]?.id, role: 'Tank', position: 1 },
-      createdAt: hoursAgo(2),
-      readAt: null,
-    },
-    {
-      userId: adminUserId,
-      type: 'event_reminder' as const,
-      title: 'Event Starting Soon',
-      message: `"${events[1]?.title || 'Weekly Dungeon Run'}" starts in 24 hours. Don't forget to sign up!`,
-      payload: { eventId: events[1]?.id },
-      createdAt: hoursAgo(5),
-      readAt: null,
-    },
-    {
-      userId: adminUserId,
-      type: 'new_event' as const,
-      title: 'New Event Created',
-      message: `${fakeUsers[0]?.username || 'A player'} created a new event: "${events[2]?.title || 'PvP Tournament'}"`,
-      payload: { eventId: events[2]?.id },
-      createdAt: hoursAgo(12),
-      readAt: null,
-    },
-    {
-      userId: adminUserId,
-      type: 'subscribed_game' as const,
-      title: 'New Event for Your Favorite Game',
-      message: `A new Valheim event has been scheduled: "${events[3]?.title || 'Boss Rush'}"`,
-      payload: { eventId: events[3]?.id, gameId: 'valheim' },
-      createdAt: daysAgo(1),
-      readAt: hoursAgo(20),
-    },
-    {
-      userId: adminUserId,
-      type: 'slot_vacated' as const,
-      title: 'Healer Needed',
-      message: `A Healer slot is available in "${events[4]?.title || 'Mythic Raid'}"`,
-      payload: { eventId: events[4]?.id, role: 'Healer', position: 2 },
-      createdAt: daysAgo(2),
-      readAt: daysAgo(1),
-    },
-    {
-      userId: adminUserId,
-      type: 'event_reminder' as const,
-      title: 'Event Tomorrow',
-      message: `Don't forget about "${events[0]?.title || 'Raid Night'}" tomorrow at 8 PM`,
-      payload: { eventId: events[0]?.id },
-      createdAt: daysAgo(3),
-      readAt: daysAgo(2),
-    },
+    ...buildUnreadNotifications(adminUserId, events, fakeUsers, hoursAgo),
+    ...buildReadNotifications(adminUserId, events, hoursAgo, daysAgo),
   ];
 }

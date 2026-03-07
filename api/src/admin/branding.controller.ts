@@ -35,6 +35,55 @@ function getBrandingDir(): string {
     : path.join(process.cwd(), 'uploads', 'branding');
 }
 
+/** Build Multer storage configuration for logo upload. */
+function buildLogoStorage() {
+  return diskStorage({
+    destination: (
+      _req: unknown,
+      _file: unknown,
+      cb: (e: null, d: string) => void,
+    ) => {
+      const dir = getBrandingDir();
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (
+      _req: unknown,
+      file: Express.Multer.File,
+      cb: (e: null, f: string) => void,
+    ) => {
+      cb(null, `logo.${ALLOWED_TYPES[file.mimetype]?.ext || 'png'}`);
+    },
+  });
+}
+
+/** Filter uploaded files by MIME type. */
+function logoFileFilter(
+  _req: unknown,
+  file: Express.Multer.File,
+  cb: (e: Error | null, a: boolean) => void,
+) {
+  if (!ALLOWED_TYPES[file.mimetype]) {
+    cb(
+      new BadRequestException(
+        'Only PNG, JPEG, WebP, and SVG images are allowed',
+      ),
+      false,
+    );
+    return;
+  }
+  cb(null, true);
+}
+
+/** Build Multer options for logo upload. */
+function buildLogoMulterOptions() {
+  return {
+    storage: buildLogoStorage(),
+    limits: { fileSize: MAX_LOGO_SIZE },
+    fileFilter: logoFileFilter,
+  };
+}
+
 /**
  * Branding controller (ROK-271).
  * Manages community name, logo, and accent color.
@@ -92,75 +141,43 @@ export class BrandingController {
     return this.getBranding();
   }
 
-  /**
-   * Upload community logo.
-   * Admin-only endpoint with magic byte validation.
-   */
+  /** Upload community logo. Admin-only endpoint with magic byte validation. */
   @Post('logo')
   @UseGuards(AuthGuard('jwt'), AdminGuard)
-  @UseInterceptors(
-    FileInterceptor('logo', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = getBrandingDir();
-          fs.mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req, file, cb) => {
-          const typeInfo = ALLOWED_TYPES[file.mimetype];
-          const ext = typeInfo?.ext || 'png';
-          cb(null, `logo.${ext}`);
-        },
-      }),
-      limits: { fileSize: MAX_LOGO_SIZE },
-      fileFilter: (_req, file, cb) => {
-        if (!ALLOWED_TYPES[file.mimetype]) {
-          cb(
-            new BadRequestException(
-              'Only PNG, JPEG, WebP, and SVG images are allowed',
-            ),
-            false,
-          );
-          return;
-        }
-        cb(null, true);
-      },
-    }),
-  )
+  @UseInterceptors(FileInterceptor('logo', buildLogoMulterOptions()))
   async uploadLogo(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('No logo file provided');
-    }
+    if (!file) throw new BadRequestException('No logo file provided');
+    this.validateMagicBytes(file);
+    this.removeOldLogos(file.filename);
+    await this.settingsService.setCommunityLogoPath(file.path);
+    this.logger.log(`Community logo uploaded: ${file.filename}`);
+    return this.getBranding();
+  }
 
-    // Magic byte validation
+  /** Validate that the file's magic bytes match its declared MIME type. */
+  private validateMagicBytes(file: Express.Multer.File): void {
     const buffer = fs.readFileSync(file.path);
     const typeInfo = ALLOWED_TYPES[file.mimetype];
-    if (typeInfo) {
-      const magicMatch = typeInfo.magic.every((byte, i) => buffer[i] === byte);
-      if (!magicMatch) {
-        fs.unlinkSync(file.path);
-        throw new BadRequestException(
-          'File content does not match declared type',
-        );
-      }
+    if (!typeInfo) return;
+    const magicMatch = typeInfo.magic.every((byte, i) => buffer[i] === byte);
+    if (!magicMatch) {
+      fs.unlinkSync(file.path);
+      throw new BadRequestException(
+        'File content does not match declared type',
+      );
     }
+  }
 
-    // Remove old logo files with different extensions
+  /** Remove old logo files with different extensions. */
+  private removeOldLogos(currentFilename: string): void {
     const dir = getBrandingDir();
-    const currentExt = path.extname(file.filename);
+    const currentExt = path.extname(currentFilename);
     for (const { ext } of Object.values(ALLOWED_TYPES)) {
       if (`.${ext}` !== currentExt) {
         const oldPath = path.join(dir, `logo.${ext}`);
-        if (fs.existsSync(oldPath)) {
-          fs.unlinkSync(oldPath);
-        }
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
     }
-
-    await this.settingsService.setCommunityLogoPath(file.path);
-    this.logger.log(`Community logo uploaded: ${file.filename}`);
-
-    return this.getBranding();
   }
 
   /**

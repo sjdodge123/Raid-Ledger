@@ -42,67 +42,73 @@ export class PostEventReminderService {
   async handlePostEventReminders(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'PostEventReminderService_handlePostEventReminders',
-      async () => {
-        if (!this.clientService.isConnected()) {
-          return;
-        }
-
-        this.logger.debug('Running post-event PUG reminder check...');
-
-        // Find qualifying PUG slots: events ended 14-16 minutes ago,
-        // PUG status is accepted/claimed, user hasn't completed onboarding,
-        // and no reminder has been sent yet.
-        const qualifyingPugs = await this.db.execute<{
-          pug_slot_id: string;
-          event_id: number;
-          event_title: string;
-          discord_user_id: string | null;
-          claimed_by_user_id: number | null;
-          user_discord_id: string | null;
-          username: string | null;
-        }>(sql`
-          SELECT
-            ps.id AS pug_slot_id,
-            ps.event_id,
-            e.title AS event_title,
-            ps.discord_user_id,
-            ps.claimed_by_user_id,
-            u.discord_id AS user_discord_id,
-            u.username
-          FROM pug_slots ps
-          JOIN events e ON e.id = ps.event_id
-          LEFT JOIN users u ON u.id = ps.claimed_by_user_id
-          WHERE upper(e.duration) BETWEEN (now() - interval '16 minutes') AND (now() - interval '14 minutes')
-            AND ps.status IN ('accepted', 'claimed')
-            AND e.cancelled_at IS NULL
-            AND (u.onboarding_completed_at IS NULL OR ps.claimed_by_user_id IS NULL)
-            AND ps.id NOT IN (
-              SELECT pug_slot_id FROM post_event_reminders_sent
-            )
-        `);
-
-        if (qualifyingPugs.length === 0) {
-          return;
-        }
-
-        this.logger.log(
-          `Found ${qualifyingPugs.length} qualifying PUGs for post-event reminder`,
-        );
-
-        const clientUrl = await this.settingsService.getClientUrl();
-        const branding = await this.settingsService.getBranding();
-        const communityName = branding.communityName || 'Raid Ledger';
-
-        for (const pug of qualifyingPugs) {
-          await this.sendPostEventReminder(pug, clientUrl, communityName);
-        }
-      },
+      () => this.processPostEventReminders(),
     );
   }
 
-  /**
-   * Send a post-event onboarding reminder DM to a single PUG.
-   */
+  /** Core logic for post-event PUG reminder processing. */
+  private async processPostEventReminders(): Promise<void> {
+    if (!this.clientService.isConnected()) return;
+    this.logger.debug('Running post-event PUG reminder check...');
+
+    const qualifyingPugs = await this.findQualifyingPugs();
+    if (qualifyingPugs.length === 0) return;
+
+    this.logger.log(
+      `Found ${qualifyingPugs.length} qualifying PUGs for post-event reminder`,
+    );
+    const clientUrl = await this.settingsService.getClientUrl();
+    const branding = await this.settingsService.getBranding();
+    const communityName = branding.communityName || 'Raid Ledger';
+
+    for (const pug of qualifyingPugs) {
+      await this.sendPostEventReminder(pug, clientUrl, communityName);
+    }
+  }
+
+  /** Find qualifying PUG slots for post-event reminders. */
+  private async findQualifyingPugs() {
+    return this.db.execute<{
+      pug_slot_id: string;
+      event_id: number;
+      event_title: string;
+      discord_user_id: string | null;
+      claimed_by_user_id: number | null;
+      user_discord_id: string | null;
+      username: string | null;
+    }>(sql`
+      SELECT ps.id AS pug_slot_id, ps.event_id, e.title AS event_title,
+        ps.discord_user_id, ps.claimed_by_user_id, u.discord_id AS user_discord_id, u.username
+      FROM pug_slots ps
+      JOIN events e ON e.id = ps.event_id
+      LEFT JOIN users u ON u.id = ps.claimed_by_user_id
+      WHERE upper(e.duration) BETWEEN (now() - interval '16 minutes') AND (now() - interval '14 minutes')
+        AND ps.status IN ('accepted', 'claimed') AND e.cancelled_at IS NULL
+        AND (u.onboarding_completed_at IS NULL OR ps.claimed_by_user_id IS NULL)
+        AND ps.id NOT IN (SELECT pug_slot_id FROM post_event_reminders_sent)
+    `);
+  }
+
+  /** Resolve a usable Discord ID for a PUG, or null if invalid. */
+  private resolvePugDiscordId(pug: {
+    pug_slot_id: string;
+    user_discord_id: string | null;
+    discord_user_id: string | null;
+  }): string | null {
+    const discordId = pug.user_discord_id || pug.discord_user_id;
+    if (!discordId) {
+      this.logger.debug(
+        'No Discord ID for PUG slot %s, skipping',
+        pug.pug_slot_id,
+      );
+      return null;
+    }
+    if (discordId.startsWith('local:') || discordId.startsWith('unlinked:'))
+      return null;
+    return discordId;
+  }
+
+  /** Send a post-event onboarding reminder DM to a single PUG. */
   private async sendPostEventReminder(
     pug: {
       pug_slot_id: string;
@@ -116,29 +122,26 @@ export class PostEventReminderService {
     clientUrl: string | null,
     communityName: string,
   ): Promise<void> {
-    // Determine the Discord ID to DM — prefer the linked user's ID,
-    // fall back to the PUG slot's Discord user ID
-    const discordId = pug.user_discord_id || pug.discord_user_id;
-    if (!discordId) {
-      this.logger.debug(
-        'No Discord ID for PUG slot %s, skipping',
-        pug.pug_slot_id,
-      );
-      return;
-    }
+    const discordId = this.resolvePugDiscordId(pug);
+    if (!discordId) return;
+    if (!(await this.trackReminderSent(pug))) return;
+    const embed = await this.buildPostEventEmbed(
+      pug,
+      discordId,
+      clientUrl,
+      communityName,
+    );
+    await this.sendPostEventDM(discordId, embed, pug);
+  }
 
-    // Skip users with local-only or unlinked Discord IDs
-    if (discordId.startsWith('local:') || discordId.startsWith('unlinked:')) {
-      return;
-    }
-
-    // Record that we're sending this reminder (idempotent via unique constraint)
-    const trackResult = await this.db
+  /** Insert dedup record for post-event reminder. Returns true if first send. */
+  private async trackReminderSent(pug: {
+    event_id: number;
+    pug_slot_id: string;
+  }): Promise<boolean> {
+    const result = await this.db
       .insert(schema.postEventRemindersSent)
-      .values({
-        eventId: pug.event_id,
-        pugSlotId: pug.pug_slot_id,
-      })
+      .values({ eventId: pug.event_id, pugSlotId: pug.pug_slot_id })
       .onConflictDoNothing({
         target: [
           schema.postEventRemindersSent.eventId,
@@ -146,52 +149,64 @@ export class PostEventReminderService {
         ],
       })
       .returning();
+    return result.length > 0;
+  }
 
-    if (trackResult.length === 0) {
-      // Already sent
-      return;
-    }
-
-    // Check if user is in the Discord server
-    const isInServer = await this.clientService.isGuildMember(discordId);
-
-    // Build DM content
+  /** Build the post-event reminder embed with optional invite link. */
+  private async buildPostEventEmbed(
+    pug: { event_id: number; event_title: string; username: string | null },
+    discordId: string,
+    clientUrl: string | null,
+    communityName: string,
+  ): Promise<EmbedBuilder> {
     const displayName = pug.username || 'there';
     const onboardingUrl = clientUrl ? `${clientUrl}/onboarding?rerun=1` : null;
-
-    const descriptionLines = [
+    const lines = [
       `Hey **${displayName}**! Thanks for joining **${pug.event_title}**`,
       '',
     ];
-
-    if (onboardingUrl) {
-      descriptionLines.push(
+    if (onboardingUrl)
+      lines.push(
         "Finish setting up your Raid Ledger profile so you're ready for the next one:",
         `[Complete your setup](${onboardingUrl})`,
       );
-    }
-
-    // Add Discord server invite if not already in server
-    if (!isInServer) {
-      const inviteUrl = await this.pugInviteService.generateServerInvite(
-        pug.event_id,
-      );
-      if (inviteUrl) {
-        descriptionLines.push(
-          '',
-          `Join the **${communityName}** Discord to stay in the loop:`,
-          inviteUrl,
-        );
-      }
-    }
-
-    const embed = new EmbedBuilder()
+    await this.appendServerInvite(
+      lines,
+      discordId,
+      pug.event_id,
+      communityName,
+    );
+    return new EmbedBuilder()
       .setColor(EMBED_COLORS.PUG_INVITE)
       .setTitle('Thanks for joining!')
-      .setDescription(descriptionLines.join('\n'))
+      .setDescription(lines.join('\n'))
       .setFooter({ text: communityName })
       .setTimestamp();
+  }
 
+  /** Append server invite link if user is not in the guild. */
+  private async appendServerInvite(
+    lines: string[],
+    discordId: string,
+    eventId: number,
+    communityName: string,
+  ): Promise<void> {
+    if (await this.clientService.isGuildMember(discordId)) return;
+    const inviteUrl = await this.pugInviteService.generateServerInvite(eventId);
+    if (inviteUrl)
+      lines.push(
+        '',
+        `Join the **${communityName}** Discord to stay in the loop:`,
+        inviteUrl,
+      );
+  }
+
+  /** Send the embed DM with error handling. */
+  private async sendPostEventDM(
+    discordId: string,
+    embed: EmbedBuilder,
+    pug: { event_id: number; pug_slot_id: string },
+  ): Promise<void> {
     try {
       await this.clientService.sendEmbedDM(discordId, embed);
       this.logger.log(
