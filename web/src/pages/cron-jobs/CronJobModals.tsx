@@ -32,28 +32,35 @@ export function ExecutionHistoryModal({
                 className="bg-panel border border-edge rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-edge/50">
-                    <div>
-                        <h3 className="text-lg font-semibold text-foreground">Execution History</h3>
-                        <p className="text-sm text-muted mt-0.5">{job.description || job.name}</p>
-                    </div>
-                    <button onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">
-                        &#10005;
-                    </button>
-                </div>
-
-                {/* Body */}
-                <div className="overflow-y-auto max-h-[60vh] p-4">
-                    {isLoading && <p className="text-muted text-sm text-center py-8">Loading...</p>}
-                    {!isLoading && (!executions || executions.length === 0) && (
-                        <p className="text-muted text-sm text-center py-8">No executions recorded yet.</p>
-                    )}
-                    {executions && executions.length > 0 && (
-                        <ExecutionTable executions={executions} tz={tz} />
-                    )}
-                </div>
+                <ExecutionHistoryHeader job={job} onClose={onClose} />
+                <ExecutionHistoryBody executions={executions} isLoading={isLoading} tz={tz} />
             </div>
+        </div>
+    );
+}
+
+function ExecutionHistoryHeader({ job, onClose }: { job: CronJobDto; onClose: () => void }): JSX.Element {
+    return (
+        <div className="flex items-center justify-between px-6 py-4 border-b border-edge/50">
+            <div>
+                <h3 className="text-lg font-semibold text-foreground">Execution History</h3>
+                <p className="text-sm text-muted mt-0.5">{job.description || job.name}</p>
+            </div>
+            <button onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">&#10005;</button>
+        </div>
+    );
+}
+
+function ExecutionHistoryBody({ executions, isLoading, tz }: {
+    executions: CronJobExecutionDto[] | undefined; isLoading: boolean; tz: string;
+}): JSX.Element {
+    return (
+        <div className="overflow-y-auto max-h-[60vh] p-4">
+            {isLoading && <p className="text-muted text-sm text-center py-8">Loading...</p>}
+            {!isLoading && (!executions || executions.length === 0) && (
+                <p className="text-muted text-sm text-center py-8">No executions recorded yet.</p>
+            )}
+            {executions && executions.length > 0 && <ExecutionTable executions={executions} tz={tz} />}
         </div>
     );
 }
@@ -102,36 +109,28 @@ export function EditScheduleModal({
     const [selectedExpression, setSelectedExpression] = useState(
         INTERVAL_PRESETS.some(p => p.value === normalizedExpression) ? normalizedExpression : job.cronExpression,
     );
-
-    const isCustomExpression = !INTERVAL_PRESETS.some(
-        (preset) => preset.value === normalizedExpression,
-    );
+    const isCustomExpression = !INTERVAL_PRESETS.some((preset) => preset.value === normalizedExpression);
 
     const handleSave = (): void => {
-        updateSchedule.mutate(
-            { id: job.id, cronExpression: selectedExpression },
-            { onSuccess: () => onClose() },
-        );
+        updateSchedule.mutate({ id: job.id, cronExpression: selectedExpression }, { onSuccess: () => onClose() });
     };
 
     return (
+        <EditScheduleOverlay onClose={onClose}>
+            <EditScheduleHeader job={job} onClose={onClose} />
+            <EditScheduleBody job={job} tz={tz} selectedExpression={selectedExpression}
+                isCustomExpression={isCustomExpression} normalizedExpression={normalizedExpression}
+                onExpressionChange={setSelectedExpression} onSave={handleSave}
+                onClose={onClose} isSaving={updateSchedule.isPending} />
+        </EditScheduleOverlay>
+    );
+}
+
+function EditScheduleOverlay({ onClose, children }: { onClose: () => void; children: React.ReactNode }): JSX.Element {
+    return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div
-                className="bg-panel border border-edge rounded-xl shadow-xl w-full max-w-md"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <EditScheduleHeader job={job} onClose={onClose} />
-                <EditScheduleBody
-                    job={job}
-                    tz={tz}
-                    selectedExpression={selectedExpression}
-                    isCustomExpression={isCustomExpression}
-                    normalizedExpression={normalizedExpression}
-                    onExpressionChange={setSelectedExpression}
-                    onSave={handleSave}
-                    onClose={onClose}
-                    isSaving={updateSchedule.isPending}
-                />
+            <div className="bg-panel border border-edge rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                {children}
             </div>
         </div>
     );
@@ -157,75 +156,75 @@ function EditScheduleBody({
     job, tz, selectedExpression, isCustomExpression, normalizedExpression,
     onExpressionChange, onSave, onClose, isSaving,
 }: {
-    job: CronJobDto;
-    tz: string;
-    selectedExpression: string;
-    isCustomExpression: boolean;
-    normalizedExpression: string;
-    onExpressionChange: (expr: string) => void;
-    onSave: () => void;
-    onClose: () => void;
-    isSaving: boolean;
+    job: CronJobDto; tz: string; selectedExpression: string; isCustomExpression: boolean;
+    normalizedExpression: string; onExpressionChange: (expr: string) => void;
+    onSave: () => void; onClose: () => void; isSaving: boolean;
 }): JSX.Element {
     return (
         <div className="p-6 space-y-4">
-            {job.description && (
-                <p className="text-sm text-muted -mt-1">{job.description}</p>
-            )}
+            {job.description && <p className="text-sm text-muted -mt-1">{job.description}</p>}
+            <RunTimesGrid job={job} tz={tz} />
+            <IntervalSelector selectedExpression={selectedExpression} onExpressionChange={onExpressionChange}
+                isCustomExpression={isCustomExpression} jobExpression={job.cronExpression} />
+            <ScheduleRevertWarning />
+            <ScheduleActions onClose={onClose} onSave={onSave} isSaving={isSaving}
+                disabled={selectedExpression === job.cronExpression || selectedExpression === normalizedExpression} />
+        </div>
+    );
+}
 
-            <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                    <span className="block text-xs text-muted mb-0.5">Last Run</span>
-                    <span className="text-foreground">{formatTimestamp(job.lastRunAt, tz)}</span>
-                </div>
-                <div>
-                    <span className="block text-xs text-muted mb-0.5">Next Run</span>
-                    <span className="text-foreground">{formatTimestamp(job.nextRunAt, tz)}</span>
-                </div>
-            </div>
-
+function RunTimesGrid({ job, tz }: { job: CronJobDto; tz: string }): JSX.Element {
+    return (
+        <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Interval</label>
-                <select
-                    value={selectedExpression}
-                    onChange={(e) => onExpressionChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-surface border border-edge rounded-lg text-foreground text-sm focus:ring-2 focus:ring-accent/50 focus:border-accent"
-                >
-                    {isCustomExpression && (
-                        <option value={job.cronExpression}>
-                            {getCronLabel(job.cronExpression)}
-                        </option>
-                    )}
-                    {INTERVAL_PRESETS.map((preset) => (
-                        <option key={preset.value} value={preset.value}>
-                            {preset.label}
-                        </option>
-                    ))}
-                </select>
+                <span className="block text-xs text-muted mb-0.5">Last Run</span>
+                <span className="text-foreground">{formatTimestamp(job.lastRunAt, tz)}</span>
             </div>
+            <div>
+                <span className="block text-xs text-muted mb-0.5">Next Run</span>
+                <span className="text-foreground">{formatTimestamp(job.nextRunAt, tz)}</span>
+            </div>
+        </div>
+    );
+}
 
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                <p className="text-xs text-yellow-400">
-                    Schedule changes take effect immediately but will revert to the
-                    original @Cron decorator schedule on application restart.
-                </p>
-            </div>
+function IntervalSelector({ selectedExpression, onExpressionChange, isCustomExpression, jobExpression }: {
+    selectedExpression: string; onExpressionChange: (expr: string) => void;
+    isCustomExpression: boolean; jobExpression: string;
+}): JSX.Element {
+    return (
+        <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Interval</label>
+            <select value={selectedExpression} onChange={(e) => onExpressionChange(e.target.value)}
+                className="w-full px-3 py-2 bg-surface border border-edge rounded-lg text-foreground text-sm focus:ring-2 focus:ring-accent/50 focus:border-accent">
+                {isCustomExpression && <option value={jobExpression}>{getCronLabel(jobExpression)}</option>}
+                {INTERVAL_PRESETS.map((preset) => (<option key={preset.value} value={preset.value}>{preset.label}</option>))}
+            </select>
+        </div>
+    );
+}
 
-            <div className="flex justify-end gap-3">
-                <button
-                    onClick={onClose}
-                    className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors"
-                >
-                    Cancel
-                </button>
-                <button
-                    onClick={onSave}
-                    disabled={isSaving || selectedExpression === job.cronExpression || selectedExpression === normalizedExpression}
-                    className="px-4 py-2 text-sm font-medium bg-accent hover:bg-accent/80 rounded-lg text-white transition-colors disabled:opacity-50"
-                >
-                    {isSaving ? 'Saving...' : 'Save'}
-                </button>
-            </div>
+function ScheduleRevertWarning(): JSX.Element {
+    return (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+            <p className="text-xs text-yellow-400">
+                Schedule changes take effect immediately but will revert to the original @Cron decorator schedule on application restart.
+            </p>
+        </div>
+    );
+}
+
+function ScheduleActions({ onClose, onSave, isSaving, disabled }: {
+    onClose: () => void; onSave: () => void; isSaving: boolean; disabled: boolean;
+}): JSX.Element {
+    return (
+        <div className="flex justify-end gap-3">
+            <button onClick={onClose}
+                className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors">Cancel</button>
+            <button onClick={onSave} disabled={isSaving || disabled}
+                className="px-4 py-2 text-sm font-medium bg-accent hover:bg-accent/80 rounded-lg text-white transition-colors disabled:opacity-50">
+                {isSaving ? 'Saving...' : 'Save'}
+            </button>
         </div>
     );
 }

@@ -22,39 +22,51 @@ export function GameDetailPage(): JSX.Element {
     const { data: game, isLoading, error } = useGameDetail(gameId);
     const { data: streamsData } = useGameStreams(gameId);
     const { isAuthenticated } = useAuth();
-    const { wantToPlay, count, source, players, toggle, isToggling } = useWantToPlay(
-        isAuthenticated ? gameId : undefined,
-    );
+    const wtp = useWantToPlay(isAuthenticated ? gameId : undefined);
 
     const igdbId = game?.igdbId;
     const { data: eventsData } = useEvents(
         igdbId ? { upcoming: true, gameId: String(igdbId), limit: 4 } : undefined,
     );
-    const gameEvents = eventsData?.data;
 
-    if (isLoading) {
-        return (
-            <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse">
-                <div className="h-64 bg-overlay rounded-xl mb-8" />
-                <div className="h-8 bg-overlay rounded w-1/3 mb-4" />
-                <div className="h-4 bg-overlay rounded w-2/3 mb-2" />
-                <div className="h-4 bg-overlay rounded w-1/2" />
+    if (isLoading) return <GameDetailLoading />;
+    if (error || !game) return <GameNotFound />;
+
+    return (
+        <GameDetailContent game={game} gameId={gameId} navigate={navigate}
+            streamsData={streamsData} isAuthenticated={isAuthenticated}
+            wtp={wtp} gameEvents={eventsData?.data} igdbId={igdbId} />
+    );
+}
+
+function GameDetailLoading(): JSX.Element {
+    return (
+        <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse">
+            <div className="h-64 bg-overlay rounded-xl mb-8" />
+            <div className="h-8 bg-overlay rounded w-1/3 mb-4" />
+            <div className="h-4 bg-overlay rounded w-2/3 mb-2" />
+            <div className="h-4 bg-overlay rounded w-1/2" />
+        </div>
+    );
+}
+
+function GameNotFound(): JSX.Element {
+    return (
+        <div className="max-w-5xl mx-auto px-4 py-8">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-red-400">Game Not Found</h2>
+                <p className="text-muted mt-2">This game could not be found.</p>
+                <Link to="/games" className="mt-4 inline-block text-emerald-400 hover:text-emerald-300">Back to Games</Link>
             </div>
-        );
-    }
+        </div>
+    );
+}
 
-    if (error || !game) {
-        return (
-            <div className="max-w-5xl mx-auto px-4 py-8">
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6">
-                    <h2 className="text-xl font-semibold text-red-400">Game Not Found</h2>
-                    <p className="text-muted mt-2">This game could not be found.</p>
-                    <Link to="/games" className="mt-4 inline-block text-emerald-400 hover:text-emerald-300">Back to Games</Link>
-                </div>
-            </div>
-        );
-    }
-
+function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticated, wtp, gameEvents, igdbId }: {
+    game: NonNullable<ReturnType<typeof useGameDetail>['data']>; gameId: number | undefined; navigate: NavigateFunction;
+    streamsData: ReturnType<typeof useGameStreams>['data']; isAuthenticated: boolean;
+    wtp: ReturnType<typeof useWantToPlay>; gameEvents: EventResponseDto[] | undefined; igdbId: number | null | undefined;
+}): JSX.Element {
     const rating = game.aggregatedRating ?? game.rating;
     const genres = game.genres.map((id) => GENRE_MAP[id]).filter(Boolean);
     const platforms = game.platforms.map((id) => PLATFORM_MAP[id]).filter(Boolean);
@@ -65,10 +77,21 @@ export function GameDetailPage(): JSX.Element {
             <BackButton navigate={navigate} />
             <GameBanner game={game} rating={rating} genres={genres} platforms={platforms} modes={modes} />
             {isAuthenticated && (
-                <WantToPlaySection wantToPlay={wantToPlay} count={count} source={source} players={players} toggle={toggle} isToggling={isToggling} gameId={gameId} />
+                <WantToPlaySection wantToPlay={wtp.wantToPlay} count={wtp.count} source={wtp.source} players={wtp.players} toggle={wtp.toggle} isToggling={wtp.isToggling} gameId={gameId} />
             )}
             {gameId && <CommunityActivitySection gameId={gameId} />}
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
+            <GameMediaSections game={game} streamsData={streamsData} />
+        </div>
+    );
+}
+
+function GameMediaSections({ game, streamsData }: {
+    game: { screenshots: { url: string }[]; videos: { videoId: string; name?: string }[]; name: string };
+    streamsData: ReturnType<typeof useGameStreams>['data'];
+}): JSX.Element {
+    return (
+        <>
             {game.screenshots.length > 0 && (
                 <section className="mb-8">
                     <h2 className="text-lg font-semibold text-foreground mb-3">Screenshots</h2>
@@ -79,7 +102,7 @@ export function GameDetailPage(): JSX.Element {
                 <section className="mb-8"><TwitchStreamEmbed streams={streamsData.streams} totalLive={streamsData.totalLive} /></section>
             )}
             {game.videos.length > 0 && <TrailersSection videos={game.videos} />}
-        </div>
+        </>
     );
 }
 

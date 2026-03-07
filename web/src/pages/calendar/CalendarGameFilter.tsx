@@ -109,22 +109,35 @@ export function CalendarGameFilterModal({
             <input type="text" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} placeholder="Search games..."
                 className="w-full px-3 py-2 mb-3 rounded-lg bg-base border border-edge text-sm text-foreground placeholder:text-muted focus:outline-none focus:border-emerald-500 transition-colors"
                 ref={(el) => el?.focus()} />
-            <div className="game-filter-list" style={{ maxHeight: '320px', overflowY: 'auto' }}>
-                {filteredModalGames.map((game) => {
-                    const isSelected = selectedGames.has(game.slug);
-                    const colors = getGameColors(game.slug);
-                    return (
-                        <label key={game.slug} className={`game-filter-item ${isSelected ? 'selected' : ''}`}
-                            style={{ '--game-color': colors.bg, '--game-border': colors.border } as React.CSSProperties}>
-                            <input type="checkbox" checked={isSelected} onChange={() => toggleGame(game.slug)} className="game-filter-checkbox" />
-                            <div className="game-filter-icon">
-                                {game.coverUrl ? (<img src={game.coverUrl} alt={game.name} className="game-filter-cover" />) : (<span className="game-filter-emoji">{colors.icon}</span>)}
-                            </div>
-                            <span className="game-filter-name">{game.name}</span>
-                        </label>
-                    );
-                })}
-            </div>
+            <ModalGameList games={filteredModalGames} selectedGames={selectedGames} toggleGame={toggleGame} />
         </Modal>
+    );
+}
+
+function ModalGameList({ games, selectedGames, toggleGame }: {
+    games: GameInfo[]; selectedGames: Set<string>; toggleGame: (slug: string) => void;
+}): JSX.Element {
+    return (
+        <div className="game-filter-list" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+            {games.map((game) => (
+                <ModalGameItem key={game.slug} game={game} isSelected={selectedGames.has(game.slug)} onToggle={() => toggleGame(game.slug)} />
+            ))}
+        </div>
+    );
+}
+
+function ModalGameItem({ game, isSelected, onToggle }: {
+    game: GameInfo; isSelected: boolean; onToggle: () => void;
+}): JSX.Element {
+    const colors = getGameColors(game.slug);
+    return (
+        <label className={`game-filter-item ${isSelected ? 'selected' : ''}`}
+            style={{ '--game-color': colors.bg, '--game-border': colors.border } as React.CSSProperties}>
+            <input type="checkbox" checked={isSelected} onChange={onToggle} className="game-filter-checkbox" />
+            <div className="game-filter-icon">
+                {game.coverUrl ? (<img src={game.coverUrl} alt={game.name} className="game-filter-cover" />) : (<span className="game-filter-emoji">{colors.icon}</span>)}
+            </div>
+            <span className="game-filter-name">{game.name}</span>
+        </label>
     );
 }
