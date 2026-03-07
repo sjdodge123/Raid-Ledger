@@ -12,11 +12,11 @@ jest.mock('node:child_process');
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockChildProcess = childProcess as jest.Mocked<typeof childProcess>;
 
-describe('BackupService', () => {
+function describeBackupService() {
   let service: BackupService;
   let mockCronJobService: { executeWithTracking: jest.Mock };
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     mockCronJobService = {
       executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) =>
         fn(),
@@ -75,7 +75,8 @@ describe('BackupService', () => {
     }).compile();
 
     service = module.get<BackupService>(BackupService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   describe('onModuleInit', () => {
     it('should create backup directories', () => {
@@ -101,7 +102,7 @@ describe('BackupService', () => {
     });
   });
 
-  describe('rotateDailyBackups', () => {
+  function describeRotateDailyBackups() {
     beforeEach(() => {
       jest.clearAllMocks();
     });
@@ -136,7 +137,8 @@ describe('BackupService', () => {
       expect(removed).toBe(0);
       expect(mockFs.unlinkSync).not.toHaveBeenCalled();
     });
-  });
+  }
+  describe('rotateDailyBackups', () => describeRotateDailyBackups());
 
   describe('listBackups', () => {
     it('should list .dump files from both directories sorted newest first', () => {
@@ -189,8 +191,8 @@ describe('BackupService', () => {
     });
   });
 
-  describe('resetInstance', () => {
-    it('should create a safety backup, drop schemas, run migrations, and return password', async () => {
+  function describeResetInstance() {
+    async function testCreateASafetyBackupDropSchemasRunMigrationsAndRe() {
       (mockFs.statSync as jest.Mock).mockReturnValue({
         size: 1024,
         birthtime: new Date(),
@@ -233,8 +235,11 @@ describe('BackupService', () => {
           expect.stringContaining('DROP SCHEMA public CASCADE'),
         ]),
       );
-    });
-  });
+    }
+    it('should create a safety backup, drop schemas, run migrations, and return password', () =>
+      testCreateASafetyBackupDropSchemasRunMigrationsAndRe());
+  }
+  describe('resetInstance', () => describeResetInstance());
 
   describe('restoreFromBackup', () => {
     it('should reject path traversal attempts', async () => {
@@ -271,4 +276,5 @@ describe('BackupService', () => {
       );
     });
   });
-});
+}
+describe('BackupService', () => describeBackupService());

@@ -23,7 +23,7 @@ const mockSettingsService = {
   get: jest.fn().mockResolvedValue(null),
 };
 
-describe('EnvironmentSnapshotService', () => {
+function describeEnvironmentSnapshotService() {
   let service: EnvironmentSnapshotService;
   let addEventProcessorMock: jest.MockedFunction<
     typeof Sentry.addEventProcessor
@@ -61,7 +61,7 @@ describe('EnvironmentSnapshotService', () => {
     expect(service.getCachedSnapshot()).toBeNull();
   });
 
-  describe('collectSnapshot', () => {
+  function describeCollectSnapshot() {
     it('collects integration status from SettingsService', async () => {
       const snapshot = await service.collectSnapshot();
 
@@ -191,7 +191,8 @@ describe('EnvironmentSnapshotService', () => {
       // DB should only have been called once
       expect(mockDb.execute).toHaveBeenCalledTimes(1);
     });
-  });
+  }
+  describe('collectSnapshot', () => describeCollectSnapshot());
 
   describe('Sentry event processor', () => {
     it('attaches snapshot contexts to Sentry events', async () => {
@@ -235,7 +236,7 @@ describe('EnvironmentSnapshotService', () => {
     });
   });
 
-  describe('migration history edge cases', () => {
+  function describeMigrationHistoryEdgeCases() {
     it('handles empty migration result', async () => {
       mockDb.execute.mockResolvedValueOnce([]);
 
@@ -285,5 +286,9 @@ describe('EnvironmentSnapshotService', () => {
         expect.any(Error),
       );
     });
-  });
-});
+  }
+  describe('migration history edge cases', () =>
+    describeMigrationHistoryEdgeCases());
+}
+describe('EnvironmentSnapshotService', () =>
+  describeEnvironmentSnapshotService());

@@ -14,7 +14,7 @@ const mockRedis = {
   ping: jest.fn().mockResolvedValue('PONG'),
 };
 
-describe('AppController', () => {
+function describeAppController() {
   let appController: AppController;
 
   beforeEach(async () => {
@@ -42,7 +42,7 @@ describe('AppController', () => {
     });
   });
 
-  describe('health', () => {
+  function describeHealth() {
     it('should return healthy status when database and redis are connected', async () => {
       const mockRes = {
         status: jest.fn().mockReturnThis(),
@@ -188,5 +188,7 @@ describe('AppController', () => {
         }),
       );
     });
-  });
-});
+  }
+  describe('health', () => describeHealth());
+}
+describe('AppController', () => describeAppController());

@@ -33,7 +33,7 @@ function mockTxSelectDualCall(claimRows: unknown[], countRows: unknown[]) {
   return fn;
 }
 
-describe('CharactersService — crud', () => {
+function describeCharactersServiceCrud() {
   let service: CharactersService;
   let mockDb: Record<string, jest.Mock>;
   let mockPluginRegistry: {
@@ -86,7 +86,7 @@ describe('CharactersService — crud', () => {
     displayOrder: 1,
   };
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     mockDb = {
       select: jest.fn(),
       insert: jest.fn(),
@@ -177,7 +177,8 @@ describe('CharactersService — crud', () => {
     }).compile();
 
     service = module.get<CharactersService>(CharactersService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   describe('findAllForUser', () => {
     it('should return all characters for a user', async () => {
@@ -230,7 +231,7 @@ describe('CharactersService — crud', () => {
     });
   });
 
-  describe('create', () => {
+  function describeCreate() {
     it('should create a character (existing characters for game)', async () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
@@ -273,7 +274,7 @@ describe('CharactersService — crud', () => {
       await expect(service.create(1, dto)).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw ConflictException on duplicate character', async () => {
+    async function testThrowConflictExceptionOnDuplicateCharacter() {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
@@ -306,10 +307,12 @@ describe('CharactersService — crud', () => {
       };
 
       await expect(service.create(1, dto)).rejects.toThrow(ConflictException);
-    });
+    }
+    it('should throw ConflictException on duplicate character', () =>
+      testThrowConflictExceptionOnDuplicateCharacter());
 
     // ROK-206: First character for a game is automatically set as main
-    it('should auto-promote first character for a game to main', async () => {
+    async function testAutoPromoteFirstCharacterForAGameToMain() {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
@@ -350,10 +353,12 @@ describe('CharactersService — crud', () => {
       expect(insertCall).toHaveBeenCalledWith(
         expect.objectContaining({ isMain: true }),
       );
-    });
+    }
+    it('should auto-promote first character for a game to main', () =>
+      testAutoPromoteFirstCharacterForAGameToMain());
 
     // ROK-206: Second character without isMain should NOT become main
-    it('should not auto-main second character when isMain is not set', async () => {
+    async function testNotAutoMainSecondCharacterWhenIsMainIsNotSet() {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
@@ -394,9 +399,11 @@ describe('CharactersService — crud', () => {
       expect(insertCall).toHaveBeenCalledWith(
         expect.objectContaining({ isMain: false }),
       );
-    });
+    }
+    it('should not auto-main second character when isMain is not set', () =>
+      testNotAutoMainSecondCharacterWhenIsMainIsNotSet());
 
-    it('should demote existing main when creating new main character', async () => {
+    async function testDemoteExistingMainWhenCreatingNewMainCharacter() {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
@@ -438,10 +445,12 @@ describe('CharactersService — crud', () => {
       const result = await service.create(1, dto);
       expect(result.isMain).toBe(true);
       expect(txUpdateMock).toHaveBeenCalled();
-    });
+    }
+    it('should demote existing main when creating new main character', () =>
+      testDemoteExistingMainWhenCreatingNewMainCharacter());
 
     // ROK-206: Creating new main with multiple existing chars swaps atomically
-    it('should demote existing main and create new main in a single transaction', async () => {
+    async function testDemoteExistingMainAndCreateNewMainInASingleTransac() {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
@@ -500,7 +509,9 @@ describe('CharactersService — crud', () => {
       expect(insertCall).toHaveBeenCalledWith(
         expect.objectContaining({ isMain: true }),
       );
-    });
+    }
+    it('should demote existing main and create new main in a single transaction', () =>
+      testDemoteExistingMainAndCreateNewMainInASingleTransac());
 
     // ROK-312: Cross-user duplicate claim check
     it('should throw ConflictException when another user owns the same name+realm', async () => {
@@ -536,7 +547,7 @@ describe('CharactersService — crud', () => {
     });
 
     // ROK-312: No-realm games skip duplicate claim check
-    it('should skip duplicate claim check for non-realm characters', async () => {
+    async function testSkipDuplicateClaimCheckForNonRealmCharacters() {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
@@ -584,8 +595,11 @@ describe('CharactersService — crud', () => {
       expect(result.isMain).toBe(true); // auto-main (charCount: 0)
       // Only 1 select call (charCount), not 2 (no claim check)
       expect(txSelectMock).toHaveBeenCalledTimes(1);
-    });
-  });
+    }
+    it('should skip duplicate claim check for non-realm characters', () =>
+      testSkipDuplicateClaimCheckForNonRealmCharacters());
+  }
+  describe('create', () => describeCreate());
 
   describe('update', () => {
     it('should update a character', async () => {
@@ -595,4 +609,5 @@ describe('CharactersService — crud', () => {
       expect(mockDb.update).toHaveBeenCalled();
     });
   });
-});
+}
+describe('CharactersService — crud', () => describeCharactersServiceCrud());

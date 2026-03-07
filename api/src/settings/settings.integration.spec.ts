@@ -11,7 +11,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 
-describe('Settings CRUD (integration)', () => {
+function describeSettingsCRUD() {
   let testApp: TestApp;
   let adminToken: string;
 
@@ -141,4 +141,5 @@ describe('Settings CRUD (integration)', () => {
 
     expect(res.status).toBe(401);
   });
-});
+}
+describe('Settings CRUD (integration)', () => describeSettingsCRUD());

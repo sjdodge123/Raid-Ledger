@@ -6,7 +6,7 @@ import { IgdbService } from './igdb.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { Job } from 'bullmq';
 
-describe('IgdbSyncProcessor', () => {
+function describeIgdbSyncProcessor() {
   let processor: IgdbSyncProcessor;
   let mockIgdbService: { syncAllGames: jest.Mock };
   let mockQueue: { name: string; getJobCounts: jest.Mock };
@@ -81,4 +81,5 @@ describe('IgdbSyncProcessor', () => {
     await expect(processor.process(mockJob)).rejects.toThrow('IGDB API down');
     expect(mockUpdateProgress).toHaveBeenCalledWith(0);
   });
-});
+}
+describe('IgdbSyncProcessor', () => describeIgdbSyncProcessor());

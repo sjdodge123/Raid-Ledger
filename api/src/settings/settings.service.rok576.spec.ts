@@ -22,7 +22,7 @@ function makeRow(key: string, value: string) {
   };
 }
 
-describe('SettingsService — ROK-576 auto-extend methods', () => {
+function describeSettingsServiceROK576AutoExtendMethods() {
   let service: SettingsService;
   let mockDb: {
     select: jest.Mock;
@@ -35,7 +35,7 @@ describe('SettingsService — ROK-576 auto-extend methods', () => {
   };
   let mockEventEmitter: Partial<EventEmitter2>;
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     process.env.JWT_SECRET = 'test-jwt-secret-for-rok576-settings-tests';
 
     mockDb = {
@@ -71,7 +71,8 @@ describe('SettingsService — ROK-576 auto-extend methods', () => {
     }).compile();
 
     service = module.get<SettingsService>(SettingsService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -217,4 +218,6 @@ describe('SettingsService — ROK-576 auto-extend methods', () => {
       expect(result).toBe(1);
     });
   });
-});
+}
+describe('SettingsService — ROK-576 auto-extend methods', () =>
+  describeSettingsServiceROK576AutoExtendMethods());

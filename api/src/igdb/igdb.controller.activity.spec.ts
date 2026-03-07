@@ -11,7 +11,7 @@ import {
   GameNowPlayingResponseSchema,
 } from '@raid-ledger/contract';
 
-describe('IgdbController — Activity Endpoints (ROK-443)', () => {
+function describeIgdbControllerActivityEndpoints() {
   const mockTopPlayers = [
     {
       userId: 1,
@@ -41,7 +41,7 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
     },
   ];
 
-  describe('getGameActivity (GET /games/:id/activity)', () => {
+  function describeGetGameActivity() {
     it('should throw BadRequestException for invalid period (via service mock)', async () => {
       // The controller validates the period before delegating to the service.
       // An invalid period throws before any DB or service call.
@@ -236,9 +236,11 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
       const parseResult = GameActivityResponseSchema.safeParse(emptyResponse);
       expect(parseResult.success).toBe(true);
     });
-  });
+  }
+  describe('getGameActivity (GET /games/:id/activity)', () =>
+    describeGetGameActivity());
 
-  describe('getGameNowPlaying (GET /games/:id/now-playing)', () => {
+  function describeGetGameNowPlaying() {
     it('should delegate to igdbService.getGameNowPlaying and return result', async () => {
       const mockNowPlayingResult = {
         players: [],
@@ -342,5 +344,9 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
       const parseResult = GameNowPlayingResponseSchema.safeParse(emptyResponse);
       expect(parseResult.success).toBe(true);
     });
-  });
-});
+  }
+  describe('getGameNowPlaying (GET /games/:id/now-playing)', () =>
+    describeGetGameNowPlaying());
+}
+describe('IgdbController — Activity Endpoints (ROK-443)', () =>
+  describeIgdbControllerActivityEndpoints());

@@ -36,7 +36,7 @@ async function insertTestJob(
   return job.id;
 }
 
-describe('Cron-Job (integration)', () => {
+function describeCronJob() {
   let testApp: TestApp;
   let adminToken: string;
 
@@ -54,7 +54,7 @@ describe('Cron-Job (integration)', () => {
   // Execution Tracking (service-level)
   // ===================================================================
 
-  describe('executeWithTracking', () => {
+  function describeExecuteWithTracking() {
     it('should record completed execution with timing', async () => {
       const jobId = await insertTestJob(testApp, 'test:completed-job');
 
@@ -154,13 +154,14 @@ describe('Cron-Job (integration)', () => {
       // Handler should still run (fallback behavior)
       expect(handlerRan).toBe(true);
     });
-  });
+  }
+  describe('executeWithTracking', () => describeExecuteWithTracking());
 
   // ===================================================================
   // Execution Pruning
   // ===================================================================
 
-  describe('execution pruning', () => {
+  function describeExecutionPruning() {
     it('should keep last 50 executions and delete older ones', async () => {
       const jobId = await insertTestJob(testApp, 'test:prunable-job');
 
@@ -240,7 +241,8 @@ describe('Cron-Job (integration)', () => {
 
       expect(remaining.length).toBe(56);
     });
-  });
+  }
+  describe('execution pruning', () => describeExecutionPruning());
 
   // ===================================================================
   // Admin API — Pause/Resume (HTTP)
@@ -323,7 +325,7 @@ describe('Cron-Job (integration)', () => {
   // Admin API — List and Execution History (HTTP)
   // ===================================================================
 
-  describe('list and history', () => {
+  function describeListAndHistory() {
     it('should list all registered cron jobs', async () => {
       await insertTestJob(testApp, 'test:listable-1');
       await insertTestJob(testApp, 'test:listable-2');
@@ -375,13 +377,14 @@ describe('Cron-Job (integration)', () => {
       expect(historyRes.body[0].error).toBe('Test error');
       expect(historyRes.body[1].status).toBe('completed');
     });
-  });
+  }
+  describe('list and history', () => describeListAndHistory());
 
   // ===================================================================
   // Auth Guards
   // ===================================================================
 
-  describe('auth guards', () => {
+  function describeAuthGuards() {
     it('should require admin role for cron-job endpoints', async () => {
       const res = await testApp.request.get('/admin/cron-jobs');
       expect(res.status).toBe(401);
@@ -418,5 +421,7 @@ describe('Cron-Job (integration)', () => {
 
       expect(res.status).toBe(403);
     });
-  });
-});
+  }
+  describe('auth guards', () => describeAuthGuards());
+}
+describe('Cron-Job (integration)', () => describeCronJob());

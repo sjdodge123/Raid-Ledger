@@ -6,7 +6,7 @@ import {
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
 
-describe('IgdbController', () => {
+function describeIgdbController() {
   let controller: IgdbController;
   let mockIgdbService: Partial<IgdbService>;
 
@@ -35,7 +35,7 @@ describe('IgdbController', () => {
     controller = module.get<IgdbController>(IgdbController);
   });
 
-  describe('searchGames', () => {
+  function describeSearchGames() {
     it('should return search results for valid query', async () => {
       const result = await controller.searchGames('valheim');
 
@@ -84,5 +84,7 @@ describe('IgdbController', () => {
         unexpectedError,
       );
     });
-  });
-});
+  }
+  describe('searchGames', () => describeSearchGames());
+}
+describe('IgdbController', () => describeIgdbController());

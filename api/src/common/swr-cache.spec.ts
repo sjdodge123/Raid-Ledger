@@ -3,7 +3,7 @@ import { memorySwr, redisSwr, type MemoryCacheEntry } from './swr-cache';
 // Helper to create a fresh in-flight map for each test (module-level map persists across tests)
 // We clear it by importing a fresh module in tests that need isolation.
 
-describe('memorySwr', () => {
+function describeMemorySwr() {
   let cache: Map<string, MemoryCacheEntry<string>>;
   let fetchCount: number;
   const fetcher = jest.fn(() => {
@@ -111,9 +111,10 @@ describe('memorySwr', () => {
     // (the second call sees the entry still in stale window but refresh is in-flight)
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
-});
+}
+describe('memorySwr', () => describeMemorySwr());
 
-describe('redisSwr', () => {
+function describeRedisSwr() {
   let mockRedis: { get: jest.Mock; setex: jest.Mock };
   let fetchCount: number;
   const fetcher = jest.fn(() => {
@@ -248,4 +249,5 @@ describe('redisSwr', () => {
     // Redis should NOT have been updated (refresh failed)
     expect(mockRedis.setex).not.toHaveBeenCalled();
   });
-});
+}
+describe('redisSwr', () => describeRedisSwr());

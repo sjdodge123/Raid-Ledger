@@ -1,7 +1,7 @@
 import { QueueHealthService } from './queue-health.service';
 import { Queue } from 'bullmq';
 
-describe('QueueHealthService', () => {
+function describeQueueHealthService() {
   let service: QueueHealthService;
 
   beforeEach(() => {
@@ -71,4 +71,5 @@ describe('QueueHealthService', () => {
     expect(result).toHaveLength(2);
     expect(result.map((q) => q.name)).toEqual(['queue-1', 'queue-2']);
   });
-});
+}
+describe('QueueHealthService', () => describeQueueHealthService());

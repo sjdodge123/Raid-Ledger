@@ -3,7 +3,7 @@ import { GameTimeService } from './game-time.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
-describe('GameTimeService', () => {
+function describeGameTimeService() {
   let service: GameTimeService;
   let mockDb: MockDb;
 
@@ -70,7 +70,7 @@ describe('GameTimeService', () => {
     });
   });
 
-  describe('saveTemplate', () => {
+  function describeSaveTemplate() {
     /**
      * Set up mocks for saveTemplate.
      * Call order for getCommittedTemplateKeys:
@@ -260,9 +260,10 @@ describe('GameTimeService', () => {
       expect(result.slots).toEqual([{ dayOfWeek: 2, hour: 20 }]);
       expect(result.slots).toHaveLength(1);
     });
-  });
+  }
+  describe('saveTemplate', () => describeSaveTemplate());
 
-  describe('getCompositeView', () => {
+  function describeGetCompositeView() {
     const makeEventRow = (
       overrides: Partial<{
         eventId: number;
@@ -409,7 +410,7 @@ describe('GameTimeService', () => {
       });
     });
 
-    it('should return event blocks with correct day/hour spans', async () => {
+    async function testReturnEventBlocksWithCorrectDayHourSpans() {
       // Event on Wed 19:00-22:00 UTC
       setupCompositeViewMocks(
         [],
@@ -445,7 +446,9 @@ describe('GameTimeService', () => {
         signupsPreview: [],
         signupCount: 0,
       });
-    });
+    }
+    it('should return event blocks with correct day/hour spans', () =>
+      testReturnEventBlocksWithCorrectDayHourSpans());
 
     it('should split midnight-spanning events into two day entries', async () => {
       // Event Sun 22:00 - Mon 02:00 UTC
@@ -561,5 +564,7 @@ describe('GameTimeService', () => {
         },
       ]);
     });
-  });
-});
+  }
+  describe('getCompositeView', () => describeGetCompositeView());
+}
+describe('GameTimeService', () => describeGameTimeService());

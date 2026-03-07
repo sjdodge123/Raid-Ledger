@@ -10,7 +10,7 @@ function buildJob(data: unknown): Job<EnrichmentJobData> {
   return { data } as unknown as Job<EnrichmentJobData>;
 }
 
-describe('EnrichmentsProcessor', () => {
+function describeEnrichmentsProcessor() {
   let processor: EnrichmentsProcessor;
   let mockEnrichmentsService: {
     runCharacterEnrichment: jest.Mock;
@@ -159,4 +159,5 @@ describe('EnrichmentsProcessor', () => {
       ).toHaveBeenCalledWith('char-1', 'raider-io', 'world-of-warcraft');
     });
   });
-});
+}
+describe('EnrichmentsProcessor', () => describeEnrichmentsProcessor());

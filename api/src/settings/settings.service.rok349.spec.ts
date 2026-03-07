@@ -23,7 +23,7 @@ function makeRow(key: string, value: string) {
   };
 }
 
-describe('SettingsService — ROK-349 setup wizard methods', () => {
+function describeSettingsServiceROK349SetupWizardMethods() {
   let service: SettingsService;
   let mockDb: {
     select: jest.Mock;
@@ -318,4 +318,6 @@ describe('SettingsService — ROK-349 setup wizard methods', () => {
       expect(SETTING_KEYS.DISCORD_BOT_TIMEZONE).toBe('discord_bot_timezone');
     });
   });
-});
+}
+describe('SettingsService — ROK-349 setup wizard methods', () =>
+  describeSettingsServiceROK349SetupWizardMethods());

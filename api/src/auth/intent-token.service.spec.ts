@@ -4,7 +4,7 @@ import { IntentTokenService } from './intent-token.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import type { IntentTokenPayload } from '@raid-ledger/contract';
 
-describe('IntentTokenService', () => {
+function describeIntentTokenService() {
   let service: IntentTokenService;
   let mockJwtService: {
     sign: jest.Mock;
@@ -84,7 +84,7 @@ describe('IntentTokenService', () => {
     });
   });
 
-  describe('validate', () => {
+  function describeValidate() {
     it('should return payload for a valid token', async () => {
       const result = await service.validate(mockToken);
 
@@ -156,5 +156,7 @@ describe('IntentTokenService', () => {
       expect(result?.discordId).toBe('disc-456');
       expect(result?.action).toBe('signup');
     });
-  });
-});
+  }
+  describe('validate', () => describeValidate());
+}
+describe('IntentTokenService', () => describeIntentTokenService());

@@ -36,7 +36,7 @@ function thenableResult(data: unknown[]): ThenableQuery {
   return obj;
 }
 
-describe('IgdbService', () => {
+function describeIgdbService() {
   let service: IgdbService;
   let mockDb: Record<string, jest.Mock>;
   let mockRedis: Record<string, jest.Mock>;
@@ -92,7 +92,7 @@ describe('IgdbService', () => {
     },
   ];
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     // Default select results — tests can override selectResults before calling service
     selectResults = mockGames;
 
@@ -164,13 +164,14 @@ describe('IgdbService', () => {
     }).compile();
 
     service = module.get<IgdbService>(IgdbService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('searchGames', () => {
+  function describeSearchGames() {
     it('should return Redis-cached games when available', async () => {
       // ROK-660: Redis now stores full GameDetailDto objects and returns them
       // directly without a DB re-query
@@ -200,7 +201,7 @@ describe('IgdbService', () => {
       expect(mockRedis.setex).toHaveBeenCalled();
     });
 
-    it('should fetch from IGDB when both caches miss', async () => {
+    async function testFetchFromIGDBWhenBothCachesMiss() {
       // Both caches miss, then return games after upsert
       mockRedis.get.mockResolvedValueOnce(null);
       let callCount = 0;
@@ -240,9 +241,11 @@ describe('IgdbService', () => {
       expect(result.cached).toBe(false);
       expect(result.source).toBe('igdb');
       expect(mockFetch).toHaveBeenCalledTimes(2); // Token + search
-    });
+    }
+    it('should fetch from IGDB when both caches miss', () =>
+      testFetchFromIGDBWhenBothCachesMiss());
 
-    it('should retry on 429 with exponential backoff', async () => {
+    async function testRetryOn429WithExponentialBackoff() {
       jest.useFakeTimers();
 
       // Both caches miss
@@ -297,9 +300,11 @@ describe('IgdbService', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3); // Token + 429 + success
 
       jest.useRealTimers();
-    });
+    }
+    it('should retry on 429 with exponential backoff', () =>
+      testRetryOn429WithExponentialBackoff());
 
-    it('should fall back to local search when IGDB fails after retries', async () => {
+    async function testFallBackToLocalSearchWhenIGDBFailsAfterRetries() {
       jest.useFakeTimers();
 
       // Redis miss
@@ -341,7 +346,9 @@ describe('IgdbService', () => {
       expect(result.games).toEqual(mockGameDetails);
 
       jest.useRealTimers();
-    });
+    }
+    it('should fall back to local search when IGDB fails after retries', () =>
+      testFallBackToLocalSearchWhenIGDBFailsAfterRetries());
 
     it('should escape LIKE special characters in query', async () => {
       // Redis hit to avoid going through the whole chain
@@ -374,7 +381,7 @@ describe('IgdbService', () => {
       expect(result.source).toBe('database');
     });
 
-    it('should upsert games from IGDB with full data', async () => {
+    async function testUpsertGamesFromIGDBWithFullData() {
       mockRedis.get.mockResolvedValueOnce(null);
       let callCount = 0;
       mockDb.select = jest.fn().mockImplementation(() => ({
@@ -412,8 +419,11 @@ describe('IgdbService', () => {
 
       // upsertGamesFromApi inserts each game individually (2 games, neither banned)
       expect(mockDb.insert).toHaveBeenCalledTimes(2);
-    });
-  });
+    }
+    it('should upsert games from IGDB with full data', () =>
+      testUpsertGamesFromIGDBWithFullData());
+  }
+  describe('searchGames', () => describeSearchGames());
 
   describe('getGameById', () => {
     it('should return game when found', async () => {
@@ -441,7 +451,7 @@ describe('IgdbService', () => {
     });
   });
 
-  describe('syncAllGames — cover art backfill (Phase 3)', () => {
+  function describeSyncAllGamesCoverArtBackfill() {
     /**
      * Helper to wire up the mock DB and fetch so that syncAllGames' Phase 1
      * (refresh existing) and Phase 2 (discover popular) complete quickly,
@@ -535,9 +545,11 @@ describe('IgdbService', () => {
       // Only token + Phase 2 (discover) — no Phase 3 IGDB call
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
-  });
+  }
+  describe('syncAllGames — cover art backfill (Phase 3)', () =>
+    describeSyncAllGamesCoverArtBackfill());
 
-  describe('error handling', () => {
+  function describeErrorHandling() {
     it('should throw when IGDB credentials not configured', async () => {
       mockConfigService.get = jest.fn().mockReturnValue(undefined);
       mockRedis.get.mockResolvedValueOnce(null);
@@ -548,7 +560,7 @@ describe('IgdbService', () => {
       expect(result.source).toBe('local');
     });
 
-    it('should retry with fresh token on 401 and succeed', async () => {
+    async function testRetryWithFreshTokenOn401AndSucceed() {
       mockRedis.get.mockResolvedValueOnce(null);
       let callCount = 0;
       mockDb.select = jest.fn().mockImplementation(() => ({
@@ -600,9 +612,11 @@ describe('IgdbService', () => {
       expect(result.source).toBe('igdb');
       // Token + 401 + fresh token + successful search = 4 calls
       expect(mockFetch).toHaveBeenCalledTimes(4);
-    });
+    }
+    it('should retry with fresh token on 401 and succeed', () =>
+      testRetryWithFreshTokenOn401AndSucceed());
 
-    it('should fall back to local when 401 retry also fails', async () => {
+    async function testFallBackToLocalWhen401RetryAlsoFails() {
       mockRedis.get.mockResolvedValueOnce(null);
       selectResults = [];
 
@@ -640,6 +654,10 @@ describe('IgdbService', () => {
       expect(result.games).toEqual([]);
       // Token + 401 + fresh token + 401 = 4 calls
       expect(mockFetch).toHaveBeenCalledTimes(4);
-    });
-  });
-});
+    }
+    it('should fall back to local when 401 retry also fails', () =>
+      testFallBackToLocalWhen401RetryAlsoFails());
+  }
+  describe('error handling', () => describeErrorHandling());
+}
+describe('IgdbService', () => describeIgdbService());

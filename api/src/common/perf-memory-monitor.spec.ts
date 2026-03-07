@@ -3,7 +3,7 @@ import { PerfMemoryMonitor } from './perf-memory-monitor';
 // Capture the real memoryUsage before mocking
 const realMemoryUsage = process.memoryUsage.bind(process);
 
-describe('PerfMemoryMonitor', () => {
+function describePerfMemoryMonitor() {
   let monitor: PerfMemoryMonitor;
   let exitSpy: jest.SpyInstance;
   const originalEnv = { ...process.env };
@@ -29,7 +29,7 @@ describe('PerfMemoryMonitor', () => {
     return monitor;
   }
 
-  describe('RSS restart guard', () => {
+  function describeRSSRestartGuard() {
     it('does not exit when RSS is below threshold', () => {
       process.env.MEMORY_RESTART_THRESHOLD_MB = '512';
       process.env.DEBUG = 'true';
@@ -140,7 +140,8 @@ describe('PerfMemoryMonitor', () => {
       jest.advanceTimersByTime(5 * 60 * 1000);
       expect(exitSpy).toHaveBeenCalledWith(0);
     });
-  });
+  }
+  describe('RSS restart guard', () => describeRSSRestartGuard());
 
   describe('interval lifecycle', () => {
     it('does not start interval when both DEBUG and threshold are disabled', () => {
@@ -173,4 +174,5 @@ describe('PerfMemoryMonitor', () => {
       expect(memSpy).not.toHaveBeenCalled();
     });
   });
-});
+}
+describe('PerfMemoryMonitor', () => describePerfMemoryMonitor());

@@ -14,7 +14,7 @@ describe('RATE_LIMIT_TIERS', () => {
   });
 });
 
-describe('RateLimit decorator', () => {
+function describeRateLimitDecorator() {
   it('should return a decorator function for each tier', () => {
     expect(typeof RateLimit('auth')).toBe('function');
     expect(typeof RateLimit('search')).toBe('function');
@@ -54,4 +54,5 @@ describe('RateLimit decorator', () => {
     expect(limit).toBe(30);
     expect(ttl).toBe(60_000);
   });
-});
+}
+describe('RateLimit decorator', () => describeRateLimitDecorator());

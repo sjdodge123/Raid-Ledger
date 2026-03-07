@@ -65,13 +65,13 @@ const fullGameRow = {
   cachedAt: new Date(),
 };
 
-describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query', () => {
+function describeIgdbServiceROK375EnrichedSearchCacheGuardRedisR() {
   let service: IgdbService;
   let mockDb: Record<string, jest.Mock>;
   let mockRedis: Record<string, jest.Mock>;
   let mockSettingsService: Record<string, jest.Mock>;
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     mockDb = {
       select: jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
@@ -138,7 +138,8 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
     }).compile();
 
     service = module.get<IgdbService>(IgdbService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -147,8 +148,8 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
   // ============================================================
   // SearchResult type: games are GameDetailDto[]
   // ============================================================
-  describe('search results return GameDetailDto (not IgdbGameDto)', () => {
-    it('database layer returns full GameDetailDto with genres/platforms/ratings', async () => {
+  function describeSearchResultsReturnGameDetailDto() {
+    async function testDatabaseLayerReturnsFullGameDetailDtoWithGenresPlatfo() {
       // The DB layer returns source='database' only when a full page (>= SEARCH_LIMIT = 20)
       // is found, to avoid suppressing IGDB lookups for partial result sets.
       mockRedis.get.mockResolvedValue(null);
@@ -186,7 +187,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(game.platforms).toEqual([6, 169]);
       expect(game.rating).toBe(82.5);
       expect(game.summary).toBe('Master Chief returns.');
-    });
+    }
+    it('database layer returns full GameDetailDto with genres/platforms/ratings', () =>
+      testDatabaseLayerReturnsFullGameDetailDtoWithGenresPlatfo());
 
     it('Redis layer returns full GameDetailDto directly from cache (ROK-660)', async () => {
       // ROK-660: Redis now stores full GameDetailDto objects (cached by cacheToRedis)
@@ -237,7 +240,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(game.genres).toEqual([5, 31]);
     });
 
-    it('IGDB layer returns full GameDetailDto after upsert and re-query', async () => {
+    async function testIGDBLayerReturnsFullGameDetailDtoAfterUpsertAndReQu() {
       mockRedis.get.mockResolvedValue(null);
       let selectCallCount = 0;
       mockDb.select = jest.fn().mockImplementation(() => ({
@@ -281,13 +284,17 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(game).toHaveProperty('genres');
       expect(game).toHaveProperty('platforms');
       expect(game).toHaveProperty('rating');
-    });
-  });
+    }
+    it('IGDB layer returns full GameDetailDto after upsert and re-query', () =>
+      testIGDBLayerReturnsFullGameDetailDtoAfterUpsertAndReQu());
+  }
+  describe('search results return GameDetailDto (not IgdbGameDto)', () =>
+    describeSearchResultsReturnGameDetailDto());
 
   // ============================================================
   // Empty IGDB responses NOT cached in Redis (cache poisoning guard)
   // ============================================================
-  describe('empty IGDB responses are not cached', () => {
+  function describeEmptyIGDBResponsesAreNotCached() {
     it('does NOT cache to Redis when IGDB returns empty results', async () => {
       mockRedis.get.mockResolvedValue(null);
       // All DB queries return empty
@@ -317,7 +324,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(mockRedis.setex).not.toHaveBeenCalled();
     });
 
-    it('caches to Redis when IGDB returns non-empty results', async () => {
+    async function testCachesToRedisWhenIGDBReturnsNonEmptyResults() {
       mockRedis.get.mockResolvedValue(null);
       let selectCallCount = 0;
       mockDb.select = jest.fn().mockImplementation(() => ({
@@ -353,7 +360,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
 
       // Non-empty results should be cached
       expect(mockRedis.setex).toHaveBeenCalled();
-    });
+    }
+    it('caches to Redis when IGDB returns non-empty results', () =>
+      testCachesToRedisWhenIGDBReturnsNonEmptyResults());
 
     it('does NOT cache empty DB results to Redis (database layer)', async () => {
       mockRedis.get.mockResolvedValue(null);
@@ -381,13 +390,15 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       // setex should not be called since nothing was found
       expect(mockRedis.setex).not.toHaveBeenCalled();
     });
-  });
+  }
+  describe('empty IGDB responses are not cached', () =>
+    describeEmptyIGDBResponsesAreNotCached());
 
   // ============================================================
   // ROK-660: Redis cache hits return cached data directly (no DB re-query)
   // Ban/hide re-validation is deferred to SWR background refresh.
   // ============================================================
-  describe('Redis cache hits return cached data directly', () => {
+  function describeRedisCacheHitsReturnCachedDataDirectly() {
     it('returns cached games without querying DB', async () => {
       // Redis returns full cached GameDetailDto objects
       const cachedGames = [
@@ -431,7 +442,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       // Should fall through to DB/IGDB layers when cached games are empty
       expect(result.source).not.toBe('redis');
     });
-  });
+  }
+  describe('Redis cache hits return cached data directly', () =>
+    describeRedisCacheHitsReturnCachedDataDirectly());
 
   // ============================================================
   // Local fallback applies adult content filter
@@ -482,7 +495,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
   // ============================================================
   // mapDbRowToDetail returns complete GameDetailDto
   // ============================================================
-  describe('mapDbRowToDetail', () => {
+  function describeMapDbRowToDetail() {
     it('maps all expanded fields from DB row to GameDetailDto', () => {
       const detail = service.mapDbRowToDetail(fullGameRow as any);
 
@@ -511,7 +524,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(detail.crossplay).toBe(true);
     });
 
-    it('handles null optional fields gracefully', () => {
+    function testHandlesNullOptionalFieldsGracefully() {
       const minimalRow = {
         id: 2,
         igdbId: 5678,
@@ -554,8 +567,11 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(detail.playerCount).toBeNull();
       expect(detail.twitchGameId).toBeNull();
       expect(detail.crossplay).toBeNull();
-    });
-  });
+    }
+    it('handles null optional fields gracefully', () =>
+      testHandlesNullOptionalFieldsGracefully());
+  }
+  describe('mapDbRowToDetail', () => describeMapDbRowToDetail());
 
   // ============================================================
   // SearchResult.source field
@@ -590,4 +606,6 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(result.source).toBe('local');
     });
   });
-});
+}
+describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query', () =>
+  describeIgdbServiceROK375EnrichedSearchCacheGuardRedisR());

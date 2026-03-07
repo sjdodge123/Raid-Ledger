@@ -29,7 +29,7 @@ function mockTxSelectDualCall(claimRows: unknown[], countRows: unknown[]) {
   return fn;
 }
 
-describe('CharactersService — operations', () => {
+function describeCharactersServiceOperations() {
   let service: CharactersService;
   let mockDb: Record<string, jest.Mock>;
   let mockPluginRegistry: {
@@ -82,7 +82,7 @@ describe('CharactersService — operations', () => {
     displayOrder: 1,
   };
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     mockDb = {
       select: jest.fn(),
       insert: jest.fn(),
@@ -173,9 +173,10 @@ describe('CharactersService — operations', () => {
     }).compile();
 
     service = module.get<CharactersService>(CharactersService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
-  describe('delete', () => {
+  function describeDelete() {
     it('should delete a non-main character when main still exists', async () => {
       // findOne returns the alt character
       mockDb.select.mockReturnValueOnce({
@@ -290,7 +291,8 @@ describe('CharactersService — operations', () => {
       // Should auto-promote the last remaining character
       expect(mockDb.update).toHaveBeenCalled();
     });
-  });
+  }
+  describe('delete', () => describeDelete());
 
   describe('setMain', () => {
     it('should set character as main and demote existing main', async () => {
@@ -300,7 +302,7 @@ describe('CharactersService — operations', () => {
     });
   });
 
-  describe('importExternal', () => {
+  function describeImportExternal() {
     it('should throw NotFoundException when no adapter found', async () => {
       mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
         new Map(),
@@ -318,7 +320,7 @@ describe('CharactersService — operations', () => {
     });
 
     // ROK-578: Merge imported data into existing local character on conflict
-    it('should merge imported data into existing local character instead of throwing 409', async () => {
+    async function testMergeImportedDataIntoExistingLocalCharacterInsteadOf() {
       const mockAdapter = {
         resolveGameSlugs: jest.fn().mockReturnValue(['world-of-warcraft']),
         fetchProfile: jest.fn().mockResolvedValue({
@@ -440,8 +442,11 @@ describe('CharactersService — operations', () => {
 
       // Verify update was called (merge path), not just insert
       expect(mockDb.update).toHaveBeenCalled();
-    });
-  });
+    }
+    it('should merge imported data into existing local character instead of throwing 409', () =>
+      testMergeImportedDataIntoExistingLocalCharacterInsteadOf());
+  }
+  describe('importExternal', () => describeImportExternal());
 
   describe('findOne', () => {
     it('should return a character when found and owned', async () => {
@@ -473,4 +478,6 @@ describe('CharactersService — operations', () => {
       );
     });
   });
-});
+}
+describe('CharactersService — operations', () =>
+  describeCharactersServiceOperations());

@@ -3,7 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { AvailabilityController } from './availability.controller';
 import { AvailabilityService } from './availability.service';
 
-describe('AvailabilityController', () => {
+function describeAvailabilityController() {
   let controller: AvailabilityController;
   let mockService: Partial<AvailabilityService>;
 
@@ -141,4 +141,5 @@ describe('AvailabilityController', () => {
       expect(mockService.delete).toHaveBeenCalledWith(1, 'avail-uuid-1');
     });
   });
-});
+}
+describe('AvailabilityController', () => describeAvailabilityController());

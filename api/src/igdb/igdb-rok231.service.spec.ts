@@ -38,7 +38,7 @@ function thenableResult(data: unknown[]): ThenableQuery {
   return obj;
 }
 
-describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
+function describeIgdbServiceROK231HideBanAndAdultContentFilter() {
   let service: IgdbService;
   let mockDb: Record<string, jest.Mock>;
   let mockRedis: Record<string, jest.Mock>;
@@ -68,7 +68,7 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
     cachedAt: new Date(),
   };
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     mockDb = {
       select: jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
@@ -134,7 +134,8 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
     }).compile();
 
     service = module.get<IgdbService>(IgdbService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -172,7 +173,7 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
   // ============================================================
   // hideGame
   // ============================================================
-  describe('hideGame', () => {
+  function describeHideGame() {
     it('hides an existing visible game', async () => {
       mockDb.select.mockImplementation(() => ({
         from: jest.fn().mockReturnValue({
@@ -213,7 +214,8 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
       // Should not attempt DB update
       expect(mockDb.update).not.toHaveBeenCalled();
     });
-  });
+  }
+  describe('hideGame', () => describeHideGame());
 
   // ============================================================
   // unhideGame
@@ -291,7 +293,7 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
   // ============================================================
   // searchGames — hidden games excluded
   // ============================================================
-  describe('searchGames — hidden game exclusion', () => {
+  function describeSearchGamesHiddenGameExclusion() {
     it('excludes hidden games from database search results', async () => {
       // Redis miss
       mockRedis.get.mockResolvedValue(null);
@@ -361,7 +363,9 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
       const igdbCallBody = mockFetch.mock.calls[1][1]?.body as string;
       expect(igdbCallBody).toContain('themes !=');
     });
-  });
+  }
+  describe('searchGames — hidden game exclusion', () =>
+    describeSearchGamesHiddenGameExclusion());
 
   // ============================================================
   // searchLocalGames — hidden games excluded
@@ -402,4 +406,6 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
       expect(result.games).toEqual([]);
     });
   });
-});
+}
+describe('IgdbService — ROK-231: hide/ban and adult content filter', () =>
+  describeIgdbServiceROK231HideBanAndAdultContentFilter());

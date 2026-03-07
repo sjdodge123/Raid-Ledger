@@ -7,7 +7,7 @@
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 
-describe('Auth flow (integration)', () => {
+function describeAuthFlow() {
   let testApp: TestApp;
 
   beforeAll(async () => {
@@ -94,4 +94,5 @@ describe('Auth flow (integration)', () => {
     expect(res.status).toBe(200);
     expect(res.body.access_token).toBeDefined();
   });
-});
+}
+describe('Auth flow (integration)', () => describeAuthFlow());

@@ -12,7 +12,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 
-describe('Feedback (integration)', () => {
+function describeFeedback() {
   let testApp: TestApp;
   let adminToken: string;
 
@@ -30,7 +30,7 @@ describe('Feedback (integration)', () => {
   // POST /feedback (submitFeedback)
   // ===================================================================
 
-  describe('POST /feedback', () => {
+  function describePOSTFeedback() {
     it('should persist feedback and return the created entry', async () => {
       const res = await testApp.request
         .post('/feedback')
@@ -108,14 +108,15 @@ describe('Feedback (integration)', () => {
 
       expect(res.status).toBe(400);
     });
-  });
+  }
+  describe('POST /feedback', () => describePOSTFeedback());
 
   // ===================================================================
   // GET /feedback (listFeedback)
   // ===================================================================
 
-  describe('GET /feedback', () => {
-    it('should list feedback with usernames via INNER JOIN', async () => {
+  function describeGETFeedback() {
+    async function testListFeedbackWithUsernamesViaINNERJOIN() {
       // Submit some feedback first
       await testApp.request
         .post('/feedback')
@@ -156,7 +157,9 @@ describe('Feedback (integration)', () => {
           createdAt: expect.any(String),
         });
       }
-    });
+    }
+    it('should list feedback with usernames via INNER JOIN', () =>
+      testListFeedbackWithUsernamesViaINNERJOIN());
 
     it('should support pagination', async () => {
       // Insert 3 feedback entries
@@ -236,5 +239,7 @@ describe('Feedback (integration)', () => {
 
       expect(res.status).toBe(403);
     });
-  });
-});
+  }
+  describe('GET /feedback', () => describeGETFeedback());
+}
+describe('Feedback (integration)', () => describeFeedback());

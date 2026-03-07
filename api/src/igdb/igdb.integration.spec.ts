@@ -34,7 +34,7 @@ async function insertTestGame(
   return game;
 }
 
-describe('Games / IGDB (integration)', () => {
+function describeGamesIGDB() {
   let testApp: TestApp;
   let adminToken: string;
 
@@ -52,7 +52,7 @@ describe('Games / IGDB (integration)', () => {
   // GET /games/search
   // ===================================================================
 
-  describe('GET /games/search', () => {
+  function describeGETGamesSearch() {
     it('should return matching games from the database', async () => {
       await insertTestGame(testApp, 'Halo Infinite', { igdbId: 1001 });
       await insertTestGame(testApp, 'Halo Reach', { igdbId: 1002 });
@@ -107,7 +107,8 @@ describe('Games / IGDB (integration)', () => {
 
       expect(res.status).toBe(400);
     });
-  });
+  }
+  describe('GET /games/search', () => describeGETGamesSearch());
 
   // ===================================================================
   // GET /games/:id (game detail)
@@ -187,8 +188,8 @@ describe('Games / IGDB (integration)', () => {
   // GET /games/:id/event-types
   // ===================================================================
 
-  describe('GET /games/:id/event-types', () => {
-    it('should return event types for a game', async () => {
+  function describeGETGamesIdEventTypes() {
+    async function testReturnEventTypesForAGame() {
       const game = await insertTestGame(testApp, 'Event Type Game', {
         igdbId: 6001,
       });
@@ -227,20 +228,23 @@ describe('Games / IGDB (integration)', () => {
         defaultDurationMinutes: 180,
         requiresComposition: true,
       });
-    });
+    }
+    it('should return event types for a game', () =>
+      testReturnEventTypesForAGame());
 
     it('should return 404 for non-existent game', async () => {
       const res = await testApp.request.get('/games/999999/event-types');
 
       expect(res.status).toBe(404);
     });
-  });
+  }
+  describe('GET /games/:id/event-types', () => describeGETGamesIdEventTypes());
 
   // ===================================================================
   // Want-to-Play (interest) lifecycle
   // ===================================================================
 
-  describe('want-to-play lifecycle', () => {
+  function describeWantToPlayLifecycle() {
     it('should toggle want-to-play on and persist', async () => {
       const game = await insertTestGame(testApp, 'Interest Game', {
         igdbId: 7001,
@@ -325,13 +329,14 @@ describe('Games / IGDB (integration)', () => {
       );
       expect(deleteRes.status).toBe(401);
     });
-  });
+  }
+  describe('want-to-play lifecycle', () => describeWantToPlayLifecycle());
 
   // ===================================================================
   // GET /games/:id/interest
   // ===================================================================
 
-  describe('GET /games/:id/interest', () => {
+  function describeGETGamesIdInterest() {
     it('should return interest status with player previews', async () => {
       const game = await insertTestGame(testApp, 'Interest Status Game', {
         igdbId: 8001,
@@ -373,13 +378,14 @@ describe('Games / IGDB (integration)', () => {
       expect(res.body.wantToPlay).toBe(false);
       expect(res.body.count).toBe(0);
     });
-  });
+  }
+  describe('GET /games/:id/interest', () => describeGETGamesIdInterest());
 
   // ===================================================================
   // GET /games/interest/batch
   // ===================================================================
 
-  describe('GET /games/interest/batch', () => {
+  function describeGETGamesInterestBatch() {
     it('should return batch interest status for multiple games', async () => {
       const game1 = await insertTestGame(testApp, 'Batch Game 1', {
         igdbId: 9001,
@@ -416,7 +422,8 @@ describe('Games / IGDB (integration)', () => {
       expect(res.status).toBe(200);
       expect(res.body.data).toEqual({});
     });
-  });
+  }
+  describe('GET /games/interest/batch', () => describeGETGamesInterestBatch());
 
   // ===================================================================
   // GET /games/:id/activity
@@ -533,7 +540,7 @@ describe('Games / IGDB (integration)', () => {
   // Discord auto-heart suppression (ROK-444)
   // ===================================================================
 
-  describe('discord auto-heart suppression', () => {
+  function describeDiscordAutoHeartSuppression() {
     it('should create suppression when removing discord-sourced interest', async () => {
       const game = await insertTestGame(testApp, 'Suppression Game', {
         igdbId: 13001,
@@ -602,5 +609,8 @@ describe('Games / IGDB (integration)', () => {
 
       expect(suppressions.length).toBe(0);
     });
-  });
-});
+  }
+  describe('discord auto-heart suppression', () =>
+    describeDiscordAutoHeartSuppression());
+}
+describe('Games / IGDB (integration)', () => describeGamesIGDB());

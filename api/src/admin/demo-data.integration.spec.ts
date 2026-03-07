@@ -14,7 +14,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 
-describe('Demo Data (integration)', () => {
+function describeDemoData() {
   let testApp: TestApp;
   let adminToken: string;
 
@@ -59,7 +59,7 @@ describe('Demo Data (integration)', () => {
   // POST /admin/settings/demo/install + clear lifecycle
   // ===================================================================
 
-  describe('install and clear lifecycle', () => {
+  function describeInstallAndClearLifecycle() {
     it('should install demo data and report counts', async () => {
       const installRes = await testApp.request
         .post('/admin/settings/demo/install')
@@ -133,7 +133,9 @@ describe('Demo Data (integration)', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
     });
-  });
+  }
+  describe('install and clear lifecycle', () =>
+    describeInstallAndClearLifecycle());
 
   // ===================================================================
   // Auth Guards
@@ -152,4 +154,5 @@ describe('Demo Data (integration)', () => {
       expect(res.status).toBe(401);
     });
   });
-});
+}
+describe('Demo Data (integration)', () => describeDemoData());

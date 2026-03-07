@@ -8,7 +8,7 @@ jest.mock('node:fs');
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 
-describe('LogsService', () => {
+function describeLogsService() {
   let service: LogsService;
   const testLogDir = '/tmp/test-logs';
 
@@ -33,7 +33,7 @@ describe('LogsService', () => {
     service = module.get<LogsService>(LogsService);
   });
 
-  describe('scrubContent', () => {
+  function describeScrubContent() {
     it('should redact DATABASE_URL values', () => {
       const input = 'Connecting to DATABASE_URL=postgresql://user:pass@host/db';
       const result = service.scrubContent(input);
@@ -89,9 +89,10 @@ describe('LogsService', () => {
       const result = service.scrubContent(input);
       expect(result).toBe(input);
     });
-  });
+  }
+  describe('scrubContent', () => describeScrubContent());
 
-  describe('listLogFiles', () => {
+  function describeListLogFiles() {
     it('should list .log files sorted newest first', () => {
       const older = new Date('2026-01-01T00:00:00Z');
       const newer = new Date('2026-02-01T00:00:00Z');
@@ -155,9 +156,10 @@ describe('LogsService', () => {
       const result = service.listLogFiles();
       expect(result).toHaveLength(0);
     });
-  });
+  }
+  describe('listLogFiles', () => describeListLogFiles());
 
-  describe('getValidatedPath', () => {
+  function describeGetValidatedPath() {
     it('should reject path traversal with ..', () => {
       expect(() => service.getValidatedPath('../etc/passwd')).toThrow(
         'Invalid filename',
@@ -197,5 +199,7 @@ describe('LogsService', () => {
       const result = service.getValidatedPath('api.log');
       expect(result).toBe(expectedPath);
     });
-  });
-});
+  }
+  describe('getValidatedPath', () => describeGetValidatedPath());
+}
+describe('LogsService', () => describeLogsService());

@@ -10,7 +10,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { DiscordMembershipResponseSchema } from '@raid-ledger/contract';
 
-describe('UsersController — getDiscordMembership (ROK-425)', () => {
+function describeUsersControllerGetDiscordMembership() {
   let controller: UsersMeController;
   let usersService: UsersService;
   let discordBotClientService: DiscordBotClientService;
@@ -56,7 +56,7 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
     },
   });
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersMeController],
       providers: [
@@ -143,11 +143,12 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
     channelResolver = module.get<ChannelResolverService>(
       ChannelResolverService,
     );
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   const mockRequest = { user: { id: 1, role: 'member' } };
 
-  describe('when bot is offline / not connected', () => {
+  function describeWhenBotIsOfflineNotConnected() {
     it('returns botConnected: false when isConnected() is false', async () => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(false);
 
@@ -200,9 +201,11 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
 
       expect(result).toEqual({ botConnected: false });
     });
-  });
+  }
+  describe('when bot is offline / not connected', () =>
+    describeWhenBotIsOfflineNotConnected());
 
-  describe('when user has no linked Discord account', () => {
+  function describeWhenUserHasNoLinkedDiscordAccount() {
     beforeEach(() => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(true);
       (discordBotClientService.getGuildInfo as jest.Mock).mockReturnValue(
@@ -266,9 +269,11 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
 
       expect(getClientSpy).not.toHaveBeenCalled();
     });
-  });
+  }
+  describe('when user has no linked Discord account', () =>
+    describeWhenUserHasNoLinkedDiscordAccount());
 
-  describe('when user IS a member of the guild', () => {
+  function describeWhenUserISAMemberOfTheGuild() {
     it('returns isMember: true when guild.members.fetch succeeds', async () => {
       const guild = makeMockGuild('found');
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(true);
@@ -309,9 +314,11 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
 
       expect(result.inviteUrl).toBeUndefined();
     });
-  });
+  }
+  describe('when user IS a member of the guild', () =>
+    describeWhenUserISAMemberOfTheGuild());
 
-  describe('when user is NOT a member of the guild', () => {
+  function describeWhenUserIsNOTAMemberOfTheGuild() {
     let guild: ReturnType<typeof makeMockGuild>;
 
     beforeEach(() => {
@@ -472,9 +479,11 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
 
       expect(result.inviteUrl).toBeUndefined();
     });
-  });
+  }
+  describe('when user is NOT a member of the guild', () =>
+    describeWhenUserIsNOTAMemberOfTheGuild());
 
-  describe('response schema validation', () => {
+  function describeResponseSchemaValidation() {
     it('validates botConnected: false response against schema', async () => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(false);
 
@@ -537,5 +546,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       const parseResult = DiscordMembershipResponseSchema.safeParse(result);
       expect(parseResult.success).toBe(true);
     });
-  });
-});
+  }
+  describe('response schema validation', () =>
+    describeResponseSchemaValidation());
+}
+describe('UsersController — getDiscordMembership (ROK-425)', () =>
+  describeUsersControllerGetDiscordMembership());

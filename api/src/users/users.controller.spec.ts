@@ -12,7 +12,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { RecentPlayersResponseSchema } from '@raid-ledger/contract';
 
-describe('UsersController', () => {
+function describeUsersController() {
   let controller: UsersController;
   let meController: UsersMeController;
   let usersService: UsersService;
@@ -53,7 +53,7 @@ describe('UsersController', () => {
     total: 1,
   };
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController, UsersMeController],
       providers: [
@@ -134,10 +134,11 @@ describe('UsersController', () => {
     meController = module.get<UsersMeController>(UsersMeController);
     usersService = module.get<UsersService>(UsersService);
     eventsService = module.get<EventsService>(EventsService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
-  describe('listRecentPlayers', () => {
-    it('should return 200 with correct shape', async () => {
+  function describeListRecentPlayers() {
+    async function testReturn200WithCorrectShape() {
       const mockRows = [
         {
           id: 1,
@@ -172,7 +173,9 @@ describe('UsersController', () => {
         customAvatarUrl: null,
         createdAt: '2026-02-10T12:00:00.000Z',
       });
-    });
+    }
+    it('should return 200 with correct shape', () =>
+      testReturn200WithCorrectShape());
 
     it('should convert Date createdAt to ISO string', async () => {
       const mockRows = [
@@ -222,9 +225,10 @@ describe('UsersController', () => {
 
       expect(result.data).toEqual([]);
     });
-  });
+  }
+  describe('listRecentPlayers', () => describeListRecentPlayers());
 
-  describe('getUserEventSignups (ROK-299)', () => {
+  function describeGetUserEventSignups() {
     it('should return upcoming events for valid user', async () => {
       const findByIdSpy = jest
         .spyOn(usersService, 'findById')
@@ -299,9 +303,11 @@ describe('UsersController', () => {
       expect(result.data.length).toBe(6);
       expect(result.total).toBe(10);
     });
-  });
+  }
+  describe('getUserEventSignups (ROK-299)', () =>
+    describeGetUserEventSignups());
 
-  describe('checkDisplayName (ROK-219)', () => {
+  function describeCheckDisplayName() {
     const mockRequest = { user: { id: 1, role: 'member' } };
 
     it('should return available:true when display name is available', async () => {
@@ -359,9 +365,10 @@ describe('UsersController', () => {
 
       expect(checkSpy).toHaveBeenCalledWith('TestName', 1);
     });
-  });
+  }
+  describe('checkDisplayName (ROK-219)', () => describeCheckDisplayName());
 
-  describe('updateMyProfile (ROK-219)', () => {
+  function describeUpdateMyProfile() {
     const mockRequest = { user: { id: 1, role: 'member' } };
 
     it('should update user display name when available', async () => {
@@ -442,9 +449,10 @@ describe('UsersController', () => {
       expect(result.data).toHaveProperty('username', 'testuser');
       expect(result.data).toHaveProperty('displayName', 'ValidName');
     });
-  });
+  }
+  describe('updateMyProfile (ROK-219)', () => describeUpdateMyProfile());
 
-  describe('completeOnboarding (ROK-219)', () => {
+  function describeCompleteOnboarding() {
     const mockRequest = { user: { id: 1, role: 'member' } };
 
     it('should mark onboarding as completed', async () => {
@@ -500,7 +508,8 @@ describe('UsersController', () => {
       expect(result).toHaveProperty('onboardingCompletedAt');
       expect(typeof result.onboardingCompletedAt).toBe('string');
     });
-  });
+  }
+  describe('completeOnboarding (ROK-219)', () => describeCompleteOnboarding());
 
   describe('resetOnboarding (ROK-312)', () => {
     const mockRequest = { user: { id: 1, role: 'member' } };
@@ -516,4 +525,5 @@ describe('UsersController', () => {
       expect(resetSpy).toHaveBeenCalledWith(1);
     });
   });
-});
+}
+describe('UsersController', () => describeUsersController());

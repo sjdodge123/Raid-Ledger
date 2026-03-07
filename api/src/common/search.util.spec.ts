@@ -63,7 +63,7 @@ describe('escapeLikePattern', () => {
   });
 });
 
-describe('buildWordMatchFilters', () => {
+function describeBuildWordMatchFilters() {
   // We cannot test the actual SQL output easily without a full Drizzle
   // column instance, but we can verify the function's observable behavior:
   // - returns empty array for empty/blank/punctuation-only queries
@@ -106,4 +106,5 @@ describe('buildWordMatchFilters', () => {
     );
     expect(filters).toHaveLength(4); // Tom Clancys Rainbow Six
   });
-});
+}
+describe('buildWordMatchFilters', () => describeBuildWordMatchFilters());

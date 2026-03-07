@@ -45,7 +45,7 @@ async function createMemberAndLogin(
   return { userId: user.id, token: loginRes.body.access_token as string };
 }
 
-describe('Characters & User Management (integration)', () => {
+function describeCharactersUserManagement() {
   let testApp: TestApp;
   let adminToken: string;
 
@@ -63,7 +63,7 @@ describe('Characters & User Management (integration)', () => {
   // Character CRUD
   // ===================================================================
 
-  describe('character create', () => {
+  function describeCharacterCreate() {
     it('should auto-main the first character for a game', async () => {
       const { token } = await createMemberAndLogin(
         testApp,
@@ -86,7 +86,7 @@ describe('Characters & User Management (integration)', () => {
       expect(res.body.name).toBe('FirstChar');
     });
 
-    it('should demote existing main when creating a new main', async () => {
+    async function testDemoteExistingMainWhenCreatingANewMain() {
       const { token } = await createMemberAndLogin(
         testApp,
         'charuser2',
@@ -132,9 +132,11 @@ describe('Characters & User Management (integration)', () => {
       ).data;
       const oldMain = chars.find((c) => c.name === 'OldMain');
       expect(oldMain?.isMain).toBe(false);
-    });
+    }
+    it('should demote existing main when creating a new main', () =>
+      testDemoteExistingMainWhenCreatingANewMain());
 
-    it('should block duplicate-claim for same realm+name by different user', async () => {
+    async function testBlockDuplicateClaimForSameRealmNameByDifferentUser() {
       const { token: t1 } = await createMemberAndLogin(
         testApp,
         'owner',
@@ -171,7 +173,9 @@ describe('Characters & User Management (integration)', () => {
         });
 
       expect(dupRes.status).toBe(409);
-    });
+    }
+    it('should block duplicate-claim for same realm+name by different user', () =>
+      testBlockDuplicateClaimForSameRealmNameByDifferentUser());
 
     it('should allow same name without realm (non-MMO games)', async () => {
       const { token: t1 } = await createMemberAndLogin(
@@ -207,14 +211,15 @@ describe('Characters & User Management (integration)', () => {
       expect(r1.status).toBe(201);
       expect(r2.status).toBe(201);
     });
-  });
+  }
+  describe('character create', () => describeCharacterCreate());
 
   // ===================================================================
   // Character Delete with Auto-Promote
   // ===================================================================
 
-  describe('character delete', () => {
-    it('should auto-promote next alt to main when main is deleted', async () => {
+  function describeCharacterDelete() {
+    async function testAutoPromoteNextAltToMainWhenMainIsDeleted() {
       const { token } = await createMemberAndLogin(
         testApp,
         'deluser',
@@ -258,15 +263,18 @@ describe('Characters & User Management (integration)', () => {
       expect(listRes.body.data.length).toBe(1);
       expect(listRes.body.data[0].name).toBe('AltChar');
       expect(listRes.body.data[0].isMain).toBe(true);
-    });
-  });
+    }
+    it('should auto-promote next alt to main when main is deleted', () =>
+      testAutoPromoteNextAltToMainWhenMainIsDeleted());
+  }
+  describe('character delete', () => describeCharacterDelete());
 
   // ===================================================================
   // Character Set Main (Atomic Swap)
   // ===================================================================
 
-  describe('character setMain', () => {
-    it('should atomically swap main designation', async () => {
+  function describeCharacterSetMain() {
+    async function testAtomicallySwapMainDesignation() {
       const { token } = await createMemberAndLogin(
         testApp,
         'swapuser',
@@ -320,8 +328,11 @@ describe('Characters & User Management (integration)', () => {
       const newMain = chars.find((c) => c.id === c2Id);
       expect(oldMain?.isMain).toBe(false);
       expect(newMain?.isMain).toBe(true);
-    });
-  });
+    }
+    it('should atomically swap main designation', () =>
+      testAtomicallySwapMainDesignation());
+  }
+  describe('character setMain', () => describeCharacterSetMain());
 
   // ===================================================================
   // Character Update
@@ -368,8 +379,8 @@ describe('Characters & User Management (integration)', () => {
   // User Delete (Cascading)
   // ===================================================================
 
-  describe('user delete', () => {
-    it('should cascade delete characters and signups when admin removes user', async () => {
+  function describeUserDelete() {
+    async function testCascadeDeleteCharactersAndSignupsWhenAdminRemovesUse() {
       const { userId, token } = await createMemberAndLogin(
         testApp,
         'deletable',
@@ -433,9 +444,11 @@ describe('Characters & User Management (integration)', () => {
         .where(eq(schema.eventSignups.userId, userId));
 
       expect(signups.length).toBe(0);
-    });
+    }
+    it('should cascade delete characters and signups when admin removes user', () =>
+      testCascadeDeleteCharactersAndSignupsWhenAdminRemovesUse());
 
-    it('should reassign events to admin when user is deleted', async () => {
+    async function testReassignEventsToAdminWhenUserIsDeleted() {
       const { userId } = await createMemberAndLogin(
         testApp,
         'eventcreator',
@@ -479,14 +492,17 @@ describe('Characters & User Management (integration)', () => {
         .limit(1);
 
       expect(event.creatorId).toBe(testApp.seed.adminUser.id);
-    });
-  });
+    }
+    it('should reassign events to admin when user is deleted', () =>
+      testReassignEventsToAdminWhenUserIsDeleted());
+  }
+  describe('user delete', () => describeUserDelete());
 
   // ===================================================================
   // Discord Link/Unlink
   // ===================================================================
 
-  describe('discord link/unlink', () => {
+  function describeDiscordLinkUnlink() {
     it('should unlink discord and prefix with unlinked:', async () => {
       // Create a user with a real discord ID (not local:)
       const [user] = await testApp.db
@@ -527,13 +543,14 @@ describe('Characters & User Management (integration)', () => {
 
       expect(updated.discordId).toBe('unlinked:123456789');
     });
-  });
+  }
+  describe('discord link/unlink', () => describeDiscordLinkUnlink());
 
   // ===================================================================
   // Display Name
   // ===================================================================
 
-  describe('display name', () => {
+  function describeDisplayName() {
     it('should update display name with availability check', async () => {
       const { token } = await createMemberAndLogin(
         testApp,
@@ -576,7 +593,8 @@ describe('Characters & User Management (integration)', () => {
 
       expect(dupRes.status).toBe(400);
     });
-  });
+  }
+  describe('display name', () => describeDisplayName());
 
   // ===================================================================
   // Auth Guards
@@ -589,4 +607,6 @@ describe('Characters & User Management (integration)', () => {
       expect(res.status).toBe(401);
     });
   });
-});
+}
+describe('Characters & User Management (integration)', () =>
+  describeCharactersUserManagement());

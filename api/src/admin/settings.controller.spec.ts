@@ -8,12 +8,12 @@ import { SettingsService } from '../settings/settings.service';
 import { IgdbService } from '../igdb/igdb.service';
 import { DemoDataService } from './demo-data.service';
 
-describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', () => {
+function describeAdminSettingsControllerROK231GameHideBanAndAdultF() {
   let controller: AdminSettingsController;
   let mockIgdbService: Partial<IgdbService>;
   let mockSettingsService: Partial<SettingsService>;
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     mockIgdbService = {
       hideGame: jest.fn().mockResolvedValue({
         success: true,
@@ -91,7 +91,8 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
     }).compile();
 
     controller = module.get<AdminSettingsController>(AdminSettingsController);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -100,7 +101,7 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
   // ============================================================
   // POST /admin/settings/games/:id/hide
   // ============================================================
-  describe('hideGame', () => {
+  function describeHideGame() {
     it('returns success when game is hidden', async () => {
       const result = await controller.hideGame(1);
 
@@ -144,7 +145,8 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
         expect(response.message).toBe('Game not found');
       }
     });
-  });
+  }
+  describe('hideGame', () => describeHideGame());
 
   // ============================================================
   // POST /admin/settings/games/:id/unhide
@@ -260,7 +262,7 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
   // ============================================================
   // PUT /admin/settings/igdb/adult-filter
   // ============================================================
-  describe('setAdultFilter', () => {
+  function describeSetAdultFilter() {
     it('saves the setting to true when enabling', async () => {
       (mockIgdbService.hideAdultGames as jest.Mock).mockResolvedValue(5);
 
@@ -325,13 +327,14 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
       expect(mockIgdbService.hideAdultGames).not.toHaveBeenCalled();
       expect(result.success).toBe(true);
     });
-  });
+  }
+  describe('setAdultFilter', () => describeSetAdultFilter());
 
   // ============================================================
   // GET /admin/settings/games — listGames with showHidden filter
   // ============================================================
-  describe('listGames — showHidden filter', () => {
-    it('returns visible games only when showHidden is undefined', async () => {
+  function describeListGamesShowHiddenFilter() {
+    async function testReturnsVisibleGamesOnlyWhenShowHiddenIsUndefined() {
       const rows = [
         {
           id: 1,
@@ -369,9 +372,11 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
       const result = await controller.listGames(undefined, undefined);
       expect(result.data.length).toBeGreaterThanOrEqual(0);
       expect(result.meta).toBeDefined();
-    });
+    }
+    it('returns visible games only when showHidden is undefined', () =>
+      testReturnsVisibleGamesOnlyWhenShowHiddenIsUndefined());
 
-    it('returns only hidden games when showHidden is "only"', async () => {
+    async function testReturnsOnlyHiddenGamesWhenShowHiddenIsOnly() {
       let callCount = 0;
       const hiddenRow = {
         id: 2,
@@ -405,9 +410,11 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
 
       const result = await controller.listGames(undefined, 'only');
       expect(result.data.length).toBeGreaterThanOrEqual(0);
-    });
+    }
+    it('returns only hidden games when showHidden is "only"', () =>
+      testReturnsOnlyHiddenGamesWhenShowHiddenIsOnly());
 
-    it('includes hidden field in response data', async () => {
+    async function testIncludesHiddenFieldInResponseData() {
       const rows = [
         {
           id: 1,
@@ -456,7 +463,9 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
       result.data.forEach((game) => {
         expect(typeof game.hidden).toBe('boolean');
       });
-    });
+    }
+    it('includes hidden field in response data', () =>
+      testIncludesHiddenFieldInResponseData());
 
     it('respects page and limit parameters', async () => {
       let callCount = 0;
@@ -535,5 +544,9 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
 
       expect(result.meta.limit).toBe(100);
     });
-  });
-});
+  }
+  describe('listGames — showHidden filter', () =>
+    describeListGamesShowHiddenFilter());
+}
+describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', () =>
+  describeAdminSettingsControllerROK231GameHideBanAndAdultF());

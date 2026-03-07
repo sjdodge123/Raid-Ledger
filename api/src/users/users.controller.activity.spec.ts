@@ -15,7 +15,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { UserActivityResponseSchema } from '@raid-ledger/contract';
 
-describe('UsersController.getUserActivity (ROK-443)', () => {
+function describeUsersControllerGetUserActivity() {
   let controller: UsersController;
   let usersService: UsersService;
 
@@ -47,7 +47,7 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
     },
   ];
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
       providers: [
@@ -125,9 +125,10 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
 
     controller = module.get<UsersController>(UsersController);
     usersService = module.get<UsersService>(UsersService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
-  describe('period validation', () => {
+  function describePeriodValidation() {
     it('should default period to week when not provided', async () => {
       jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
       const activitySpy = jest
@@ -187,7 +188,8 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
         controller.getUserActivity(1, 'daily', undefined),
       ).rejects.toThrow(BadRequestException);
     });
-  });
+  }
+  describe('period validation', () => describePeriodValidation());
 
   describe('user not found', () => {
     it('should throw NotFoundException when user does not exist', async () => {
@@ -216,7 +218,7 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
     });
   });
 
-  describe('response shape', () => {
+  function describeResponseShape() {
     it('should return data and period in response', async () => {
       jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
       jest
@@ -283,5 +285,8 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
 
       expect(result.period).toBe('all');
     });
-  });
-});
+  }
+  describe('response shape', () => describeResponseShape());
+}
+describe('UsersController.getUserActivity (ROK-443)', () =>
+  describeUsersControllerGetUserActivity());

@@ -64,7 +64,7 @@ const mockAuthReq = (userId: number) =>
 
 // ─── GameInterestResponseSchema — source field (ROK-444) ─────────────────────
 
-describe('GameInterestResponseSchema — source field (ROK-444)', () => {
+function describeGameInterestResponseSchemaSourceField() {
   it('accepts source: discord', () => {
     const result = GameInterestResponseSchema.safeParse({
       wantToPlay: true,
@@ -133,11 +133,13 @@ describe('GameInterestResponseSchema — source field (ROK-444)', () => {
       expect(result.success).toBe(true);
     }
   });
-});
+}
+describe('GameInterestResponseSchema — source field (ROK-444)', () =>
+  describeGameInterestResponseSchemaSourceField());
 
 // ─── getGameInterest — source field returned (ROK-444) ───────────────────────
 
-describe('IgdbController.getGameInterest — source field (ROK-444)', () => {
+function describeIgdbControllerGetGameInterestSourceField() {
   /**
    * getGameInterest uses Promise.all for 3 concurrent queries.
    * The flat mock can handle this because each query terminates at a different
@@ -227,11 +229,13 @@ describe('IgdbController.getGameInterest — source field (ROK-444)', () => {
 
     expect(typeof result.count).toBe('number');
   });
-});
+}
+describe('IgdbController.getGameInterest — source field (ROK-444)', () =>
+  describeIgdbControllerGetGameInterestSourceField());
 
 // ─── addWantToPlay — returns source: 'manual' (ROK-444) ──────────────────────
 
-describe('IgdbController.addWantToPlay — source: manual (ROK-444)', () => {
+function describeIgdbControllerAddWantToPlaySourceManual() {
   function buildAddDb(gameExists: boolean): Record<string, jest.Mock> {
     const db: Record<string, jest.Mock> = {};
     const chainMethods = [
@@ -322,11 +326,13 @@ describe('IgdbController.addWantToPlay — source: manual (ROK-444)', () => {
       NotFoundException,
     );
   });
-});
+}
+describe('IgdbController.addWantToPlay — source: manual (ROK-444)', () =>
+  describeIgdbControllerAddWantToPlaySourceManual());
 
 // ─── removeWantToPlay — suppression logic (ROK-444) ──────────────────────────
 
-describe('IgdbController.removeWantToPlay — suppression on discord source (ROK-444)', () => {
+function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
   /**
    * removeWantToPlay query sequence:
    *   1. db.select({source}).from(gameInterests).where(and(...)).limit(1)  ← .limit(1) terminal
@@ -462,4 +468,6 @@ describe('IgdbController.removeWantToPlay — suppression on discord source (ROK
       expect.objectContaining({ userId: 42, gameId: 77 }),
     );
   });
-});
+}
+describe('IgdbController.removeWantToPlay — suppression on discord source (ROK-444)', () =>
+  describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou());
