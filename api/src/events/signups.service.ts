@@ -20,6 +20,7 @@ import type {
   UpdateSignupStatusDto,
   UpdateRosterDto,
   RosterWithAssignments,
+  ConfirmationStatus,
 } from '@raid-ledger/contract';
 import type { PromotionResult } from './signups-allocation.helpers';
 import * as discordH from './signups-discord.helpers';
@@ -198,15 +199,22 @@ export class SignupsService {
     userId: number,
     dto: ConfirmSignupDto,
   ): Promise<SignupResponseDto> {
-    await cancelH.fetchAndVerifySignup(this.db, eventId, signupId, userId);
+    const signup = await cancelH.fetchAndVerifySignup(
+      this.db,
+      eventId,
+      signupId,
+      userId,
+    );
     const character = await cancelH.verifyCharacterOwnership(
       this.db,
       dto.characterId,
       userId,
     );
+    const newStatus: ConfirmationStatus =
+      signup.confirmationStatus === 'pending' ? 'confirmed' : 'changed';
     const [updated] = await this.db
       .update(schema.eventSignups)
-      .set({ characterId: dto.characterId, confirmationStatus: 'confirmed' })
+      .set({ characterId: dto.characterId, confirmationStatus: newStatus })
       .where(eq(schema.eventSignups.id, signupId))
       .returning();
     const user = await cancelH.fetchUserById(this.db, userId);
