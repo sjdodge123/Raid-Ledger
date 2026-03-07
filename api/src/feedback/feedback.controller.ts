@@ -78,12 +78,6 @@ export class FeedbackController {
     };
   }
 
-  /**
-   * GET /feedback
-   * List all feedback (admin only, paginated).
-   */
-  @Get()
-  @UseGuards(AuthGuard('jwt'), AdminGuard)
   /** Parse and clamp pagination params. */
   private parsePagination(pageParam?: string, limitParam?: string) {
     const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
@@ -114,6 +108,12 @@ export class FeedbackController {
       .offset(offset);
   }
 
+  /**
+   * GET /feedback
+   * List all feedback (admin only, paginated).
+   */
+  @Get()
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
   async listFeedback(
     @Query('page') pageParam?: string,
     @Query('limit') limitParam?: string,
