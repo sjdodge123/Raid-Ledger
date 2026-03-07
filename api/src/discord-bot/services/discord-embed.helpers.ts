@@ -240,6 +240,16 @@ function formatDuration(startTime: string, endTime: string): string {
     : `${durationMin}m`;
 }
 
+function formatParticipantLine(p: {
+  discordUserId: string;
+  totalDurationSeconds: number | null;
+}): string {
+  const dur = p.totalDurationSeconds
+    ? ` (${Math.round(p.totalDurationSeconds / 60)}m)`
+    : '';
+  return `<@${p.discordUserId}>${dur}`;
+}
+
 function buildCompletedEmbedCore(
   event: {
     title: string;
@@ -254,12 +264,7 @@ function buildCompletedEmbedCore(
   context: EmbedContext,
 ): EmbedBuilder {
   const durationStr = formatDuration(event.startTime, event.endTime);
-  const rosterLines = participants.map((p) => {
-    const dur = p.totalDurationSeconds
-      ? ` (${Math.round(p.totalDurationSeconds / 60)}m)`
-      : '';
-    return `<@${p.discordUserId}>${dur}`;
-  });
+  const rosterLines = participants.map(formatParticipantLine);
 
   return new EmbedBuilder()
     .setColor(EMBED_COLORS.SYSTEM)

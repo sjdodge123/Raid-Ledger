@@ -47,6 +47,17 @@ export type {
   WowInstanceDetail,
 } from './blizzard.constants';
 
+/** Raw profile shape from the Blizzard character API. */
+interface RawBlizzardProfile {
+  name: string;
+  level: number;
+  character_class: { name: string };
+  active_spec?: { name: string };
+  race: { name: string };
+  faction: { type: string };
+  realm: { name: string };
+}
+
 @Injectable()
 export class BlizzardService {
   private readonly logger = new Logger(BlizzardService.name);
@@ -106,25 +117,16 @@ export class BlizzardService {
       : null;
   }
 
-  /** Build profile result from raw API data. */
-  private buildProfileResult(
-    profile: {
-      name: string;
-      level: number;
-      character_class: { name: string };
-      active_spec?: { name: string };
-      race: { name: string };
-      faction: { type: string };
-      realm: { name: string };
-    },
-    avatarUrl: string | null,
-    renderUrl: string | null,
-    itemLevel: number | null,
-    gameVariant: WowGameVariant,
-    region: string,
-    realmSlug: string,
-    charName: string,
-  ): BlizzardCharacterProfile {
+  /** Extract core character fields from raw profile. */
+  private static extractCoreFields(profile: {
+    name: string;
+    level: number;
+    character_class: { name: string };
+    active_spec?: { name: string };
+    race: { name: string };
+    faction: { type: string };
+    realm: { name: string };
+  }) {
     const specName = profile.active_spec?.name ?? null;
     return {
       name: profile.name,
@@ -135,6 +137,22 @@ export class BlizzardService {
       level: profile.level,
       race: profile.race.name,
       faction: profile.faction.type.toLowerCase() as 'alliance' | 'horde',
+    };
+  }
+
+  /** Build profile result from raw API data. */
+  private buildProfileResult(
+    profile: RawBlizzardProfile,
+    avatarUrl: string | null,
+    renderUrl: string | null,
+    itemLevel: number | null,
+    gameVariant: WowGameVariant,
+    region: string,
+    realmSlug: string,
+    charName: string,
+  ): BlizzardCharacterProfile {
+    return {
+      ...BlizzardService.extractCoreFields(profile),
       itemLevel,
       avatarUrl,
       renderUrl,
@@ -195,6 +213,38 @@ export class BlizzardService {
     return this.fetchEquipItemLevel(profileUrl, namespace, token);
   }
 
+  /** Fetch raw profile data, media, and item level for a character. */
+  private async fetchProfileData(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant: WowGameVariant,
+  ) {
+    const token = await this.getAccessToken(region);
+    const params = buildCharacterParams(name, realm, region, gameVariant);
+    const profileUrl = `${params.baseUrl}/profile/wow/character/${params.realmSlug}/${params.charName}`;
+    const profile = await this.fetchRawProfile(
+      profileUrl,
+      params.namespace,
+      token,
+      name,
+      realm,
+      region,
+    );
+    const media = await fetchCharacterMedia(
+      profileUrl,
+      params.namespace,
+      token,
+    );
+    const itemLevel = await this.resolveItemLevel(
+      profile,
+      profileUrl,
+      params.namespace,
+      token,
+    );
+    return { profile, ...media, itemLevel, ...params };
+  }
+
   /** Fetch a WoW character profile from the Blizzard API. */
   async fetchCharacterProfile(
     name: string,
@@ -202,42 +252,16 @@ export class BlizzardService {
     region: string,
     gameVariant: WowGameVariant = 'retail',
   ): Promise<BlizzardCharacterProfile> {
-    const token = await this.getAccessToken(region);
-    const { realmSlug, charName, namespace, baseUrl } = buildCharacterParams(
-      name,
-      realm,
-      region,
-      gameVariant,
-    );
-    const profileUrl = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}`;
-    const profile = await this.fetchRawProfile(
-      profileUrl,
-      namespace,
-      token,
-      name,
-      realm,
-      region,
-    );
-    const { avatarUrl, renderUrl } = await fetchCharacterMedia(
-      profileUrl,
-      namespace,
-      token,
-    );
-    const itemLevel = await this.resolveItemLevel(
-      profile,
-      profileUrl,
-      namespace,
-      token,
-    );
+    const data = await this.fetchProfileData(name, realm, region, gameVariant);
     return this.buildProfileResult(
-      profile,
-      avatarUrl,
-      renderUrl,
-      itemLevel,
+      data.profile,
+      data.avatarUrl,
+      data.renderUrl,
+      data.itemLevel,
       gameVariant,
       region,
-      realmSlug,
-      charName,
+      data.realmSlug,
+      data.charName,
     );
   }
 
@@ -278,6 +302,17 @@ export class BlizzardService {
     );
   }
 
+  /** Parse raw equipment response. */
+  private static parseEquipmentResponse(json: unknown) {
+    return json as {
+      equipped_item_level?: number;
+      equipped_items?: Array<{
+        item: { id: number };
+        media?: { key?: { href: string } };
+      }>;
+    };
+  }
+
   /** Fetch raw equipment data from the Blizzard API. */
   private async fetchRawEquipment(
     name: string,
@@ -302,14 +337,11 @@ export class BlizzardService {
       );
       return null;
     }
-    const data = (await res.json()) as {
-      equipped_item_level?: number;
-      equipped_items?: Array<{
-        item: { id: number };
-        media?: { key?: { href: string } };
-      }>;
+    return {
+      data: BlizzardService.parseEquipmentResponse(await res.json()),
+      token,
+      charName,
     };
-    return { data, token, charName };
   }
 
   /** Fetch a WoW character's equipped items from the Blizzard API. */

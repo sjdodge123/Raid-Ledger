@@ -126,6 +126,70 @@ async function signupAsTentative(
 /**
  * Try game-specific tentative flow for linked user. Returns true if handled.
  */
+async function loadTentativeGameContext(
+  linkedUser: typeof schema.users.$inferSelect,
+  event: typeof schema.events.$inferSelect,
+  deps: SignupInteractionDeps,
+): Promise<{
+  characters: import('@raid-ledger/contract').CharacterDto[];
+  isMMO: boolean;
+} | null> {
+  const [game] = await deps.db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.id, event.gameId!))
+    .limit(1);
+  if (!game) return null;
+
+  const characterList = await deps.charactersService.findAllForUser(
+    linkedUser.id,
+    event.gameId!,
+  );
+  const isMMO =
+    (event.slotConfig as Record<string, unknown> | null)?.type === 'mmo';
+  return { characters: characterList.data, isMMO };
+}
+
+function shouldShowTentativeCharSelect(
+  isMMO: boolean,
+  charCount: number,
+): boolean {
+  return (isMMO && charCount >= 1) || charCount > 1;
+}
+
+/** Handle character-based tentative branch. Returns null if not applicable. */
+async function tryTentativeCharPath(
+  interaction: ButtonInteraction,
+  eventId: number,
+  linkedUser: typeof schema.users.$inferSelect,
+  event: typeof schema.events.$inferSelect,
+  ctx: {
+    characters: import('@raid-ledger/contract').CharacterDto[];
+    isMMO: boolean;
+  },
+  deps: SignupInteractionDeps,
+): Promise<boolean | null> {
+  if (shouldShowTentativeCharSelect(ctx.isMMO, ctx.characters.length)) {
+    await showTentativeCharacterSelect(
+      interaction,
+      eventId,
+      event.title,
+      ctx.characters,
+      deps,
+    );
+    return true;
+  }
+  if (ctx.characters.length === 1)
+    return tentativeSingleCharacter(
+      interaction,
+      eventId,
+      linkedUser.id,
+      ctx.characters[0],
+      deps,
+    );
+  return null;
+}
+
 async function tryLinkedTentativeGameFlow(
   interaction: ButtonInteraction,
   eventId: number,
@@ -133,43 +197,18 @@ async function tryLinkedTentativeGameFlow(
   event: typeof schema.events.$inferSelect,
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
-  const [game] = await deps.db
-    .select()
-    .from(schema.games)
-    .where(eq(schema.games.id, event.gameId!))
-    .limit(1);
-  if (!game) return false;
-
-  const characterList = await deps.charactersService.findAllForUser(
-    linkedUser.id,
-    event.gameId!,
+  const ctx = await loadTentativeGameContext(linkedUser, event, deps);
+  if (!ctx) return false;
+  const charResult = await tryTentativeCharPath(
+    interaction,
+    eventId,
+    linkedUser,
+    event,
+    ctx,
+    deps,
   );
-  const characters = characterList.data;
-  const isMMO =
-    (event.slotConfig as Record<string, unknown> | null)?.type === 'mmo';
-
-  if ((isMMO && characters.length >= 1) || characters.length > 1) {
-    await showTentativeCharacterSelect(
-      interaction,
-      eventId,
-      event.title,
-      characters,
-      deps,
-    );
-    return true;
-  }
-
-  if (characters.length === 1) {
-    return tentativeSingleCharacter(
-      interaction,
-      eventId,
-      linkedUser.id,
-      characters[0],
-      deps,
-    );
-  }
-
-  if (isMMO) {
+  if (charResult !== null) return charResult;
+  if (ctx.isMMO) {
     await showRoleSelect(
       interaction,
       eventId,
@@ -180,7 +219,6 @@ async function tryLinkedTentativeGameFlow(
     );
     return true;
   }
-
   return false;
 }
 

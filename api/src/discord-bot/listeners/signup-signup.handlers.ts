@@ -29,12 +29,7 @@ export async function handleExistingSignup(
     deps,
   );
 
-  const [linkedUser] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, interaction.user.id))
-    .limit(1);
-
+  const linkedUser = await findLinkedUserByDiscordId(interaction.user.id, deps);
   if (!linkedUser) {
     await interaction.editReply({ content: alreadySignedUpMessage() });
     return;
@@ -48,12 +43,31 @@ export async function handleExistingSignup(
     deps,
   );
   if (!handled) {
-    await interaction.editReply({
-      content: wasReactivated
-        ? 'Your status has been changed to **signed up**!'
-        : alreadySignedUpMessage(),
-    });
+    await replyReactivationResult(interaction, wasReactivated);
   }
+}
+
+async function findLinkedUserByDiscordId(
+  discordId: string,
+  deps: SignupInteractionDeps,
+): Promise<typeof schema.users.$inferSelect | null> {
+  const [user] = await deps.db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.discordId, discordId))
+    .limit(1);
+  return user ?? null;
+}
+
+async function replyReactivationResult(
+  interaction: ButtonInteraction,
+  wasReactivated: boolean,
+): Promise<void> {
+  await interaction.editReply({
+    content: wasReactivated
+      ? 'Your status has been changed to **signed up**!'
+      : alreadySignedUpMessage(),
+  });
 }
 
 function alreadySignedUpMessage(): string {
@@ -136,6 +150,15 @@ async function loadGameContext(
   };
 }
 
+function needsCharacterOrRole(
+  existingSignup: ExistingSignup,
+  isMMO: boolean,
+): boolean {
+  return (
+    !existingSignup.characterId || (isMMO && !existingSignup.character?.role)
+  );
+}
+
 async function offerSelectionUI(
   interaction: ButtonInteraction,
   eventId: number,
@@ -144,10 +167,7 @@ async function offerSelectionUI(
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
   if (ctx.characters.length >= 1) {
-    if (
-      !existingSignup.characterId ||
-      (ctx.isMMO && !existingSignup.character?.role)
-    ) {
+    if (needsCharacterOrRole(existingSignup, ctx.isMMO))
       return offerCharacterOrRole(
         interaction,
         eventId,
@@ -155,7 +175,6 @@ async function offerSelectionUI(
         existingSignup,
         deps,
       );
-    }
     await showCharacterSelect(
       interaction,
       eventId,
@@ -165,12 +184,23 @@ async function offerSelectionUI(
     );
     return true;
   }
-
   if (ctx.isMMO) {
     await showRoleSelect(interaction, eventId, deps);
     return true;
   }
   return false;
+}
+
+function resolveCharacterInfo(
+  characters: import('@raid-ledger/contract').CharacterDto[],
+  characterId: string,
+): { name: string; role: string | null } | undefined {
+  const currentChar = characters.find((c) => c.id === characterId);
+  if (!currentChar) return undefined;
+  return {
+    name: currentChar.name,
+    role: currentChar.roleOverride ?? currentChar.role ?? null,
+  };
 }
 
 async function offerCharacterOrRole(
@@ -191,20 +221,16 @@ async function offerCharacterOrRole(
     return true;
   }
   // MMO without role — show role select
-  const currentChar = ctx.characters.find(
-    (c) => c.id === existingSignup.characterId,
+  const charInfo = resolveCharacterInfo(
+    ctx.characters,
+    existingSignup.characterId,
   );
   await showRoleSelect(
     interaction,
     eventId,
     deps,
     existingSignup.characterId,
-    currentChar
-      ? {
-          name: currentChar.name,
-          role: currentChar.roleOverride ?? currentChar.role ?? null,
-        }
-      : undefined,
+    charInfo,
   );
   return true;
 }
@@ -257,6 +283,72 @@ async function fetchEvent(
 /**
  * Try game-specific signup flow (character/role). Returns true if handled.
  */
+async function loadGameSignupContext(
+  linkedUser: typeof schema.users.$inferSelect,
+  event: typeof schema.events.$inferSelect,
+  deps: SignupInteractionDeps,
+): Promise<{
+  game: { hasRoles: boolean };
+  characters: import('@raid-ledger/contract').CharacterDto[];
+  isMMO: boolean;
+} | null> {
+  const [game] = await deps.db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.id, event.gameId!))
+    .limit(1);
+  if (!game) return null;
+
+  const characterList = await deps.charactersService.findAllForUser(
+    linkedUser.id,
+    event.gameId!,
+  );
+  const slotConfig = event.slotConfig as Record<string, unknown> | null;
+  return {
+    game,
+    characters: characterList.data,
+    isMMO: slotConfig?.type === 'mmo',
+  };
+}
+
+function shouldShowCharacterSelect(isMMO: boolean, charCount: number): boolean {
+  return (isMMO && charCount >= 1) || charCount > 1;
+}
+
+/** Handle character-based signup branch (multi-char select or single char). */
+async function tryCharacterSignupPath(
+  interaction: ButtonInteraction,
+  eventId: number,
+  linkedUser: typeof schema.users.$inferSelect,
+  event: typeof schema.events.$inferSelect,
+  ctx: {
+    characters: import('@raid-ledger/contract').CharacterDto[];
+    isMMO: boolean;
+    game: { hasRoles: boolean };
+  },
+  deps: SignupInteractionDeps,
+): Promise<boolean | null> {
+  if (shouldShowCharacterSelect(ctx.isMMO, ctx.characters.length)) {
+    await showCharacterSelect(
+      interaction,
+      eventId,
+      event.title,
+      ctx.characters,
+      deps,
+    );
+    return true;
+  }
+  if (ctx.characters.length === 1)
+    return signupSingleCharacter(
+      interaction,
+      eventId,
+      linkedUser.id,
+      ctx.characters[0],
+      deps,
+    );
+  return null;
+}
+
 async function tryGameSignupFlow(
   interaction: ButtonInteraction,
   eventId: number,
@@ -264,53 +356,27 @@ async function tryGameSignupFlow(
   event: typeof schema.events.$inferSelect,
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
-  const [game] = await deps.db
-    .select()
-    .from(schema.games)
-    .where(eq(schema.games.id, event.gameId!))
-    .limit(1);
-  if (!game) return false;
-
-  const characterList = await deps.charactersService.findAllForUser(
-    linkedUser.id,
-    event.gameId!,
+  const ctx = await loadGameSignupContext(linkedUser, event, deps);
+  if (!ctx) return false;
+  const charResult = await tryCharacterSignupPath(
+    interaction,
+    eventId,
+    linkedUser,
+    event,
+    ctx,
+    deps,
   );
-  const characters = characterList.data;
-  const slotConfig = event.slotConfig as Record<string, unknown> | null;
-  const isMMO = slotConfig?.type === 'mmo';
-
-  if ((isMMO && characters.length >= 1) || characters.length > 1) {
-    await showCharacterSelect(
-      interaction,
-      eventId,
-      event.title,
-      characters,
-      deps,
-    );
-    return true;
-  }
-
-  if (characters.length === 1) {
-    return signupSingleCharacter(
-      interaction,
-      eventId,
-      linkedUser.id,
-      characters[0],
-      deps,
-    );
-  }
-
-  if (isMMO) {
+  if (charResult !== null) return charResult;
+  if (ctx.isMMO) {
     await showRoleSelect(interaction, eventId, deps);
     return true;
   }
-
   return signupWithoutCharacter(
     interaction,
     eventId,
     linkedUser.id,
     event,
-    game,
+    ctx.game,
     deps,
   );
 }

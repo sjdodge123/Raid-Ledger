@@ -552,6 +552,73 @@ function buildCompositeLookups(
   };
 }
 
+/** Build the final composite result object. */
+function buildCompositeResult(
+  slots: CompositeSlot[],
+  events: EventBlockDescriptor[],
+  weekStart: Date,
+  overrideRows: OverrideRecord[],
+  absenceRows: AbsenceRecord[],
+): CompositeViewResult {
+  return {
+    slots,
+    events,
+    weekStart: weekStart.toISOString(),
+    overrides: overrideRows,
+    absences: absenceRows,
+  };
+}
+
+interface CompositeViewInput {
+  remapped: Array<{ dayOfWeek: number; hour: number }>;
+  signedUpEvents: SignedUpEventRow[];
+  overrideRows: OverrideRecord[];
+  absenceRows: AbsenceRecord[];
+  signupsMap: SignupsPreviewMap;
+  weekStart: Date;
+  weekEnd: Date;
+  tzOffset: number;
+}
+
+/** Build slots and events from lookups. */
+function buildSlotsAndEvents(input: CompositeViewInput) {
+  const {
+    remapped,
+    signedUpEvents,
+    overrideRows,
+    absenceRows,
+    weekStart,
+    weekEnd,
+    tzOffset,
+  } = input;
+  const lookups = buildCompositeLookups(
+    remapped,
+    signedUpEvents,
+    overrideRows,
+    absenceRows,
+    weekStart,
+    weekEnd,
+    tzOffset,
+  );
+  return {
+    slots: buildCompositeSlots(
+      remapped,
+      lookups.templateSet,
+      lookups.committedSet,
+      lookups.absenceDates,
+      lookups.overrideMap,
+      weekStart,
+    ),
+    events: buildEventBlocks(
+      signedUpEvents,
+      weekStart,
+      weekEnd,
+      tzOffset,
+      input.signupsMap,
+    ),
+  };
+}
+
 /** Assemble the full composite view result from all fetched data. */
 export function assembleCompositeView(
   remapped: Array<{ dayOfWeek: number; hour: number }>,
@@ -563,35 +630,21 @@ export function assembleCompositeView(
   weekEnd: Date,
   tzOffset: number,
 ): CompositeViewResult {
-  const lookups = buildCompositeLookups(
+  const { slots, events } = buildSlotsAndEvents({
     remapped,
     signedUpEvents,
     overrideRows,
     absenceRows,
-    weekStart,
-    weekEnd,
-    tzOffset,
-  );
-  const slots = buildCompositeSlots(
-    remapped,
-    lookups.templateSet,
-    lookups.committedSet,
-    lookups.absenceDates,
-    lookups.overrideMap,
-    weekStart,
-  );
-  const events = buildEventBlocks(
-    signedUpEvents,
-    weekStart,
-    weekEnd,
-    tzOffset,
     signupsMap,
-  );
-  return {
+    weekStart,
+    weekEnd,
+    tzOffset,
+  });
+  return buildCompositeResult(
     slots,
     events,
-    weekStart: weekStart.toISOString(),
-    overrides: overrideRows,
-    absences: absenceRows,
-  };
+    weekStart,
+    overrideRows,
+    absenceRows,
+  );
 }

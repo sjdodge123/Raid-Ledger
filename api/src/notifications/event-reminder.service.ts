@@ -41,6 +41,18 @@ const REMINDER_WINDOWS = [
 
 type ReminderWindowType = (typeof REMINDER_WINDOWS)[number]['type'];
 
+type CharsByUserMap = Map<
+  number,
+  { userId: number; name: string; charClass: string | null; gameId: number }[]
+>;
+
+interface ReminderFetchContext {
+  signupsByEvent: Map<number, number[]>;
+  userMap: Map<number, { id: number; discordId: string | null }>;
+  tzMap: Map<number, string>;
+  charsByUser: CharsByUserMap;
+}
+
 /** Scheduled service that sends event reminders via Discord DM (ROK-126). */
 @Injectable()
 export class EventReminderService {
@@ -150,10 +162,7 @@ export class EventReminderService {
     for (const event of events) {
       await this.sendRemindersForEvent(
         event,
-        ctx.signupsByEvent,
-        ctx.userMap,
-        ctx.tzMap,
-        ctx.charsByUser,
+        ctx,
         windowType,
         windowLabel,
         now,
@@ -187,39 +196,55 @@ export class EventReminderService {
       duration: [Date, Date];
       gameId: number | null;
     },
-    signupsByEvent: Map<number, number[]>,
-    userMap: Map<number, { id: number; discordId: string | null }>,
-    tzMap: Map<number, string>,
-    charsByUser: Map<
-      number,
-      {
-        userId: number;
-        name: string;
-        charClass: string | null;
-        gameId: number;
-      }[]
-    >,
+    fetchCtx: ReminderFetchContext,
     windowType: ReminderWindowType,
     windowLabel: string,
     now: Date,
     defaultTimezone: string,
   ): Promise<void> {
-    const userIds = signupsByEvent.get(event.id) ?? [];
-    const ctx = await this.buildEventReminderContext(event, now);
+    const userIds = fetchCtx.signupsByEvent.get(event.id) ?? [];
+    const eventCtx = await this.buildEventReminderContext(event, now);
     for (const userId of userIds) {
-      if (!userMap.get(userId)) continue;
-      await this.sendReminder({
-        eventId: event.id,
+      if (!fetchCtx.userMap.get(userId)) continue;
+      await this.sendSingleUserReminder(
+        event,
         userId,
+        eventCtx,
+        fetchCtx,
         windowType,
         windowLabel,
-        title: event.title,
-        ...ctx,
-        characterDisplay: buildCharDisplay(charsByUser, userId, event.gameId),
-        timezone: tzMap.get(userId),
         defaultTimezone,
-      });
+      );
     }
+  }
+
+  /** Send a reminder to a single user. */
+  private async sendSingleUserReminder(
+    event: { id: number; title: string; gameId?: number | null },
+    userId: number,
+    eventCtx: Awaited<
+      ReturnType<EventReminderService['buildEventReminderContext']>
+    >,
+    fetchCtx: Pick<ReminderFetchContext, 'charsByUser' | 'tzMap'>,
+    windowType: ReminderWindowType,
+    windowLabel: string,
+    defaultTimezone: string,
+  ): Promise<void> {
+    await this.sendReminder({
+      eventId: event.id,
+      userId,
+      windowType,
+      windowLabel,
+      title: event.title,
+      ...eventCtx,
+      characterDisplay: buildCharDisplay(
+        fetchCtx.charsByUser,
+        userId,
+        event.gameId ?? null,
+      ),
+      timezone: fetchCtx.tzMap.get(userId),
+      defaultTimezone,
+    });
   }
 
   /** Build the notification payload for a reminder. */

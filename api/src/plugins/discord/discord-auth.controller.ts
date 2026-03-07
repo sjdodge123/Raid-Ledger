@@ -147,6 +147,30 @@ export class DiscordAuthController {
     return `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
   }
 
+  /** Initiate the Discord link OAuth flow after validating config. */
+  private async initiateDiscordLinkFlow(
+    userId: number,
+    clientUrl: string,
+    res: Response,
+  ): Promise<void> {
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (!oauthConfig) {
+      res.redirect(
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
+      );
+      return;
+    }
+    const state = signOAuthState(
+      { userId, action: 'link', timestamp: Date.now() },
+      this.getSecret(),
+    );
+    const redirectUri = oauthConfig.callbackUrl.replace(
+      '/callback',
+      '/link/callback',
+    );
+    res.redirect(this.buildOAuthUrl(oauthConfig.clientId, redirectUri, state));
+  }
+
   /** GET /auth/discord/link — initiate Discord OAuth for account linking. */
   @RateLimit('auth')
   @Get('discord/link')
@@ -164,22 +188,7 @@ export class DiscordAuthController {
     }
     const userId = this.verifyTokenOrRedirect(token, res, clientUrl);
     if (userId === null) return;
-    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
-    if (!oauthConfig) {
-      res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
-      );
-      return;
-    }
-    const state = signOAuthState(
-      { userId, action: 'link', timestamp: Date.now() },
-      this.getSecret(),
-    );
-    const redirectUri = oauthConfig.callbackUrl.replace(
-      '/callback',
-      '/link/callback',
-    );
-    res.redirect(this.buildOAuthUrl(oauthConfig.clientId, redirectUri, state));
+    await this.initiateDiscordLinkFlow(userId, clientUrl, res);
   }
 
   /** Verify JWT token, redirect to error on failure. Returns userId or null. */

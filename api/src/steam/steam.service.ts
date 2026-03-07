@@ -12,6 +12,19 @@ import type { SteamSyncResultDto } from '@raid-ledger/contract';
  * Fetches owned games from Steam, matches to IGDB records via steam_app_id,
  * and populates game_interests with source='steam_library'.
  */
+interface SteamClassifyCtx {
+  gameByAppId: Map<number, { id: number }>;
+  existingGameIds: Set<number>;
+  userId: number;
+  now: Date;
+  toInsert: ReturnType<SteamService['buildInsertRow']>[];
+  toUpdate: Array<{
+    gameId: number;
+    playtimeForever: number;
+    playtime2weeks: number | null;
+  }>;
+}
+
 @Injectable()
 export class SteamService {
   private readonly logger = new Logger(SteamService.name);
@@ -131,6 +144,15 @@ export class SteamService {
     };
   }
 
+  /** Build an update entry for an existing steam game interest. */
+  private static buildUpdateEntry(
+    gameId: number,
+    playtimeForever: number,
+    playtime2weeks: number | null,
+  ) {
+    return { gameId, playtimeForever, playtime2weeks };
+  }
+
   /** Classify a single owned game as insert or update. */
   private classifySteamGame(
     steamGame: {
@@ -138,34 +160,27 @@ export class SteamService {
       playtime_forever: number;
       playtime_2weeks?: number;
     },
-    gameByAppId: Map<number, { id: number }>,
-    existingGameIds: Set<number>,
-    userId: number,
-    now: Date,
-    toInsert: ReturnType<SteamService['buildInsertRow']>[],
-    toUpdate: Array<{
-      gameId: number;
-      playtimeForever: number;
-      playtime2weeks: number | null;
-    }>,
+    ctx: SteamClassifyCtx,
   ): void {
-    const dbGame = gameByAppId.get(steamGame.appid);
+    const dbGame = ctx.gameByAppId.get(steamGame.appid);
     if (!dbGame) return;
     const pt2w = steamGame.playtime_2weeks ?? null;
-    if (existingGameIds.has(dbGame.id))
-      toUpdate.push({
-        gameId: dbGame.id,
-        playtimeForever: steamGame.playtime_forever,
-        playtime2weeks: pt2w,
-      });
-    else
-      toInsert.push(
-        this.buildInsertRow(
-          userId,
+    if (ctx.existingGameIds.has(dbGame.id))
+      ctx.toUpdate.push(
+        SteamService.buildUpdateEntry(
           dbGame.id,
           steamGame.playtime_forever,
           pt2w,
-          now,
+        ),
+      );
+    else
+      ctx.toInsert.push(
+        this.buildInsertRow(
+          ctx.userId,
+          dbGame.id,
+          steamGame.playtime_forever,
+          pt2w,
+          ctx.now,
         ),
       );
   }
@@ -184,16 +199,15 @@ export class SteamService {
       playtimeForever: number;
       playtime2weeks: number | null;
     }> = [];
-    for (const steamGame of ownedGames)
-      this.classifySteamGame(
-        steamGame,
-        gameByAppId,
-        existingGameIds,
-        userId,
-        now,
-        toInsert,
-        toUpdate,
-      );
+    const ctx: SteamClassifyCtx = {
+      gameByAppId,
+      existingGameIds,
+      userId,
+      now,
+      toInsert,
+      toUpdate,
+    };
+    for (const steamGame of ownedGames) this.classifySteamGame(steamGame, ctx);
     return { toInsert, toUpdate };
   }
 

@@ -625,6 +625,24 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     return row ?? null;
   }
 
+  private buildRestoredSegments(
+    priorSegments: Array<{
+      joinAt: string;
+      leaveAt: string | null;
+      durationSec: number;
+    }>,
+    now: Date,
+  ) {
+    return [
+      ...priorSegments.map((s) => ({
+        ...s,
+        leaveAt: s.leaveAt ?? now.toISOString(),
+        durationSec: s.durationSec ?? 0,
+      })),
+      { joinAt: now.toISOString(), leaveAt: null, durationSec: 0 },
+    ];
+  }
+
   private restoreExistingSession(
     eventId: number,
     memberId: string,
@@ -633,7 +651,6 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     existingDb: typeof schema.eventVoiceSessions.$inferSelect,
   ): void {
     const now = new Date();
-    const priorSegments = existingDb.segments ?? [];
     this.sessions.set(`${eventId}:${memberId}`, {
       eventId,
       userId: existingDb.userId,
@@ -643,14 +660,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       firstJoinAt: existingDb.firstJoinAt,
       lastLeaveAt: null,
       totalDurationSec: existingDb.totalDurationSec ?? 0,
-      segments: [
-        ...priorSegments.map((s) => ({
-          ...s,
-          leaveAt: s.leaveAt ?? now.toISOString(),
-          durationSec: s.durationSec ?? 0,
-        })),
-        { joinAt: now.toISOString(), leaveAt: null, durationSec: 0 },
-      ],
+      segments: this.buildRestoredSegments(existingDb.segments ?? [], now),
       isActive: true,
       activeSegmentStart: now,
       dirty: true,

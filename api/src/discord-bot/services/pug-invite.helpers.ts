@@ -66,6 +66,19 @@ function addVoiceField(
 /**
  * Build the PUG invite DM embed.
  */
+function buildPugActionRow(pugSlotId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${PUG_BUTTON_IDS.ACCEPT}:${pugSlotId}`)
+      .setLabel('Accept')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`${PUG_BUTTON_IDS.DECLINE}:${pugSlotId}`)
+      .setLabel('Decline')
+      .setStyle(ButtonStyle.Danger),
+  );
+}
+
 export function buildPugInviteEmbed(
   pugSlotId: string,
   eventId: number,
@@ -91,22 +104,32 @@ export function buildPugInviteEmbed(
     });
   }
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${PUG_BUTTON_IDS.ACCEPT}:${pugSlotId}`)
-      .setLabel('Accept')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`${PUG_BUTTON_IDS.DECLINE}:${pugSlotId}`)
-      .setLabel('Decline')
-      .setStyle(ButtonStyle.Danger),
-  );
-  return { embed, row };
+  return { embed, row: buildPugActionRow(pugSlotId) };
 }
 
 /**
  * Build the member invite DM embed (ROK-292).
  */
+function buildMemberActionRow(
+  eventId: number,
+  notificationId: string,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(
+        `${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`,
+      )
+      .setLabel('Accept')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(
+        `${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`,
+      )
+      .setLabel('Decline')
+      .setStyle(ButtonStyle.Danger),
+  );
+}
+
 export function buildMemberInviteEmbed(
   eventId: number,
   notificationId: string,
@@ -125,22 +148,7 @@ export function buildMemberInviteEmbed(
     .setTimestamp();
 
   addVoiceField(embed, voiceChannelId);
-
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(
-        `${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`,
-      )
-      .setLabel('Accept')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(
-        `${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`,
-      )
-      .setLabel('Decline')
-      .setStyle(ButtonStyle.Danger),
-  );
-  return { embed, row };
+  return { embed, row: buildMemberActionRow(eventId, notificationId) };
 }
 
 /**

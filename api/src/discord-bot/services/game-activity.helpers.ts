@@ -476,15 +476,10 @@ async function filterCandidates(
   });
 }
 
-async function buildExclusionSets(
+async function fetchOptedOutUsers(
   db: PostgresJsDatabase<typeof schema>,
-  userIds: number[],
-): Promise<{
-  optedOut: Set<number>;
-  existing: Set<string>;
-  suppressed: Set<string>;
-}> {
-  const optedOut = await db
+): Promise<Set<number>> {
+  const rows = await db
     .select({ userId: tables.userPreferences.userId })
     .from(tables.userPreferences)
     .where(
@@ -493,26 +488,49 @@ async function buildExclusionSets(
         sql`${tables.userPreferences.value}::text = 'false'`,
       ),
     );
+  return new Set(rows.map((r) => r.userId));
+}
 
-  const existing = await db
+async function fetchExistingInterests(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Set<string>> {
+  const rows = await db
     .select({
       userId: tables.gameInterests.userId,
       gameId: tables.gameInterests.gameId,
     })
     .from(tables.gameInterests)
     .where(inArray(tables.gameInterests.userId, userIds));
+  return new Set(rows.map((r) => `${r.userId}:${r.gameId}`));
+}
 
-  const suppressions = await db
+async function fetchSuppressions(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Set<string>> {
+  const rows = await db
     .select({
       userId: tables.gameInterestSuppressions.userId,
       gameId: tables.gameInterestSuppressions.gameId,
     })
     .from(tables.gameInterestSuppressions)
     .where(inArray(tables.gameInterestSuppressions.userId, userIds));
+  return new Set(rows.map((r) => `${r.userId}:${r.gameId}`));
+}
 
-  return {
-    optedOut: new Set(optedOut.map((r) => r.userId)),
-    existing: new Set(existing.map((r) => `${r.userId}:${r.gameId}`)),
-    suppressed: new Set(suppressions.map((r) => `${r.userId}:${r.gameId}`)),
-  };
+async function buildExclusionSets(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<{
+  optedOut: Set<number>;
+  existing: Set<string>;
+  suppressed: Set<string>;
+}> {
+  const [optedOut, existing, suppressed] = await Promise.all([
+    fetchOptedOutUsers(db),
+    fetchExistingInterests(db, userIds),
+    fetchSuppressions(db, userIds),
+  ]);
+  return { optedOut, existing, suppressed };
 }

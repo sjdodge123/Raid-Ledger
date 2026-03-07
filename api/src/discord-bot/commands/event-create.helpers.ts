@@ -22,36 +22,50 @@ function buildCreateSubcommand(
   sub: import('discord.js').SlashCommandSubcommandBuilder,
 ): import('discord.js').SlashCommandSubcommandBuilder {
   return addMmoRoleOptions(
-    sub
-      .setName('create')
-      .setDescription('Quick-create an event from Discord')
-      .addStringOption((opt) =>
-        opt.setName('title').setDescription('Event title').setRequired(true),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('game')
-          .setDescription('Game name')
-          .setRequired(true)
-          .setAutocomplete(true),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('time')
-          .setDescription(
-            'When the event starts (e.g., "tonight 8pm", "Friday 7:30pm")',
-          )
-          .setRequired(true),
-      )
-      .addStringOption(buildRosterOption)
-      .addIntegerOption((opt) =>
-        opt
-          .setName('slots')
-          .setDescription(`Max attendees (default: ${DEFAULT_SLOTS})`)
-          .setMinValue(1)
-          .setMaxValue(100),
-      ),
+    addCreateBaseOptions(
+      sub
+        .setName('create')
+        .setDescription('Quick-create an event from Discord'),
+    ),
   );
+}
+
+function addCreateRequiredOptions(
+  sub: import('discord.js').SlashCommandSubcommandBuilder,
+): import('discord.js').SlashCommandSubcommandBuilder {
+  return sub
+    .addStringOption((opt) =>
+      opt.setName('title').setDescription('Event title').setRequired(true),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('game')
+        .setDescription('Game name')
+        .setRequired(true)
+        .setAutocomplete(true),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('time')
+        .setDescription(
+          'When the event starts (e.g., "tonight 8pm", "Friday 7:30pm")',
+        )
+        .setRequired(true),
+    );
+}
+
+function addCreateBaseOptions(
+  sub: import('discord.js').SlashCommandSubcommandBuilder,
+): import('discord.js').SlashCommandSubcommandBuilder {
+  return addCreateRequiredOptions(sub)
+    .addStringOption(buildRosterOption)
+    .addIntegerOption((opt) =>
+      opt
+        .setName('slots')
+        .setDescription(`Max attendees (default: ${DEFAULT_SLOTS})`)
+        .setMinValue(1)
+        .setMaxValue(100),
+    );
 }
 
 function addMmoRoleOptions(

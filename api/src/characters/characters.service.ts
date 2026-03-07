@@ -390,6 +390,77 @@ export class CharactersService {
     };
   }
 
+  /** Persist the imported character and log the result. */
+  private async commitImportedChar(
+    tx: PostgresJsDatabase<typeof schema>,
+    userId: number,
+    profile: { name: string; realm: string; [k: string]: unknown },
+    values: typeof schema.characters.$inferInsert,
+    shouldBeMain: boolean,
+  ): Promise<CharacterDto> {
+    const [character] = await tx
+      .insert(schema.characters)
+      .values(values)
+      .returning();
+    this.logger.log(
+      `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
+    );
+    return mapCharacterToDto(character);
+  }
+
+  /** Resolve main status and demote existing main if needed. */
+  private async resolveAndDemoteMain(
+    tx: PostgresJsDatabase<typeof schema>,
+    userId: number,
+    gameId: number,
+    isMain: boolean | undefined,
+  ): Promise<boolean> {
+    const { shouldBeMain, charCount } = await resolveMainStatus(
+      tx,
+      userId,
+      gameId,
+      isMain,
+    );
+    if (shouldBeMain && charCount > 0)
+      await demoteExistingMain(tx, userId, gameId);
+    return shouldBeMain;
+  }
+
+  /** Execute the import transaction body. */
+  private async executeImportTx(
+    tx: PostgresJsDatabase<typeof schema>,
+    userId: number,
+    gameId: number,
+    profile: { name: string; realm: string; [k: string]: unknown },
+    dto: ImportWowCharacterDto,
+    equipment: unknown,
+    talents: unknown,
+  ): Promise<CharacterDto> {
+    await this.checkDuplicateClaim(
+      tx,
+      gameId,
+      userId,
+      profile.name,
+      profile.realm,
+    );
+    const shouldBeMain = await this.resolveAndDemoteMain(
+      tx,
+      userId,
+      gameId,
+      dto.isMain,
+    );
+    const values = this.buildImportInsertValues(
+      userId,
+      gameId,
+      profile,
+      dto,
+      equipment,
+      talents,
+      shouldBeMain,
+    );
+    return this.commitImportedChar(tx, userId, profile, values, shouldBeMain);
+  }
+
   /** Insert an imported character in a transaction with main-swap. */
   private async insertImportedCharacter(
     userId: number,
@@ -400,38 +471,15 @@ export class CharactersService {
     talents: unknown,
   ): Promise<CharacterDto> {
     return this.db.transaction(async (tx) => {
-      await this.checkDuplicateClaim(
+      return this.executeImportTx(
         tx,
-        gameId,
-        userId,
-        profile.name,
-        profile.realm,
-      );
-      const { shouldBeMain, charCount } = await resolveMainStatus(
-        tx,
-        userId,
-        gameId,
-        dto.isMain,
-      );
-      if (shouldBeMain && charCount > 0)
-        await demoteExistingMain(tx, userId, gameId);
-      const values = this.buildImportInsertValues(
         userId,
         gameId,
         profile,
         dto,
         equipment,
         talents,
-        shouldBeMain,
       );
-      const [character] = await tx
-        .insert(schema.characters)
-        .values(values)
-        .returning();
-      this.logger.log(
-        `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
-      );
-      return mapCharacterToDto(character);
     });
   }
 
@@ -533,6 +581,25 @@ export class CharactersService {
     return { region, gameVariant, adapter };
   }
 
+  /** Apply refresh fields to DB and return updated character. */
+  private async applyRefreshUpdate(
+    userId: number,
+    characterId: string,
+    fields: Record<string, unknown>,
+    gameId: number,
+  ): Promise<CharacterDto> {
+    const [updated] = await this.db
+      .update(schema.characters)
+      .set(fields)
+      .where(eq(schema.characters.id, characterId))
+      .returning();
+    this.logger.log(
+      `User ${userId} refreshed character ${characterId} from external source`,
+    );
+    this.enqueueCharacterEnrichmentsBackground(characterId, gameId);
+    return mapCharacterToDto(updated);
+  }
+
   /** Refresh a character's data from an external game API (ROK-234, ROK-237). */
   async refreshExternal(
     userId: number,
@@ -555,16 +622,12 @@ export class CharactersService {
       region,
       gameVariant,
     });
-    const [updated] = await this.db
-      .update(schema.characters)
-      .set(fields)
-      .where(eq(schema.characters.id, characterId))
-      .returning();
-    this.logger.log(
-      `User ${userId} refreshed character ${characterId} from external source`,
+    return this.applyRefreshUpdate(
+      userId,
+      characterId,
+      fields,
+      character.gameId,
     );
-    this.enqueueCharacterEnrichmentsBackground(characterId, character.gameId);
-    return mapCharacterToDto(updated);
   }
 
   /** Enforce 5-minute refresh cooldown. */

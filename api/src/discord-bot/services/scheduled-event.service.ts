@@ -23,6 +23,12 @@ import {
 
 export type { ScheduledEventData } from './scheduled-event.helpers';
 
+interface ScheduledEventRecord {
+  discordScheduledEventId: string | null;
+  notificationChannelOverride: string | null;
+  recurrenceGroupId: string | null;
+}
+
 /**
  * Manages Discord Scheduled Events for Raid Ledger events (ROK-471).
  */
@@ -136,28 +142,38 @@ export class ScheduledEventService {
       const guild = this.clientService.getGuild();
       if (!guild) return;
 
-      const event = await this.getEventWithOverride(eventId);
-      if (!event?.discordScheduledEventId) {
-        await this.createScheduledEvent(
-          eventId,
-          eventData,
-          gameId,
-          isAdHoc,
-          event?.notificationChannelOverride,
-        );
-        return;
-      }
-
-      await this.tryEditScheduledEvent(
+      await this.doUpdateScheduledEvent(
         guild,
         eventId,
-        event,
         eventData,
         gameId,
+        isAdHoc,
       );
     } catch (error) {
       this.logApiError('update', eventId, error);
     }
+  }
+
+  private async doUpdateScheduledEvent(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    eventId: number,
+    eventData: ScheduledEventData,
+    gameId?: number | null,
+    isAdHoc?: boolean,
+  ): Promise<void> {
+    const event = await this.getEventWithOverride(eventId);
+    if (!event?.discordScheduledEventId) {
+      await this.createScheduledEvent(
+        eventId,
+        eventData,
+        gameId,
+        isAdHoc,
+        event?.notificationChannelOverride,
+      );
+      return;
+    }
+
+    await this.tryEditScheduledEvent(guild, eventId, event, eventData, gameId);
   }
 
   /** Delete a Discord Scheduled Event. */
@@ -277,25 +293,31 @@ export class ScheduledEventService {
     }
   }
 
-  private async tryEditScheduledEvent(
-    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
-    eventId: number,
-    event: {
-      discordScheduledEventId: string | null;
-      notificationChannelOverride: string | null;
-      recurrenceGroupId: string | null;
-    },
-    eventData: ScheduledEventData,
+  private async resolveEditVoiceChannel(
+    event: Pick<
+      ScheduledEventRecord,
+      'notificationChannelOverride' | 'recurrenceGroupId'
+    >,
     gameId?: number | null,
-  ): Promise<void> {
-    const description = await this.buildDescription(eventId, eventData);
-    const voiceChannelId =
+  ): Promise<string | null | undefined> {
+    return (
       event.notificationChannelOverride ??
       (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         gameId,
         event.recurrenceGroupId,
-      ));
+      ))
+    );
+  }
 
+  private async tryEditScheduledEvent(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    eventId: number,
+    event: ScheduledEventRecord,
+    eventData: ScheduledEventData,
+    gameId?: number | null,
+  ): Promise<void> {
+    const description = await this.buildDescription(eventId, eventData);
+    const voiceChannelId = await this.resolveEditVoiceChannel(event, gameId);
     try {
       await this.callEditScheduledEvent(
         guild,
