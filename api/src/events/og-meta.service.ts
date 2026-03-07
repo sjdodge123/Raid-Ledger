@@ -24,9 +24,28 @@ export class OgMetaService {
       (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
     const canonicalUrl = `${clientUrl}/i/${encodeURIComponent(code)}`;
 
-    let resolveData;
+    const resolveData = await this.safeResolveInvite(code, canonicalUrl);
+    if (typeof resolveData === 'string') return resolveData;
+
+    if (!resolveData.valid) {
+      const description = this.getFallbackDescription(resolveData.error);
+      return this.renderFallbackHtml('Raid Ledger', description, canonicalUrl);
+    }
+
+    if (!resolveData.event) {
+      return this.renderFallbackHtml(
+        'Raid Ledger',
+        'This invite link is invalid.',
+        canonicalUrl,
+      );
+    }
+
+    return this.renderEventOgHtml(resolveData.event, canonicalUrl);
+  }
+
+  private async safeResolveInvite(code: string, canonicalUrl: string) {
     try {
-      resolveData = await this.inviteService.resolveInvite(code);
+      return await this.inviteService.resolveInvite(code);
     } catch (err) {
       this.logger.warn(
         'Failed to resolve invite for OG tags: %s',
@@ -38,31 +57,21 @@ export class OgMetaService {
         canonicalUrl,
       );
     }
+  }
 
-    if (!resolveData.valid) {
-      const description = this.getFallbackDescription(resolveData.error);
-      return this.renderFallbackHtml('Raid Ledger', description, canonicalUrl);
-    }
-
-    const event = resolveData.event;
-    if (!event) {
-      return this.renderFallbackHtml(
-        'Raid Ledger',
-        'This invite link is invalid.',
-        canonicalUrl,
-      );
-    }
-
+  private async renderEventOgHtml(
+    event: {
+      title: string;
+      startTime?: string;
+      endTime?: string;
+      game?: { name: string; coverUrl?: string | null } | null;
+    },
+    canonicalUrl: string,
+  ): Promise<string> {
     const title = `You're invited to: ${event.title}`;
     const description = await this.buildDescription(event);
     const imageUrl = event.game?.coverUrl ?? null;
-
-    return this.renderHtml({
-      title,
-      description,
-      url: canonicalUrl,
-      imageUrl,
-    });
+    return this.renderHtml({ title, description, url: canonicalUrl, imageUrl });
   }
 
   private async buildDescription(event: {
@@ -71,37 +80,20 @@ export class OgMetaService {
     endTime?: string;
     game?: { name: string; coverUrl?: string | null } | null;
   }): Promise<string> {
-    const lines: string[] = [];
-    lines.push(`You're invited to join ${event.title}!`);
-    lines.push('');
+    const lines: string[] = [`You're invited to join ${event.title}!`, ''];
 
     if (event.startTime) {
       const timezone =
         (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-      const date = new Date(event.startTime);
-      const dayStr = date.toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        timeZone: timezone,
-      });
-      const timeStr = date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: timezone,
-      });
-      lines.push(`${dayStr} at ${timeStr}`);
+      lines.push(formatEventDateTime(event.startTime, timezone));
     }
 
-    if (event.game?.name) {
-      lines.push(`Game: ${event.game.name}`);
-    }
+    if (event.game?.name) lines.push(`Game: ${event.game.name}`);
 
     lines.push('');
     lines.push(
       'Click to sign up through Raid Ledger \u2014 log in with Discord or create an account to claim your spot.',
     );
-
     return lines.join('\n');
   }
 
@@ -128,41 +120,7 @@ export class OgMetaService {
     url: string;
     imageUrl: string | null;
   }): string {
-    const t = escapeHtml(meta.title);
-    const d = escapeHtml(meta.description);
-    const u = escapeHtml(meta.url);
-    const imageTag = meta.imageUrl
-      ? `<meta property="og:image" content="${escapeHtml(meta.imageUrl)}" />\n    <meta name="twitter:image" content="${escapeHtml(meta.imageUrl)}" />`
-      : '';
-
-    return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${t}</title>
-    <meta name="description" content="${d}" />
-
-    <!-- Open Graph -->
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Raid Ledger" />
-    <meta property="og:title" content="${t}" />
-    <meta property="og:description" content="${d}" />
-    <meta property="og:url" content="${u}" />
-    ${imageTag}
-
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="${t}" />
-    <meta name="twitter:description" content="${d}" />
-
-    <!-- Redirect real browsers to the SPA -->
-    <meta http-equiv="refresh" content="0;url=${u}" />
-  </head>
-  <body>
-    <p>Redirecting to <a href="${u}">${t}</a>...</p>
-  </body>
-</html>`;
+    return buildOgHtmlPage(meta);
   }
 
   private renderFallbackHtml(
@@ -179,6 +137,23 @@ export class OgMetaService {
   }
 }
 
+/** Format a date string into a human-readable "Day at Time" string. */
+function formatEventDateTime(startTime: string, timezone: string): string {
+  const date = new Date(startTime);
+  const dayStr = date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: timezone,
+  });
+  const timeStr = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: timezone,
+  });
+  return `${dayStr} at ${timeStr}`;
+}
+
 /** Escape HTML special characters to prevent XSS in rendered meta tags. */
 function escapeHtml(str: string): string {
   return str
@@ -187,4 +162,56 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/** Build a complete HTML page with OG meta tags. */
+function buildOgHtmlPage(meta: {
+  title: string;
+  description: string;
+  url: string;
+  imageUrl: string | null;
+}): string {
+  const t = escapeHtml(meta.title);
+  const d = escapeHtml(meta.description);
+  const u = escapeHtml(meta.url);
+  const headTags = buildOgHeadTags(t, d, u, meta.imageUrl);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>${headTags}
+  </head>
+  <body>
+    <p>Redirecting to <a href="${u}">${t}</a>...</p>
+  </body>
+</html>`;
+}
+
+function buildOgHeadTags(
+  t: string,
+  d: string,
+  u: string,
+  imageUrl: string | null,
+): string {
+  const imageTag = imageUrl
+    ? `\n    <meta property="og:image" content="${escapeHtml(imageUrl)}" />\n    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`
+    : '';
+
+  return `
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${t}</title>
+    <meta name="description" content="${d}" />
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Raid Ledger" />
+    <meta property="og:title" content="${t}" />
+    <meta property="og:description" content="${d}" />
+    <meta property="og:url" content="${u}" />
+    ${imageTag}
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="${t}" />
+    <meta name="twitter:description" content="${d}" />
+    <!-- Redirect real browsers to the SPA -->
+    <meta http-equiv="refresh" content="0;url=${u}" />`;
 }

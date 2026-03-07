@@ -30,6 +30,77 @@ const DEFAULT_SLOTS = 20;
 const DEFAULT_DURATION_HOURS = 2;
 const FALLBACK_TIMEZONE = 'America/New_York';
 
+interface ParsedCreateOptions {
+  title: string;
+  game: { id: number; name: string } | null;
+  parsed: ReturnType<typeof parseNaturalTime>;
+  slotConfig: ReturnType<typeof buildSlotConfig>['slotConfig'];
+  maxAttendees: number;
+}
+
+function buildConfirmationEmbed(
+  opts: ParsedCreateOptions,
+  startTime: Date,
+): EmbedBuilder {
+  const parsed = opts.parsed!;
+  const rosterInfo =
+    opts.slotConfig?.type === 'mmo'
+      ? `Roster: **MMO** (${opts.slotConfig.tank}T / ${opts.slotConfig.healer}H / ${opts.slotConfig.dps}D)`
+      : `Slots: **${opts.maxAttendees}**`;
+
+  return new EmbedBuilder()
+    .setColor(0x34d399)
+    .setTitle('Event Created')
+    .setDescription(
+      [
+        `**${opts.title}**`,
+        '',
+        `${toDiscordTimestamp(startTime, 'F')} (${toDiscordTimestamp(startTime, 'R')})`,
+        opts.game ? `Game: **${opts.game.name}**` : null,
+        rosterInfo,
+        '',
+        `Timezone: ${parsed.timezone}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+}
+
+function buildConfigureButton(
+  magicLinkUrl: string | null,
+): ActionRowBuilder<ButtonBuilder>[] {
+  if (!magicLinkUrl) return [];
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('Configure in Raid Ledger')
+        .setStyle(ButtonStyle.Link)
+        .setURL(magicLinkUrl)
+        .setEmoji({ name: '\u2699\uFE0F' }),
+    ),
+  ];
+}
+
+function buildPlanReply(magicLinkUrl: string): {
+  embeds: [EmbedBuilder];
+  components: [ActionRowBuilder<ButtonBuilder>];
+} {
+  const embed = new EmbedBuilder()
+    .setColor(0x8b5cf6)
+    .setTitle('Plan an Event')
+    .setDescription('Use the web form to pick time slots and start a poll.');
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setLabel('Open Planning Form')
+      .setStyle(ButtonStyle.Link)
+      .setURL(magicLinkUrl)
+      .setEmoji({ name: '\uD83D\uDCCA' }),
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
 @Injectable()
 export class EventCreateCommand
   implements SlashCommandHandler, CommandInteractionHandler
@@ -76,34 +147,37 @@ export class EventCreateCommand
     const user = await this.resolveUser(interaction);
     if (!user) return;
 
-    const { title, game, parsed, slotConfig, maxAttendees } =
-      await this.parseCreateOptions(interaction, user.id);
-    if (!parsed) return;
+    const opts = await this.parseCreateOptions(interaction, user.id);
+    if (!opts.parsed) return;
 
-    const startTime = parsed.date;
+    await this.createAndConfirm(interaction, user.id, opts);
+  }
+
+  private async createAndConfirm(
+    interaction: ChatInputCommandInteraction,
+    userId: number,
+    opts: ParsedCreateOptions,
+  ): Promise<void> {
+    const startTime = opts.parsed!.date;
     const endTime = new Date(
       startTime.getTime() + DEFAULT_DURATION_HOURS * 60 * 60 * 1000,
     );
 
     try {
-      const event = await this.eventsService.create(user.id, {
-        title,
+      const event = await this.eventsService.create(userId, {
+        title: opts.title,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        gameId: game?.id ?? undefined,
-        maxAttendees,
-        slotConfig,
+        gameId: opts.game?.id ?? undefined,
+        maxAttendees: opts.maxAttendees,
+        slotConfig: opts.slotConfig,
       });
 
       await this.replyWithConfirmation(
         interaction,
         event.id,
-        user.id,
-        title,
-        game,
-        slotConfig,
-        maxAttendees,
-        parsed,
+        userId,
+        opts,
         startTime,
       );
     } catch (error) {
@@ -120,36 +194,30 @@ export class EventCreateCommand
     const user = await this.resolveUser(interaction);
     if (!user) return;
 
-    const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
-    if (!clientUrl || clientUrl === 'auto') {
-      await interaction.editReply('The web app URL is not configured.');
+    const magicLinkUrl = await this.resolvePlanLink(user.id);
+    if (!magicLinkUrl) {
+      await interaction.editReply(
+        typeof magicLinkUrl === 'undefined'
+          ? 'The web app URL is not configured.'
+          : 'Failed to generate a link.',
+      );
       return;
     }
 
-    const magicLinkUrl = await this.magicLinkService.generateLink(
-      user.id,
+    await interaction.editReply(buildPlanReply(magicLinkUrl));
+  }
+
+  private async resolvePlanLink(
+    userId: number,
+  ): Promise<string | null | undefined> {
+    const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
+    if (!clientUrl || clientUrl === 'auto') return undefined;
+
+    return this.magicLinkService.generateLink(
+      userId,
       '/events/plan',
       clientUrl,
     );
-    if (!magicLinkUrl) {
-      await interaction.editReply('Failed to generate a link.');
-      return;
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor(0x8b5cf6)
-      .setTitle('Plan an Event')
-      .setDescription('Use the web form to pick time slots and start a poll.');
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setLabel('Open Planning Form')
-        .setStyle(ButtonStyle.Link)
-        .setURL(magicLinkUrl)
-        .setEmoji({ name: '\uD83D\uDCCA' }),
-    );
-
-    await interaction.editReply({ embeds: [embed], components: [row] });
   }
 
   // ─── Helpers ──────────────────────────────────────────────
@@ -170,40 +238,45 @@ export class EventCreateCommand
   private async parseCreateOptions(
     interaction: ChatInputCommandInteraction,
     userId: number,
-  ): Promise<{
-    title: string;
-    game: { id: number; name: string } | null;
-    parsed: ReturnType<typeof parseNaturalTime>;
-    slotConfig: ReturnType<typeof buildSlotConfig>['slotConfig'];
-    maxAttendees: number;
-  }> {
+  ): Promise<ParsedCreateOptions> {
     const title = interaction.options.getString('title', true);
     const gameName = interaction.options.getString('game', true);
     const timeInput = interaction.options.getString('time', true);
-    const rosterType = interaction.options.getString('roster') ?? 'generic';
-    const slots = interaction.options.getInteger('slots') ?? DEFAULT_SLOTS;
-    const tanks = interaction.options.getInteger('tanks');
-    const healers = interaction.options.getInteger('healers');
-    const dps = interaction.options.getInteger('dps');
 
     const game = await this.resolveGame(gameName);
+    const parsed = await this.parseTime(interaction, timeInput, userId);
+    const { slotConfig, maxAttendees } = this.readSlotOptions(interaction);
+
+    return { title, game, parsed, slotConfig, maxAttendees };
+  }
+
+  private async parseTime(
+    interaction: ChatInputCommandInteraction,
+    timeInput: string,
+    userId: number,
+  ): Promise<ReturnType<typeof parseNaturalTime>> {
     const timezone = await this.resolveTimezone(userId);
     const parsed = parseNaturalTime(timeInput, timezone);
-
     if (!parsed) {
       await interaction.editReply(
         `Could not parse time: "${timeInput}". Try "tonight 8pm".`,
       );
     }
+    return parsed;
+  }
 
-    const { slotConfig, maxAttendees } = buildSlotConfig(
+  private readSlotOptions(
+    interaction: ChatInputCommandInteraction,
+  ): ReturnType<typeof buildSlotConfig> {
+    const rosterType = interaction.options.getString('roster') ?? 'generic';
+    const slots = interaction.options.getInteger('slots') ?? DEFAULT_SLOTS;
+    return buildSlotConfig(
       rosterType,
       slots,
-      tanks,
-      healers,
-      dps,
+      interaction.options.getInteger('tanks'),
+      interaction.options.getInteger('healers'),
+      interaction.options.getInteger('dps'),
     );
-    return { title, game, parsed, slotConfig, maxAttendees };
   }
 
   private async resolveGame(
@@ -233,59 +306,27 @@ export class EventCreateCommand
     interaction: ChatInputCommandInteraction,
     eventId: number,
     userId: number,
-    title: string,
-    game: { id: number; name: string } | null,
-    slotConfig: ReturnType<typeof buildSlotConfig>['slotConfig'],
-    maxAttendees: number,
-    parsed: NonNullable<ReturnType<typeof parseNaturalTime>>,
+    opts: ParsedCreateOptions,
     startTime: Date,
   ): Promise<void> {
-    const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
-    let magicLinkUrl: string | null = null;
-    if (clientUrl && clientUrl !== 'auto') {
-      magicLinkUrl = await this.magicLinkService.generateLink(
-        userId,
-        `/events/${eventId}/edit`,
-        clientUrl,
-      );
-    }
-
-    const rosterInfo =
-      slotConfig?.type === 'mmo'
-        ? `Roster: **MMO** (${slotConfig.tank}T / ${slotConfig.healer}H / ${slotConfig.dps}D)`
-        : `Slots: **${maxAttendees}**`;
-
-    const embed = new EmbedBuilder()
-      .setColor(0x34d399)
-      .setTitle('Event Created')
-      .setDescription(
-        [
-          `**${title}**`,
-          '',
-          `${toDiscordTimestamp(startTime, 'F')} (${toDiscordTimestamp(startTime, 'R')})`,
-          game ? `Game: **${game.name}**` : null,
-          rosterInfo,
-          '',
-          `Timezone: ${parsed.timezone}`,
-        ]
-          .filter(Boolean)
-          .join('\n'),
-      );
-
-    const components: ActionRowBuilder<ButtonBuilder>[] = [];
-    if (magicLinkUrl) {
-      components.push(
-        new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setLabel('Configure in Raid Ledger')
-            .setStyle(ButtonStyle.Link)
-            .setURL(magicLinkUrl)
-            .setEmoji({ name: '\u2699\uFE0F' }),
-        ),
-      );
-    }
+    const magicLinkUrl = await this.resolveEditLink(userId, eventId);
+    const embed = buildConfirmationEmbed(opts, startTime);
+    const components = buildConfigureButton(magicLinkUrl);
 
     await interaction.editReply({ embeds: [embed], components });
+  }
+
+  private async resolveEditLink(
+    userId: number,
+    eventId: number,
+  ): Promise<string | null> {
+    const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
+    if (!clientUrl || clientUrl === 'auto') return null;
+    return this.magicLinkService.generateLink(
+      userId,
+      `/events/${eventId}/edit`,
+      clientUrl,
+    );
   }
 
   private async autocompleteGame(

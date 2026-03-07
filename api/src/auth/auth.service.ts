@@ -30,27 +30,15 @@ export class AuthService {
     username: string,
     avatar?: string,
   ) {
-    // Check for previously unlinked account first
     const unlinked =
       await this.usersService.findByDiscordIdIncludingUnlinked(discordId);
-
     if (unlinked && unlinked.discordId?.startsWith('unlinked:')) {
-      // Re-link the previously unlinked account
-      const relinked = await this.usersService.relinkDiscord(
+      return this.relinkUnlinkedAccount(
         unlinked.id,
+        discordId,
         username,
         avatar,
       );
-
-      if (relinked) {
-        // Emit event for PUG slot claiming (ROK-292)
-        this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
-          userId: relinked.id,
-          discordId,
-        } satisfies DiscordLoginPayload);
-      }
-
-      return relinked;
     }
 
     const user = await this.usersService.createOrUpdate({
@@ -58,14 +46,30 @@ export class AuthService {
       username,
       avatar: avatar || undefined,
     });
+    this.emitDiscordLogin(user.id, discordId);
+    return user;
+  }
 
-    // Emit event for PUG slot claiming (ROK-292)
+  private async relinkUnlinkedAccount(
+    userId: number,
+    discordId: string,
+    username: string,
+    avatar?: string,
+  ) {
+    const relinked = await this.usersService.relinkDiscord(
+      userId,
+      username,
+      avatar,
+    );
+    if (relinked) this.emitDiscordLogin(relinked.id, discordId);
+    return relinked;
+  }
+
+  private emitDiscordLogin(userId: number, discordId: string): void {
     this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
-      userId: user.id,
+      userId,
       discordId,
     } satisfies DiscordLoginPayload);
-
-    return user;
   }
 
   login(user: { id: number; username: string; role: UserRole }) {

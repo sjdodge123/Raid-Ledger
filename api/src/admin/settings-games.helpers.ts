@@ -23,10 +23,36 @@ export async function queryGameList(
   const safePage = Math.max(1, params.page);
   const safeLimit = Math.min(100, Math.max(1, params.limit));
   const offset = (safePage - 1) * safeLimit;
-
   const whereClause = buildGameWhereClause(params);
 
-  const [countResult, rows] = await Promise.all([
+  const [countResult, rows] = await fetchGameData(
+    db,
+    whereClause,
+    safeLimit,
+    offset,
+  );
+  const total = countResult[0]?.count ?? 0;
+
+  return {
+    data: rows.map((r) => ({ ...r, cachedAt: r.cachedAt.toISOString() })),
+    meta: {
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+      hasMore: safePage * safeLimit < total,
+    },
+  };
+}
+
+/** Execute parallel count + rows queries. */
+async function fetchGameData(
+  db: PostgresJsDatabase<typeof schema>,
+  whereClause: ReturnType<typeof buildGameWhereClause>,
+  limit: number,
+  offset: number,
+) {
+  return Promise.all([
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.games)
@@ -45,25 +71,9 @@ export async function queryGameList(
       .from(schema.games)
       .where(whereClause)
       .orderBy(schema.games.name)
-      .limit(safeLimit)
+      .limit(limit)
       .offset(offset),
   ]);
-
-  const total = countResult[0]?.count ?? 0;
-
-  return {
-    data: rows.map((r) => ({
-      ...r,
-      cachedAt: r.cachedAt.toISOString(),
-    })),
-    meta: {
-      total,
-      page: safePage,
-      limit: safeLimit,
-      totalPages: Math.ceil(total / safeLimit),
-      hasMore: safePage * safeLimit < total,
-    },
-  };
 }
 
 /** Build the WHERE clause for game list filtering. */

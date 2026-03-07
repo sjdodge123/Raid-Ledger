@@ -97,47 +97,43 @@ export class BossEncountersService {
     return result ?? [];
   }
 
+  /** Resolve sub-instance ID to parent + wing boss filter. */
+  private resolveSubInstance(instanceId: number): {
+    queryId: number;
+    wingBossNames?: Set<string>;
+  } {
+    if (instanceId <= 10000) return { queryId: instanceId };
+    const parentId = Math.floor(instanceId / 100);
+    return {
+      queryId: parentId,
+      wingBossNames: SUB_INSTANCE_BOSSES[`${parentId}:${instanceId % 100}`],
+    };
+  }
+
   private async fetchBossesForInstance(
     instanceId: number,
     variant: string,
   ): Promise<BossEncounterDto[]> {
     const expansions = this.getExpansionsForVariant(variant);
-
-    // Resolve sub-instance to parent and determine wing boss filter
-    let queryInstanceId = instanceId;
-    let wingBossNames: Set<string> | undefined;
-
-    if (instanceId > 10000) {
-      const parentId = Math.floor(instanceId / 100);
-      const suffix = instanceId % 100;
-      queryInstanceId = parentId;
-      wingBossNames = SUB_INSTANCE_BOSSES[`${parentId}:${suffix}`];
-    }
-
+    const { queryId, wingBossNames } = this.resolveSubInstance(instanceId);
     const rows = await this.db
       .select()
       .from(wowClassicBosses)
       .where(
         and(
-          eq(wowClassicBosses.instanceId, queryInstanceId),
+          eq(wowClassicBosses.instanceId, queryId),
           inArray(wowClassicBosses.expansion, expansions),
         ),
       )
       .orderBy(wowClassicBosses.order);
-
-    // Filter to wing-specific bosses when querying a sub-instance
     const filtered = wingBossNames
       ? rows.filter((row) => wingBossNames.has(row.name))
       : rows;
-
-    // Reassign sequential order numbers for sub-instance filtered results
-    if (wingBossNames) {
+    if (wingBossNames)
       return filtered.map((row, i) => ({
         ...this.toBossDto(row),
         order: i + 1,
       }));
-    }
-
     return filtered.map((row) => this.toBossDto(row));
   }
 

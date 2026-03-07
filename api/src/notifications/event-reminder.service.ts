@@ -41,6 +41,18 @@ const REMINDER_WINDOWS = [
 
 type ReminderWindowType = (typeof REMINDER_WINDOWS)[number]['type'];
 
+type CharsByUserMap = Map<
+  number,
+  { userId: number; name: string; charClass: string | null; gameId: number }[]
+>;
+
+interface ReminderFetchContext {
+  signupsByEvent: Map<number, number[]>;
+  userMap: Map<number, { id: number; discordId: string | null }>;
+  tzMap: Map<number, string>;
+  charsByUser: CharsByUserMap;
+}
+
 /** Scheduled service that sends event reminders via Discord DM (ROK-126). */
 @Injectable()
 export class EventReminderService {
@@ -118,6 +130,20 @@ export class EventReminderService {
       );
   }
 
+  /** Fetch all user data needed for sending reminders. */
+  private async fetchReminderContext(eventIds: number[]) {
+    const signupsByEvent = await fetchSignupsByEvent(this.db, eventIds);
+    const allUserIds = [...new Set(Array.from(signupsByEvent.values()).flat())];
+    if (allUserIds.length === 0) return null;
+    const [userMap, tzEntries, charsByUser] = await Promise.all([
+      fetchUserMap(this.db, allUserIds),
+      fetchUserTimezones(this.db, allUserIds),
+      fetchCharactersByUser(this.db, allUserIds),
+    ]);
+    const tzMap = new Map(tzEntries.map((ut) => [ut.userId, ut.timezone]));
+    return { signupsByEvent, userMap, tzMap, charsByUser };
+  }
+
   /** Send reminders for all events in a specific window. */
   private async sendRemindersForWindow(
     events: {
@@ -131,33 +157,35 @@ export class EventReminderService {
     now: Date,
     defaultTimezone: string,
   ): Promise<void> {
-    const eventIds = events.map((e) => e.id);
-    const signupsByEvent = await fetchSignupsByEvent(this.db, eventIds);
-    const allUserIds = [...new Set(Array.from(signupsByEvent.values()).flat())];
-    if (allUserIds.length === 0) return;
-
-    const userMap = await fetchUserMap(this.db, allUserIds);
-    const tzMap = new Map(
-      (await fetchUserTimezones(this.db, allUserIds)).map((ut) => [
-        ut.userId,
-        ut.timezone,
-      ]),
-    );
-    const charsByUser = await fetchCharactersByUser(this.db, allUserIds);
-
+    const ctx = await this.fetchReminderContext(events.map((e) => e.id));
+    if (!ctx) return;
     for (const event of events) {
       await this.sendRemindersForEvent(
         event,
-        signupsByEvent,
-        userMap,
-        tzMap,
-        charsByUser,
+        ctx,
         windowType,
         windowLabel,
         now,
         defaultTimezone,
       );
     }
+  }
+
+  /** Compute event-level reminder context (timing, Discord URLs). */
+  private async buildEventReminderContext(
+    event: { id: number; duration: [Date, Date]; gameId: number | null },
+    now: Date,
+  ) {
+    const startTime = event.duration[0];
+    const minutesUntil = Math.max(
+      0,
+      Math.round((startTime.getTime() - now.getTime()) / 60000),
+    );
+    const [discordUrl, voiceChannelId] = await Promise.all([
+      this.notificationService.getDiscordEmbedUrl(event.id),
+      this.notificationService.resolveVoiceChannelId(event.gameId),
+    ]);
+    return { startTime, minutesUntil, discordUrl, voiceChannelId };
   }
 
   /** Send reminders for a single event to all signed-up users. */
@@ -168,53 +196,74 @@ export class EventReminderService {
       duration: [Date, Date];
       gameId: number | null;
     },
-    signupsByEvent: Map<number, number[]>,
-    userMap: Map<number, { id: number; discordId: string | null }>,
-    tzMap: Map<number, string>,
-    charsByUser: Map<
-      number,
-      {
-        userId: number;
-        name: string;
-        charClass: string | null;
-        gameId: number;
-      }[]
-    >,
+    fetchCtx: ReminderFetchContext,
     windowType: ReminderWindowType,
     windowLabel: string,
     now: Date,
     defaultTimezone: string,
   ): Promise<void> {
-    const userIds = signupsByEvent.get(event.id) ?? [];
-    const startTime = event.duration[0];
-    const minutesUntil = Math.max(
-      0,
-      Math.round((startTime.getTime() - now.getTime()) / 60000),
-    );
-    const discordUrl = await this.notificationService.getDiscordEmbedUrl(
-      event.id,
-    );
-    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
-      event.gameId,
-    );
-
+    const userIds = fetchCtx.signupsByEvent.get(event.id) ?? [];
+    const eventCtx = await this.buildEventReminderContext(event, now);
     for (const userId of userIds) {
-      if (!userMap.get(userId)) continue;
-      await this.sendReminder({
-        eventId: event.id,
+      if (!fetchCtx.userMap.get(userId)) continue;
+      await this.sendSingleUserReminder(
+        event,
         userId,
+        eventCtx,
+        fetchCtx,
         windowType,
         windowLabel,
-        title: event.title,
-        startTime,
-        minutesUntil,
-        characterDisplay: buildCharDisplay(charsByUser, userId, event.gameId),
-        timezone: tzMap.get(userId),
         defaultTimezone,
-        discordUrl,
-        voiceChannelId,
-      });
+      );
     }
+  }
+
+  /** Send a reminder to a single user. */
+  private async sendSingleUserReminder(
+    event: { id: number; title: string; gameId?: number | null },
+    userId: number,
+    eventCtx: Awaited<
+      ReturnType<EventReminderService['buildEventReminderContext']>
+    >,
+    fetchCtx: Pick<ReminderFetchContext, 'charsByUser' | 'tzMap'>,
+    windowType: ReminderWindowType,
+    windowLabel: string,
+    defaultTimezone: string,
+  ): Promise<void> {
+    await this.sendReminder({
+      eventId: event.id,
+      userId,
+      windowType,
+      windowLabel,
+      title: event.title,
+      ...eventCtx,
+      characterDisplay: buildCharDisplay(
+        fetchCtx.charsByUser,
+        userId,
+        event.gameId ?? null,
+      ),
+      timezone: fetchCtx.tzMap.get(userId),
+      defaultTimezone,
+    });
+  }
+
+  /** Build the notification payload for a reminder. */
+  private buildReminderPayload(input: {
+    eventId: number;
+    windowType: string;
+    characterDisplay: string | null;
+    startTime: Date;
+    discordUrl?: string | null;
+    voiceChannelId?: string | null;
+  }): Record<string, unknown> {
+    return {
+      eventId: input.eventId,
+      reminderWindow: input.windowType,
+      characterDisplay: input.characterDisplay,
+      startTime: input.startTime.toISOString(),
+      ...(input.discordUrl ? { discordUrl: input.discordUrl } : {}),
+      ...(input.voiceChannelId ? { voiceChannelId: input.voiceChannelId } : {}),
+    };
   }
 
   /** Send a single reminder notification with duplicate prevention. */
@@ -233,6 +282,24 @@ export class EventReminderService {
     voiceChannelId?: string | null;
     gameId?: number | null;
   }): Promise<boolean> {
+    if (!(await this.insertReminderDedup(input))) return false;
+    const { messageText, titleTimeLabel } = this.buildReminderStrings(input);
+    await this.notificationService.create({
+      userId: input.userId,
+      type: 'event_reminder',
+      title: `Event Starting ${titleTimeLabel}!`,
+      message: messageText,
+      payload: this.buildReminderPayload(input),
+    });
+    return true;
+  }
+
+  /** Insert dedup record — returns true if this is the first send. */
+  private async insertReminderDedup(input: {
+    eventId: number;
+    userId: number;
+    windowType: string;
+  }): Promise<boolean> {
     const result = await this.db
       .insert(schema.eventRemindersSent)
       .values({
@@ -248,8 +315,17 @@ export class EventReminderService {
         ],
       })
       .returning();
-    if (result.length === 0) return false;
+    return result.length > 0;
+  }
 
+  /** Build reminder message text and title label. */
+  private buildReminderStrings(input: {
+    title: string;
+    startTime: Date;
+    minutesUntil: number;
+    timezone?: string;
+    defaultTimezone?: string;
+  }): { messageText: string; titleTimeLabel: string } {
     const timezone = input.timezone ?? input.defaultTimezone ?? 'UTC';
     const timeStr = input.startTime.toLocaleTimeString('en-US', {
       hour: 'numeric',
@@ -258,30 +334,14 @@ export class EventReminderService {
       timeZoneName: 'short',
       timeZone: timezone,
     });
-    const messageText = buildReminderMessage(
-      input.title,
-      timeStr,
-      input.minutesUntil,
-    );
-    const titleTimeLabel = buildTitleTimeLabel(input.minutesUntil);
-
-    await this.notificationService.create({
-      userId: input.userId,
-      type: 'event_reminder',
-      title: `Event Starting ${titleTimeLabel}!`,
-      message: messageText,
-      payload: {
-        eventId: input.eventId,
-        reminderWindow: input.windowType,
-        characterDisplay: input.characterDisplay,
-        startTime: input.startTime.toISOString(),
-        ...(input.discordUrl ? { discordUrl: input.discordUrl } : {}),
-        ...(input.voiceChannelId
-          ? { voiceChannelId: input.voiceChannelId }
-          : {}),
-      },
-    });
-    return true;
+    return {
+      messageText: buildReminderMessage(
+        input.title,
+        timeStr,
+        input.minutesUntil,
+      ),
+      titleTimeLabel: buildTitleTimeLabel(input.minutesUntil),
+    };
   }
 
   /** Fetch user timezones (public for test access). */

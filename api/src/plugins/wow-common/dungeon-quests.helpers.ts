@@ -56,6 +56,40 @@ export function toDto(
   };
 }
 
+/** Walk backwards through chain links, prepending to the chain. */
+function walkBackward(
+  quest: DungeonQuestDto,
+  questLookup: Map<number, DungeonQuestDto>,
+  chain: DungeonQuestDto[],
+  visited: Set<number>,
+): void {
+  let cur = quest.prevQuestId;
+  while (cur !== null && !visited.has(cur) && visited.size < MAX_CHAIN_DEPTH) {
+    const prev = questLookup.get(cur);
+    if (!prev) break;
+    visited.add(prev.questId);
+    chain.unshift(prev);
+    cur = prev.prevQuestId;
+  }
+}
+
+/** Walk forwards through chain links, appending to the chain. */
+function walkForward(
+  quest: DungeonQuestDto,
+  questLookup: Map<number, DungeonQuestDto>,
+  chain: DungeonQuestDto[],
+  visited: Set<number>,
+): void {
+  let cur = quest.nextQuestId;
+  while (cur !== null && !visited.has(cur) && visited.size < MAX_CHAIN_DEPTH) {
+    const next = questLookup.get(cur);
+    if (!next) break;
+    visited.add(next.questId);
+    chain.push(next);
+    cur = next.nextQuestId;
+  }
+}
+
 /** Walk backwards/forwards through quest chain links in memory. */
 export function walkChainInMemory(
   quest: DungeonQuestDto,
@@ -63,33 +97,8 @@ export function walkChainInMemory(
 ): DungeonQuestDto[] {
   const chain: DungeonQuestDto[] = [quest];
   const visited = new Set<number>([quest.questId]);
-
-  let currentPrev = quest.prevQuestId;
-  while (
-    currentPrev !== null &&
-    !visited.has(currentPrev) &&
-    visited.size < MAX_CHAIN_DEPTH
-  ) {
-    const prev = questLookup.get(currentPrev);
-    if (!prev) break;
-    visited.add(prev.questId);
-    chain.unshift(prev);
-    currentPrev = prev.prevQuestId;
-  }
-
-  let currentNext = quest.nextQuestId;
-  while (
-    currentNext !== null &&
-    !visited.has(currentNext) &&
-    visited.size < MAX_CHAIN_DEPTH
-  ) {
-    const next = questLookup.get(currentNext);
-    if (!next) break;
-    visited.add(next.questId);
-    chain.push(next);
-    currentNext = next.nextQuestId;
-  }
-
+  walkBackward(quest, questLookup, chain, visited);
+  walkForward(quest, questLookup, chain, visited);
   return chain;
 }
 
@@ -108,42 +117,85 @@ export function collectFrontierIds(
   return frontier;
 }
 
+/** Parse raw reward item JSON into enriched lookup. */
+function parseRewardItems(
+  parsed: Record<
+    string,
+    {
+      name: string;
+      quality: string;
+      slot: string | null;
+      itemLevel: number | null;
+      iconUrl: string | null;
+      itemSubclass: string | null;
+    }
+  >,
+): Record<string, EnrichedQuestReward> {
+  const lookup: Record<string, EnrichedQuestReward> = {};
+  for (const [idStr, item] of Object.entries(parsed)) {
+    lookup[idStr] = {
+      itemId: Number(idStr),
+      itemName: item.name,
+      quality: item.quality,
+      slot: item.slot,
+      itemLevel: item.itemLevel,
+      iconUrl: item.iconUrl,
+      itemSubclass: item.itemSubclass ?? null,
+    };
+  }
+  return lookup;
+}
+
 /** Load quest reward item metadata from Wowhead-enriched JSON file. */
 export async function loadRewardItemLookup(): Promise<
   Record<string, EnrichedQuestReward>
 > {
-  const lookup: Record<string, EnrichedQuestReward> = {};
   try {
-    const rewardItemPath = join(__dirname, 'data', 'quest-reward-items.json');
-    const rawRewardData = await readFile(rewardItemPath, 'utf-8');
-    const parsed = JSON.parse(rawRewardData) as Record<
-      string,
-      {
-        name: string;
-        quality: string;
-        slot: string | null;
-        itemLevel: number | null;
-        iconUrl: string | null;
-        itemSubclass: string | null;
-      }
-    >;
-    for (const [idStr, item] of Object.entries(parsed)) {
-      lookup[idStr] = {
-        itemId: Number(idStr),
-        itemName: item.name,
-        quality: item.quality,
-        slot: item.slot,
-        itemLevel: item.itemLevel,
-        iconUrl: item.iconUrl,
-        itemSubclass: item.itemSubclass ?? null,
-      };
-    }
+    const rawRewardData = await readFile(
+      join(__dirname, 'data', 'quest-reward-items.json'),
+      'utf-8',
+    );
+    return parseRewardItems(
+      JSON.parse(rawRewardData) as Record<
+        string,
+        {
+          name: string;
+          quality: string;
+          slot: string | null;
+          itemLevel: number | null;
+          iconUrl: string | null;
+          itemSubclass: string | null;
+        }
+      >,
+    );
   } catch {
     logger.warn(
       'Could not load quest-reward-items.json — falling back to boss loot table only',
     );
+    return {};
   }
-  return lookup;
+}
+
+/** Merge loot table rows into the item details map, filling gaps. */
+function mergeLootRows(
+  lootRows: Array<{
+    itemId: number;
+    itemName: string;
+    quality: string;
+    slot: string | null;
+    itemLevel: number | null;
+    iconUrl: string | null;
+    itemSubclass: string | null;
+  }>,
+  map: Map<number, EnrichedQuestReward>,
+): void {
+  for (const row of lootRows) {
+    const existing = map.get(row.itemId);
+    if (existing) {
+      if (!existing.itemSubclass && row.itemSubclass)
+        existing.itemSubclass = row.itemSubclass;
+    } else map.set(row.itemId, { ...row });
+  }
 }
 
 /** Build item details map from Wowhead JSON + boss loot table fallback. */
@@ -153,12 +205,10 @@ export async function buildItemDetailsMap(
   rewardItemLookup: Record<string, EnrichedQuestReward>,
 ): Promise<Map<number, EnrichedQuestReward>> {
   const itemDetailsMap = new Map<number, EnrichedQuestReward>();
-
   for (const itemId of allItemIds) {
     const wowheadItem = rewardItemLookup[String(itemId)];
     if (wowheadItem) itemDetailsMap.set(itemId, wowheadItem);
   }
-
   const lootLookupIds = [...allItemIds];
   if (lootLookupIds.length > 0) {
     const lootRows = await db
@@ -173,18 +223,8 @@ export async function buildItemDetailsMap(
       })
       .from(wowClassicBossLoot)
       .where(inArray(wowClassicBossLoot.itemId, lootLookupIds));
-
-    for (const row of lootRows) {
-      const existing = itemDetailsMap.get(row.itemId);
-      if (existing) {
-        if (!existing.itemSubclass && row.itemSubclass)
-          existing.itemSubclass = row.itemSubclass;
-      } else {
-        itemDetailsMap.set(row.itemId, { ...row });
-      }
-    }
+    mergeLootRows(lootRows, itemDetailsMap);
   }
-
   return itemDetailsMap;
 }
 

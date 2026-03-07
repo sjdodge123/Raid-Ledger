@@ -70,29 +70,14 @@ export class VersionCheckService implements OnModuleInit {
    */
   async checkForUpdates(): Promise<void> {
     this.logger.debug('Checking for updates...');
-
     try {
       const latestVersion = await this.fetchLatestVersion();
-
       if (!latestVersion) {
         this.logger.debug('Could not determine latest version from GitHub');
         return;
       }
-
       const updateAvailable = this.isNewer(latestVersion, this.currentVersion);
-
-      await Promise.all([
-        this.settingsService.set(SETTING_KEYS.LATEST_VERSION, latestVersion),
-        this.settingsService.set(
-          SETTING_KEYS.VERSION_CHECK_LAST_RUN,
-          new Date().toISOString(),
-        ),
-        this.settingsService.set(
-          SETTING_KEYS.UPDATE_AVAILABLE,
-          updateAvailable ? 'true' : 'false',
-        ),
-      ]);
-
+      await this.storeVersionCheckResults(latestVersion, updateAvailable);
       this.logger.debug(
         `Version check complete: current=${this.currentVersion}, latest=${latestVersion}, updateAvailable=${updateAvailable}`,
       );
@@ -104,38 +89,49 @@ export class VersionCheckService implements OnModuleInit {
     }
   }
 
+  /** Persist version check results to app settings. */
+  private async storeVersionCheckResults(
+    latestVersion: string,
+    updateAvailable: boolean,
+  ): Promise<void> {
+    await Promise.all([
+      this.settingsService.set(SETTING_KEYS.LATEST_VERSION, latestVersion),
+      this.settingsService.set(
+        SETTING_KEYS.VERSION_CHECK_LAST_RUN,
+        new Date().toISOString(),
+      ),
+      this.settingsService.set(
+        SETTING_KEYS.UPDATE_AVAILABLE,
+        updateAvailable ? 'true' : 'false',
+      ),
+    ]);
+  }
+
   /**
    * Fetch the latest version string from GitHub releases, falling back to tags.
    */
-  private async fetchLatestVersion(): Promise<string | null> {
-    const headers: Record<string, string> = {
-      Accept: 'application/vnd.github.v3+json',
-      'User-Agent': 'RaidLedger-VersionCheck',
-    };
+  /** GitHub API headers for version checks. */
+  private readonly githubHeaders: Record<string, string> = {
+    Accept: 'application/vnd.github.v3+json',
+    'User-Agent': 'RaidLedger-VersionCheck',
+  };
 
-    // Try releases first
+  private async fetchLatestVersion(): Promise<string | null> {
     try {
       const response = await fetch(
         'https://api.github.com/repos/sjdodge123/Raid-Ledger/releases/latest',
-        { headers, signal: AbortSignal.timeout(10_000) },
+        { headers: this.githubHeaders, signal: AbortSignal.timeout(10_000) },
       );
-
-      if (response.ok) {
-        const data = (await response.json()) as GitHubRelease;
-        return this.normalizeVersion(data.tag_name);
-      }
-
-      // 404 means no releases exist yet — fall back to tags
-      if (response.status === 404) {
-        return this.fetchLatestTag(headers);
-      }
-
-      // Rate limited or other error
+      if (response.ok)
+        return this.normalizeVersion(
+          ((await response.json()) as GitHubRelease).tag_name,
+        );
+      if (response.status === 404)
+        return this.fetchLatestTag(this.githubHeaders);
       if (response.status === 403 || response.status === 429) {
         this.logger.warn('GitHub API rate limited, skipping version check');
         return null;
       }
-
       this.logger.warn(`GitHub releases API returned ${response.status}`);
       return null;
     } catch (error) {

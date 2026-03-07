@@ -138,6 +138,39 @@ export class DiscordAuthController {
     );
   }
 
+  /** Build Discord OAuth authorize URL. */
+  private buildOAuthUrl(
+    clientId: string,
+    redirectUri: string,
+    state: string,
+  ): string {
+    return `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
+  }
+
+  /** Initiate the Discord link OAuth flow after validating config. */
+  private async initiateDiscordLinkFlow(
+    userId: number,
+    clientUrl: string,
+    res: Response,
+  ): Promise<void> {
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (!oauthConfig) {
+      res.redirect(
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
+      );
+      return;
+    }
+    const state = signOAuthState(
+      { userId, action: 'link', timestamp: Date.now() },
+      this.getSecret(),
+    );
+    const redirectUri = oauthConfig.callbackUrl.replace(
+      '/callback',
+      '/link/callback',
+    );
+    res.redirect(this.buildOAuthUrl(oauthConfig.clientId, redirectUri, state));
+  }
+
   /** GET /auth/discord/link — initiate Discord OAuth for account linking. */
   @RateLimit('auth')
   @Get('discord/link')
@@ -153,36 +186,45 @@ export class DiscordAuthController {
         .json({ message: 'Authentication token required' });
       return;
     }
+    const userId = this.verifyTokenOrRedirect(token, res, clientUrl);
+    if (userId === null) return;
+    await this.initiateDiscordLinkFlow(userId, clientUrl, res);
+  }
 
-    let userId: number;
+  /** Verify JWT token, redirect to error on failure. Returns userId or null. */
+  private verifyTokenOrRedirect(
+    token: string,
+    res: Response,
+    clientUrl: string,
+  ): number | null {
     try {
-      userId = this.jwtService.verify<{ sub: number }>(token).sub;
+      return this.jwtService.verify<{ sub: number }>(token).sub;
     } catch {
       res.redirect(
         `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
       );
-      return;
+      return null;
     }
+  }
 
-    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
-    if (!oauthConfig) {
-      res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
-      );
-      return;
-    }
-
-    const state = signOAuthState(
-      { userId, action: 'link', timestamp: Date.now() },
-      this.getSecret(),
+  /** Complete the Discord link: persist link, emit event, send DM. */
+  private async completeLinkFlow(code: string, state: string): Promise<number> {
+    const { userId, discordProfile } = await this.performLinkExchange(
+      code,
+      state,
     );
-    const redirectUri = oauthConfig.callbackUrl.replace(
-      '/callback',
-      '/link/callback',
+    await this.usersService.linkDiscord(
+      userId,
+      discordProfile.id,
+      discordProfile.username,
+      discordProfile.avatar,
     );
-    res.redirect(
-      `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`,
-    );
+    this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
+      userId,
+      discordId: discordProfile.id,
+    } satisfies DiscordLoginPayload);
+    this.sendWelcomeDMSafe(userId);
+    return userId;
   }
 
   /** GET /auth/discord/link/callback — handle Discord OAuth callback for linking. */
@@ -196,28 +238,23 @@ export class DiscordAuthController {
   ) {
     const clientUrl = this.getClientUrl(req);
     try {
-      const { userId, discordProfile } = await this.performLinkExchange(
-        code,
-        state,
-      );
-      await this.usersService.linkDiscord(
-        userId,
-        discordProfile.id,
-        discordProfile.username,
-        discordProfile.avatar,
-      );
-      this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
-        userId,
-        discordId: discordProfile.id,
-      } satisfies DiscordLoginPayload);
-      this.sendWelcomeDMSafe(userId);
+      await this.completeLinkFlow(code, state);
       res.redirect(`${clientUrl}/profile?linked=success`);
     } catch (error) {
       this.logger.error('Discord link error:', error);
+      const msg = error instanceof Error ? error.message : 'Link failed';
       res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Link failed')}`,
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent(msg)}`,
       );
     }
+  }
+
+  /** Verify link state and extract userId. */
+  private verifyLinkState(state: string): number {
+    const stateData = verifyOAuthState(state, this.getSecret(), this.logger);
+    if (!stateData || stateData.action !== 'link')
+      throw new Error('Invalid or tampered state parameter');
+    return stateData.userId as number;
   }
 
   /** Perform the link OAuth exchange: verify state, exchange code, fetch profile. */
@@ -230,12 +267,7 @@ export class DiscordAuthController {
   }> {
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) throw new Error('Discord OAuth is not configured');
-
-    const stateData = verifyOAuthState(state, this.getSecret(), this.logger);
-    if (!stateData || stateData.action !== 'link')
-      throw new Error('Invalid or tampered state parameter');
-
-    const userId = stateData.userId as number;
+    const userId = this.verifyLinkState(state);
     const redirectUri = oauthConfig.callbackUrl.replace(
       '/callback',
       '/link/callback',
@@ -251,15 +283,19 @@ export class DiscordAuthController {
       tokens.access_token,
       discordFetch,
     );
+    await this.validateNoExistingLink(discordProfile.id, userId);
+    return { userId, discordProfile };
+  }
 
+  /** Validate that the Discord account isn't already linked to another user. */
+  private async validateNoExistingLink(
+    discordId: string,
+    userId: number,
+  ): Promise<void> {
     const existingUser =
-      await this.usersService.findByDiscordIdIncludingUnlinked(
-        discordProfile.id,
-      );
+      await this.usersService.findByDiscordIdIncludingUnlinked(discordId);
     if (existingUser && existingUser.id !== userId)
       throw new Error('This Discord account is already linked to another user');
-
-    return { userId, discordProfile };
   }
 
   /** Send welcome DM safely (fire-and-forget). */

@@ -34,10 +34,8 @@ export interface InMemorySession {
   dirty: boolean;
 }
 
-/**
- * Convert a DB voice session row to DTO format.
- */
-export function toVoiceSessionDto(session: {
+/** Input shape for toVoiceSessionDto. */
+export interface VoiceSessionRow {
   id: string;
   eventId: number;
   userId: number | null;
@@ -48,7 +46,19 @@ export function toVoiceSessionDto(session: {
   totalDurationSec: number;
   segments: unknown;
   classification: string | null;
-}): EventVoiceSessionDto {
+}
+
+function parseClassification(raw: string | null): VoiceClassification | null {
+  if (!raw) return null;
+  return VoiceClassificationEnum.safeParse(raw).data ?? null;
+}
+
+/**
+ * Convert a DB voice session row to DTO format.
+ */
+export function toVoiceSessionDto(
+  session: VoiceSessionRow,
+): EventVoiceSessionDto {
   return {
     id: session.id,
     eventId: session.eventId,
@@ -58,14 +68,8 @@ export function toVoiceSessionDto(session: {
     firstJoinAt: session.firstJoinAt.toISOString(),
     lastLeaveAt: session.lastLeaveAt?.toISOString() ?? null,
     totalDurationSec: session.totalDurationSec,
-    segments: (session.segments ?? []) as Array<{
-      joinAt: string;
-      leaveAt: string | null;
-      durationSec: number;
-    }>,
-    classification: session.classification
-      ? (VoiceClassificationEnum.safeParse(session.classification).data ?? null)
-      : null,
+    segments: (session.segments ?? []) as EventVoiceSessionDto['segments'],
+    classification: parseClassification(session.classification),
   };
 }
 
@@ -110,36 +114,37 @@ export function buildActiveRoster(
   sessions: Map<string, InMemorySession>,
 ): AdHocRosterResponseDto {
   const participants: AdHocParticipantDto[] = [];
-
   for (const session of sessions.values()) {
     if (session.eventId !== eventId) continue;
-
-    const now = new Date();
-    let totalDuration = session.totalDurationSec;
-    if (session.isActive && session.activeSegmentStart) {
-      totalDuration += Math.floor(
-        (now.getTime() - session.activeSegmentStart.getTime()) / 1000,
-      );
-    }
-
-    participants.push({
-      id: session.discordUserId,
-      eventId: session.eventId,
-      userId: session.userId,
-      discordUserId: session.discordUserId,
-      discordUsername: session.discordUsername,
-      discordAvatarHash: session.discordAvatarHash,
-      joinedAt: session.firstJoinAt.toISOString(),
-      leftAt: session.isActive
-        ? null
-        : (session.lastLeaveAt?.toISOString() ?? null),
-      totalDurationSeconds: totalDuration,
-      sessionCount: session.segments.length,
-    });
+    participants.push(sessionToParticipant(session));
   }
 
   const activeCount = participants.filter((p) => p.leftAt === null).length;
   return { eventId, participants, activeCount };
+}
+
+function sessionToParticipant(session: InMemorySession): AdHocParticipantDto {
+  let totalDuration = session.totalDurationSec;
+  if (session.isActive && session.activeSegmentStart) {
+    totalDuration += Math.floor(
+      (Date.now() - session.activeSegmentStart.getTime()) / 1000,
+    );
+  }
+
+  return {
+    id: session.discordUserId,
+    eventId: session.eventId,
+    userId: session.userId,
+    discordUserId: session.discordUserId,
+    discordUsername: session.discordUsername,
+    discordAvatarHash: session.discordAvatarHash,
+    joinedAt: session.firstJoinAt.toISOString(),
+    leftAt: session.isActive
+      ? null
+      : (session.lastLeaveAt?.toISOString() ?? null),
+    totalDurationSeconds: totalDuration,
+    sessionCount: session.segments.length,
+  };
 }
 
 /**

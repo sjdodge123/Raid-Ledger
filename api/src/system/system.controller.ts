@@ -27,42 +27,34 @@ export class SystemController {
    * Get system status for first-run detection (AC-4).
    * Public endpoint - no authentication required.
    */
-  @Get('status')
-  async getStatus(): Promise<SystemStatusDto> {
-    // Collect auth adapters synchronously (the map itself is not async)
-    const authAdapters =
-      this.pluginRegistry.getAdaptersForExtensionPoint<AuthProvider>(
-        EXTENSION_POINTS.AUTH_PROVIDER,
-      );
-    const adapterEntries = [...authAdapters.entries()];
-
-    // Run all independent async checks in parallel (ROK-662)
-    const [
-      userCount,
-      discordConfigured,
-      blizzardConfigured,
-      branding,
-      onboardingCompletedRaw,
-      demoMode,
-      ...adapterConfigured
-    ] = await Promise.all([
-      this.usersService.count(),
-      this.settingsService.isDiscordConfigured(),
-      this.settingsService.isBlizzardConfigured(),
-      this.settingsService.getBranding(),
-      this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
-      this.settingsService.getDemoMode(),
-      ...adapterEntries.map(([, provider]) => provider.isConfigured()),
-    ]);
-
-    // Build authProviders from parallel results
-    const authProviders: LoginMethodDto[] = [];
+  /** Collect configured auth providers from plugin adapters. */
+  private buildAuthProviders(
+    adapterEntries: [string, AuthProvider][],
+    adapterConfigured: boolean[],
+  ): LoginMethodDto[] {
+    const providers: LoginMethodDto[] = [];
     for (let i = 0; i < adapterEntries.length; i++) {
-      if (adapterConfigured[i]) {
-        authProviders.push(adapterEntries[i][1].getLoginMethod());
-      }
+      if (adapterConfigured[i])
+        providers.push(adapterEntries[i][1].getLoginMethod());
     }
+    return providers;
+  }
 
+  /** Build system status DTO from fetched data. */
+  private buildStatusDto(
+    userCount: number,
+    discordConfigured: boolean,
+    blizzardConfigured: boolean,
+    branding: {
+      communityName: string | null;
+      communityLogoPath: string | null;
+      communityAccentColor: string | null;
+    },
+    onboardingCompletedRaw: string | null,
+    demoMode: boolean,
+    adapterEntries: [string, AuthProvider][],
+    adapterConfigured: boolean[],
+  ): SystemStatusDto {
     return {
       isFirstRun: userCount === 0,
       discordConfigured,
@@ -75,7 +67,48 @@ export class SystemController {
         : undefined,
       communityAccentColor: branding.communityAccentColor ?? undefined,
       onboardingCompleted: onboardingCompletedRaw === 'true',
-      authProviders,
+      authProviders: this.buildAuthProviders(adapterEntries, adapterConfigured),
     };
+  }
+
+  /** Fetch all status data in parallel. */
+  private async fetchStatusData(adapterEntries: [string, AuthProvider][]) {
+    return Promise.all([
+      this.usersService.count(),
+      this.settingsService.isDiscordConfigured(),
+      this.settingsService.isBlizzardConfigured(),
+      this.settingsService.getBranding(),
+      this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
+      this.settingsService.getDemoMode(),
+      ...adapterEntries.map(([, provider]) => provider.isConfigured()),
+    ]);
+  }
+
+  @Get('status')
+  async getStatus(): Promise<SystemStatusDto> {
+    const authAdapters =
+      this.pluginRegistry.getAdaptersForExtensionPoint<AuthProvider>(
+        EXTENSION_POINTS.AUTH_PROVIDER,
+      );
+    const adapterEntries = [...authAdapters.entries()];
+    const [
+      userCount,
+      discordConfigured,
+      blizzardConfigured,
+      branding,
+      onboardingCompletedRaw,
+      demoMode,
+      ...adapterConfigured
+    ] = await this.fetchStatusData(adapterEntries);
+    return this.buildStatusDto(
+      userCount,
+      discordConfigured,
+      blizzardConfigured,
+      branding,
+      onboardingCompletedRaw,
+      demoMode,
+      adapterEntries,
+      adapterConfigured,
+    );
   }
 }

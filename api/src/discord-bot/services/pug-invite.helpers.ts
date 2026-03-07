@@ -31,21 +31,15 @@ function formatEventTime(
   return { dateStr, timeStr };
 }
 
-/**
- * Build the PUG invite DM embed.
- */
-export function buildPugInviteEmbed(
-  pugSlotId: string,
-  eventId: number,
+/** Build description lines shared between invite embeds. */
+function buildInviteDescLines(
   event: typeof schema.events.$inferSelect,
-  communityName: string,
-  clientUrl: string | null,
+  eventId: number,
   timezone: string,
-  voiceChannelId: string | null,
-): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
+  clientUrl: string | null,
+): string[] {
   const { dateStr, timeStr } = formatEventTime(event.duration[0], timezone);
-
-  const descLines = [
+  return [
     `**${event.title}**`,
     `\uD83D\uDCC5 ${dateStr} at ${timeStr}`,
     '',
@@ -53,14 +47,13 @@ export function buildPugInviteEmbed(
       ? `\uD83D\uDCCE [Event details](${clientUrl}/events/${eventId})`
       : '',
   ].filter(Boolean);
+}
 
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.PUG_INVITE)
-    .setTitle(`You've been invited to a raid!`)
-    .setDescription(descLines.join('\n'))
-    .setFooter({ text: communityName })
-    .setTimestamp();
-
+/** Add optional voice channel field to an embed. */
+function addVoiceField(
+  embed: EmbedBuilder,
+  voiceChannelId: string | null,
+): void {
   if (voiceChannelId) {
     embed.addFields({
       name: 'Voice Channel',
@@ -68,15 +61,13 @@ export function buildPugInviteEmbed(
       inline: true,
     });
   }
+}
 
-  if (clientUrl) {
-    embed.addFields({
-      name: '\u200b',
-      value: `\uD83D\uDCAC Join ${communityName} on [Raid Ledger](${clientUrl})`,
-    });
-  }
-
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+/**
+ * Build the PUG invite DM embed.
+ */
+function buildPugActionRow(pugSlotId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`${PUG_BUTTON_IDS.ACCEPT}:${pugSlotId}`)
       .setLabel('Accept')
@@ -86,49 +77,44 @@ export function buildPugInviteEmbed(
       .setLabel('Decline')
       .setStyle(ButtonStyle.Danger),
   );
-
-  return { embed, row };
 }
 
-/**
- * Build the member invite DM embed (ROK-292).
- */
-export function buildMemberInviteEmbed(
+export function buildPugInviteEmbed(
+  pugSlotId: string,
   eventId: number,
-  notificationId: string,
   event: typeof schema.events.$inferSelect,
   communityName: string,
   clientUrl: string | null,
   timezone: string,
   voiceChannelId: string | null,
 ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
-  const { dateStr, timeStr } = formatEventTime(event.duration[0], timezone);
-
-  const descLines = [
-    `**${event.title}**`,
-    `\uD83D\uDCC5 ${dateStr} at ${timeStr}`,
-    '',
-    clientUrl
-      ? `\uD83D\uDCCE [Event details](${clientUrl}/events/${eventId})`
-      : '',
-  ].filter(Boolean);
-
+  const descLines = buildInviteDescLines(event, eventId, timezone, clientUrl);
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.PUG_INVITE)
-    .setTitle(`You've been invited to an event!`)
+    .setTitle(`You've been invited to a raid!`)
     .setDescription(descLines.join('\n'))
     .setFooter({ text: communityName })
     .setTimestamp();
 
-  if (voiceChannelId) {
+  addVoiceField(embed, voiceChannelId);
+  if (clientUrl) {
     embed.addFields({
-      name: 'Voice Channel',
-      value: `<#${voiceChannelId}>`,
-      inline: true,
+      name: '\u200b',
+      value: `\uD83D\uDCAC Join ${communityName} on [Raid Ledger](${clientUrl})`,
     });
   }
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  return { embed, row: buildPugActionRow(pugSlotId) };
+}
+
+/**
+ * Build the member invite DM embed (ROK-292).
+ */
+function buildMemberActionRow(
+  eventId: number,
+  notificationId: string,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(
         `${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`,
@@ -142,8 +128,27 @@ export function buildMemberInviteEmbed(
       .setLabel('Decline')
       .setStyle(ButtonStyle.Danger),
   );
+}
 
-  return { embed, row };
+export function buildMemberInviteEmbed(
+  eventId: number,
+  notificationId: string,
+  event: typeof schema.events.$inferSelect,
+  communityName: string,
+  clientUrl: string | null,
+  timezone: string,
+  voiceChannelId: string | null,
+): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
+  const descLines = buildInviteDescLines(event, eventId, timezone, clientUrl);
+  const embed = new EmbedBuilder()
+    .setColor(EMBED_COLORS.PUG_INVITE)
+    .setTitle(`You've been invited to an event!`)
+    .setDescription(descLines.join('\n'))
+    .setFooter({ text: communityName })
+    .setTimestamp();
+
+  addVoiceField(embed, voiceChannelId);
+  return { embed, row: buildMemberActionRow(eventId, notificationId) };
 }
 
 /**

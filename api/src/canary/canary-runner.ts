@@ -29,53 +29,50 @@ function getMissingCredentials(test: CanaryTestDefinition): string[] {
  */
 export async function runAllCanaries(): Promise<CanaryRunReport> {
   const results: CanaryRunReport['results'] = [];
-
   for (const test of registry) {
-    const missing = getMissingCredentials(test);
+    results.push(await runSingleCanary(test));
+  }
+  return {
+    timestamp: new Date().toISOString(),
+    results,
+    summary: buildSummary(results),
+  };
+}
 
-    if (missing.length > 0) {
-      results.push({
-        integrationKey: test.integrationKey,
-        name: test.name,
-        result: {
-          status: 'SKIP',
-          reason: `Credential not configured: ${missing.join(', ')}`,
-        },
-      });
-      continue;
-    }
-
-    let result: CanaryProbeResult;
-    const start = Date.now();
-
-    try {
-      result = await test.probe();
-      result.durationMs = result.durationMs ?? Date.now() - start;
-    } catch (error) {
-      result = {
-        status: 'FAIL',
-        reason: error instanceof Error ? error.message : String(error),
-        durationMs: Date.now() - start,
-      };
-    }
-
-    results.push({
+async function runSingleCanary(
+  test: CanaryTestDefinition,
+): Promise<CanaryRunReport['results'][0]> {
+  const missing = getMissingCredentials(test);
+  if (missing.length > 0) {
+    return {
       integrationKey: test.integrationKey,
       name: test.name,
-      result,
-    });
+      result: {
+        status: 'SKIP',
+        reason: `Credential not configured: ${missing.join(', ')}`,
+      },
+    };
   }
+  const start = Date.now();
+  let result: CanaryProbeResult;
+  try {
+    result = await test.probe();
+    result.durationMs = result.durationMs ?? Date.now() - start;
+  } catch (error) {
+    result = {
+      status: 'FAIL',
+      reason: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - start,
+    };
+  }
+  return { integrationKey: test.integrationKey, name: test.name, result };
+}
 
-  const summary = {
+function buildSummary(results: CanaryRunReport['results']) {
+  return {
     total: results.length,
     passed: results.filter((r) => r.result.status === 'PASS').length,
     failed: results.filter((r) => r.result.status === 'FAIL').length,
     skipped: results.filter((r) => r.result.status === 'SKIP').length,
-  };
-
-  return {
-    timestamp: new Date().toISOString(),
-    results,
-    summary,
   };
 }

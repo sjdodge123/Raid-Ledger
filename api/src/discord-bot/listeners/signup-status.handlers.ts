@@ -22,31 +22,49 @@ export async function handleTentative(
   );
 
   if (existingSignup) {
-    await deps.signupsService.updateStatus(
-      eventId,
-      existingSignup.discordUserId
-        ? { discordUserId: existingSignup.discordUserId }
-        : { userId: existingSignup.user.id },
-      { status: 'tentative' },
-    );
+    await markExistingTentative(eventId, existingSignup, deps);
     await interaction.editReply({ content: "You're marked as **tentative**." });
     await deps.updateEmbedSignupCount(eventId);
     return;
   }
 
-  const [linkedUser] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordUserId))
-    .limit(1);
-
+  const linkedUser = await findLinkedUser(discordUserId, deps);
   if (linkedUser) {
     await handleLinkedTentative(interaction, eventId, linkedUser, deps);
     return;
   }
 
-  // Unlinked user — check for role selection on MMO events
   await handleUnlinkedTentative(interaction, eventId, discordUserId, deps);
+}
+
+async function markExistingTentative(
+  eventId: number,
+  existingSignup: NonNullable<
+    Awaited<
+      ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>
+    >
+  >,
+  deps: SignupInteractionDeps,
+): Promise<void> {
+  await deps.signupsService.updateStatus(
+    eventId,
+    existingSignup.discordUserId
+      ? { discordUserId: existingSignup.discordUserId }
+      : { userId: existingSignup.user.id },
+    { status: 'tentative' },
+  );
+}
+
+async function findLinkedUser(
+  discordUserId: string,
+  deps: SignupInteractionDeps,
+): Promise<typeof schema.users.$inferSelect | null> {
+  const [user] = await deps.db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.discordId, discordUserId))
+    .limit(1);
+  return user ?? null;
 }
 
 /**
@@ -58,119 +76,152 @@ async function handleLinkedTentative(
   linkedUser: typeof schema.users.$inferSelect,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const [event] = await deps.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
-
+  const event = await fetchEvent(eventId, deps);
   if (!event) {
     await interaction.editReply({ content: 'Event not found.' });
     return;
   }
 
   if (event.gameId) {
-    const handled = await tryLinkedTentativeGameFlow(
+    const handled = await tryLinkedTentativeGameFlow({
       interaction,
       eventId,
       linkedUser,
       event,
       deps,
-    );
+    });
     if (handled) return;
   }
 
-  // No game or no character support — plain tentative signup
-  await deps.signupsService.signup(eventId, linkedUser.id);
+  await signupAsTentative(eventId, linkedUser.id, deps);
+  await interaction.editReply({ content: "You're marked as **tentative**." });
+}
+
+async function fetchEvent(
+  eventId: number,
+  deps: SignupInteractionDeps,
+): Promise<typeof schema.events.$inferSelect | null> {
+  const [event] = await deps.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return event ?? null;
+}
+
+async function signupAsTentative(
+  eventId: number,
+  userId: number,
+  deps: SignupInteractionDeps,
+): Promise<void> {
+  await deps.signupsService.signup(eventId, userId);
   await deps.signupsService.updateStatus(
     eventId,
-    { userId: linkedUser.id },
+    { userId },
     { status: 'tentative' },
   );
-  await interaction.editReply({ content: "You're marked as **tentative**." });
   await deps.updateEmbedSignupCount(eventId);
 }
 
 /**
  * Try game-specific tentative flow for linked user. Returns true if handled.
  */
-async function tryLinkedTentativeGameFlow(
-  interaction: ButtonInteraction,
-  eventId: number,
+async function loadTentativeGameContext(
   linkedUser: typeof schema.users.$inferSelect,
   event: typeof schema.events.$inferSelect,
   deps: SignupInteractionDeps,
-): Promise<boolean> {
+): Promise<{
+  characters: import('@raid-ledger/contract').CharacterDto[];
+  isMMO: boolean;
+} | null> {
   const [game] = await deps.db
     .select()
     .from(schema.games)
     .where(eq(schema.games.id, event.gameId!))
     .limit(1);
-
-  if (!game) return false;
+  if (!game) return null;
 
   const characterList = await deps.charactersService.findAllForUser(
     linkedUser.id,
     event.gameId!,
   );
-  const characters = characterList.data;
-  const slotConfig = event.slotConfig as Record<string, unknown> | null;
+  const isMMO =
+    (event.slotConfig as Record<string, unknown> | null)?.type === 'mmo';
+  return { characters: characterList.data, isMMO };
+}
 
-  if (slotConfig?.type === 'mmo' && characters.length >= 1) {
-    const m = (await import('../utils/signup-dropdown-builders.js')) as {
-      showCharacterSelect: typeof ShowCharSelectFn;
-    };
-    await m.showCharacterSelect(interaction, {
-      customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
+function shouldShowTentativeCharSelect(
+  isMMO: boolean,
+  charCount: number,
+): boolean {
+  return (isMMO && charCount >= 1) || charCount > 1;
+}
+
+type TentativeCtx = {
+  characters: import('@raid-ledger/contract').CharacterDto[];
+  isMMO: boolean;
+};
+
+type TentativeCharArgs = {
+  interaction: ButtonInteraction;
+  eventId: number;
+  userId: number;
+  event: typeof schema.events.$inferSelect;
+  ctx: TentativeCtx;
+  deps: SignupInteractionDeps;
+};
+
+/** Handle character-based tentative branch. Returns null if not applicable. */
+async function tryTentativeCharPath(
+  args: TentativeCharArgs,
+): Promise<boolean | null> {
+  const { interaction, eventId, event, ctx, deps } = args;
+  if (shouldShowTentativeCharSelect(ctx.isMMO, ctx.characters.length)) {
+    await showTentativeCharacterSelect(
+      interaction,
       eventId,
-      eventTitle: event.title,
-      characters,
-      emojiService: deps.emojiService,
-      customIdSuffix: 'tentative',
-    });
+      event.title,
+      ctx.characters,
+      deps,
+    );
     return true;
   }
-
-  if (characters.length > 1) {
-    const m = (await import('../utils/signup-dropdown-builders.js')) as {
-      showCharacterSelect: typeof ShowCharSelectFn;
-    };
-    await m.showCharacterSelect(interaction, {
-      customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
+  if (ctx.characters.length === 1)
+    return tentativeSingleCharacter(
+      interaction,
       eventId,
-      eventTitle: event.title,
-      characters,
-      emojiService: deps.emojiService,
-      customIdSuffix: 'tentative',
-    });
-    return true;
-  }
-
-  if (characters.length === 1) {
-    const char = characters[0];
-    const signupResult = await deps.signupsService.signup(
-      eventId,
-      linkedUser.id,
+      args.userId,
+      ctx.characters[0],
+      deps,
     );
-    await deps.signupsService.confirmSignup(
-      eventId,
-      signupResult.id,
-      linkedUser.id,
-      { characterId: char.id },
-    );
-    await deps.signupsService.updateStatus(
-      eventId,
-      { userId: linkedUser.id },
-      { status: 'tentative' },
-    );
-    await interaction.editReply({
-      content: `You're marked as **tentative** with **${char.name}**.`,
-    });
-    await deps.updateEmbedSignupCount(eventId);
-    return true;
-  }
 
-  if (slotConfig?.type === 'mmo') {
+  return null;
+}
+
+type TentativeGameFlowArgs = {
+  interaction: ButtonInteraction;
+  eventId: number;
+  linkedUser: typeof schema.users.$inferSelect;
+  event: typeof schema.events.$inferSelect;
+  deps: SignupInteractionDeps;
+};
+
+async function tryLinkedTentativeGameFlow(
+  a: TentativeGameFlowArgs,
+): Promise<boolean> {
+  const { interaction, eventId, linkedUser, event, deps } = a;
+  const ctx = await loadTentativeGameContext(linkedUser, event, deps);
+  if (!ctx) return false;
+  const charResult = await tryTentativeCharPath({
+    interaction,
+    eventId,
+    userId: linkedUser.id,
+    event,
+    ctx,
+    deps,
+  });
+  if (charResult !== null) return charResult;
+  if (ctx.isMMO) {
     await showRoleSelect(
       interaction,
       eventId,
@@ -181,8 +232,50 @@ async function tryLinkedTentativeGameFlow(
     );
     return true;
   }
-
   return false;
+}
+
+async function showTentativeCharacterSelect(
+  interaction: ButtonInteraction,
+  eventId: number,
+  eventTitle: string,
+  characters: import('@raid-ledger/contract').CharacterDto[],
+  deps: SignupInteractionDeps,
+): Promise<void> {
+  const m = (await import('../utils/signup-dropdown-builders.js')) as {
+    showCharacterSelect: typeof ShowCharSelectFn;
+  };
+  await m.showCharacterSelect(interaction, {
+    customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
+    eventId,
+    eventTitle,
+    characters,
+    emojiService: deps.emojiService,
+    customIdSuffix: 'tentative',
+  });
+}
+
+async function tentativeSingleCharacter(
+  interaction: ButtonInteraction,
+  eventId: number,
+  userId: number,
+  char: import('@raid-ledger/contract').CharacterDto,
+  deps: SignupInteractionDeps,
+): Promise<boolean> {
+  const result = await deps.signupsService.signup(eventId, userId);
+  await deps.signupsService.confirmSignup(eventId, result.id, userId, {
+    characterId: char.id,
+  });
+  await deps.signupsService.updateStatus(
+    eventId,
+    { userId },
+    { status: 'tentative' },
+  );
+  await interaction.editReply({
+    content: `You're marked as **tentative** with **${char.name}**.`,
+  });
+  await deps.updateEmbedSignupCount(eventId);
+  return true;
 }
 
 /**
@@ -194,26 +287,7 @@ async function handleUnlinkedTentative(
   discordUserId: string,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const [event] = await deps.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
-
-  if (event) {
-    const slotConfig = event.slotConfig as Record<string, unknown> | null;
-    if (slotConfig?.type === 'mmo') {
-      await showRoleSelect(
-        interaction,
-        eventId,
-        deps,
-        undefined,
-        undefined,
-        'tentative',
-      );
-      return;
-    }
-  }
+  if (await tryMmoTentativeRedirect(interaction, eventId, deps)) return;
 
   await deps.signupsService.signupDiscord(eventId, {
     discordUserId,
@@ -221,9 +295,28 @@ async function handleUnlinkedTentative(
     discordAvatarHash: interaction.user.avatar,
     status: 'tentative',
   });
-
   await interaction.editReply({ content: "You're marked as **tentative**." });
   await deps.updateEmbedSignupCount(eventId);
+}
+
+async function tryMmoTentativeRedirect(
+  interaction: ButtonInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+): Promise<boolean> {
+  const event = await fetchEvent(eventId, deps);
+  const slotConfig = event?.slotConfig as Record<string, unknown> | null;
+  if (slotConfig?.type !== 'mmo') return false;
+
+  await showRoleSelect(
+    interaction,
+    eventId,
+    deps,
+    undefined,
+    undefined,
+    'tentative',
+  );
+  return true;
 }
 
 /**
@@ -242,16 +335,20 @@ export async function handleDecline(
 
   if (existingSignup) {
     await deps.signupsService.cancelByDiscordUser(eventId, discordUserId);
-    await interaction.editReply({ content: "You've **declined** this event." });
-    await deps.updateEmbedSignupCount(eventId);
-    return;
+  } else {
+    await createDeclinedSignup(interaction, eventId, deps);
   }
 
-  const [linkedUser] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordUserId))
-    .limit(1);
+  await interaction.editReply({ content: "You've **declined** this event." });
+  await deps.updateEmbedSignupCount(eventId);
+}
+
+async function createDeclinedSignup(
+  interaction: ButtonInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+): Promise<void> {
+  const linkedUser = await findLinkedUser(interaction.user.id, deps);
 
   if (linkedUser) {
     await deps.signupsService.signup(eventId, linkedUser.id);
@@ -262,15 +359,12 @@ export async function handleDecline(
     );
   } else {
     await deps.signupsService.signupDiscord(eventId, {
-      discordUserId,
+      discordUserId: interaction.user.id,
       discordUsername: interaction.user.username,
       discordAvatarHash: interaction.user.avatar,
       status: 'declined',
     });
   }
-
-  await interaction.editReply({ content: "You've **declined** this event." });
-  await deps.updateEmbedSignupCount(eventId);
 }
 
 /**
@@ -281,36 +375,36 @@ export async function handleQuickSignup(
   eventId: number,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const discordUserId = interaction.user.id;
-  const existingSignup = await deps.signupsService.findByDiscordUser(
+  const existing = await deps.signupsService.findByDiscordUser(
     eventId,
-    discordUserId,
+    interaction.user.id,
   );
-
-  if (existingSignup) {
+  if (existing) {
     await interaction.editReply({ content: "You're already signed up!" });
     return;
   }
 
-  const [event] = await deps.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
-
+  const event = await fetchEvent(eventId, deps);
   if (!event) {
     await interaction.editReply({ content: 'Event not found.' });
     return;
   }
 
-  const slotConfig = event.slotConfig as Record<string, unknown> | null;
-  if (slotConfig?.type === 'mmo') {
+  if ((event.slotConfig as Record<string, unknown> | null)?.type === 'mmo') {
     await showRoleSelect(interaction, eventId, deps);
     return;
   }
 
+  await quickSignupAnonymous(interaction, eventId, deps);
+}
+
+async function quickSignupAnonymous(
+  interaction: ButtonInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+): Promise<void> {
   await deps.signupsService.signupDiscord(eventId, {
-    discordUserId,
+    discordUserId: interaction.user.id,
     discordUsername: interaction.user.username,
     discordAvatarHash: interaction.user.avatar,
   });
@@ -319,7 +413,6 @@ export async function handleQuickSignup(
   const accountLink = clientUrl
     ? `\n[Create an account](${clientUrl}) to manage characters and get reminders.`
     : '';
-
   await interaction.editReply({
     content: `You're signed up as **${interaction.user.username}**!${accountLink}`,
   });
@@ -334,22 +427,26 @@ export async function showOnboardingEphemeral(
   eventId: number,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const [event] = await deps.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
-
+  const event = await fetchEvent(eventId, deps);
   if (!event) {
     await interaction.editReply({ content: 'Event not found.' });
     return;
   }
 
+  const row = buildOnboardingRow(eventId, interaction.user.id, deps);
+  await interaction.editReply({
+    content: buildOnboardingText(event.title),
+    components: [row],
+  });
+}
+
+function buildOnboardingRow(
+  eventId: number,
+  discordUserId: string,
+  deps: SignupInteractionDeps,
+): ActionRowBuilder<ButtonBuilder> {
   const clientUrl = process.env.CLIENT_URL ?? '';
-  const intentToken = deps.intentTokenService.generate(
-    eventId,
-    interaction.user.id,
-  );
+  const intentToken = deps.intentTokenService.generate(eventId, discordUserId);
   const joinUrl = clientUrl
     ? `${clientUrl}/join?intent=signup&eventId=${eventId}&token=${encodeURIComponent(intentToken)}`
     : null;
@@ -369,14 +466,14 @@ export async function showOnboardingEphemeral(
       .setLabel('Quick Sign Up')
       .setStyle(ButtonStyle.Secondary),
   );
+  return row;
+}
 
-  await interaction.editReply({
-    content: [
-      `**Sign up for ${event.title}**`,
-      '',
-      'Create a Raid Ledger account to manage characters,',
-      'get reminders, and track your raid history.',
-    ].join('\n'),
-    components: [row],
-  });
+function buildOnboardingText(eventTitle: string): string {
+  return [
+    `**Sign up for ${eventTitle}**`,
+    '',
+    'Create a Raid Ledger account to manage characters,',
+    'get reminders, and track your raid history.',
+  ].join('\n');
 }

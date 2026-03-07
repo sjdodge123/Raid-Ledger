@@ -48,67 +48,72 @@ async function testTokenEndpoint(
     `${config.clientId}:${config.clientSecret}`,
   ).toString('base64');
 
-  const tokenResponse = await fetch(
-    'https://discord.com/api/v10/oauth2/token',
-    {
-      method: 'POST',
-      headers: {
-        ...DISCORD_HEADERS,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${basicAuth}`,
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        scope: 'identify',
-      }),
-    },
+  const tokenResponse = await fetchDiscordToken(basicAuth);
+  const tokenData = await parseTokenResponse(tokenResponse);
+  if (!tokenData) return null;
+
+  return interpretTokenResult(
+    tokenResponse.status,
+    tokenResponse.ok,
+    tokenData,
   );
+}
 
-  const tokenText = await tokenResponse.text();
-  let tokenData: { error?: string } | null = null;
+/** POST to Discord token endpoint. */
+async function fetchDiscordToken(basicAuth: string) {
+  return fetch('https://discord.com/api/v10/oauth2/token', {
+    method: 'POST',
+    headers: {
+      ...DISCORD_HEADERS,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${basicAuth}`,
+    },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      scope: 'identify',
+    }),
+  });
+}
+
+/** Parse token response; returns null and logs if non-JSON or rate-limited. */
+async function parseTokenResponse(
+  response: Response,
+): Promise<{ error?: string } | null> {
+  const tokenText = await response.text();
   try {
-    tokenData = JSON.parse(tokenText) as { error?: string };
+    return JSON.parse(tokenText) as { error?: string };
   } catch {
-    // Non-JSON response — likely Cloudflare HTML block
-  }
-
-  if (!tokenData) {
-    // Non-JSON response, fall through to gateway
     logger.warn(
-      `Token endpoint blocked (${tokenResponse.status}), falling back to gateway check`,
+      `Token endpoint blocked (${response.status}), falling back to gateway check`,
     );
     return null;
   }
+}
 
-  if (tokenResponse.status === 401 || tokenData.error === 'invalid_client') {
+/** Interpret the parsed token endpoint result. */
+function interpretTokenResult(
+  status: number,
+  ok: boolean,
+  data: { error?: string },
+): OAuthTestResponse | null {
+  if (status === 401 || data.error === 'invalid_client')
     return { success: false, message: 'Invalid Client ID or Client Secret' };
-  }
-
-  if (
-    tokenResponse.status === 400 &&
-    tokenData.error === 'unsupported_grant_type'
-  ) {
+  if (status === 400 && data.error === 'unsupported_grant_type')
     return {
       success: true,
       message: 'Credentials are valid! Discord OAuth is ready to use.',
     };
-  }
-
-  if (tokenResponse.ok) {
+  if (ok)
     return { success: true, message: 'Credentials verified successfully!' };
-  }
-
-  if (tokenResponse.status === 429) {
-    // Rate-limited — fall through to gateway
+  if (status === 429) {
     logger.warn(
-      `Token endpoint blocked (${tokenResponse.status}), falling back to gateway check`,
+      `Token endpoint blocked (${status}), falling back to gateway check`,
     );
     return null;
   }
-
   return {
     success: false,
-    message: `Discord returned an error: ${tokenData.error || tokenResponse.status}`,
+    message: `Discord returned an error: ${data.error || status}`,
   };
 }
 

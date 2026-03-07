@@ -26,42 +26,35 @@ import type { Response } from 'express';
  */
 @Catch()
 export class SentryExceptionFilter implements ExceptionFilter {
+  /** Handle an HTTP exception by sending the appropriate JSON response. */
+  private handleHttpException(response: Response, exception: unknown): void {
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const body = exception.getResponse();
+      if (status >= 500) Sentry.captureException(exception);
+      response
+        .status(status)
+        .json(
+          typeof body === 'string'
+            ? { statusCode: status, message: body }
+            : body,
+        );
+    } else {
+      Sentry.captureException(exception);
+      response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'Internal server error',
+      });
+    }
+  }
+
   catch(exception: unknown, host: ArgumentsHost): void {
     if (host.getType() === 'http') {
       const response = host.switchToHttp().getResponse<Response>();
-
-      if (response.headersSent) {
-        return;
-      }
-
-      if (exception instanceof HttpException) {
-        const status = exception.getStatus();
-        const body = exception.getResponse();
-
-        // Only report server errors to Sentry, not client errors (4xx)
-        if (status >= 500) {
-          Sentry.captureException(exception);
-        }
-
-        response
-          .status(status)
-          .json(
-            typeof body === 'string'
-              ? { statusCode: status, message: body }
-              : body,
-          );
-      } else {
-        // Unexpected non-HttpException — always report to Sentry
-        Sentry.captureException(exception);
-        response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-          message: 'Internal server error',
-        });
-      }
+      if (response.headersSent) return;
+      this.handleHttpException(response, exception);
       return;
     }
-
-    // Non-HTTP context — capture directly and re-throw
     Sentry.captureException(exception);
     throw exception;
   }

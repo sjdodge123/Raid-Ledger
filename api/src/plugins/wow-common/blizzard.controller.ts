@@ -101,19 +101,15 @@ export class BlizzardController {
     @Query('type') type?: string,
     @Query('region') region?: string,
   ) {
-    if (!type || (type !== 'dungeon' && type !== 'raid')) {
+    if (!type || (type !== 'dungeon' && type !== 'raid'))
       throw new BadRequestException(
         'type is required and must be one of: dungeon, raid',
       );
-    }
-
     const parsedRegion = WowRegionSchema.safeParse(region ?? 'us');
-    if (!parsedRegion.success) {
+    if (!parsedRegion.success)
       throw new BadRequestException(
         'Invalid region. Must be one of: us, eu, kr, tw',
       );
-    }
-
     const variant = this.parseGameVariant(gameVariant);
     try {
       const { dungeons, raids } = await this.blizzardService.fetchAllInstances(

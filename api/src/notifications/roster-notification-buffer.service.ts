@@ -123,9 +123,19 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
     this.buffer.delete(key);
 
     const { action } = entry;
+    const currentAssignment = await this.lookupCurrentAssignment(action);
+    const payload = await this.buildFlushPayload(action);
 
-    // Look up the user's current roster assignment for this event
-    const currentAssignment = await this.db
+    if (currentAssignment.length === 0) {
+      await this.notifyPlayerLeft(action, payload);
+    } else {
+      await this.handleRoleChange(action, currentAssignment[0].role, payload);
+    }
+  }
+
+  /** Look up the user's current roster assignment for this event. */
+  private async lookupCurrentAssignment(action: BufferedRosterAction) {
+    return this.db
       .select({ role: schema.rosterAssignments.role })
       .from(schema.rosterAssignments)
       .innerJoin(
@@ -139,50 +149,61 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
         ),
       )
       .limit(1);
+  }
 
-    // Resolve Discord embed URL and voice channel for the notification payload
+  /** Build the notification payload with Discord embed URL and voice channel. */
+  private async buildFlushPayload(
+    action: BufferedRosterAction,
+  ): Promise<Record<string, unknown>> {
     const [discordUrl, voiceChannelId] = await Promise.all([
       this.notificationService.getDiscordEmbedUrl(action.eventId),
       this.notificationService.resolveVoiceChannelForEvent(action.eventId),
     ]);
-
     const payload: Record<string, unknown> = { eventId: action.eventId };
     if (discordUrl) payload.discordUrl = discordUrl;
     if (voiceChannelId) payload.voiceChannelId = voiceChannelId;
+    return payload;
+  }
 
-    if (currentAssignment.length === 0) {
-      // Net result: player left entirely
-      await this.notificationService.create({
-        userId: action.organizerId,
-        type: 'slot_vacated',
-        title: 'Slot Vacated',
-        message: `${action.displayName} left the ${action.vacatedRole} slot for ${action.eventTitle}`,
-        payload,
-      });
+  /** Notify organizer that a player left entirely. */
+  private async notifyPlayerLeft(
+    action: BufferedRosterAction,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    await this.notificationService.create({
+      userId: action.organizerId,
+      type: 'slot_vacated',
+      title: 'Slot Vacated',
+      message: `${action.displayName} left the ${action.vacatedRole} slot for ${action.eventTitle}`,
+      payload,
+    });
+    this.logger.debug(
+      `Flushed: ${action.displayName} left ${action.vacatedRole} for event ${action.eventId}`,
+    );
+  }
+
+  /** Handle role change: skip if same slot, notify if different. */
+  private async handleRoleChange(
+    action: BufferedRosterAction,
+    newRole: string | null,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    if (newRole === action.vacatedRole) {
       this.logger.debug(
-        `Flushed: ${action.displayName} left ${action.vacatedRole} for event ${action.eventId}`,
+        `Skipped: ${action.displayName} returned to ${action.vacatedRole} for event ${action.eventId}`,
       );
-    } else {
-      const newRole = currentAssignment[0].role;
-      if (newRole === action.vacatedRole) {
-        // Player is back in the same slot — the action cancelled out, skip notification
-        this.logger.debug(
-          `Skipped: ${action.displayName} returned to ${action.vacatedRole} for event ${action.eventId}`,
-        );
-      } else {
-        // Player moved to a different slot
-        await this.notificationService.create({
-          userId: action.organizerId,
-          type: 'slot_vacated',
-          title: 'Roster Change',
-          message: `${action.displayName} joined the ${newRole} slot for ${action.eventTitle}`,
-          payload,
-        });
-        this.logger.debug(
-          `Flushed: ${action.displayName} moved from ${action.vacatedRole} to ${newRole} for event ${action.eventId}`,
-        );
-      }
+      return;
     }
+    await this.notificationService.create({
+      userId: action.organizerId,
+      type: 'slot_vacated',
+      title: 'Roster Change',
+      message: `${action.displayName} joined the ${newRole} slot for ${action.eventTitle}`,
+      payload,
+    });
+    this.logger.debug(
+      `Flushed: ${action.displayName} moved from ${action.vacatedRole} to ${newRole} for event ${action.eventId}`,
+    );
   }
 
   /** Visible for testing — returns the number of buffered entries. */

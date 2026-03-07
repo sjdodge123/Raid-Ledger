@@ -291,19 +291,28 @@ export class EventsController {
   }> {
     const event = await this.eventsService.findOne(id);
 
-    // ROK-599: Per-event override → series binding → game binding → default
-    const channelId =
-      event.notificationChannelOverride ??
-      (await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
-        event.game?.id ?? null,
-        event.recurrenceGroupId ?? null,
-      ));
-
+    const channelId = await this.resolveVoiceChannelId(event);
     if (!channelId) {
       return { channelId: null, channelName: null, guildId: null };
     }
 
-    // Resolve channel name from Discord (prefer cache to avoid REST calls)
+    return this.resolveChannelDetails(channelId, !!req.user);
+  }
+
+  private async resolveVoiceChannelId(event: EventResponseDto) {
+    return (
+      event.notificationChannelOverride ??
+      (await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
+        event.game?.id ?? null,
+        event.recurrenceGroupId ?? null,
+      ))
+    );
+  }
+
+  private async resolveChannelDetails(
+    channelId: string,
+    isAuthenticated: boolean,
+  ) {
     try {
       const guildId = this.discordBotClientService.getGuildId();
       const client = this.discordBotClientService.getClient();
@@ -317,13 +326,12 @@ export class EventsController {
         return {
           channelId,
           channelName: channel?.name ?? null,
-          guildId: req.user ? guildId : null,
+          guildId: isAuthenticated ? guildId : null,
         };
       }
     } catch {
       // Discord API failure — return ID without name
     }
-
     return { channelId, channelName: null, guildId: null };
   }
 

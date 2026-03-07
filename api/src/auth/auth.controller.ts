@@ -78,7 +78,6 @@ export class AuthController {
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
   async getProfile(@Req() req: RequestWithUser) {
-    // Fetch user data and avatar preference in parallel (ROK-448: was sequential)
     const [user, avatarPref] = await Promise.all([
       this.usersService.findById(req.user.id),
       this.preferencesService.getUserPreference(
@@ -86,27 +85,42 @@ export class AuthController {
         'avatarPreference',
       ),
     ]);
-    if (!user) {
-      throw new UnauthorizedException('User no longer exists');
-    }
+    if (!user) throw new UnauthorizedException('User no longer exists');
 
-    // ROK-414: Resolve avatar URL server-side instead of sending all characters
-    let resolvedAvatarUrl: string | null = null;
+    const resolvedAvatarUrl = await this.resolveAvatarUrl(
+      req.user.id,
+      user,
+      avatarPref,
+    );
+    return this.buildProfileResponse(user, avatarPref, resolvedAvatarUrl);
+  }
+
+  /** Resolve avatar URL from preference type. */
+  private async resolveAvatarUrl(
+    userId: number,
+    user: { customAvatarUrl: string | null },
+    avatarPref: { value: unknown } | null | undefined,
+  ): Promise<string | null> {
     const pref = avatarPref?.value as
       | { type: string; characterName?: string }
       | null
       | undefined;
-
-    if (pref?.type === 'custom' && user.customAvatarUrl) {
-      resolvedAvatarUrl = user.customAvatarUrl;
-    } else if (pref?.type === 'character' && pref.characterName) {
-      resolvedAvatarUrl = await this.charactersService.getAvatarUrlByName(
-        req.user.id,
+    if (pref?.type === 'custom' && user.customAvatarUrl)
+      return user.customAvatarUrl;
+    if (pref?.type === 'character' && pref.characterName)
+      return this.charactersService.getAvatarUrlByName(
+        userId,
         pref.characterName,
       );
-    }
-    // 'discord' type: resolvedAvatarUrl stays null — client uses user.avatar
+    return null;
+  }
 
+  /** Build the profile response DTO. */
+  private buildProfileResponse(
+    user: NonNullable<Awaited<ReturnType<typeof this.usersService.findById>>>,
+    avatarPref: { value: unknown } | null | undefined,
+    resolvedAvatarUrl: string | null,
+  ) {
     return {
       id: user.id,
       discordId: user.discordId,
@@ -135,7 +149,6 @@ export class AuthController {
     @Body() body: unknown,
   ): Promise<RedeemIntentResponseDto> {
     const dto = RedeemIntentSchema.parse(body);
-
     const payload = await this.intentTokenService.validate(dto.token);
     if (!payload) {
       return {
@@ -144,56 +157,64 @@ export class AuthController {
       };
     }
 
-    // Verify the intent token's Discord ID matches the logged-in user's Discord account.
-    // Prevents token theft: even if someone intercepts the URL, they can't redeem it
-    // under a different Discord identity.
-    const currentUser = await this.usersService.findById(req.user.id);
+    const mismatch = await this.checkDiscordIdMismatch(
+      req.user.id,
+      payload.discordId,
+    );
+    if (mismatch) return mismatch;
+
+    return this.executeIntentRedemption(req.user.id, payload.eventId);
+  }
+
+  /** Check if the intent token's Discord ID matches the logged-in user. */
+  private async checkDiscordIdMismatch(
+    userId: number,
+    tokenDiscordId?: string,
+  ): Promise<RedeemIntentResponseDto | null> {
+    const currentUser = await this.usersService.findById(userId);
     if (
       currentUser?.discordId &&
-      payload.discordId &&
-      currentUser.discordId !== payload.discordId
+      tokenDiscordId &&
+      currentUser.discordId !== tokenDiscordId
     ) {
       this.logger.warn(
-        `Intent token Discord ID mismatch: token=${payload.discordId}, user=${currentUser.discordId}`,
+        `Intent token Discord ID mismatch: token=${tokenDiscordId}, user=${currentUser.discordId}`,
       );
       return {
         success: false,
         message: 'This signup link was generated for a different Discord user',
       };
     }
+    return null;
+  }
 
+  /** Execute the signup and claim anonymous signups. */
+  private async executeIntentRedemption(
+    userId: number,
+    eventId: number,
+  ): Promise<RedeemIntentResponseDto> {
     try {
-      // Auto-complete the signup
-      await this.signupsService.signup(payload.eventId, req.user.id);
-
-      // Claim any anonymous signups this Discord user had
-      if (req.user.id) {
-        const user = await this.usersService.findById(req.user.id);
-        if (user?.discordId) {
-          await this.signupsService.claimAnonymousSignups(
-            user.discordId,
-            req.user.id,
-          );
-        }
-      }
-
+      await this.signupsService.signup(eventId, userId);
+      await this.claimAnonymousSignupsIfLinked(userId);
       this.logger.log(
-        `Redeemed intent token: user ${req.user.id} signed up for event ${payload.eventId}`,
+        `Redeemed intent token: user ${userId} signed up for event ${eventId}`,
       );
-
-      return {
-        success: true,
-        eventId: payload.eventId,
-        message: "You're signed up!",
-      };
+      return { success: true, eventId, message: "You're signed up!" };
     } catch (error) {
       this.logger.error('Failed to redeem intent token:', error);
       return {
         success: false,
-        eventId: payload.eventId,
+        eventId,
         message:
           error instanceof Error ? error.message : 'Failed to process signup',
       };
     }
+  }
+
+  /** Claim anonymous signups for the user's Discord account. */
+  private async claimAnonymousSignupsIfLinked(userId: number): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (user?.discordId)
+      await this.signupsService.claimAnonymousSignups(user.discordId, userId);
   }
 }

@@ -72,7 +72,14 @@ export class DiscordNotificationEmbedService {
       : EMBED_COLORS.ANNOUNCEMENT;
     const name = communityName || 'Raid Ledger';
     const clientUrl = await this.resolveClientUrl();
-    const embed = new EmbedBuilder()
+    const embed = this.buildWelcomeEmbedContent(name, color);
+    const row = this.buildWelcomeActionRow(clientUrl);
+    return { embed, row };
+  }
+
+  /** Build the welcome embed content with fields. */
+  private buildWelcomeEmbedContent(name: string, color: number): EmbedBuilder {
+    return new EmbedBuilder()
       .setAuthor({ name })
       .setTitle(`Welcome to ${name}!`)
       .setDescription(
@@ -98,7 +105,13 @@ export class DiscordNotificationEmbedService {
       )
       .setFooter({ text: name })
       .setTimestamp();
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  }
+
+  /** Build the welcome action row with navigation buttons. */
+  private buildWelcomeActionRow(
+    clientUrl: string,
+  ): ActionRowBuilder<ButtonBuilder> {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setLabel('View Events')
         .setStyle(ButtonStyle.Link)
@@ -112,7 +125,6 @@ export class DiscordNotificationEmbedService {
         .setStyle(ButtonStyle.Link)
         .setURL(`${clientUrl}/profile/preferences/notifications`),
     );
-    return { embed, row };
   }
 
   /** Build embed for batched/summary notifications. */

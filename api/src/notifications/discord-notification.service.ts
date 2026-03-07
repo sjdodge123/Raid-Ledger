@@ -57,74 +57,100 @@ export class DiscordNotificationService {
     message: string;
     payload?: Record<string, unknown>;
   }): Promise<boolean> {
-    // (a) Check user has Discord linked
-    const [user] = await this.db
-      .select({ discordId: schema.users.discordId })
-      .from(schema.users)
-      .where(eq(schema.users.id, input.userId))
-      .limit(1);
-
-    if (!user?.discordId) {
-      this.logger.debug(
-        `User ${input.userId}: no Discord linked, skipping Discord notification`,
-      );
+    const discordId = await this.resolveDiscordId(input.userId);
+    if (!discordId) return false;
+    if (await this.isTypeDisabledForUser(input.userId, input.type))
       return false;
-    }
-
-    // (d) Full RL members have an entry in the users table with a discordId.
-    // Anonymous participants from Quick Sign Up (ROK-137) don't have user table entries.
-
-    // (b) Check user has Discord channel enabled in preferences
-    const [prefs] = await this.db
-      .select()
-      .from(schema.userNotificationPreferences)
-      .where(eq(schema.userNotificationPreferences.userId, input.userId))
-      .limit(1);
-
-    if (prefs) {
-      const channelPrefs = prefs.channelPrefs as Record<
-        string,
-        Record<string, boolean>
-      >;
-      // (c) Check notification type is enabled for Discord
-      const typePrefs = channelPrefs[input.type];
-      if (typePrefs && typePrefs.discord === false) {
-        this.logger.debug(
-          `User ${input.userId}: Discord disabled for ${input.type}, skipping`,
-        );
-        return false;
-      }
-    }
-
-    // Check bot is connected
     if (!this.clientService.isConnected()) {
       this.logger.debug('Discord bot not connected, skipping notification');
       return false;
     }
+    if (await this.isRateLimited(input)) return false;
+    await this.enqueueJob(input, discordId);
+    this.logger.log(
+      `Enqueued Discord notification for user ${input.userId} (${input.type})`,
+    );
+    return true;
+  }
 
-    // Rate limiting (AC-5): check if we already sent this type recently
-    // ROK-489: include reminderWindow in key so each window gets its own rate limit slot
+  /** Resolve user's Discord ID, returning null if not linked. */
+  private async resolveDiscordId(userId: number): Promise<string | null> {
+    const [user] = await this.db
+      .select({ discordId: schema.users.discordId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    if (!user?.discordId) {
+      this.logger.debug(
+        `User ${userId}: no Discord linked, skipping Discord notification`,
+      );
+      return null;
+    }
+    return user.discordId;
+  }
+
+  /** Check if Discord channel is disabled for this notification type. */
+  private async isTypeDisabledForUser(
+    userId: number,
+    type: NotificationType,
+  ): Promise<boolean> {
+    const [prefs] = await this.db
+      .select()
+      .from(schema.userNotificationPreferences)
+      .where(eq(schema.userNotificationPreferences.userId, userId))
+      .limit(1);
+    if (!prefs) return false;
+    const channelPrefs = prefs.channelPrefs as Record<
+      string,
+      Record<string, boolean>
+    >;
+    const typePrefs = channelPrefs[type];
+    if (typePrefs && typePrefs.discord === false) {
+      this.logger.debug(
+        `User ${userId}: Discord disabled for ${type}, skipping`,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /** Check rate limiting for this notification type + user. */
+  private async isRateLimited(input: {
+    userId: number;
+    type: NotificationType;
+    payload?: Record<string, unknown>;
+  }): Promise<boolean> {
     const subType = (input.payload?.reminderWindow as string | undefined) ?? '';
     const rateLimitKey = `discord-notif:rate:${input.userId}:${input.type}${subType ? `:${subType}` : ''}`;
     const recentCount = await this.redis.get(rateLimitKey);
-
     if (recentCount && parseInt(recentCount, 10) > 0) {
       this.logger.debug(
         `User ${input.userId}: rate limited for ${input.type}, skipping Discord DM`,
       );
-      return false;
+      return true;
     }
-
-    // Set rate limit key
     await this.redis.set(rateLimitKey, '1', 'PX', RATE_LIMIT_WINDOW_MS);
+    return false;
+  }
 
-    // Enqueue for background delivery
+  /** Enqueue the notification job for background delivery. */
+  private async enqueueJob(
+    input: {
+      notificationId: string;
+      userId: number;
+      type: NotificationType;
+      title: string;
+      message: string;
+      payload?: Record<string, unknown>;
+    },
+    discordId: string,
+  ): Promise<void> {
     await this.queue.add(
       'send-dm',
       {
         notificationId: input.notificationId,
         userId: input.userId,
-        discordId: user.discordId,
+        discordId,
         type: input.type,
         title: input.title,
         message: input.message,
@@ -132,19 +158,11 @@ export class DiscordNotificationService {
       } satisfies DiscordNotificationJobData,
       {
         attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
+        backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: 100,
         removeOnFail: 50,
       },
     );
-
-    this.logger.log(
-      `Enqueued Discord notification for user ${input.userId} (${input.type})`,
-    );
-    return true;
   }
 
   /**

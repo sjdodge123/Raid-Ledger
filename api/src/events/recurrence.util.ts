@@ -27,49 +27,56 @@ export function generateRecurringDates(
 ): Date[] {
   const dates: Date[] = [new Date(start)];
   const originalDay = start.getUTCDate();
-
   let current = new Date(start);
 
   while (dates.length < MAX_RECURRENCE_INSTANCES) {
-    let next: Date;
-
-    if (frequency === 'weekly') {
-      next = new Date(current);
-      next.setUTCDate(next.getUTCDate() + 7);
-    } else if (frequency === 'biweekly') {
-      next = new Date(current);
-      next.setUTCDate(next.getUTCDate() + 14);
-    } else {
-      // Monthly: advance by one calendar month from the *original* day.
-      // This prevents drift (e.g. Jan 31 -> Feb 28 -> Mar 28 instead of Mar 31).
-      next = new Date(current);
-      next.setUTCMonth(next.getUTCMonth() + 1);
-
-      // Clamp: if the day overflowed (e.g. 31 -> Mar 3), roll back to
-      // the last day of the intended month.
-      const intendedMonth = (current.getUTCMonth() + 1) % 12;
-      if (next.getUTCMonth() !== intendedMonth) {
-        // Overflowed — set to day 0 of next.getUTCMonth() which gives the
-        // last day of the intended month.
-        next.setUTCDate(0);
-      }
-
-      // Restore the original day if the target month can hold it,
-      // to prevent drift from clamped months (e.g. Jan 31 -> Feb 28 -> Mar 31).
-      if (next.getUTCDate() !== originalDay) {
-        const testDate = new Date(next);
-        testDate.setUTCDate(originalDay);
-        // Only restore if it didn't overflow to the next month
-        if (testDate.getUTCMonth() === next.getUTCMonth()) {
-          next.setUTCDate(originalDay);
-        }
-      }
-    }
-
+    const next = computeNextDate(current, frequency, originalDay);
     if (next > until) break;
     dates.push(next);
     current = next;
   }
 
   return dates;
+}
+
+function computeNextDate(
+  current: Date,
+  frequency: 'weekly' | 'biweekly' | 'monthly',
+  originalDay: number,
+): Date {
+  if (frequency === 'weekly') {
+    const next = new Date(current);
+    next.setUTCDate(next.getUTCDate() + 7);
+    return next;
+  }
+  if (frequency === 'biweekly') {
+    const next = new Date(current);
+    next.setUTCDate(next.getUTCDate() + 14);
+    return next;
+  }
+  return computeMonthlyNext(current, originalDay);
+}
+
+/**
+ * Advance by one calendar month, clamping to the last day of the target
+ * month when the source day doesn't exist (e.g. Jan 31 -> Feb 28).
+ * Restores the original day when possible to prevent drift.
+ */
+function computeMonthlyNext(current: Date, originalDay: number): Date {
+  const next = new Date(current);
+  next.setUTCMonth(next.getUTCMonth() + 1);
+
+  const intendedMonth = (current.getUTCMonth() + 1) % 12;
+  if (next.getUTCMonth() !== intendedMonth) {
+    next.setUTCDate(0);
+  }
+
+  if (next.getUTCDate() !== originalDay) {
+    const testDate = new Date(next);
+    testDate.setUTCDate(originalDay);
+    if (testDate.getUTCMonth() === next.getUTCMonth()) {
+      next.setUTCDate(originalDay);
+    }
+  }
+  return next;
 }

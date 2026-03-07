@@ -39,33 +39,39 @@ export class BossDataRefreshService {
     }
     this.isRefreshing = true;
     this.logger.log('Starting boss data refresh from Blizzard Journal API...');
-
     try {
-      const instances = await this.fetchAllInstanceIds();
-      this.logger.log(`Found ${instances.length} instances to refresh`);
-      let totalBosses = 0,
-        totalLoot = 0;
-
-      for (const inst of instances) {
-        try {
-          const result = await this.refreshInstance(inst.id, inst.expansion);
-          totalBosses += result.bosses;
-          totalLoot += result.loot;
-        } catch (err) {
-          this.logger.warn(`Failed to refresh instance ${inst.id}: ${err}`);
-        }
-        await this.sleep(100);
-      }
-
+      const result = await this.refreshAllInstances();
       await this.bossEncountersService.clearCache();
       await this.dungeonQuestsService.clearCache();
       this.logger.log(
-        `Boss data refresh complete: ${totalBosses} bosses, ${totalLoot} loot items`,
+        `Boss data refresh complete: ${result.bosses} bosses, ${result.loot} loot items`,
       );
-      return { bosses: totalBosses, loot: totalLoot };
+      return result;
     } finally {
       this.isRefreshing = false;
     }
+  }
+
+  /** Iterate through all instances and refresh each one. */
+  private async refreshAllInstances(): Promise<{
+    bosses: number;
+    loot: number;
+  }> {
+    const instances = await this.fetchAllInstanceIds();
+    this.logger.log(`Found ${instances.length} instances to refresh`);
+    let totalBosses = 0,
+      totalLoot = 0;
+    for (const inst of instances) {
+      try {
+        const result = await this.refreshInstance(inst.id, inst.expansion);
+        totalBosses += result.bosses;
+        totalLoot += result.loot;
+      } catch (err) {
+        this.logger.warn(`Failed to refresh instance ${inst.id}: ${err}`);
+      }
+      await this.sleep(100);
+    }
+    return { bosses: totalBosses, loot: totalLoot };
   }
 
   /** Fetch TBC instance IDs from the Blizzard journal. */

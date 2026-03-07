@@ -65,6 +65,11 @@ export class OnboardingController {
    */
   @Get('status')
   async getStatus(): Promise<OnboardingStatusDto> {
+    const settings = await this.fetchOnboardingSettings();
+    return this.buildStatusDto(settings);
+  }
+
+  private async fetchOnboardingSettings() {
     const [
       completedRaw,
       currentStepRaw,
@@ -82,23 +87,31 @@ export class OnboardingController {
       this.settingsService.isIgdbConfigured(),
       this.settingsService.isDiscordConfigured(),
     ]);
-
-    const completed = completedRaw === 'true';
-    const currentStep = currentStepRaw ? parseInt(currentStepRaw, 10) : 0;
-
-    // Determine step completion heuristically
-    const secureAccount = false; // We can't determine if password was changed, so always show as available
-    const communityIdentity = !!(communityName || defaultTimezone);
-    const connectPlugins =
-      blizzardConfigured || igdbConfigured || discordConfigured;
-
     return {
-      completed,
-      currentStep: Math.min(currentStep, 3),
+      completedRaw,
+      currentStepRaw,
+      communityName,
+      defaultTimezone,
+      blizzardConfigured,
+      igdbConfigured,
+      discordConfigured,
+    };
+  }
+
+  private buildStatusDto(
+    s: Awaited<ReturnType<OnboardingController['fetchOnboardingSettings']>>,
+  ): OnboardingStatusDto {
+    return {
+      completed: s.completedRaw === 'true',
+      currentStep: Math.min(
+        s.currentStepRaw ? parseInt(s.currentStepRaw, 10) : 0,
+        3,
+      ),
       steps: {
-        secureAccount,
-        communityIdentity,
-        connectPlugins,
+        secureAccount: false,
+        communityIdentity: !!(s.communityName || s.defaultTimezone),
+        connectPlugins:
+          s.blizzardConfigured || s.igdbConfigured || s.discordConfigured,
       },
     };
   }
@@ -173,45 +186,45 @@ export class OnboardingController {
       );
     }
 
-    const { currentPassword, newPassword } = parsed.data;
+    const localCred = await this.findLocalCredential(req.user.id);
+    await this.verifyCurrentPassword(
+      parsed.data.currentPassword,
+      localCred.passwordHash,
+    );
+    await this.updatePassword(localCred.id, parsed.data.newPassword);
 
-    // Find the local credential for the current admin
+    this.logger.log(
+      `Admin user ${req.user.username} changed password via onboarding`,
+    );
+    return { success: true, message: 'Password changed successfully' };
+  }
+
+  private async findLocalCredential(userId: number) {
     const [localCred] = await this.db
       .select()
       .from(schema.localCredentials)
-      .where(eq(schema.localCredentials.userId, req.user.id))
+      .where(eq(schema.localCredentials.userId, userId))
       .limit(1);
-
     if (!localCred) {
       throw new BadRequestException(
         'No local credentials found for this admin account',
       );
     }
+    return localCred;
+  }
 
-    // Verify current password
-    const isValid = await bcrypt.compare(
-      currentPassword,
-      localCred.passwordHash,
-    );
-    if (!isValid) {
+  private async verifyCurrentPassword(currentPassword: string, hash: string) {
+    const isValid = await bcrypt.compare(currentPassword, hash);
+    if (!isValid)
       throw new UnauthorizedException('Current password is incorrect');
-    }
+  }
 
-    // Hash and save new password
+  private async updatePassword(credId: number, newPassword: string) {
     const newHash = await this.localAuthService.hashPassword(newPassword);
     await this.db
       .update(schema.localCredentials)
       .set({ passwordHash: newHash })
-      .where(eq(schema.localCredentials.id, localCred.id));
-
-    this.logger.log(
-      `Admin user ${req.user.username} changed password via onboarding`,
-    );
-
-    return {
-      success: true,
-      message: 'Password changed successfully',
-    };
+      .where(eq(schema.localCredentials.id, credId));
   }
 
   // ============================================================

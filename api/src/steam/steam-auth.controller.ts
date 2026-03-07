@@ -128,45 +128,44 @@ export class SteamAuthController {
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-
     if (!token) {
       res.status(401).json({ message: 'Authentication token required' });
       return;
     }
 
-    let userId: number;
-    try {
-      userId = this.jwtService.verify<{ sub: number }>(token).sub;
-    } catch {
-      res.redirect(
-        `${clientUrl}/profile?steam=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
-      );
-      return;
-    }
+    const userId = this.verifySteamToken(token, res, clientUrl);
+    if (userId === null) return;
 
-    // Check Steam is configured
-    const steamConfigured = await this.settingsService.isSteamConfigured();
-    if (!steamConfigured) {
+    if (!(await this.settingsService.isSteamConfigured())) {
       res.redirect(
         `${clientUrl}/profile?steam=error&message=${encodeURIComponent('Steam integration is not configured. Please ask an admin to set it up.')}`,
       );
       return;
     }
 
-    // Create signed state with user ID
     const state = this.signState({
       userId,
       action: 'steam_link',
       timestamp: Date.now(),
     });
+    const returnUrl = `${this.getOriginUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
+    res.redirect(buildSteamOpenIdUrl(returnUrl));
+  }
 
-    // Build return URL — Steam OpenID returns here after auth
-    const originUrl = this.getOriginUrl(req);
-    const returnUrl = `${originUrl}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
-
-    // Redirect to Steam OpenID
-    const steamUrl = buildSteamOpenIdUrl(returnUrl);
-    res.redirect(steamUrl);
+  /** Verify JWT token for Steam linking. Returns userId or null on failure. */
+  private verifySteamToken(
+    token: string,
+    res: Response,
+    clientUrl: string,
+  ): number | null {
+    try {
+      return this.jwtService.verify<{ sub: number }>(token).sub;
+    } catch {
+      res.redirect(
+        `${clientUrl}/profile?steam=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
+      );
+      return null;
+    }
   }
 
   /**
@@ -181,47 +180,9 @@ export class SteamAuthController {
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-
     try {
-      // Verify signed state
-      const state = query.state;
-      if (!state) throw new Error('Missing state parameter');
-
-      const stateData = this.verifyState(state);
-      if (!stateData || stateData.action !== 'steam_link') {
-        throw new Error('Invalid or tampered state parameter');
-      }
-
-      const userId = stateData.userId as number;
-
-      // Verify OpenID response with Steam
-      const steamId = await verifySteamOpenId(query);
-      if (!steamId) {
-        throw new Error('Steam verification failed');
-      }
-
-      // Link Steam account
-      await this.usersService.linkSteam(userId, steamId);
-
-      this.logger.log(`Steam account ${steamId} linked to user ${userId}`);
-
-      // Check privacy status
-      const apiKey = await this.settingsService.getSteamApiKey();
-      let isPublic = false;
-      if (apiKey) {
-        const profile = await getPlayerSummary(apiKey, steamId);
-        isPublic = profile?.communityvisibilitystate === 3;
-      }
-
-      // Auto-trigger library sync (fire-and-forget)
-      if (isPublic) {
-        this.steamService.syncLibrary(userId).catch((err: unknown) => {
-          this.logger.warn(
-            `Auto-sync after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        });
-      }
-
+      const { userId, steamId } = await this.processLinkCallback(query);
+      const isPublic = await this.checkAndSyncSteam(userId, steamId);
       const privacyParam = isPublic ? '' : '&steam_private=true';
       res.redirect(`${clientUrl}/profile?steam=success${privacyParam}`);
     } catch (error) {
@@ -230,6 +191,41 @@ export class SteamAuthController {
         `${clientUrl}/profile?steam=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Steam link failed')}`,
       );
     }
+  }
+
+  /** Process the Steam link callback: verify state, verify OpenID, link account. */
+  private async processLinkCallback(
+    query: Record<string, string>,
+  ): Promise<{ userId: number; steamId: string }> {
+    if (!query.state) throw new Error('Missing state parameter');
+    const stateData = this.verifyState(query.state);
+    if (!stateData || stateData.action !== 'steam_link')
+      throw new Error('Invalid or tampered state parameter');
+    const userId = stateData.userId as number;
+    const steamId = await verifySteamOpenId(query);
+    if (!steamId) throw new Error('Steam verification failed');
+    await this.usersService.linkSteam(userId, steamId);
+    this.logger.log(`Steam account ${steamId} linked to user ${userId}`);
+    return { userId, steamId };
+  }
+
+  /** Check Steam privacy and auto-sync library if public. Returns isPublic. */
+  private async checkAndSyncSteam(
+    userId: number,
+    steamId: string,
+  ): Promise<boolean> {
+    const apiKey = await this.settingsService.getSteamApiKey();
+    if (!apiKey) return false;
+    const profile = await getPlayerSummary(apiKey, steamId);
+    const isPublic = profile?.communityvisibilitystate === 3;
+    if (isPublic) {
+      this.steamService.syncLibrary(userId).catch((err: unknown) => {
+        this.logger.warn(
+          `Auto-sync after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+    }
+    return isPublic;
   }
 
   /**

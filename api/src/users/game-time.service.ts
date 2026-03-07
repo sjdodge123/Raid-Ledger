@@ -295,6 +295,20 @@ export class GameTimeService {
     return result;
   }
 
+  /** Fetch all data sources for composite view in parallel. */
+  private async fetchCompositeData(
+    userId: number,
+    weekStart: Date,
+    weekEnd: Date,
+  ) {
+    const [startDate, endDate] = this.weekDateRange(weekStart, weekEnd);
+    return Promise.all([
+      fetchWeekSignedUpEvents(this.db, userId, weekStart, weekEnd),
+      fetchOverrides(this.db, userId, startDate, endDate),
+      fetchAbsences(this.db, userId, startDate, endDate),
+    ]);
+  }
+
   /** Build the composite result from all data sources. */
   private async buildCompositeResult(
     userId: number,
@@ -308,14 +322,11 @@ export class GameTimeService {
       ...s,
       dayOfWeek: (s.dayOfWeek + 1) % 7,
     }));
-    const [startDate, endDate] = this.weekDateRange(weekStart, weekEnd);
-    const [signedUpEvents, overrideRows, absenceRows] = await Promise.all([
-      fetchWeekSignedUpEvents(this.db, userId, weekStart, weekEnd),
-      fetchOverrides(this.db, userId, startDate, endDate),
-      fetchAbsences(this.db, userId, startDate, endDate),
+    const [signedUpEvents, overrideRows, absenceRows] =
+      await this.fetchCompositeData(userId, weekStart, weekEnd);
+    const signupsMap = await fetchSignupsPreview(this.db, [
+      ...new Set(signedUpEvents.map((e) => e.eventId)),
     ]);
-    const eventIds = [...new Set(signedUpEvents.map((e) => e.eventId))];
-    const signupsMap = await fetchSignupsPreview(this.db, eventIds);
     return assembleCompositeView(
       remapped,
       signedUpEvents,

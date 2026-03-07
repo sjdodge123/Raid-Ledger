@@ -83,38 +83,51 @@ export async function processOpenEvents(
   logger: Logger,
 ): Promise<void> {
   for (const ev of opens) {
-    const resolvedGameId = cache.get(ev.discordActivityName);
-    const gameId = resolvedGameId !== undefined ? resolvedGameId : null;
+    await insertOpenSession(db, ev, cache, logger);
+  }
+}
 
-    try {
-      const [existingOpen] = await db
-        .select({ id: tables.gameActivitySessions.id })
-        .from(tables.gameActivitySessions)
-        .where(
-          and(
-            eq(tables.gameActivitySessions.userId, ev.userId),
-            eq(
-              tables.gameActivitySessions.discordActivityName,
-              ev.discordActivityName,
-            ),
-            isNull(tables.gameActivitySessions.endedAt),
-          ),
-        )
-        .limit(1);
+async function hasOpenSession(
+  db: PostgresJsDatabase<typeof schema>,
+  userId: number,
+  activityName: string,
+): Promise<boolean> {
+  const [existing] = await db
+    .select({ id: tables.gameActivitySessions.id })
+    .from(tables.gameActivitySessions)
+    .where(
+      and(
+        eq(tables.gameActivitySessions.userId, userId),
+        eq(tables.gameActivitySessions.discordActivityName, activityName),
+        isNull(tables.gameActivitySessions.endedAt),
+      ),
+    )
+    .limit(1);
+  return !!existing;
+}
 
-      if (existingOpen) continue;
+async function insertOpenSession(
+  db: PostgresJsDatabase<typeof schema>,
+  ev: SessionOpenEvent,
+  cache: Map<string, number | null>,
+  logger: Logger,
+): Promise<void> {
+  const resolvedGameId = cache.get(ev.discordActivityName);
+  const gameId = resolvedGameId !== undefined ? resolvedGameId : null;
 
-      await db.insert(tables.gameActivitySessions).values({
-        userId: ev.userId,
-        gameId,
-        discordActivityName: ev.discordActivityName,
-        startedAt: ev.startedAt,
-      });
-    } catch (err) {
-      logger.warn(
-        `Failed to insert session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
-      );
-    }
+  try {
+    if (await hasOpenSession(db, ev.userId, ev.discordActivityName)) return;
+
+    await db.insert(tables.gameActivitySessions).values({
+      userId: ev.userId,
+      gameId,
+      discordActivityName: ev.discordActivityName,
+      startedAt: ev.startedAt,
+    });
+  } catch (err) {
+    logger.warn(
+      `Failed to insert session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
+    );
   }
 }
 
@@ -127,47 +140,61 @@ export async function processCloseEvents(
   logger: Logger,
 ): Promise<void> {
   for (const ev of closes) {
-    try {
-      const [session] = await db
-        .select({
-          id: tables.gameActivitySessions.id,
-          startedAt: tables.gameActivitySessions.startedAt,
-        })
-        .from(tables.gameActivitySessions)
-        .where(
-          and(
-            eq(tables.gameActivitySessions.userId, ev.userId),
-            eq(
-              tables.gameActivitySessions.discordActivityName,
-              ev.discordActivityName,
-            ),
-            isNull(tables.gameActivitySessions.endedAt),
-          ),
-        )
-        .orderBy(tables.gameActivitySessions.startedAt)
-        .limit(1);
+    await closeOpenSession(db, ev, logger);
+  }
+}
 
-      if (!session) continue;
+async function findOpenSessionForClose(
+  db: PostgresJsDatabase<typeof schema>,
+  userId: number,
+  activityName: string,
+): Promise<{ id: string; startedAt: Date } | null> {
+  const [session] = await db
+    .select({
+      id: tables.gameActivitySessions.id,
+      startedAt: tables.gameActivitySessions.startedAt,
+    })
+    .from(tables.gameActivitySessions)
+    .where(
+      and(
+        eq(tables.gameActivitySessions.userId, userId),
+        eq(tables.gameActivitySessions.discordActivityName, activityName),
+        isNull(tables.gameActivitySessions.endedAt),
+      ),
+    )
+    .orderBy(tables.gameActivitySessions.startedAt)
+    .limit(1);
+  return session ?? null;
+}
 
-      const durationSeconds = Math.min(
-        Math.max(
-          0,
-          Math.floor(
-            (ev.endedAt.getTime() - session.startedAt.getTime()) / 1000,
-          ),
-        ),
-        MAX_SESSION_DURATION_SECONDS,
-      );
+async function closeOpenSession(
+  db: PostgresJsDatabase<typeof schema>,
+  ev: SessionCloseEvent,
+  logger: Logger,
+): Promise<void> {
+  try {
+    const session = await findOpenSessionForClose(
+      db,
+      ev.userId,
+      ev.discordActivityName,
+    );
+    if (!session) return;
 
-      await db
-        .update(tables.gameActivitySessions)
-        .set({ endedAt: ev.endedAt, durationSeconds })
-        .where(eq(tables.gameActivitySessions.id, session.id));
-    } catch (err) {
-      logger.warn(
-        `Failed to close session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
-      );
-    }
+    const durationSeconds = Math.min(
+      Math.max(
+        0,
+        Math.floor((ev.endedAt.getTime() - session.startedAt.getTime()) / 1000),
+      ),
+      MAX_SESSION_DURATION_SECONDS,
+    );
+    await db
+      .update(tables.gameActivitySessions)
+      .set({ endedAt: ev.endedAt, durationSeconds })
+      .where(eq(tables.gameActivitySessions.id, session.id));
+  } catch (err) {
+    logger.warn(
+      `Failed to close session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
+    );
   }
 }
 
@@ -181,7 +208,23 @@ export async function closeOrphanedSessions(
   const now = new Date();
   const cutoff = new Date(now.getTime() - MAX_SESSION_DURATION_SECONDS * 1000);
 
-  const staleResult = await db
+  const staleCount = await closeStaleSessions(db, now, cutoff);
+  const recentCount = await closeRecentSessions(db, now, cutoff);
+
+  const total = staleCount + recentCount;
+  if (total > 0) {
+    logger.log(
+      `Closed ${total} orphaned session(s) (${staleCount} stale, ${recentCount} recent)`,
+    );
+  }
+}
+
+async function closeStaleSessions(
+  db: PostgresJsDatabase<typeof schema>,
+  now: Date,
+  cutoff: Date,
+): Promise<number> {
+  const result = await db
     .update(tables.gameActivitySessions)
     .set({ endedAt: now, durationSeconds: MAX_SESSION_DURATION_SECONDS })
     .where(
@@ -191,8 +234,15 @@ export async function closeOrphanedSessions(
       ),
     )
     .returning({ id: tables.gameActivitySessions.id });
+  return result.length;
+}
 
-  const recentResult = await db
+async function closeRecentSessions(
+  db: PostgresJsDatabase<typeof schema>,
+  now: Date,
+  cutoff: Date,
+): Promise<number> {
+  const result = await db
     .update(tables.gameActivitySessions)
     .set({
       endedAt: now,
@@ -205,13 +255,7 @@ export async function closeOrphanedSessions(
       ),
     )
     .returning({ id: tables.gameActivitySessions.id });
-
-  const total = staleResult.length + recentResult.length;
-  if (total > 0) {
-    logger.log(
-      `Closed ${total} orphaned session(s) (${staleResult.length} stale, ${recentResult.length} recent)`,
-    );
-  }
+  return result.length;
 }
 
 /**
@@ -221,10 +265,31 @@ export async function aggregateRollups(
   db: PostgresJsDatabase<typeof schema>,
   logger: Logger,
 ): Promise<void> {
+  const sessions = await fetchClosedSessions(db);
+  if (sessions.length === 0) return;
+
+  const rollupMap = buildRollupMap(sessions);
+  const upsertCount = await upsertRollups(db, rollupMap);
+
+  logger.log(
+    `Rolled up ${sessions.length} session(s) into ${upsertCount} rollup row(s)`,
+  );
+}
+
+async function fetchClosedSessions(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<
+  Array<{
+    userId: number;
+    gameId: number | null;
+    startedAt: Date;
+    durationSeconds: number | null;
+  }>
+> {
   const since = new Date();
   since.setHours(since.getHours() - 48);
 
-  const sessions = await db
+  return db
     .select({
       userId: tables.gameActivitySessions.userId,
       gameId: tables.gameActivitySessions.gameId,
@@ -240,12 +305,13 @@ export async function aggregateRollups(
         gte(tables.gameActivitySessions.endedAt, since),
       ),
     );
+}
 
-  if (sessions.length === 0) return;
-
-  const rollupMap = buildRollupMap(sessions);
-  let upsertCount = 0;
-
+async function upsertRollups(
+  db: PostgresJsDatabase<typeof schema>,
+  rollupMap: Map<string, RollupEntry>,
+): Promise<number> {
+  let count = 0;
   for (const rollup of rollupMap.values()) {
     await db
       .insert(tables.gameActivityRollups)
@@ -265,12 +331,9 @@ export async function aggregateRollups(
         ],
         set: { totalSeconds: sql`EXCLUDED.total_seconds` },
       });
-    upsertCount++;
+    count++;
   }
-
-  logger.log(
-    `Rolled up ${sessions.length} session(s) into ${upsertCount} rollup row(s)`,
-  );
+  return count;
 }
 
 interface RollupEntry {
@@ -401,7 +464,22 @@ async function filterCandidates(
   candidates: Array<{ userId: number; gameId: number | null }>,
   userIds: number[],
 ): Promise<Array<{ userId: number; gameId: number | null }>> {
-  const optedOut = await db
+  const exclusionSets = await buildExclusionSets(db, userIds);
+
+  return candidates.filter((c) => {
+    if (!c.gameId) return false;
+    if (exclusionSets.optedOut.has(c.userId)) return false;
+    const key = `${c.userId}:${c.gameId}`;
+    return (
+      !exclusionSets.existing.has(key) && !exclusionSets.suppressed.has(key)
+    );
+  });
+}
+
+async function fetchOptedOutUsers(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<Set<number>> {
+  const rows = await db
     .select({ userId: tables.userPreferences.userId })
     .from(tables.userPreferences)
     .where(
@@ -410,32 +488,49 @@ async function filterCandidates(
         sql`${tables.userPreferences.value}::text = 'false'`,
       ),
     );
-  const optedOutSet = new Set(optedOut.map((r) => r.userId));
+  return new Set(rows.map((r) => r.userId));
+}
 
-  const existing = await db
+async function fetchExistingInterests(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Set<string>> {
+  const rows = await db
     .select({
       userId: tables.gameInterests.userId,
       gameId: tables.gameInterests.gameId,
     })
     .from(tables.gameInterests)
     .where(inArray(tables.gameInterests.userId, userIds));
-  const existingSet = new Set(existing.map((r) => `${r.userId}:${r.gameId}`));
+  return new Set(rows.map((r) => `${r.userId}:${r.gameId}`));
+}
 
-  const suppressions = await db
+async function fetchSuppressions(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Set<string>> {
+  const rows = await db
     .select({
       userId: tables.gameInterestSuppressions.userId,
       gameId: tables.gameInterestSuppressions.gameId,
     })
     .from(tables.gameInterestSuppressions)
     .where(inArray(tables.gameInterestSuppressions.userId, userIds));
-  const suppressedSet = new Set(
-    suppressions.map((r) => `${r.userId}:${r.gameId}`),
-  );
+  return new Set(rows.map((r) => `${r.userId}:${r.gameId}`));
+}
 
-  return candidates.filter((c) => {
-    if (!c.gameId) return false;
-    if (optedOutSet.has(c.userId)) return false;
-    const key = `${c.userId}:${c.gameId}`;
-    return !existingSet.has(key) && !suppressedSet.has(key);
-  });
+async function buildExclusionSets(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<{
+  optedOut: Set<number>;
+  existing: Set<string>;
+  suppressed: Set<string>;
+}> {
+  const [optedOut, existing, suppressed] = await Promise.all([
+    fetchOptedOutUsers(db),
+    fetchExistingInterests(db, userIds),
+    fetchSuppressions(db, userIds),
+  ]);
+  return { optedOut, existing, suppressed };
 }
