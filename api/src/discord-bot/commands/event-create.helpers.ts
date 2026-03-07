@@ -1,7 +1,13 @@
 import {
   SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
+import { toDiscordTimestamp } from '../utils/time-parser';
+import type { parseNaturalTime } from '../utils/time-parser';
 
 const DEFAULT_SLOTS = 20;
 
@@ -159,4 +165,77 @@ function buildMmoSlotConfig(
     },
     maxAttendees: tankSlots + healerSlots + dpsSlots,
   };
+}
+
+// ─── Confirmation / Plan reply builders ──────────────────────────
+
+export interface ParsedCreateOptions {
+  title: string;
+  game: { id: number; name: string } | null;
+  parsed: ReturnType<typeof parseNaturalTime>;
+  slotConfig: ReturnType<typeof buildSlotConfig>['slotConfig'];
+  maxAttendees: number;
+}
+
+export function buildConfirmationEmbed(
+  opts: ParsedCreateOptions,
+  startTime: Date,
+): EmbedBuilder {
+  const parsed = opts.parsed!;
+  const rosterInfo =
+    opts.slotConfig?.type === 'mmo'
+      ? `Roster: **MMO** (${opts.slotConfig.tank}T / ${opts.slotConfig.healer}H / ${opts.slotConfig.dps}D)`
+      : `Slots: **${opts.maxAttendees}**`;
+
+  return new EmbedBuilder()
+    .setColor(0x34d399)
+    .setTitle('Event Created')
+    .setDescription(
+      [
+        `**${opts.title}**`,
+        '',
+        `${toDiscordTimestamp(startTime, 'F')} (${toDiscordTimestamp(startTime, 'R')})`,
+        opts.game ? `Game: **${opts.game.name}**` : null,
+        rosterInfo,
+        '',
+        `Timezone: ${parsed.timezone}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+}
+
+export function buildConfigureButton(
+  magicLinkUrl: string | null,
+): ActionRowBuilder<ButtonBuilder>[] {
+  if (!magicLinkUrl) return [];
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('Configure in Raid Ledger')
+        .setStyle(ButtonStyle.Link)
+        .setURL(magicLinkUrl)
+        .setEmoji({ name: '\u2699\uFE0F' }),
+    ),
+  ];
+}
+
+export function buildPlanReply(magicLinkUrl: string): {
+  embeds: [EmbedBuilder];
+  components: [ActionRowBuilder<ButtonBuilder>];
+} {
+  const embed = new EmbedBuilder()
+    .setColor(0x8b5cf6)
+    .setTitle('Plan an Event')
+    .setDescription('Use the web form to pick time slots and start a poll.');
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setLabel('Open Planning Form')
+      .setStyle(ButtonStyle.Link)
+      .setURL(magicLinkUrl)
+      .setEmoji({ name: '\uD83D\uDCCA' }),
+  );
+
+  return { embeds: [embed], components: [row] };
 }

@@ -14,8 +14,8 @@ import {
   fetchCharactersByUser,
   fetchUserTimezones,
   buildCharDisplay,
-  buildReminderMessage,
-  buildTitleTimeLabel,
+  buildReminderPayload,
+  buildReminderStrings,
 } from './event-reminder.helpers';
 
 const REMINDER_WINDOWS = [
@@ -247,25 +247,6 @@ export class EventReminderService {
     });
   }
 
-  /** Build the notification payload for a reminder. */
-  private buildReminderPayload(input: {
-    eventId: number;
-    windowType: string;
-    characterDisplay: string | null;
-    startTime: Date;
-    discordUrl?: string | null;
-    voiceChannelId?: string | null;
-  }): Record<string, unknown> {
-    return {
-      eventId: input.eventId,
-      reminderWindow: input.windowType,
-      characterDisplay: input.characterDisplay,
-      startTime: input.startTime.toISOString(),
-      ...(input.discordUrl ? { discordUrl: input.discordUrl } : {}),
-      ...(input.voiceChannelId ? { voiceChannelId: input.voiceChannelId } : {}),
-    };
-  }
-
   /** Send a single reminder notification with duplicate prevention. */
   async sendReminder(input: {
     eventId: number;
@@ -283,13 +264,13 @@ export class EventReminderService {
     gameId?: number | null;
   }): Promise<boolean> {
     if (!(await this.insertReminderDedup(input))) return false;
-    const { messageText, titleTimeLabel } = this.buildReminderStrings(input);
+    const { messageText, titleTimeLabel } = buildReminderStrings(input);
     await this.notificationService.create({
       userId: input.userId,
       type: 'event_reminder',
       title: `Event Starting ${titleTimeLabel}!`,
       message: messageText,
-      payload: this.buildReminderPayload(input),
+      payload: buildReminderPayload(input),
     });
     return true;
   }
@@ -316,32 +297,6 @@ export class EventReminderService {
       })
       .returning();
     return result.length > 0;
-  }
-
-  /** Build reminder message text and title label. */
-  private buildReminderStrings(input: {
-    title: string;
-    startTime: Date;
-    minutesUntil: number;
-    timezone?: string;
-    defaultTimezone?: string;
-  }): { messageText: string; titleTimeLabel: string } {
-    const timezone = input.timezone ?? input.defaultTimezone ?? 'UTC';
-    const timeStr = input.startTime.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZoneName: 'short',
-      timeZone: timezone,
-    });
-    return {
-      messageText: buildReminderMessage(
-        input.title,
-        timeStr,
-        input.minutesUntil,
-      ),
-      titleTimeLabel: buildTitleTimeLabel(input.minutesUntil),
-    };
   }
 
   /** Fetch user timezones (public for test access). */

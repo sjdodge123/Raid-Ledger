@@ -4,6 +4,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
+import { SignupsAllocationService } from './signups-allocation.service';
+import { SignupsRosterService } from './signups-roster.service';
 import { PugsService } from './pugs.service';
 import { InviteService } from './invite.service';
 import { OgMetaService } from './og-meta.service';
@@ -62,6 +64,8 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
   providers: [
     EventsService,
     SignupsService,
+    SignupsAllocationService,
+    SignupsRosterService,
     AttendanceService,
     PugsService,
     InviteService,

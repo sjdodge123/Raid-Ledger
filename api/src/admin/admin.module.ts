@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminSettingsController } from './settings.controller';
+import { AdminGamesController } from './settings-games.controller';
 import { BrandingController } from './branding.controller';
 import { OnboardingController } from './onboarding.controller';
 import { SettingsModule } from '../settings/settings.module';
@@ -13,6 +14,7 @@ import { DemoDataService } from './demo-data.service';
   controllers: [
     AdminController,
     AdminSettingsController,
+    AdminGamesController,
     BrandingController,
     OnboardingController,
   ],

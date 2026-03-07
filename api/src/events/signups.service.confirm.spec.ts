@@ -10,6 +10,8 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
 import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { BenchPromotionService } from './bench-promotion.service';
+import { SignupsAllocationService } from './signups-allocation.service';
+import { SignupsRosterService } from './signups-roster.service';
 
 describe('SignupsService — confirm', () => {
   let service: SignupsService;
@@ -146,6 +148,24 @@ describe('SignupsService — confirm', () => {
           useValue: mockRosterNotificationBuffer,
         },
         { provide: BenchPromotionService, useValue: mockBenchPromotionService },
+        {
+          provide: SignupsAllocationService,
+          useValue: {
+            autoAllocateSignup: jest.fn(),
+            promoteFromBench: jest.fn(),
+            checkTentativeDisplacement: jest.fn(),
+            reslotTentativePlayer: jest.fn(),
+          },
+        },
+        {
+          provide: SignupsRosterService,
+          useValue: {
+            cancel: jest.fn(),
+            selfUnassign: jest.fn(),
+            adminRemoveSignup: jest.fn(),
+            updateRoster: jest.fn(),
+          },
+        },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();

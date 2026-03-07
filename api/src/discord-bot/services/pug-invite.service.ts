@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, or, isNull } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -9,8 +9,14 @@ import { SettingsService } from '../../settings/settings.service';
 import {
   buildPugInviteEmbed,
   buildMemberInviteEmbed,
-  buildInviteRelayEmbed,
 } from './pug-invite.helpers';
+import {
+  findGuildMember,
+  handleMemberFound,
+  handleMemberNotFound,
+  resolveInviteChannel,
+  claimPugSlotsInDb,
+} from './pug-invite.member-helpers';
 
 /**
  * Handles PUG invite flow via Discord bot (ROK-292).
@@ -65,15 +71,27 @@ export class PugInviteService {
     event: typeof schema.events.$inferSelect,
     creatorUserId?: number,
   ): Promise<void> {
-    const member = await this.findGuildMember(discordUsername);
+    const member = await findGuildMember(this.clientService, discordUsername);
     if (member) {
-      await this.handleMemberFound(pugSlotId, eventId, member, event);
-    } else {
-      await this.handleMemberNotFound(
+      const slot = await handleMemberFound(this.db, pugSlotId, member);
+      if (!slot) return;
+      await this.sendPugInviteDm(
         pugSlotId,
+        member.id,
         eventId,
+        slot.role,
+        event,
+      );
+    } else {
+      const inviteUrl = await this.generateServerInvite(eventId);
+      await handleMemberNotFound(
+        this.db,
+        pugSlotId,
         discordUsername,
+        inviteUrl,
         creatorUserId,
+        this.clientService,
+        this.logger,
       );
     }
   }
@@ -115,33 +133,7 @@ export class PugInviteService {
     userId: number,
     inviteCode?: string,
   ): Promise<number> {
-    const conditions = [
-      and(
-        eq(schema.pugSlots.discordUserId, discordUserId),
-        isNull(schema.pugSlots.claimedByUserId),
-      ),
-    ];
-
-    if (inviteCode) {
-      conditions.push(
-        and(
-          eq(schema.pugSlots.inviteCode, inviteCode),
-          isNull(schema.pugSlots.claimedByUserId),
-        ),
-      );
-    }
-
-    const result = await this.db
-      .update(schema.pugSlots)
-      .set({
-        claimedByUserId: userId,
-        status: 'claimed',
-        updatedAt: new Date(),
-      })
-      .where(or(...conditions))
-      .returning();
-
-    return result.length;
+    return claimPugSlotsInDb(this.db, discordUserId, userId, inviteCode);
   }
 
   /** Send a member invite DM with Accept/Decline buttons (ROK-292). */
@@ -174,25 +166,6 @@ export class PugInviteService {
     await this.trySendDm(targetDiscordId, embed, row, 'member invite');
   }
 
-  private async trySendDm(
-    targetDiscordId: string,
-    embed: import('discord.js').EmbedBuilder,
-    row?: import('discord.js').ActionRowBuilder<
-      import('discord.js').ButtonBuilder
-    >,
-    label = 'DM',
-  ): Promise<void> {
-    try {
-      await this.clientService.sendEmbedDM(targetDiscordId, embed, row);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to send ${label} DM to %s: %s`,
-        targetDiscordId,
-        error instanceof Error ? error.message : 'Unknown error',
-      );
-    }
-  }
-
   /** Generate a Discord server invite URL. */
   async generateServerInvite(eventId: number): Promise<string | null> {
     const client = this.clientService.getClient();
@@ -202,7 +175,7 @@ export class PugInviteService {
     if (!guild) return null;
 
     try {
-      const channelId = await this.resolveInviteChannel(guild);
+      const channelId = await resolveInviteChannel(guild, this.channelResolver);
       if (!channelId) return null;
 
       const channel = await guild.channels.fetch(channelId);
@@ -249,101 +222,20 @@ export class PugInviteService {
     }
   }
 
-  private async findGuildMember(
-    discordUsername: string,
-  ): Promise<{ id: string; avatarHash: string | null } | null> {
-    const client = this.clientService.getClient();
-    if (!client?.isReady()) return null;
-
-    const guild = client.guilds.cache.first();
-    if (!guild) return null;
-
+  private async trySendDm(
+    targetDiscordId: string,
+    embed: import('discord.js').EmbedBuilder,
+    row?: import('discord.js').ActionRowBuilder<
+      import('discord.js').ButtonBuilder
+    >,
+    label = 'DM',
+  ): Promise<void> {
     try {
-      const members = await guild.members.fetch({
-        query: discordUsername,
-        limit: 10,
-      });
-      const match = members.find(
-        (m) => m.user.username.toLowerCase() === discordUsername.toLowerCase(),
-      );
-      return match
-        ? { id: match.user.id, avatarHash: match.user.avatar }
-        : null;
-    } catch {
-      return null;
-    }
-  }
-
-  private async handleMemberFound(
-    pugSlotId: string,
-    eventId: number,
-    member: { id: string; avatarHash: string | null },
-    event: typeof schema.events.$inferSelect,
-  ): Promise<void> {
-    await this.db
-      .update(schema.pugSlots)
-      .set({
-        discordUserId: member.id,
-        discordAvatarHash: member.avatarHash,
-        status: 'invited',
-        invitedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.pugSlots.id, pugSlotId));
-
-    const [slot] = await this.db
-      .select()
-      .from(schema.pugSlots)
-      .where(eq(schema.pugSlots.id, pugSlotId))
-      .limit(1);
-    if (!slot) return;
-
-    await this.sendPugInviteDm(pugSlotId, member.id, eventId, slot.role, event);
-  }
-
-  private async handleMemberNotFound(
-    pugSlotId: string,
-    eventId: number,
-    discordUsername: string,
-    creatorUserId?: number,
-  ): Promise<void> {
-    const inviteUrl = await this.generateServerInvite(eventId);
-    if (!inviteUrl) return;
-
-    await this.db
-      .update(schema.pugSlots)
-      .set({ serverInviteUrl: inviteUrl, updatedAt: new Date() })
-      .where(eq(schema.pugSlots.id, pugSlotId));
-
-    if (creatorUserId) {
-      await this.notifyCreatorWithInvite(
-        creatorUserId,
-        discordUsername,
-        inviteUrl,
-      );
-    }
-  }
-
-  private async notifyCreatorWithInvite(
-    creatorUserId: number,
-    pugUsername: string,
-    inviteUrl: string,
-  ): Promise<void> {
-    const [creator] = await this.db
-      .select({ discordId: schema.users.discordId })
-      .from(schema.users)
-      .where(eq(schema.users.id, creatorUserId))
-      .limit(1);
-
-    if (!creator?.discordId) return;
-
-    const embed = buildInviteRelayEmbed(pugUsername, inviteUrl);
-    try {
-      await this.clientService.sendEmbedDM(creator.discordId, embed);
+      await this.clientService.sendEmbedDM(targetDiscordId, embed, row);
     } catch (error) {
       this.logger.warn(
-        'Failed to send invite relay DM to creator %d: %s',
-        creatorUserId,
+        `Failed to send ${label} DM to %s: %s`,
+        targetDiscordId,
         error instanceof Error ? error.message : 'Unknown error',
       );
     }
@@ -412,21 +304,5 @@ export class PugInviteService {
       .where(eq(schema.pugSlots.id, pugSlotId))
       .limit(1);
     return slot ?? null;
-  }
-
-  private async resolveInviteChannel(
-    guild: import('discord.js').Guild,
-  ): Promise<string | null> {
-    let channelId = await this.channelResolver.resolveChannelForEvent();
-    if (!channelId && guild.systemChannelId) {
-      channelId = guild.systemChannelId;
-    }
-    if (!channelId) {
-      const firstText = guild.channels.cache.find(
-        (ch) => ch.isTextBased() && !ch.isThread() && !ch.isDMBased(),
-      );
-      if (firstText) channelId = firstText.id;
-    }
-    return channelId ?? null;
   }
 }

@@ -3,10 +3,6 @@ import {
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } from 'discord.js';
 import { and, ilike } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -18,88 +14,21 @@ import { UsersService } from '../../users/users.service';
 import { PreferencesService } from '../../users/preferences.service';
 import { SettingsService } from '../../settings/settings.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
-import { parseNaturalTime, toDiscordTimestamp } from '../utils/time-parser';
+import { parseNaturalTime } from '../utils/time-parser';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 import {
   buildEventCommandDefinition,
   buildSlotConfig,
+  buildConfirmationEmbed,
+  buildConfigureButton,
+  buildPlanReply,
+  type ParsedCreateOptions,
 } from './event-create.helpers';
 
 const DEFAULT_SLOTS = 20;
 const DEFAULT_DURATION_HOURS = 2;
 const FALLBACK_TIMEZONE = 'America/New_York';
-
-interface ParsedCreateOptions {
-  title: string;
-  game: { id: number; name: string } | null;
-  parsed: ReturnType<typeof parseNaturalTime>;
-  slotConfig: ReturnType<typeof buildSlotConfig>['slotConfig'];
-  maxAttendees: number;
-}
-
-function buildConfirmationEmbed(
-  opts: ParsedCreateOptions,
-  startTime: Date,
-): EmbedBuilder {
-  const parsed = opts.parsed!;
-  const rosterInfo =
-    opts.slotConfig?.type === 'mmo'
-      ? `Roster: **MMO** (${opts.slotConfig.tank}T / ${opts.slotConfig.healer}H / ${opts.slotConfig.dps}D)`
-      : `Slots: **${opts.maxAttendees}**`;
-
-  return new EmbedBuilder()
-    .setColor(0x34d399)
-    .setTitle('Event Created')
-    .setDescription(
-      [
-        `**${opts.title}**`,
-        '',
-        `${toDiscordTimestamp(startTime, 'F')} (${toDiscordTimestamp(startTime, 'R')})`,
-        opts.game ? `Game: **${opts.game.name}**` : null,
-        rosterInfo,
-        '',
-        `Timezone: ${parsed.timezone}`,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-    );
-}
-
-function buildConfigureButton(
-  magicLinkUrl: string | null,
-): ActionRowBuilder<ButtonBuilder>[] {
-  if (!magicLinkUrl) return [];
-  return [
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setLabel('Configure in Raid Ledger')
-        .setStyle(ButtonStyle.Link)
-        .setURL(magicLinkUrl)
-        .setEmoji({ name: '\u2699\uFE0F' }),
-    ),
-  ];
-}
-
-function buildPlanReply(magicLinkUrl: string): {
-  embeds: [EmbedBuilder];
-  components: [ActionRowBuilder<ButtonBuilder>];
-} {
-  const embed = new EmbedBuilder()
-    .setColor(0x8b5cf6)
-    .setTitle('Plan an Event')
-    .setDescription('Use the web form to pick time slots and start a poll.');
-
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setLabel('Open Planning Form')
-      .setStyle(ButtonStyle.Link)
-      .setURL(magicLinkUrl)
-      .setEmoji({ name: '\uD83D\uDCCA' }),
-  );
-
-  return { embeds: [embed], components: [row] };
-}
 
 @Injectable()
 export class EventCreateCommand
