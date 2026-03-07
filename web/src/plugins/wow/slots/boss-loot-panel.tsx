@@ -43,55 +43,45 @@ interface BossLootPanelProps {
     characterId?: string;
 }
 
-/** Boss & Loot Preview Panel main component */
-export function BossLootPanel({
-    contentInstances,
-    gameSlug,
-    characterId,
-}: BossLootPanelProps) {
-    const variant = useMemo(() => slugToVariant(gameSlug), [gameSlug]);
-    const [panelOpen, setPanelOpen] = useState(true);
-
-    const instances = useMemo(
-        () =>
-            contentInstances
-                .map((ci) => ({
-                    id: typeof ci.id === 'number' ? ci.id : Number(ci.id ?? ci.instanceId),
-                    name: typeof ci.name === 'string' ? ci.name : undefined,
-                }))
-                .filter((inst) => !isNaN(inst.id) && inst.id > 0),
+function useContentInstances(contentInstances: Record<string, unknown>[]) {
+    return useMemo(
+        () => contentInstances
+            .map((ci) => ({
+                id: typeof ci.id === 'number' ? ci.id : Number(ci.id ?? ci.instanceId),
+                name: typeof ci.name === 'string' ? ci.name : undefined,
+            }))
+            .filter((inst) => !isNaN(inst.id) && inst.id > 0),
         [contentInstances],
     );
+}
 
-    const { data: character } = useCharacterDetail(characterId);
-    const wowheadVariant = character?.gameVariant ?? variant;
-
-    const equippedBySlot = useMemo(() => {
+function useEquippedBySlot(character: ReturnType<typeof useCharacterDetail>['data']) {
+    return useMemo(() => {
         const map = new Map<string, EquipmentItemDto>();
         if (character?.equipment?.items) {
-            for (const item of character.equipment.items) {
-                map.set(item.slot.toUpperCase(), item);
-            }
+            for (const item of character.equipment.items) map.set(item.slot.toUpperCase(), item);
         }
         return map;
     }, [character]);
+}
+
+/** Boss & Loot Preview Panel main component */
+export function BossLootPanel({ contentInstances, gameSlug, characterId }: BossLootPanelProps) {
+    const variant = useMemo(() => slugToVariant(gameSlug), [gameSlug]);
+    const [panelOpen, setPanelOpen] = useState(true);
+    const instances = useContentInstances(contentInstances);
+    const { data: character } = useCharacterDetail(characterId);
+    const wowheadVariant = character?.gameVariant ?? variant;
+    const equippedBySlot = useEquippedBySlot(character);
 
     if (!instances.length) return null;
-
     return (
         <div className="boss-loot-panel">
             <PanelHeader panelOpen={panelOpen} onToggle={() => setPanelOpen((v) => !v)} />
             {panelOpen && instances.map((inst) => (
-                <InstanceBossList
-                    key={inst.id}
-                    instanceId={inst.id}
-                    instanceName={inst.name}
-                    variant={variant}
-                    wowheadVariant={wowheadVariant}
-                    equippedBySlot={equippedBySlot}
-                    characterClass={character?.class}
-                    hasCharacter={!!characterId}
-                />
+                <InstanceBossList key={inst.id} instanceId={inst.id} instanceName={inst.name}
+                    variant={variant} wowheadVariant={wowheadVariant} equippedBySlot={equippedBySlot}
+                    characterClass={character?.class} hasCharacter={!!characterId} />
             ))}
         </div>
     );
@@ -123,6 +113,18 @@ function PanelHeader({ panelOpen, onToggle }: { panelOpen: boolean; onToggle: ()
     );
 }
 
+function useToggleSet() {
+    const [ids, setIds] = useState<Set<number>>(new Set());
+    const toggle = (id: number) => {
+        setIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+    return { ids, toggle };
+}
+
 /** Boss list for a single content instance */
 function InstanceBossList({
     instanceId, instanceName, variant, wowheadVariant,
@@ -133,16 +135,7 @@ function InstanceBossList({
     characterClass?: string | null; hasCharacter: boolean;
 }) {
     const { data: bosses, isLoading } = useBossesForInstance(instanceId, variant);
-    const [expandedBossIds, setExpandedBossIds] = useState<Set<number>>(new Set());
-
-    const toggleBoss = (bossId: number) => {
-        setExpandedBossIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(bossId)) next.delete(bossId);
-            else next.add(bossId);
-            return next;
-        });
-    };
+    const { ids: expandedBossIds, toggle: toggleBoss } = useToggleSet();
 
     if (isLoading) {
         return (
@@ -152,24 +145,15 @@ function InstanceBossList({
             </div>
         );
     }
-
     if (!bosses || bosses.length === 0) return null;
 
     return (
         <div className="boss-loot-instance">
             {instanceName && <h3 className="boss-loot-instance__name">{instanceName}</h3>}
             {bosses.map((boss) => (
-                <BossRow
-                    key={boss.id}
-                    boss={boss}
-                    isExpanded={expandedBossIds.has(boss.id)}
-                    onToggle={() => toggleBoss(boss.id)}
-                    variant={variant}
-                    wowheadVariant={wowheadVariant}
-                    equippedBySlot={equippedBySlot}
-                    characterClass={characterClass}
-                    hasCharacter={hasCharacter}
-                />
+                <BossRow key={boss.id} boss={boss} isExpanded={expandedBossIds.has(boss.id)}
+                    onToggle={() => toggleBoss(boss.id)} variant={variant} wowheadVariant={wowheadVariant}
+                    equippedBySlot={equippedBySlot} characterClass={characterClass} hasCharacter={hasCharacter} />
             ))}
         </div>
     );
@@ -204,38 +188,25 @@ function BossRow({
     );
 }
 
+function handleKeyToggle(e: React.KeyboardEvent, onToggle: () => void) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); }
+}
+
 /** Boss row header with name, order, and wowhead link */
 function BossRowHeader({ boss, isExpanded, onToggle, wowheadVariant }: {
     boss: BossEncounterDto; isExpanded: boolean; onToggle: () => void; wowheadVariant: string;
 }) {
     return (
         <div className="boss-row__header-wrapper">
-            <div
-                className="boss-row__header"
-                onClick={onToggle}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onToggle();
-                    }
-                }}
-            >
-                <span className={`boss-row__chevron ${isExpanded ? 'boss-row__chevron--open' : ''}`}>
-                    &#x25B8;
-                </span>
+            <div className="boss-row__header" onClick={onToggle} role="button" tabIndex={0}
+                onKeyDown={(e) => handleKeyToggle(e, onToggle)}>
+                <span className={`boss-row__chevron ${isExpanded ? 'boss-row__chevron--open' : ''}`}>&#x25B8;</span>
                 <span className="boss-row__order">{boss.order}</span>
                 <span className="boss-row__name">{boss.name}</span>
                 {boss.sodModified && <span className="boss-row__sod-badge">SoD</span>}
             </div>
-            <a
-                className="boss-row__wowhead-link"
-                href={getWowheadNpcSearchUrl(boss.name, wowheadVariant)}
-                target="_blank" rel="noopener noreferrer" title="View on Wowhead"
-            >
-                &#x2197;
-            </a>
+            <a className="boss-row__wowhead-link" href={getWowheadNpcSearchUrl(boss.name, wowheadVariant)}
+                target="_blank" rel="noopener noreferrer" title="View on Wowhead">&#x2197;</a>
         </div>
     );
 }

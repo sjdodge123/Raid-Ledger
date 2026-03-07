@@ -41,88 +41,76 @@ function report(metric: WebVitalMetric) {
     }
 }
 
+function observeFCP(): void {
+    try {
+        const observer = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+                if (entry.name === 'first-contentful-paint') {
+                    report({ name: 'FCP', value: entry.startTime, rating: rate('FCP', entry.startTime) });
+                    observer.disconnect();
+                }
+            }
+        });
+        observer.observe({ type: 'paint', buffered: true });
+    } catch { /* not supported */ }
+}
+
+function observeLCP(): void {
+    try {
+        let lcpValue = 0;
+        const observer = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) lcpValue = entry.startTime;
+        });
+        observer.observe({ type: 'largest-contentful-paint', buffered: true });
+        addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                if (lcpValue > 0) report({ name: 'LCP', value: lcpValue, rating: rate('LCP', lcpValue) });
+                observer.disconnect();
+            }
+        }, { once: true });
+    } catch { /* not supported */ }
+}
+
+function observeCLS(): void {
+    try {
+        let clsValue = 0;
+        const observer = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+                const shift = entry as PerformanceEntry & { hadRecentInput: boolean; value: number };
+                if (!shift.hadRecentInput) clsValue += shift.value;
+            }
+        });
+        observer.observe({ type: 'layout-shift', buffered: true });
+        addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                report({ name: 'CLS', value: clsValue, rating: rate('CLS', clsValue) });
+                observer.disconnect();
+            }
+        }, { once: true });
+    } catch { /* not supported */ }
+}
+
+function observeTTFB(): void {
+    try {
+        const observer = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+                const nav = entry as PerformanceNavigationTiming;
+                const ttfb = nav.responseStart - nav.requestStart;
+                if (ttfb > 0) report({ name: 'TTFB', value: ttfb, rating: rate('TTFB', ttfb) });
+            }
+            observer.disconnect();
+        });
+        observer.observe({ type: 'navigation', buffered: true });
+    } catch { /* not supported */ }
+}
+
 /**
  * Initialize Web Vitals monitoring. Call once after React render.
  */
 export function initPerformanceMonitoring() {
     if (typeof PerformanceObserver === 'undefined') return;
-
-    // FCP — First Contentful Paint
-    try {
-        const fcpObserver = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) {
-                if (entry.name === 'first-contentful-paint') {
-                    report({ name: 'FCP', value: entry.startTime, rating: rate('FCP', entry.startTime) });
-                    fcpObserver.disconnect();
-                }
-            }
-        });
-        fcpObserver.observe({ type: 'paint', buffered: true });
-    } catch {
-        // paint observer not supported
-    }
-
-    // LCP — Largest Contentful Paint
-    try {
-        let lcpValue = 0;
-        const lcpObserver = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) {
-                lcpValue = entry.startTime;
-            }
-        });
-        lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true });
-
-        // Report final LCP when page becomes hidden or after interaction
-        const reportLCP = () => {
-            if (lcpValue > 0) {
-                report({ name: 'LCP', value: lcpValue, rating: rate('LCP', lcpValue) });
-            }
-            lcpObserver.disconnect();
-        };
-        addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') reportLCP();
-        }, { once: true });
-    } catch {
-        // LCP observer not supported
-    }
-
-    // CLS — Cumulative Layout Shift
-    try {
-        let clsValue = 0;
-        const clsObserver = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) {
-                const layoutShift = entry as PerformanceEntry & { hadRecentInput: boolean; value: number };
-                if (!layoutShift.hadRecentInput) {
-                    clsValue += layoutShift.value;
-                }
-            }
-        });
-        clsObserver.observe({ type: 'layout-shift', buffered: true });
-
-        addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                report({ name: 'CLS', value: clsValue, rating: rate('CLS', clsValue) });
-                clsObserver.disconnect();
-            }
-        }, { once: true });
-    } catch {
-        // layout-shift observer not supported
-    }
-
-    // TTFB — Time to First Byte
-    try {
-        const navObserver = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) {
-                const nav = entry as PerformanceNavigationTiming;
-                const ttfb = nav.responseStart - nav.requestStart;
-                if (ttfb > 0) {
-                    report({ name: 'TTFB', value: ttfb, rating: rate('TTFB', ttfb) });
-                }
-            }
-            navObserver.disconnect();
-        });
-        navObserver.observe({ type: 'navigation', buffered: true });
-    } catch {
-        // navigation observer not supported
-    }
+    observeFCP();
+    observeLCP();
+    observeCLS();
+    observeTTFB();
 }

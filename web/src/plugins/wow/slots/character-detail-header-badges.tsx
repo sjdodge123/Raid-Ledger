@@ -11,20 +11,32 @@ interface CharacterDetailHeaderBadgesProps {
     profileUrl: string | null;
 }
 
+function FactionBadge({ faction }: { faction: string }) {
+    return (
+        <span className={`px-2 py-0.5 rounded text-sm font-medium border ${FACTION_STYLES[faction] ?? 'bg-faint text-muted'}`}>
+            {faction.charAt(0).toUpperCase() + faction.slice(1)}
+        </span>
+    );
+}
+
+function ArmoryLinkBadge({ profileUrl }: { profileUrl: string }) {
+    return (
+        <a href={profileUrl} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-blue-400 hover:underline inline-flex items-center gap-1">
+            View on Armory
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+        </a>
+    );
+}
+
 export function CharacterDetailHeaderBadges({
-    faction,
-    itemLevel,
-    equippedItemLevel,
-    lastSyncedAt,
-    profileUrl,
+    faction, itemLevel, equippedItemLevel, lastSyncedAt, profileUrl,
 }: CharacterDetailHeaderBadgesProps) {
     return (
         <>
-            {faction && (
-                <span className={`px-2 py-0.5 rounded text-sm font-medium border ${FACTION_STYLES[faction] ?? 'bg-faint text-muted'}`}>
-                    {faction.charAt(0).toUpperCase() + faction.slice(1)}
-                </span>
-            )}
+            {faction && <FactionBadge faction={faction} />}
             {itemLevel && (
                 <div className="text-sm">
                     <span className="text-muted">Item Level </span>
@@ -37,24 +49,8 @@ export function CharacterDetailHeaderBadges({
                     <span className="text-purple-300 font-semibold">{equippedItemLevel}</span>
                 </div>
             )}
-            {profileUrl && (
-                <a
-                    href={profileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-400 hover:underline inline-flex items-center gap-1"
-                >
-                    View on Armory
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                </a>
-            )}
-            {lastSyncedAt && (
-                <span className="text-xs text-muted">
-                    Updated {timeAgo(lastSyncedAt)}
-                </span>
-            )}
+            {profileUrl && <ArmoryLinkBadge profileUrl={profileUrl} />}
+            {lastSyncedAt && <span className="text-xs text-muted">Updated {timeAgo(lastSyncedAt)}</span>}
         </>
     );
 }

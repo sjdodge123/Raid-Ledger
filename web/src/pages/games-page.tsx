@@ -20,8 +20,7 @@ import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
 
 type GamesTab = "discover" | "manage";
 
-// eslint-disable-next-line max-lines-per-function
-export function GamesPage() {
+function useGamesPageState() {
   const { user } = useAuth();
   const canManage = isOperatorOrAdmin(user);
   const [activeTab, setActiveTab] = useState<GamesTab>("discover");
@@ -32,13 +31,28 @@ export function GamesPage() {
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const scrollDirection = useScrollDirection();
   const isHeaderHidden = scrollDirection === 'down';
+  return { canManage, activeTab, setActiveTab, searchQuery, setSearchQuery, selectedGenres, setSelectedGenres, genreSheetOpen, setGenreSheetOpen, showHidden, setShowHidden, debouncedSearch, isHeaderHidden };
+}
 
+function useGamesData(debouncedSearch: string, selectedGenres: Set<string>) {
   const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
   const { data: searchData, isLoading: searchLoading } = useGameSearch(debouncedSearch, debouncedSearch.length >= 2);
   const isSearching = debouncedSearch.length >= 2;
-
   const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
-  const filteredRows = discoverData?.rows
+  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters);
+  const searchResults = searchData?.data;
+  const searchSource = searchData?.meta?.source;
+  const allGameIds = useMemo(() => {
+    const ids: number[] = [];
+    if (filteredRows) for (const row of filteredRows) for (const game of row.games) ids.push(game.id);
+    if (searchResults) for (const game of searchResults) ids.push(game.id);
+    return ids;
+  }, [filteredRows, searchResults]);
+  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds };
+}
+
+function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS) {
+  return rows
     ?.map((row) => ({
       ...row,
       games: activeFilters.length > 0
@@ -46,50 +60,52 @@ export function GamesPage() {
         : row.games,
     }))
     .filter((row) => row.games.length > 0);
+}
 
-  const searchResults = searchData?.data;
-  const searchSource = searchData?.meta?.source;
-
-  const allGameIds = useMemo(() => {
-    const ids: number[] = [];
-    if (filteredRows) for (const row of filteredRows) for (const game of row.games) ids.push(game.id);
-    if (searchResults) for (const game of searchResults) ids.push(game.id);
-    return ids;
-  }, [filteredRows, searchResults]);
-
+export function GamesPage() {
+  const state = useGamesPageState();
+  const data = useGamesData(state.debouncedSearch, state.selectedGenres);
   return (
     <div className="pb-20 md:pb-0">
-      <GamesMobileToolbar activeTab={activeTab === "manage" ? "manage" : "discover"} onTabChange={(tab) => setActiveTab(tab)} showManageTab={canManage} />
+      <GamesMobileToolbar activeTab={state.activeTab === "manage" ? "manage" : "discover"} onTabChange={(tab) => state.setActiveTab(tab)} showManageTab={state.canManage} />
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <GamesHeader activeTab={activeTab} />
-        <AdminTabToggle canManage={canManage} activeTab={activeTab} onTabChange={setActiveTab} />
-
-        {activeTab === "manage" && canManage && (
-          <>
-            <AdultContentFilterToggle />
-            <ShowHiddenGamesToggle showHidden={showHidden} onToggle={() => setShowHidden(showHidden === 'only' ? undefined : 'only')} />
-            <GameLibraryTable key={showHidden ?? 'default'} showHidden={showHidden} />
-          </>
-        )}
-
-        {activeTab === "discover" && (
-          <WantToPlayProvider gameIds={allGameIds}>
-            <SearchBar searchQuery={searchQuery} onSearchChange={setSearchQuery} isHeaderHidden={isHeaderHidden} />
-            {!isSearching && <DesktopGenrePills selectedGenres={selectedGenres} onGenresChange={setSelectedGenres} />}
-            {isSearching ? (
-              <SearchResults searchLoading={searchLoading} searchResults={searchResults} searchSource={searchSource} debouncedSearch={debouncedSearch} />
-            ) : (
-              <DiscoverContent discoverLoading={discoverLoading} filteredRows={filteredRows} selectedGenres={selectedGenres} />
-            )}
-          </WantToPlayProvider>
+        <GamesHeader activeTab={state.activeTab} />
+        <AdminTabToggle canManage={state.canManage} activeTab={state.activeTab} onTabChange={state.setActiveTab} />
+        <ManageTab canManage={state.canManage} activeTab={state.activeTab} showHidden={state.showHidden} setShowHidden={state.setShowHidden} />
+        {state.activeTab === "discover" && (
+          <DiscoverTab state={state} data={data} />
         )}
       </div>
-
-      {activeTab === "discover" && !isSearching && (
-        <FAB onClick={() => setGenreSheetOpen(true)} icon={FunnelIcon} label="Genre Filter" />
+      {state.activeTab === "discover" && !data.isSearching && (
+        <FAB onClick={() => state.setGenreSheetOpen(true)} icon={FunnelIcon} label="Genre Filter" />
       )}
-      <GenreFilterSheet genreSheetOpen={genreSheetOpen} onClose={() => setGenreSheetOpen(false)} selectedGenres={selectedGenres} onGenresChange={setSelectedGenres} />
+      <GenreFilterSheet genreSheetOpen={state.genreSheetOpen} onClose={() => state.setGenreSheetOpen(false)} selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />
     </div>
+  );
+}
+
+function ManageTab({ canManage, activeTab, showHidden, setShowHidden }: { canManage: boolean; activeTab: GamesTab; showHidden: 'only' | undefined; setShowHidden: (v: 'only' | undefined) => void }) {
+  if (activeTab !== "manage" || !canManage) return null;
+  return (
+    <>
+      <AdultContentFilterToggle />
+      <ShowHiddenGamesToggle showHidden={showHidden} onToggle={() => setShowHidden(showHidden === 'only' ? undefined : 'only')} />
+      <GameLibraryTable key={showHidden ?? 'default'} showHidden={showHidden} />
+    </>
+  );
+}
+
+function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData> }) {
+  return (
+    <WantToPlayProvider gameIds={data.allGameIds}>
+      <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
+      {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
+      {data.isSearching ? (
+        <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} debouncedSearch={state.debouncedSearch} />
+      ) : (
+        <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} />
+      )}
+    </WantToPlayProvider>
   );
 }
 
@@ -161,27 +177,33 @@ function DesktopGenrePills({ selectedGenres, onGenresChange }: { selectedGenres:
   );
 }
 
+function SearchLoadingSkeleton() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      {Array.from({ length: 10 }).map((_, i) => (<div key={i} className="animate-pulse"><div className="aspect-[3/4] bg-overlay rounded-xl" /><div className="mt-2 h-4 bg-overlay rounded w-3/4" /></div>))}
+    </div>
+  );
+}
+
+function LocalSearchWarning() {
+  return (
+    <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-yellow-900/30 border border-yellow-700/40 text-yellow-500 text-sm font-medium">
+      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      Showing local results (external search unavailable)
+    </div>
+  );
+}
+
 function SearchResults({ searchLoading, searchResults, searchSource, debouncedSearch }: {
   searchLoading: boolean; searchResults: GameDetailDto[] | undefined; searchSource: string | undefined; debouncedSearch: string;
 }): JSX.Element {
-  if (searchLoading) {
-    return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {Array.from({ length: 10 }).map((_, i) => (<div key={i} className="animate-pulse"><div className="aspect-[3/4] bg-overlay rounded-xl" /><div className="mt-2 h-4 bg-overlay rounded w-3/4" /></div>))}
-      </div>
-    );
-  }
+  if (searchLoading) return <SearchLoadingSkeleton />;
   if (searchResults && searchResults.length > 0) {
     return (
       <>
-        {searchSource === 'local' && (
-          <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-yellow-900/30 border border-yellow-700/40 text-yellow-500 text-sm font-medium">
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            Showing local results (external search unavailable)
-          </div>
-        )}
+        {searchSource === 'local' && <LocalSearchWarning />}
         <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {searchResults.map((game) => (<GameCard key={game.id} game={game} />))}
         </div>
@@ -199,40 +221,43 @@ function SearchResults({ searchLoading, searchResults, searchSource, debouncedSe
   );
 }
 
-// eslint-disable-next-line max-lines-per-function
+function DiscoverLoadingSkeleton() {
+  return (
+    <div className="space-y-8">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="animate-pulse"><div className="h-6 bg-overlay rounded w-48 mb-3" /><div className="flex gap-4">
+          {Array.from({ length: 6 }).map((_, j) => (<div key={j} className="w-[180px] flex-shrink-0"><div className="aspect-[3/4] bg-overlay rounded-xl" /></div>))}
+        </div></div>
+      ))}
+    </div>
+  );
+}
+
+function DiscoverRows({ filteredRows }: { filteredRows: GameDiscoverRowDto[] }) {
+  return (
+    <div className="space-y-8">
+      <div className="hidden md:block space-y-8">
+        {filteredRows.map((row) => (<GameCarousel key={row.slug} category={row.category} games={row.games} />))}
+      </div>
+      <div className="md:hidden space-y-6">
+        {filteredRows.map((row) => (
+          <div key={row.slug}>
+            <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
+            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none' }}>
+              {row.games.map((game) => (<div key={game.id} className="w-[140px] flex-shrink-0 snap-start"><MobileGameCard game={game} /></div>))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DiscoverContent({ discoverLoading, filteredRows, selectedGenres }: {
   discoverLoading: boolean; filteredRows: GameDiscoverRowDto[] | undefined; selectedGenres: Set<string>;
 }): JSX.Element {
-  if (discoverLoading) {
-    return (
-      <div className="space-y-8">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="animate-pulse"><div className="h-6 bg-overlay rounded w-48 mb-3" /><div className="flex gap-4">
-            {Array.from({ length: 6 }).map((_, j) => (<div key={j} className="w-[180px] flex-shrink-0"><div className="aspect-[3/4] bg-overlay rounded-xl" /></div>))}
-          </div></div>
-        ))}
-      </div>
-    );
-  }
-  if (filteredRows && filteredRows.length > 0) {
-    return (
-      <div className="space-y-8">
-        <div className="hidden md:block space-y-8">
-          {filteredRows.map((row) => (<GameCarousel key={row.slug} category={row.category} games={row.games} />))}
-        </div>
-        <div className="md:hidden space-y-6">
-          {filteredRows.map((row) => (
-            <div key={row.slug}>
-              <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
-              <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none' }}>
-                {row.games.map((game) => (<div key={game.id} className="w-[140px] flex-shrink-0 snap-start"><MobileGameCard game={game} /></div>))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (discoverLoading) return <DiscoverLoadingSkeleton />;
+  if (filteredRows && filteredRows.length > 0) return <DiscoverRows filteredRows={filteredRows} />;
   return (
     <div className="text-center py-16">
       <p className="text-muted text-lg">No games in the library yet</p>
@@ -241,7 +266,23 @@ function DiscoverContent({ discoverLoading, filteredRows, selectedGenres }: {
   );
 }
 
-// eslint-disable-next-line max-lines-per-function
+function GenreSheetItem({ genre, isActive, onToggle }: { genre: typeof GENRE_FILTERS[number]; isActive: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle} className={`flex items-center justify-between h-12 px-3 rounded-lg transition-colors ${isActive ? "bg-emerald-600/10 text-emerald-400" : "text-secondary hover:bg-overlay"}`}>
+      <div className="flex items-center gap-3">
+        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isActive ? 'bg-emerald-500 border-emerald-500' : 'border-edge'}`}>
+          {isActive && (<svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>)}
+        </div>
+        <span className="text-sm font-medium">{genre.label}</span>
+      </div>
+    </button>
+  );
+}
+
+function toggleGenre(selectedGenres: Set<string>, key: string): Set<string> {
+  return new Set(selectedGenres.has(key) ? [...selectedGenres].filter(k => k !== key) : [...selectedGenres, key]);
+}
+
 function GenreFilterSheet({ genreSheetOpen, onClose, selectedGenres, onGenresChange }: {
   genreSheetOpen: boolean; onClose: () => void; selectedGenres: Set<string>; onGenresChange: (s: Set<string>) => void;
 }): JSX.Element {
@@ -255,21 +296,9 @@ function GenreFilterSheet({ genreSheetOpen, onClose, selectedGenres, onGenresCha
             <span className="text-sm font-medium">All</span>
           </div>
         </button>
-        {GENRE_FILTERS.map((genre) => {
-          const isActive = selectedGenres.has(genre.key);
-          return (
-            <button key={genre.key} onClick={() => {
-              onGenresChange(new Set(isActive ? [...selectedGenres].filter(k => k !== genre.key) : [...selectedGenres, genre.key]));
-            }} className={`flex items-center justify-between h-12 px-3 rounded-lg transition-colors ${isActive ? "bg-emerald-600/10 text-emerald-400" : "text-secondary hover:bg-overlay"}`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isActive ? 'bg-emerald-500 border-emerald-500' : 'border-edge'}`}>
-                  {isActive && (<svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>)}
-                </div>
-                <span className="text-sm font-medium">{genre.label}</span>
-              </div>
-            </button>
-          );
-        })}
+        {GENRE_FILTERS.map((genre) => (
+          <GenreSheetItem key={genre.key} genre={genre} isActive={selectedGenres.has(genre.key)} onToggle={() => onGenresChange(toggleGenre(selectedGenres, genre.key))} />
+        ))}
       </div>
     </BottomSheet>
   );

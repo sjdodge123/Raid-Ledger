@@ -29,116 +29,95 @@ export function formatJobName(name: string): string {
         .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function formatHour(h: number): string {
+    if (h === 0) return '12:00 AM';
+    if (h === 12) return '12:00 PM';
+    return h < 12 ? `${h}:00 AM` : `${h - 12}:00 PM`;
+}
+
+function describeMinuteInterval(min: string): string | null {
+    if (!min.startsWith('*/')) return null;
+    const n = parseInt(min.slice(2), 10);
+    return n === 1 ? 'Every minute' : `Every ${n} minutes`;
+}
+
+function describeHourInterval(hour: string): string | null {
+    if (!hour.startsWith('*/')) return null;
+    const n = parseInt(hour.slice(2), 10);
+    return n === 1 ? 'Every hour' : `Every ${n} hours`;
+}
+
+function describeSpecificHours(hour: string): string | null {
+    if (hour.includes('/') || hour.includes('-')) return null;
+    const hours = hour.split(',').map((h) => parseInt(h, 10));
+    if (!hours.every((h) => !isNaN(h))) return null;
+    if (hours.length === 1) return `Daily at ${formatHour(hours[0])}`;
+    const labels = hours.map(formatHour);
+    return `Daily at ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
+function describeSpecificTime(min: string, hour: string): string | null {
+    if (min.includes('*') || min.includes('/') || hour.includes('*') || hour.includes('/')) return null;
+    const h = parseInt(hour, 10), m = parseInt(min, 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    const period = h >= 12 ? 'PM' : 'AM';
+    const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `Daily at ${displayHour}:${m.toString().padStart(2, '0')} ${period}`;
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 /** Convert a 6-field cron expression to a human-readable description */
 export function describeCron(expression: string): string {
     const parts = expression.trim().split(/\s+/);
     if (parts.length !== 6) return expression;
-
     const [, min, hour, day, month, weekday] = parts;
+    const isDaily = day === '*' && month === '*' && weekday === '*';
 
-    // Every N minutes
-    if (hour === '*' && day === '*' && month === '*' && weekday === '*') {
-        if (min.startsWith('*/')) {
-            const n = parseInt(min.slice(2), 10);
-            return n === 1 ? 'Every minute' : `Every ${n} minutes`;
-        }
+    if (isDaily && hour === '*') { const r = describeMinuteInterval(min); if (r) return r; }
+    if (isDaily && min === '0') {
+        const r = describeHourInterval(hour) ?? describeSpecificHours(hour); if (r) return r;
+        if (hour === '0') return 'Daily at midnight';
     }
-
-    // Every N hours
-    if (min === '0' && day === '*' && month === '*' && weekday === '*') {
-        if (hour.startsWith('*/')) {
-            const n = parseInt(hour.slice(2), 10);
-            return n === 1 ? 'Every hour' : `Every ${n} hours`;
-        }
-    }
-
-    // Specific hours
-    if (min === '0' && day === '*' && month === '*' && weekday === '*' && !hour.includes('/') && !hour.includes('-')) {
-        const hours = hour.split(',').map((h) => parseInt(h, 10));
-        if (hours.every((h) => !isNaN(h))) {
-            const formatHour = (h: number): string => {
-                if (h === 0) return '12:00 AM';
-                if (h === 12) return '12:00 PM';
-                return h < 12 ? `${h}:00 AM` : `${h - 12}:00 PM`;
-            };
-            if (hours.length === 1) return `Daily at ${formatHour(hours[0])}`;
-            const labels = hours.map(formatHour);
-            return `Daily at ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
-        }
-    }
-
-    // Specific hour + minute
-    if (day === '*' && month === '*' && weekday === '*' && !min.includes('*') && !min.includes('/') && !hour.includes('*') && !hour.includes('/')) {
-        const h = parseInt(hour, 10);
-        const m = parseInt(min, 10);
-        if (!isNaN(h) && !isNaN(m)) {
-            const period = h >= 12 ? 'PM' : 'AM';
-            const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-            return `Daily at ${displayHour}:${m.toString().padStart(2, '0')} ${period}`;
-        }
-    }
-
-    // Daily at midnight
-    if (min === '0' && hour === '0' && day === '*' && month === '*' && weekday === '*') {
-        return 'Daily at midnight';
-    }
-
-    // Weekly
+    if (isDaily) { const r = describeSpecificTime(min, hour); if (r) return r; }
     if (min === '0' && hour === '0' && day === '*' && month === '*' && weekday !== '*') {
-        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const dayIdx = parseInt(weekday, 10);
-        if (!isNaN(dayIdx) && dayIdx >= 0 && dayIdx <= 6) {
-            return `Weekly on ${dayNames[dayIdx]} at midnight`;
-        }
+        if (!isNaN(dayIdx) && dayIdx >= 0 && dayIdx <= 6) return `Weekly on ${DAY_NAMES[dayIdx]} at midnight`;
     }
-
     return expression;
+}
+
+function normalizeField(field: string, rangePattern: RegExp): string {
+    const match = field.match(rangePattern);
+    if (!match) return field;
+    const step = parseInt(match[1], 10);
+    return step === 1 ? '*' : `*/${step}`;
+}
+
+function tryCollapseHourCommas(normalizedHour: string): string {
+    const hourCommaMatch = normalizedHour.match(/^(\d+(?:,\d+)*)$/);
+    if (!hourCommaMatch) return normalizedHour;
+    const hours = normalizedHour.split(',').map(Number).sort((a, b) => a - b);
+    if (hours.length < 2) return normalizedHour;
+    const interval = hours[1] - hours[0];
+    const isEvenlySpaced = hours.every((h, i) => i === 0 || h - hours[i - 1] === interval);
+    return isEvenlySpaced && 24 % interval === 0 && hours.length === 24 / interval ? `*/${interval}` : normalizedHour;
 }
 
 /** Normalize cron expressions to match our preset format */
 export function normalizeCron(expression: string): string {
     let parts = expression.trim().split(/\s+/);
-
-    if (parts.length === 5) {
-        parts = ['0', ...parts];
-    }
+    if (parts.length === 5) parts = ['0', ...parts];
     if (parts.length !== 6) return expression;
 
     const [sec, min, hour, day, month, weekday] = parts;
+    let normalizedHour = normalizeField(hour, /^0-23\/(\d+)$/);
+    const normalizedMin = normalizeField(min, /^0-59\/(\d+)$/);
 
-    let normalizedHour = hour;
-    const hourRangeMatch = hour.match(/^0-23\/(\d+)$/);
-    if (hourRangeMatch) {
-        const step = parseInt(hourRangeMatch[1], 10);
-        normalizedHour = step === 1 ? '*' : `*/${step}`;
-    }
-
-    let normalizedMin = min;
-    const minRangeMatch = min.match(/^0-59\/(\d+)$/);
-    if (minRangeMatch) {
-        const step = parseInt(minRangeMatch[1], 10);
-        normalizedMin = step === 1 ? '*' : `*/${step}`;
-    }
-
-    // Map specific hour patterns to interval presets
     if (normalizedMin === '0' && day === '*' && month === '*' && weekday === '*') {
-        const hourCommaMatch = normalizedHour.match(/^(\d+(?:,\d+)*)$/);
-        if (hourCommaMatch) {
-            const hours = normalizedHour.split(',').map(Number).sort((a, b) => a - b);
-            if (hours.length >= 2) {
-                const interval = hours[1] - hours[0];
-                const isEvenlySpaced = hours.every((h, i) => i === 0 || h - hours[i - 1] === interval);
-                if (isEvenlySpaced && 24 % interval === 0 && hours.length === 24 / interval) {
-                    normalizedHour = `*/${interval}`;
-                }
-            }
-        }
+        normalizedHour = tryCollapseHourCommas(normalizedHour);
     }
-
-    if (normalizedHour === '*' && normalizedMin === '0') {
-        return `0 0 * * * *`;
-    }
-
+    if (normalizedHour === '*' && normalizedMin === '0') return '0 0 * * * *';
     return [sec, normalizedMin, normalizedHour, day, month, weekday].join(' ');
 }
 

@@ -45,17 +45,41 @@ export function useWantToPlay(gameId: number | undefined) {
  * Individual (non-batch) want-to-play hook. Always called to satisfy
  * React hook rules, but disabled when `enabled` is false.
  */
-function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
+function useInterestToggleMutation(gameId: number | undefined) {
     const queryClient = useQueryClient();
     const queryKey = ['games', 'interest', gameId];
 
+    return useMutation<GameInterestResponseDto, Error, boolean>({
+        mutationFn: async (wantToPlay: boolean) => {
+            const response = await fetch(`${API_BASE_URL}/games/${gameId}/want-to-play`, { method: wantToPlay ? 'POST' : 'DELETE', headers: getHeaders() });
+            if (!response.ok) throw new Error('Failed to update interest');
+            return response.json();
+        },
+        onMutate: async (wantToPlay) => {
+            await queryClient.cancelQueries({ queryKey });
+            const previous = queryClient.getQueryData<GameInterestResponseDto>(queryKey);
+            queryClient.setQueryData<GameInterestResponseDto>(queryKey, (old) => ({
+                wantToPlay, count: (old?.count ?? 0) + (wantToPlay ? 1 : -1),
+            }));
+            return { previous };
+        },
+        onError: (_err, _vars, context) => {
+            const prev = (context as { previous?: GameInterestResponseDto })?.previous;
+            if (prev) queryClient.setQueryData(queryKey, prev);
+            toast.error('Failed to update game interest');
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey });
+            queryClient.invalidateQueries({ queryKey: ['userHeartedGames'] });
+        },
+    });
+}
+
+function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
     const interest = useQuery<GameInterestResponseDto>({
-        queryKey,
+        queryKey: ['games', 'interest', gameId],
         queryFn: async () => {
-            const response = await fetch(
-                `${API_BASE_URL}/games/${gameId}/interest`,
-                { headers: getHeaders() },
-            );
+            const response = await fetch(`${API_BASE_URL}/games/${gameId}/interest`, { headers: getHeaders() });
             if (!response.ok) throw new Error('Failed to fetch interest');
             return response.json();
         },
@@ -63,44 +87,7 @@ function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
         staleTime: 1000 * 60 * 5,
     });
 
-    const toggle = useMutation<GameInterestResponseDto, Error, boolean>({
-        mutationFn: async (wantToPlay: boolean) => {
-            const method = wantToPlay ? 'POST' : 'DELETE';
-            const response = await fetch(
-                `${API_BASE_URL}/games/${gameId}/want-to-play`,
-                { method, headers: getHeaders() },
-            );
-            if (!response.ok) throw new Error('Failed to update interest');
-            return response.json();
-        },
-        onMutate: async (wantToPlay) => {
-            await queryClient.cancelQueries({ queryKey });
-            const previous =
-                queryClient.getQueryData<GameInterestResponseDto>(queryKey);
-
-            queryClient.setQueryData<GameInterestResponseDto>(queryKey, (old) => ({
-                wantToPlay,
-                count: (old?.count ?? 0) + (wantToPlay ? 1 : -1),
-            }));
-
-            return { previous };
-        },
-        onError: (_err, _vars, context) => {
-            if ((context as { previous?: GameInterestResponseDto })?.previous) {
-                queryClient.setQueryData(
-                    queryKey,
-                    (context as { previous: GameInterestResponseDto }).previous,
-                );
-            }
-            toast.error('Failed to update game interest');
-        },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey });
-            queryClient.invalidateQueries({
-                queryKey: ['userHeartedGames'],
-            });
-        },
-    });
+    const toggle = useInterestToggleMutation(gameId);
 
     return {
         wantToPlay: interest.data?.wantToPlay ?? false,

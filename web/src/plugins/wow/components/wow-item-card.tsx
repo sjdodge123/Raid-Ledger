@@ -67,17 +67,91 @@ export interface WowItemCardProps {
     className?: string;
 }
 
+function ItemIcon({ iconUrl, name, qKey, itemLevel }: {
+    iconUrl?: string | null; name: string; qKey: string; itemLevel?: number | null;
+}) {
+    return (
+        <>
+            {iconUrl ? (
+                <img src={iconUrl} alt={name} className={`wow-item-card__icon wow-item-card__icon--${qKey}`}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; const next = e.currentTarget.nextElementSibling; if (next) (next as HTMLElement).style.display = 'flex'; }} />
+            ) : null}
+            <div className="wow-item-card__icon-fallback" style={iconUrl ? { display: 'none' } : undefined}>
+                {itemLevel && itemLevel > 0 ? itemLevel : '—'}
+            </div>
+        </>
+    );
+}
+
+function ItemCardContent({ name, qKey, slotLabel, subclass, enchant, wowheadUrl, wowheadData, isMobile, onLinkClick }: {
+    name: string; qKey: string; slotLabel: string | null; subclass?: string | null;
+    enchant?: string | null; wowheadUrl?: string; wowheadData?: string;
+    isMobile: boolean; onLinkClick: (e: React.MouseEvent<HTMLAnchorElement>) => void;
+}) {
+    return (
+        <div className="wow-item-card__content">
+            <div className={`wow-item-card__name wow-item-card__name--${qKey}`}>
+                {wowheadUrl ? (
+                    <a href={wowheadUrl} data-wowhead={isMobile ? undefined : wowheadData}
+                        target="_blank" rel="noopener noreferrer" onClick={onLinkClick}>{name}</a>
+                ) : name}
+            </div>
+            {(slotLabel || subclass) && (
+                <div className="wow-item-card__meta">
+                    {slotLabel && <span>{slotLabel}</span>}
+                    {slotLabel && subclass && <span>·</span>}
+                    {subclass && <span>{subclass}</span>}
+                </div>
+            )}
+            {enchant && <div className="wow-item-card__enchant">{enchant}</div>}
+        </div>
+    );
+}
+
+function ModalItemHeader({ name, qKey, iconUrl, itemLevel }: { name: string; qKey: string; iconUrl?: string | null; itemLevel?: number | null }) {
+    return (
+        <div className="flex items-center gap-3">
+            {iconUrl && <img src={iconUrl} alt={name} className={`w-10 h-10 rounded border-2 flex-shrink-0 wow-item-card__icon--${qKey}`} />}
+            <div>
+                <div className={`text-base font-bold wow-item-card__name--${qKey}`}>{name}</div>
+                {itemLevel != null && itemLevel > 0 && <div className="text-sm text-yellow-400">Item Level {itemLevel}</div>}
+            </div>
+        </div>
+    );
+}
+
+function ItemMobileModal({ name, qKey, iconUrl, itemLevel, slotLabel, subclass, enchant, wowheadUrl, onClose }: {
+    name: string; qKey: string; iconUrl?: string | null; itemLevel?: number | null;
+    slotLabel: string | null; subclass?: string | null; enchant?: string | null;
+    wowheadUrl?: string; onClose: () => void;
+}) {
+    return (
+        <Modal isOpen onClose={onClose} title={name} maxWidth="max-w-sm">
+            <div className="space-y-3">
+                <ModalItemHeader name={name} qKey={qKey} iconUrl={iconUrl} itemLevel={itemLevel} />
+                {(slotLabel || subclass) && (
+                    <div className="flex items-center justify-between text-sm text-muted">
+                        {slotLabel && <span>{slotLabel}</span>}
+                        {subclass && <span>{subclass}</span>}
+                    </div>
+                )}
+                {enchant && <div className="text-sm text-green-400">{enchant}</div>}
+                {wowheadUrl && (
+                    <div className="pt-2 border-t border-edge">
+                        <a href={wowheadUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1">
+                            View on Wowhead
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        </a>
+                    </div>
+                )}
+            </div>
+        </Modal>
+    );
+}
+
 export function WowItemCard({
-    name,
-    quality,
-    slot,
-    subclass,
-    itemLevel,
-    iconUrl,
-    enchant,
-    wowheadData,
-    wowheadUrl,
-    className,
+    name, quality, slot, subclass, itemLevel, iconUrl,
+    enchant, wowheadData, wowheadUrl, className,
 }: WowItemCardProps) {
     const qKey = qualityKey(quality);
     const slotLabel = slot ? (SLOT_LABELS[slot] ?? slot) : null;
@@ -85,124 +159,21 @@ export function WowItemCard({
     const [modalOpen, setModalOpen] = useState(false);
 
     const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-        if (isMobile) {
-            e.preventDefault();
-            e.stopPropagation();
-            setModalOpen(true);
-        }
+        if (isMobile) { e.preventDefault(); e.stopPropagation(); setModalOpen(true); }
     };
 
     return (
         <>
             <div className={`wow-item-card ${className ?? ''}`}>
-                {/* Icon */}
-                {iconUrl ? (
-                    <img
-                        src={iconUrl}
-                        alt={name}
-                        className={`wow-item-card__icon wow-item-card__icon--${qKey}`}
-                        onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            const next = e.currentTarget.nextElementSibling;
-                            if (next) (next as HTMLElement).style.display = 'flex';
-                        }}
-                    />
-                ) : null}
-                <div
-                    className="wow-item-card__icon-fallback"
-                    style={iconUrl ? { display: 'none' } : undefined}
-                >
-                    {itemLevel && itemLevel > 0 ? itemLevel : '—'}
-                </div>
-
-                {/* Content */}
-                <div className="wow-item-card__content">
-                    <div className={`wow-item-card__name wow-item-card__name--${qKey}`}>
-                        {wowheadUrl ? (
-                            <a
-                                href={wowheadUrl}
-                                data-wowhead={isMobile ? undefined : wowheadData}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={handleLinkClick}
-                            >
-                                {name}
-                            </a>
-                        ) : (
-                            name
-                        )}
-                    </div>
-                    {(slotLabel || subclass) && (
-                        <div className="wow-item-card__meta">
-                            {slotLabel && <span>{slotLabel}</span>}
-                            {slotLabel && subclass && <span>·</span>}
-                            {subclass && <span>{subclass}</span>}
-                        </div>
-                    )}
-                    {enchant && (
-                        <div className="wow-item-card__enchant">{enchant}</div>
-                    )}
-                </div>
-
-                {/* Item level badge */}
-                {itemLevel != null && itemLevel > 0 && (
-                    <span className="wow-item-card__ilvl">iL{itemLevel}</span>
-                )}
+                <ItemIcon iconUrl={iconUrl} name={name} qKey={qKey} itemLevel={itemLevel} />
+                <ItemCardContent name={name} qKey={qKey} slotLabel={slotLabel} subclass={subclass}
+                    enchant={enchant} wowheadUrl={wowheadUrl} wowheadData={wowheadData}
+                    isMobile={isMobile} onLinkClick={handleLinkClick} />
+                {itemLevel != null && itemLevel > 0 && <span className="wow-item-card__ilvl">iL{itemLevel}</span>}
             </div>
-
-            {/* Mobile item detail modal (ROK-501) */}
-            {modalOpen && (
-                <Modal isOpen onClose={() => setModalOpen(false)} title={name} maxWidth="max-w-sm">
-                    <div className="space-y-3">
-                        {/* Icon + quality name */}
-                        <div className="flex items-center gap-3">
-                            {iconUrl && (
-                                <img
-                                    src={iconUrl}
-                                    alt={name}
-                                    className={`w-10 h-10 rounded border-2 flex-shrink-0 wow-item-card__icon--${qKey}`}
-                                />
-                            )}
-                            <div>
-                                <div className={`text-base font-bold wow-item-card__name--${qKey}`}>{name}</div>
-                                {itemLevel != null && itemLevel > 0 && (
-                                    <div className="text-sm text-yellow-400">Item Level {itemLevel}</div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Slot and subclass */}
-                        {(slotLabel || subclass) && (
-                            <div className="flex items-center justify-between text-sm text-muted">
-                                {slotLabel && <span>{slotLabel}</span>}
-                                {subclass && <span>{subclass}</span>}
-                            </div>
-                        )}
-
-                        {/* Enchant */}
-                        {enchant && (
-                            <div className="text-sm text-green-400">{enchant}</div>
-                        )}
-
-                        {/* Wowhead link */}
-                        {wowheadUrl && (
-                            <div className="pt-2 border-t border-edge">
-                                <a
-                                    href={wowheadUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1"
-                                >
-                                    View on Wowhead
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                    </svg>
-                                </a>
-                            </div>
-                        )}
-                    </div>
-                </Modal>
-            )}
+            {modalOpen && <ItemMobileModal name={name} qKey={qKey} iconUrl={iconUrl} itemLevel={itemLevel}
+                slotLabel={slotLabel} subclass={subclass} enchant={enchant} wowheadUrl={wowheadUrl}
+                onClose={() => setModalOpen(false)} />}
         </>
     );
 }

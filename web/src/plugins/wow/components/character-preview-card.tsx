@@ -45,6 +45,17 @@ export function CharacterPreviewCard({
     );
 }
 
+function CharacterNameLine({ preview, factionColor, factionBg }: { preview: BlizzardCharacterPreviewDto; factionColor: string; factionBg: string }) {
+    return (
+        <div className="flex items-center gap-2">
+            <h3 className="text-foreground font-bold text-lg truncate">{preview.name}</h3>
+            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${factionColor} ${factionBg}`}>
+                {preview.faction.charAt(0).toUpperCase() + preview.faction.slice(1)}
+            </span>
+        </div>
+    );
+}
+
 /** Character info section with avatar, name, class/race details */
 function CharacterInfoSection({ preview, factionColor, factionBg, roleEmoji }: {
     preview: BlizzardCharacterPreviewDto; factionColor: string; factionBg: string; roleEmoji: string;
@@ -55,22 +66,12 @@ function CharacterInfoSection({ preview, factionColor, factionBg, roleEmoji }: {
                 <div className="flex gap-3">
                     <CharacterAvatar preview={preview} />
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <h3 className="text-foreground font-bold text-lg truncate">{preview.name}</h3>
-                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${factionColor} ${factionBg}`}>
-                                {preview.faction.charAt(0).toUpperCase() + preview.faction.slice(1)}
-                            </span>
-                        </div>
+                        <CharacterNameLine preview={preview} factionColor={factionColor} factionBg={factionBg} />
                         <p className="text-secondary text-sm">{preview.realm}</p>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm">
                             <span className="text-muted">{preview.race}</span>
                             <span className="text-foreground font-medium">{preview.class}</span>
-                            {preview.spec && (
-                                <span className="text-secondary">
-                                    {preview.spec}
-                                    {preview.role && <span className="ml-1">{roleEmoji}</span>}
-                                </span>
-                            )}
+                            {preview.spec && <span className="text-secondary">{preview.spec}{preview.role && <span className="ml-1">{roleEmoji}</span>}</span>}
                         </div>
                     </div>
                 </div>
@@ -122,38 +123,33 @@ function CharacterFooterStats({ preview }: { preview: BlizzardCharacterPreviewDt
     );
 }
 
+function MainToggleButton({ setAsMain, onSetAsMainChange }: { setAsMain: boolean; onSetAsMainChange: (v: boolean) => void }) {
+    return (
+        <button type="button" onClick={() => onSetAsMainChange(!setAsMain)}
+            title={setAsMain ? 'Will be set as main character' : 'Click to set as main'}
+            className={`w-16 flex flex-col items-center justify-center gap-0.5 border-r border-edge/20 font-semibold text-xs transition-all ${setAsMain ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30' : 'bg-panel/30 text-muted hover:text-secondary hover:bg-panel/50'}`}>
+            <span className="text-lg">{setAsMain ? '⭐' : '☆'}</span>
+            <span>Main</span>
+        </button>
+    );
+}
+
 /** Action buttons: Main toggle, Dismiss, Save */
 function ActionButtons({ setAsMain, onSetAsMainChange, onImport, onBack, isImporting, highlightActions }: {
     setAsMain: boolean; onSetAsMainChange: (v: boolean) => void;
-    onImport: () => void; onBack: () => void;
-    isImporting: boolean; highlightActions?: boolean;
+    onImport: () => void; onBack: () => void; isImporting: boolean; highlightActions?: boolean;
 }) {
+    const hl = highlightActions ?? false;
     return (
         <div className="flex flex-shrink-0 border-l border-edge/30">
-            <button type="button" onClick={() => onSetAsMainChange(!setAsMain)}
-                title={setAsMain ? 'Will be set as main character' : 'Click to set as main'}
-                className={`w-16 flex flex-col items-center justify-center gap-0.5 border-r border-edge/20 font-semibold text-xs transition-all ${setAsMain
-                    ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                    : 'bg-panel/30 text-muted hover:text-secondary hover:bg-panel/50'
-                }`}>
-                <span className="text-lg">{setAsMain ? '⭐' : '☆'}</span>
-                <span>Main</span>
-            </button>
+            <MainToggleButton setAsMain={setAsMain} onSetAsMainChange={onSetAsMainChange} />
             <button type="button" onClick={onBack} disabled={isImporting} aria-label="Dismiss" title="Dismiss"
-                className={`w-16 flex items-center justify-center bg-red-600/15 border-r border-edge/20 text-red-400 hover:bg-red-600/30 hover:text-red-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${highlightActions ? 'animate-pulse bg-red-600/25 ring-inset ring-2 ring-red-400/60' : ''}`}>
-                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                className={`w-16 flex items-center justify-center bg-red-600/15 border-r border-edge/20 text-red-400 hover:bg-red-600/30 hover:text-red-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${hl ? 'animate-pulse bg-red-600/25 ring-inset ring-2 ring-red-400/60' : ''}`}>
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
             <button type="button" onClick={onImport} disabled={isImporting} aria-label="Save character" title="Save character"
-                className={`w-16 flex items-center justify-center bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${highlightActions ? 'animate-pulse ring-inset ring-2 ring-emerald-300/60' : ''}`}>
-                {isImporting ? (
-                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                    </svg>
-                )}
+                className={`w-16 flex items-center justify-center bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${hl ? 'animate-pulse ring-inset ring-2 ring-emerald-300/60' : ''}`}>
+                {isImporting ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>}
             </button>
         </div>
     );

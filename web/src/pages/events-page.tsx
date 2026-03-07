@@ -20,48 +20,25 @@ import { EventsPageHeader } from "./events/EventsPageHeader";
 /**
  * Events List Page - displays upcoming events in a responsive grid
  */
-// eslint-disable-next-line max-lines-per-function
-export function EventsPage() {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const gameIdFilter = searchParams.get("gameId") || undefined;
-  const tabParam = searchParams.get('tab') as EventsTab | null;
-  const [activeTab, setActiveTab] = useState<EventsTab>(
-    tabParam && ['upcoming', 'past', 'mine', 'plans'].includes(tabParam) ? tabParam : 'upcoming',
-  );
-  const [searchQuery, setSearchQuery] = useState('');
+function buildEventQueryParams(activeTab: EventsTab, gameIdFilter: string | undefined) {
+  const params: import('../lib/api-client').EventListParams = {
+    ...(gameIdFilter ? { gameId: gameIdFilter } : {}),
+  };
+  switch (activeTab) {
+    case 'past': params.upcoming = false; break;
+    case 'mine': params.upcoming = true; params.signedUpAs = 'me'; break;
+    default: params.upcoming = true; break;
+  }
+  return params;
+}
 
-  const eventQueryParams = useMemo(() => {
-    const params: import('../lib/api-client').EventListParams = {
-      ...(gameIdFilter ? { gameId: gameIdFilter } : {}),
-    };
-    switch (activeTab) {
-      case 'past': params.upcoming = false; break;
-      case 'mine': params.upcoming = true; params.signedUpAs = 'me'; break;
-      default: params.upcoming = true; break;
-    }
-    return params;
-  }, [activeTab, gameIdFilter]);
-
-  const { items, isLoading, error, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfiniteEvents(eventQueryParams);
-  const { isAuthenticated } = useAuth();
-  const { data: gameTime } = useGameTime({ enabled: isAuthenticated });
-  const { games: registryGames } = useGameRegistry();
-  const gameTimeSlots = gameTime?.slots;
-
-  const filteredGameName = useMemo(() => {
-    if (!gameIdFilter || !items.length) return null;
-    return items[0]?.game?.name ?? null;
-  }, [gameIdFilter, items]);
-
+function useGameTimeOverlaps(items: EventResponseDto[], gameTimeSlots: GameTimeSlot[] | undefined) {
   const slotSet = useMemo(() => {
     if (!gameTimeSlots?.length) return null;
     const set = new Set<string>();
-    for (const slot of gameTimeSlots as GameTimeSlot[]) set.add(`${slot.dayOfWeek}-${slot.hour}`);
+    for (const slot of gameTimeSlots) set.add(`${slot.dayOfWeek}-${slot.hour}`);
     return set;
   }, [gameTimeSlots]);
-
-  const [filterGameTime, setFilterGameTime] = useState(false);
 
   const overlapSet = useMemo(() => {
     if (!items.length || !slotSet) return null;
@@ -70,72 +47,140 @@ export function EventsPage() {
     return set;
   }, [items, slotSet]);
 
-  const displayEvents = useMemo(() => {
-    if (!items.length) return items;
-    let result = items;
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      result = result.filter((e) => e.title.toLowerCase().includes(q) || e.game?.name?.toLowerCase().includes(q));
-    }
-    if (overlapSet && activeTab !== 'past') {
-      result = [...result].sort((a, b) => {
-        const aO = overlapSet.has(a.id) ? 0 : 1;
-        const bO = overlapSet.has(b.id) ? 0 : 1;
-        if (aO !== bO) return aO - bO;
-        return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
-      });
-    }
-    if (filterGameTime && overlapSet) result = result.filter((e) => overlapSet.has(e.id));
-    return result;
-  }, [items, overlapSet, filterGameTime, searchQuery, activeTab]);
+  return { slotSet, overlapSet };
+}
 
-  if (error) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-red-400 mb-2">Failed to load events</h2>
-          <p className="text-muted">{error.message}</p>
-        </div>
-      </div>
-    );
+function filterAndSortEvents(items: EventResponseDto[], searchQuery: string, overlapSet: Set<number> | null, filterGameTime: boolean, activeTab: EventsTab) {
+  if (!items.length) return items;
+  let result = items;
+  if (searchQuery.trim()) {
+    const q = searchQuery.trim().toLowerCase();
+    result = result.filter((e) => e.title.toLowerCase().includes(q) || e.game?.name?.toLowerCase().includes(q));
   }
+  if (overlapSet && activeTab !== 'past') {
+    result = [...result].sort((a, b) => {
+      const diff = (overlapSet.has(a.id) ? 0 : 1) - (overlapSet.has(b.id) ? 0 : 1);
+      return diff !== 0 ? diff : new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+    });
+  }
+  if (filterGameTime && overlapSet) result = result.filter((e) => overlapSet.has(e.id));
+  return result;
+}
 
-  const handleGameChange = (gameId: string | undefined): void => {
-    const next = new URLSearchParams(searchParams);
-    if (gameId) { next.set('gameId', gameId); } else { next.delete('gameId'); }
-    setSearchParams(next);
-  };
+function useEventsPageState() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const gameIdFilter = searchParams.get("gameId") || undefined;
+  const tabParam = searchParams.get('tab') as EventsTab | null;
+  const [activeTab, setActiveTab] = useState<EventsTab>(
+    tabParam && ['upcoming', 'past', 'mine', 'plans'].includes(tabParam) ? tabParam : 'upcoming',
+  );
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterGameTime, setFilterGameTime] = useState(false);
+  return { searchParams, setSearchParams, gameIdFilter, activeTab, setActiveTab, searchQuery, setSearchQuery, filterGameTime, setFilterGameTime };
+}
+
+function handleGameChange(gameId: string | undefined, searchParams: URLSearchParams, setSearchParams: (p: URLSearchParams) => void) {
+  const next = new URLSearchParams(searchParams);
+  if (gameId) { next.set('gameId', gameId); } else { next.delete('gameId'); }
+  setSearchParams(next);
+}
+
+export function EventsPage() {
+  const navigate = useNavigate();
+  const state = useEventsPageState();
+  const eventQueryParams = useMemo(() => buildEventQueryParams(state.activeTab, state.gameIdFilter), [state.activeTab, state.gameIdFilter]);
+  const { items, isLoading, error, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfiniteEvents(eventQueryParams);
+  const { isAuthenticated } = useAuth();
+  const { data: gameTime } = useGameTime({ enabled: isAuthenticated });
+  const { games: registryGames } = useGameRegistry();
+
+  const filteredGameName = useMemo(() => (!state.gameIdFilter || !items.length) ? null : (items[0]?.game?.name ?? null), [state.gameIdFilter, items]);
+  const { slotSet, overlapSet } = useGameTimeOverlaps(items, gameTime?.slots as GameTimeSlot[] | undefined);
+  const displayEvents = useMemo(() => filterAndSortEvents(items, state.searchQuery, overlapSet, state.filterGameTime, state.activeTab), [items, overlapSet, state.filterGameTime, state.searchQuery, state.activeTab]);
+
+  if (error) return <EventsErrorState message={error.message} />;
 
   return (
     <PullToRefresh onRefresh={refetch}>
       <div className="pb-20 md:pb-0">
-        <EventsMobileToolbar activeTab={activeTab} onTabChange={setActiveTab} searchQuery={searchQuery} onSearchChange={setSearchQuery}
-          games={registryGames} selectedGameId={gameIdFilter} onGameChange={handleGameChange} />
-
-        <div className="py-8 px-4">
-          <div className="max-w-7xl mx-auto">
-            <EventsPageHeader activeTab={activeTab} filteredGameName={filteredGameName} isAuthenticated={isAuthenticated} />
-            <DesktopFilterTabs isAuthenticated={isAuthenticated} activeTab={activeTab} onTabChange={setActiveTab}
-              searchQuery={searchQuery} onSearchChange={setSearchQuery} registryGames={registryGames}
-              gameIdFilter={gameIdFilter} searchParams={searchParams} setSearchParams={setSearchParams} />
-
-            {activeTab === 'plans' ? (
-              <EventPlansList />
-            ) : (
-              <>
-                <GameFilterChip gameIdFilter={gameIdFilter} filteredGameName={filteredGameName} searchParams={searchParams} setSearchParams={setSearchParams} />
-                <GameTimeFilter slotSet={slotSet} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} />
-                <EventsGrid isLoading={isLoading} displayEvents={displayEvents} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} navigate={navigate} />
-                {!isLoading && displayEvents.length > 0 && (
-                  <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />
-                )}
-              </>
-            )}
-          </div>
-        </div>
+        <EventsMobileToolbar activeTab={state.activeTab} onTabChange={state.setActiveTab} searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery}
+          games={registryGames} selectedGameId={state.gameIdFilter} onGameChange={(gameId) => handleGameChange(gameId, state.searchParams, state.setSearchParams)} />
+        <EventsContent activeTab={state.activeTab} setActiveTab={state.setActiveTab} searchQuery={state.searchQuery} setSearchQuery={state.setSearchQuery}
+          isAuthenticated={isAuthenticated} filteredGameName={filteredGameName} registryGames={registryGames} gameIdFilter={state.gameIdFilter}
+          searchParams={state.searchParams} setSearchParams={state.setSearchParams} isLoading={isLoading} displayEvents={displayEvents}
+          filterGameTime={state.filterGameTime} setFilterGameTime={state.setFilterGameTime} slotSet={slotSet} overlapSet={overlapSet}
+          sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} navigate={navigate} />
         {isAuthenticated && <FAB onClick={() => navigate('/events/new')} label="Create Event" />}
       </div>
     </PullToRefresh>
+  );
+}
+
+function EventsErrorState({ message }: { message: string }) {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="text-center">
+        <h2 className="text-xl font-semibold text-red-400 mb-2">Failed to load events</h2>
+        <p className="text-muted">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+function EventsContent({ activeTab, setActiveTab, searchQuery, setSearchQuery, isAuthenticated, filteredGameName, registryGames,
+  gameIdFilter, searchParams, setSearchParams, isLoading, displayEvents, filterGameTime, setFilterGameTime, slotSet, overlapSet,
+  sentinelRef, isFetchingNextPage, hasNextPage, navigate }: {
+  activeTab: EventsTab; setActiveTab: (t: EventsTab) => void; searchQuery: string; setSearchQuery: (q: string) => void;
+  isAuthenticated: boolean; filteredGameName: string | null; registryGames: { id: number; name: string }[];
+  gameIdFilter: string | undefined; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
+  isLoading: boolean; displayEvents: EventResponseDto[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
+  slotSet: Set<string> | null; overlapSet: Set<number> | null;
+  sentinelRef: React.RefObject<HTMLDivElement | null>; isFetchingNextPage: boolean; hasNextPage: boolean; navigate: (path: string) => void;
+}) {
+  return (
+    <div className="py-8 px-4">
+      <div className="max-w-7xl mx-auto">
+        <EventsPageHeader activeTab={activeTab} filteredGameName={filteredGameName} isAuthenticated={isAuthenticated} />
+        <DesktopFilterTabs isAuthenticated={isAuthenticated} activeTab={activeTab} onTabChange={setActiveTab}
+          searchQuery={searchQuery} onSearchChange={setSearchQuery} registryGames={registryGames}
+          gameIdFilter={gameIdFilter} searchParams={searchParams} setSearchParams={setSearchParams} />
+        {activeTab === 'plans' ? <EventPlansList /> : (
+          <>
+            <GameFilterChip gameIdFilter={gameIdFilter} filteredGameName={filteredGameName} searchParams={searchParams} setSearchParams={setSearchParams} />
+            <GameTimeFilter slotSet={slotSet} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} />
+            <EventsGrid isLoading={isLoading} displayEvents={displayEvents} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} navigate={navigate} />
+            {!isLoading && displayEvents.length > 0 && <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const TAB_LABELS: ReadonlyArray<readonly [EventsTab, string]> = [['upcoming', 'Upcoming'], ['past', 'Past'], ['mine', 'My Events'], ['plans', 'Plans']];
+
+function DesktopTabButtons({ activeTab, onTabChange }: { activeTab: EventsTab; onTabChange: (t: EventsTab) => void }) {
+  return (
+    <div className="flex gap-1 bg-panel rounded-lg p-1">
+      {TAB_LABELS.map(([key, label]) => (
+        <button key={key} onClick={() => onTabChange(key)}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === key ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DesktopSearchInput({ searchQuery, onSearchChange }: { searchQuery: string; onSearchChange: (q: string) => void }) {
+  return (
+    <div className="relative flex-1 max-w-xs">
+      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search events..." aria-label="Search events"
+        className="w-full pl-10 pr-4 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+    </div>
   );
 }
 
@@ -146,27 +191,10 @@ function DesktopFilterTabs({ isAuthenticated, activeTab, onTabChange, searchQuer
   if (!isAuthenticated) return null;
   return (
     <div className="hidden md:flex items-center gap-4 mb-6">
-      <div className="flex gap-1 bg-panel rounded-lg p-1">
-        {([['upcoming', 'Upcoming'], ['past', 'Past'], ['mine', 'My Events'], ['plans', 'Plans']] as const).map(([key, label]) => (
-          <button key={key} onClick={() => onTabChange(key)}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === key ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="relative flex-1 max-w-xs">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search events..." aria-label="Search events"
-          className="w-full pl-10 pr-4 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-      </div>
+      <DesktopTabButtons activeTab={activeTab} onTabChange={onTabChange} />
+      <DesktopSearchInput searchQuery={searchQuery} onSearchChange={onSearchChange} />
       {registryGames.length > 1 && (
-        <select value={gameIdFilter ?? ''} onChange={(e) => {
-          const next = new URLSearchParams(searchParams);
-          if (e.target.value) { next.set('gameId', e.target.value); } else { next.delete('gameId'); }
-          setSearchParams(next);
-        }} aria-label="Filter by game"
+        <select value={gameIdFilter ?? ''} onChange={(e) => handleGameChange(e.target.value || undefined, searchParams, setSearchParams)} aria-label="Filter by game"
           className="px-3 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none appearance-none pr-8">
           <option value="">All Games</option>
           {registryGames.map((game) => (<option key={game.id} value={String(game.id)}>{game.name}</option>))}
@@ -211,37 +239,32 @@ function GameTimeFilter({ slotSet, filterGameTime, setFilterGameTime, overlapSet
   );
 }
 
-// eslint-disable-next-line max-lines-per-function
-function EventsGrid({ isLoading, displayEvents, filterGameTime, setFilterGameTime, overlapSet, navigate }: {
-  isLoading: boolean; displayEvents: EventResponseDto[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
-  overlapSet: Set<number> | null; navigate: (path: string) => void;
-}): JSX.Element {
-  const emptyFilterMsg = filterGameTime ? (
+function EventsEmptyFilterMsg({ filterGameTime, setFilterGameTime }: { filterGameTime: boolean; setFilterGameTime: (v: boolean) => void }) {
+  if (!filterGameTime) return <EventsEmptyState />;
+  return (
     <div className="col-span-full text-center py-12">
       <p className="text-muted">No events match your game time schedule.</p>
       <button onClick={() => setFilterGameTime(false)} className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors">Clear filter</button>
     </div>
-  ) : (<EventsEmptyState />);
+  );
+}
 
+function EventsGrid({ isLoading, displayEvents, filterGameTime, setFilterGameTime, overlapSet, navigate }: {
+  isLoading: boolean; displayEvents: EventResponseDto[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
+  overlapSet: Set<number> | null; navigate: (path: string) => void;
+}): JSX.Element {
+  const empty = <EventsEmptyFilterMsg filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} />;
   return (
     <>
       <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {isLoading ? (
-          Array.from({ length: 8 }).map((_, i) => <EventCardSkeleton key={i} />)
-        ) : displayEvents.length === 0 ? emptyFilterMsg : (
-          displayEvents.map((event) => (
-            <EventCard key={event.id} event={event} signupCount={event.signupCount} matchesGameTime={overlapSet?.has(event.id)} onClick={() => navigate(`/events/${event.id}`)} />
-          ))
-        )}
+        {isLoading ? Array.from({ length: 8 }).map((_, i) => <EventCardSkeleton key={i} />)
+          : displayEvents.length === 0 ? empty
+          : displayEvents.map((event) => <EventCard key={event.id} event={event} signupCount={event.signupCount} matchesGameTime={overlapSet?.has(event.id)} onClick={() => navigate(`/events/${event.id}`)} />)}
       </div>
       <div className="md:hidden space-y-3">
-        {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <MobileEventCardSkeleton key={i} />)
-        ) : displayEvents.length === 0 ? emptyFilterMsg : (
-          displayEvents.map((event) => (
-            <MobileEventCard key={event.id} event={event} signupCount={event.signupCount} matchesGameTime={overlapSet?.has(event.id)} onClick={() => navigate(`/events/${event.id}`)} />
-          ))
-        )}
+        {isLoading ? Array.from({ length: 4 }).map((_, i) => <MobileEventCardSkeleton key={i} />)
+          : displayEvents.length === 0 ? empty
+          : displayEvents.map((event) => <MobileEventCard key={event.id} event={event} signupCount={event.signupCount} matchesGameTime={overlapSet?.has(event.id)} onClick={() => navigate(`/events/${event.id}`)} />)}
       </div>
     </>
   );

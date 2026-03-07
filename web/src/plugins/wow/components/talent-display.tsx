@@ -75,145 +75,84 @@ function WowheadTalentEmbed({ embedUrl }: { embedUrl: string }) {
     );
 }
 
-function ClassicTalentDisplay({
-    talents,
-    wowheadUrl,
-    embedUrl,
-}: {
-    talents: ClassicTalents;
-    wowheadUrl: string | null;
-    embedUrl: string | null;
-}) {
+function ClassicSummaryLine({ talents, totalPoints, wowheadUrl }: { talents: ClassicTalents; totalPoints: number; wowheadUrl: string | null }) {
+    return (
+        <div className="flex items-center gap-3">
+            <span className="text-lg font-mono font-bold text-foreground tracking-wider">{talents.summary}</span>
+            {totalPoints > 0 && <span className="text-xs text-muted">({totalPoints} points)</span>}
+            {wowheadUrl && (
+                <a href={wowheadUrl} target="_blank" rel="noopener noreferrer"
+                    className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded border border-amber-700/50 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 transition-colors">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    View on Wowhead
+                </a>
+            )}
+        </div>
+    );
+}
+
+function getBarColor(spentPoints: number, maxPoints: number): string {
+    if (spentPoints === maxPoints && spentPoints > 0) return 'bg-amber-500';
+    return spentPoints > 0 ? 'bg-blue-500' : 'bg-faint';
+}
+
+function ClassicTreeRow({ tree, totalPoints, maxPoints }: { tree: ClassicTalents['trees'][number]; totalPoints: number; maxPoints: number }) {
+    const pct = totalPoints > 0 ? Math.round((tree.spentPoints / totalPoints) * 100) : 0;
+    const isMax = tree.spentPoints === maxPoints && maxPoints > 0;
+    const pillClass = isMax ? 'bg-amber-950/40 border-amber-800/50 text-amber-300' : 'bg-overlay border-edge text-foreground';
+    return (
+        <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-sm">
+                <span className={isMax ? 'text-foreground font-medium' : 'text-muted'}>{tree.name}</span>
+                <span className="text-muted font-mono">{tree.spentPoints}</span>
+            </div>
+            <div className="h-2 bg-faint/50 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${getBarColor(tree.spentPoints, maxPoints)}`} style={{ width: `${pct}%` }} />
+            </div>
+            {tree.talents.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                    {tree.talents.map((talent, i) => <span key={`${talent.name}-${i}`} className={`px-1.5 py-0.5 text-[10px] rounded border ${pillClass}`}>{talent.name}</span>)}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ClassicTalentDisplay({ talents, wowheadUrl, embedUrl }: { talents: ClassicTalents; wowheadUrl: string | null; embedUrl: string | null }) {
     const totalPoints = talents.trees.reduce((sum, t) => sum + t.spentPoints, 0);
     const maxPoints = Math.max(...talents.trees.map((t) => t.spentPoints), 0);
-
     return (
         <div className="space-y-4">
-            {/* Summary line */}
-            <div className="flex items-center gap-3">
-                <span className="text-lg font-mono font-bold text-foreground tracking-wider">
-                    {talents.summary}
-                </span>
-                {totalPoints > 0 && (
-                    <span className="text-xs text-muted">({totalPoints} points)</span>
-                )}
-                {wowheadUrl && (
-                    <a
-                        href={wowheadUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded border border-amber-700/50 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 transition-colors"
-                    >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                        View on Wowhead
-                    </a>
-                )}
-            </div>
-
-            {/* Wowhead talent calculator embed */}
+            <ClassicSummaryLine talents={talents} totalPoints={totalPoints} wowheadUrl={wowheadUrl} />
             {embedUrl && <WowheadTalentEmbed embedUrl={embedUrl} />}
-
-            {/* Tree breakdown with talent pills */}
             <div className="space-y-3">
-                {talents.trees.map((tree) => {
-                    const pct = totalPoints > 0
-                        ? Math.round((tree.spentPoints / totalPoints) * 100)
-                        : 0;
-                    const barColor = tree.spentPoints === maxPoints && tree.spentPoints > 0
-                        ? 'bg-amber-500'
-                        : tree.spentPoints > 0
-                            ? 'bg-blue-500'
-                            : 'bg-faint';
+                {talents.trees.map((tree) => <ClassicTreeRow key={tree.name} tree={tree} totalPoints={totalPoints} maxPoints={maxPoints} />)}
+            </div>
+        </div>
+    );
+}
 
-                    return (
-                        <div key={tree.name} className="space-y-1.5">
-                            <div className="flex items-center justify-between text-sm">
-                                <span className={tree.spentPoints === maxPoints && maxPoints > 0
-                                    ? 'text-foreground font-medium'
-                                    : 'text-muted'
-                                }>
-                                    {tree.name}
-                                </span>
-                                <span className="text-muted font-mono">{tree.spentPoints}</span>
-                            </div>
-                            <div className="h-2 bg-faint/50 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full rounded-full transition-all ${barColor}`}
-                                    style={{ width: `${pct}%` }}
-                                />
-                            </div>
-                            {tree.talents.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                    {tree.talents.map((talent, i) => (
-                                        <span
-                                            key={`${talent.name}-${i}`}
-                                            className={`px-1.5 py-0.5 text-[10px] rounded border
-                                                ${tree.spentPoints === maxPoints
-                                                    ? 'bg-amber-950/40 border-amber-800/50 text-amber-300'
-                                                    : 'bg-overlay border-edge text-foreground'
-                                                }`}
-                                        >
-                                            {talent.name}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
+function TalentPillSection({ label, talents, pillClass }: { label: string; talents: Array<{ name: string }>; pillClass: string }) {
+    if (talents.length === 0) return null;
+    return (
+        <div>
+            <h3 className="text-sm font-medium text-muted mb-2">{label}</h3>
+            <div className="flex flex-wrap gap-1.5">
+                {talents.map((talent, i) => <span key={`${talent.name}-${i}`} className={`px-2 py-1 text-xs rounded ${pillClass}`}>{talent.name}</span>)}
             </div>
         </div>
     );
 }
 
 function RetailTalentDisplay({ talents }: { talents: RetailTalents }) {
+    const heroLabel = talents.heroTalents?.treeName ? `${talents.heroTalents.treeName} (Hero Talents)` : 'Hero Talents';
     return (
         <div className="space-y-4">
-            {/* Spec talents */}
-            {talents.classTalents.length > 0 && (
-                <div>
-                    <h3 className="text-sm font-medium text-muted mb-2">
-                        {talents.specName} Talents
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
-                        {talents.classTalents.map((talent, i) => (
-                            <span
-                                key={`${talent.name}-${i}`}
-                                className="px-2 py-1 text-xs bg-overlay border border-edge rounded text-foreground"
-                            >
-                                {talent.name}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Hero talents */}
-            {talents.heroTalents && talents.heroTalents.talents.length > 0 && (
-                <div>
-                    <h3 className="text-sm font-medium text-muted mb-2">
-                        {talents.heroTalents.treeName
-                            ? `${talents.heroTalents.treeName} (Hero Talents)`
-                            : 'Hero Talents'}
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
-                        {talents.heroTalents.talents.map((talent, i) => (
-                            <span
-                                key={`${talent.name}-${i}`}
-                                className="px-2 py-1 text-xs bg-purple-950/40 border border-purple-800/50 rounded text-purple-300"
-                            >
-                                {talent.name}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {talents.classTalents.length === 0 && !talents.heroTalents && (
-                <p className="text-sm text-muted">No talent details available.</p>
-            )}
+            <TalentPillSection label={`${talents.specName} Talents`} talents={talents.classTalents} pillClass="bg-overlay border border-edge text-foreground" />
+            {talents.heroTalents && <TalentPillSection label={heroLabel} talents={talents.heroTalents.talents} pillClass="bg-purple-950/40 border border-purple-800/50 text-purple-300" />}
+            {talents.classTalents.length === 0 && !talents.heroTalents && <p className="text-sm text-muted">No talent details available.</p>}
         </div>
     );
 }
@@ -225,48 +164,31 @@ interface TalentDisplayProps {
     gameVariant?: string | null;
 }
 
-export function TalentDisplay({ talents, isArmoryImported, characterClass, gameVariant }: TalentDisplayProps) {
-    const wowheadUrl = characterClass
-        ? getWowheadTalentCalcUrl(characterClass, gameVariant)
-        : null;
-
-    if (!talents || !isTalentData(talents)) {
-        return (
-            <div className="text-center py-8 text-muted">
-                <p className="text-lg">No talent data</p>
-                <p className="text-sm mt-1">
-                    {isArmoryImported
-                        ? 'Talent data may not be available for this character. Try refreshing.'
-                        : 'Talent data is only available for characters imported from the Blizzard Armory.'}
-                </p>
-            </div>
-        );
-    }
-
-    if (isRetailTalents(talents)) {
-        return <RetailTalentDisplay talents={talents} />;
-    }
-
-    if (isClassicTalents(talents)) {
-        // Build the Wowhead talent string once and reuse for both embed and link-out
-        const talentString = characterClass
-            ? buildWowheadTalentString(characterClass, talents.trees)
-            : null;
-
-        const embedUrl = characterClass && talentString
-            ? getWowheadTalentCalcEmbedUrl(characterClass, talentString, gameVariant)
-            : null;
-
-        const talentCalcUrl = talentString && wowheadUrl
-            ? `${wowheadUrl}/${talentString}`
-            : wowheadUrl;
-
-        return <ClassicTalentDisplay talents={talents} wowheadUrl={talentCalcUrl} embedUrl={embedUrl} />;
-    }
-
+function NoTalentData({ isArmoryImported }: { isArmoryImported: boolean }) {
     return (
         <div className="text-center py-8 text-muted">
             <p className="text-lg">No talent data</p>
+            <p className="text-sm mt-1">
+                {isArmoryImported ? 'Talent data may not be available for this character. Try refreshing.' : 'Talent data is only available for characters imported from the Blizzard Armory.'}
+            </p>
         </div>
     );
+}
+
+function resolveClassicUrls(characterClass: string | null | undefined, talents: ClassicTalents, gameVariant: string | null | undefined) {
+    const wowheadUrl = characterClass ? getWowheadTalentCalcUrl(characterClass, gameVariant) : null;
+    const talentString = characterClass ? buildWowheadTalentString(characterClass, talents.trees) : null;
+    const embedUrl = characterClass && talentString ? getWowheadTalentCalcEmbedUrl(characterClass, talentString, gameVariant) : null;
+    const talentCalcUrl = talentString && wowheadUrl ? `${wowheadUrl}/${talentString}` : wowheadUrl;
+    return { embedUrl, talentCalcUrl };
+}
+
+export function TalentDisplay({ talents, isArmoryImported, characterClass, gameVariant }: TalentDisplayProps) {
+    if (!talents || !isTalentData(talents)) return <NoTalentData isArmoryImported={isArmoryImported} />;
+    if (isRetailTalents(talents)) return <RetailTalentDisplay talents={talents} />;
+    if (isClassicTalents(talents)) {
+        const { embedUrl, talentCalcUrl } = resolveClassicUrls(characterClass, talents, gameVariant);
+        return <ClassicTalentDisplay talents={talents} wowheadUrl={talentCalcUrl} embedUrl={embedUrl} />;
+    }
+    return <div className="text-center py-8 text-muted"><p className="text-lg">No talent data</p></div>;
 }

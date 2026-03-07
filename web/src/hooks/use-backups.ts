@@ -3,93 +3,54 @@ import type { BackupFileDto, BackupListResponseDto } from '@raid-ledger/contract
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 
-export function useBackups() {
-    const queryClient = useQueryClient();
+function backupHeaders(): Record<string, string> {
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken() || ''}` };
+}
 
-    const getHeaders = () => ({
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAuthToken() || ''}`,
-    });
+async function backupFetch<T>(path: string, method = 'GET', errorMsg = 'Request failed'): Promise<T> {
+    const response = await fetch(`${API_BASE_URL}${path}`, { method, headers: backupHeaders() });
+    if (!response.ok) throw new Error(errorMsg);
+    return response.json();
+}
 
-    const backups = useQuery<BackupListResponseDto>({
+function useBackupQuery() {
+    return useQuery<BackupListResponseDto>({
         queryKey: ['admin', 'backups'],
-        queryFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/admin/backups`, {
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to fetch backups');
-            return response.json();
-        },
+        queryFn: () => backupFetch('/admin/backups', 'GET', 'Failed to fetch backups'),
         enabled: !!getAuthToken(),
         staleTime: 15_000,
     });
+}
 
-    const createBackup = useMutation<
-        { success: boolean; message: string; backup: BackupFileDto },
-        Error
-    >({
-        mutationFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/admin/backups`, {
-                method: 'POST',
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to create backup');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
-        },
+function useBackupMutations() {
+    const queryClient = useQueryClient();
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
+
+    const createBackup = useMutation({
+        mutationFn: () => backupFetch<{ success: boolean; message: string; backup: BackupFileDto }>('/admin/backups', 'POST', 'Failed to create backup'),
+        onSuccess: invalidate,
     });
 
-    const deleteBackup = useMutation<
-        { success: boolean; message: string },
-        Error,
-        { type: string; filename: string }
-    >({
-        mutationFn: async ({ type, filename }) => {
-            const response = await fetch(
-                `${API_BASE_URL}/admin/backups/${type}/${encodeURIComponent(filename)}`,
-                { method: 'DELETE', headers: getHeaders() },
-            );
-            if (!response.ok) throw new Error('Failed to delete backup');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
-        },
+    const deleteBackup = useMutation({
+        mutationFn: ({ type, filename }: { type: string; filename: string }) =>
+            backupFetch<{ success: boolean; message: string }>(`/admin/backups/${type}/${encodeURIComponent(filename)}`, 'DELETE', 'Failed to delete backup'),
+        onSuccess: invalidate,
     });
 
-    const restoreBackup = useMutation<
-        { success: boolean; message: string },
-        Error,
-        { type: string; filename: string }
-    >({
-        mutationFn: async ({ type, filename }) => {
-            const response = await fetch(
-                `${API_BASE_URL}/admin/backups/${type}/${encodeURIComponent(filename)}/restore`,
-                { method: 'POST', headers: getHeaders() },
-            );
-            if (!response.ok) throw new Error('Failed to restore backup');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
-        },
+    const restoreBackup = useMutation({
+        mutationFn: ({ type, filename }: { type: string; filename: string }) =>
+            backupFetch<{ success: boolean; message: string }>(`/admin/backups/${type}/${encodeURIComponent(filename)}/restore`, 'POST', 'Failed to restore backup'),
+        onSuccess: invalidate,
     });
 
-    const resetInstance = useMutation<
-        { success: boolean; message: string; password: string },
-        Error
-    >({
-        mutationFn: async () => {
-            const response = await fetch(
-                `${API_BASE_URL}/admin/backups/reset-instance`,
-                { method: 'POST', headers: getHeaders() },
-            );
-            if (!response.ok) throw new Error('Failed to reset instance');
-            return response.json();
-        },
+    const resetInstance = useMutation({
+        mutationFn: () => backupFetch<{ success: boolean; message: string; password: string }>('/admin/backups/reset-instance', 'POST', 'Failed to reset instance'),
     });
 
-    return { backups, createBackup, deleteBackup, restoreBackup, resetInstance };
+    return { createBackup, deleteBackup, restoreBackup, resetInstance };
+}
+
+export function useBackups() {
+    const backups = useBackupQuery();
+    return { backups, ...useBackupMutations() };
 }

@@ -8,11 +8,8 @@ import type {
     ApiResponse,
 } from './admin-settings-types';
 
-/** Demo data, timezone, and Steam settings */
-export function useMiscSettings() {
+function useDemoDataSettings() {
     const queryClient = useQueryClient();
-
-    // -- Demo Data (ROK-193) --
 
     const demoDataStatus = useQuery<DemoDataStatus>({
         queryKey: ['admin', 'settings', 'demo', 'status'],
@@ -21,31 +18,27 @@ export function useMiscSettings() {
         staleTime: 10_000,
     });
 
+    const invalidateDemo = () => {
+        queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'demo', 'status'] });
+        queryClient.invalidateQueries({ queryKey: ['events'] });
+        queryClient.invalidateQueries({ queryKey: ['users'] });
+    };
+
     const installDemoData = useMutation<DemoDataResult, Error>({
-        mutationFn: () =>
-            adminFetch('/admin/settings/demo/install', {
-                method: 'POST',
-            }, 'Failed to install demo data'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'demo', 'status'] });
-            queryClient.invalidateQueries({ queryKey: ['events'] });
-            queryClient.invalidateQueries({ queryKey: ['users'] });
-        },
+        mutationFn: () => adminFetch('/admin/settings/demo/install', { method: 'POST' }, 'Failed to install demo data'),
+        onSuccess: invalidateDemo,
     });
 
     const clearDemoData = useMutation<DemoDataResult, Error>({
-        mutationFn: () =>
-            adminFetch('/admin/settings/demo/clear', {
-                method: 'POST',
-            }, 'Failed to clear demo data'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'demo', 'status'] });
-            queryClient.invalidateQueries({ queryKey: ['events'] });
-            queryClient.invalidateQueries({ queryKey: ['users'] });
-        },
+        mutationFn: () => adminFetch('/admin/settings/demo/clear', { method: 'POST' }, 'Failed to clear demo data'),
+        onSuccess: invalidateDemo,
     });
 
-    // -- Default Timezone (ROK-431) --
+    return { demoDataStatus, installDemoData, clearDemoData };
+}
+
+function useTimezoneSettings() {
+    const queryClient = useQueryClient();
 
     const defaultTimezone = useQuery<{ timezone: string | null }>({
         queryKey: ['admin', 'settings', 'timezone'],
@@ -57,64 +50,50 @@ export function useMiscSettings() {
     const updateTimezone = useMutation<ApiResponse, Error, string>({
         mutationFn: (timezone) =>
             adminFetch('/admin/settings/timezone', {
-                method: 'PUT',
-                body: JSON.stringify({ timezone }),
+                method: 'PUT', body: JSON.stringify({ timezone }),
             }, 'Failed to update timezone'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'timezone'] });
-        },
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'timezone'] }),
     });
 
-    // -- Steam API Key (ROK-417) --
+    return { defaultTimezone, updateTimezone };
+}
+
+function useSteamSettings() {
+    const queryClient = useQueryClient();
+    const STEAM_KEY = ['admin', 'settings', 'steam'] as const;
 
     const steamStatus = useQuery<{ configured: boolean }>({
-        queryKey: ['admin', 'settings', 'steam'],
+        queryKey: [...STEAM_KEY],
         queryFn: () => adminFetch('/admin/settings/steam'),
         enabled: !!getAuthToken(),
         staleTime: 30_000,
     });
 
-    const updateSteam = useMutation<
-        ApiResponse,
-        Error,
-        { apiKey: string }
-    >({
+    const updateSteam = useMutation<ApiResponse, Error, { apiKey: string }>({
         mutationFn: (config) =>
             adminFetch('/admin/settings/steam', {
-                method: 'PUT',
-                body: JSON.stringify(config),
+                method: 'PUT', body: JSON.stringify(config),
             }, 'Failed to update Steam configuration'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'steam'] });
-        },
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: [...STEAM_KEY] }),
     });
 
     const testSteam = useMutation<OAuthTestResponse, Error>({
-        mutationFn: () =>
-            adminFetch('/admin/settings/steam/test', {
-                method: 'POST',
-            }, 'Failed to test Steam configuration'),
+        mutationFn: () => adminFetch('/admin/settings/steam/test', { method: 'POST' }, 'Failed to test Steam configuration'),
     });
 
     const clearSteam = useMutation<ApiResponse, Error>({
-        mutationFn: () =>
-            adminFetch('/admin/settings/steam/clear', {
-                method: 'POST',
-            }, 'Failed to clear Steam configuration'),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'steam'] });
-        },
+        mutationFn: () => adminFetch('/admin/settings/steam/clear', { method: 'POST' }, 'Failed to clear Steam configuration'),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: [...STEAM_KEY] }),
     });
 
+    return { steamStatus, updateSteam, testSteam, clearSteam };
+}
+
+/** Demo data, timezone, and Steam settings */
+export function useMiscSettings() {
     return {
-        demoDataStatus,
-        installDemoData,
-        clearDemoData,
-        defaultTimezone,
-        updateTimezone,
-        steamStatus,
-        updateSteam,
-        testSteam,
-        clearSteam,
+        ...useDemoDataSettings(),
+        ...useTimezoneSettings(),
+        ...useSteamSettings(),
     };
 }

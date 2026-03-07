@@ -161,30 +161,15 @@ interface RemoveConfirmModalProps {
 /** Remove user from event confirmation modal */
 export function RemoveConfirmModal(props: RemoveConfirmModalProps): JSX.Element {
     return (
-        <Modal
-            isOpen={props.removeConfirm !== null}
-            onClose={props.onClose}
-            title="Remove from Event"
-        >
+        <Modal isOpen={props.removeConfirm !== null} onClose={props.onClose} title="Remove from Event">
             {props.removeConfirm && (
                 <div className="space-y-4">
                     <p className="text-sm text-secondary">
                         Remove <strong className="text-foreground">{props.removeConfirm.username}</strong> from this event? This will delete their signup and roster assignment.
                     </p>
                     <div className="flex justify-end gap-2 pt-2">
-                        <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={props.onClose}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            onClick={props.onConfirm}
-                            disabled={props.isPending}
-                        >
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={props.onClose}>Cancel</button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={props.onConfirm} disabled={props.isPending}>
                             {props.isPending ? 'Removing...' : 'Remove'}
                         </button>
                     </div>

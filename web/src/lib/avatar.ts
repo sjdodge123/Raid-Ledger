@@ -117,44 +117,49 @@ export function buildDiscordAvatarUrl(
  * ROK-414: The overlay now uses `resolvedAvatarUrl` (server-resolved) instead of
  * a full characters array, avoiding heavy JSONB payloads on /auth/me.
  */
-export function toAvatarUser(user: {
+type AvatarUserInput = {
     id?: number;
     avatar: string | null;
     discordId?: string | null;
     customAvatarUrl?: string | null;
     characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
     avatarPreference?: AvatarPreference | null;
-}): AvatarUser {
-    // ROK-352: Overlay current user's preference data when IDs match
-    const overlay = _currentUserAvatarData
-        && user.id != null
-        && user.id === _currentUserAvatarData.id
+};
+
+function getOverlay(userId?: number): CurrentUserAvatarData | null {
+    return _currentUserAvatarData && userId != null && userId === _currentUserAvatarData.id
         ? _currentUserAvatarData
         : null;
+}
 
-    const avatar = buildDiscordAvatarUrl(user.discordId, user.avatar) ?? (user.avatar?.startsWith('http') ? user.avatar : null);
-
-    // ROK-352/414: When overlay is active (current user), overlay data is always more
-    // authoritative than partial DTOs. Auth data is the source of truth for
-    // the current user's own preference, resolvedAvatarUrl, and custom avatar.
-    if (overlay) {
-        const pref = overlay.avatarPreference !== undefined ? overlay.avatarPreference : user.avatarPreference;
-
-        // ROK-414: Build a synthetic characters entry from resolvedAvatarUrl so
-        // resolveAvatar() can still find the character avatar via its existing
-        // character-preference lookup path.
-        let characters = user.characters;
-        if (pref?.type === 'character' && pref.characterName && overlay.resolvedAvatarUrl) {
-            characters = [{ gameId: '__resolved__', name: pref.characterName, avatarUrl: overlay.resolvedAvatarUrl }];
-        }
-
-        return {
-            avatar,
-            customAvatarUrl: overlay.customAvatarUrl !== undefined ? overlay.customAvatarUrl : user.customAvatarUrl,
-            characters,
-            avatarPreference: pref,
-        };
+function buildOverlayResult(
+    overlay: CurrentUserAvatarData,
+    user: AvatarUserInput,
+    avatar: string | null,
+): AvatarUser {
+    const pref = overlay.avatarPreference !== undefined ? overlay.avatarPreference : user.avatarPreference;
+    let characters = user.characters;
+    if (pref?.type === 'character' && pref.characterName && overlay.resolvedAvatarUrl) {
+        characters = [{ gameId: '__resolved__', name: pref.characterName, avatarUrl: overlay.resolvedAvatarUrl }];
     }
+    return {
+        avatar,
+        customAvatarUrl: overlay.customAvatarUrl !== undefined ? overlay.customAvatarUrl : user.customAvatarUrl,
+        characters,
+        avatarPreference: pref,
+    };
+}
+
+/**
+ * Bridge function that converts API response shapes into AvatarUser.
+ * ROK-352/414: Overlays current user's preference data when IDs match.
+ */
+export function toAvatarUser(user: AvatarUserInput): AvatarUser {
+    const overlay = getOverlay(user.id);
+    const avatar = buildDiscordAvatarUrl(user.discordId, user.avatar)
+        ?? (user.avatar?.startsWith('http') ? user.avatar : null);
+
+    if (overlay) return buildOverlayResult(overlay, user, avatar);
 
     return {
         avatar,
@@ -173,51 +178,44 @@ export function toAvatarUser(user: {
  * 3. Discord avatar
  * 4. Initials (returns null, component handles initials)
  */
+const INITIALS_RESULT: ResolvedAvatar = { url: null, type: 'initials' };
+
+function resolveFromPreference(user: AvatarUser): ResolvedAvatar | null {
+    const pref = user.avatarPreference;
+    if (!pref) return null;
+    if (pref.type === 'custom' && user.customAvatarUrl) {
+        return { url: `${API_BASE_URL}${user.customAvatarUrl}`, type: 'custom' };
+    }
+    if (pref.type === 'discord' && user.avatar) {
+        return { url: user.avatar, type: 'discord' };
+    }
+    if (pref.type === 'character' && pref.characterName && user.characters) {
+        const character = user.characters.find(c => c.name === pref.characterName);
+        if (character?.avatarUrl) return { url: character.avatarUrl, type: 'character' };
+    }
+    return null;
+}
+
+function resolveByDefault(user: AvatarUser, gameId?: number | string): ResolvedAvatar {
+    if (user.customAvatarUrl) {
+        return { url: `${API_BASE_URL}${user.customAvatarUrl}`, type: 'custom' };
+    }
+    if (gameId && user.characters?.length) {
+        const character = user.characters.find(c => c.gameId === gameId);
+        if (character?.avatarUrl) return { url: character.avatarUrl, type: 'character' };
+    }
+    if (user.avatar) return { url: user.avatar, type: 'discord' };
+    return INITIALS_RESULT;
+}
+
+/**
+ * Resolves the most appropriate avatar for a user based on context.
+ * Priority: Custom > Character (by preference or gameId) > Discord > Initials
+ */
 export function resolveAvatar(
     user: AvatarUser | null | undefined,
     gameId?: number | string
 ): ResolvedAvatar {
-    // Handle null/undefined user
-    if (!user) {
-        return { url: null, type: 'initials' };
-    }
-
-    // If user has a server-persisted avatar preference, honor it first (ROK-352)
-    if (user.avatarPreference) {
-        const pref = user.avatarPreference;
-        if (pref.type === 'custom' && user.customAvatarUrl) {
-            return { url: `${API_BASE_URL}${user.customAvatarUrl}`, type: 'custom' };
-        }
-        if (pref.type === 'discord' && user.avatar) {
-            return { url: user.avatar, type: 'discord' };
-        }
-        if (pref.type === 'character' && pref.characterName && user.characters) {
-            const character = user.characters.find(c => c.name === pref.characterName);
-            if (character?.avatarUrl) {
-                return { url: character.avatarUrl, type: 'character' };
-            }
-        }
-        // Preferred source unavailable — fall through to default priority
-    }
-
-    // Custom avatar has highest priority (ROK-220)
-    if (user.customAvatarUrl) {
-        return { url: `${API_BASE_URL}${user.customAvatarUrl}`, type: 'custom' };
-    }
-
-    // If gameId provided, try to find character portrait
-    if (gameId && user.characters && user.characters.length > 0) {
-        const character = user.characters.find(c => c.gameId === gameId);
-        if (character?.avatarUrl) {
-            return { url: character.avatarUrl, type: 'character' };
-        }
-    }
-
-    // Fall back to Discord avatar
-    if (user.avatar) {
-        return { url: user.avatar, type: 'discord' };
-    }
-
-    // No avatar available - component will show initials
-    return { url: null, type: 'initials' };
+    if (!user) return INITIALS_RESULT;
+    return resolveFromPreference(user) ?? resolveByDefault(user, gameId);
 }

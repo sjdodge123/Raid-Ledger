@@ -52,13 +52,55 @@ function getNextWeekStart(): string {
     return nextSunday.toISOString().split('T')[0];
 }
 
-export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTimeEditorReturn {
-    const enabled = options?.enabled ?? true;
-    const rolling = options?.rolling ?? false;
+function isAvailableSlot(s: GameTimeSlot): boolean {
+    return s.status === 'available' || !s.status;
+}
+
+function deriveDisplaySlots(
+    editSlots: GameTimeSlot[] | null,
+    gameTimeData: ReturnType<typeof useGameTime>['data'],
+    rolling: boolean,
+): GameTimeSlot[] {
+    if (editSlots !== null) return editSlots;
+    if (!gameTimeData?.slots) return [];
+    return gameTimeData.slots
+        .filter((s: GameTimeSlot) => rolling || s.fromTemplate !== false)
+        .map((s: GameTimeSlot) => ({
+            dayOfWeek: s.dayOfWeek,
+            hour: s.hour,
+            status: (!rolling && (s.status === 'committed' || s.status === 'freed'))
+                ? 'available'
+                : (s.status ?? 'available'),
+        }));
+}
+
+function togglePresetSlots(
+    current: GameTimeSlot[],
+    dayOfWeek: number,
+    rangeHours: number[],
+): GameTimeSlot[] {
+    const allActive = rangeHours.every((h) =>
+        current.some((s) => s.dayOfWeek === dayOfWeek && s.hour === h && isAvailableSlot(s)),
+    );
+
+    if (allActive) {
+        return current.filter(
+            (s) => !(s.dayOfWeek === dayOfWeek && rangeHours.includes(s.hour) && isAvailableSlot(s)),
+        );
+    }
+
+    const existingHours = new Set(
+        current.filter((s) => s.dayOfWeek === dayOfWeek && isAvailableSlot(s)).map((s) => s.hour),
+    );
+    const toAdd = rangeHours
+        .filter((h) => !existingHours.has(h))
+        .map((h) => ({ dayOfWeek, hour: h, status: 'available' as const }));
+    return [...current, ...toAdd];
+}
+
+function useGameTimeQueries(enabled: boolean, rolling: boolean) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzOffset = useMemo(() => getTimezoneOffsetMinutes(resolved), [resolved]);
-
-    // Memoize next week start so the query key is stable across renders
     const nextWeekStart = useMemo(() => getNextWeekStart(), []);
 
     const { data: gameTimeData, isLoading } = useGameTime({ enabled, tzOffset });
@@ -68,141 +110,61 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
         tzOffset,
     });
 
-    const saveGameTime = useSaveGameTime();
-    const saveOverrides = useSaveGameTimeOverrides();
-    const [editSlots, setEditSlots] = useState<GameTimeSlot[] | null>(null);
-
-    // Timezone label — uses user's preferred timezone
     const tzLabel = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
 
-    // Today / current time tracking
+    return { gameTimeData, nextWeekData, isLoading, tzLabel };
+}
+
+function useCurrentTime() {
     const [now, setNow] = useState(() => new Date());
     useEffect(() => {
         const interval = setInterval(() => setNow(new Date()), 60_000);
         return () => clearInterval(interval);
     }, []);
+    return { todayIndex: now.getDay(), currentHour: now.getHours() + now.getMinutes() / 60 };
+}
 
-    const todayIndex = now.getDay(); // 0=Sun naturally
-    const currentHour = now.getHours() + now.getMinutes() / 60;
+function deriveNextWeekSlots(nextWeekData: ReturnType<typeof useGameTime>['data']): GameTimeSlot[] | undefined {
+    if (!nextWeekData?.slots) return undefined;
+    return nextWeekData.slots.map((s: GameTimeSlot) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour, status: s.status ?? 'available' }));
+}
 
-    // Derive displayed slots
-    // In non-rolling (profile) mode:
-    //  - Filter out event-only committed slots (fromTemplate=false) — those are
-    //    injected by the composite view for calendar display, not user-set template slots.
-    //  - Remap template committed/freed → available so template slots that overlap
-    //    with events remain visible and editable in the weekly template editor.
-    const slots = useMemo<GameTimeSlot[]>(() => {
-        if (editSlots !== null) return editSlots;
-        if (!gameTimeData?.slots) return [];
-        return gameTimeData.slots
-            .filter((s: GameTimeSlot) => rolling || s.fromTemplate !== false)
-            .map((s: GameTimeSlot) => ({
-                dayOfWeek: s.dayOfWeek,
-                hour: s.hour,
-                status: (!rolling && (s.status === 'committed' || s.status === 'freed'))
-                    ? 'available'
-                    : (s.status ?? 'available'),
-            }));
-    }, [editSlots, gameTimeData, rolling]);
+function useSaveHandler(slots: GameTimeSlot[], saveGameTime: ReturnType<typeof useSaveGameTime>, setEditSlots: (v: GameTimeSlot[] | null) => void) {
+    return useCallback(async () => {
+        const templateSlots = slots.filter(isAvailableSlot).map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour }));
+        try { await saveGameTime.mutateAsync(templateSlots); setEditSlots(null); toast.success('Game time saved'); }
+        catch { toast.error('Failed to save game time'); }
+    }, [slots, saveGameTime, setEditSlots]);
+}
 
-    const events = useMemo<GameTimeEventBlock[]>(
-        () => (gameTimeData?.events as GameTimeEventBlock[]) ?? [],
-        [gameTimeData],
-    );
+export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTimeEditorReturn {
+    const enabled = options?.enabled ?? true;
+    const rolling = options?.rolling ?? false;
 
-    const nextWeekEvents = useMemo<GameTimeEventBlock[] | undefined>(
-        () => (nextWeekData?.events as GameTimeEventBlock[] | undefined),
-        [nextWeekData],
-    );
+    const { gameTimeData, nextWeekData, isLoading, tzLabel } = useGameTimeQueries(enabled, rolling);
+    const saveGameTime = useSaveGameTime();
+    const saveOverrides = useSaveGameTimeOverrides();
+    const [editSlots, setEditSlots] = useState<GameTimeSlot[] | null>(null);
+    const { todayIndex, currentHour } = useCurrentTime();
 
-    const nextWeekSlots = useMemo<GameTimeSlot[] | undefined>(() => {
-        if (!nextWeekData?.slots) return undefined;
-        return nextWeekData.slots.map((s: GameTimeSlot) => ({
-            dayOfWeek: s.dayOfWeek,
-            hour: s.hour,
-            status: s.status ?? 'available',
-        }));
-    }, [nextWeekData]);
-
-    const isDirty = editSlots !== null;
-
-    const handleChange = useCallback((newSlots: GameTimeSlot[]) => {
-        setEditSlots(newSlots);
-    }, []);
+    const slots = useMemo(() => deriveDisplaySlots(editSlots, gameTimeData, rolling), [editSlots, gameTimeData, rolling]);
+    const events = useMemo<GameTimeEventBlock[]>(() => (gameTimeData?.events as GameTimeEventBlock[]) ?? [], [gameTimeData]);
+    const nextWeekEvents = useMemo(() => nextWeekData?.events as GameTimeEventBlock[] | undefined, [nextWeekData]);
+    const nextWeekSlots = useMemo(() => deriveNextWeekSlots(nextWeekData), [nextWeekData]);
 
     const applyPreset = useCallback((dayOfWeek: number, preset: GameTimePreset) => {
         const [start, end] = PRESET_HOUR_RANGES[preset];
-        const rangeHours = Array.from({ length: end - start }, (_, i) => start + i);
-        const current = editSlots ?? slots;
-
-        const allActive = rangeHours.every((h) =>
-            current.some(
-                (s) => s.dayOfWeek === dayOfWeek && s.hour === h && (s.status === 'available' || !s.status),
-            ),
-        );
-
-        let newSlots: GameTimeSlot[];
-        if (allActive) {
-            newSlots = current.filter(
-                (s) =>
-                    !(s.dayOfWeek === dayOfWeek && rangeHours.includes(s.hour) && (s.status === 'available' || !s.status)),
-            );
-        } else {
-            const existingHours = new Set(
-                current
-                    .filter((s) => s.dayOfWeek === dayOfWeek && (s.status === 'available' || !s.status))
-                    .map((s) => s.hour),
-            );
-            const toAdd = rangeHours
-                .filter((h) => !existingHours.has(h))
-                .map((h) => ({ dayOfWeek, hour: h, status: 'available' as const }));
-            newSlots = [...current, ...toAdd];
-        }
-        setEditSlots(newSlots);
+        setEditSlots(togglePresetSlots(editSlots ?? slots, dayOfWeek, Array.from({ length: end - start }, (_, i) => start + i)));
     }, [editSlots, slots]);
 
-    const save = useCallback(async () => {
-        // Build the set of user-edited available slots.
-        // The backend preserves committed slots server-side, so the frontend
-        // only needs to send the available slots the user is managing.
-        const templateSlots = slots
-            .filter((s) => s.status === 'available' || !s.status)
-            .map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour }));
-
-        try {
-            await saveGameTime.mutateAsync(templateSlots);
-            setEditSlots(null);
-            toast.success('Game time saved');
-        } catch {
-            toast.error('Failed to save game time');
-        }
-    }, [slots, saveGameTime]);
-
-    const clear = useCallback(() => {
-        setEditSlots([]);
-    }, []);
-
-    const discard = useCallback(() => {
-        setEditSlots(null);
-    }, []);
+    const save = useSaveHandler(slots, saveGameTime, setEditSlots);
 
     return {
-        slots,
-        events,
-        nextWeekEvents,
-        nextWeekSlots,
-        isLoading,
-        weekStart: gameTimeData?.weekStart ?? '',
-        isDirty,
-        handleChange,
-        applyPreset,
-        save,
-        clear,
-        discard,
-        isSaving: saveGameTime.isPending || saveOverrides.isPending,
-        tzLabel,
-        todayIndex,
-        currentHour,
+        slots, events, nextWeekEvents, nextWeekSlots, isLoading,
+        weekStart: gameTimeData?.weekStart ?? '', isDirty: editSlots !== null,
+        handleChange: useCallback((newSlots: GameTimeSlot[]) => setEditSlots(newSlots), []),
+        applyPreset, save, clear: useCallback(() => setEditSlots([]), []), discard: useCallback(() => setEditSlots(null), []),
+        isSaving: saveGameTime.isPending || saveOverrides.isPending, tzLabel, todayIndex, currentHour,
         overrides: (gameTimeData?.overrides as Array<{ date: string; hour: number; status: string }>) ?? [],
         absences: (gameTimeData?.absences as Array<{ id: number; startDate: string; endDate: string; reason: string | null }>) ?? [],
     };

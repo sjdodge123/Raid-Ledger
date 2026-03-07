@@ -66,11 +66,7 @@ const PREFERENCES_STALE_TIME = 5 * 60 * 1000;
 export function useNotifications(limit = 20, offset = 0) {
     const queryClient = useQueryClient();
 
-    const {
-        data: notifications = [],
-        isLoading,
-        error,
-    } = useQuery({
+    const { data: notifications = [], isLoading, error } = useQuery({
         queryKey: ['notifications', limit, offset],
         queryFn: () => fetchNotifications(limit, offset),
         staleTime: NOTIFICATION_STALE_TIME,
@@ -82,28 +78,47 @@ export function useNotifications(limit = 20, offset = 0) {
         staleTime: NOTIFICATION_STALE_TIME,
     });
 
-    const markReadMutation = useMutation({
-        mutationFn: markNotificationRead,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        },
-    });
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    const markReadMutation = useMutation({ mutationFn: markNotificationRead, onSuccess: invalidate });
+    const markAllReadMutation = useMutation({ mutationFn: markAllNotificationsRead, onSuccess: invalidate });
 
-    const markAllReadMutation = useMutation({
-        mutationFn: markAllNotificationsRead,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        },
-    });
+    return { notifications, unreadCount, isLoading, error, markRead: markReadMutation.mutate, markAllRead: markAllReadMutation.mutate };
+}
 
-    return {
-        notifications,
-        unreadCount,
-        isLoading,
-        error,
-        markRead: markReadMutation.mutate,
-        markAllRead: markAllReadMutation.mutate,
+function buildOptimisticPrefs(
+    previous: NotificationPreferences,
+    input: UpdatePreferencesInput,
+): NotificationPreferences {
+    const optimistic: NotificationPreferences = {
+        ...previous,
+        channelPrefs: { ...previous.channelPrefs },
     };
+    for (const [type, channels] of Object.entries(input.channelPrefs)) {
+        const t = type as NotificationType;
+        if (optimistic.channelPrefs[t] && channels) {
+            optimistic.channelPrefs[t] = { ...optimistic.channelPrefs[t], ...channels };
+        }
+    }
+    return optimistic;
+}
+
+function usePreferencesMutation(queryClient: ReturnType<typeof useQueryClient>, queryKey: string[]) {
+    return useMutation({
+        mutationFn: patchPreferences,
+        onMutate: async (input: UpdatePreferencesInput) => {
+            await queryClient.cancelQueries({ queryKey });
+            const previous = queryClient.getQueryData<NotificationPreferences>(queryKey);
+            if (previous) queryClient.setQueryData(queryKey, buildOptimisticPrefs(previous, input));
+            return { previous };
+        },
+        onSuccess: () => toast.success('Preferences updated', { id: 'notif-prefs' }),
+        onError: (_err, _vars, context) => {
+            const prev = (context as { previous?: NotificationPreferences })?.previous;
+            if (prev) queryClient.setQueryData(queryKey, prev);
+            toast.error('Failed to update preferences', { id: 'notif-prefs' });
+        },
+        onSettled: () => queryClient.invalidateQueries({ queryKey }),
+    });
 }
 
 /** Hook for managing notification preferences with optimistic updates */
@@ -111,79 +126,9 @@ export function useNotificationPreferences() {
     const queryClient = useQueryClient();
     const queryKey = ['notifications', 'preferences'];
 
-    const {
-        data: preferences,
-        isLoading,
-        error,
-    } = useQuery({
-        queryKey,
-        queryFn: fetchPreferences,
-        staleTime: PREFERENCES_STALE_TIME,
-    });
+    const { data: preferences, isLoading, error } = useQuery({ queryKey, queryFn: fetchPreferences, staleTime: PREFERENCES_STALE_TIME });
+    const { data: channelAvailability } = useQuery({ queryKey: ['notifications', 'channels'], queryFn: fetchChannelAvailability, staleTime: PREFERENCES_STALE_TIME });
+    const updateMutation = usePreferencesMutation(queryClient, queryKey);
 
-    const { data: channelAvailability } = useQuery({
-        queryKey: ['notifications', 'channels'],
-        queryFn: fetchChannelAvailability,
-        staleTime: PREFERENCES_STALE_TIME,
-    });
-
-    const updateMutation = useMutation({
-        mutationFn: patchPreferences,
-        onMutate: async (input: UpdatePreferencesInput) => {
-            await queryClient.cancelQueries({ queryKey });
-            const previous =
-                queryClient.getQueryData<NotificationPreferences>(queryKey);
-
-            if (previous) {
-                const optimistic: NotificationPreferences = {
-                    ...previous,
-                    channelPrefs: { ...previous.channelPrefs },
-                };
-                for (const [type, channels] of Object.entries(
-                    input.channelPrefs,
-                )) {
-                    const t = type as NotificationType;
-                    if (optimistic.channelPrefs[t] && channels) {
-                        optimistic.channelPrefs[t] = {
-                            ...optimistic.channelPrefs[t],
-                            ...channels,
-                        };
-                    }
-                }
-                queryClient.setQueryData<NotificationPreferences>(
-                    queryKey,
-                    optimistic,
-                );
-            }
-            return { previous };
-        },
-        onSuccess: () => {
-            toast.success('Preferences updated', { id: 'notif-prefs' });
-        },
-        onError: (_err, _vars, context) => {
-            if (
-                (context as { previous?: NotificationPreferences })?.previous
-            ) {
-                queryClient.setQueryData(
-                    queryKey,
-                    (context as { previous: NotificationPreferences })
-                        .previous,
-                );
-            }
-            toast.error('Failed to update preferences', {
-                id: 'notif-prefs',
-            });
-        },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey });
-        },
-    });
-
-    return {
-        preferences,
-        isLoading,
-        error,
-        updatePreferences: updateMutation.mutate,
-        channelAvailability,
-    };
+    return { preferences, isLoading, error, updatePreferences: updateMutation.mutate, channelAvailability };
 }
