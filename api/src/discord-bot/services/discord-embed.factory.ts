@@ -294,22 +294,7 @@ export class DiscordEmbedFactory {
     context: EmbedContext,
     inviterUsername: string,
   ): EmbedBuilder {
-    const startDate = new Date(event.startTime);
-    const startUnix = Math.floor(startDate.getTime() / 1000);
-    const timeDisplay = `<t:${startUnix}:f> (<t:${startUnix}:R>)`;
-
-    const bodyLines: string[] = [];
-    if (event.game?.name) bodyLines.push(`\uD83C\uDFAE **${event.game.name}**`);
-    bodyLines.push(`\uD83D\uDCC6 ${timeDisplay}`);
-    if (event.voiceChannelId)
-      bodyLines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
-    if (event.description) {
-      const excerpt =
-        event.description.length > 200
-          ? event.description.slice(0, 200) + '...'
-          : event.description;
-      bodyLines.push('', excerpt);
-    }
+    const bodyLines = this.buildInviteBodyLines(event);
 
     const embed = new EmbedBuilder()
       .setColor(EMBED_COLORS.PUG_INVITE)
@@ -325,6 +310,21 @@ export class DiscordEmbedFactory {
     if (event.game?.coverUrl) embed.setThumbnail(event.game.coverUrl);
 
     return embed;
+  }
+
+  private buildInviteBodyLines(event: EmbedEventData): string[] {
+    const startUnix = Math.floor(new Date(event.startTime).getTime() / 1000);
+    const lines: string[] = [];
+    if (event.game?.name) lines.push(`\uD83C\uDFAE **${event.game.name}**`);
+    lines.push(`\uD83D\uDCC6 <t:${startUnix}:f> (<t:${startUnix}:R>)`);
+    if (event.voiceChannelId) lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
+    if (event.description) {
+      const excerpt = event.description.length > 200
+        ? event.description.slice(0, 200) + '...'
+        : event.description;
+      lines.push('', excerpt);
+    }
+    return lines;
   }
 
   private attachButtons(

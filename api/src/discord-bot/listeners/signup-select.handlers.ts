@@ -60,6 +60,20 @@ function parseRoleSelectParts(parts: string[]): {
   return { characterId, signupStatus };
 }
 
+/** Parse role values from the interaction into a reusable context. */
+function parseRoleValues(interaction: StringSelectMenuInteraction): {
+  selectedRoles: ('tank' | 'healer' | 'dps')[];
+  primaryRole: string;
+  rolesLabel: string;
+} {
+  const selectedRoles = interaction.values as ('tank' | 'healer' | 'dps')[];
+  const primaryRole = selectedRoles[0];
+  const rolesLabel = selectedRoles
+    .map((r) => r.charAt(0).toUpperCase() + r.slice(1))
+    .join(', ');
+  return { selectedRoles, primaryRole, rolesLabel };
+}
+
 /**
  * Handle role selection for signup flows.
  */
@@ -71,48 +85,44 @@ async function handleRoleSelectMenu(
   signupStatus?: 'tentative',
 ): Promise<void> {
   await interaction.deferUpdate();
-
-  const selectedRoles = interaction.values as ('tank' | 'healer' | 'dps')[];
-  const primaryRole = selectedRoles[0];
-  const rolesLabel = selectedRoles
-    .map((r) => r.charAt(0).toUpperCase() + r.slice(1))
-    .join(', ');
+  const { selectedRoles, primaryRole, rolesLabel } = parseRoleValues(interaction);
 
   try {
     if (characterId) {
       await handleLinkedRoleSelect(
-        interaction,
-        eventId,
-        deps,
-        characterId,
-        selectedRoles,
-        primaryRole,
-        rolesLabel,
-        signupStatus,
+        interaction, eventId, deps, characterId,
+        selectedRoles, primaryRole, rolesLabel, signupStatus,
       );
-      return;
+    } else {
+      await handleUnlinkedRoleSelect(
+        interaction, eventId, deps,
+        selectedRoles, primaryRole, rolesLabel, signupStatus,
+      );
     }
-
-    await handleUnlinkedRoleSelect(
-      interaction,
-      eventId,
-      deps,
-      selectedRoles,
-      primaryRole,
-      rolesLabel,
-      signupStatus,
-    );
   } catch (error) {
-    deps.logger.error(
-      `Error handling role select for event ${eventId}:`,
-      error,
-    );
+    deps.logger.error(`Error handling role select for event ${eventId}:`, error);
     await safeEditReply(
       interaction,
       { content: 'Something went wrong. Please try again.', components: [] },
       deps.logger,
     );
   }
+}
+
+type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
+
+/** Build the signup options object from selected roles. */
+function buildRoleSignupOptions(
+  selectedRoles: ('tank' | 'healer' | 'dps')[],
+  primaryRole: string,
+): { slotRole?: SlotRole; preferredRoles: ('tank' | 'healer' | 'dps')[] } {
+  if (selectedRoles.length === 1) {
+    return {
+      slotRole: primaryRole as SlotRole,
+      preferredRoles: selectedRoles,
+    };
+  }
+  return { preferredRoles: selectedRoles };
 }
 
 /**
@@ -128,13 +138,7 @@ async function handleLinkedRoleSelect(
   rolesLabel: string,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  const discordUserId = interaction.user.id;
-  const [linkedUser] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordUserId))
-    .limit(1);
-
+  const linkedUser = await findLinkedUser(interaction.user.id, deps);
   if (!linkedUser) {
     await interaction.editReply({
       content: 'Could not find your linked account. Please try again.',
@@ -143,50 +147,55 @@ async function handleLinkedRoleSelect(
     return;
   }
 
-  const signupResult = await deps.signupsService.signup(
-    eventId,
-    linkedUser.id,
-    selectedRoles.length === 1
-      ? {
-          slotRole: primaryRole as
-            | 'tank'
-            | 'healer'
-            | 'dps'
-            | 'flex'
-            | 'player'
-            | 'bench',
-          preferredRoles: selectedRoles,
-        }
-      : { preferredRoles: selectedRoles },
-  );
-  await deps.signupsService.confirmSignup(
-    eventId,
-    signupResult.id,
-    linkedUser.id,
-    { characterId },
-  );
+  const opts = buildRoleSignupOptions(selectedRoles, primaryRole);
+  await signupWithCharacter(deps, eventId, linkedUser.id, characterId, opts, signupStatus);
 
-  if (signupStatus === 'tentative') {
-    await deps.signupsService.updateStatus(
-      eventId,
-      { userId: linkedUser.id },
-      { status: 'tentative' },
-    );
-  }
-
-  const character = await deps.charactersService.findOne(
-    linkedUser.id,
-    characterId,
-  );
-
+  const character = await deps.charactersService.findOne(linkedUser.id, characterId);
   await interaction.editReply({
-    content:
-      signupStatus === 'tentative'
-        ? `You're marked as **tentative** with **${character.name}** (${rolesLabel}).`
-        : `Signed up as **${character.name}** (${rolesLabel})!`,
+    content: formatRoleConfirmation(signupStatus, character.name, rolesLabel),
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);
+}
+
+/** Sign up a user and confirm with a character, optionally marking tentative. */
+async function signupWithCharacter(
+  deps: SignupInteractionDeps,
+  eventId: number,
+  userId: number,
+  characterId: string,
+  opts: { slotRole?: SlotRole; preferredRoles?: ('tank' | 'healer' | 'dps')[] },
+  signupStatus?: 'tentative',
+): Promise<void> {
+  const signupResult = await deps.signupsService.signup(eventId, userId, opts);
+  await deps.signupsService.confirmSignup(eventId, signupResult.id, userId, { characterId });
+
+  if (signupStatus === 'tentative') {
+    await deps.signupsService.updateStatus(eventId, { userId }, { status: 'tentative' });
+  }
+}
+
+function formatRoleConfirmation(
+  signupStatus: 'tentative' | undefined,
+  charName: string,
+  rolesLabel: string,
+): string {
+  return signupStatus === 'tentative'
+    ? `You're marked as **tentative** with **${charName}** (${rolesLabel}).`
+    : `Signed up as **${charName}** (${rolesLabel})!`;
+}
+
+/** Find a linked user by Discord ID. */
+async function findLinkedUser(
+  discordUserId: string,
+  deps: SignupInteractionDeps,
+): Promise<typeof schema.users.$inferSelect | null> {
+  const [user] = await deps.db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.discordId, discordUserId))
+    .limit(1);
+  return user ?? null;
 }
 
 /**
@@ -201,53 +210,54 @@ async function handleUnlinkedRoleSelect(
   rolesLabel: string,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  const discordUserId = interaction.user.id;
-  const [linkedUser] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordUserId))
-    .limit(1);
+  const linkedUser = await findLinkedUser(interaction.user.id, deps);
 
   if (linkedUser) {
     await handleLinkedNoCharRoleSelect(
-      interaction,
-      eventId,
-      deps,
-      linkedUser,
-      selectedRoles,
-      primaryRole,
-      rolesLabel,
-      signupStatus,
+      interaction, eventId, deps, linkedUser,
+      selectedRoles, primaryRole, rolesLabel, signupStatus,
     );
     return;
   }
 
-  // Anonymous user — existing Path B behavior
+  await signupAnonymousWithRoles(
+    interaction, eventId, deps, selectedRoles, primaryRole, rolesLabel, signupStatus,
+  );
+}
+
+/** Anonymous user signup with roles (Path B). */
+async function signupAnonymousWithRoles(
+  interaction: StringSelectMenuInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+  selectedRoles: ('tank' | 'healer' | 'dps')[],
+  primaryRole: string,
+  rolesLabel: string,
+  signupStatus?: 'tentative',
+): Promise<void> {
   await deps.signupsService.signupDiscord(eventId, {
-    discordUserId,
+    discordUserId: interaction.user.id,
     discordUsername: interaction.user.username,
     discordAvatarHash: interaction.user.avatar,
-    role:
-      selectedRoles.length === 1
-        ? (primaryRole as 'tank' | 'healer' | 'dps' | 'flex' | 'player')
-        : undefined,
+    role: selectedRoles.length === 1
+      ? (primaryRole as 'tank' | 'healer' | 'dps' | 'flex' | 'player')
+      : undefined,
     preferredRoles: selectedRoles,
     status: signupStatus ?? undefined,
   });
 
-  const clientUrl = process.env.CLIENT_URL ?? '';
-  const accountLink = clientUrl
-    ? `\n[Create an account](${clientUrl}) to manage characters and get reminders.`
-    : '';
-
   await interaction.editReply({
-    content:
-      signupStatus === 'tentative'
-        ? `You're marked as **tentative** (${rolesLabel}).`
-        : `You're signed up as **${interaction.user.username}** (${rolesLabel})!${accountLink}`,
+    content: formatAnonymousRoleConfirmation(interaction.user.username, rolesLabel, signupStatus),
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);
+}
+
+function formatAnonymousRoleConfirmation(username: string, rolesLabel: string, status?: 'tentative'): string {
+  if (status === 'tentative') return `You're marked as **tentative** (${rolesLabel}).`;
+  const clientUrl = process.env.CLIENT_URL ?? '';
+  const link = clientUrl ? `\n[Create an account](${clientUrl}) to manage characters and get reminders.` : '';
+  return `You're signed up as **${username}** (${rolesLabel})!${link}`;
 }
 
 /**
@@ -263,51 +273,47 @@ async function handleLinkedNoCharRoleSelect(
   rolesLabel: string,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  await deps.signupsService.signup(
-    eventId,
-    linkedUser.id,
-    selectedRoles.length === 1
-      ? {
-          slotRole: primaryRole as
-            | 'tank'
-            | 'healer'
-            | 'dps'
-            | 'flex'
-            | 'player'
-            | 'bench',
-          preferredRoles: selectedRoles,
-        }
-      : { preferredRoles: selectedRoles },
-  );
+  const opts = buildRoleSignupOptions(selectedRoles, primaryRole);
+  await deps.signupsService.signup(eventId, linkedUser.id, opts);
 
   if (signupStatus === 'tentative') {
     await deps.signupsService.updateStatus(
-      eventId,
-      { userId: linkedUser.id },
-      { status: 'tentative' },
+      eventId, { userId: linkedUser.id }, { status: 'tentative' },
     );
   }
 
+  const eventTitle = await fetchEventTitle(eventId, deps);
+  await interaction.editReply({
+    content: formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel),
+    components: [],
+  });
+  await deps.updateEmbedSignupCount(eventId);
+}
+
+async function fetchEventTitle(
+  eventId: number,
+  deps: SignupInteractionDeps,
+): Promise<string> {
   const [event] = await deps.db
     .select()
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
     .limit(1);
+  return event?.title ?? 'the event';
+}
 
+function formatNoCharConfirmation(
+  signupStatus: 'tentative' | undefined,
+  eventTitle: string,
+  rolesLabel: string,
+): string {
   const clientUrl = process.env.CLIENT_URL ?? '';
-  let nudge = '';
-  if (clientUrl) {
-    nudge = `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`;
-  }
-
-  await interaction.editReply({
-    content:
-      signupStatus === 'tentative'
-        ? `You're marked as **tentative** for **${event?.title ?? 'the event'}** (${rolesLabel}).`
-        : `You're signed up for **${event?.title ?? 'the event'}** (${rolesLabel})!${nudge}`,
-    components: [],
-  });
-  await deps.updateEmbedSignupCount(eventId);
+  const nudge = clientUrl
+    ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
+    : '';
+  return signupStatus === 'tentative'
+    ? `You're marked as **tentative** for **${eventTitle}** (${rolesLabel}).`
+    : `You're signed up for **${eventTitle}** (${rolesLabel})!${nudge}`;
 }
 
 /**
@@ -321,94 +327,92 @@ async function handleCharacterSelectMenu(
 ): Promise<void> {
   await interaction.deferUpdate();
 
-  const characterId = interaction.values[0];
-  const discordUserId = interaction.user.id;
-
   try {
-    const [linkedUser] = await deps.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.discordId, discordUserId))
-      .limit(1);
-
-    if (!linkedUser) {
-      await interaction.editReply({
-        content: 'Could not find your linked account. Please try again.',
-        components: [],
-      });
-      return;
-    }
-
-    const [event] = await deps.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
-
-    if (event) {
-      const slotConfig = event.slotConfig as Record<string, unknown> | null;
-      if (slotConfig?.type === 'mmo') {
-        const character = await deps.charactersService.findOne(
-          linkedUser.id,
-          characterId,
-        );
-        await showRoleSelect(
-          interaction,
-          eventId,
-          deps,
-          characterId,
-          {
-            name: character.name,
-            role: character.roleOverride ?? character.role ?? null,
-          },
-          signupStatus,
-        );
-        return;
-      }
-    }
-
-    // Non-MMO: Sign up with selected character immediately
-    const signupResult = await deps.signupsService.signup(
-      eventId,
-      linkedUser.id,
-    );
-    await deps.signupsService.confirmSignup(
-      eventId,
-      signupResult.id,
-      linkedUser.id,
-      { characterId },
-    );
-
-    if (signupStatus === 'tentative') {
-      await deps.signupsService.updateStatus(
-        eventId,
-        { userId: linkedUser.id },
-        { status: 'tentative' },
-      );
-    }
-
-    const character = await deps.charactersService.findOne(
-      linkedUser.id,
-      characterId,
-    );
-
-    await interaction.editReply({
-      content:
-        signupStatus === 'tentative'
-          ? `You're marked as **tentative** with **${character.name}**.`
-          : `Signed up as **${character.name}**!`,
-      components: [],
-    });
-    await deps.updateEmbedSignupCount(eventId);
+    await processCharacterSelect(interaction, eventId, deps, signupStatus);
   } catch (error) {
-    deps.logger.error(
-      `Error handling character select for event ${eventId}:`,
-      error,
-    );
+    deps.logger.error(`Error handling character select for event ${eventId}:`, error);
     await safeEditReply(
       interaction,
       { content: 'Something went wrong. Please try again.', components: [] },
       deps.logger,
     );
   }
+}
+
+async function processCharacterSelect(
+  interaction: StringSelectMenuInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+  signupStatus?: 'tentative',
+): Promise<void> {
+  const characterId = interaction.values[0];
+  const linkedUser = await findLinkedUser(interaction.user.id, deps);
+
+  if (!linkedUser) {
+    await interaction.editReply({
+      content: 'Could not find your linked account. Please try again.',
+      components: [],
+    });
+    return;
+  }
+
+  const redirected = await tryMmoRoleRedirect(
+    interaction, eventId, deps, linkedUser.id, characterId, signupStatus,
+  );
+  if (redirected) return;
+
+  await signupWithCharacterDirect(
+    interaction, eventId, deps, linkedUser.id, characterId, signupStatus,
+  );
+}
+
+/** If event is MMO, redirect to role select. Returns true if handled. */
+async function tryMmoRoleRedirect(
+  interaction: StringSelectMenuInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+  userId: number,
+  characterId: string,
+  signupStatus?: 'tentative',
+): Promise<boolean> {
+  const [event] = await deps.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+
+  const slotConfig = event?.slotConfig as Record<string, unknown> | null;
+  if (!slotConfig || slotConfig.type !== 'mmo') return false;
+
+  const character = await deps.charactersService.findOne(userId, characterId);
+  await showRoleSelect(interaction, eventId, deps, characterId, {
+    name: character.name,
+    role: character.roleOverride ?? character.role ?? null,
+  }, signupStatus);
+  return true;
+}
+
+/** Non-MMO character signup: sign up and confirm immediately. */
+async function signupWithCharacterDirect(
+  interaction: StringSelectMenuInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+  userId: number,
+  characterId: string,
+  signupStatus?: 'tentative',
+): Promise<void> {
+  const signupResult = await deps.signupsService.signup(eventId, userId);
+  await deps.signupsService.confirmSignup(eventId, signupResult.id, userId, { characterId });
+  if (signupStatus === 'tentative') {
+    await deps.signupsService.updateStatus(eventId, { userId }, { status: 'tentative' });
+  }
+  const character = await deps.charactersService.findOne(userId, characterId);
+
+  await interaction.editReply({
+    content: signupStatus === 'tentative'
+      ? `You're marked as **tentative** with **${character.name}**.`
+      : `Signed up as **${character.name}**!`,
+    components: [],
+  });
+  await deps.updateEmbedSignupCount(eventId);
 }

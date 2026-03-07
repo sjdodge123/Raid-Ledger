@@ -47,37 +47,25 @@ function buildMmoRoster(
   emojiService: DiscordEmojiService,
 ): string {
   const sc = event.slotConfig!;
-  const tankMax = sc.tank ?? 0;
-  const healerMax = sc.healer ?? 0;
-  const dpsMax = sc.dps ?? 0;
-  const totalMax = tankMax + healerMax + dpsMax + (sc.flex ?? 0);
-  const rc = event.roleCounts ?? {};
+  const totalMax = (sc.tank ?? 0) + (sc.healer ?? 0) + (sc.dps ?? 0) + (sc.flex ?? 0);
+  const sections = buildRoleSections(sc, event.roleCounts ?? {}, emojiService);
 
-  const lines: string[] = [];
-  lines.push(`── ROSTER: ${event.signupCount}/${totalMax} ──`);
+  const lines: string[] = [`── ROSTER: ${event.signupCount}/${totalMax} ──`];
+  appendSectionLines(lines, sections, mentions, emojiService);
+  return lines.join('\n');
+}
 
-  const sections = buildRoleSections(
-    tankMax,
-    healerMax,
-    dpsMax,
-    rc,
-    emojiService,
-  );
-
+function appendSectionLines(
+  lines: string[],
+  sections: RoleSection[],
+  mentions: NonNullable<EmbedEventData['signupMentions']>,
+  emojiService: DiscordEmojiService,
+): void {
   sections.forEach((section, idx) => {
     if (idx > 0) lines.push('');
-    lines.push(
-      `${section.emoji} **${section.label}** (${section.count}/${section.max}):`,
-    );
-    const playerLines = getMentionsForRole(
-      mentions,
-      section.role,
-      emojiService,
-    );
-    lines.push(playerLines || '\u2003—');
+    lines.push(`${section.emoji} **${section.label}** (${section.count}/${section.max}):`);
+    lines.push(getMentionsForRole(mentions, section.role, emojiService) || '\u2003—');
   });
-
-  return lines.join('\n');
 }
 
 interface RoleSection {
@@ -89,41 +77,24 @@ interface RoleSection {
 }
 
 function buildRoleSections(
-  tankMax: number,
-  healerMax: number,
-  dpsMax: number,
+  sc: NonNullable<EmbedEventData['slotConfig']>,
   rc: Record<string, number>,
   emojiService: DiscordEmojiService,
 ): RoleSection[] {
-  const sections: RoleSection[] = [];
-  if (tankMax > 0) {
-    sections.push({
-      emoji: emojiService.getRoleEmoji('tank'),
-      label: 'Tanks',
-      count: rc['tank'] ?? 0,
-      max: tankMax,
-      role: 'tank',
-    });
-  }
-  if (healerMax > 0) {
-    sections.push({
-      emoji: emojiService.getRoleEmoji('healer'),
-      label: 'Healers',
-      count: rc['healer'] ?? 0,
-      max: healerMax,
-      role: 'healer',
-    });
-  }
-  if (dpsMax > 0) {
-    sections.push({
-      emoji: emojiService.getRoleEmoji('dps'),
-      label: 'DPS',
-      count: rc['dps'] ?? 0,
-      max: dpsMax,
-      role: 'dps',
-    });
-  }
-  return sections;
+  const defs: Array<[string, string, number]> = [
+    ['tank', 'Tanks', sc.tank ?? 0],
+    ['healer', 'Healers', sc.healer ?? 0],
+    ['dps', 'DPS', sc.dps ?? 0],
+  ];
+  return defs
+    .filter(([, , max]) => max > 0)
+    .map(([role, label, max]) => ({
+      emoji: emojiService.getRoleEmoji(role),
+      label,
+      count: rc[role] ?? 0,
+      max,
+      role,
+    }));
 }
 
 /**
@@ -197,13 +168,21 @@ export function buildAdHocUpdateEmbed(
   const active = participants.filter((p) => p.isActive);
   const left = participants.filter((p) => !p.isActive);
 
+  const embed = buildAdHocUpdateEmbedCore(event, active, left, context);
+  const row = buildViewButton(event.id, context.clientUrl);
+  return row ? { embed, row } : { embed };
+}
+
+function buildAdHocUpdateEmbedCore(
+  event: { title: string; gameName?: string },
+  active: Array<{ discordUserId: string }>,
+  left: Array<{ discordUserId: string }>,
+  context: EmbedContext,
+): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.LIVE_EVENT)
     .setTitle(`\uD83C\uDFAE ${event.title}`)
-    .setDescription(
-      `**Status:** LIVE` +
-        (event.gameName ? `\n**Game:** ${event.gameName}` : ''),
-    )
+    .setDescription(`**Status:** LIVE` + (event.gameName ? `\n**Game:** ${event.gameName}` : ''))
     .addFields({
       name: `\uD83D\uDC65 Active (${active.length})`,
       value: active.map((p) => `<@${p.discordUserId}>`).join(', ') || 'None',
@@ -216,12 +195,7 @@ export function buildAdHocUpdateEmbed(
     });
   }
 
-  embed.setTimestamp().setFooter({
-    text: context.communityName ?? 'Raid Ledger',
-  });
-
-  const row = buildViewButton(event.id, context.clientUrl);
-  return row ? { embed, row } : { embed };
+  return embed.setTimestamp().setFooter({ text: context.communityName ?? 'Raid Ledger' });
 }
 
 /**
@@ -242,27 +216,36 @@ export function buildAdHocCompletedEmbed(
   }>,
   context: EmbedContext,
 ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-  const start = new Date(event.startTime);
-  const end = new Date(event.endTime);
-  const durationMin = Math.round((end.getTime() - start.getTime()) / 60000);
-  const durationStr =
-    durationMin >= 60
-      ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`
-      : `${durationMin}m`;
+  const embed = buildCompletedEmbedCore(event, participants, context);
+  const row = buildViewButton(event.id, context.clientUrl);
+  return row ? { embed, row } : { embed };
+}
 
+function formatDuration(startTime: string, endTime: string): string {
+  const durationMin = Math.round(
+    (new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000,
+  );
+  return durationMin >= 60
+    ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`
+    : `${durationMin}m`;
+}
+
+function buildCompletedEmbedCore(
+  event: { title: string; gameName?: string; startTime: string; endTime: string },
+  participants: Array<{ discordUserId: string; totalDurationSeconds: number | null }>,
+  context: EmbedContext,
+): EmbedBuilder {
+  const durationStr = formatDuration(event.startTime, event.endTime);
   const rosterLines = participants.map((p) => {
-    const dur = p.totalDurationSeconds
-      ? ` (${Math.round(p.totalDurationSeconds / 60)}m)`
-      : '';
+    const dur = p.totalDurationSeconds ? ` (${Math.round(p.totalDurationSeconds / 60)}m)` : '';
     return `<@${p.discordUserId}>${dur}`;
   });
 
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setColor(EMBED_COLORS.SYSTEM)
     .setTitle(`\u2705 ${event.title} \u2014 Completed`)
     .setDescription(
-      `Session ended after **${durationStr}**` +
-        (event.gameName ? `\n**Game:** ${event.gameName}` : ''),
+      `Session ended after **${durationStr}**` + (event.gameName ? `\n**Game:** ${event.gameName}` : ''),
     )
     .addFields({
       name: `\uD83D\uDC65 Participants (${participants.length})`,
@@ -270,9 +253,6 @@ export function buildAdHocCompletedEmbed(
     })
     .setTimestamp()
     .setFooter({ text: context.communityName ?? 'Raid Ledger' });
-
-  const row = buildViewButton(event.id, context.clientUrl);
-  return row ? { embed, row } : { embed };
 }
 
 /**

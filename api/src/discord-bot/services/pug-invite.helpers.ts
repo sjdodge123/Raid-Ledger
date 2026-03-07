@@ -31,6 +31,29 @@ function formatEventTime(
   return { dateStr, timeStr };
 }
 
+/** Build description lines shared between invite embeds. */
+function buildInviteDescLines(
+  event: typeof schema.events.$inferSelect,
+  eventId: number,
+  timezone: string,
+  clientUrl: string | null,
+): string[] {
+  const { dateStr, timeStr } = formatEventTime(event.duration[0], timezone);
+  return [
+    `**${event.title}**`,
+    `\uD83D\uDCC5 ${dateStr} at ${timeStr}`,
+    '',
+    clientUrl ? `\uD83D\uDCCE [Event details](${clientUrl}/events/${eventId})` : '',
+  ].filter(Boolean);
+}
+
+/** Add optional voice channel field to an embed. */
+function addVoiceField(embed: EmbedBuilder, voiceChannelId: string | null): void {
+  if (voiceChannelId) {
+    embed.addFields({ name: 'Voice Channel', value: `<#${voiceChannelId}>`, inline: true });
+  }
+}
+
 /**
  * Build the PUG invite DM embed.
  */
@@ -43,17 +66,7 @@ export function buildPugInviteEmbed(
   timezone: string,
   voiceChannelId: string | null,
 ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
-  const { dateStr, timeStr } = formatEventTime(event.duration[0], timezone);
-
-  const descLines = [
-    `**${event.title}**`,
-    `\uD83D\uDCC5 ${dateStr} at ${timeStr}`,
-    '',
-    clientUrl
-      ? `\uD83D\uDCCE [Event details](${clientUrl}/events/${eventId})`
-      : '',
-  ].filter(Boolean);
-
+  const descLines = buildInviteDescLines(event, eventId, timezone, clientUrl);
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.PUG_INVITE)
     .setTitle(`You've been invited to a raid!`)
@@ -61,32 +74,15 @@ export function buildPugInviteEmbed(
     .setFooter({ text: communityName })
     .setTimestamp();
 
-  if (voiceChannelId) {
-    embed.addFields({
-      name: 'Voice Channel',
-      value: `<#${voiceChannelId}>`,
-      inline: true,
-    });
-  }
-
+  addVoiceField(embed, voiceChannelId);
   if (clientUrl) {
-    embed.addFields({
-      name: '\u200b',
-      value: `\uD83D\uDCAC Join ${communityName} on [Raid Ledger](${clientUrl})`,
-    });
+    embed.addFields({ name: '\u200b', value: `\uD83D\uDCAC Join ${communityName} on [Raid Ledger](${clientUrl})` });
   }
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${PUG_BUTTON_IDS.ACCEPT}:${pugSlotId}`)
-      .setLabel('Accept')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`${PUG_BUTTON_IDS.DECLINE}:${pugSlotId}`)
-      .setLabel('Decline')
-      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`${PUG_BUTTON_IDS.ACCEPT}:${pugSlotId}`).setLabel('Accept').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`${PUG_BUTTON_IDS.DECLINE}:${pugSlotId}`).setLabel('Decline').setStyle(ButtonStyle.Danger),
   );
-
   return { embed, row };
 }
 
@@ -102,17 +98,7 @@ export function buildMemberInviteEmbed(
   timezone: string,
   voiceChannelId: string | null,
 ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
-  const { dateStr, timeStr } = formatEventTime(event.duration[0], timezone);
-
-  const descLines = [
-    `**${event.title}**`,
-    `\uD83D\uDCC5 ${dateStr} at ${timeStr}`,
-    '',
-    clientUrl
-      ? `\uD83D\uDCCE [Event details](${clientUrl}/events/${eventId})`
-      : '',
-  ].filter(Boolean);
-
+  const descLines = buildInviteDescLines(event, eventId, timezone, clientUrl);
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.PUG_INVITE)
     .setTitle(`You've been invited to an event!`)
@@ -120,29 +106,16 @@ export function buildMemberInviteEmbed(
     .setFooter({ text: communityName })
     .setTimestamp();
 
-  if (voiceChannelId) {
-    embed.addFields({
-      name: 'Voice Channel',
-      value: `<#${voiceChannelId}>`,
-      inline: true,
-    });
-  }
+  addVoiceField(embed, voiceChannelId);
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(
-        `${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`,
-      )
-      .setLabel('Accept')
-      .setStyle(ButtonStyle.Success),
+      .setCustomId(`${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`)
+      .setLabel('Accept').setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(
-        `${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`,
-      )
-      .setLabel('Decline')
-      .setStyle(ButtonStyle.Danger),
+      .setCustomId(`${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`)
+      .setLabel('Decline').setStyle(ButtonStyle.Danger),
   );
-
   return { embed, row };
 }
 

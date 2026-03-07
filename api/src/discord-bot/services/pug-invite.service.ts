@@ -35,32 +35,27 @@ export class PugInviteService {
     creatorUserId?: number,
   ): Promise<void> {
     if (!this.clientService.isConnected()) return;
-
     const event = await this.getEvent(eventId);
     if (!event || event.cancelledAt) return;
-
     const pugSlot = await this.getPugSlot(pugSlotId);
     if (!pugSlot || pugSlot.status !== 'pending') return;
 
     try {
-      const member = await this.findGuildMember(discordUsername);
-      if (member) {
-        await this.handleMemberFound(pugSlotId, eventId, member, event);
-      } else {
-        await this.handleMemberNotFound(
-          pugSlotId,
-          eventId,
-          discordUsername,
-          creatorUserId,
-        );
-      }
+      await this.routePugSlot(pugSlotId, eventId, discordUsername, event, creatorUserId);
     } catch (error) {
-      this.logger.error(
-        'Failed to process PUG invite for %s (slot: %s):',
-        discordUsername,
-        pugSlotId,
-        error,
-      );
+      this.logger.error('Failed to process PUG invite for %s (slot: %s):', discordUsername, pugSlotId, error);
+    }
+  }
+
+  private async routePugSlot(
+    pugSlotId: string, eventId: number, discordUsername: string,
+    event: typeof schema.events.$inferSelect, creatorUserId?: number,
+  ): Promise<void> {
+    const member = await this.findGuildMember(discordUsername);
+    if (member) {
+      await this.handleMemberFound(pugSlotId, eventId, member, event);
+    } else {
+      await this.handleMemberNotFound(pugSlotId, eventId, discordUsername, creatorUserId);
     }
   }
 
@@ -138,33 +133,31 @@ export class PugInviteService {
     gameId?: number | null,
   ): Promise<void> {
     if (!this.clientService.isConnected()) return;
-
     const event = await this.getEvent(eventId);
     if (!event || event.cancelledAt) return;
 
-    const { communityName, clientUrl, timezone } = await this.getContext();
-
-    const voiceChannelId =
-      await this.channelResolver.resolveVoiceChannelForEvent(
-        gameId,
-        event.recurrenceGroupId,
-      );
-
+    const ctx = await this.getContext();
+    const voiceChannelId = await this.channelResolver.resolveVoiceChannelForEvent(
+      gameId, event.recurrenceGroupId,
+    );
     const { embed, row } = buildMemberInviteEmbed(
-      eventId,
-      notificationId,
-      event,
-      communityName,
-      clientUrl,
-      timezone,
-      voiceChannelId,
+      eventId, notificationId, event, ctx.communityName, ctx.clientUrl, ctx.timezone, voiceChannelId,
     );
 
+    await this.trySendDm(targetDiscordId, embed, row, 'member invite');
+  }
+
+  private async trySendDm(
+    targetDiscordId: string,
+    embed: import('discord.js').EmbedBuilder,
+    row?: import('discord.js').ActionRowBuilder<import('discord.js').ButtonBuilder>,
+    label = 'DM',
+  ): Promise<void> {
     try {
       await this.clientService.sendEmbedDM(targetDiscordId, embed, row);
     } catch (error) {
       this.logger.warn(
-        'Failed to send member invite DM to %s: %s',
+        `Failed to send ${label} DM to %s: %s`,
         targetDiscordId,
         error instanceof Error ? error.message : 'Unknown error',
       );
@@ -334,34 +327,15 @@ export class PugInviteService {
     _role: string,
     event: typeof schema.events.$inferSelect,
   ): Promise<void> {
-    const { communityName, clientUrl, timezone } = await this.getContext();
-
-    const gameId = event.gameId ?? null;
-    const voiceChannelId =
-      await this.channelResolver.resolveVoiceChannelForEvent(
-        gameId,
-        event.recurrenceGroupId,
-      );
-
+    const ctx = await this.getContext();
+    const voiceChannelId = await this.channelResolver.resolveVoiceChannelForEvent(
+      event.gameId ?? null, event.recurrenceGroupId,
+    );
     const { embed, row } = buildPugInviteEmbed(
-      pugSlotId,
-      eventId,
-      event,
-      communityName,
-      clientUrl,
-      timezone,
-      voiceChannelId,
+      pugSlotId, eventId, event, ctx.communityName, ctx.clientUrl, ctx.timezone, voiceChannelId,
     );
 
-    try {
-      await this.clientService.sendEmbedDM(discordUserId, embed, row);
-    } catch (error) {
-      this.logger.warn(
-        'Failed to send PUG invite DM to %s: %s',
-        discordUserId,
-        error instanceof Error ? error.message : 'Unknown error',
-      );
-    }
+    await this.trySendDm(discordUserId, embed, row, 'PUG invite');
   }
 
   private async getContext(): Promise<{
