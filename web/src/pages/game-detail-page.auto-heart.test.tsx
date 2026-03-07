@@ -110,7 +110,7 @@ function renderDetailPage(gameId = '42') {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4)', () => {
+describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — AC #4: Tooltip on discord-sourced hearts', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
@@ -165,6 +165,24 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4)', () =>
         expect(heartButton).not.toHaveAttribute('title');
     });
 
+});
+
+describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Button text (regression)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+            data: mockGame,
+            isLoading: false,
+            error: null,
+        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+
+        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
+            isAuthenticated: true,
+        } as ReturnType<typeof useAuthHook.useAuth>);
+    });
+
     it('does NOT show tooltip when source is undefined (not hearted)', () => {
         vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
             wantToPlay: false,
@@ -217,6 +235,24 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4)', () =>
         expect(screen.getByRole('button', { name: /remove from list/i })).toBeInTheDocument();
     });
 
+});
+
+describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Heart button not rendered when not authenticated', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+            data: mockGame,
+            isLoading: false,
+            error: null,
+        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+
+        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
+            isAuthenticated: true,
+        } as ReturnType<typeof useAuthHook.useAuth>);
+    });
+
     it('shows "Want to Play" when wantToPlay is false', () => {
         vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
             wantToPlay: false,
@@ -255,6 +291,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4)', () =>
         expect(screen.queryByRole('button', { name: /want to play/i })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /remove from list/i })).not.toBeInTheDocument();
     });
+
 });
 
 // ─── GameDetailPage — loading and error states (regression) ─────────────────

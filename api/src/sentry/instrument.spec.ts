@@ -52,12 +52,12 @@ async function loadInstrument(
   return { sentryInitMock: sentry.init };
 }
 
-describe('Sentry instrument.ts', () => {
+function describeSentryInstrumentTs() {
   afterEach(() => {
     jest.resetModules();
   });
 
-  describe('when telemetry is enabled (default)', () => {
+  function describeWhenTelemetryIsEnabled() {
     let sentryInitMock: jest.MockedFunction<
       (options?: Record<string, unknown>) => void
     >;
@@ -146,7 +146,9 @@ describe('Sentry instrument.ts', () => {
       const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
       expect(config['environment']).toBe('development');
     });
-  });
+  }
+  describe('when telemetry is enabled (default)', () =>
+    describeWhenTelemetryIsEnabled());
 
   describe('when NODE_ENV=production', () => {
     let sentryInitMock: jest.MockedFunction<
@@ -211,4 +213,5 @@ describe('Sentry instrument.ts', () => {
       expect(sentryInitMock).toHaveBeenCalledTimes(1);
     });
   });
-});
+}
+describe('Sentry instrument.ts', () => describeSentryInstrumentTs());

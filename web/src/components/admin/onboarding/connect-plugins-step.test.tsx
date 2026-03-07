@@ -61,8 +61,8 @@ describe('ConnectPluginsStep', () => {
         });
     });
 
-    describe('Error state', () => {
-        it('shows error message when plugin load fails', () => {
+    function errorStateGroup1() {
+it('shows error message when plugin load fails', () => {
             mockUsePluginAdmin.mockReturnValue({
                 ...defaultPluginAdmin,
                 plugins: { isLoading: false, isError: true, data: [] },
@@ -75,7 +75,7 @@ describe('ConnectPluginsStep', () => {
             expect(screen.getByText(/failed to load plugins/i)).toBeInTheDocument();
         });
 
-        it('shows Back and Skip buttons in error state', () => {
+it('shows Back and Skip buttons in error state', () => {
             mockUsePluginAdmin.mockReturnValue({
                 ...defaultPluginAdmin,
                 plugins: { isLoading: false, isError: true, data: [] },
@@ -89,7 +89,10 @@ describe('ConnectPluginsStep', () => {
             expect(screen.getByRole('button', { name: /skip/i })).toBeInTheDocument();
         });
 
-        it('Back button in error state has min-h-[44px]', () => {
+    }
+
+    function errorStateGroup2() {
+it('Back button in error state has min-h-[44px]', () => {
             mockUsePluginAdmin.mockReturnValue({
                 ...defaultPluginAdmin,
                 plugins: { isLoading: false, isError: true, data: [] },
@@ -102,7 +105,7 @@ describe('ConnectPluginsStep', () => {
             expect(screen.getByRole('button', { name: /back/i }).className).toContain('min-h-[44px]');
         });
 
-        it('Skip button in error state has min-h-[44px]', () => {
+it('Skip button in error state has min-h-[44px]', () => {
             mockUsePluginAdmin.mockReturnValue({
                 ...defaultPluginAdmin,
                 plugins: { isLoading: false, isError: true, data: [] },
@@ -114,6 +117,12 @@ describe('ConnectPluginsStep', () => {
 
             expect(screen.getByRole('button', { name: /skip/i }).className).toContain('min-h-[44px]');
         });
+
+    }
+
+    describe('Error state', () => {
+        errorStateGroup1();
+        errorStateGroup2();
     });
 
     describe('Stub plugin (no real plugins)', () => {
@@ -145,8 +154,8 @@ describe('ConnectPluginsStep', () => {
         });
     });
 
-    describe('Real plugins', () => {
-        it('renders real plugins when available', () => {
+    function realPluginsGroup1() {
+it('renders real plugins when available', () => {
             mockUsePluginAdmin.mockReturnValue({
                 ...defaultPluginAdmin,
                 plugins: {
@@ -176,7 +185,10 @@ describe('ConnectPluginsStep', () => {
             expect(screen.getByText('Blizzard Plugin')).toBeInTheDocument();
         });
 
-        it('shows Activate button for inactive plugins', () => {
+    }
+
+    function realPluginsGroup2() {
+it('shows Activate button for inactive plugins', () => {
             mockUsePluginAdmin.mockReturnValue({
                 ...defaultPluginAdmin,
                 plugins: {
@@ -207,6 +219,12 @@ describe('ConnectPluginsStep', () => {
             expect(activateBtn).toBeInTheDocument();
             expect(activateBtn.className).toContain('min-h-[44px]');
         });
+
+    }
+
+    describe('Real plugins', () => {
+        realPluginsGroup1();
+        realPluginsGroup2();
     });
 
     describe('Plugin card responsive layout (flex-col sm:flex-row)', () => {
@@ -224,8 +242,8 @@ describe('ConnectPluginsStep', () => {
         });
     });
 
-    describe('Navigation buttons', () => {
-        it('Back button calls onBack', () => {
+    function navigationButtonsGroup1() {
+it('Back button calls onBack', () => {
             renderWithProviders(
                 <ConnectPluginsStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -234,7 +252,7 @@ describe('ConnectPluginsStep', () => {
             expect(mockOnBack).toHaveBeenCalledOnce();
         });
 
-        it('Skip button calls onSkip', () => {
+it('Skip button calls onSkip', () => {
             renderWithProviders(
                 <ConnectPluginsStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -243,7 +261,7 @@ describe('ConnectPluginsStep', () => {
             expect(mockOnSkip).toHaveBeenCalledOnce();
         });
 
-        it('Next button calls onNext', () => {
+it('Next button calls onNext', () => {
             renderWithProviders(
                 <ConnectPluginsStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -252,7 +270,10 @@ describe('ConnectPluginsStep', () => {
             expect(mockOnNext).toHaveBeenCalledOnce();
         });
 
-        it('Back button has min-h-[44px]', () => {
+    }
+
+    function navigationButtonsGroup2() {
+it('Back button has min-h-[44px]', () => {
             renderWithProviders(
                 <ConnectPluginsStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -260,7 +281,7 @@ describe('ConnectPluginsStep', () => {
             expect(screen.getByRole('button', { name: /back/i }).className).toContain('min-h-[44px]');
         });
 
-        it('Next button has min-h-[44px]', () => {
+it('Next button has min-h-[44px]', () => {
             renderWithProviders(
                 <ConnectPluginsStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -268,12 +289,18 @@ describe('ConnectPluginsStep', () => {
             expect(screen.getByRole('button', { name: /next/i }).className).toContain('min-h-[44px]');
         });
 
-        it('Skip button has min-h-[44px]', () => {
+it('Skip button has min-h-[44px]', () => {
             renderWithProviders(
                 <ConnectPluginsStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
 
             expect(screen.getByRole('button', { name: /skip/i }).className).toContain('min-h-[44px]');
         });
+
+    }
+
+    describe('Navigation buttons', () => {
+        navigationButtonsGroup1();
+        navigationButtonsGroup2();
     });
 });

@@ -237,8 +237,8 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
 
     // ── Query invalidation after updatePreference ────────────────────────────
 
-    describe('Query invalidation after avatar selection (ROK-352)', () => {
-        it('calls invalidateQueries with auth/me key after successful updatePreference', async () => {
+    function queryInvalidationAfterAvatarSelectionGroup1() {
+it('calls invalidateQueries with auth/me key after successful updatePreference', async () => {
             vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
                 user: { ...mockUser, discordId: '123456789', avatar: 'abc123' },
                 isAuthenticated: true,
@@ -277,7 +277,10 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             });
         });
 
-        it('calls updatePreference before invalidating queries (ordering)', async () => {
+    }
+
+    function queryInvalidationAfterAvatarSelectionGroup2() {
+it('calls updatePreference before invalidating queries (ordering)', async () => {
             const callOrder: string[] = [];
             vi.mocked(apiClient.updatePreference).mockImplementationOnce(() => {
                 callOrder.push('updatePreference');
@@ -313,12 +316,18 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             await waitFor(() => expect(callOrder).toContain('invalidateQueries'));
             expect(callOrder.indexOf('updatePreference')).toBeLessThan(callOrder.indexOf('invalidateQueries'));
         });
+
+    }
+
+    describe('Query invalidation after avatar selection (ROK-352)', () => {
+        queryInvalidationAfterAvatarSelectionGroup1();
+        queryInvalidationAfterAvatarSelectionGroup2();
     });
 
     // ── Error handling ───────────────────────────────────────────────────────
 
-    describe('Error handling when updatePreference fails', () => {
-        it('shows error toast when updatePreference rejects', async () => {
+    function errorHandlingWhenUpdatePreferenceFailsGroup1() {
+it('shows error toast when updatePreference rejects', async () => {
             vi.mocked(apiClient.updatePreference).mockRejectedValueOnce(new Error('Network error'));
 
             vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
@@ -340,7 +349,10 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             });
         });
 
-        it('does NOT call invalidateQueries when updatePreference fails', async () => {
+    }
+
+    function errorHandlingWhenUpdatePreferenceFailsGroup2() {
+it('does NOT call invalidateQueries when updatePreference fails', async () => {
             vi.mocked(apiClient.updatePreference).mockRejectedValueOnce(new Error('Server error'));
 
             const queryClient = new QueryClient({
@@ -377,7 +389,10 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             expect(invalidateSpy).not.toHaveBeenCalled();
         });
 
-        it('does not crash when option URL is not in avatarOptions', () => {
+    }
+
+    function errorHandlingWhenUpdatePreferenceFailsGroup3() {
+it('does not crash when option URL is not in avatarOptions', () => {
             // handleAvatarSelect returns early if option not found — no call to updatePreference
             vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
                 user: { ...mockUser, discordId: 'local:xyz', avatar: null, customAvatarUrl: null },
@@ -391,12 +406,19 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             expect(screen.getByTestId('avatar-modal')).toBeInTheDocument();
             expect(apiClient.updatePreference).not.toHaveBeenCalled();
         });
+
+    }
+
+    describe('Error handling when updatePreference fails', () => {
+        errorHandlingWhenUpdatePreferenceFailsGroup1();
+        errorHandlingWhenUpdatePreferenceFailsGroup2();
+        errorHandlingWhenUpdatePreferenceFailsGroup3();
     });
 
     // ── Character preference selection ───────────────────────────────────────
 
-    describe('Character preference via modal', () => {
-        it('calls updatePreference with characterName when character avatar is selected', async () => {
+    function characterPreferenceViaModalGroup1() {
+it('calls updatePreference with characterName when character avatar is selected', async () => {
             vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
                 data: {
                     data: [
@@ -421,7 +443,10 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             }
         });
 
-        it('does not include characterName for discord preference type', async () => {
+    }
+
+    function characterPreferenceViaModalGroup2() {
+it('does not include characterName for discord preference type', async () => {
             vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
                 user: { ...mockUser, discordId: '123456789', avatar: 'abc123' },
                 isAuthenticated: true,
@@ -444,6 +469,12 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 });
             }
         });
+
+    }
+
+    describe('Character preference via modal', () => {
+        characterPreferenceViaModalGroup1();
+        characterPreferenceViaModalGroup2();
     });
 
     // ── No localStorage usage ────────────────────────────────────────────────

@@ -41,17 +41,10 @@ function makeBinding(overrides: Partial<ChannelBindingDto> = {}): ChannelBinding
   };
 }
 
-describe('ChannelBindingList', () => {
-  const onUpdate = vi.fn();
-  const onDelete = vi.fn();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  // ── Empty state ──────────────────────────────────────────────
-
-  it('shows empty state message when bindings array is empty', () => {
+const onUpdate = vi.fn();
+const onDelete = vi.fn();
+function channelbindinglistGroup1() {
+it('shows empty state message when bindings array is empty', () => {
     render(
       <ChannelBindingList
         bindings={[]}
@@ -67,7 +60,10 @@ describe('ChannelBindingList', () => {
     ).toBeInTheDocument();
   });
 
-  it('mentions /bind command in empty state', () => {
+}
+
+function channelbindinglistGroup2() {
+it('mentions /bind command in empty state', () => {
     render(
       <ChannelBindingList
         bindings={[]}
@@ -81,9 +77,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText('/bind')).toBeInTheDocument();
   });
 
-  // ── Single binding rendering ─────────────────────────────────
+}
 
-  it('renders the channel name for a text binding', () => {
+function channelbindinglistGroup3() {
+it('renders the channel name for a text binding', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ channelName: 'raid-announcements' })]}
@@ -97,7 +94,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText('#raid-announcements')).toBeInTheDocument();
   });
 
-  it('falls back to channelId when channelName is undefined', () => {
+}
+
+function channelbindinglistGroup4() {
+it('falls back to channelId when channelName is undefined', () => {
     render(
       <ChannelBindingList
         bindings={[
@@ -113,7 +113,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText('#ch-789')).toBeInTheDocument();
   });
 
-  it('shows "Announcements" badge for game-announcements binding', () => {
+}
+
+function channelbindinglistGroup5() {
+it('shows "Announcements" badge for game-announcements binding', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ bindingPurpose: 'game-announcements' })]}
@@ -127,7 +130,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText('Announcements')).toBeInTheDocument();
   });
 
-  it('shows "Activity Monitor" badge for game-voice-monitor binding', () => {
+}
+
+function channelbindinglistGroup6() {
+it('shows "Activity Monitor" badge for game-voice-monitor binding', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ bindingPurpose: 'game-voice-monitor' })]}
@@ -141,7 +147,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText('Activity Monitor')).toBeInTheDocument();
   });
 
-  it('shows "General Lobby" badge for general-lobby binding', () => {
+}
+
+function channelbindinglistGroup7() {
+it('shows "General Lobby" badge for general-lobby binding', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ bindingPurpose: 'general-lobby' })]}
@@ -155,7 +164,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText('General Lobby')).toBeInTheDocument();
   });
 
-  it('shows game name when binding has gameName', () => {
+}
+
+function channelbindinglistGroup8() {
+it('shows game name when binding has gameName', () => {
     render(
       <ChannelBindingList
         bindings={[
@@ -171,7 +183,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText(/World of Warcraft/)).toBeInTheDocument();
   });
 
-  it('shows "All games" when binding has no gameName', () => {
+}
+
+function channelbindinglistGroup9() {
+it('shows "All games" when binding has no gameName', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ gameName: undefined, gameId: null })]}
@@ -185,9 +200,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText(/All games/)).toBeInTheDocument();
   });
 
-  // ── Edit button ──────────────────────────────────────────────
+}
 
-  it('renders an Edit button for each binding', () => {
+function channelbindinglistGroup10() {
+it('renders an Edit button for each binding', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding()]}
@@ -201,7 +217,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
 
-  it('shows BindingConfigForm when Edit is clicked', () => {
+}
+
+function channelbindinglistGroup11() {
+it('shows BindingConfigForm when Edit is clicked', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ id: 'uuid-1' })]}
@@ -217,7 +236,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByTestId('binding-config-form')).toBeInTheDocument();
   });
 
-  it('toggles Edit button label to "Close" when form is open', () => {
+}
+
+function channelbindinglistGroup12() {
+it('toggles Edit button label to "Close" when form is open', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding()]}
@@ -233,7 +255,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   });
 
-  it('hides BindingConfigForm when Close is clicked', () => {
+}
+
+function channelbindinglistGroup13() {
+it('hides BindingConfigForm when Close is clicked', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding()]}
@@ -251,7 +276,10 @@ describe('ChannelBindingList', () => {
     expect(screen.queryByTestId('binding-config-form')).not.toBeInTheDocument();
   });
 
-  it('hides form when Cancel is clicked inside BindingConfigForm', () => {
+}
+
+function channelbindinglistGroup14() {
+it('hides form when Cancel is clicked inside BindingConfigForm', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding()]}
@@ -268,7 +296,10 @@ describe('ChannelBindingList', () => {
     expect(screen.queryByTestId('binding-config-form')).not.toBeInTheDocument();
   });
 
-  it('calls onUpdate when Save is clicked inside BindingConfigForm', () => {
+}
+
+function channelbindinglistGroup15() {
+it('calls onUpdate when Save is clicked inside BindingConfigForm', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ id: 'uuid-1' })]}
@@ -285,7 +316,10 @@ describe('ChannelBindingList', () => {
     expect(onUpdate).toHaveBeenCalledWith('uuid-1', { config: {} });
   });
 
-  it('hides form after Save is submitted', () => {
+}
+
+function channelbindinglistGroup16() {
+it('hides form after Save is submitted', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding()]}
@@ -302,9 +336,10 @@ describe('ChannelBindingList', () => {
     expect(screen.queryByTestId('binding-config-form')).not.toBeInTheDocument();
   });
 
-  // ── Delete button ────────────────────────────────────────────
+}
 
-  it('renders a Remove button for each binding', () => {
+function channelbindinglistGroup17() {
+it('renders a Remove button for each binding', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding()]}
@@ -318,7 +353,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
   });
 
-  it('calls onDelete with binding id when Remove is clicked', () => {
+}
+
+function channelbindinglistGroup18() {
+it('calls onDelete with binding id when Remove is clicked', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ id: 'uuid-1' })]}
@@ -334,7 +372,10 @@ describe('ChannelBindingList', () => {
     expect(onDelete).toHaveBeenCalledWith('uuid-1');
   });
 
-  it('disables Remove button when isDeleting and deletingId matches', () => {
+}
+
+function channelbindinglistGroup19() {
+it('disables Remove button when isDeleting and deletingId matches', () => {
     const binding = makeBinding({ id: 'uuid-1' });
 
     const { rerender } = render(
@@ -365,7 +406,10 @@ describe('ChannelBindingList', () => {
     ).toBeDisabled();
   });
 
-  it('does not disable Remove button for other bindings when one is deleting', () => {
+}
+
+function channelbindinglistGroup20() {
+it('does not disable Remove button for other bindings when one is deleting', () => {
     const bindings = [
       makeBinding({ id: 'uuid-1', channelName: 'ch1' }),
       makeBinding({ id: 'uuid-2', channelName: 'ch2', channelId: 'ch-2' }),
@@ -400,9 +444,10 @@ describe('ChannelBindingList', () => {
     expect(secondRemoveBtn).not.toBeDisabled();
   });
 
-  // ── Multiple bindings ────────────────────────────────────────
+}
 
-  it('renders all bindings in the list', () => {
+function channelbindinglistGroup21() {
+it('renders all bindings in the list', () => {
     const bindings = [
       makeBinding({ id: 'uuid-1', channelName: 'general', channelId: 'ch-1' }),
       makeBinding({ id: 'uuid-2', channelName: 'raids', channelId: 'ch-2' }),
@@ -424,7 +469,10 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText('#voice')).toBeInTheDocument();
   });
 
-  it('only opens one form at a time (closing previous when another Edit is clicked)', () => {
+}
+
+function channelbindinglistGroup22() {
+it('only opens one form at a time (closing previous when another Edit is clicked)', () => {
     const bindings = [
       makeBinding({ id: 'uuid-1', channelName: 'ch1', channelId: 'ch-1' }),
       makeBinding({ id: 'uuid-2', channelName: 'ch2', channelId: 'ch-2' }),
@@ -449,4 +497,34 @@ describe('ChannelBindingList', () => {
     const closeButton = screen.getByRole('button', { name: 'Close' });
     expect(closeButton).toBeInTheDocument();
   });
+
+}
+
+describe('ChannelBindingList', () => {
+beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+    channelbindinglistGroup1();
+    channelbindinglistGroup2();
+    channelbindinglistGroup3();
+    channelbindinglistGroup4();
+    channelbindinglistGroup5();
+    channelbindinglistGroup6();
+    channelbindinglistGroup7();
+    channelbindinglistGroup8();
+    channelbindinglistGroup9();
+    channelbindinglistGroup10();
+    channelbindinglistGroup11();
+    channelbindinglistGroup12();
+    channelbindinglistGroup13();
+    channelbindinglistGroup14();
+    channelbindinglistGroup15();
+    channelbindinglistGroup16();
+    channelbindinglistGroup17();
+    channelbindinglistGroup18();
+    channelbindinglistGroup19();
+    channelbindinglistGroup20();
+    channelbindinglistGroup21();
+    channelbindinglistGroup22();
 });

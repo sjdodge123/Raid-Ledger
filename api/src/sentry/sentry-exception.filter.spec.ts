@@ -59,7 +59,7 @@ function createMockHost(type: string): ArgumentsHost {
   } as unknown as ArgumentsHost;
 }
 
-describe('SentryExceptionFilter', () => {
+function describeSentryExceptionFilter() {
   let filter: SentryExceptionFilter;
 
   beforeEach(() => {
@@ -67,7 +67,7 @@ describe('SentryExceptionFilter', () => {
     filter = new SentryExceptionFilter();
   });
 
-  describe('HTTP context', () => {
+  function describeHTTPContext() {
     it('sends proper JSON response for HttpException (4xx)', () => {
       const { host, response } = createMockHttpHost();
       const error = new HttpException('Bad Request', HttpStatus.BAD_REQUEST);
@@ -140,9 +140,10 @@ describe('SentryExceptionFilter', () => {
       expect(response.json).not.toHaveBeenCalled();
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
-  });
+  }
+  describe('HTTP context', () => describeHTTPContext());
 
-  describe('non-HTTP context', () => {
+  function describeNonHTTPContext() {
     it('captures via Sentry SDK and re-throws for WebSocket contexts', () => {
       const host = createMockHost('ws');
       const error = new Error('ws error');
@@ -211,5 +212,7 @@ describe('SentryExceptionFilter', () => {
       expect(thrown).toBe(nonError);
       expect(Sentry.captureException).toHaveBeenCalledWith(nonError);
     });
-  });
-});
+  }
+  describe('non-HTTP context', () => describeNonHTTPContext());
+}
+describe('SentryExceptionFilter', () => describeSentryExceptionFilter());

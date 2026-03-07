@@ -3,7 +3,7 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AvailabilityService } from './availability.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
-describe('AvailabilityService', () => {
+function describeAvailabilityService() {
   let service: AvailabilityService;
   let mockDb: Record<string, jest.Mock>;
 
@@ -31,7 +31,7 @@ describe('AvailabilityService', () => {
     ] as [Date, Date],
   };
 
-  beforeEach(async () => {
+  async function beforeEachHelper() {
     mockDb = {
       select: jest.fn(),
       insert: jest.fn(),
@@ -83,7 +83,8 @@ describe('AvailabilityService', () => {
     }).compile();
 
     service = module.get<AvailabilityService>(AvailabilityService);
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   describe('findAllForUser', () => {
     it('should return all availability windows for a user', async () => {
@@ -141,7 +142,7 @@ describe('AvailabilityService', () => {
     });
   });
 
-  describe('create', () => {
+  function describeCreate() {
     it('should create an availability window', async () => {
       // Mock conflict check returns empty (no conflicts)
       mockDb.select.mockReturnValueOnce({
@@ -182,7 +183,8 @@ describe('AvailabilityService', () => {
       expect(result.conflicts).toHaveLength(1);
       expect(result.conflicts![0].status).toBe('committed');
     });
-  });
+  }
+  describe('create', () => describeCreate());
 
   describe('update', () => {
     it('should update an availability window', async () => {
@@ -218,7 +220,7 @@ describe('AvailabilityService', () => {
     });
   });
 
-  describe('checkConflicts', () => {
+  function describeCheckConflicts() {
     it('should return empty array when no conflicts', async () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
@@ -269,5 +271,7 @@ describe('AvailabilityService', () => {
 
       expect(conflicts).toHaveLength(0);
     });
-  });
-});
+  }
+  describe('checkConflicts', () => describeCheckConflicts());
+}
+describe('AvailabilityService', () => describeAvailabilityService());

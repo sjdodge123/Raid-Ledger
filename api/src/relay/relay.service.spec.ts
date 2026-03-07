@@ -9,7 +9,7 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
-describe('RelayService', () => {
+function describeRelayService() {
   let service: RelayService;
   let mockSettingsService: Partial<SettingsService>;
   let mockDb: Record<string, jest.Mock>;
@@ -46,7 +46,7 @@ describe('RelayService', () => {
     mockFetch.mockReset();
   });
 
-  describe('isConnected', () => {
+  function describeIsConnected() {
     it('should return false when relay is disabled', async () => {
       (mockSettingsService.get as jest.Mock).mockResolvedValue(null);
 
@@ -84,7 +84,8 @@ describe('RelayService', () => {
 
       expect(result).toBe(true);
     });
-  });
+  }
+  describe('isConnected', () => describeIsConnected());
 
   describe('getStatus', () => {
     it('should return disabled status by default', async () => {
@@ -147,4 +148,5 @@ describe('RelayService', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
   });
-});
+}
+describe('RelayService', () => describeRelayService());

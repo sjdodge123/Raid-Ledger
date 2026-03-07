@@ -148,7 +148,7 @@ function renderCard(event?: CalendarEvent, overlapFn?: (s: Date, e: Date) => boo
 
 // --- Tests ---
 
-describe('DayEventCard', () => {
+describe('DayEventCard — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockUser = null;
@@ -215,6 +215,19 @@ describe('DayEventCard', () => {
         expect(screen.getByText('Leave')).toBeInTheDocument();
     });
 
+});
+
+describe('DayEventCard — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = null;
+        mockIsAuthenticated = false;
+        mockRosterData = null;
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
+    });
+
     it('shows no action buttons for ended events', () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
@@ -246,6 +259,19 @@ describe('DayEventCard', () => {
 
         const tankBtn = screen.getByText('Tank 2/2');
         expect(tankBtn.closest('button')).toBeDisabled();
+    });
+
+});
+
+describe('DayEventCard — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = null;
+        mockIsAuthenticated = false;
+        mockRosterData = null;
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
     });
 
     it('button clicks stop propagation', () => {
@@ -306,6 +332,19 @@ describe('DayEventCard', () => {
         expect(mockSignupMutateAsync).not.toHaveBeenCalled();
     });
 
+});
+
+describe('DayEventCard — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = null;
+        mockIsAuthenticated = false;
+        mockRosterData = null;
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
+    });
+
     it('calls signup directly for MMO role click when game has no id', async () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
@@ -355,4 +394,5 @@ describe('DayEventCard', () => {
         renderCard();
         expect(screen.getByText('by RaidLeader')).toBeInTheDocument();
     });
+
 });

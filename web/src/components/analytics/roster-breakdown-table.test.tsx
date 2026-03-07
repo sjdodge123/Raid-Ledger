@@ -38,7 +38,7 @@ const rosterWithVoice: RosterBreakdownEntryDto[] = [
     },
 ];
 
-describe('RosterBreakdownTable', () => {
+describe('RosterBreakdownTable — part 1', () => {
     it('renders "No signups for this event." when roster is empty', () => {
         render(<RosterBreakdownTable roster={[]} hasVoiceData={false} />);
         expect(screen.getByText('No signups for this event.')).toBeInTheDocument();
@@ -110,6 +110,9 @@ describe('RosterBreakdownTable', () => {
         expect(dashes.length).toBeGreaterThanOrEqual(1);
     });
 
+});
+
+describe('RosterBreakdownTable — part 2', () => {
     it('formats voice duration in minutes correctly (2h = 2h 0m)', () => {
         // 7200 seconds = 2h 0m
         render(<RosterBreakdownTable roster={rosterWithVoice} hasVoiceData={true} />);
@@ -173,6 +176,9 @@ describe('RosterBreakdownTable', () => {
         expect(playerHeader.textContent).toContain('↑');
     });
 
+});
+
+describe('RosterBreakdownTable — part 3', () => {
     it('renders multiple roster entries', () => {
         const roster = [
             makeEntry({ userId: 1, username: 'Alice' }),
@@ -184,4 +190,5 @@ describe('RosterBreakdownTable', () => {
         expect(screen.getByText('Bob')).toBeInTheDocument();
         expect(screen.getByText('Carol')).toBeInTheDocument();
     });
+
 });

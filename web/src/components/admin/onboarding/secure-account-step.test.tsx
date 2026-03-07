@@ -78,8 +78,8 @@ describe('SecureAccountStep', () => {
         });
     });
 
-    describe('Password inputs full-width at <768px (mobile)', () => {
-        it('current password input has w-full class', () => {
+    function passwordInputsFullWidthAtGroup1() {
+it('current password input has w-full class', () => {
             const { container } = renderWithProviders(
                 <SecureAccountStep onNext={mockOnNext} onSkip={mockOnSkip} />
             );
@@ -88,7 +88,7 @@ describe('SecureAccountStep', () => {
             expect(currentInput!.className).toContain('w-full');
         });
 
-        it('new password input has w-full class', () => {
+it('new password input has w-full class', () => {
             const { container } = renderWithProviders(
                 <SecureAccountStep onNext={mockOnNext} onSkip={mockOnSkip} />
             );
@@ -97,7 +97,10 @@ describe('SecureAccountStep', () => {
             expect(newInput!.className).toContain('w-full');
         });
 
-        it('confirm password input has w-full class', () => {
+    }
+
+    function passwordInputsFullWidthAtGroup2() {
+it('confirm password input has w-full class', () => {
             const { container } = renderWithProviders(
                 <SecureAccountStep onNext={mockOnNext} onSkip={mockOnSkip} />
             );
@@ -106,7 +109,7 @@ describe('SecureAccountStep', () => {
             expect(confirmInput!.className).toContain('w-full');
         });
 
-        it('inputs have sm:max-w-md for desktop max-width constraint', () => {
+it('inputs have sm:max-w-md for desktop max-width constraint', () => {
             const { container } = renderWithProviders(
                 <SecureAccountStep onNext={mockOnNext} onSkip={mockOnSkip} />
             );
@@ -114,6 +117,12 @@ describe('SecureAccountStep', () => {
             // On desktop, max-width is constrained; on mobile it's full-width
             expect(currentInput!.className).toContain('sm:max-w-md');
         });
+
+    }
+
+    describe('Password inputs full-width at <768px (mobile)', () => {
+        passwordInputsFullWidthAtGroup1();
+        passwordInputsFullWidthAtGroup2();
     });
 
     describe('Touch target compliance (min-h-[44px])', () => {

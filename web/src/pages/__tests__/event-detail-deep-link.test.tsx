@@ -193,15 +193,8 @@ function renderPage(initialRoute: string) {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe('EventDetailPage deep-link actions (ROK-536)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        // Set as the event creator (id: 10 matches creator.id)
-        mockUser = { id: 10, username: 'Creator', role: 'member' };
-        mockIsAuthenticated = true;
-    });
-
-    it('auto-opens cancel modal from ?action=cancel', async () => {
+function eventdetailpageDeepLinkActionsROKGroup1() {
+it('auto-opens cancel modal from ?action=cancel', async () => {
         const event = createMockEvent();
         setupHandlers(event);
         renderPage('/events/42?action=cancel');
@@ -211,7 +204,7 @@ describe('EventDetailPage deep-link actions (ROK-536)', () => {
         });
     });
 
-    it('auto-opens reschedule modal from ?action=reschedule', async () => {
+it('auto-opens reschedule modal from ?action=reschedule', async () => {
         const event = createMockEvent();
         setupHandlers(event);
         renderPage('/events/42?action=reschedule');
@@ -221,7 +214,10 @@ describe('EventDetailPage deep-link actions (ROK-536)', () => {
         });
     });
 
-    it('passes decoded reason to cancel modal', async () => {
+}
+
+function eventdetailpageDeepLinkActionsROKGroup2() {
+it('passes decoded reason to cancel modal', async () => {
         const event = createMockEvent();
         setupHandlers(event);
         renderPage('/events/42?action=cancel&reason=Not%20enough%20tanks');
@@ -231,7 +227,7 @@ describe('EventDetailPage deep-link actions (ROK-536)', () => {
         });
     });
 
-    it('does NOT auto-open modal for non-creator', async () => {
+it('does NOT auto-open modal for non-creator', async () => {
         mockUser = { id: 99, username: 'Visitor', role: 'member' };
         const event = createMockEvent();
         setupHandlers(event);
@@ -243,4 +239,17 @@ describe('EventDetailPage deep-link actions (ROK-536)', () => {
         });
         expect(screen.queryByTestId('cancel-modal')).not.toBeInTheDocument();
     });
+
+}
+
+describe('EventDetailPage deep-link actions (ROK-536)', () => {
+beforeEach(() => {
+        vi.clearAllMocks();
+        // Set as the event creator (id: 10 matches creator.id)
+        mockUser = { id: 10, username: 'Creator', role: 'member' };
+        mockIsAuthenticated = true;
+    });
+
+    eventdetailpageDeepLinkActionsROKGroup1();
+    eventdetailpageDeepLinkActionsROKGroup2();
 });

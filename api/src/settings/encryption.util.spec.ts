@@ -1,6 +1,6 @@
 import { encrypt, decrypt, isEncrypted } from './encryption.util';
 
-describe('encryption.util', () => {
+function describeEncryptionUtil() {
   beforeAll(() => {
     // Ensure JWT_SECRET is set for consistent testing
     process.env.JWT_SECRET = 'test-jwt-secret-for-encryption-testing';
@@ -39,7 +39,7 @@ describe('encryption.util', () => {
     });
   });
 
-  describe('decrypt', () => {
+  function describeDecrypt() {
     it('should decrypt an encrypted value back to original', () => {
       const plaintext = 'my-secret-value';
       const encrypted = encrypt(plaintext);
@@ -90,7 +90,8 @@ describe('encryption.util', () => {
 
       expect(() => decrypt(tampered)).toThrow();
     });
-  });
+  }
+  describe('decrypt', () => describeDecrypt());
 
   describe('isEncrypted', () => {
     it('should return true for encrypted values', () => {
@@ -108,4 +109,5 @@ describe('encryption.util', () => {
       expect(isEncrypted('short:short:data')).toBe(false);
     });
   });
-});
+}
+describe('encryption.util', () => describeEncryptionUtil());

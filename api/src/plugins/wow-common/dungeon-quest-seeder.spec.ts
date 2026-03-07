@@ -2,36 +2,38 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 
-describe('DungeonQuestSeeder', () => {
-  let seeder: DungeonQuestSeeder;
-  let mockDb: {
-    insert: jest.Mock;
-    delete: jest.Mock;
+let seeder: DungeonQuestSeeder;
+let mockDb: {
+  insert: jest.Mock;
+  delete: jest.Mock;
+};
+
+async function setupEach() {
+  const mockReturning = jest.fn().mockResolvedValue([{ id: 1 }]);
+  const mockOnConflictDoNothing = jest
+    .fn()
+    .mockReturnValue({ returning: mockReturning });
+  const mockValues = jest
+    .fn()
+    .mockReturnValue({ onConflictDoNothing: mockOnConflictDoNothing });
+
+  mockDb = {
+    insert: jest.fn().mockReturnValue({ values: mockValues }),
+    delete: jest.fn().mockResolvedValue(undefined),
   };
 
-  beforeEach(async () => {
-    const mockReturning = jest.fn().mockResolvedValue([{ id: 1 }]);
-    const mockOnConflictDoNothing = jest
-      .fn()
-      .mockReturnValue({ returning: mockReturning });
-    const mockValues = jest
-      .fn()
-      .mockReturnValue({ onConflictDoNothing: mockOnConflictDoNothing });
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      DungeonQuestSeeder,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+    ],
+  }).compile();
 
-    mockDb = {
-      insert: jest.fn().mockReturnValue({ values: mockValues }),
-      delete: jest.fn().mockResolvedValue(undefined),
-    };
+  seeder = module.get<DungeonQuestSeeder>(DungeonQuestSeeder);
+}
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DungeonQuestSeeder,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-      ],
-    }).compile();
-
-    seeder = module.get<DungeonQuestSeeder>(DungeonQuestSeeder);
-  });
+describe('DungeonQuestSeeder', () => {
+  beforeEach(() => setupEach());
 
   describe('seed()', () => {
     it('should insert dungeon quests from bundled data', async () => {

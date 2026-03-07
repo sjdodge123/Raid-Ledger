@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { MagicLinkService } from './magic-link.service';
 import { UsersService } from '../users/users.service';
 
-describe('MagicLinkService', () => {
+function describeMagicLinkService() {
   let service: MagicLinkService;
   let jwtService: JwtService;
   let usersService: UsersService;
@@ -32,7 +32,7 @@ describe('MagicLinkService', () => {
     usersService = module.get<UsersService>(UsersService);
   });
 
-  describe('generateLink', () => {
+  function describeGenerateLink() {
     it('should generate a magic link for a valid user', async () => {
       const mockUser = {
         id: 1,
@@ -92,5 +92,7 @@ describe('MagicLinkService', () => {
         'https://raidledger.com/events/100/edit?token=mock-jwt-token',
       );
     });
-  });
-});
+  }
+  describe('generateLink', () => describeGenerateLink());
+}
+describe('MagicLinkService', () => describeMagicLinkService());

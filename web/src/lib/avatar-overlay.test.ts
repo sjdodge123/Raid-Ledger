@@ -11,7 +11,7 @@ vi.mock('./config', () => ({
     API_BASE_URL: 'http://localhost:3000',
 }));
 
-describe('toAvatarUser — current user overlay (ROK-352)', () => {
+describe('toAvatarUser — current user overlay (ROK-352) — part 1', () => {
     afterEach(() => {
         setCurrentUserAvatarData(null);
     });
@@ -81,6 +81,13 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.customAvatarUrl).toBe('/avatars/current-user.webp');
     });
 
+});
+
+describe('toAvatarUser — current user overlay (ROK-352) — part 2', () => {
+    afterEach(() => {
+        setCurrentUserAvatarData(null);
+    });
+
     it('does NOT overlay when user id does not match current user', () => {
         setCurrentUserAvatarData({
             id: 42,
@@ -139,6 +146,13 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.avatarPreference).toEqual({ type: 'discord' });
     });
 
+});
+
+describe('toAvatarUser — current user overlay (ROK-352) — part 3', () => {
+    afterEach(() => {
+        setCurrentUserAvatarData(null);
+    });
+
     it('overlay wins over caller null avatarPreference for current user', () => {
         setCurrentUserAvatarData({
             id: 42,
@@ -190,6 +204,13 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
 
         expect(result.type).toBe('character');
         expect(result.url).toBe('https://example.com/thrall.png');
+    });
+
+});
+
+describe('toAvatarUser — current user overlay (ROK-352) — part 4', () => {
+    afterEach(() => {
+        setCurrentUserAvatarData(null);
     });
 
     it('end-to-end: resolvedAvatarUrl overlay fixes signupsPreview without character names (ROK-414)', () => {
@@ -245,4 +266,5 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
             expect(getCurrentUserAvatarData()).toBeNull();
         });
     });
+
 });

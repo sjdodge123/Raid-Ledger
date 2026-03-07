@@ -91,7 +91,7 @@ function setupDefaultMocks(
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('UserProfilePage — ActivitySection (ROK-443)', () => {
+describe('UserProfilePage — ActivitySection (ROK-443) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -158,6 +158,13 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
         });
     });
 
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('loading state', () => {
         it('shows loading skeletons when activity is loading', () => {
             const profile = createMockProfile();
@@ -176,7 +183,14 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
         });
     });
 
-    describe('activity entries', () => {
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('activity entries — part 1', () => {
         it('renders game name for each activity entry', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
@@ -235,6 +249,16 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.getByText('1h 30m')).toBeInTheDocument();
         });
 
+    });
+
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('activity entries — part 2', () => {
         it('renders playtime in minutes only for sub-hour entries', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
@@ -291,6 +315,16 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(screen.queryByText('Most Played')).not.toBeInTheDocument();
         });
 
+    });
+
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('activity entries — part 3', () => {
         it('links each activity entry to the game detail page', () => {
             const profile = createMockProfile();
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
@@ -353,6 +387,14 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(img).toBeInTheDocument();
             expect(img).toHaveAttribute('src', 'https://example.com/cover.jpg');
         });
+
+    });
+
+});
+
+describe('UserProfilePage — ActivitySection (ROK-443) — part 6', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
     describe('period selector', () => {
@@ -406,4 +448,5 @@ describe('UserProfilePage — ActivitySection (ROK-443)', () => {
             expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(1, 'all');
         });
     });
+
 });

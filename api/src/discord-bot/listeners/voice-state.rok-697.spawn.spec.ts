@@ -93,7 +93,65 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
     };
   }
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      VoiceStateListener,
+      { provide: DiscordBotClientService, useValue: mockClientService },
+      { provide: AdHocEventService, useValue: mockAdHocEventService },
+      {
+        provide: VoiceAttendanceService,
+        useValue: {
+          findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
+          handleJoin: jest.fn(),
+          handleLeave: jest.fn(),
+          getActiveRoster: jest.fn().mockReturnValue({
+            eventId: 0,
+            participants: [],
+            activeCount: 0,
+          }),
+          recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: DepartureGraceService,
+        useValue: {
+          onMemberLeave: jest.fn().mockResolvedValue(undefined),
+          onMemberRejoin: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: ChannelBindingsService,
+        useValue: mockChannelBindingsService,
+      },
+      {
+        provide: PresenceGameDetectorService,
+        useValue: mockPresenceDetector,
+      },
+      {
+        provide: GameActivityService,
+        useValue: mockGameActivityService,
+      },
+      { provide: UsersService, useValue: mockUsersService },
+      {
+        provide: AdHocEventsGateway,
+        useValue: {
+          emitRosterUpdate: jest.fn(),
+          emitStatusChange: jest.fn(),
+          emitEndTimeExtended: jest.fn(),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     jest.useFakeTimers();
 
     mockClientService = {
@@ -131,56 +189,14 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        VoiceStateListener,
-        { provide: DiscordBotClientService, useValue: mockClientService },
-        { provide: AdHocEventService, useValue: mockAdHocEventService },
-        {
-          provide: VoiceAttendanceService,
-          useValue: {
-            findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
-            handleJoin: jest.fn(),
-            handleLeave: jest.fn(),
-            getActiveRoster: jest.fn().mockReturnValue({
-              eventId: 0,
-              participants: [],
-              activeCount: 0,
-            }),
-            recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: DepartureGraceService,
-          useValue: {
-            onMemberLeave: jest.fn().mockResolvedValue(undefined),
-            onMemberRejoin: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelBindingsService,
-          useValue: mockChannelBindingsService,
-        },
-        {
-          provide: PresenceGameDetectorService,
-          useValue: mockPresenceDetector,
-        },
-        {
-          provide: GameActivityService,
-          useValue: mockGameActivityService,
-        },
-        { provide: UsersService, useValue: mockUsersService },
-        {
-          provide: AdHocEventsGateway,
-          useValue: {
-            emitRosterUpdate: jest.fn(),
-            emitStatusChange: jest.fn(),
-            emitEndTimeExtended: jest.fn(),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     listener = module.get(VoiceStateListener);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -232,7 +248,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
   // ─── AC1: Spawn immediately with unanimous game activity ───────────────────
 
   describe('AC1: immediate spawn — all threshold players share same game (game-specific binding)', () => {
-    it('spawns event immediately when all members are detected playing the binding game', async () => {
+    async function testSpawnseventimmediatelywhenallmembersaredetected() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       // Both members playing gameId=1 → unanimous
@@ -271,9 +287,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('spawns event immediately when all members are detected playing the binding game', async () => {
+      await testSpawnseventimmediatelywhenallmembersaredetected();
     });
 
-    it('does NOT start a delayed spawn timer when game activity is unanimous', async () => {
+    async function testDoesnotstartadelayedspawntimerwhen() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       mockPresenceDetector.detectGameForMember.mockResolvedValue({
@@ -318,13 +338,17 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       expect(mockAdHocEventService.handleVoiceJoin.mock.calls.length).toBe(
         callCountAfterImmediateSpawn,
       );
+    }
+
+    it('does NOT start a delayed spawn timer when game activity is unanimous', async () => {
+      await testDoesnotstartadelayedspawntimerwhen();
     });
   });
 
   // ─── AC2: Delayed spawn — no unanimous game activity ──────────────────────
 
   describe('AC2: delayed spawn — threshold met but no unanimous game activity (game-specific binding)', () => {
-    it('does NOT spawn immediately when no game activity is detected', async () => {
+    async function testDoesnotspawnimmediatelywhennogameactivity() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       // No game activity detected
@@ -362,9 +386,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
 
       // Not spawned immediately
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('does NOT spawn immediately when no game activity is detected', async () => {
+      await testDoesnotspawnimmediatelywhennogameactivity();
     });
 
-    it('spawns event after 15-minute delay when no unanimous game activity', async () => {
+    async function testSpawnseventafter15minutedelaywhennounanimous() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       // No game activity → delayed spawn path
@@ -407,9 +435,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
 
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('spawns event after 15-minute delay when no unanimous game activity', async () => {
+      await testSpawnseventafter15minutedelaywhennounanimous();
     });
 
-    it('does NOT spawn immediately when players are playing DIFFERENT games', async () => {
+    async function testDoesnotspawnimmediatelywhenplayersareplaying() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       // First member plays binding game, second plays a different game → not unanimous
@@ -447,13 +479,17 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
 
       // Not spawned immediately
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('does NOT spawn immediately when players are playing DIFFERENT games', async () => {
+      await testDoesnotspawnimmediatelywhenplayersareplaying();
     });
   });
 
   // ─── AC3: Timer cancels on player count drop ───────────────────────────────
 
   describe('AC3: timer resets/cancels when count drops below threshold', () => {
-    it('cancels pending spawn timer when a player leaves and drops below threshold', async () => {
+    async function testCancelspendingspawntimerwhenaplayerleaves() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       // No game detected → delayed spawn
@@ -505,9 +541,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
 
       // handleVoiceJoin should NOT have been called (spawn was cancelled)
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('cancels pending spawn timer when a player leaves and drops below threshold', async () => {
+      await testCancelspendingspawntimerwhenaplayerleaves();
     });
 
-    it('does NOT fire spawn after 15 minutes when all players leave during the wait', async () => {
+    async function testDoesnotfirespawnafter15minuteswhen() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       mockPresenceDetector.detectGameForMember.mockResolvedValue({
@@ -557,13 +597,17 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       // No spawn even after 15 minutes
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    }
+
+    it('does NOT fire spawn after 15 minutes when all players leave during the wait', async () => {
+      await testDoesnotfirespawnafter15minuteswhen();
     });
   });
 
   // ─── AC4: Existing bound channel detection still applies ──────────────────
 
   describe('AC4: unbound channels do not trigger quick play or game activity checks', () => {
-    it('does not trigger game activity check or spawn for unbound channels', async () => {
+    async function testDoesnottriggergameactivitycheckorspawn() {
       // No bindings
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([]);
 
@@ -602,13 +646,17 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       // detectGameForMember should not have been called for presence check
       // (only binding resolution happens, not game detection)
       expect(mockPresenceDetector.detectGameForMember).not.toHaveBeenCalled();
+    }
+
+    it('does not trigger game activity check or spawn for unbound channels', async () => {
+      await testDoesnottriggergameactivitycheckorspawn();
     });
   });
 
   // ─── AC5: Game activity from presence data ────────────────────────────────
 
   describe('AC5: game activity is read from Discord presence data (detectGameForMember)', () => {
-    it('calls detectGameForMember to decide spawn path and spawns immediately when unanimous', async () => {
+    async function testCallsdetectgameformembertodecidespawnpathandspawns() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       // Both playing binding game → unanimous, spawn immediately
@@ -646,9 +694,13 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
 
       expect(mockPresenceDetector.detectGameForMember).toHaveBeenCalled();
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('calls detectGameForMember to decide spawn path and spawns immediately when unanimous', async () => {
+      await testCallsdetectgameformembertodecidespawnpathandspawns();
     });
 
-    it('routes to delayed path when detectGameForMember returns null for any member', async () => {
+    async function testRoutestodelayedpathwhendetectgameformemberreturnsnull() {
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       // First member playing the game, second has null gameId → not unanimous
@@ -693,6 +745,10 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       // Spawn happens after delay
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    }
+
+    it('routes to delayed path when detectGameForMember returns null for any member', async () => {
+      await testRoutestodelayedpathwhendetectgameformemberreturnsnull();
     });
   });
 

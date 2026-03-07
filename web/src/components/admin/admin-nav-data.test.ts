@@ -65,7 +65,7 @@ function makePlugin(overrides: Partial<PluginInfoDto> & { slug: string; name: st
     };
 }
 
-describe('buildPluginIntegrationItems', () => {
+describe('buildPluginIntegrationItems — part 1', () => {
     it('returns empty array for empty plugin list', () => {
         expect(buildPluginIntegrationItems([])).toHaveLength(0);
     });
@@ -126,6 +126,9 @@ describe('buildPluginIntegrationItems', () => {
         expect(items[0].newBadgeKey).toBe('integration-nav-seen:wow:bnet');
     });
 
+});
+
+describe('buildPluginIntegrationItems — part 2', () => {
     it('returns offline status for unconfigured plugin integration', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
@@ -154,9 +157,10 @@ describe('buildPluginIntegrationItems', () => {
         const items = buildPluginIntegrationItems(plugins);
         expect(items).toHaveLength(2);
     });
+
 });
 
-describe('buildDiscordNavItems', () => {
+describe('buildDiscordNavItems — part 1', () => {
     it('returns 3 items when bot is offline: Overview, Authentication, Bot', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: false },
@@ -220,6 +224,9 @@ describe('buildDiscordNavItems', () => {
         expect(bot.status).toBe('loading');
     });
 
+});
+
+describe('buildDiscordNavItems — part 2', () => {
     it('Channels and Features hidden when bot is offline', () => {
         const items = buildDiscordNavItems(
             { connected: false, connecting: false },
@@ -228,9 +235,10 @@ describe('buildDiscordNavItems', () => {
         expect(items.find((i) => i.label === 'Channels')).toBeUndefined();
         expect(items.find((i) => i.label === 'Features')).toBeUndefined();
     });
+
 });
 
-describe('buildNavSections', () => {
+describe('buildNavSections — part 1', () => {
     it('returns exactly 2 sections when no Discord items: General and Integrations', () => {
         const sections = buildNavSections([], []);
         expect(sections).toHaveLength(2);
@@ -290,6 +298,9 @@ describe('buildNavSections', () => {
         expect(labels).toContain('IGDB / Twitch');
     });
 
+});
+
+describe('buildNavSections — part 2', () => {
     it('Integrations section includes plugin items before Manage Plugins', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
@@ -315,4 +326,5 @@ describe('buildNavSections', () => {
         expect(general.children.length).toBeLessThanOrEqual(7);
         expect(general.children.length).toBe(6);
     });
+
 });

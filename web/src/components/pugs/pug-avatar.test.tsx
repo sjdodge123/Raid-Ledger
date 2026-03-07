@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PugAvatar } from './pug-avatar';
 
-describe('PugAvatar', () => {
+describe('PugAvatar — part 1', () => {
     describe('Discord CDN avatar', () => {
         it('renders Discord CDN avatar when userId and avatarHash are provided', () => {
             render(
@@ -40,6 +40,9 @@ describe('PugAvatar', () => {
         });
     });
 
+});
+
+describe('PugAvatar — part 2', () => {
     describe('initials fallback avatar', () => {
         it('renders initials when no Discord avatar is available', () => {
             render(<PugAvatar username="testplayer" />);

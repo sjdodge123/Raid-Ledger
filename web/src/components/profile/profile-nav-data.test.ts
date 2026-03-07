@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { SECTIONS } from './profile-nav-data';
 
-describe('profile-nav-data (ROK-359 consolidation)', () => {
+describe('profile-nav-data — section structure (ROK-359)', () => {
     it('has exactly 4 sections', () => {
         expect(SECTIONS).toHaveLength(4);
     });
@@ -53,7 +53,9 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         const account = SECTIONS.find((s) => s.id === 'account');
         expect(account).toBeUndefined();
     });
+});
 
+describe('profile-nav-data — invariants (ROK-359)', () => {
     it('every section has a label string', () => {
         for (const section of SECTIONS) {
             expect(typeof section.label).toBe('string');

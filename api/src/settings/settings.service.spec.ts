@@ -21,7 +21,7 @@ function makeRow(key: string, value: string) {
   };
 }
 
-describe('SettingsService — ROK-365 cache behavior', () => {
+function describeSettingsServiceROK365CacheBehavior() {
   let service: SettingsService;
   let mockDb: {
     select: jest.Mock;
@@ -78,7 +78,7 @@ describe('SettingsService — ROK-365 cache behavior', () => {
   // ============================================================
   // Cache population: single DB load for all settings
   // ============================================================
-  describe('cache population', () => {
+  function describeCachePopulation() {
     it('loads all settings from DB in a single query on first get()', async () => {
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.DISCORD_CLIENT_ID, 'id-value'),
@@ -145,12 +145,13 @@ describe('SettingsService — ROK-365 cache behavior', () => {
       expect(demo).toBe('false');
       expect(mockDb.select).toHaveBeenCalledTimes(1);
     });
-  });
+  }
+  describe('cache population', () => describeCachePopulation());
 
   // ============================================================
   // Cache invalidation on set()
   // ============================================================
-  describe('cache invalidation on set()', () => {
+  function describeCacheInvalidationOnSet() {
     it('write-through: get() returns new value immediately after set()', async () => {
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.DISCORD_CLIENT_ID, 'old-value'),
@@ -200,12 +201,14 @@ describe('SettingsService — ROK-365 cache behavior', () => {
       const exists = await service.exists(SETTING_KEYS.DEMO_MODE);
       expect(exists).toBe(true);
     });
-  });
+  }
+  describe('cache invalidation on set()', () =>
+    describeCacheInvalidationOnSet());
 
   // ============================================================
   // Cache invalidation on delete()
   // ============================================================
-  describe('cache invalidation on delete()', () => {
+  function describeCacheInvalidationOnDelete() {
     it('delete() removes key from cache immediately', async () => {
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.DISCORD_CLIENT_ID, 'some-id'),
@@ -256,12 +259,14 @@ describe('SettingsService — ROK-365 cache behavior', () => {
       const missingKey = await service.get(SETTING_KEYS.IGDB_CLIENT_SECRET);
       expect(missingKey).toBeNull();
     });
-  });
+  }
+  describe('cache invalidation on delete()', () =>
+    describeCacheInvalidationOnDelete());
 
   // ============================================================
   // TTL expiry — cache reloads from DB after 5 minutes
   // ============================================================
-  describe('TTL expiry', () => {
+  function describeTTLExpiry() {
     it('does NOT reload DB while cache is within 5-minute TTL', async () => {
       jest.useFakeTimers();
 
@@ -321,12 +326,13 @@ describe('SettingsService — ROK-365 cache behavior', () => {
       const second = await service.get(SETTING_KEYS.COMMUNITY_NAME);
       expect(second).toBe('NewName');
     });
-  });
+  }
+  describe('TTL expiry', () => describeTTLExpiry());
 
   // ============================================================
   // Concurrent load coalescing
   // ============================================================
-  describe('concurrent load coalescing', () => {
+  function describeConcurrentLoadCoalescing() {
     it('multiple simultaneous get() calls trigger only one DB load', async () => {
       let resolveLoad!: () => void;
       const loadPromise = new Promise<void>((resolve) => {
@@ -383,7 +389,9 @@ describe('SettingsService — ROK-365 cache behavior', () => {
       await service.get(SETTING_KEYS.DEMO_MODE);
       expect(mockDb.select).toHaveBeenCalledTimes(2);
     });
-  });
+  }
+  describe('concurrent load coalescing', () =>
+    describeConcurrentLoadCoalescing());
 
   // ============================================================
   // exists() uses cache
@@ -482,4 +490,6 @@ describe('SettingsService — ROK-365 cache behavior', () => {
       expect(result).toBe(false);
     });
   });
-});
+}
+describe('SettingsService — ROK-365 cache behavior', () =>
+  describeSettingsServiceROK365CacheBehavior());

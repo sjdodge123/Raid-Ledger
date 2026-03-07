@@ -303,38 +303,45 @@ describe('VoiceAttendanceService — in-memory session lifecycle', () => {
   let service: VoiceAttendanceService;
   let mockDb: MockDb;
 
-  beforeEach(async () => {
+  function buildProviders() {
+    return [
+      VoiceAttendanceService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: SettingsService,
+        useValue: { get: jest.fn().mockResolvedValue('5') },
+      },
+      {
+        provide: CronJobService,
+        useValue: {
+          executeWithTracking: jest
+            .fn()
+            .mockImplementation((_: string, fn: () => Promise<void>) => fn()),
+        },
+      },
+      {
+        provide: ChannelBindingsService,
+        useValue: { getBindings: jest.fn().mockResolvedValue([]) },
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: { getClient: jest.fn(), getGuildId: jest.fn() },
+      },
+    ];
+  }
+  async function setupBlock() {
     jest.useFakeTimers();
     mockDb = createDrizzleMock();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        VoiceAttendanceService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: SettingsService,
-          useValue: { get: jest.fn().mockResolvedValue('5') },
-        },
-        {
-          provide: CronJobService,
-          useValue: {
-            executeWithTracking: jest
-              .fn()
-              .mockImplementation((_: string, fn: () => Promise<void>) => fn()),
-          },
-        },
-        {
-          provide: ChannelBindingsService,
-          useValue: { getBindings: jest.fn().mockResolvedValue([]) },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: { getClient: jest.fn(), getGuildId: jest.fn() },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(VoiceAttendanceService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {

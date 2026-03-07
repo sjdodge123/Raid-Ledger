@@ -28,7 +28,7 @@ function createParticipant(
   };
 }
 
-describe('VoiceRoster', () => {
+describe('VoiceRoster — Empty state', () => {
   // ── Empty state ─────────────────────────────────────────────────────────────
 
   it('renders heading', () => {
@@ -111,6 +111,9 @@ describe('VoiceRoster', () => {
 
   // ── Avatar display ─────────────────────────────────────────────────────────
 
+});
+
+describe('VoiceRoster — Guest label', () => {
   it('renders discord avatar image when discordAvatarHash is present', () => {
     const withAvatar = createParticipant({
       discordAvatarHash: 'abc123',
@@ -189,6 +192,9 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('1h 30m')).toBeInTheDocument();
   });
 
+});
+
+describe('VoiceRoster — Multiple participants', () => {
   it('formats duration less than 1 minute as "<1m"', () => {
     const p = createParticipant({
       leftAt: '2026-03-01T18:00:30Z',
@@ -259,6 +265,9 @@ describe('VoiceRoster', () => {
     expect(screen.getByText('Gamma')).toBeInTheDocument();
   });
 
+});
+
+describe('VoiceRoster — part 4', () => {
   it('handles many left participants without errors', () => {
     const participants = Array.from({ length: 10 }, (_, i) =>
       createParticipant({
@@ -275,4 +284,5 @@ describe('VoiceRoster', () => {
 
     expect(screen.getByText(/Left \(10\)/)).toBeInTheDocument();
   });
+
 });

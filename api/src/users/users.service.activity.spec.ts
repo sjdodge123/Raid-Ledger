@@ -7,7 +7,7 @@ import { UsersService } from './users.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
-describe('UsersService.getUserActivity (ROK-443)', () => {
+function describeUsersServiceGetUserActivity() {
   let service: UsersService;
   let mockDb: MockDb;
 
@@ -42,7 +42,7 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
     },
   ];
 
-  describe('privacy filtering', () => {
+  function describePrivacyFiltering() {
     it('should return empty array when show_activity is false and requester is different user', async () => {
       // Simulate user preference: show_activity = false
       (mockDb.query as any).userPreferences = {
@@ -122,9 +122,10 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
       // show_activity=false, different user (undefined !== 1), so empty
       expect(result).toEqual([]);
     });
-  });
+  }
+  describe('privacy filtering', () => describePrivacyFiltering());
 
-  describe('period filtering', () => {
+  function describePeriodFiltering() {
     beforeEach(() => {
       (mockDb.query as any).userPreferences = {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -171,9 +172,10 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
 
       expect(mockDb.groupBy).toHaveBeenCalled();
     });
-  });
+  }
+  describe('period filtering', () => describePeriodFiltering());
 
-  describe('result transformation', () => {
+  function describeResultTransformation() {
     beforeEach(() => {
       (mockDb.query as any).userPreferences = {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -243,5 +245,8 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
       expect(result[0].isMostPlayed).toBe(true);
       expect(result.slice(1).every((r) => !r.isMostPlayed)).toBe(true);
     });
-  });
-});
+  }
+  describe('result transformation', () => describeResultTransformation());
+}
+describe('UsersService.getUserActivity (ROK-443)', () =>
+  describeUsersServiceGetUserActivity());

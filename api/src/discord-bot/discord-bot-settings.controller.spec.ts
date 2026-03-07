@@ -8,691 +8,642 @@ import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
-describe('DiscordBotSettingsController', () => {
-  let controller: DiscordBotSettingsController;
-  let discordBotService: DiscordBotService;
-  let discordBotClientService: DiscordBotClientService;
-  let settingsService: SettingsService;
+let controller: DiscordBotSettingsController;
+let discordBotService: DiscordBotService;
+let discordBotClientService: DiscordBotClientService;
+let settingsService: SettingsService;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [DiscordBotSettingsController],
-      providers: [
-        {
-          provide: DiscordBotService,
-          useValue: {
-            getStatus: jest.fn(),
-            testToken: jest.fn(),
-            ensureConnected: jest.fn().mockResolvedValue(undefined),
-            getSetupStatus: jest.fn(),
-          },
+function buildModule() {
+  return Test.createTestingModule({
+    controllers: [DiscordBotSettingsController],
+    providers: [
+      {
+        provide: DiscordBotService,
+        useValue: {
+          getStatus: jest.fn(),
+          testToken: jest.fn(),
+          ensureConnected: jest.fn().mockResolvedValue(undefined),
+          getSetupStatus: jest.fn(),
         },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            getTextChannels: jest.fn(),
-            getVoiceChannels: jest.fn(),
-            isConnected: jest.fn().mockReturnValue(true),
-            disconnect: jest.fn().mockResolvedValue(undefined),
-            connect: jest.fn().mockResolvedValue(undefined),
-            sendEmbed: jest.fn().mockResolvedValue(undefined),
-          },
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          getTextChannels: jest.fn(),
+          getVoiceChannels: jest.fn(),
+          isConnected: jest.fn().mockReturnValue(true),
+          disconnect: jest.fn().mockResolvedValue(undefined),
+          connect: jest.fn().mockResolvedValue(undefined),
+          sendEmbed: jest.fn().mockResolvedValue(undefined),
         },
-        {
-          provide: DiscordEmojiService,
-          useValue: {
-            syncAllEmojis: jest.fn().mockResolvedValue(undefined),
-            isUsingCustomEmojis: jest.fn().mockReturnValue(false),
-          },
+      },
+      {
+        provide: DiscordEmojiService,
+        useValue: {
+          syncAllEmojis: jest.fn().mockResolvedValue(undefined),
+          isUsingCustomEmojis: jest.fn().mockReturnValue(false),
         },
-        {
-          provide: SettingsService,
-          useValue: {
-            setDiscordBotConfig: jest.fn(),
-            getDiscordBotConfig: jest.fn(),
-            clearDiscordBotConfig: jest.fn(),
-            getDiscordBotDefaultChannel: jest.fn(),
-            setDiscordBotDefaultChannel: jest.fn(),
-            getDiscordBotDefaultVoiceChannel: jest.fn(),
-            setDiscordBotDefaultVoiceChannel: jest.fn(),
-            getAdHocEventsEnabled: jest.fn(),
-            setAdHocEventsEnabled: jest.fn(),
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Community',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
-          },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          setDiscordBotConfig: jest.fn(),
+          getDiscordBotConfig: jest.fn(),
+          clearDiscordBotConfig: jest.fn(),
+          getDiscordBotDefaultChannel: jest.fn(),
+          setDiscordBotDefaultChannel: jest.fn(),
+          getDiscordBotDefaultVoiceChannel: jest.fn(),
+          setDiscordBotDefaultVoiceChannel: jest.fn(),
+          getAdHocEventsEnabled: jest.fn(),
+          setAdHocEventsEnabled: jest.fn(),
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Community',
+            communityLogoPath: null,
+            communityAccentColor: null,
+          }),
+          getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
         },
+      },
+      {
+        provide: CharactersService,
+        useValue: { findAllForUser: jest.fn() },
+      },
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: {},
+      },
+    ],
+  }).compile();
+}
+
+beforeEach(async () => {
+  const module: TestingModule = await buildModule();
+
+  controller = module.get<DiscordBotSettingsController>(
+    DiscordBotSettingsController,
+  );
+  discordBotService = module.get<DiscordBotService>(DiscordBotService);
+  discordBotClientService = module.get<DiscordBotClientService>(
+    DiscordBotClientService,
+  );
+  settingsService = module.get<SettingsService>(SettingsService);
+});
+
+afterEach(() => {
+  jest.clearAllMocks();
+});
+
+describe('DiscordBotSettingsController — getStatus', () => {
+  it('should return bot status', async () => {
+    const mockStatus = {
+      configured: true,
+      connected: true,
+      guildName: 'Test Guild',
+      memberCount: 100,
+    };
+
+    jest.spyOn(discordBotService, 'getStatus').mockResolvedValue(mockStatus);
+
+    const result = await controller.getStatus();
+
+    expect(result).toEqual(mockStatus);
+    expect(discordBotService.getStatus).toHaveBeenCalled();
+  });
+});
+
+describe('DiscordBotSettingsController — updateConfig: valid inputs', () => {
+  it('should update config and return success when enabled', async () => {
+    const body = { botToken: 'new-bot-token', enabled: true };
+
+    const result = await controller.updateConfig(body);
+
+    expect(settingsService.setDiscordBotConfig).toHaveBeenCalledWith(
+      'new-bot-token',
+      true,
+    );
+    expect(result).toEqual({ success: true, message: 'Configuration saved.' });
+  });
+
+  it('should update config and return success when disabled', async () => {
+    const body = { botToken: 'new-bot-token', enabled: false };
+
+    const result = await controller.updateConfig(body);
+
+    expect(settingsService.setDiscordBotConfig).toHaveBeenCalledWith(
+      'new-bot-token',
+      false,
+    );
+    expect(result).toEqual({ success: true, message: 'Configuration saved.' });
+  });
+
+  it('should accept enabled=false as valid', async () => {
+    const body = { botToken: 'token', enabled: false };
+
+    const result = await controller.updateConfig(body);
+
+    expect(result.success).toBe(true);
+    expect(settingsService.setDiscordBotConfig).toHaveBeenCalledWith(
+      'token',
+      false,
+    );
+  });
+});
+
+describe('DiscordBotSettingsController — updateConfig: validation errors', () => {
+  it('should throw validation error when botToken is empty', async () => {
+    const body = { botToken: '', enabled: true };
+
+    await expect(controller.updateConfig(body)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
+  });
+
+  it('should throw validation error when enabled is not boolean', async () => {
+    const body = { botToken: 'token', enabled: 'true' as unknown as boolean };
+
+    await expect(controller.updateConfig(body)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
+  });
+
+  it('should throw validation error when enabled is undefined', async () => {
+    const body = {
+      botToken: 'token',
+      enabled: undefined as unknown as boolean,
+    };
+
+    await expect(controller.updateConfig(body)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
+  });
+});
+
+describe('DiscordBotSettingsController — updateConfig: ensureConnected', () => {
+  it('should trigger ensureConnected after saving config', async () => {
+    const body = { botToken: 'new-bot-token', enabled: true };
+
+    await controller.updateConfig(body);
+
+    expect(discordBotService.ensureConnected).toHaveBeenCalledWith({
+      token: 'new-bot-token',
+      enabled: true,
+    });
+  });
+
+  it('should trigger ensureConnected even when disabled (ensureConnected handles skip)', async () => {
+    const body = { botToken: 'new-bot-token', enabled: false };
+
+    await controller.updateConfig(body);
+
+    expect(discordBotService.ensureConnected).toHaveBeenCalledWith({
+      token: 'new-bot-token',
+      enabled: false,
+    });
+  });
+});
+
+describe('DiscordBotSettingsController — testConnection: with provided token', () => {
+  it('should test provided token', async () => {
+    const body = { botToken: 'test-token' };
+    const mockResult = {
+      success: true,
+      guildName: 'Test Guild',
+      message: 'Connected to Test Guild (50 members)',
+    };
+
+    jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
+
+    const result = await controller.testConnection(body);
+
+    expect(discordBotService.testToken).toHaveBeenCalledWith('test-token');
+    expect(result).toEqual(mockResult);
+  });
+
+  it('should prefer provided token over stored config', async () => {
+    const body = { botToken: 'provided-token' };
+    const mockConfig = { token: 'stored-token', enabled: true };
+    const mockResult = { success: true, message: 'Connected' };
+
+    jest
+      .spyOn(settingsService, 'getDiscordBotConfig')
+      .mockResolvedValue(mockConfig);
+    jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
+
+    await controller.testConnection(body);
+
+    expect(discordBotService.testToken).toHaveBeenCalledWith('provided-token');
+    expect(settingsService.getDiscordBotConfig).not.toHaveBeenCalled();
+  });
+});
+
+describe('DiscordBotSettingsController — testConnection: stored token fallback', () => {
+  it('should use stored token when no token provided', async () => {
+    const body = {};
+    const mockConfig = { token: 'stored-token', enabled: true };
+    const mockResult = { success: true, message: 'Connected' };
+
+    jest
+      .spyOn(settingsService, 'getDiscordBotConfig')
+      .mockResolvedValue(mockConfig);
+    jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
+
+    const result = await controller.testConnection(body);
+
+    expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
+    expect(discordBotService.testToken).toHaveBeenCalledWith('stored-token');
+    expect(result).toEqual(mockResult);
+  });
+
+  it('should return error when no token and no config', async () => {
+    jest.spyOn(settingsService, 'getDiscordBotConfig').mockResolvedValue(null);
+
+    const result = await controller.testConnection({});
+
+    expect(result).toEqual({
+      success: false,
+      message: 'No bot token configured',
+    });
+    expect(discordBotService.testToken).not.toHaveBeenCalled();
+  });
+
+  it('should handle empty string token by falling back to stored config', async () => {
+    const body = { botToken: '' };
+    const mockConfig = { token: 'stored-token', enabled: true };
+    const mockResult = { success: true, message: 'Connected' };
+
+    jest
+      .spyOn(settingsService, 'getDiscordBotConfig')
+      .mockResolvedValue(mockConfig);
+    jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
+
+    await controller.testConnection(body);
+
+    expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
+    expect(discordBotService.testToken).toHaveBeenCalledWith('stored-token');
+  });
+});
+
+describe('DiscordBotSettingsController — testConnection: validation', () => {
+  it('should throw validation error when body is undefined', async () => {
+    await expect(
+      controller.testConnection(undefined as unknown as Record<string, string>),
+    ).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('DiscordBotSettingsController — clearConfig', () => {
+  it('should clear config and return success', async () => {
+    const result = await controller.clearConfig();
+
+    expect(settingsService.clearDiscordBotConfig).toHaveBeenCalled();
+    expect(result).toEqual({
+      success: true,
+      message: 'Discord bot configuration cleared.',
+    });
+  });
+
+  it('should handle errors during clear', async () => {
+    jest
+      .spyOn(settingsService, 'clearDiscordBotConfig')
+      .mockRejectedValue(new Error('Database error'));
+
+    await expect(controller.clearConfig()).rejects.toThrow('Database error');
+  });
+});
+
+describe('DiscordBotSettingsController — getChannels', () => {
+  it('should return text channels from the client service', () => {
+    const mockChannels = [
+      { id: '123', name: 'general' },
+      { id: '456', name: 'raids' },
+    ];
+    jest
+      .spyOn(discordBotClientService, 'getTextChannels')
+      .mockReturnValue(mockChannels);
+
+    const result = controller.getChannels();
+
+    expect(result).toEqual(mockChannels);
+    expect(discordBotClientService.getTextChannels).toHaveBeenCalled();
+  });
+
+  it('should return empty array when bot is not connected', () => {
+    jest.spyOn(discordBotClientService, 'getTextChannels').mockReturnValue([]);
+
+    const result = controller.getChannels();
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe('DiscordBotSettingsController — getDefaultChannel', () => {
+  it('should return the default channel ID', async () => {
+    jest
+      .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+      .mockResolvedValue('123456');
+
+    const result = await controller.getDefaultChannel();
+
+    expect(result).toEqual({ channelId: '123456' });
+  });
+
+  it('should return null when no default channel is set', async () => {
+    jest
+      .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+      .mockResolvedValue(null);
+
+    const result = await controller.getDefaultChannel();
+
+    expect(result).toEqual({ channelId: null });
+  });
+});
+
+describe('DiscordBotSettingsController — setDefaultChannel: success', () => {
+  it('should set the default channel and return success', async () => {
+    const result = await controller.setDefaultChannel({
+      channelId: '123456',
+    });
+
+    expect(settingsService.setDiscordBotDefaultChannel).toHaveBeenCalledWith(
+      '123456',
+    );
+    expect(result).toEqual({
+      success: true,
+      message: 'Default channel updated.',
+    });
+  });
+});
+
+describe('DiscordBotSettingsController — setDefaultChannel: validation', () => {
+  it('should throw BadRequestException when channelId is missing', async () => {
+    await expect(controller.setDefaultChannel({})).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(settingsService.setDiscordBotDefaultChannel).not.toHaveBeenCalled();
+  });
+
+  it('should throw BadRequestException when channelId is empty string', async () => {
+    await expect(
+      controller.setDefaultChannel({ channelId: '' }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should throw BadRequestException when channelId is not a string', async () => {
+    await expect(
+      controller.setDefaultChannel({ channelId: 123 }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should throw BadRequestException when body is null', async () => {
+    await expect(controller.setDefaultChannel(null)).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-471: Voice channel endpoints
+// ---------------------------------------------------------------------------
+describe('DiscordBotSettingsController — getVoiceChannels', () => {
+  it('should return voice channels from the client service (AC-8)', () => {
+    const mockVoiceChannels = [
+      { id: '111', name: 'General Voice' },
+      { id: '222', name: 'Raid Voice' },
+    ];
+    jest
+      .spyOn(discordBotClientService, 'getVoiceChannels')
+      .mockReturnValue(mockVoiceChannels);
+
+    const result = controller.getVoiceChannels();
+
+    expect(result).toEqual(mockVoiceChannels);
+    expect(discordBotClientService.getVoiceChannels).toHaveBeenCalled();
+  });
+
+  it('should return empty array when bot is not connected', () => {
+    jest.spyOn(discordBotClientService, 'getVoiceChannels').mockReturnValue([]);
+
+    const result = controller.getVoiceChannels();
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe('DiscordBotSettingsController — getDefaultVoiceChannel', () => {
+  it('should return the configured default voice channel ID (AC-8)', async () => {
+    jest
+      .spyOn(settingsService, 'getDiscordBotDefaultVoiceChannel')
+      .mockResolvedValue('voice-ch-123');
+
+    const result = await controller.getDefaultVoiceChannel();
+
+    expect(result).toEqual({ channelId: 'voice-ch-123' });
+  });
+
+  it('should return null when no default voice channel is set', async () => {
+    jest
+      .spyOn(settingsService, 'getDiscordBotDefaultVoiceChannel')
+      .mockResolvedValue(null);
+
+    const result = await controller.getDefaultVoiceChannel();
+
+    expect(result).toEqual({ channelId: null });
+  });
+});
+
+describe('DiscordBotSettingsController — setDefaultVoiceChannel: success', () => {
+  it('should set the default voice channel and return success (AC-8)', async () => {
+    jest
+      .spyOn(settingsService, 'setDiscordBotDefaultVoiceChannel')
+      .mockResolvedValue(undefined);
+
+    const result = await controller.setDefaultVoiceChannel({
+      channelId: 'voice-ch-456',
+    });
+
+    expect(
+      settingsService.setDiscordBotDefaultVoiceChannel,
+    ).toHaveBeenCalledWith('voice-ch-456');
+    expect(result).toEqual({
+      success: true,
+      message: 'Default voice channel updated.',
+    });
+  });
+});
+
+describe('DiscordBotSettingsController — setDefaultVoiceChannel: validation', () => {
+  it('should throw BadRequestException when channelId is missing', async () => {
+    await expect(controller.setDefaultVoiceChannel({})).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(
+      settingsService.setDiscordBotDefaultVoiceChannel,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('should throw BadRequestException when channelId is empty string', async () => {
+    await expect(
+      controller.setDefaultVoiceChannel({ channelId: '' }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should throw BadRequestException when channelId is not a string', async () => {
+    await expect(
+      controller.setDefaultVoiceChannel({ channelId: 123 }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should throw BadRequestException when body is null', async () => {
+    await expect(controller.setDefaultVoiceChannel(null)).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('should throw BadRequestException when body is undefined', async () => {
+    await expect(controller.setDefaultVoiceChannel(undefined)).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-430: New endpoints — setup-status, reconnect, test-message
+// ---------------------------------------------------------------------------
+
+describe('DiscordBotSettingsController — getSetupStatus', () => {
+  it('should delegate to discordBotService.getSetupStatus', async () => {
+    const mockStatus = {
+      steps: [
         {
-          provide: CharactersService,
-          useValue: { findAllForUser: jest.fn() },
-        },
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: {},
+          key: 'oauth',
+          label: 'Configure Discord OAuth',
+          completed: true,
+          settingsPath: '/admin/settings/discord/auth',
         },
       ],
-    }).compile();
+      overallComplete: false,
+      completedCount: 1,
+      totalCount: 5,
+    };
+    jest
+      .spyOn(discordBotService, 'getSetupStatus')
+      .mockResolvedValue(mockStatus);
 
-    controller = module.get<DiscordBotSettingsController>(
-      DiscordBotSettingsController,
+    const result = await controller.getSetupStatus();
+
+    expect(discordBotService.getSetupStatus).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      completedCount: expect.any(Number),
+      totalCount: expect.any(Number),
+      overallComplete: expect.any(Boolean),
+      steps: expect.any(Array),
+    });
+  });
+});
+
+describe('DiscordBotSettingsController — reconnect', () => {
+  it('should disconnect and reconnect the bot when config exists', async () => {
+    jest
+      .spyOn(settingsService, 'getDiscordBotConfig')
+      .mockResolvedValue({ token: 'bot-token-123', enabled: true });
+
+    const result = await controller.reconnect();
+
+    expect(discordBotClientService.disconnect).toHaveBeenCalled();
+    expect(discordBotClientService.connect).toHaveBeenCalledWith(
+      'bot-token-123',
     );
-    discordBotService = module.get<DiscordBotService>(DiscordBotService);
-    discordBotClientService = module.get<DiscordBotClientService>(
-      DiscordBotClientService,
+    expect(result).toMatchObject({ success: true });
+  });
+
+  it('should throw BadRequestException when no bot token is configured', async () => {
+    jest.spyOn(settingsService, 'getDiscordBotConfig').mockResolvedValue(null);
+
+    await expect(controller.reconnect()).rejects.toThrow(BadRequestException);
+    expect(discordBotClientService.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('should return success=false when reconnect throws', async () => {
+    jest
+      .spyOn(settingsService, 'getDiscordBotConfig')
+      .mockResolvedValue({ token: 'bot-token-123', enabled: true });
+    jest
+      .spyOn(discordBotClientService, 'connect')
+      .mockRejectedValue(new Error('Connection refused'));
+
+    const result = await controller.reconnect();
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Connection refused');
+  });
+});
+
+describe('DiscordBotSettingsController — sendTestMessage: guards', () => {
+  it('should throw BadRequestException when bot is not connected', async () => {
+    jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(false);
+
+    await expect(controller.sendTestMessage()).rejects.toThrow(
+      BadRequestException,
     );
-    settingsService = module.get<SettingsService>(SettingsService);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('should throw BadRequestException when no default channel is set', async () => {
+    jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
+    jest
+      .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+      .mockResolvedValue(null);
+
+    await expect(controller.sendTestMessage()).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+});
+
+describe('DiscordBotSettingsController — sendTestMessage: execution', () => {
+  it('should send embed to default channel and return success', async () => {
+    jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
+    jest
+      .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+      .mockResolvedValue('channel-123');
+    jest.spyOn(settingsService, 'getBranding').mockResolvedValue({
+      communityName: 'My Guild',
+      communityLogoPath: null,
+      communityAccentColor: null,
+    });
+    jest
+      .spyOn(settingsService, 'getClientUrl')
+      .mockResolvedValue('https://myguild.example.com');
+
+    const result = await controller.sendTestMessage();
+
+    expect(discordBotClientService.sendEmbed).toHaveBeenCalledWith(
+      'channel-123',
+      expect.anything(),
+    );
+    expect(result).toMatchObject({ success: true });
   });
 
-  describe('getStatus', () => {
-    it('should return bot status', async () => {
-      const mockStatus = {
-        configured: true,
-        connected: true,
-        guildName: 'Test Guild',
-        memberCount: 100,
-      };
-
-      jest.spyOn(discordBotService, 'getStatus').mockResolvedValue(mockStatus);
-
-      const result = await controller.getStatus();
-
-      expect(result).toEqual(mockStatus);
-      expect(discordBotService.getStatus).toHaveBeenCalled();
+  it('should return success=false when sendEmbed throws', async () => {
+    jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
+    jest
+      .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+      .mockResolvedValue('channel-123');
+    jest.spyOn(settingsService, 'getBranding').mockResolvedValue({
+      communityName: 'My Guild',
+      communityLogoPath: null,
+      communityAccentColor: null,
     });
-  });
-
-  describe('updateConfig', () => {
-    it('should update config and return success when enabled', async () => {
-      const body = {
-        botToken: 'new-bot-token',
-        enabled: true,
-      };
-
-      const result = await controller.updateConfig(body);
-
-      expect(settingsService.setDiscordBotConfig).toHaveBeenCalledWith(
-        'new-bot-token',
-        true,
-      );
-      expect(result).toEqual({
-        success: true,
-        message: 'Configuration saved.',
-      });
-    });
-
-    it('should update config and return success when disabled', async () => {
-      const body = {
-        botToken: 'new-bot-token',
-        enabled: false,
-      };
-
-      const result = await controller.updateConfig(body);
-
-      expect(settingsService.setDiscordBotConfig).toHaveBeenCalledWith(
-        'new-bot-token',
-        false,
-      );
-      expect(result).toEqual({
-        success: true,
-        message: 'Configuration saved.',
-      });
-    });
-
-    it('should throw validation error when botToken is empty', async () => {
-      const body = {
-        botToken: '',
-        enabled: true,
-      };
-
-      await expect(controller.updateConfig(body)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
-    });
-
-    it('should throw validation error when enabled is not boolean', async () => {
-      const body = {
-        botToken: 'token',
-        enabled: 'true' as unknown as boolean,
-      };
-
-      await expect(controller.updateConfig(body)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
-    });
-
-    it('should throw validation error when enabled is undefined', async () => {
-      const body = {
-        botToken: 'token',
-        enabled: undefined as unknown as boolean,
-      };
-
-      await expect(controller.updateConfig(body)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
-    });
-
-    it('should accept enabled=false as valid', async () => {
-      const body = {
-        botToken: 'token',
-        enabled: false,
-      };
-
-      const result = await controller.updateConfig(body);
-
-      expect(result.success).toBe(true);
-      expect(settingsService.setDiscordBotConfig).toHaveBeenCalledWith(
-        'token',
-        false,
-      );
-    });
-
-    it('should trigger ensureConnected after saving config', async () => {
-      const body = {
-        botToken: 'new-bot-token',
-        enabled: true,
-      };
-
-      await controller.updateConfig(body);
-
-      expect(discordBotService.ensureConnected).toHaveBeenCalledWith({
-        token: 'new-bot-token',
-        enabled: true,
-      });
-    });
-
-    it('should trigger ensureConnected even when disabled (ensureConnected handles skip)', async () => {
-      const body = {
-        botToken: 'new-bot-token',
-        enabled: false,
-      };
-
-      await controller.updateConfig(body);
-
-      expect(discordBotService.ensureConnected).toHaveBeenCalledWith({
-        token: 'new-bot-token',
-        enabled: false,
-      });
-    });
-  });
-
-  describe('testConnection', () => {
-    it('should test provided token', async () => {
-      const body = { botToken: 'test-token' };
-      const mockResult = {
-        success: true,
-        guildName: 'Test Guild',
-        message: 'Connected to Test Guild (50 members)',
-      };
-
-      jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
-
-      const result = await controller.testConnection(body);
-
-      expect(discordBotService.testToken).toHaveBeenCalledWith('test-token');
-      expect(result).toEqual(mockResult);
-    });
-
-    it('should use stored token when no token provided', async () => {
-      const body = {};
-      const mockConfig = { token: 'stored-token', enabled: true };
-      const mockResult = {
-        success: true,
-        message: 'Connected',
-      };
-
-      jest
-        .spyOn(settingsService, 'getDiscordBotConfig')
-        .mockResolvedValue(mockConfig);
-      jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
-
-      const result = await controller.testConnection(body);
-
-      expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
-      expect(discordBotService.testToken).toHaveBeenCalledWith('stored-token');
-      expect(result).toEqual(mockResult);
-    });
-
-    it('should return error when no token and no config', async () => {
-      const body = {};
-
-      jest
-        .spyOn(settingsService, 'getDiscordBotConfig')
-        .mockResolvedValue(null);
-
-      const result = await controller.testConnection(body);
-
-      expect(result).toEqual({
-        success: false,
-        message: 'No bot token configured',
-      });
-      expect(discordBotService.testToken).not.toHaveBeenCalled();
-    });
-
-    it('should throw validation error when body is undefined', async () => {
-      await expect(
-        controller.testConnection(
-          undefined as unknown as Record<string, string>,
-        ),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should prefer provided token over stored config', async () => {
-      const body = { botToken: 'provided-token' };
-      const mockConfig = { token: 'stored-token', enabled: true };
-      const mockResult = {
-        success: true,
-        message: 'Connected',
-      };
-
-      jest
-        .spyOn(settingsService, 'getDiscordBotConfig')
-        .mockResolvedValue(mockConfig);
-      jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
-
-      await controller.testConnection(body);
-
-      expect(discordBotService.testToken).toHaveBeenCalledWith(
-        'provided-token',
-      );
-      expect(settingsService.getDiscordBotConfig).not.toHaveBeenCalled();
-    });
-
-    it('should handle empty string token', async () => {
-      const body = { botToken: '' };
-      const mockConfig = { token: 'stored-token', enabled: true };
-      const mockResult = {
-        success: true,
-        message: 'Connected',
-      };
-
-      jest
-        .spyOn(settingsService, 'getDiscordBotConfig')
-        .mockResolvedValue(mockConfig);
-      jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
-
-      await controller.testConnection(body);
-
-      // Empty string is falsy, so should fall back to stored config
-      expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
-      expect(discordBotService.testToken).toHaveBeenCalledWith('stored-token');
-    });
-  });
-
-  describe('clearConfig', () => {
-    it('should clear config and return success', async () => {
-      const result = await controller.clearConfig();
-
-      expect(settingsService.clearDiscordBotConfig).toHaveBeenCalled();
-      expect(result).toEqual({
-        success: true,
-        message: 'Discord bot configuration cleared.',
-      });
-    });
-
-    it('should handle errors during clear', async () => {
-      jest
-        .spyOn(settingsService, 'clearDiscordBotConfig')
-        .mockRejectedValue(new Error('Database error'));
-
-      await expect(controller.clearConfig()).rejects.toThrow('Database error');
-    });
-  });
-
-  describe('getChannels', () => {
-    it('should return text channels from the client service', () => {
-      const mockChannels = [
-        { id: '123', name: 'general' },
-        { id: '456', name: 'raids' },
-      ];
-      jest
-        .spyOn(discordBotClientService, 'getTextChannels')
-        .mockReturnValue(mockChannels);
-
-      const result = controller.getChannels();
-
-      expect(result).toEqual(mockChannels);
-      expect(discordBotClientService.getTextChannels).toHaveBeenCalled();
-    });
-
-    it('should return empty array when bot is not connected', () => {
-      jest
-        .spyOn(discordBotClientService, 'getTextChannels')
-        .mockReturnValue([]);
-
-      const result = controller.getChannels();
-
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('getDefaultChannel', () => {
-    it('should return the default channel ID', async () => {
-      jest
-        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
-        .mockResolvedValue('123456');
-
-      const result = await controller.getDefaultChannel();
-
-      expect(result).toEqual({ channelId: '123456' });
-    });
-
-    it('should return null when no default channel is set', async () => {
-      jest
-        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
-        .mockResolvedValue(null);
-
-      const result = await controller.getDefaultChannel();
-
-      expect(result).toEqual({ channelId: null });
-    });
-  });
-
-  describe('setDefaultChannel', () => {
-    it('should set the default channel and return success', async () => {
-      const result = await controller.setDefaultChannel({
-        channelId: '123456',
-      });
-
-      expect(settingsService.setDiscordBotDefaultChannel).toHaveBeenCalledWith(
-        '123456',
-      );
-      expect(result).toEqual({
-        success: true,
-        message: 'Default channel updated.',
-      });
-    });
-
-    it('should throw BadRequestException when channelId is missing', async () => {
-      await expect(controller.setDefaultChannel({})).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(
-        settingsService.setDiscordBotDefaultChannel,
-      ).not.toHaveBeenCalled();
-    });
-
-    it('should throw BadRequestException when channelId is empty string', async () => {
-      await expect(
-        controller.setDefaultChannel({ channelId: '' }),
-      ).rejects.toThrow(BadRequestException);
-      expect(
-        settingsService.setDiscordBotDefaultChannel,
-      ).not.toHaveBeenCalled();
-    });
-
-    it('should throw BadRequestException when channelId is not a string', async () => {
-      await expect(
-        controller.setDefaultChannel({ channelId: 123 }),
-      ).rejects.toThrow(BadRequestException);
-      expect(
-        settingsService.setDiscordBotDefaultChannel,
-      ).not.toHaveBeenCalled();
-    });
-
-    it('should throw BadRequestException when body is null', async () => {
-      await expect(controller.setDefaultChannel(null)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // ROK-471: Voice channel endpoints
-  // ---------------------------------------------------------------------------
-  describe('getVoiceChannels', () => {
-    it('should return voice channels from the client service (AC-8)', () => {
-      const mockVoiceChannels = [
-        { id: '111', name: 'General Voice' },
-        { id: '222', name: 'Raid Voice' },
-      ];
-      jest
-        .spyOn(discordBotClientService, 'getVoiceChannels')
-        .mockReturnValue(mockVoiceChannels);
-
-      const result = controller.getVoiceChannels();
-
-      expect(result).toEqual(mockVoiceChannels);
-      expect(discordBotClientService.getVoiceChannels).toHaveBeenCalled();
-    });
-
-    it('should return empty array when bot is not connected', () => {
-      jest
-        .spyOn(discordBotClientService, 'getVoiceChannels')
-        .mockReturnValue([]);
-
-      const result = controller.getVoiceChannels();
-
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('getDefaultVoiceChannel', () => {
-    it('should return the configured default voice channel ID (AC-8)', async () => {
-      jest
-        .spyOn(settingsService, 'getDiscordBotDefaultVoiceChannel')
-        .mockResolvedValue('voice-ch-123');
-
-      const result = await controller.getDefaultVoiceChannel();
-
-      expect(result).toEqual({ channelId: 'voice-ch-123' });
-    });
-
-    it('should return null when no default voice channel is set', async () => {
-      jest
-        .spyOn(settingsService, 'getDiscordBotDefaultVoiceChannel')
-        .mockResolvedValue(null);
-
-      const result = await controller.getDefaultVoiceChannel();
-
-      expect(result).toEqual({ channelId: null });
-    });
-  });
-
-  describe('setDefaultVoiceChannel', () => {
-    it('should set the default voice channel and return success (AC-8)', async () => {
-      jest
-        .spyOn(settingsService, 'setDiscordBotDefaultVoiceChannel')
-        .mockResolvedValue(undefined);
-
-      const result = await controller.setDefaultVoiceChannel({
-        channelId: 'voice-ch-456',
-      });
-
-      expect(
-        settingsService.setDiscordBotDefaultVoiceChannel,
-      ).toHaveBeenCalledWith('voice-ch-456');
-      expect(result).toEqual({
-        success: true,
-        message: 'Default voice channel updated.',
-      });
-    });
-
-    it('should throw BadRequestException when channelId is missing', async () => {
-      await expect(controller.setDefaultVoiceChannel({})).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(
-        settingsService.setDiscordBotDefaultVoiceChannel,
-      ).not.toHaveBeenCalled();
-    });
-
-    it('should throw BadRequestException when channelId is empty string', async () => {
-      await expect(
-        controller.setDefaultVoiceChannel({ channelId: '' }),
-      ).rejects.toThrow(BadRequestException);
-      expect(
-        settingsService.setDiscordBotDefaultVoiceChannel,
-      ).not.toHaveBeenCalled();
-    });
-
-    it('should throw BadRequestException when channelId is not a string', async () => {
-      await expect(
-        controller.setDefaultVoiceChannel({ channelId: 123 }),
-      ).rejects.toThrow(BadRequestException);
-      expect(
-        settingsService.setDiscordBotDefaultVoiceChannel,
-      ).not.toHaveBeenCalled();
-    });
-
-    it('should throw BadRequestException when body is null', async () => {
-      await expect(controller.setDefaultVoiceChannel(null)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('should throw BadRequestException when body is undefined', async () => {
-      await expect(
-        controller.setDefaultVoiceChannel(undefined),
-      ).rejects.toThrow(BadRequestException);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // ROK-430: New endpoints — setup-status, reconnect, test-message
-  // ---------------------------------------------------------------------------
-
-  describe('getSetupStatus', () => {
-    it('should delegate to discordBotService.getSetupStatus', async () => {
-      const mockStatus = {
-        steps: [
-          {
-            key: 'oauth',
-            label: 'Configure Discord OAuth',
-            completed: true,
-            settingsPath: '/admin/settings/discord/auth',
-          },
-        ],
-        overallComplete: false,
-        completedCount: 1,
-        totalCount: 5,
-      };
-      jest
-        .spyOn(discordBotService, 'getSetupStatus')
-        .mockResolvedValue(mockStatus);
-
-      const result = await controller.getSetupStatus();
-
-      expect(discordBotService.getSetupStatus).toHaveBeenCalled();
-      expect(result).toMatchObject({
-        completedCount: expect.any(Number),
-        totalCount: expect.any(Number),
-        overallComplete: expect.any(Boolean),
-        steps: expect.any(Array),
-      });
-    });
-  });
-
-  describe('reconnect', () => {
-    it('should disconnect and reconnect the bot when config exists', async () => {
-      jest
-        .spyOn(settingsService, 'getDiscordBotConfig')
-        .mockResolvedValue({ token: 'bot-token-123', enabled: true });
-
-      const result = await controller.reconnect();
-
-      expect(discordBotClientService.disconnect).toHaveBeenCalled();
-      expect(discordBotClientService.connect).toHaveBeenCalledWith(
-        'bot-token-123',
-      );
-      expect(result).toMatchObject({ success: true });
-    });
-
-    it('should throw BadRequestException when no bot token is configured', async () => {
-      jest
-        .spyOn(settingsService, 'getDiscordBotConfig')
-        .mockResolvedValue(null);
-
-      await expect(controller.reconnect()).rejects.toThrow(BadRequestException);
-      expect(discordBotClientService.disconnect).not.toHaveBeenCalled();
-    });
-
-    it('should return success=false when reconnect throws', async () => {
-      jest
-        .spyOn(settingsService, 'getDiscordBotConfig')
-        .mockResolvedValue({ token: 'bot-token-123', enabled: true });
-      jest
-        .spyOn(discordBotClientService, 'connect')
-        .mockRejectedValue(new Error('Connection refused'));
-
-      const result = await controller.reconnect();
-
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('Connection refused');
-    });
-  });
-
-  describe('sendTestMessage', () => {
-    it('should throw BadRequestException when bot is not connected', async () => {
-      jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(false);
-
-      await expect(controller.sendTestMessage()).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('should throw BadRequestException when no default channel is set', async () => {
-      jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
-      jest
-        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
-        .mockResolvedValue(null);
-
-      await expect(controller.sendTestMessage()).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('should send embed to default channel and return success', async () => {
-      jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
-      jest
-        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
-        .mockResolvedValue('channel-123');
-      jest.spyOn(settingsService, 'getBranding').mockResolvedValue({
-        communityName: 'My Guild',
-        communityLogoPath: null,
-        communityAccentColor: null,
-      });
-      jest
-        .spyOn(settingsService, 'getClientUrl')
-        .mockResolvedValue('https://myguild.example.com');
-
-      const result = await controller.sendTestMessage();
-
-      expect(discordBotClientService.sendEmbed).toHaveBeenCalledWith(
-        'channel-123',
-        expect.anything(),
-      );
-      expect(result).toMatchObject({ success: true });
-    });
-
-    it('should return success=false when sendEmbed throws', async () => {
-      jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
-      jest
-        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
-        .mockResolvedValue('channel-123');
-      jest.spyOn(settingsService, 'getBranding').mockResolvedValue({
-        communityName: 'My Guild',
-        communityLogoPath: null,
-        communityAccentColor: null,
-      });
-      jest.spyOn(settingsService, 'getClientUrl').mockResolvedValue(null);
-      jest
-        .spyOn(discordBotClientService, 'sendEmbed')
-        .mockRejectedValue(new Error('Channel not found'));
-
-      const result = await controller.sendTestMessage();
-
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('Channel not found');
-    });
+    jest.spyOn(settingsService, 'getClientUrl').mockResolvedValue(null);
+    jest
+      .spyOn(discordBotClientService, 'sendEmbed')
+      .mockRejectedValue(new Error('Channel not found'));
+
+    const result = await controller.sendTestMessage();
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Channel not found');
   });
 });

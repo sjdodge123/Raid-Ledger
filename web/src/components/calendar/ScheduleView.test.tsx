@@ -46,7 +46,7 @@ const defaultProps = {
     eventOverlapsGameTime: vi.fn(() => false),
 };
 
-describe('ScheduleView', () => {
+describe('ScheduleView — part 1', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(MOCK_NOW);
@@ -55,7 +55,6 @@ describe('ScheduleView', () => {
         (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockClear();
         (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockReturnValue(false);
     });
-
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -72,88 +71,133 @@ describe('ScheduleView', () => {
         });
     });
 
-    describe('Event grouping by day', () => {
-        it('renders events grouped under correct day abbreviation and date', () => {
-            const events = [
-                makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
-                makeCalendarEvent(2, 'Event B', new Date('2026-02-13T15:00:00'), new Date('2026-02-13T17:00:00')),
-            ];
+});
 
-            render(<ScheduleView {...defaultProps} events={events} />);
+describe('Event grouping by day — part 1 (sub 1)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+        defaultProps.onDateChange.mockClear();
+        defaultProps.onSelectEvent.mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
-            // Day abbreviations
-            expect(screen.getByText('Thu')).toBeInTheDocument();
-            expect(screen.getByText('Fri')).toBeInTheDocument();
+    it('renders events grouped under correct day abbreviation and date', () => {
+        const events = [
+            makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+            makeCalendarEvent(2, 'Event B', new Date('2026-02-13T15:00:00'), new Date('2026-02-13T17:00:00')),
+        ];
 
-            // Date numbers
-            expect(screen.getByText('12')).toBeInTheDocument();
-            expect(screen.getByText('13')).toBeInTheDocument();
+        render(<ScheduleView {...defaultProps} events={events} />);
 
-            // Event titles rendered as buttons
-            expect(screen.getByText('Event A')).toBeInTheDocument();
-            expect(screen.getByText('Event B')).toBeInTheDocument();
-        });
+        // Day abbreviations
+        expect(screen.getByText('Thu')).toBeInTheDocument();
+        expect(screen.getByText('Fri')).toBeInTheDocument();
 
-        it('groups multiple events under same day', () => {
-            const events = [
-                makeCalendarEvent(1, 'Morning Raid', new Date('2026-02-12T08:00:00'), new Date('2026-02-12T10:00:00')),
-                makeCalendarEvent(2, 'Evening Raid', new Date('2026-02-12T18:00:00'), new Date('2026-02-12T20:00:00')),
-            ];
+        // Date numbers
+        expect(screen.getByText('12')).toBeInTheDocument();
+        expect(screen.getByText('13')).toBeInTheDocument();
 
-            render(<ScheduleView {...defaultProps} events={events} />);
+        // Event titles rendered as buttons
+        expect(screen.getByText('Event A')).toBeInTheDocument();
+        expect(screen.getByText('Event B')).toBeInTheDocument();
+    });
 
-            // Only one day abbreviation for Thu
-            const thuLabels = screen.getAllByText('Thu');
-            expect(thuLabels).toHaveLength(1);
+    it('groups multiple events under same day', () => {
+        const events = [
+            makeCalendarEvent(1, 'Morning Raid', new Date('2026-02-12T08:00:00'), new Date('2026-02-12T10:00:00')),
+            makeCalendarEvent(2, 'Evening Raid', new Date('2026-02-12T18:00:00'), new Date('2026-02-12T20:00:00')),
+        ];
 
-            // Both event titles present
-            expect(screen.getByText('Morning Raid')).toBeInTheDocument();
-            expect(screen.getByText('Evening Raid')).toBeInTheDocument();
-        });
+        render(<ScheduleView {...defaultProps} events={events} />);
 
-        it('renders events sorted by start time within the same day', () => {
-            const events = [
-                makeCalendarEvent(2, 'Evening Raid', new Date('2026-02-12T18:00:00'), new Date('2026-02-12T20:00:00')),
-                makeCalendarEvent(1, 'Morning Raid', new Date('2026-02-12T08:00:00'), new Date('2026-02-12T10:00:00')),
-            ];
+        // Only one day abbreviation for Thu
+        const thuLabels = screen.getAllByText('Thu');
+        expect(thuLabels).toHaveLength(1);
 
-            render(<ScheduleView {...defaultProps} events={events} />);
+        // Both event titles present
+        expect(screen.getByText('Morning Raid')).toBeInTheDocument();
+        expect(screen.getByText('Evening Raid')).toBeInTheDocument();
+    });
 
-            const buttons = screen.getAllByRole('button');
-            expect(buttons[0]).toHaveTextContent('Morning Raid');
-            expect(buttons[1]).toHaveTextContent('Evening Raid');
-        });
+});
 
-        it('renders day groups in ascending date order', () => {
-            const events = [
-                makeCalendarEvent(2, 'Later Event', new Date('2026-02-14T10:00:00'), new Date('2026-02-14T12:00:00')),
-                makeCalendarEvent(1, 'Earlier Event', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
-            ];
+describe('Event grouping by day — part 1 (sub 2)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+        defaultProps.onDateChange.mockClear();
+        defaultProps.onSelectEvent.mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
-            render(<ScheduleView {...defaultProps} events={events} />);
+    it('renders events sorted by start time within the same day', () => {
+        const events = [
+            makeCalendarEvent(2, 'Evening Raid', new Date('2026-02-12T18:00:00'), new Date('2026-02-12T20:00:00')),
+            makeCalendarEvent(1, 'Morning Raid', new Date('2026-02-12T08:00:00'), new Date('2026-02-12T10:00:00')),
+        ];
 
-            const buttons = screen.getAllByRole('button');
-            expect(buttons[0]).toHaveTextContent('Earlier Event');
-            expect(buttons[1]).toHaveTextContent('Later Event');
-        });
+        render(<ScheduleView {...defaultProps} events={events} />);
 
-        it('does not render days without events', () => {
-            // Events on Feb 12 and Feb 14 — Feb 13 should be hidden
-            const events = [
-                makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
-                makeCalendarEvent(2, 'Event B', new Date('2026-02-14T10:00:00'), new Date('2026-02-14T12:00:00')),
-            ];
+        const buttons = screen.getAllByRole('button');
+        expect(buttons[0]).toHaveTextContent('Morning Raid');
+        expect(buttons[1]).toHaveTextContent('Evening Raid');
+    });
 
-            render(<ScheduleView {...defaultProps} events={events} />);
+    it('renders day groups in ascending date order', () => {
+        const events = [
+            makeCalendarEvent(2, 'Later Event', new Date('2026-02-14T10:00:00'), new Date('2026-02-14T12:00:00')),
+            makeCalendarEvent(1, 'Earlier Event', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+        ];
 
-            // Feb 12 (Thu) and Feb 14 (Sat) should be present
-            expect(screen.getByText('12')).toBeInTheDocument();
-            expect(screen.getByText('14')).toBeInTheDocument();
+        render(<ScheduleView {...defaultProps} events={events} />);
 
-            // Feb 13 (Fri) should NOT be present (no events, not today)
-            expect(screen.queryByText('13')).not.toBeInTheDocument();
-        });
+        const buttons = screen.getAllByRole('button');
+        expect(buttons[0]).toHaveTextContent('Earlier Event');
+        expect(buttons[1]).toHaveTextContent('Later Event');
+    });
 
+    it('does not render days without events', () => {
+        // Events on Feb 12 and Feb 14 — Feb 13 should be hidden
+        const events = [
+            makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+            makeCalendarEvent(2, 'Event B', new Date('2026-02-14T10:00:00'), new Date('2026-02-14T12:00:00')),
+        ];
+
+        render(<ScheduleView {...defaultProps} events={events} />);
+
+        // Feb 12 (Thu) and Feb 14 (Sat) should be present
+        expect(screen.getByText('12')).toBeInTheDocument();
+        expect(screen.getByText('14')).toBeInTheDocument();
+
+        // Feb 13 (Fri) should NOT be present (no events, not today)
+        expect(screen.queryByText('13')).not.toBeInTheDocument();
+    });
+
+});
+
+describe('ScheduleView — part 3', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+        defaultProps.onDateChange.mockClear();
+        defaultProps.onSelectEvent.mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    describe('Event grouping by day — part 2', () => {
         it('always shows today even without events', () => {
             // MOCK_NOW is Feb 10. Event only on Feb 12.
             const events = [
@@ -166,6 +210,7 @@ describe('ScheduleView', () => {
             expect(screen.getByText('10')).toBeInTheDocument();
             expect(screen.getByText('Tue')).toBeInTheDocument();
         });
+
     });
 
     describe('Google Calendar-style day headers', () => {
@@ -194,6 +239,21 @@ describe('ScheduleView', () => {
             const separators = container.querySelectorAll('.week-separator');
             expect(separators.length).toBeGreaterThanOrEqual(2);
         });
+    });
+
+});
+
+describe('ScheduleView — part 4', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+        defaultProps.onDateChange.mockClear();
+        defaultProps.onSelectEvent.mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     describe('Now line', () => {
@@ -260,77 +320,122 @@ describe('ScheduleView', () => {
 
     });
 
-    describe('Swipe gesture handling', () => {
-        it('calls onDateChange with next day on swipe left (dx < -50)', () => {
-            const onDateChange = vi.fn();
-            const events = [
-                makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
-            ];
+});
 
-            const { container } = render(
-                <ScheduleView {...defaultProps} events={events} onDateChange={onDateChange} />
-            );
+describe('Swipe gesture handling — part 1 (sub 1)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+        defaultProps.onDateChange.mockClear();
+        defaultProps.onSelectEvent.mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
-            const scheduleView = container.querySelector('.schedule-view')!;
+    it('calls onDateChange with next day on swipe left (dx < -50)', () => {
+        const onDateChange = vi.fn();
+        const events = [
+            makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+        ];
 
-            fireEvent.touchStart(scheduleView, {
-                touches: [{ clientX: 300, clientY: 200 }],
-            });
-            fireEvent.touchEnd(scheduleView, {
-                changedTouches: [{ clientX: 200, clientY: 205 }], // dx=-100, dy=5 -> swipe left -> next day
-            });
+        const { container } = render(
+            <ScheduleView {...defaultProps} events={events} onDateChange={onDateChange} />
+        );
 
-            expect(onDateChange).toHaveBeenCalledTimes(1);
-            const newDate = onDateChange.mock.calls[0][0] as Date;
-            expect(newDate.getDate()).toBe(MOCK_NOW.getDate() + 1);
+        const scheduleView = container.querySelector('.schedule-view')!;
+
+        fireEvent.touchStart(scheduleView, {
+            touches: [{ clientX: 300, clientY: 200 }],
+        });
+        fireEvent.touchEnd(scheduleView, {
+            changedTouches: [{ clientX: 200, clientY: 205 }], // dx=-100, dy=5 -> swipe left -> next day
         });
 
-        it('calls onDateChange with previous day on swipe right (dx > 50)', () => {
-            const onDateChange = vi.fn();
-            const events = [
-                makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
-            ];
+        expect(onDateChange).toHaveBeenCalledTimes(1);
+        const newDate = onDateChange.mock.calls[0][0] as Date;
+        expect(newDate.getDate()).toBe(MOCK_NOW.getDate() + 1);
+    });
 
-            const { container } = render(
-                <ScheduleView {...defaultProps} events={events} onDateChange={onDateChange} />
-            );
+});
 
-            const scheduleView = container.querySelector('.schedule-view')!;
+describe('Swipe gesture handling — part 1 (sub 2)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+        defaultProps.onDateChange.mockClear();
+        defaultProps.onSelectEvent.mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
-            fireEvent.touchStart(scheduleView, {
-                touches: [{ clientX: 200, clientY: 200 }],
-            });
-            fireEvent.touchEnd(scheduleView, {
-                changedTouches: [{ clientX: 310, clientY: 205 }], // dx=110, dy=5 -> swipe right -> prev day
-            });
+    it('calls onDateChange with previous day on swipe right (dx > 50)', () => {
+        const onDateChange = vi.fn();
+        const events = [
+            makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+        ];
 
-            expect(onDateChange).toHaveBeenCalledTimes(1);
-            const newDate = onDateChange.mock.calls[0][0] as Date;
-            expect(newDate.getDate()).toBe(MOCK_NOW.getDate() - 1);
+        const { container } = render(
+            <ScheduleView {...defaultProps} events={events} onDateChange={onDateChange} />
+        );
+
+        const scheduleView = container.querySelector('.schedule-view')!;
+
+        fireEvent.touchStart(scheduleView, {
+            touches: [{ clientX: 200, clientY: 200 }],
+        });
+        fireEvent.touchEnd(scheduleView, {
+            changedTouches: [{ clientX: 310, clientY: 205 }], // dx=110, dy=5 -> swipe right -> prev day
         });
 
-        it('does not call onDateChange when horizontal movement < 50px', () => {
-            const onDateChange = vi.fn();
-            const events = [
-                makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
-            ];
+        expect(onDateChange).toHaveBeenCalledTimes(1);
+        const newDate = onDateChange.mock.calls[0][0] as Date;
+        expect(newDate.getDate()).toBe(MOCK_NOW.getDate() - 1);
+    });
 
-            const { container } = render(
-                <ScheduleView {...defaultProps} events={events} onDateChange={onDateChange} />
-            );
+    it('does not call onDateChange when horizontal movement < 50px', () => {
+        const onDateChange = vi.fn();
+        const events = [
+            makeCalendarEvent(1, 'Raid A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+        ];
 
-            const scheduleView = container.querySelector('.schedule-view')!;
+        const { container } = render(
+            <ScheduleView {...defaultProps} events={events} onDateChange={onDateChange} />
+        );
 
-            fireEvent.touchStart(scheduleView, {
-                touches: [{ clientX: 200, clientY: 200 }],
-            });
-            fireEvent.touchEnd(scheduleView, {
-                changedTouches: [{ clientX: 230, clientY: 205 }], // dx=30 < 50
-            });
+        const scheduleView = container.querySelector('.schedule-view')!;
 
-            expect(onDateChange).not.toHaveBeenCalled();
+        fireEvent.touchStart(scheduleView, {
+            touches: [{ clientX: 200, clientY: 200 }],
+        });
+        fireEvent.touchEnd(scheduleView, {
+            changedTouches: [{ clientX: 230, clientY: 205 }], // dx=30 < 50
         });
 
+        expect(onDateChange).not.toHaveBeenCalled();
+    });
+
+});
+
+describe('ScheduleView — part 6', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+        defaultProps.onDateChange.mockClear();
+        defaultProps.onSelectEvent.mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockClear();
+        (defaultProps.eventOverlapsGameTime as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    describe('Swipe gesture handling — part 2', () => {
         it('does not call onDateChange when vertical movement dominates', () => {
             const onDateChange = vi.fn();
             const events = [
@@ -352,5 +457,7 @@ describe('ScheduleView', () => {
 
             expect(onDateChange).not.toHaveBeenCalled();
         });
+
     });
+
 });

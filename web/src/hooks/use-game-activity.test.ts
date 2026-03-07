@@ -69,7 +69,7 @@ const mockNowPlayingResponse = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('useGameActivity (ROK-443)', () => {
+describe('useGameActivity (ROK-443) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -143,6 +143,13 @@ describe('useGameActivity (ROK-443)', () => {
         expect(result.current.data?.topPlayers[0].username).toBe('PlayerOne');
     });
 
+});
+
+describe('useGameActivity (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('should return totalSeconds from response', async () => {
         mockGetGameActivity.mockResolvedValue(mockActivityResponse);
 
@@ -189,9 +196,10 @@ describe('useGameActivity (ROK-443)', () => {
 
         expect(result.current.error).toBeInstanceOf(Error);
     });
+
 });
 
-describe('useGameNowPlaying (ROK-443)', () => {
+describe('useGameNowPlaying (ROK-443) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -266,6 +274,13 @@ describe('useGameNowPlaying (ROK-443)', () => {
         expect(result.current.data?.count).toBe(0);
     });
 
+});
+
+describe('useGameNowPlaying (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('should handle API errors', async () => {
         mockGetGameNowPlaying.mockRejectedValue(new Error('Network error'));
 
@@ -279,4 +294,5 @@ describe('useGameNowPlaying (ROK-443)', () => {
 
         expect(result.current.error).toBeInstanceOf(Error);
     });
+
 });

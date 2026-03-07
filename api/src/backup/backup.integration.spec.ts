@@ -34,7 +34,7 @@ const TEST_BACKUP_DIR = fs.mkdtempSync(
 );
 process.env.BACKUP_DIR = TEST_BACKUP_DIR;
 
-describe('Backup CRUD (integration)', () => {
+function describeBackupCRUD() {
   let testApp: TestApp;
   let adminToken: string;
 
@@ -126,7 +126,7 @@ describe('Backup CRUD (integration)', () => {
     });
   });
 
-  describe('DELETE /admin/backups/:type/:filename', () => {
+  function describeDELETEAdminBackupsTypeFilename() {
     it('should delete an existing backup', async () => {
       // Create a backup
       const createRes = await testApp.request
@@ -168,9 +168,11 @@ describe('Backup CRUD (integration)', () => {
 
       expect(res.status).toBe(400);
     });
-  });
+  }
+  describe('DELETE /admin/backups/:type/:filename', () =>
+    describeDELETEAdminBackupsTypeFilename());
 
-  describe('POST /admin/backups/:type/:filename/restore', () => {
+  function describePOSTAdminBackupsTypeFilenameRestore() {
     it('should restore data from a backup', async () => {
       // 1. Create some identifiable data
       await testApp.request
@@ -236,8 +238,11 @@ describe('Backup CRUD (integration)', () => {
       expect(migrationBackups.length).toBeGreaterThanOrEqual(1);
       expect(migrationBackups[0].filename).toMatch(/^pre_restore_/);
     });
-  });
-});
+  }
+  describe('POST /admin/backups/:type/:filename/restore', () =>
+    describePOSTAdminBackupsTypeFilenameRestore());
+}
+describe('Backup CRUD (integration)', () => describeBackupCRUD());
 
 describe('Backup auth enforcement (integration)', () => {
   let testApp: TestApp;

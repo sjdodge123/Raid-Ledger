@@ -47,80 +47,76 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
     },
   ];
 
+  function buildTestProviders() {
+    return [
+      {
+        provide: UsersService,
+        useValue: {
+          findById: jest.fn(),
+          findRecent: jest.fn(),
+          findAll: jest.fn(),
+          getHeartedGames: jest.fn(),
+          getUserActivity: jest.fn(),
+          unlinkDiscord: jest.fn(),
+          setCustomAvatar: jest.fn(),
+          findAllWithRoles: jest.fn(),
+          setRole: jest.fn(),
+          checkDisplayNameAvailability: jest.fn(),
+          setDisplayName: jest.fn(),
+          completeOnboarding: jest.fn(),
+          resetOnboarding: jest.fn(),
+          deleteUser: jest.fn(),
+          findAdmin: jest.fn(),
+        },
+      },
+      {
+        provide: AvatarService,
+        useValue: {
+          checkRateLimit: jest.fn(),
+          validateAndProcess: jest.fn(),
+          save: jest.fn(),
+          delete: jest.fn(),
+        },
+      },
+      {
+        provide: PreferencesService,
+        useValue: {
+          getUserPreferences: jest.fn(),
+          setUserPreference: jest.fn(),
+        },
+      },
+      {
+        provide: GameTimeService,
+        useValue: {
+          getCompositeView: jest.fn(),
+          saveTemplate: jest.fn(),
+          saveOverrides: jest.fn(),
+          createAbsence: jest.fn(),
+          deleteAbsence: jest.fn(),
+          getAbsences: jest.fn(),
+        },
+      },
+      { provide: CharactersService, useValue: { findAllForUser: jest.fn() } },
+      { provide: EventsService, useValue: { findUpcomingByUser: jest.fn() } },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(false),
+          getGuildInfo: jest.fn().mockReturnValue(null),
+          getClient: jest.fn().mockReturnValue(null),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveChannelForEvent: jest.fn().mockResolvedValue(null) },
+      },
+    ];
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [
-        {
-          provide: UsersService,
-          useValue: {
-            findById: jest.fn(),
-            findRecent: jest.fn(),
-            findAll: jest.fn(),
-            getHeartedGames: jest.fn(),
-            getUserActivity: jest.fn(),
-            unlinkDiscord: jest.fn(),
-            setCustomAvatar: jest.fn(),
-            findAllWithRoles: jest.fn(),
-            setRole: jest.fn(),
-            checkDisplayNameAvailability: jest.fn(),
-            setDisplayName: jest.fn(),
-            completeOnboarding: jest.fn(),
-            resetOnboarding: jest.fn(),
-            deleteUser: jest.fn(),
-            findAdmin: jest.fn(),
-          },
-        },
-        {
-          provide: AvatarService,
-          useValue: {
-            checkRateLimit: jest.fn(),
-            validateAndProcess: jest.fn(),
-            save: jest.fn(),
-            delete: jest.fn(),
-          },
-        },
-        {
-          provide: PreferencesService,
-          useValue: {
-            getUserPreferences: jest.fn(),
-            setUserPreference: jest.fn(),
-          },
-        },
-        {
-          provide: GameTimeService,
-          useValue: {
-            getCompositeView: jest.fn(),
-            saveTemplate: jest.fn(),
-            saveOverrides: jest.fn(),
-            createAbsence: jest.fn(),
-            deleteAbsence: jest.fn(),
-            getAbsences: jest.fn(),
-          },
-        },
-        {
-          provide: CharactersService,
-          useValue: { findAllForUser: jest.fn() },
-        },
-        {
-          provide: EventsService,
-          useValue: { findUpcomingByUser: jest.fn() },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(false),
-            getGuildInfo: jest.fn().mockReturnValue(null),
-            getClient: jest.fn().mockReturnValue(null),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveChannelForEvent: jest.fn().mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildTestProviders(),
     }).compile();
 
     controller = module.get<UsersController>(UsersController);

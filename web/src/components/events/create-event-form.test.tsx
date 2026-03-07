@@ -119,8 +119,8 @@ describe('CreateEventForm — custom duration inputs stacking', () => {
     });
 });
 
-describe('CreateEventForm — SlotStepper behavior', () => {
-    it('increments slot value when + button is clicked', () => {
+function createeventformSlotStepperBehaviorGroup1() {
+it('increments slot value when + button is clicked', () => {
         const { container } = renderForm();
         const stepperContainer = container.querySelector('.divide-y');
         expect(stepperContainer).not.toBeNull();
@@ -134,7 +134,7 @@ describe('CreateEventForm — SlotStepper behavior', () => {
         expect(parseInt(firstInput.value)).toBe(initialValue + 1);
     });
 
-    it('decrements slot value when - button is clicked', () => {
+it('decrements slot value when - button is clicked', () => {
         const { container } = renderForm();
         const stepperContainer = container.querySelector('.divide-y');
         expect(stepperContainer).not.toBeNull();
@@ -149,7 +149,10 @@ describe('CreateEventForm — SlotStepper behavior', () => {
         expect(parseInt(firstInput.value)).toBe(Math.max(0, initialValue - 1));
     });
 
-    it('decrement button is disabled when value is at minimum (0)', () => {
+}
+
+function createeventformSlotStepperBehaviorGroup2() {
+it('decrement button is disabled when value is at minimum (0)', () => {
         renderForm();
         // Find the Flex row's decrement button (Flex defaults to 5 for MMO)
         fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
@@ -171,6 +174,12 @@ describe('CreateEventForm — SlotStepper behavior', () => {
         expect(parseInt(flexInput.value)).toBe(0);
         expect(flexDecrement).toBeDisabled();
     });
+
+}
+
+describe('CreateEventForm — SlotStepper behavior', () => {
+    createeventformSlotStepperBehaviorGroup1();
+    createeventformSlotStepperBehaviorGroup2();
 });
 
 describe('CreateEventForm — desktop layout unchanged', () => {
@@ -251,7 +260,7 @@ describe('CreateEventForm — recurrence section visibility', () => {
         expect(screen.getByLabelText(/repeat until/i)).toBeInTheDocument();
     });
 
-    it('hides the recurrence section when in edit mode', () => {
+    function testHidesTheRecurrenceSectionWhen() {
         const editEvent = {
             id: 1,
             title: 'Test Event',
@@ -285,7 +294,9 @@ describe('CreateEventForm — recurrence section visibility', () => {
 
         // Repeat select should not be in the DOM in edit mode
         expect(screen.queryByLabelText(/repeat/i)).not.toBeInTheDocument();
-    });
+    
+    }
+    it('hides the recurrence section when in edit mode', () => { testHidesTheRecurrenceSectionWhen(); });
 });
 
 describe('CreateEventForm — recurrence validation', () => {
@@ -331,8 +342,8 @@ describe('CreateEventForm — recurrence validation', () => {
     });
 });
 
-describe('CreateEventForm — recurrence instance count preview', () => {
-    it('shows instance count preview when frequency and until are set', async () => {
+function createeventformRecurrenceInstanceCountPreviewGroup1() {
+it('shows instance count preview when frequency and until are set', async () => {
         const { container } = renderForm();
 
         fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-01' } });
@@ -350,7 +361,7 @@ describe('CreateEventForm — recurrence instance count preview', () => {
         expect(preview.textContent).toMatch(/4/);
     });
 
-    it('shows no instance count preview when until is before start', () => {
+it('shows no instance count preview when until is before start', () => {
         const { container } = renderForm();
 
         fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-15' } });
@@ -365,7 +376,10 @@ describe('CreateEventForm — recurrence instance count preview', () => {
         expect(screen.queryByText(/creates/i)).not.toBeInTheDocument();
     });
 
-    it('caps instance count preview at 52 for a far-future until date', async () => {
+}
+
+function createeventformRecurrenceInstanceCountPreviewGroup2() {
+it('caps instance count preview at 52 for a far-future until date', async () => {
         const { container } = renderForm();
 
         fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-01-01' } });
@@ -381,4 +395,10 @@ describe('CreateEventForm — recurrence instance count preview', () => {
         // The count shown must be exactly 52 (cap), not more
         expect(preview.textContent).toMatch(/52/);
     });
+
+}
+
+describe('CreateEventForm — recurrence instance count preview', () => {
+    createeventformRecurrenceInstanceCountPreviewGroup1();
+    createeventformRecurrenceInstanceCountPreviewGroup2();
 });

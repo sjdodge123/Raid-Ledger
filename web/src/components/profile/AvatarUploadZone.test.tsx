@@ -10,7 +10,7 @@ const defaultProps = {
     onRemove: vi.fn(),
 };
 
-describe('AvatarUploadZone', () => {
+describe('AvatarUploadZone — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -69,6 +69,13 @@ describe('AvatarUploadZone', () => {
         });
     });
 
+});
+
+describe('AvatarUploadZone — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('File validation', () => {
         it('shows error for invalid file type', () => {
             render(<AvatarUploadZone {...defaultProps} />);
@@ -121,6 +128,13 @@ describe('AvatarUploadZone', () => {
         });
     });
 
+});
+
+describe('AvatarUploadZone — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('Label and accessibility', () => {
         it('renders the Upload Custom Avatar label', () => {
             render(<AvatarUploadZone {...defaultProps} />);
@@ -134,4 +148,5 @@ describe('AvatarUploadZone', () => {
             expect(input).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp,image/gif');
         });
     });
+
 });

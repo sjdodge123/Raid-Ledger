@@ -282,74 +282,61 @@ describe('PlanEventForm — time slot selection', () => {
     });
 });
 
-describe('PlanEventForm — validation', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
-            mutate: mockMutate,
-            isPending: false,
-        });
-        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
-            data: mockTimeSuggestions,
-            isLoading: false,
-        });
+function setupDefaultMocks() {
+    vi.clearAllMocks();
+    (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutate: mockMutate,
+        isPending: false,
     });
+    (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
+        data: mockTimeSuggestions,
+        isLoading: false,
+    });
+}
 
-    afterEach(() => {
-        activeQueryClient?.clear();
+function fillTitleAndSelectSlots() {
+    fireEvent.change(screen.getByPlaceholderText('Weekly Raid Night'), {
+        target: { value: 'My Raid' },
     });
+    fireEvent.click(screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!);
+    fireEvent.click(screen.getByText('Tuesday Mar 11, 6:00 PM').closest('button')!);
+}
+
+describe('PlanEventForm — validation errors', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
 
     it('should show validation error when title is empty on submit', () => {
         renderForm();
-        const submitBtn = screen.getByRole('button', { name: 'Start Poll' });
-        fireEvent.click(submitBtn);
-
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
         expect(screen.getByText('Title is required')).toBeTruthy();
     });
 
     it('should show validation error when fewer than 2 time slots selected', () => {
         renderForm();
-
-        // Fill in title
         fireEvent.change(screen.getByPlaceholderText('Weekly Raid Night'), {
             target: { value: 'My Raid' },
         });
-
-        // Select only 1 slot
-        const monBtn = screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!;
-        fireEvent.click(monBtn);
-
-        const submitBtn = screen.getByRole('button', { name: 'Start Poll' });
-        fireEvent.click(submitBtn);
-
+        fireEvent.click(screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!);
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
         expect(screen.getByText('Select at least 2 time options')).toBeTruthy();
     });
 
     it('should not call mutate when validation fails', () => {
         renderForm();
-
-        const submitBtn = screen.getByRole('button', { name: 'Start Poll' });
-        fireEvent.click(submitBtn);
-
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
         expect(mockMutate).not.toHaveBeenCalled();
     });
+});
+
+describe('PlanEventForm — valid submission', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
 
     it('should call mutate when form is valid', () => {
         renderForm();
-
-        // Fill in title
-        fireEvent.change(screen.getByPlaceholderText('Weekly Raid Night'), {
-            target: { value: 'My Raid' },
-        });
-
-        // Select 2 slots
-        const monBtn = screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!;
-        const tueBtn = screen.getByText('Tuesday Mar 11, 6:00 PM').closest('button')!;
-        fireEvent.click(monBtn);
-        fireEvent.click(tueBtn);
-
-        const submitBtn = screen.getByRole('button', { name: 'Start Poll' });
-        fireEvent.click(submitBtn);
+        fillTitleAndSelectSlots();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
 
         expect(mockMutate).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -364,31 +351,16 @@ describe('PlanEventForm — validation', () => {
     });
 });
 
-describe('PlanEventForm — submit behavior', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
-            mutate: mockMutate,
-            isPending: false,
-        });
-        (useTimeSuggestions as ReturnType<typeof vi.fn>).mockReturnValue({
-            data: mockTimeSuggestions,
-            isLoading: false,
-        });
-    });
-
-    afterEach(() => {
-        activeQueryClient?.clear();
-    });
+describe('PlanEventForm — pending state', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
 
     it('should show "Posting Poll..." when isPending is true', () => {
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
             mutate: mockMutate,
             isPending: true,
         });
-
         renderForm();
-
         expect(screen.getByRole('button', { name: 'Posting Poll...' })).toBeTruthy();
     });
 
@@ -397,28 +369,19 @@ describe('PlanEventForm — submit behavior', () => {
             mutate: mockMutate,
             isPending: true,
         });
-
         renderForm();
-
-        const submitBtn = screen.getByRole('button', { name: 'Posting Poll...' });
-        expect(submitBtn).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Posting Poll...' })).toBeDisabled();
     });
+});
+
+describe('PlanEventForm — pollMode & navigation', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
 
     it('should include pollMode in submitted DTO', () => {
         renderForm();
-
-        // Fill required fields
-        fireEvent.change(screen.getByPlaceholderText('Weekly Raid Night'), {
-            target: { value: 'My Raid' },
-        });
-
-        // Switch to All or Nothing
+        fillTitleAndSelectSlots();
         fireEvent.click(screen.getByRole('button', { name: 'All or Nothing' }));
-
-        // Select 2 slots
-        fireEvent.click(screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!);
-        fireEvent.click(screen.getByText('Tuesday Mar 11, 6:00 PM').closest('button')!);
-
         fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
 
         expect(mockMutate).toHaveBeenCalledWith(
@@ -429,7 +392,6 @@ describe('PlanEventForm — submit behavior', () => {
 
     it('should navigate to /events on successful creation via onSuccess callback', () => {
         let capturedCallbacks: { onSuccess?: () => void } = {};
-
         (useCreateEventPlan as ReturnType<typeof vi.fn>).mockReturnValue({
             mutate: vi.fn((_dto: unknown, callbacks: { onSuccess?: () => void }) => {
                 capturedCallbacks = callbacks;
@@ -438,27 +400,15 @@ describe('PlanEventForm — submit behavior', () => {
         });
 
         renderForm();
-
-        // Fill required fields
-        fireEvent.change(screen.getByPlaceholderText('Weekly Raid Night'), {
-            target: { value: 'My Raid' },
-        });
-        fireEvent.click(screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!);
-        fireEvent.click(screen.getByText('Tuesday Mar 11, 6:00 PM').closest('button')!);
+        fillTitleAndSelectSlots();
         fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
-
-        // Simulate success callback
         capturedCallbacks.onSuccess?.();
-
         expect(mockNavigate).toHaveBeenCalledWith('/events');
     });
 
     it('should navigate to /events when Cancel button clicked', () => {
         renderForm();
-
-        const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
-        fireEvent.click(cancelBtn);
-
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(mockNavigate).toHaveBeenCalledWith('/events');
     });
 });

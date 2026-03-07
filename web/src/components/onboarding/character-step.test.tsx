@@ -73,7 +73,7 @@ function renderWithProviders(ui: React.ReactElement) {
     );
 }
 
-describe('CharacterStep', () => {
+describe('CharacterStep — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
@@ -128,6 +128,16 @@ describe('CharacterStep', () => {
         });
     });
 
+});
+
+describe('CharacterStep — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
     describe('Form interaction', () => {
         it('shows validation error when submitting without a name', async () => {
             renderWithProviders(
@@ -179,7 +189,15 @@ describe('CharacterStep', () => {
         });
     });
 
-    describe('Saved character display', () => {
+});
+
+describe('Saved character display — part 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
         it('shows saved character card when character exists at charIndex', () => {
             mockUseMyCharacters.mockReturnValue({
                 data: {
@@ -237,6 +255,17 @@ describe('CharacterStep', () => {
             expect(addButton).toBeInTheDocument();
         });
 
+});
+
+describe('CharacterStep — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Saved character display — part 2', () => {
         it('calls onAddAnother when Add Another Character is clicked', () => {
             const mockOnAddAnother = vi.fn();
             mockUseMyCharacters.mockReturnValue({
@@ -271,6 +300,19 @@ describe('CharacterStep', () => {
             expect(mockOnAddAnother).toHaveBeenCalledOnce();
         });
 
+    });
+
+});
+
+describe('CharacterStep — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    describe('Saved character display — part 3', () => {
         it('calls onRemoveStep when delete button is clicked on extra step (charIndex > 0)', async () => {
             const mockOnRemoveStep = vi.fn();
             const mockDeleteMutate = vi.fn((_id, options) => {
@@ -302,6 +344,17 @@ describe('CharacterStep', () => {
                 expect(mockOnRemoveStep).toHaveBeenCalledOnce();
             });
         });
+
+    });
+
+});
+
+describe('CharacterStep — part 6', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
     });
 
     describe('Edge cases', () => {
@@ -357,4 +410,5 @@ describe('CharacterStep', () => {
             });
         });
     });
+
 });

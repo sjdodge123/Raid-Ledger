@@ -39,12 +39,11 @@ const renderWithRouter = (component: React.ReactNode) => {
     return render(<BrowserRouter>{component}</BrowserRouter>);
 };
 
-describe('NewMembersSection', () => {
+describe('NewMembersSection — part 1', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(MOCK_NOW);
     });
-
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -100,6 +99,17 @@ describe('NewMembersSection', () => {
         expect(container.innerHTML).toBe('');
     });
 
+});
+
+describe('NewMembersSection — part 2', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('each card links to user profile', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: {
@@ -149,6 +159,17 @@ describe('NewMembersSection', () => {
         expect(screen.getByText('New Members')).toBeInTheDocument();
     });
 
+});
+
+describe('NewMembersSection — part 3', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('shows first letter initial for players without avatar', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: {
@@ -163,4 +184,5 @@ describe('NewMembersSection', () => {
 
         expect(screen.getByText('Z')).toBeInTheDocument();
     });
+
 });

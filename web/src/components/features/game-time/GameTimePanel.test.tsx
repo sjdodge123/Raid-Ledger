@@ -31,30 +31,50 @@ function renderPanel(props: Partial<React.ComponentProps<typeof GameTimePanel>> 
     );
 }
 
-describe('GameTimePanel - Profile Mode (ROK-301)', () => {
+function createDefaultEditorMock(overrides = {}) {
+    return {
+        slots: [],
+        handleChange: vi.fn(),
+        applyPreset: vi.fn(),
+        clear: vi.fn(),
+        discard: vi.fn(),
+        save: vi.fn(),
+        isDirty: false,
+        isSaving: false,
+        isLoading: false,
+        tzLabel: 'PST',
+        events: [],
+        todayIndex: 3,
+        currentHour: 15.5,
+        nextWeekEvents: [],
+        nextWeekSlots: [],
+        weekStart: '2026-02-08',
+        overrides: [],
+        absences: [],
+        ...overrides,
+    };
+}
+
+function setupMatchMediaMock(mobile = false) {
+    Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: vi.fn().mockImplementation(query => ({
+            matches: mobile ? query === '(max-width: 767px)' : false,
+            media: query,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+        })),
+    });
+}
+
+function setupDefaultEditorMock(overrides = {}) {
+    vi.clearAllMocks();
+    vi.mocked(mockUseGameTimeEditor).mockReturnValue(createDefaultEditorMock(overrides));
+}
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 1', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
-        // Set default mock return value
-        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
-            slots: [],
-            handleChange: vi.fn(),
-            applyPreset: vi.fn(),
-            clear: vi.fn(),
-            discard: vi.fn(),
-            save: vi.fn(),
-            isDirty: false,
-            isSaving: false,
-            isLoading: false,
-            tzLabel: 'PST',
-            events: [],
-            todayIndex: 3,
-            currentHour: 15.5,
-            nextWeekEvents: [],
-            nextWeekSlots: [],
-            weekStart: '2026-02-08',
-            overrides: [],
-            absences: [],
-        });
+        setupDefaultEditorMock();
     });
 
     describe('Full Day Names', () => {
@@ -92,6 +112,13 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(header0.textContent).toMatch(/^Sun/);
             expect(header1.textContent).toMatch(/^Mon/);
         });
+    });
+
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 2', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
     });
 
     describe('Sunday Week Start', () => {
@@ -146,6 +173,13 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
 
     });
 
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 3', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
     describe('Profile Mode UI Elements', () => {
         it('renders profile mode header and description', () => {
             renderPanel({ mode: 'profile' });
@@ -182,7 +216,14 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
         });
     });
 
-    describe('Availability Data Preservation', () => {
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 4', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Availability Data Preservation — part 1', () => {
         it('renders slots passed to GameTimeGrid', () => {
             vi.mocked(mockUseGameTimeEditor).mockReturnValue({
                 slots: [
@@ -218,131 +259,165 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(cell1.dataset.status).toBe('available');
         });
 
-        it('preserves committed slots', () => {
-            vi.mocked(mockUseGameTimeEditor).mockReturnValue({
-                slots: [
-                    { dayOfWeek: 2, hour: 20, status: 'committed' },
-                ],
-                handleChange: vi.fn(),
-                applyPreset: vi.fn(),
-                clear: vi.fn(),
-                save: vi.fn(),
-                isDirty: false,
-                isSaving: false,
-                isLoading: false,
-                tzLabel: 'PST',
-                events: [],
-                todayIndex: 3,
-                currentHour: 15.5,
-                nextWeekEvents: [],
-                nextWeekSlots: [],
-                weekStart: '2026-02-08',
-                absences: [],
-                discard: vi.fn(),
-                overrides: [],
-            });
-
-            renderPanel({ mode: 'profile' });
-
-            const cell = screen.getByTestId('cell-2-20');
-            expect(cell.dataset.status).toBe('committed');
-        });
-
-        it('preserves blocked slots', () => {
-            vi.mocked(mockUseGameTimeEditor).mockReturnValue({
-                slots: [
-                    { dayOfWeek: 3, hour: 14, status: 'blocked' },
-                ],
-                handleChange: vi.fn(),
-                applyPreset: vi.fn(),
-                clear: vi.fn(),
-                save: vi.fn(),
-                isDirty: false,
-                isSaving: false,
-                isLoading: false,
-                tzLabel: 'PST',
-                events: [],
-                todayIndex: 3,
-                currentHour: 15.5,
-                nextWeekEvents: [],
-                nextWeekSlots: [],
-                weekStart: '2026-02-08',
-                absences: [],
-                discard: vi.fn(),
-                overrides: [],
-            });
-
-            renderPanel({ mode: 'profile' });
-
-            const cell = screen.getByTestId('cell-3-14');
-            expect(cell.dataset.status).toBe('blocked');
-        });
     });
 
-    describe('Profile Mode Rolling Override', () => {
-        it('forces rolling=false in profile mode even if rolling=true is passed', () => {
-            const mockEditor = {
-                slots: [],
-                handleChange: vi.fn(),
-                applyPreset: vi.fn(),
-                clear: vi.fn(),
-                discard: vi.fn(),
-                save: vi.fn(),
-                isDirty: false,
-                isSaving: false,
-                isLoading: false,
-                tzLabel: 'PST',
-                events: [],
-                todayIndex: 3,
-                currentHour: 15.5,
-                nextWeekEvents: [],
-                nextWeekSlots: [],
-                weekStart: '2026-02-08',
-                overrides: [],
-                absences: [],
-            };
-            vi.mocked(mockUseGameTimeEditor).mockReturnValue(mockEditor);
+});
 
-            renderPanel({ mode: 'profile', rolling: true });
-
-            // useGameTimeEditor should be called with rolling: false
-            expect(vi.mocked(mockUseGameTimeEditor)).toHaveBeenCalledWith(
-                expect.objectContaining({ rolling: false }),
-            );
-        });
-
-        it('respects rolling prop in modal mode', () => {
-            vi.mocked(mockUseGameTimeEditor).mockReturnValue({
-                slots: [],
-                handleChange: vi.fn(),
-                applyPreset: vi.fn(),
-                clear: vi.fn(),
-                save: vi.fn(),
-                isDirty: false,
-                isSaving: false,
-                isLoading: false,
-                tzLabel: 'PST',
-                events: [],
-                todayIndex: 3,
-                currentHour: 15.5,
-                nextWeekEvents: [],
-                nextWeekSlots: [],
-                weekStart: '2026-02-08',
-                absences: [],
-                discard: vi.fn(),
-                overrides: [],
-            });
-
-            renderPanel({ mode: 'modal', rolling: true });
-
-            // useGameTimeEditor should be called with rolling: true
-            expect(vi.mocked(mockUseGameTimeEditor)).toHaveBeenCalledWith(
-                expect.objectContaining({ rolling: true }),
-            );
-        });
+describe('Availability Data Preservation — part 2 (sub 1)', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
     });
 
-    describe('Mobile Responsive Behavior (ROK-340)', () => {
+    it('preserves committed slots', () => {
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+            slots: [
+                { dayOfWeek: 2, hour: 20, status: 'committed' },
+            ],
+            handleChange: vi.fn(),
+            applyPreset: vi.fn(),
+            clear: vi.fn(),
+            save: vi.fn(),
+            isDirty: false,
+            isSaving: false,
+            isLoading: false,
+            tzLabel: 'PST',
+            events: [],
+            todayIndex: 3,
+            currentHour: 15.5,
+            nextWeekEvents: [],
+            nextWeekSlots: [],
+            weekStart: '2026-02-08',
+            absences: [],
+            discard: vi.fn(),
+            overrides: [],
+        });
+
+        renderPanel({ mode: 'profile' });
+
+        const cell = screen.getByTestId('cell-2-20');
+        expect(cell.dataset.status).toBe('committed');
+    });
+
+});
+
+describe('Availability Data Preservation — part 2 (sub 2)', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('preserves blocked slots', () => {
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+            slots: [
+                { dayOfWeek: 3, hour: 14, status: 'blocked' },
+            ],
+            handleChange: vi.fn(),
+            applyPreset: vi.fn(),
+            clear: vi.fn(),
+            save: vi.fn(),
+            isDirty: false,
+            isSaving: false,
+            isLoading: false,
+            tzLabel: 'PST',
+            events: [],
+            todayIndex: 3,
+            currentHour: 15.5,
+            nextWeekEvents: [],
+            nextWeekSlots: [],
+            weekStart: '2026-02-08',
+            absences: [],
+            discard: vi.fn(),
+            overrides: [],
+        });
+
+        renderPanel({ mode: 'profile' });
+
+        const cell = screen.getByTestId('cell-3-14');
+        expect(cell.dataset.status).toBe('blocked');
+    });
+
+});
+
+describe('Profile Mode Rolling Override — sub 1', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('forces rolling=false in profile mode even if rolling=true is passed', () => {
+        const mockEditor = {
+            slots: [],
+            handleChange: vi.fn(),
+            applyPreset: vi.fn(),
+            clear: vi.fn(),
+            discard: vi.fn(),
+            save: vi.fn(),
+            isDirty: false,
+            isSaving: false,
+            isLoading: false,
+            tzLabel: 'PST',
+            events: [],
+            todayIndex: 3,
+            currentHour: 15.5,
+            nextWeekEvents: [],
+            nextWeekSlots: [],
+            weekStart: '2026-02-08',
+            overrides: [],
+            absences: [],
+        };
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue(mockEditor);
+
+        renderPanel({ mode: 'profile', rolling: true });
+
+        // useGameTimeEditor should be called with rolling: false
+        expect(vi.mocked(mockUseGameTimeEditor)).toHaveBeenCalledWith(
+            expect.objectContaining({ rolling: false }),
+        );
+    });
+
+});
+
+describe('Profile Mode Rolling Override — sub 2', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('respects rolling prop in modal mode', () => {
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+            slots: [],
+            handleChange: vi.fn(),
+            applyPreset: vi.fn(),
+            clear: vi.fn(),
+            save: vi.fn(),
+            isDirty: false,
+            isSaving: false,
+            isLoading: false,
+            tzLabel: 'PST',
+            events: [],
+            todayIndex: 3,
+            currentHour: 15.5,
+            nextWeekEvents: [],
+            nextWeekSlots: [],
+            weekStart: '2026-02-08',
+            absences: [],
+            discard: vi.fn(),
+            overrides: [],
+        });
+
+        renderPanel({ mode: 'modal', rolling: true });
+
+        // useGameTimeEditor should be called with rolling: true
+        expect(vi.mocked(mockUseGameTimeEditor)).toHaveBeenCalledWith(
+            expect.objectContaining({ rolling: true }),
+        );
+    });
+
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 7', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Mobile Responsive Behavior (ROK-340) — part 1', () => {
         beforeEach(() => {
             // Mock window.matchMedia for responsive tests
             Object.defineProperty(window, 'matchMedia', {
@@ -390,40 +465,67 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
         });
 
-        it('mobile editor receives correct props in profile mode', () => {
-            // Mock mobile viewport
-            window.matchMedia = vi.fn().mockImplementation(query => ({
-                matches: query === '(max-width: 767px)' ? true : false,
-                media: query,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-            }));
+    });
 
-            vi.mocked(mockUseGameTimeEditor).mockReturnValue({
-                slots: [{ dayOfWeek: 0, hour: 6, status: 'available' }],
-                handleChange: vi.fn(),
-                applyPreset: vi.fn(),
-                clear: vi.fn(),
-                discard: vi.fn(),
-                save: vi.fn(),
-                isDirty: false,
-                isSaving: false,
-                isLoading: false,
-                tzLabel: 'PST',
-                events: [],
-                todayIndex: 0,
-                currentHour: 12,
-                nextWeekEvents: [],
-                nextWeekSlots: [],
-                weekStart: '2026-02-08',
-                overrides: [],
-                absences: [],
+});
+
+describe('Mobile Responsive Behavior (ROK-340) — part 2', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+    beforeEach(() => {
+        setupMatchMediaMock();
+    });
+
+    it('mobile editor receives correct props in profile mode', () => {
+        setupMatchMediaMock(true);
+
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+            slots: [{ dayOfWeek: 0, hour: 6, status: 'available' }],
+            handleChange: vi.fn(),
+            applyPreset: vi.fn(),
+            clear: vi.fn(),
+            discard: vi.fn(),
+            save: vi.fn(),
+            isDirty: false,
+            isSaving: false,
+            isLoading: false,
+            tzLabel: 'PST',
+            events: [],
+            todayIndex: 0,
+            currentHour: 12,
+            nextWeekEvents: [],
+            nextWeekSlots: [],
+            weekStart: '2026-02-08',
+            overrides: [],
+            absences: [],
+        });
+
+        renderPanel({ mode: 'profile' });
+
+        const mobileEditor = screen.getByTestId('game-time-mobile-editor');
+        expect(mobileEditor).toBeInTheDocument();
+    });
+
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 9', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Mobile Responsive Behavior (ROK-340) — part 3', () => {
+        beforeEach(() => {
+            // Mock window.matchMedia for responsive tests
+            Object.defineProperty(window, 'matchMedia', {
+                writable: true,
+                value: vi.fn().mockImplementation(query => ({
+                    matches: false,
+                    media: query,
+                    addEventListener: vi.fn(),
+                    removeEventListener: vi.fn(),
+                })),
             });
-
-            renderPanel({ mode: 'profile' });
-
-            const mobileEditor = screen.getByTestId('game-time-mobile-editor');
-            expect(mobileEditor).toBeInTheDocument();
         });
 
         it('mobile editor is read-only in picker mode', () => {
@@ -450,39 +552,66 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(screen.queryByText('Morning')).not.toBeInTheDocument();
         });
 
-        it('mobile editor displays timezone label', () => {
-            // Mock mobile viewport
-            window.matchMedia = vi.fn().mockImplementation(query => ({
-                matches: query === '(max-width: 767px)' ? true : false,
-                media: query,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-            }));
+    });
 
-            vi.mocked(mockUseGameTimeEditor).mockReturnValue({
-                slots: [],
-                handleChange: vi.fn(),
-                applyPreset: vi.fn(),
-                clear: vi.fn(),
-                discard: vi.fn(),
-                save: vi.fn(),
-                isDirty: false,
-                isSaving: false,
-                isLoading: false,
-                tzLabel: 'PST',
-                events: [],
-                todayIndex: 0,
-                currentHour: 12,
-                nextWeekEvents: [],
-                nextWeekSlots: [],
-                weekStart: '2026-02-08',
-                overrides: [],
-                absences: [],
+});
+
+describe('Mobile Responsive Behavior (ROK-340) — part 4', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+    beforeEach(() => {
+        setupMatchMediaMock();
+    });
+
+    it('mobile editor displays timezone label', () => {
+        setupMatchMediaMock(true);
+
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+            slots: [],
+            handleChange: vi.fn(),
+            applyPreset: vi.fn(),
+            clear: vi.fn(),
+            discard: vi.fn(),
+            save: vi.fn(),
+            isDirty: false,
+            isSaving: false,
+            isLoading: false,
+            tzLabel: 'PST',
+            events: [],
+            todayIndex: 0,
+            currentHour: 12,
+            nextWeekEvents: [],
+            nextWeekSlots: [],
+            weekStart: '2026-02-08',
+            overrides: [],
+            absences: [],
+        });
+
+        renderPanel({ mode: 'profile' });
+
+        expect(screen.getByText('PST')).toBeInTheDocument();
+    });
+
+});
+
+describe('GameTimePanel - Profile Mode (ROK-301) — part 11', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    describe('Mobile Responsive Behavior (ROK-340) — part 5', () => {
+        beforeEach(() => {
+            // Mock window.matchMedia for responsive tests
+            Object.defineProperty(window, 'matchMedia', {
+                writable: true,
+                value: vi.fn().mockImplementation(query => ({
+                    matches: false,
+                    media: query,
+                    addEventListener: vi.fn(),
+                    removeEventListener: vi.fn(),
+                })),
             });
-
-            renderPanel({ mode: 'profile' });
-
-            expect(screen.getByText('PST')).toBeInTheDocument();
         });
 
         it('breakpoint is exactly 767px (mobile) vs 768px (desktop)', () => {
@@ -512,5 +641,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             renderPanel({ mode: 'profile' });
             expect(screen.queryByTestId('game-time-grid')).toBeInTheDocument();
         });
+
     });
+
 });

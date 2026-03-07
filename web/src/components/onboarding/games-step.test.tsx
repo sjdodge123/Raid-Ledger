@@ -161,14 +161,13 @@ const DEFAULT_DISCOVER_DATA = {
     isLoading: false,
 };
 
-describe('GamesStep', () => {
+describe('GamesStep — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Restore default mock implementations after each test
         mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
         mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
     });
-
     afterEach(() => {
         activeQueryClient?.clear();
     });
@@ -199,6 +198,19 @@ describe('GamesStep', () => {
             renderWithProviders(<GamesStep />);
             expect(screen.getByRole('button', { name: /^all$/i })).toBeInTheDocument();
         });
+    });
+
+});
+
+describe('GamesStep — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     describe('Genre filtering', () => {
@@ -243,6 +255,19 @@ describe('GamesStep', () => {
         });
     });
 
+});
+
+describe('GamesStep — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
     describe('Search', () => {
         it('updates search query when user types', () => {
             renderWithProviders(<GamesStep />);
@@ -273,9 +298,25 @@ describe('GamesStep', () => {
     });
 
     // ============================================================
+
     // ROK-375: Local source warning banner
+
     // ============================================================
-    describe('ROK-375: local source warning banner', () => {
+
+});
+
+describe('GamesStep — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    describe('ROK-375: local source warning banner — part 1', () => {
         it('shows "external search unavailable" warning when search source is "local"', () => {
             mockUseGameSearch.mockReturnValue({
                 data: {
@@ -313,6 +354,22 @@ describe('GamesStep', () => {
             expect(screen.getByText(/external search unavailable/i)).toBeInTheDocument();
         });
 
+    });
+
+});
+
+describe('GamesStep — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    describe('ROK-375: local source warning banner — part 2', () => {
         it('does NOT show warning when search source is "igdb"', () => {
             mockUseGameSearch.mockReturnValue({
                 data: {
@@ -350,6 +407,22 @@ describe('GamesStep', () => {
             expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
         });
 
+    });
+
+});
+
+describe('GamesStep — part 6', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Restore default mock implementations after each test
+        mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
+        mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    describe('ROK-375: local source warning banner — part 3', () => {
         it('does NOT show warning when search source is "database"', () => {
             mockUseGameSearch.mockReturnValue({
                 data: {
@@ -396,4 +469,5 @@ describe('GamesStep', () => {
         });
 
     });
+
 });

@@ -72,7 +72,7 @@ async function createFutureEvent(
   return res.body.id as number;
 }
 
-describe('Game-Time (integration)', () => {
+function describeGameTime() {
   let testApp: TestApp;
   let adminToken: string;
 
@@ -90,7 +90,7 @@ describe('Game-Time (integration)', () => {
   // Template CRUD
   // ===================================================================
 
-  describe('template save and retrieve', () => {
+  function describeTemplateSaveAndRetrieve() {
     it('should save template slots and return them in display convention', async () => {
       const { token } = await createMemberAndLogin(
         testApp,
@@ -215,14 +215,16 @@ describe('Game-Time (integration)', () => {
       expect(dbRows[0].dayOfWeek).toBe(6); // DB convention: Sun=6
       expect(dbRows[0].startHour).toBe(10);
     });
-  });
+  }
+  describe('template save and retrieve', () =>
+    describeTemplateSaveAndRetrieve());
 
   // ===================================================================
   // Committed-Slot Preservation
   // ===================================================================
 
-  describe('committed-slot preservation', () => {
-    it('should preserve template slots that overlap with active event signups', async () => {
+  function describeCommittedSlotPreservation() {
+    async function testPreserveTemplateSlotsThatOverlapWithActiveEventSignu() {
       const { token } = await createMemberAndLogin(
         testApp,
         'committed_user',
@@ -274,15 +276,19 @@ describe('Game-Time (integration)', () => {
       expect(putRes.status).toBe(200);
       // The response should include both the submitted slot AND preserved committed slots
       expect(putRes.body.data.slots.length).toBeGreaterThanOrEqual(2);
-    });
-  });
+    }
+    it('should preserve template slots that overlap with active event signups', () =>
+      testPreserveTemplateSlotsThatOverlapWithActiveEventSignu());
+  }
+  describe('committed-slot preservation', () =>
+    describeCommittedSlotPreservation());
 
   // ===================================================================
   // Overrides
   // ===================================================================
 
-  describe('overrides', () => {
-    it('should save overrides and reflect them in composite view', async () => {
+  function describeOverrides() {
+    async function testSaveOverridesAndReflectThemInCompositeView() {
       const { token } = await createMemberAndLogin(
         testApp,
         'override_user',
@@ -324,9 +330,11 @@ describe('Game-Time (integration)', () => {
           }),
         ]),
       );
-    });
+    }
+    it('should save overrides and reflect them in composite view', () =>
+      testSaveOverridesAndReflectThemInCompositeView());
 
-    it('should upsert on same (userId, date, hour) rather than duplicate', async () => {
+    async function testUpsertOnSameRatherThanDuplicate() {
       const { token, userId } = await createMemberAndLogin(
         testApp,
         'upsert_user',
@@ -365,15 +373,18 @@ describe('Game-Time (integration)', () => {
 
       expect(rows.length).toBe(1);
       expect(rows[0].status).toBe('available');
-    });
-  });
+    }
+    it('should upsert on same (userId, date, hour) rather than duplicate', () =>
+      testUpsertOnSameRatherThanDuplicate());
+  }
+  describe('overrides', () => describeOverrides());
 
   // ===================================================================
   // Absences
   // ===================================================================
 
-  describe('absences', () => {
-    it('should create, list, and delete absences', async () => {
+  function describeAbsences() {
+    async function testCreateListAndDeleteAbsences() {
       const { token } = await createMemberAndLogin(
         testApp,
         'absence_user',
@@ -422,9 +433,11 @@ describe('Game-Time (integration)', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(listRes2.body.data.length).toBe(0);
-    });
+    }
+    it('should create, list, and delete absences', () =>
+      testCreateListAndDeleteAbsences());
 
-    it('should block template slots during absence in composite view', async () => {
+    async function testBlockTemplateSlotsDuringAbsenceInCompositeView() {
       const { token } = await createMemberAndLogin(
         testApp,
         'absence_block',
@@ -465,15 +478,18 @@ describe('Game-Time (integration)', () => {
       );
       expect(tueSlot).toBeDefined();
       expect(tueSlot!.status).toBe('blocked');
-    });
-  });
+    }
+    it('should block template slots during absence in composite view', () =>
+      testBlockTemplateSlotsDuringAbsenceInCompositeView());
+  }
+  describe('absences', () => describeAbsences());
 
   // ===================================================================
   // Composite View — Signup Preview (Window Function)
   // ===================================================================
 
-  describe('composite view', () => {
-    it('should return events with signup preview (max 6) via window function', async () => {
+  function describeCompositeView() {
+    async function testReturnEventsWithSignupPreviewViaWindowFunction() {
       const { token } = await createMemberAndLogin(
         testApp,
         'composite_user',
@@ -536,9 +552,11 @@ describe('Game-Time (integration)', () => {
       ).toBeLessThanOrEqual(6);
       // Total count should reflect all signups (admin + user + 5 others = 7)
       expect(eventBlock!.signupCount).toBeGreaterThanOrEqual(7);
-    });
+    }
+    it('should return events with signup preview (max 6) via window function', () =>
+      testReturnEventsWithSignupPreviewViaWindowFunction());
 
-    it('should return committed slots for events outside template', async () => {
+    async function testReturnCommittedSlotsForEventsOutsideTemplate() {
       const { token } = await createMemberAndLogin(
         testApp,
         'offhours_user',
@@ -589,8 +607,11 @@ describe('Game-Time (integration)', () => {
         (s) => s.status === 'committed' && s.fromTemplate === false,
       );
       expect(committedNonTemplate.length).toBeGreaterThanOrEqual(1);
-    });
-  });
+    }
+    it('should return committed slots for events outside template', () =>
+      testReturnCommittedSlotsForEventsOutsideTemplate());
+  }
+  describe('composite view', () => describeCompositeView());
 
   // ===================================================================
   // Auth Guards
@@ -609,4 +630,5 @@ describe('Game-Time (integration)', () => {
       expect(res.status).toBe(401);
     });
   });
-});
+}
+describe('Game-Time (integration)', () => describeGameTime());

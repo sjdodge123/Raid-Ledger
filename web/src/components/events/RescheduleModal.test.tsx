@@ -85,11 +85,10 @@ function renderModal(overrides: Partial<RescheduleModalProps> = {}) {
     return render(<RescheduleModal {...props} />, { wrapper: createWrapper() });
 }
 
-describe('RescheduleModal', () => {
+describe('RescheduleModal — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
-
     afterEach(() => {
         activeQueryClient?.clear();
     });
@@ -146,6 +145,16 @@ describe('RescheduleModal', () => {
         });
     });
 
+});
+
+describe('RescheduleModal — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
     describe('full 24h scrollable grid (ROK-475)', () => {
         it('grid renders all 24 hours (no hourRange filtering)', () => {
             renderModal();
@@ -164,6 +173,16 @@ describe('RescheduleModal', () => {
             expect(within(grid).getByTestId('cell-0-19')).toBeInTheDocument();
             expect(within(grid).getByTestId('cell-3-20')).toBeInTheDocument();
         });
+    });
+
+});
+
+describe('RescheduleModal — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     describe('cell click interaction', () => {
@@ -213,6 +232,16 @@ describe('RescheduleModal', () => {
             expect(screen.queryByText('Confirm')).not.toBeInTheDocument();
             expect(screen.queryByText('New time')).not.toBeInTheDocument();
         });
+    });
+
+});
+
+describe('RescheduleModal — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     describe('duration presets', () => {
@@ -277,6 +306,16 @@ describe('RescheduleModal', () => {
         });
     });
 
+});
+
+describe('RescheduleModal — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
     describe('event block rendering in grid', () => {
         it('renders the current event block in the grid', () => {
             renderModal();
@@ -321,6 +360,7 @@ describe('RescheduleModal', () => {
             expect(onClose).toHaveBeenCalled();
         });
     });
+
 });
 
 // ---------------------------------------------------------------------------
@@ -329,11 +369,10 @@ describe('RescheduleModal', () => {
 
 import { useAggregateGameTime } from '../../hooks/use-reschedule';
 
-describe('ROK-475: full 24h scrollable grid', () => {
+describe('ROK-475: full 24h scrollable grid — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
-
     afterEach(() => {
         activeQueryClient?.clear();
     });
@@ -387,6 +426,16 @@ describe('ROK-475: full 24h scrollable grid', () => {
 
         const currentDay = new Date('2026-02-25T10:00:00.000Z').getDay();
         expect(screen.getByTestId(`event-block-42-${currentDay}`)).toBeInTheDocument();
+    });
+
+});
+
+describe('ROK-475: full 24h scrollable grid — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('heatmap cells are rendered at the correct positions', () => {
@@ -447,4 +496,5 @@ describe('ROK-475: full 24h scrollable grid', () => {
         expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
         expect(screen.queryByTestId('team-availability-picker')).not.toBeInTheDocument();
     });
+
 });

@@ -43,7 +43,7 @@ function timeOffset(offsetMs: number): string {
   return new Date(Date.now() + offsetMs).toISOString();
 }
 
-describe('showVoiceRoster logic (ROK-530)', () => {
+describe('showVoiceRoster logic (ROK-530) — Ad-hoc events', () => {
   // ── Ad-hoc events ─────────────────────────────────────────────────────────
 
   it('showVoiceRoster is true for ad-hoc events regardless of time', () => {
@@ -117,6 +117,9 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(upcomingWithGame)).toBe(false);
   });
 
+});
+
+describe('showVoiceRoster logic (ROK-530) — Planned events: ended', () => {
   it('showVoiceRoster is false for planned upcoming events without a game', () => {
     const upcoming = {
       isAdHoc: false,
@@ -146,6 +149,7 @@ describe('showVoiceRoster logic (ROK-530)', () => {
   it('showVoiceRoster is false when event is null (loading state)', () => {
     expect(deriveShowVoiceRoster(null)).toBe(false);
   });
+
 });
 
 // ─── useVoiceRoster hook receives correct eventId ─────────────────────────────

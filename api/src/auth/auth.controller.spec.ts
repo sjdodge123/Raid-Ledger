@@ -18,7 +18,7 @@ interface AuthenticatedRequest {
   user: { id: number; username: string; role: UserRole };
 }
 
-describe('AuthController — redeemIntent', () => {
+function describeAuthControllerRedeemIntent() {
   let controller: AuthController;
   let mockIntentTokenService: {
     generate: jest.Mock;
@@ -62,7 +62,7 @@ describe('AuthController — redeemIntent', () => {
     user: mockUser,
   };
 
-  beforeEach(async () => {
+  async function beforeEachHelper2() {
     mockIntentTokenService = {
       generate: jest.fn(),
       validate: jest.fn(),
@@ -123,9 +123,10 @@ describe('AuthController — redeemIntent', () => {
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
-  });
+  }
+  beforeEach(() => beforeEachHelper2());
 
-  describe('redeemIntent', () => {
+  function describeRedeemIntent() {
     it('should return success with eventId when token is valid', async () => {
       mockIntentTokenService.validate.mockReturnValueOnce({
         eventId: 42,
@@ -300,14 +301,17 @@ describe('AuthController — redeemIntent', () => {
       expect(result.message).toContain('different Discord user');
       expect(mockSignupsService.signup).not.toHaveBeenCalled();
     });
-  });
-});
+  }
+  describe('redeemIntent', () => describeRedeemIntent());
+}
+describe('AuthController — redeemIntent', () =>
+  describeAuthControllerRedeemIntent());
 
 // ============================================================
 // Adversarial tests: GET /auth/me — avatarPreference (ROK-352)
 // ============================================================
 
-describe('AuthController — getProfile (ROK-352)', () => {
+function describeAuthControllerGetProfile() {
   let controller: AuthController;
   let mockUsersService: {
     findById: jest.Mock;
@@ -366,7 +370,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
     return module.get<AuthController>(AuthController);
   };
 
-  beforeEach(() => {
+  function beforeEachHelper() {
     mockUsersService = {
       findById: jest.fn().mockResolvedValue({
         id: 1,
@@ -406,7 +410,8 @@ describe('AuthController — getProfile (ROK-352)', () => {
       findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
       getAvatarUrlByName: jest.fn().mockResolvedValue(null),
     };
-  });
+  }
+  beforeEach(() => beforeEachHelper());
 
   it('includes avatarPreference: null in response when no preference stored', async () => {
     mockPreferencesService.getUserPreference.mockResolvedValueOnce(null);
@@ -608,4 +613,6 @@ describe('AuthController — getProfile (ROK-352)', () => {
     // avatarPref?.value ?? null  → null when value is null
     expect(result['avatarPreference']).toBeNull();
   });
-});
+}
+describe('AuthController — getProfile (ROK-352)', () =>
+  describeAuthControllerGetProfile());

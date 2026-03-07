@@ -236,13 +236,12 @@ describe('CalendarPage — All / None buttons', () => {
     });
 });
 
-describe('CalendarPage — filter persistence when view changes', () => {
+describe('CalendarPage — filter persistence when view changes — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
-
     afterEach(() => {
         activeQueryClient?.clear();
     });
@@ -280,6 +279,18 @@ describe('CalendarPage — filter persistence when view changes', () => {
             const updatedWowCb = updatedWowLabel.querySelector('input[type="checkbox"]') as HTMLInputElement;
             expect(updatedWowCb).not.toBeChecked();
         }
+    });
+
+});
+
+describe('CalendarPage — filter persistence when view changes — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('filter selections survive component unmount/remount (ROK-372 regression)', () => {
@@ -333,6 +344,18 @@ describe('CalendarPage — filter persistence when view changes', () => {
         expect(updatedWowCb).not.toBeChecked();
     });
 
+});
+
+describe('CalendarPage — filter persistence when view changes — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
+    });
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
     it('games do not get removed from allKnownGames when a different date range is loaded', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
@@ -344,6 +367,7 @@ describe('CalendarPage — filter persistence when view changes', () => {
         expect(names).toContain('Apex Legends');
         expect(names).toContain('World of Warcraft');
     });
+
 });
 
 describe('CalendarPage — FAB and BottomSheet', () => {

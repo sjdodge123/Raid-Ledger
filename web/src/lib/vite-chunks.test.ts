@@ -17,7 +17,7 @@ const manualChunks: Record<string, string[]> = {
     'socket': ['socket.io-client'],
 };
 
-describe('vite manualChunks configuration (ROK-343)', () => {
+describe('vite manualChunks configuration (ROK-343) — part 1', () => {
     it('defines exactly 5 vendor chunks', () => {
         expect(Object.keys(manualChunks).length).toBe(5);
     });
@@ -78,6 +78,9 @@ describe('vite manualChunks configuration (ROK-343)', () => {
         });
     });
 
+});
+
+describe('vite manualChunks configuration (ROK-343) — part 2', () => {
     describe('calendar-vendor chunk', () => {
         const chunk = manualChunks['calendar-vendor'];
 
@@ -136,4 +139,5 @@ describe('vite manualChunks configuration (ROK-343)', () => {
             expect(modules.length, `chunk ${name} should not be empty`).toBeGreaterThan(0);
         }
     });
+
 });

@@ -23,7 +23,7 @@ const createMockPug = (overrides: Partial<PugSlotResponseDto> = {}): PugSlotResp
     ...overrides,
 });
 
-describe('PugCard', () => {
+describe('PugCard — part 1', () => {
     describe('basic rendering', () => {
         it('renders Discord username', () => {
             render(<PugCard pug={createMockPug()} />);
@@ -82,7 +82,10 @@ describe('PugCard', () => {
         });
     });
 
-    describe('server invite link', () => {
+});
+
+describe('PugCard — part 2', () => {
+    describe('server invite link — part 1', () => {
         it('shows invite link for pending PUGs with serverInviteUrl when canManage', () => {
             render(
                 <PugCard
@@ -138,6 +141,12 @@ describe('PugCard', () => {
             expect(screen.queryByText('Server invite link')).not.toBeInTheDocument();
         });
 
+    });
+
+});
+
+describe('PugCard — part 3', () => {
+    describe('server invite link — part 2', () => {
         it('has a copy button next to the invite link', () => {
             render(
                 <PugCard
@@ -174,8 +183,12 @@ describe('PugCard', () => {
 
             expect(mockWriteText).toHaveBeenCalledWith('https://discord.gg/test123');
         });
+
     });
 
+});
+
+describe('PugCard — part 4', () => {
     describe('invite badge (ROK-263)', () => {
         it('renders clickable invite badge when canManage and inviteCode present', () => {
             render(
@@ -240,7 +253,9 @@ describe('PugCard', () => {
         });
     });
 
-    describe('dropdown link actions (ROK-263)', () => {
+});
+
+describe('dropdown link actions (ROK-263)', () => {
         it('shows Copy Link and Regenerate Link in menu when inviteCode is present', () => {
             render(
                 <PugCard
@@ -310,8 +325,9 @@ describe('PugCard', () => {
 
             expect(onRegenerateLink).toHaveBeenCalledWith('pug-uuid-1');
         });
-    });
+});
 
+describe('PugCard — part 6', () => {
     describe('manage actions', () => {
         it('shows action menu button when canManage is true', () => {
             render(<PugCard pug={createMockPug()} canManage />);
@@ -355,4 +371,5 @@ describe('PugCard', () => {
             expect(onRemove).toHaveBeenCalledWith('pug-uuid-1');
         });
     });
+
 });

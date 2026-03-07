@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { GameTimeGrid } from './GameTimeGrid';
 import type { GameTimeSlot, HeatmapCell } from './GameTimeGrid';
 
-describe('GameTimeGrid', () => {
+describe('GameTimeGrid — part 1', () => {
     it('renders 7 day headers (Sunday first)', () => {
         render(<GameTimeGrid slots={[]} />);
         expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sun');
@@ -66,6 +66,9 @@ describe('GameTimeGrid', () => {
         ]);
     });
 
+});
+
+describe('GameTimeGrid — part 2', () => {
     it('click toggles cell from available to inactive (erase)', () => {
         const slots: GameTimeSlot[] = [
             { dayOfWeek: 1, hour: 10, status: 'available' },
@@ -138,6 +141,9 @@ describe('GameTimeGrid', () => {
         expect(cells).toHaveLength(7 * 18);
     });
 
+});
+
+describe('GameTimeGrid — part 3', () => {
     describe('event block overlays', () => {
         const mockEvents = [
             {
@@ -178,6 +184,9 @@ describe('GameTimeGrid', () => {
         });
     });
 
+});
+
+describe('GameTimeGrid — part 4', () => {
     describe('preview block overlays', () => {
         it('renders preview blocks', () => {
             const previewBlocks = [
@@ -207,6 +216,9 @@ describe('GameTimeGrid', () => {
         });
     });
 
+});
+
+describe('GameTimeGrid — part 5', () => {
     describe('fullDayNames prop (ROK-301)', () => {
         it('renders abbreviated day names by default', () => {
             render(<GameTimeGrid slots={[]} />);
@@ -252,6 +264,9 @@ describe('GameTimeGrid', () => {
 
     // === ROK-370: Fix reschedule modal grid click offset ===
 
+});
+
+describe('GameTimeGrid — part 6', () => {
     describe('compact prop (ROK-370)', () => {
         it('compact mode does not affect slot status rendering', () => {
             const slots: GameTimeSlot[] = [
@@ -304,6 +319,9 @@ describe('GameTimeGrid', () => {
         });
     });
 
+});
+
+describe('GameTimeGrid — part 7', () => {
     describe('heatmap overlay with compact grid (ROK-370)', () => {
         const heatmapCells: HeatmapCell[] = [
             { dayOfWeek: 0, hour: 10, availableCount: 3, totalCount: 4 },
@@ -356,4 +374,5 @@ describe('GameTimeGrid', () => {
             expect(screen.queryByTestId('cell-0-18')).not.toBeInTheDocument();
         });
     });
+
 });

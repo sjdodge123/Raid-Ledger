@@ -86,20 +86,7 @@ describe('CharactersService — crud', () => {
     displayOrder: 1,
   };
 
-  beforeEach(async () => {
-    mockDb = {
-      select: jest.fn(),
-      insert: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      transaction: jest.fn(),
-    };
-
-    mockPluginRegistry = {
-      getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
-    };
-
-    // Default select chain
+  function setupMockDbChains() {
     const selectChain = {
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
@@ -113,31 +100,26 @@ describe('CharactersService — crud', () => {
     };
     mockDb.select.mockReturnValue(selectChain);
 
-    // Default insert chain
-    const insertChain = {
+    mockDb.insert.mockReturnValue({
       values: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockCharacter]),
       }),
-    };
-    mockDb.insert.mockReturnValue(insertChain);
+    });
 
-    // Default update chain
-    const updateChain = {
+    mockDb.update.mockReturnValue({
       set: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
           returning: jest.fn().mockResolvedValue([mockCharacter]),
         }),
       }),
-    };
-    mockDb.update.mockReturnValue(updateChain);
+    });
 
-    // Default delete chain
-    const deleteChain = {
+    mockDb.delete.mockReturnValue({
       where: jest.fn().mockResolvedValue(undefined),
-    };
-    mockDb.delete.mockReturnValue(deleteChain);
+    });
+  }
 
-    // Default transaction mock — includes tx.select for duplicate claim check + ROK-206 charCount
+  function setupTransactionMock() {
     mockDb.transaction.mockImplementation(
       (callback: (tx: Record<string, jest.Mock>) => unknown) => {
         const tx = {
@@ -160,6 +142,23 @@ describe('CharactersService — crud', () => {
         return callback(tx);
       },
     );
+  }
+
+  beforeEach(async () => {
+    mockDb = {
+      select: jest.fn(),
+      insert: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      transaction: jest.fn(),
+    };
+
+    mockPluginRegistry = {
+      getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
+    };
+
+    setupMockDbChains();
+    setupTransactionMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

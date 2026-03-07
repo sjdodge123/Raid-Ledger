@@ -15,7 +15,7 @@ vi.mock('../icons/DiscordIcon', () => ({
 import { useServerInvite } from '../../hooks/use-discord-onboarding';
 const mockUseServerInvite = useServerInvite as unknown as ReturnType<typeof vi.fn>;
 
-describe('DiscordJoinStep', () => {
+describe('DiscordJoinStep — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -90,6 +90,13 @@ describe('DiscordJoinStep', () => {
 
     });
 
+});
+
+describe('DiscordJoinStep — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('With no invite URL available (null)', () => {
         beforeEach(() => {
             mockUseServerInvite.mockReturnValue({
@@ -151,6 +158,13 @@ describe('DiscordJoinStep', () => {
         });
     });
 
+});
+
+describe('DiscordJoinStep — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('Informational text', () => {
         beforeEach(() => {
             mockUseServerInvite.mockReturnValue({
@@ -171,4 +185,5 @@ describe('DiscordJoinStep', () => {
             expect(screen.getByText(/join the server later/i)).toBeInTheDocument();
         });
     });
+
 });

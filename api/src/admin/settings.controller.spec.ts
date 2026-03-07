@@ -8,72 +8,79 @@ import { SettingsService } from '../settings/settings.service';
 import { IgdbService } from '../igdb/igdb.service';
 import { DemoDataService } from './demo-data.service';
 
+function createMockIgdbService(): Partial<IgdbService> {
+  return {
+    hideGame: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Game "Valheim" hidden from users.',
+      name: 'Valheim',
+    }),
+    unhideGame: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Game "Valheim" is now visible to users.',
+      name: 'Valheim',
+    }),
+    banGame: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Game "Valheim" has been banned.',
+      name: 'Valheim',
+    }),
+    unbanGame: jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Game "Valheim" has been unbanned and restored.',
+      name: 'Valheim',
+    }),
+    isAdultFilterEnabled: jest.fn().mockResolvedValue(false),
+    hideAdultGames: jest.fn().mockResolvedValue(0),
+    getSyncStatus: jest.fn().mockResolvedValue({
+      lastSyncAt: null,
+      gameCount: 0,
+      syncInProgress: false,
+    }),
+    getHealthStatus: jest.fn().mockReturnValue({
+      tokenStatus: 'not_fetched',
+      tokenExpiresAt: null,
+      lastApiCallAt: null,
+      lastApiCallSuccess: null,
+    }),
+    syncAllGames: jest
+      .fn()
+      .mockResolvedValue({ refreshed: 0, discovered: 0, backfilled: 0 }),
+    database: {
+      select: jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+            orderBy: jest.fn().mockReturnValue({
+              limit: jest.fn().mockReturnValue({
+                offset: jest.fn().mockResolvedValue([]),
+              }),
+            }),
+          }),
+        }),
+      }),
+    } as any,
+  };
+}
+
+function createMockSettingsService(): Partial<SettingsService> {
+  return {
+    set: jest.fn().mockResolvedValue(undefined),
+    get: jest.fn().mockResolvedValue(null),
+    isIgdbConfigured: jest.fn().mockResolvedValue(false),
+    getDiscordOAuthConfig: jest.fn().mockResolvedValue(null),
+    isBlizzardConfigured: jest.fn().mockResolvedValue(false),
+  } as any;
+}
+
 describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', () => {
   let controller: AdminSettingsController;
   let mockIgdbService: Partial<IgdbService>;
   let mockSettingsService: Partial<SettingsService>;
 
   beforeEach(async () => {
-    mockIgdbService = {
-      hideGame: jest.fn().mockResolvedValue({
-        success: true,
-        message: 'Game "Valheim" hidden from users.',
-        name: 'Valheim',
-      }),
-      unhideGame: jest.fn().mockResolvedValue({
-        success: true,
-        message: 'Game "Valheim" is now visible to users.',
-        name: 'Valheim',
-      }),
-      banGame: jest.fn().mockResolvedValue({
-        success: true,
-        message: 'Game "Valheim" has been banned.',
-        name: 'Valheim',
-      }),
-      unbanGame: jest.fn().mockResolvedValue({
-        success: true,
-        message: 'Game "Valheim" has been unbanned and restored.',
-        name: 'Valheim',
-      }),
-      isAdultFilterEnabled: jest.fn().mockResolvedValue(false),
-      hideAdultGames: jest.fn().mockResolvedValue(0),
-      getSyncStatus: jest.fn().mockResolvedValue({
-        lastSyncAt: null,
-        gameCount: 0,
-        syncInProgress: false,
-      }),
-      getHealthStatus: jest.fn().mockReturnValue({
-        tokenStatus: 'not_fetched',
-        tokenExpiresAt: null,
-        lastApiCallAt: null,
-        lastApiCallSuccess: null,
-      }),
-      syncAllGames: jest
-        .fn()
-        .mockResolvedValue({ refreshed: 0, discovered: 0, backfilled: 0 }),
-      database: {
-        select: jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue([]),
-              orderBy: jest.fn().mockReturnValue({
-                limit: jest.fn().mockReturnValue({
-                  offset: jest.fn().mockResolvedValue([]),
-                }),
-              }),
-            }),
-          }),
-        }),
-      } as any,
-    };
-
-    mockSettingsService = {
-      set: jest.fn().mockResolvedValue(undefined),
-      get: jest.fn().mockResolvedValue(null),
-      isIgdbConfigured: jest.fn().mockResolvedValue(false),
-      getDiscordOAuthConfig: jest.fn().mockResolvedValue(null),
-      isBlizzardConfigured: jest.fn().mockResolvedValue(false),
-    } as any;
+    mockIgdbService = createMockIgdbService();
+    mockSettingsService = createMockSettingsService();
 
     const mockDemoDataService = {
       getStatus: jest.fn().mockResolvedValue({ demoMode: false }),

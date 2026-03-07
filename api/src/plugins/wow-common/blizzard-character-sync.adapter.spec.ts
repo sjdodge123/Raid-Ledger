@@ -2,32 +2,67 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardService } from './blizzard.service';
 
-describe('BlizzardCharacterSyncAdapter', () => {
-  let adapter: BlizzardCharacterSyncAdapter;
-  let mockBlizzardService: {
-    fetchCharacterProfile: jest.Mock;
-    fetchCharacterSpecializations: jest.Mock;
-    fetchCharacterEquipment: jest.Mock;
+let adapter: BlizzardCharacterSyncAdapter;
+let mockBlizzardService: {
+  fetchCharacterProfile: jest.Mock;
+  fetchCharacterSpecializations: jest.Mock;
+  fetchCharacterEquipment: jest.Mock;
+};
+
+async function setupEach() {
+  mockBlizzardService = {
+    fetchCharacterProfile: jest.fn(),
+    fetchCharacterSpecializations: jest.fn(),
+    fetchCharacterEquipment: jest.fn(),
   };
 
-  beforeEach(async () => {
-    mockBlizzardService = {
-      fetchCharacterProfile: jest.fn(),
-      fetchCharacterSpecializations: jest.fn(),
-      fetchCharacterEquipment: jest.fn(),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        BlizzardCharacterSyncAdapter,
-        { provide: BlizzardService, useValue: mockBlizzardService },
-      ],
-    }).compile();
-
-    adapter = module.get<BlizzardCharacterSyncAdapter>(
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
       BlizzardCharacterSyncAdapter,
-    );
-  });
+      { provide: BlizzardService, useValue: mockBlizzardService },
+    ],
+  }).compile();
+
+  adapter = module.get<BlizzardCharacterSyncAdapter>(
+    BlizzardCharacterSyncAdapter,
+  );
+}
+
+async function testFetchProfileDelegation() {
+  const mockProfile = {
+    name: 'Thrall',
+    realm: 'area-52',
+    class: 'Shaman',
+    spec: 'Enhancement',
+    role: 'dps' as const,
+    level: 80,
+    race: 'Orc',
+    faction: 'horde',
+    itemLevel: 480,
+    avatarUrl: null,
+    renderUrl: null,
+    profileUrl: null,
+  };
+  mockBlizzardService.fetchCharacterProfile.mockResolvedValue(mockProfile);
+
+  const result = await adapter.fetchProfile(
+    'Thrall',
+    'area-52',
+    'us',
+    'retail',
+  );
+
+  expect(result).toBe(mockProfile);
+  expect(mockBlizzardService.fetchCharacterProfile).toHaveBeenCalledWith(
+    'Thrall',
+    'area-52',
+    'us',
+    'retail',
+  );
+}
+
+describe('BlizzardCharacterSyncAdapter — slugs', () => {
+  beforeEach(() => setupEach());
 
   describe('gameSlugs', () => {
     it('should include all WoW game slugs', () => {
@@ -69,46 +104,18 @@ describe('BlizzardCharacterSyncAdapter', () => {
       expect(adapter.resolveGameSlugs('final-fantasy-xiv-online')).toEqual([]);
     });
   });
+});
+
+describe('BlizzardCharacterSyncAdapter — data fetching', () => {
+  beforeEach(() => setupEach());
 
   describe('fetchProfile()', () => {
-    it('should delegate to BlizzardService.fetchCharacterProfile', async () => {
-      const mockProfile = {
-        name: 'Thrall',
-        realm: 'area-52',
-        class: 'Shaman',
-        spec: 'Enhancement',
-        role: 'dps' as const,
-        level: 80,
-        race: 'Orc',
-        faction: 'horde',
-        itemLevel: 480,
-        avatarUrl: null,
-        renderUrl: null,
-        profileUrl: null,
-      };
-      mockBlizzardService.fetchCharacterProfile.mockResolvedValue(mockProfile);
-
-      const result = await adapter.fetchProfile(
-        'Thrall',
-        'area-52',
-        'us',
-        'retail',
-      );
-
-      expect(result).toBe(mockProfile);
-      expect(mockBlizzardService.fetchCharacterProfile).toHaveBeenCalledWith(
-        'Thrall',
-        'area-52',
-        'us',
-        'retail',
-      );
-    });
+    it('should delegate to BlizzardService.fetchCharacterProfile', () =>
+      testFetchProfileDelegation());
 
     it('should default to retail when no gameVariant specified', async () => {
       mockBlizzardService.fetchCharacterProfile.mockResolvedValue({});
-
       await adapter.fetchProfile('Thrall', 'area-52', 'us');
-
       expect(mockBlizzardService.fetchCharacterProfile).toHaveBeenCalledWith(
         'Thrall',
         'area-52',
@@ -124,7 +131,6 @@ describe('BlizzardCharacterSyncAdapter', () => {
       mockBlizzardService.fetchCharacterSpecializations.mockResolvedValue(
         mockSpec,
       );
-
       const result = await adapter.fetchSpecialization(
         'Thrall',
         'area-52',
@@ -132,7 +138,6 @@ describe('BlizzardCharacterSyncAdapter', () => {
         'Shaman',
         'retail',
       );
-
       expect(result).toBe(mockSpec);
       expect(
         mockBlizzardService.fetchCharacterSpecializations,
@@ -150,27 +155,23 @@ describe('BlizzardCharacterSyncAdapter', () => {
       mockBlizzardService.fetchCharacterEquipment.mockResolvedValue(
         mockEquipment,
       );
-
       const result = await adapter.fetchEquipment(
         'Thrall',
         'area-52',
         'us',
         'retail',
       );
-
       expect(result).toBe(mockEquipment);
     });
 
     it('should return empty equipment when BlizzardService returns null', async () => {
       mockBlizzardService.fetchCharacterEquipment.mockResolvedValue(null);
-
       const result = await adapter.fetchEquipment(
         'Thrall',
         'area-52',
         'us',
         'retail',
       );
-
       expect(result.equippedItemLevel).toBeNull();
       expect(result.items).toEqual([]);
     });

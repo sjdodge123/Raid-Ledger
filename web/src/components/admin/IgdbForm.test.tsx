@@ -52,7 +52,7 @@ vi.mock('../../hooks/use-admin-settings', () => ({
     }),
 }));
 
-describe('IgdbForm', () => {
+describe('IgdbForm — Form rendering', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockIgdbStatus.data = null;
@@ -122,6 +122,23 @@ describe('IgdbForm', () => {
 
     // ── Configured state ─────────────────────────────────────────
 
+});
+
+describe('IgdbForm — Sync Now button', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIgdbStatus.data = null;
+        mockIgdbSyncStatus.data = null;
+        mockUpdateIgdb.isPending = false;
+        mockUpdateIgdb.mutateAsync = vi.fn();
+        mockTestIgdb.isPending = false;
+        mockTestIgdb.mutateAsync = vi.fn();
+        mockClearIgdb.isPending = false;
+        mockClearIgdb.mutateAsync = vi.fn();
+        mockSyncIgdb.isPending = false;
+        mockSyncIgdb.mutateAsync = vi.fn();
+    });
+
     it('shows Test Connection button when configured', () => {
         mockIgdbStatus.data = { configured: true };
         render(<IgdbForm />);
@@ -176,6 +193,23 @@ describe('IgdbForm', () => {
         expect(screen.getByText('123 games cached')).toBeInTheDocument();
     });
 
+});
+
+describe('IgdbForm — Password visibility toggle', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIgdbStatus.data = null;
+        mockIgdbSyncStatus.data = null;
+        mockUpdateIgdb.isPending = false;
+        mockUpdateIgdb.mutateAsync = vi.fn();
+        mockTestIgdb.isPending = false;
+        mockTestIgdb.mutateAsync = vi.fn();
+        mockClearIgdb.isPending = false;
+        mockClearIgdb.mutateAsync = vi.fn();
+        mockSyncIgdb.isPending = false;
+        mockSyncIgdb.mutateAsync = vi.fn();
+    });
+
     it('shows Loading... when sync status data is null', () => {
         mockIgdbStatus.data = { configured: true };
         mockIgdbSyncStatus.data = null;
@@ -226,4 +260,5 @@ describe('IgdbForm', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
         expect(mockClearIgdb.mutateAsync).not.toHaveBeenCalled();
     });
+
 });

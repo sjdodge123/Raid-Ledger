@@ -64,7 +64,60 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
   let mockClientService: { getClient: jest.Mock; getGuildId: jest.Mock };
   let voiceHandler: (oldState: unknown, newState: unknown) => void;
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      VoiceStateListener,
+      { provide: DiscordBotClientService, useValue: mockClientService },
+      { provide: AdHocEventService, useValue: mockAdHocEventService },
+      {
+        provide: VoiceAttendanceService,
+        useValue: mockVoiceAttendanceService,
+      },
+      {
+        provide: DepartureGraceService,
+        useValue: {
+          onMemberLeave: jest.fn().mockResolvedValue(undefined),
+          onMemberRejoin: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: ChannelBindingsService,
+        useValue: mockChannelBindingsService,
+      },
+      {
+        provide: PresenceGameDetectorService,
+        useValue: {
+          detectGameForMember: jest.fn().mockResolvedValue(null),
+          detectGames: jest.fn().mockResolvedValue([]),
+        },
+      },
+      {
+        provide: GameActivityService,
+        useValue: {
+          bufferStart: jest.fn(),
+          bufferStop: jest.fn(),
+        },
+      },
+      {
+        provide: UsersService,
+        useValue: { findByDiscordId: jest.fn().mockResolvedValue(null) },
+      },
+      {
+        provide: AdHocEventsGateway,
+        useValue: { emitRosterUpdate: jest.fn() },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     jest.useFakeTimers();
 
     mockVoiceAttendanceService = {
@@ -94,48 +147,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        VoiceStateListener,
-        { provide: DiscordBotClientService, useValue: mockClientService },
-        { provide: AdHocEventService, useValue: mockAdHocEventService },
-        {
-          provide: VoiceAttendanceService,
-          useValue: mockVoiceAttendanceService,
-        },
-        {
-          provide: DepartureGraceService,
-          useValue: {
-            onMemberLeave: jest.fn().mockResolvedValue(undefined),
-            onMemberRejoin: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelBindingsService,
-          useValue: mockChannelBindingsService,
-        },
-        {
-          provide: PresenceGameDetectorService,
-          useValue: {
-            detectGameForMember: jest.fn().mockResolvedValue(null),
-            detectGames: jest.fn().mockResolvedValue([]),
-          },
-        },
-        {
-          provide: GameActivityService,
-          useValue: {
-            bufferStart: jest.fn(),
-            bufferStop: jest.fn(),
-          },
-        },
-        {
-          provide: UsersService,
-          useValue: { findByDiscordId: jest.fn().mockResolvedValue(null) },
-        },
-        {
-          provide: AdHocEventsGateway,
-          useValue: { emitRosterUpdate: jest.fn() },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     listener = module.get(VoiceStateListener);
@@ -167,6 +179,10 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     };
     mockClientService.getClient.mockReturnValue(mockClient);
     await listener.onBotConnected();
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {
@@ -265,7 +281,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
   });
 
-  it('voice attendance tracks multiple active scheduled events for the same channel join', async () => {
+  async function testVoiceattendancetracksmultipleactivescheduledeventsfor() {
     // Edge case: two scheduled events active at the same time in the same channel
     mockVoiceAttendanceService.findActiveScheduledEvents.mockResolvedValue([
       { eventId: 401, gameId: 1 },
@@ -301,9 +317,13 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       null,
       null,
     );
+  }
+
+  it('voice attendance tracks multiple active scheduled events for the same channel join', async () => {
+    await testVoiceattendancetracksmultipleactivescheduledeventsfor();
   });
 
-  it('voice attendance join error does not break the ad-hoc path', async () => {
+  async function testVoiceattendancejoinerrordoesnotbreakthe() {
     // Even if findActiveScheduledEvents throws, the ad-hoc path should continue
     mockVoiceAttendanceService.findActiveScheduledEvents.mockRejectedValue(
       new Error('DB connection lost'),
@@ -341,6 +361,10 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
 
     // Ad-hoc path continues despite voice attendance error
     expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+  }
+
+  it('voice attendance join error does not break the ad-hoc path', async () => {
+    await testVoiceattendancejoinerrordoesnotbreakthe();
   });
 
   it('voice attendance leave error does not break the ad-hoc path', async () => {
@@ -405,7 +429,39 @@ describe('EventsController — voice endpoint authorization', () => {
     updatedAt: '2026-02-01T00:00:00.000Z',
   };
 
-  beforeEach(async () => {
+  function buildProviders2() {
+    return [
+      { provide: EventsService, useValue: mockEventsService },
+      {
+        provide: AttendanceService,
+        useValue: {
+          recordAttendance: jest.fn(),
+          getAttendanceSummary: jest.fn(),
+        },
+      },
+      {
+        provide: AdHocEventService,
+        useValue: { getAdHocRoster: jest.fn() },
+      },
+      {
+        provide: VoiceAttendanceService,
+        useValue: mockVoiceAttendanceService,
+      },
+      {
+        provide: AnalyticsService,
+        useValue: { getEventMetrics: jest.fn() },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
+      },
+    ];
+  }
+  async function setupBlock2() {
     mockEventsService = {
       findOne: jest.fn().mockResolvedValue(mockEvent),
     };
@@ -429,41 +485,16 @@ describe('EventsController — voice endpoint authorization', () => {
 
     module = await Test.createTestingModule({
       controllers: [EventsAttendanceController],
-      providers: [
-        { provide: EventsService, useValue: mockEventsService },
-        {
-          provide: AttendanceService,
-          useValue: {
-            recordAttendance: jest.fn(),
-            getAttendanceSummary: jest.fn(),
-          },
-        },
-        {
-          provide: AdHocEventService,
-          useValue: { getAdHocRoster: jest.fn() },
-        },
-        {
-          provide: VoiceAttendanceService,
-          useValue: mockVoiceAttendanceService,
-        },
-        {
-          provide: AnalyticsService,
-          useValue: { getEventMetrics: jest.fn() },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
-        },
-      ],
+      providers: buildProviders2(),
     }).compile();
 
     controller = module.get<EventsAttendanceController>(
       EventsAttendanceController,
     );
+  }
+
+  beforeEach(async () => {
+    await setupBlock2();
   });
 
   describe('GET :id/voice-sessions', () => {

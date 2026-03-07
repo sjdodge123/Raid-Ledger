@@ -275,7 +275,7 @@ function renderEventDetailPage() {
     );
 }
 
-describe('EventDetailPage signup flow (ROK-600)', () => {
+describe('EventDetailPage signup flow (ROK-600) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockUser = { id: 99, username: 'TestUser', role: 'member' };
@@ -337,6 +337,16 @@ describe('EventDetailPage signup flow (ROK-600)', () => {
         });
     });
 
+});
+
+describe('EventDetailPage signup flow (ROK-600) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = { id: 99, username: 'TestUser', role: 'member' };
+        mockIsAuthenticated = true;
+        mockMyCharactersData = { data: [], meta: { total: 0 } };
+    });
+
     it('direct signup for event with no game (no modal)', async () => {
         const event = createMockEventResponse({
             game: null,
@@ -387,4 +397,5 @@ describe('EventDetailPage signup flow (ROK-600)', () => {
         });
         expect(mockSignupMutateAsync).not.toHaveBeenCalled();
     });
+
 });

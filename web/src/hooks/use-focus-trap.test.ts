@@ -63,8 +63,8 @@ describe('useFocusTrap', () => {
         removeSpy.mockRestore();
     });
 
-    describe('Tab key cycling', () => {
-        it('cycles forward from last focusable element to first', () => {
+    function tabKeyCyclingGroup1() {
+it('cycles forward from last focusable element to first', () => {
             container = createContainer(`
                 <button id="btn1">One</button>
                 <button id="btn2">Two</button>
@@ -99,7 +99,10 @@ describe('useFocusTrap', () => {
             expect(preventDefaultSpy).toHaveBeenCalled();
         });
 
-        it('cycles backward from first focusable element to last on Shift+Tab', () => {
+    }
+
+    function tabKeyCyclingGroup2() {
+it('cycles backward from first focusable element to last on Shift+Tab', () => {
             container = createContainer(`
                 <button id="btn1">One</button>
                 <button id="btn2">Two</button>
@@ -131,7 +134,10 @@ describe('useFocusTrap', () => {
             expect(preventDefaultSpy).toHaveBeenCalled();
         });
 
-        it('prevents default and does nothing when container has no focusable elements', () => {
+    }
+
+    function tabKeyCyclingGroup3() {
+it('prevents default and does nothing when container has no focusable elements', () => {
             container = createContainer('<div>No buttons here</div>');
 
             const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
@@ -147,7 +153,10 @@ describe('useFocusTrap', () => {
             expect(preventDefaultSpy).toHaveBeenCalled();
         });
 
-        it('ignores keys other than Tab', () => {
+    }
+
+    function tabKeyCyclingGroup4() {
+it('ignores keys other than Tab', () => {
             container = createContainer('<button>One</button>');
 
             const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
@@ -163,7 +172,7 @@ describe('useFocusTrap', () => {
             expect(preventDefaultSpy).not.toHaveBeenCalled();
         });
 
-        it('ignores Tab when containerRef is null', () => {
+it('ignores Tab when containerRef is null', () => {
             const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
             // ref.current remains null (not attached to any element)
             expect(result.current.current).toBeNull();
@@ -172,6 +181,14 @@ describe('useFocusTrap', () => {
             const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
             expect(() => document.dispatchEvent(event)).not.toThrow();
         });
+
+    }
+
+    describe('Tab key cycling', () => {
+        tabKeyCyclingGroup1();
+        tabKeyCyclingGroup2();
+        tabKeyCyclingGroup3();
+        tabKeyCyclingGroup4();
     });
 
     describe('focus restoration on deactivation', () => {
@@ -213,8 +230,8 @@ describe('useFocusTrap', () => {
         });
     });
 
-    describe('focusable element selectors', () => {
-        it('includes buttons', () => {
+    function focusableElementSelectorsGroup1() {
+it('includes buttons', () => {
             container = createContainer('<button>Click me</button>');
 
             const { result } = renderHook(() => useFocusTrap<HTMLDivElement>(true));
@@ -235,7 +252,10 @@ describe('useFocusTrap', () => {
             // Should not throw; no assertion on focus since we just need coverage
         });
 
-        it('excludes disabled buttons', () => {
+    }
+
+    function focusableElementSelectorsGroup2() {
+it('excludes disabled buttons', () => {
             container = createContainer(`
                 <button disabled>Disabled</button>
                 <button id="active">Active</button>
@@ -263,5 +283,11 @@ describe('useFocusTrap', () => {
             // Since active btn is both first and last, Tab from last should wrap to first — preventDefault called
             expect(preventDefaultSpy).toHaveBeenCalled();
         });
+
+    }
+
+    describe('focusable element selectors', () => {
+        focusableElementSelectorsGroup1();
+        focusableElementSelectorsGroup2();
     });
 });

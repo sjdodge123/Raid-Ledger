@@ -11,16 +11,93 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import type { Job } from 'bullmq';
 import type { EmbedSyncJobData } from '../queues/embed-sync.queue';
 
-describe('EmbedSyncProcessor — ROK-471 scheduled event description update', () => {
+const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
+
+const mockEmbed = new EmbedBuilder().setTitle('Test');
+const mockRow = new ActionRowBuilder<ButtonBuilder>();
+
+/** Build a chainable Drizzle select that resolves via `.limit()` or is thenable. */
+function makeSelectChain(rows: unknown[] = []) {
+  const chain: Record<string, jest.Mock> & { then?: unknown } = {};
+  chain.from = jest.fn().mockReturnValue(chain);
+  chain.where = jest.fn().mockReturnValue(chain);
+  chain.limit = jest.fn().mockResolvedValue(rows);
+  chain.leftJoin = jest.fn().mockReturnValue(chain);
+  chain.innerJoin = jest.fn().mockReturnValue(chain);
+  chain.groupBy = jest.fn().mockResolvedValue([]);
+  chain.select = jest.fn().mockReturnValue(chain);
+  chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
+    Promise.resolve(rows).then(resolve, reject);
+  return chain;
+}
+
+function makeUpdateChain() {
+  const chain: Record<string, jest.Mock> = {};
+  chain.set = jest.fn().mockReturnValue(chain);
+  chain.where = jest.fn().mockResolvedValue(undefined);
+  return chain;
+}
+
+/** Standard provider mocks for EmbedSyncProcessor. */
+function buildProviders(mockDb: Record<string, jest.Mock>) {
+  return [
+    EmbedSyncProcessor,
+    { provide: DrizzleAsyncProvider, useValue: mockDb },
+    {
+      provide: DiscordBotClientService,
+      useValue: {
+        isConnected: jest.fn().mockReturnValue(true),
+        getGuildId: jest.fn().mockReturnValue('guild-123'),
+        editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
+      },
+    },
+    {
+      provide: DiscordEmbedFactory,
+      useValue: {
+        buildEventUpdate: jest
+          .fn()
+          .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+      },
+    },
+    {
+      provide: SettingsService,
+      useValue: {
+        getBranding: jest.fn().mockResolvedValue({
+          communityName: 'Test Guild',
+          communityLogoPath: null,
+          communityAccentColor: null,
+        }),
+        getClientUrl: jest.fn().mockResolvedValue(null),
+        getDefaultTimezone: jest.fn().mockResolvedValue(null),
+      },
+    },
+    {
+      provide: ScheduledEventService,
+      useValue: {
+        updateDescription: jest.fn().mockResolvedValue(undefined),
+        completeScheduledEvent: jest.fn().mockResolvedValue(undefined),
+      },
+    },
+    {
+      provide: ChannelResolverService,
+      useValue: {
+        resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
+      },
+    },
+  ];
+}
+
+// =========================================================================
+// ROK-471 scheduled event description update
+// =========================================================================
+
+describe('EmbedSyncProcessor — description update: success', () => {
   let processor: EmbedSyncProcessor;
   let clientService: jest.Mocked<DiscordBotClientService>;
   let scheduledEventService: jest.Mocked<ScheduledEventService>;
   let mockDb: Record<string, jest.Mock>;
 
-  const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-  const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
-
-  /** A minimal event row returned from DB. */
   const mockEvent = {
     id: 42,
     title: 'Raid Night',
@@ -34,7 +111,6 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
     discordScheduledEventId: null,
   };
 
-  /** The Discord embed message record tracked for event 42. */
   const mockRecord = {
     id: 'record-uuid',
     eventId: 42,
@@ -44,92 +120,23 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
     embedState: EMBED_STATES.POSTED,
   };
 
-  const mockEmbed = new EmbedBuilder().setTitle('Test');
-  const mockRow = new ActionRowBuilder<ButtonBuilder>();
-
-  /** Build a chainable Drizzle select that resolves via `.limit()` or is thenable. */
-  const makeSelectChain = (rows: unknown[] = []) => {
-    const chain: Record<string, jest.Mock> & { then?: unknown } = {};
-    chain.from = jest.fn().mockReturnValue(chain);
-    chain.where = jest.fn().mockReturnValue(chain);
-    chain.limit = jest.fn().mockResolvedValue(rows);
-    chain.leftJoin = jest.fn().mockReturnValue(chain);
-    chain.innerJoin = jest.fn().mockReturnValue(chain);
-    chain.groupBy = jest.fn().mockResolvedValue([]);
-    chain.select = jest.fn().mockReturnValue(chain);
-    chain.then = (
-      resolve: (v: unknown) => void,
-      reject: (e: unknown) => void,
-    ) => Promise.resolve(rows).then(resolve, reject);
-    return chain;
-  };
-
-  const makeUpdateChain = () => {
-    const chain: Record<string, jest.Mock> = {};
-    chain.set = jest.fn().mockReturnValue(chain);
-    chain.where = jest.fn().mockResolvedValue(undefined);
-    return chain;
-  };
+  function setupDbForSuccessfulSync() {
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([mockRecord]))
+      .mockReturnValueOnce(makeSelectChain([mockEvent]))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }]));
+  }
 
   beforeEach(async () => {
-    const selectChain = makeSelectChain();
-    const updateChain = makeUpdateChain();
-
     mockDb = {
-      select: jest.fn().mockReturnValue(selectChain),
-      update: jest.fn().mockReturnValue(updateChain),
+      select: jest.fn().mockReturnValue(makeSelectChain()),
+      update: jest.fn().mockReturnValue(makeUpdateChain()),
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EmbedSyncProcessor,
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: mockDb,
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
-          },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventUpdate: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue(null),
-            getDefaultTimezone: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: ScheduledEventService,
-          useValue: {
-            updateDescription: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveVoiceChannelForScheduledEvent: jest
-              .fn()
-              .mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildProviders(mockDb),
     }).compile();
 
     processor = module.get(EmbedSyncProcessor);
@@ -137,35 +144,15 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
     scheduledEventService = module.get(ScheduledEventService);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  /** Build the DB select mock chain to return the right rows in order:
-   *  1. discordEventMessages record
-   *  2. events record
-   *  3. eventSignups rows (empty)
-   *  4. rosterAssignments rows (empty)
-   *  5. games row (for game name)
-   */
-  const setupDbForSuccessfulSync = () => {
-    mockDb.select
-      .mockReturnValueOnce(makeSelectChain([mockRecord])) // discordEventMessages
-      .mockReturnValueOnce(makeSelectChain([mockEvent])) // events
-      .mockReturnValueOnce(makeSelectChain([])) // eventSignups
-      .mockReturnValueOnce(makeSelectChain([])) // rosterAssignments
-      .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }])); // games
-  };
+  afterEach(() => jest.clearAllMocks());
 
   it('calls scheduledEventService.updateDescription after a successful embed sync (AC-7)', async () => {
     setupDbForSuccessfulSync();
-    const updateChain = makeUpdateChain();
-    mockDb.update.mockReturnValue(updateChain);
+    mockDb.update.mockReturnValue(makeUpdateChain());
 
     const job = {
       data: { eventId: 42, reason: 'signup' },
     } as Job<EmbedSyncJobData>;
-
     await processor.process(job);
 
     expect(scheduledEventService.updateDescription).toHaveBeenCalledWith(
@@ -174,13 +161,61 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
     );
   });
 
+  it('does not block embed sync when updateDescription fails (fire-and-forget)', async () => {
+    setupDbForSuccessfulSync();
+    mockDb.update.mockReturnValue(makeUpdateChain());
+
+    scheduledEventService.updateDescription.mockRejectedValue(
+      new Error('Discord API error'),
+    );
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await expect(processor.process(job)).resolves.not.toThrow();
+
+    expect(clientService.editEmbed).toHaveBeenCalled();
+  });
+});
+
+describe('EmbedSyncProcessor — description update: skip conditions', () => {
+  let processor: EmbedSyncProcessor;
+  let clientService: jest.Mocked<DiscordBotClientService>;
+  let scheduledEventService: jest.Mocked<ScheduledEventService>;
+  let mockDb: Record<string, jest.Mock>;
+
+  const mockRecord = {
+    id: 'record-uuid',
+    eventId: 42,
+    guildId: 'guild-123',
+    channelId: 'channel-789',
+    messageId: 'msg-456',
+    embedState: EMBED_STATES.POSTED,
+  };
+
+  beforeEach(async () => {
+    mockDb = {
+      select: jest.fn().mockReturnValue(makeSelectChain()),
+      update: jest.fn().mockReturnValue(makeUpdateChain()),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: buildProviders(mockDb),
+    }).compile();
+
+    processor = module.get(EmbedSyncProcessor);
+    clientService = module.get(DiscordBotClientService);
+    scheduledEventService = module.get(ScheduledEventService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
   it('does not call updateDescription when the bot is not connected', async () => {
     clientService.isConnected.mockReturnValue(false);
 
     const job = {
       data: { eventId: 42, reason: 'signup' },
     } as Job<EmbedSyncJobData>;
-
     await expect(processor.process(job)).rejects.toThrow(
       'Discord bot not connected',
     );
@@ -189,12 +224,11 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
   });
 
   it('does not call updateDescription when no Discord message record exists', async () => {
-    mockDb.select.mockReturnValue(makeSelectChain([])); // no record
+    mockDb.select.mockReturnValue(makeSelectChain([]));
 
     const job = {
       data: { eventId: 42, reason: 'signup' },
     } as Job<EmbedSyncJobData>;
-
     await processor.process(job);
 
     expect(scheduledEventService.updateDescription).not.toHaveBeenCalled();
@@ -210,40 +244,49 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
     const job = {
       data: { eventId: 42, reason: 'signup' },
     } as Job<EmbedSyncJobData>;
-
     await processor.process(job);
 
     expect(scheduledEventService.updateDescription).not.toHaveBeenCalled();
   });
-
-  it('does not block embed sync when updateDescription fails (fire-and-forget)', async () => {
-    setupDbForSuccessfulSync();
-    const updateChain = makeUpdateChain();
-    mockDb.update.mockReturnValue(updateChain);
-
-    scheduledEventService.updateDescription.mockRejectedValue(
-      new Error('Discord API error'),
-    );
-
-    const job = {
-      data: { eventId: 42, reason: 'signup' },
-    } as Job<EmbedSyncJobData>;
-
-    // The embed sync should complete successfully even if updateDescription fails
-    await expect(processor.process(job)).resolves.not.toThrow();
-
-    // Verify the embed was still updated
-    expect(clientService.editEmbed).toHaveBeenCalled();
-  });
 });
 
-describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
+// =========================================================================
+// ROK-682 slot-config-based fullness
+// =========================================================================
+
+/** Build signup rows that simulate N active signups. */
+function makeSignupRows(count: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    discordId: `user-${i}`,
+    username: `User ${i}`,
+    role: 'player',
+    status: 'signed_up',
+    preferredRoles: null,
+    className: null,
+  }));
+}
+
+function makeSlotConfigEvent(slotConfig: Record<string, unknown>) {
+  return {
+    id: 42,
+    title: 'Ghost Raid',
+    description: null,
+    duration: [FUTURE, FUTURE_END],
+    maxAttendees: null,
+    cancelledAt: null,
+    gameId: 1,
+    slotConfig,
+    isAdHoc: false,
+    extendedUntil: null,
+    notificationChannelOverride: null,
+    recurrenceGroupId: null,
+  };
+}
+
+describe('EmbedSyncProcessor — slot-config fullness: FULL', () => {
   let processor: EmbedSyncProcessor;
   let embedFactory: jest.Mocked<DiscordEmbedFactory>;
   let mockDb: Record<string, jest.Mock>;
-
-  const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-  const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
 
   const mockRecord = {
     id: 'record-uuid',
@@ -254,100 +297,29 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
     embedState: EMBED_STATES.POSTED,
   };
 
-  const mockEmbed = new EmbedBuilder().setTitle('Test');
-  const mockRow = new ActionRowBuilder<ButtonBuilder>();
-
-  const makeSelectChain = (rows: unknown[] = []) => {
-    const chain: Record<string, jest.Mock> & { then?: unknown } = {};
-    chain.from = jest.fn().mockReturnValue(chain);
-    chain.where = jest.fn().mockReturnValue(chain);
-    chain.limit = jest.fn().mockResolvedValue(rows);
-    chain.leftJoin = jest.fn().mockReturnValue(chain);
-    chain.innerJoin = jest.fn().mockReturnValue(chain);
-    chain.groupBy = jest.fn().mockResolvedValue([]);
-    chain.select = jest.fn().mockReturnValue(chain);
-    chain.then = (
-      resolve: (v: unknown) => void,
-      reject: (e: unknown) => void,
-    ) => Promise.resolve(rows).then(resolve, reject);
-    return chain;
-  };
-
-  const makeUpdateChain = () => {
-    const chain: Record<string, jest.Mock> = {};
-    chain.set = jest.fn().mockReturnValue(chain);
-    chain.where = jest.fn().mockResolvedValue(undefined);
-    return chain;
-  };
-
-  /** Build signup rows that simulate N active signups. */
-  const makeSignupRows = (count: number) =>
-    Array.from({ length: count }, (_, i) => ({
-      discordId: `user-${i}`,
-      username: `User ${i}`,
-      role: 'player',
-      status: 'signed_up',
-      preferredRoles: null,
-      className: null,
-    }));
+  function setupDbForEvent(
+    event: Record<string, unknown>,
+    signupCount: number,
+  ) {
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([mockRecord]))
+      .mockReturnValueOnce(makeSelectChain([event]))
+      .mockReturnValueOnce(makeSelectChain(makeSignupRows(signupCount)))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(
+        makeSelectChain([{ name: 'Phasmophobia', coverUrl: null }]),
+      );
+    mockDb.update.mockReturnValue(makeUpdateChain());
+  }
 
   beforeEach(async () => {
-    const selectChain = makeSelectChain();
-    const updateChain = makeUpdateChain();
-
     mockDb = {
-      select: jest.fn().mockReturnValue(selectChain),
-      update: jest.fn().mockReturnValue(updateChain),
+      select: jest.fn().mockReturnValue(makeSelectChain()),
+      update: jest.fn().mockReturnValue(makeUpdateChain()),
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EmbedSyncProcessor,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
-          },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventUpdate: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue(null),
-            getDefaultTimezone: jest.fn().mockResolvedValue(null),
-          },
-        },
-        {
-          provide: ScheduledEventService,
-          useValue: {
-            updateDescription: jest.fn().mockResolvedValue(undefined),
-            completeScheduledEvent: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveVoiceChannelForScheduledEvent: jest
-              .fn()
-              .mockResolvedValue(null),
-          },
-        },
-      ],
+      providers: buildProviders(mockDb),
     }).compile();
 
     processor = module.get(EmbedSyncProcessor);
@@ -356,101 +328,102 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  /**
-   * Set up DB mocks for a sync run with a given event and signup count.
-   */
-  const setupDbForEvent = (
-    event: Record<string, unknown>,
-    signupCount: number,
-  ) => {
-    mockDb.select
-      .mockReturnValueOnce(makeSelectChain([mockRecord])) // discordEventMessages
-      .mockReturnValueOnce(makeSelectChain([event])) // events
-      .mockReturnValueOnce(makeSelectChain(makeSignupRows(signupCount))) // eventSignups
-      .mockReturnValueOnce(makeSelectChain([])) // rosterAssignments
-      .mockReturnValueOnce(
-        makeSelectChain([{ name: 'Phasmophobia', coverUrl: null }]),
-      ); // games
-    mockDb.update.mockReturnValue(makeUpdateChain());
+  it('marks event as FULL when generic slotConfig player count is reached', async () => {
+    const event = makeSlotConfigEvent({ type: 'generic', player: 4, bench: 2 });
+    setupDbForEvent(event, 4);
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      EMBED_STATES.FULL,
+    );
+  });
+
+  it('marks event as FULL when MMO slotConfig total is reached', async () => {
+    const event = makeSlotConfigEvent({
+      type: 'mmo',
+      tank: 2,
+      healer: 3,
+      dps: 5,
+      flex: 0,
+    });
+    setupDbForEvent(event, 10);
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      EMBED_STATES.FULL,
+    );
+  });
+
+  it('marks event as FULL when signups exceed slot capacity (benched players)', async () => {
+    const event = makeSlotConfigEvent({ type: 'generic', player: 4, bench: 2 });
+    setupDbForEvent(event, 5);
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      EMBED_STATES.FULL,
+    );
+  });
+});
+
+describe('EmbedSyncProcessor — slot-config fullness: FILLING', () => {
+  let processor: EmbedSyncProcessor;
+  let embedFactory: jest.Mocked<DiscordEmbedFactory>;
+  let mockDb: Record<string, jest.Mock>;
+
+  const mockRecord = {
+    id: 'record-uuid',
+    eventId: 42,
+    guildId: 'guild-123',
+    channelId: 'channel-789',
+    messageId: 'msg-456',
+    embedState: EMBED_STATES.POSTED,
   };
 
-  it('marks event as FULL when generic slotConfig player count is reached (maxAttendees null)', async () => {
-    const event = {
-      id: 42,
-      title: 'Ghost Raid',
-      description: null,
-      duration: [FUTURE, FUTURE_END],
-      maxAttendees: null,
-      cancelledAt: null,
-      gameId: 1,
-      slotConfig: { type: 'generic', player: 4, bench: 2 },
-      isAdHoc: false,
-      extendedUntil: null,
-      notificationChannelOverride: null,
-      recurrenceGroupId: null,
+  beforeEach(async () => {
+    mockDb = {
+      select: jest.fn().mockReturnValue(makeSelectChain()),
+      update: jest.fn().mockReturnValue(makeUpdateChain()),
     };
 
-    setupDbForEvent(event, 4); // 4 signups == 4 player slots → FULL
+    const module: TestingModule = await Test.createTestingModule({
+      providers: buildProviders(mockDb),
+    }).compile();
 
-    const job = {
-      data: { eventId: 42, reason: 'signup' },
-    } as Job<EmbedSyncJobData>;
-    await processor.process(job);
-
-    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      EMBED_STATES.FULL,
-    );
+    processor = module.get(EmbedSyncProcessor);
+    embedFactory = module.get(DiscordEmbedFactory);
   });
 
-  it('marks event as FULL when MMO slotConfig total is reached (maxAttendees null)', async () => {
-    const event = {
-      id: 42,
-      title: 'Mythic Raid',
-      description: null,
-      duration: [FUTURE, FUTURE_END],
-      maxAttendees: null,
-      cancelledAt: null,
-      gameId: 1,
-      slotConfig: { type: 'mmo', tank: 2, healer: 3, dps: 5, flex: 0 },
-      isAdHoc: false,
-      extendedUntil: null,
-      notificationChannelOverride: null,
-      recurrenceGroupId: null,
-    };
-
-    setupDbForEvent(event, 10); // 10 signups == 2+3+5 = 10 slots → FULL
-
-    const job = {
-      data: { eventId: 42, reason: 'signup' },
-    } as Job<EmbedSyncJobData>;
-    await processor.process(job);
-
-    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      EMBED_STATES.FULL,
-    );
-  });
+  afterEach(() => jest.clearAllMocks());
 
   it('marks event as FILLING when signups are below slot capacity', async () => {
-    const event = {
-      id: 42,
-      title: 'Ghost Raid',
-      description: null,
-      duration: [FUTURE, FUTURE_END],
-      maxAttendees: null,
-      cancelledAt: null,
-      gameId: 1,
-      slotConfig: { type: 'generic', player: 4, bench: 2 },
-      isAdHoc: false,
-      extendedUntil: null,
-      notificationChannelOverride: null,
-      recurrenceGroupId: null,
-    };
-
-    setupDbForEvent(event, 3); // 3 signups < 4 player slots → FILLING
+    const event = makeSlotConfigEvent({ type: 'generic', player: 4, bench: 2 });
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([mockRecord]))
+      .mockReturnValueOnce(makeSelectChain([event]))
+      .mockReturnValueOnce(makeSelectChain(makeSignupRows(3)))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(
+        makeSelectChain([{ name: 'Phasmophobia', coverUrl: null }]),
+      );
+    mockDb.update.mockReturnValue(makeUpdateChain());
 
     const job = {
       data: { eventId: 42, reason: 'signup' },
@@ -461,36 +434,6 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
       expect.anything(),
       expect.anything(),
       EMBED_STATES.FILLING,
-    );
-  });
-
-  it('marks event as FULL when signups exceed slot capacity (benched players)', async () => {
-    const event = {
-      id: 42,
-      title: 'Ghost Raid',
-      description: null,
-      duration: [FUTURE, FUTURE_END],
-      maxAttendees: null,
-      cancelledAt: null,
-      gameId: 1,
-      slotConfig: { type: 'generic', player: 4, bench: 2 },
-      isAdHoc: false,
-      extendedUntil: null,
-      notificationChannelOverride: null,
-      recurrenceGroupId: null,
-    };
-
-    setupDbForEvent(event, 5); // 5 signups > 4 player slots (1 benched) → FULL
-
-    const job = {
-      data: { eventId: 42, reason: 'signup' },
-    } as Job<EmbedSyncJobData>;
-    await processor.process(job);
-
-    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      EMBED_STATES.FULL,
     );
   });
 });

@@ -33,7 +33,7 @@ const mockTrendsData = {
     },
 };
 
-describe('AttendanceTrendsChart', () => {
+describe('AttendanceTrendsChart — part 1', () => {
     beforeEach(() => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance`, () =>
@@ -95,6 +95,17 @@ describe('AttendanceTrendsChart', () => {
         await waitFor(() => {
             expect(screen.getByText('No attendance data for this period.')).toBeInTheDocument();
         });
+    });
+
+});
+
+describe('AttendanceTrendsChart — part 2', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance`, () =>
+                HttpResponse.json(mockTrendsData),
+            ),
+        );
     });
 
     it('shows error state when request fails', async () => {
@@ -159,4 +170,5 @@ describe('AttendanceTrendsChart', () => {
         renderWithProviders(<AttendanceTrendsChart />);
         expect(screen.getByText('Loading chart data...')).toBeInTheDocument();
     });
+
 });

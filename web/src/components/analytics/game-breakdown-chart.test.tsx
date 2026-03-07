@@ -42,30 +42,25 @@ const mockGameData = {
     ],
 };
 
-describe('GameBreakdownChart', () => {
-    beforeEach(() => {
-        server.use(
-            http.get(`${API_BASE}/analytics/attendance/games`, () =>
-                HttpResponse.json(mockGameData),
-            ),
-        );
-    });
-
-    it('renders Per-Game Breakdown heading', async () => {
+function gamebreakdownchartGroup1() {
+it('renders Per-Game Breakdown heading', async () => {
         renderWithProviders(<GameBreakdownChart />);
         await waitFor(() => {
             expect(screen.getByText('Per-Game Breakdown')).toBeInTheDocument();
         });
     });
 
-    it('renders bar chart when data is loaded', async () => {
+it('renders bar chart when data is loaded', async () => {
         renderWithProviders(<GameBreakdownChart />);
         await waitFor(() => {
             expect(screen.getByTestId('bar-chart')).toBeInTheDocument();
         });
     });
 
-    it('shows empty state when no game data', async () => {
+}
+
+function gamebreakdownchartGroup2() {
+it('shows empty state when no game data', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/games`, () =>
                 HttpResponse.json({ games: [] }),
@@ -78,7 +73,7 @@ describe('GameBreakdownChart', () => {
         });
     });
 
-    it('shows error state when request fails', async () => {
+it('shows error state when request fails', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/games`, () =>
                 HttpResponse.json({ message: 'Forbidden' }, { status: 403 }),
@@ -91,7 +86,10 @@ describe('GameBreakdownChart', () => {
         });
     });
 
-    it('shows loading state while fetching', () => {
+}
+
+function gamebreakdownchartGroup3() {
+it('shows loading state while fetching', () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/games`, async () => {
                 await new Promise((r) => setTimeout(r, 100));
@@ -102,4 +100,19 @@ describe('GameBreakdownChart', () => {
         renderWithProviders(<GameBreakdownChart />);
         expect(screen.getByText('Loading chart data...')).toBeInTheDocument();
     });
+
+}
+
+describe('GameBreakdownChart', () => {
+beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/games`, () =>
+                HttpResponse.json(mockGameData),
+            ),
+        );
+    });
+
+    gamebreakdownchartGroup1();
+    gamebreakdownchartGroup2();
+    gamebreakdownchartGroup3();
 });

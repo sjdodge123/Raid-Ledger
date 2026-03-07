@@ -39,7 +39,7 @@ function setStoreState(partial: Partial<{
     useConnectivityStore.setState(partial as Parameters<typeof useConnectivityStore.setState>[0]);
 }
 
-describe('ConnectivityBanner', () => {
+describe('ConnectivityBanner — part 1', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         setStoreState({
@@ -49,7 +49,6 @@ describe('ConnectivityBanner', () => {
             consecutiveFailures: 0,
         });
     });
-
     afterEach(() => {
         vi.useRealTimers();
         vi.clearAllMocks();
@@ -87,6 +86,23 @@ describe('ConnectivityBanner', () => {
 
             expect(screen.getByText(/Unable to reach the server/)).toBeInTheDocument();
         });
+    });
+
+});
+
+describe('ConnectivityBanner — part 2', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        setStoreState({
+            status: 'online',
+            hasBeenOnline: true,
+            lastOnlineAt: null,
+            consecutiveFailures: 0,
+        });
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.clearAllMocks();
     });
 
     describe('elapsed time display', () => {
@@ -145,6 +161,23 @@ describe('ConnectivityBanner', () => {
         });
     });
 
+});
+
+describe('ConnectivityBanner — part 3', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        setStoreState({
+            status: 'online',
+            hasBeenOnline: true,
+            lastOnlineAt: null,
+            consecutiveFailures: 0,
+        });
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.clearAllMocks();
+    });
+
     describe('banner reappears after dismiss on new offline period', () => {
         it('resets dismissed state when status transitions to offline again', () => {
             setStoreState({ status: 'offline', hasBeenOnline: true, lastOnlineAt: new Date() });
@@ -183,4 +216,5 @@ describe('ConnectivityBanner', () => {
             expect(toast.success).toHaveBeenCalledWith('Reconnected');
         });
     });
+
 });

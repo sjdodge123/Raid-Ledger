@@ -82,21 +82,8 @@ describe('CharactersService — operations', () => {
     displayOrder: 1,
   };
 
-  beforeEach(async () => {
-    mockDb = {
-      select: jest.fn(),
-      insert: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      transaction: jest.fn(),
-    };
-
-    mockPluginRegistry = {
-      getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
-    };
-
-    // Default select chain
-    const selectChain = {
+  function setupMockDbChains() {
+    mockDb.select.mockReturnValue({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
           limit: jest.fn().mockResolvedValue([mockCharacter]),
@@ -106,34 +93,25 @@ describe('CharactersService — operations', () => {
         }),
         orderBy: jest.fn().mockResolvedValue([mockCharacter, mockAltCharacter]),
       }),
-    };
-    mockDb.select.mockReturnValue(selectChain);
-
-    // Default insert chain
-    const insertChain = {
+    });
+    mockDb.insert.mockReturnValue({
       values: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockCharacter]),
       }),
-    };
-    mockDb.insert.mockReturnValue(insertChain);
-
-    // Default update chain
-    const updateChain = {
+    });
+    mockDb.update.mockReturnValue({
       set: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
           returning: jest.fn().mockResolvedValue([mockCharacter]),
         }),
       }),
-    };
-    mockDb.update.mockReturnValue(updateChain);
-
-    // Default delete chain
-    const deleteChain = {
+    });
+    mockDb.delete.mockReturnValue({
       where: jest.fn().mockResolvedValue(undefined),
-    };
-    mockDb.delete.mockReturnValue(deleteChain);
+    });
+  }
 
-    // Default transaction mock — includes tx.select for duplicate claim check + ROK-206 charCount
+  function setupTransactionMock() {
     mockDb.transaction.mockImplementation(
       (callback: (tx: Record<string, jest.Mock>) => unknown) => {
         const tx = {
@@ -156,6 +134,22 @@ describe('CharactersService — operations', () => {
         return callback(tx);
       },
     );
+  }
+
+  beforeEach(async () => {
+    mockDb = {
+      select: jest.fn(),
+      insert: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      transaction: jest.fn(),
+    };
+    mockPluginRegistry = {
+      getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
+    };
+
+    setupMockDbChains();
+    setupTransactionMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -318,7 +312,7 @@ describe('CharactersService — operations', () => {
     });
 
     // ROK-578: Merge imported data into existing local character on conflict
-    it('should merge imported data into existing local character instead of throwing 409', async () => {
+    function setupMergeConflictMocks() {
       const mockAdapter = {
         resolveGameSlugs: jest.fn().mockReturnValue(['world-of-warcraft']),
         fetchProfile: jest.fn().mockResolvedValue({
@@ -343,28 +337,20 @@ describe('CharactersService — operations', () => {
         }),
         fetchEquipment: jest.fn().mockResolvedValue({ slots: [] }),
       };
-
       mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
         new Map([['wow', mockAdapter]]),
       );
 
-      // User exists
-      mockDb.select.mockReturnValueOnce({
+      // User exists + Game lookup
+      const selectOnce = (rows: unknown[]) => ({
         from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([{ id: 1 }]),
-          }),
+          where: jest
+            .fn()
+            .mockReturnValue({ limit: jest.fn().mockResolvedValue(rows) }),
         }),
       });
-
-      // Game lookup
-      mockDb.select.mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([mockGame]),
-          }),
-        }),
-      });
+      mockDb.select.mockReturnValueOnce(selectOnce([{ id: 1 }]));
+      mockDb.select.mockReturnValueOnce(selectOnce([mockGame]));
 
       // Transaction throws unique violation (simulates duplicate)
       mockDb.transaction.mockImplementationOnce(
@@ -383,7 +369,7 @@ describe('CharactersService — operations', () => {
         },
       );
 
-      // mergeIntoExisting: find existing local character
+      // mergeIntoExisting: find existing local + update returns merged
       const existingLocal = {
         ...mockCharacter,
         externalId: null,
@@ -391,15 +377,8 @@ describe('CharactersService — operations', () => {
         gameVariant: null,
         lastSyncedAt: null,
       };
-      mockDb.select.mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([existingLocal]),
-          }),
-        }),
-      });
+      mockDb.select.mockReturnValueOnce(selectOnce([existingLocal]));
 
-      // mergeIntoExisting: update returns merged character
       const mergedCharacter = {
         ...mockCharacter,
         itemLevel: 500,
@@ -420,6 +399,10 @@ describe('CharactersService — operations', () => {
           }),
         }),
       });
+    }
+
+    it('should merge imported data into existing local character instead of throwing 409', async () => {
+      setupMergeConflictMocks();
 
       const result = await service.importExternal(1, {
         name: 'Thrall',
@@ -429,7 +412,6 @@ describe('CharactersService — operations', () => {
         isMain: false,
       });
 
-      // Should return merged data, not throw ConflictException
       expect(result.itemLevel).toBe(500);
       expect(result.avatarUrl).toBe(
         'https://render.worldofwarcraft.com/thrall.jpg',
@@ -437,8 +419,6 @@ describe('CharactersService — operations', () => {
       expect(result.region).toBe('us');
       expect(result.gameVariant).toBe('retail');
       expect(result.equipment).toEqual({ slots: [] });
-
-      // Verify update was called (merge path), not just insert
       expect(mockDb.update).toHaveBeenCalled();
     });
   });

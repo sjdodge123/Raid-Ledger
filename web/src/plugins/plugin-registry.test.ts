@@ -4,7 +4,7 @@ import { registerSlotComponent, getSlotRegistrations, clearRegistry, registerPlu
 function StubComponent() { return null; }
 function StubComponent2() { return null; }
 
-describe('plugin-registry', () => {
+describe('plugin-registry — part 1', () => {
     beforeEach(() => {
         clearRegistry();
     });
@@ -64,6 +64,13 @@ describe('plugin-registry', () => {
         expect(registrations).toHaveLength(2);
         expect(registrations[0].pluginSlug).toBe('plugin-a');
         expect(registrations[1].pluginSlug).toBe('plugin-b');
+    });
+
+});
+
+describe('plugin-registry — part 2', () => {
+    beforeEach(() => {
+        clearRegistry();
     });
 
     it('clearRegistry removes all registrations', () => {
@@ -127,4 +134,5 @@ describe('plugin-registry', () => {
         const badge = getPluginBadge('plug');
         expect(badge).toEqual({ icon: 'B', color: 'red', label: 'Second' });
     });
+
 });

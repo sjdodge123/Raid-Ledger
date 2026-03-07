@@ -103,7 +103,7 @@ describe('RosterBuilder — Join? confirmation flow (ROK-353)', () => {
         vi.useRealTimers();
     });
 
-    it('AC-3: pending state persists across prop changes (simulated refetch)', () => {
+    function testAc3PendingStatePersists2() {
         const { rerender } = renderWithRouter(
             <RosterBuilder
                 pool={[]}
@@ -143,9 +143,11 @@ describe('RosterBuilder — Join? confirmation flow (ROK-353)', () => {
 
         fireEvent.click(screen.getByText('Join?'));
         expect(mockSlotClick).toHaveBeenCalledTimes(1);
-    });
+    
+    }
+    it('AC-3: pending state persists across prop changes (simulated refetch)', () => { testAc3PendingStatePersists2(); });
 
-    it('AC-3: pending state persists when canJoin briefly becomes false', () => {
+    function testAc3PendingStatePersists() {
         const { rerender } = renderWithRouter(
             <RosterBuilder
                 pool={[]}
@@ -185,9 +187,11 @@ describe('RosterBuilder — Join? confirmation flow (ROK-353)', () => {
 
         fireEvent.click(screen.getByText('Join?'));
         expect(mockSlotClick).toHaveBeenCalledTimes(1);
-    });
+    
+    }
+    it('AC-3: pending state persists when canJoin briefly becomes false', () => { testAc3PendingStatePersists(); });
 
-    it('pending state clears when signupSucceeded becomes true (ROK-467)', () => {
+    function testPendingStateClearsWhenSignupSucceeded() {
         const { rerender } = renderWithRouter(
             <RosterBuilder
                 pool={[]}
@@ -223,9 +227,11 @@ describe('RosterBuilder — Join? confirmation flow (ROK-353)', () => {
         );
 
         expect(screen.queryByText('Join?')).not.toBeInTheDocument();
-    });
+    
+    }
+    it('pending state clears when signupSucceeded becomes true (ROK-467)', () => { testPendingStateClearsWhenSignupSucceeded(); });
 
-    it('canJoin=false alone does NOT clear pending state (ROK-467)', () => {
+    function testCanjoinFalseAloneDoesNOT() {
         vi.useFakeTimers();
 
         const { rerender } = renderWithRouter(
@@ -269,7 +275,9 @@ describe('RosterBuilder — Join? confirmation flow (ROK-353)', () => {
         expect(screen.getByText('Join?')).toBeInTheDocument();
 
         vi.useRealTimers();
-    });
+    
+    }
+    it('canJoin=false alone does NOT clear pending state (ROK-467)', () => { testCanjoinFalseAloneDoesNOT(); });
 
     it('AC-5: admin assignment popup is unaffected by join confirmation', () => {
         renderWithRouter(

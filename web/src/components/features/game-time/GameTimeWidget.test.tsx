@@ -64,7 +64,7 @@ function renderWidget(props: {
     );
 }
 
-describe('GameTimeWidget', () => {
+describe('GameTimeWidget — part 1', () => {
     it('shows overlap message when template matches event hours', () => {
         // 2026-02-09 is Monday → JS getDay()=1 → game-time dayOfWeek=0
         mockEditorReturn.mockReturnValue(makeEditorData({
@@ -140,6 +140,9 @@ describe('GameTimeWidget', () => {
         expect(raidNights.length).toBeGreaterThanOrEqual(1);
     });
 
+});
+
+describe('GameTimeWidget — part 2', () => {
     it('modal is read-only (cells are not paintable)', () => {
         const handleChange = vi.fn();
         mockEditorReturn.mockReturnValue(makeEditorData({
@@ -172,4 +175,5 @@ describe('GameTimeWidget', () => {
         expect(link).toBeInTheDocument();
         expect(link.closest('a')).toHaveAttribute('href', '/profile/gaming');
     });
+
 });

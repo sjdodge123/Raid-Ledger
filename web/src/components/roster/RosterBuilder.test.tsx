@@ -127,8 +127,7 @@ describe('RosterBuilder', () => {
     });
 
     // ROK-209: Auto-Fill UI tests
-    describe('Auto-Fill', () => {
-        const mmoPool = [
+const mmoPool = [
             makePlayer(10, 'tank', 'TankA'),
             makePlayer(11, 'healer', 'HealerA'),
             makePlayer(12, 'healer', 'HealerB'),
@@ -136,29 +135,32 @@ describe('RosterBuilder', () => {
             makePlayer(14, 'dps', 'DpsB'),
             makePlayer(15, 'dps', 'DpsC'),
         ];
-
-        it('shows Auto-Fill button when canEdit is true', () => {
+    function autoFillGroup1() {
+it('shows Auto-Fill button when canEdit is true', () => {
             renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Auto-Fill')).toBeInTheDocument();
         });
 
-        it('hides Auto-Fill button when canEdit is false', () => {
+it('hides Auto-Fill button when canEdit is false', () => {
             renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={false} />
             );
             expect(screen.queryByText('Auto-Fill')).not.toBeInTheDocument();
         });
 
-        it('disables Auto-Fill when pool is empty', () => {
+it('disables Auto-Fill when pool is empty', () => {
             renderWithRouter(
                 <RosterBuilder pool={[]} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Auto-Fill')).toBeDisabled();
         });
 
-        it('disables Auto-Fill when all slots are filled', () => {
+    }
+
+    function autoFillGroup2() {
+it('disables Auto-Fill when all slots are filled', () => {
             const fullAssignments: RosterAssignmentResponse[] = [];
             let id = 1;
             for (const [role, count] of [['tank', 2], ['healer', 4], ['dps', 14], ['flex', 5]] as const) {
@@ -174,7 +176,10 @@ describe('RosterBuilder', () => {
             expect(screen.getByText('Auto-Fill')).toBeDisabled();
         });
 
-        it('shows confirmation modal with correct counts on Auto-Fill click', () => {
+    }
+
+    function autoFillGroup3() {
+it('shows confirmation modal with correct counts on Auto-Fill click', () => {
             renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
@@ -186,7 +191,7 @@ describe('RosterBuilder', () => {
             expect(screen.getByText('Cancel')).toBeInTheDocument();
         });
 
-        it('shows info toast when no matching players', () => {
+it('shows info toast when no matching players', () => {
             const tinySlots = { tank: 0, healer: 0, dps: 0, flex: 0, player: 0 };
             renderWithRouter(
                 <RosterBuilder pool={[makePlayer(1, null, 'NoRole')]} assignments={[]} slots={tinySlots} onRosterChange={mockOnRosterChange} canEdit={true} />
@@ -195,7 +200,10 @@ describe('RosterBuilder', () => {
             expect(screen.getByText('Auto-Fill')).toBeDisabled();
         });
 
-        it('calls onRosterChange with filled assignments on confirm', () => {
+    }
+
+    function autoFillGroup4() {
+it('calls onRosterChange with filled assignments on confirm', () => {
             renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
@@ -209,7 +217,10 @@ describe('RosterBuilder', () => {
             expect(newPool.length).toBe(0);
         });
 
-        it('does not move already-assigned players', () => {
+    }
+
+    function autoFillGroup5() {
+it('does not move already-assigned players', () => {
             const existingAssignment = { ...makePlayer(99, 'tank', 'ExistingTank'), slot: 'tank' as RosterRole, position: 1 };
             renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[existingAssignment]} onRosterChange={mockOnRosterChange} canEdit={true} />
@@ -224,36 +235,47 @@ describe('RosterBuilder', () => {
             expect(tankA?.slot).toBe('tank');
             expect(tankA?.position).toBe(2);
         });
+
+    }
+
+    describe('Auto-Fill', () => {
+        autoFillGroup1();
+        autoFillGroup2();
+        autoFillGroup3();
+        autoFillGroup4();
+        autoFillGroup5();
     });
 
-    describe('Clear All', () => {
-        const assigned = [
+const assigned = [
             { ...makePlayer(1, 'tank', 'TankA'), slot: 'tank' as RosterRole, position: 1 },
             { ...makePlayer(2, 'healer', 'HealerA'), slot: 'healer' as RosterRole, position: 1 },
         ];
-
-        it('shows Clear All button when canEdit is true', () => {
+    function clearAllGroup1() {
+it('shows Clear All button when canEdit is true', () => {
             renderWithRouter(
                 <RosterBuilder pool={[]} assignments={assigned} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Clear All')).toBeInTheDocument();
         });
 
-        it('hides Clear All button when canEdit is false', () => {
+it('hides Clear All button when canEdit is false', () => {
             renderWithRouter(
                 <RosterBuilder pool={[]} assignments={assigned} onRosterChange={mockOnRosterChange} canEdit={false} />
             );
             expect(screen.queryByText('Clear All')).not.toBeInTheDocument();
         });
 
-        it('disables Clear All when no assignments', () => {
+it('disables Clear All when no assignments', () => {
             renderWithRouter(
                 <RosterBuilder pool={[]} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Clear All')).toBeDisabled();
         });
 
-        it('shows confirmation text on first click, clears on second click', () => {
+    }
+
+    function clearAllGroup2() {
+it('shows confirmation text on first click, clears on second click', () => {
             renderWithRouter(
                 <RosterBuilder pool={[]} assignments={assigned} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
@@ -270,7 +292,10 @@ describe('RosterBuilder', () => {
             expect(newPool.length).toBe(2);
         });
 
-        it('auto-resets confirmation after 3s', () => {
+    }
+
+    function clearAllGroup3() {
+it('auto-resets confirmation after 3s', () => {
             vi.useFakeTimers();
             renderWithRouter(
                 <RosterBuilder pool={[]} assignments={assigned} onRosterChange={mockOnRosterChange} canEdit={true} />
@@ -286,6 +311,13 @@ describe('RosterBuilder', () => {
             expect(screen.getByText('Clear All')).toBeInTheDocument();
             vi.useRealTimers();
         });
+
+    }
+
+    describe('Clear All', () => {
+        clearAllGroup1();
+        clearAllGroup2();
+        clearAllGroup3();
     });
 
     // ROK-343: Memoization tests

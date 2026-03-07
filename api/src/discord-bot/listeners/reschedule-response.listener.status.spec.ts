@@ -70,323 +70,279 @@ function makeButtonInteraction(
   return interaction;
 }
 
+let testModule: TestingModule;
+let listener: TestableRescheduleResponseListener;
+let mockDb: MockDb;
+let mockSignupsService: {
+  findByDiscordUser: jest.Mock;
+  confirmSignup: jest.Mock;
+  updateStatus: jest.Mock;
+};
+let mockEmbedSyncQueue: { enqueue: jest.Mock };
+
+const mockEvent = {
+  id: 42,
+  title: 'Mythic Raid Night',
+  cancelledAt: null,
+  gameId: null,
+  slotConfig: null,
+};
+
+const mockCancelledEvent = {
+  id: 42,
+  title: 'Mythic Raid Night',
+  cancelledAt: new Date('2026-01-01'),
+  gameId: null,
+  slotConfig: null,
+};
+
+const mockSignup = {
+  id: 101,
+  eventId: 42,
+  status: 'signed_up',
+  discordUserId: 'discord-user-1',
+  user: { id: 41 },
+};
+
+async function setupStatusModule() {
+  mockDb = createDrizzleMock();
+  mockSignupsService = {
+    findByDiscordUser: jest.fn().mockResolvedValue(null),
+    confirmSignup: jest.fn().mockResolvedValue({ id: 101 }),
+    updateStatus: jest.fn().mockResolvedValue(undefined),
+  };
+  mockEmbedSyncQueue = { enqueue: jest.fn().mockResolvedValue(undefined) };
+
+  testModule = await Test.createTestingModule({
+    providers: [
+      RescheduleResponseListener,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: DiscordBotClientService,
+        useValue: { getClient: jest.fn().mockReturnValue(null) },
+      },
+      { provide: SignupsService, useValue: mockSignupsService },
+      {
+        provide: CharactersService,
+        useValue: {
+          findAllForUser: jest
+            .fn()
+            .mockResolvedValue({ data: [], meta: { total: 0 } }),
+          findOne: jest
+            .fn()
+            .mockResolvedValue({ id: 'char-1', name: 'Arthas' }),
+        },
+      },
+      { provide: EmbedSyncQueueService, useValue: mockEmbedSyncQueue },
+      {
+        provide: DiscordEmojiService,
+        useValue: {
+          getClassEmojiComponent: jest.fn().mockReturnValue(undefined),
+          getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
+        },
+      },
+    ],
+  }).compile();
+
+  const instance: unknown = testModule.get(RescheduleResponseListener);
+  listener = instance as TestableRescheduleResponseListener;
+}
+
 describe('RescheduleResponseListener — status', () => {
-  let module: TestingModule;
-
-  let listener: TestableRescheduleResponseListener;
-  let mockDb: MockDb;
-  let mockClientService: { getClient: jest.Mock };
-  let mockSignupsService: {
-    findByDiscordUser: jest.Mock;
-    confirmSignup: jest.Mock;
-    updateStatus: jest.Mock;
-  };
-  let mockCharactersService: {
-    findAllForUser: jest.Mock;
-    findOne: jest.Mock;
-  };
-  let mockEmbedSyncQueue: { enqueue: jest.Mock };
-  let mockEmojiService: {
-    getClassEmojiComponent: jest.Mock;
-    getRoleEmojiComponent: jest.Mock;
-  };
-
-  const mockEvent = {
-    id: 42,
-    title: 'Mythic Raid Night',
-    cancelledAt: null,
-    gameId: null,
-    slotConfig: null,
-  };
-
-  const mockCancelledEvent = {
-    id: 42,
-    title: 'Mythic Raid Night',
-    cancelledAt: new Date('2026-01-01'),
-    gameId: null,
-    slotConfig: null,
-  };
-
-  const mockSignup = {
-    id: 101,
-    eventId: 42,
-    status: 'signed_up',
-    discordUserId: 'discord-user-1',
-    user: { id: 41 },
-  };
-
   beforeEach(async () => {
-    mockDb = createDrizzleMock();
-
-    mockClientService = {
-      getClient: jest.fn().mockReturnValue(null),
-    };
-
-    mockSignupsService = {
-      findByDiscordUser: jest.fn().mockResolvedValue(null),
-      confirmSignup: jest.fn().mockResolvedValue({ id: 101 }),
-      updateStatus: jest.fn().mockResolvedValue(undefined),
-    };
-
-    mockCharactersService = {
-      findAllForUser: jest
-        .fn()
-        .mockResolvedValue({ data: [], meta: { total: 0 } }),
-      findOne: jest.fn().mockResolvedValue({ id: 'char-1', name: 'Arthas' }),
-    };
-
-    mockEmbedSyncQueue = {
-      enqueue: jest.fn().mockResolvedValue(undefined),
-    };
-
-    mockEmojiService = {
-      getClassEmojiComponent: jest.fn().mockReturnValue(undefined),
-      getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
-    };
-
-    module = await Test.createTestingModule({
-      providers: [
-        RescheduleResponseListener,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: DiscordBotClientService, useValue: mockClientService },
-        { provide: SignupsService, useValue: mockSignupsService },
-        { provide: CharactersService, useValue: mockCharactersService },
-        { provide: EmbedSyncQueueService, useValue: mockEmbedSyncQueue },
-        { provide: DiscordEmojiService, useValue: mockEmojiService },
-      ],
-    }).compile();
-
-    const instance: unknown = module.get(RescheduleResponseListener);
-    listener = instance as TestableRescheduleResponseListener;
+    await setupStatusModule();
   });
 
   afterEach(async () => {
-    await module.close();
+    await testModule.close();
     jest.clearAllMocks();
   });
 
-  // ─── Bot connection ─────────────────────────────────────────────────
-
   describe('handleTentative', () => {
-    it('sets signup status to tentative via DB update for unlinked user', async () => {
-      // Event lookup
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
-      // Linked user lookup — unlinked
-      mockDb.limit.mockResolvedValueOnce([]);
-      // reconfirmSignup: find signup by discordUserId
-      mockDb.limit.mockResolvedValueOnce([mockSignup]);
-      // ensureRosterAssignment — no existing (slotConfig null → early return)
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
-      );
-      await listener['handleButtonInteraction'](interaction);
-
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'tentative', roachedOutAt: null }),
-      );
-    });
-
-    it('replies with tentative confirmation message', async () => {
-      // Event lookup
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
-      // Linked user lookup — unlinked
-      mockDb.limit.mockResolvedValueOnce([]);
-      // reconfirmSignup: find signup by discordUserId
-      mockDb.limit.mockResolvedValueOnce([mockSignup]);
-      // ensureRosterAssignment — no existing (slotConfig null → early return)
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
-      );
-      await listener['handleButtonInteraction'](interaction);
-
-      expect(interaction.editReply).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: expect.stringContaining('tentative'),
-        }),
-      );
-    });
-
-    it('enqueues embed sync after marking tentative', async () => {
-      // Event lookup
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
-      // Linked user lookup — unlinked
-      mockDb.limit.mockResolvedValueOnce([]);
-      // reconfirmSignup: find signup by discordUserId
-      mockDb.limit.mockResolvedValueOnce([mockSignup]);
-      // ensureRosterAssignment — no existing (slotConfig null → early return)
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
-      );
-      await listener['handleButtonInteraction'](interaction);
-
-      expect(mockEmbedSyncQueue.enqueue).toHaveBeenCalledWith(
-        42,
-        'reschedule-tentative',
-      );
-    });
-
-    it('replies "Event not found." when event does not exist', async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
-      );
-      await listener['handleTentative'](interaction, 42);
-
-      expect(interaction.editReply).toHaveBeenCalledWith({
-        content: 'Event not found.',
-      });
-    });
-
-    it('replies "This event has been cancelled." for cancelled events', async () => {
-      mockDb.limit.mockResolvedValueOnce([mockCancelledEvent]);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
-      );
-      await listener['handleTentative'](interaction, 42);
-
-      expect(interaction.editReply).toHaveBeenCalledWith({
-        content: 'This event has been cancelled.',
-      });
-    });
-
-    it('replies "You\'re not signed up" when user has no signup', async () => {
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(null);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
-      );
-      await listener['handleTentative'](interaction, 42);
-
-      expect(interaction.editReply).toHaveBeenCalledWith({
-        content: "You're not signed up for this event.",
-      });
-    });
+    tentativeSuccessTests();
+    tentativeEdgeCaseTests();
   });
-
-  // ─── Decline flow ─────────────────────────────────────────────────────
 
   describe('handleDecline', () => {
-    it('sets signup status to declined and deletes roster assignment', async () => {
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    declineSuccessTests();
+    declineEdgeCaseTests();
+  });
+});
 
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
-      );
-      await listener['handleButtonInteraction'](interaction);
+function setupTentativeMocks() {
+  mockDb.limit.mockResolvedValueOnce([mockEvent]);
+  mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+  mockDb.limit.mockResolvedValueOnce([]);
+  mockDb.limit.mockResolvedValueOnce([mockSignup]);
+  mockDb.limit.mockResolvedValueOnce([]);
+}
 
-      // update sets status to declined
-      expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'declined' }),
-      );
+function tentativeSuccessTests() {
+  it('sets signup status to tentative for unlinked user', async () => {
+    setupTentativeMocks();
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'tentative', roachedOutAt: null }),
+    );
+  });
 
-      // delete roster assignment
-      expect(mockDb.delete).toHaveBeenCalled();
-    });
+  it('replies with tentative confirmation message', async () => {
+    setupTentativeMocks();
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('tentative'),
+      }),
+    );
+  });
 
-    it('replies with "No worries!" message after successful decline', async () => {
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+  it('enqueues embed sync after marking tentative', async () => {
+    setupTentativeMocks();
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(mockEmbedSyncQueue.enqueue).toHaveBeenCalledWith(
+      42,
+      'reschedule-tentative',
+    );
+  });
+}
 
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
-      );
-      await listener['handleButtonInteraction'](interaction);
-
-      expect(interaction.editReply).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: expect.stringContaining('No worries!'),
-        }),
-      );
-    });
-
-    it('enqueues embed sync after decline', async () => {
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
-      );
-      await listener['handleButtonInteraction'](interaction);
-
-      expect(mockEmbedSyncQueue.enqueue).toHaveBeenCalledWith(
-        42,
-        'reschedule-decline',
-      );
-    });
-
-    it('replies "Event not found." when event does not exist', async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // no event
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
-      );
-      await listener['handleDecline'](interaction, 42);
-
-      expect(interaction.editReply).toHaveBeenCalledWith({
-        content: 'Event not found.',
-      });
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it('replies "This event has been cancelled." for cancelled events', async () => {
-      mockDb.limit.mockResolvedValueOnce([mockCancelledEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
-      );
-      await listener['handleDecline'](interaction, 42);
-
-      expect(interaction.editReply).toHaveBeenCalledWith({
-        content: 'This event has been cancelled.',
-      });
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it('replies "You\'re not signed up" when user has no signup', async () => {
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(null);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
-      );
-      await listener['handleDecline'](interaction, 42);
-
-      expect(interaction.editReply).toHaveBeenCalledWith({
-        content: "You're not signed up for this event.",
-      });
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it('clears roachedOutAt when declining', async () => {
-      mockDb.limit.mockResolvedValueOnce([mockEvent]);
-      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
-
-      const interaction = makeButtonInteraction(
-        `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
-      );
-      await listener['handleDecline'](interaction, 42);
-
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ roachedOutAt: null }),
-      );
+function tentativeEdgeCaseTests() {
+  it('replies "Event not found." when event does not exist', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleTentative'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'Event not found.',
     });
   });
 
-  // ─── Select menu routing ─────────────────────────────────────────────
-});
+  it('replies "cancelled" for cancelled events', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockCancelledEvent]);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleTentative'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'This event has been cancelled.',
+    });
+  });
+
+  it('replies "not signed up" when user has no signup', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(null);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+    );
+    await listener['handleTentative'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: "You're not signed up for this event.",
+    });
+  });
+}
+
+function declineSuccessTests() {
+  it('sets status to declined and deletes roster assignment', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'declined' }),
+    );
+    expect(mockDb.delete).toHaveBeenCalled();
+  });
+
+  it('replies with "No worries!" message', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('No worries!'),
+      }),
+    );
+  });
+
+  it('enqueues embed sync after decline', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    expect(mockEmbedSyncQueue.enqueue).toHaveBeenCalledWith(
+      42,
+      'reschedule-decline',
+    );
+  });
+
+  it('clears roachedOutAt when declining', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleDecline'](interaction, 42);
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ roachedOutAt: null }),
+    );
+  });
+}
+
+function declineEdgeCaseTests() {
+  it('replies "Event not found." when event does not exist', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleDecline'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'Event not found.',
+    });
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it('replies "cancelled" for cancelled events', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockCancelledEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleDecline'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'This event has been cancelled.',
+    });
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it('replies "not signed up" when user has no signup', async () => {
+    mockDb.limit.mockResolvedValueOnce([mockEvent]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(null);
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.DECLINE}:42`,
+    );
+    await listener['handleDecline'](interaction, 42);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: "You're not signed up for this event.",
+    });
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+}

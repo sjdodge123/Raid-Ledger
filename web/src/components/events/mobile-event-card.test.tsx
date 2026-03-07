@@ -19,7 +19,7 @@ const createMockEvent = (overrides: Partial<EventResponseDto> = {}): EventRespon
     ...overrides,
 });
 
-describe('MobileEventCard', () => {
+describe('MobileEventCard — rendering', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(MOCK_NOW);
@@ -65,6 +65,22 @@ describe('MobileEventCard', () => {
         expect(onClick).toHaveBeenCalledTimes(1);
     });
 
+    it('renders relative time', () => {
+        render(<MobileEventCard event={createMockEvent()} />);
+        expect(screen.getByTestId('mobile-event-relative')).toBeInTheDocument();
+    });
+});
+
+describe('MobileEventCard — avatars & badges', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('renders avatar stack container', () => {
         const event = createMockEvent({
             signupsPreview: [
@@ -76,11 +92,6 @@ describe('MobileEventCard', () => {
         render(<MobileEventCard event={event} signupCount={5} />);
         const avatarStack = screen.getByTestId('mobile-event-avatars');
         expect(avatarStack.children.length).toBe(3);
-    });
-
-    it('renders relative time', () => {
-        render(<MobileEventCard event={createMockEvent()} />);
-        expect(screen.getByTestId('mobile-event-relative')).toBeInTheDocument();
     });
 
     it('applies badge-overlay class to status badge', () => {

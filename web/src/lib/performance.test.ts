@@ -38,14 +38,13 @@ class MockObserver {
     }
 }
 
-describe('initPerformanceMonitoring', () => {
+describe('initPerformanceMonitoring — part 1', () => {
     beforeEach(() => {
         observerInstances.length = 0;
         vi.stubGlobal('PerformanceObserver', MockObserver);
         // Reset any existing event listeners
         vi.spyOn(globalThis, 'addEventListener');
     });
-
     afterEach(() => {
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
@@ -104,6 +103,20 @@ describe('initPerformanceMonitoring', () => {
         expect(fcpObserver.disconnected).toBe(false);
     });
 
+});
+
+describe('initPerformanceMonitoring — part 2', () => {
+    beforeEach(() => {
+        observerInstances.length = 0;
+        vi.stubGlobal('PerformanceObserver', MockObserver);
+        // Reset any existing event listeners
+        vi.spyOn(globalThis, 'addEventListener');
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+    });
+
     it('TTFB observer disconnects after navigation entry with positive TTFB', () => {
         initPerformanceMonitoring();
         const navObserver = observerInstances[3];
@@ -151,6 +164,20 @@ describe('initPerformanceMonitoring', () => {
 
         // LCP observer should disconnect after page hidden
         expect(lcpObserver.disconnected).toBe(true);
+    });
+
+});
+
+describe('initPerformanceMonitoring — part 3', () => {
+    beforeEach(() => {
+        observerInstances.length = 0;
+        vi.stubGlobal('PerformanceObserver', MockObserver);
+        // Reset any existing event listeners
+        vi.spyOn(globalThis, 'addEventListener');
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
     });
 
     it('CLS accumulates layout shift values without recent input', () => {
@@ -212,6 +239,20 @@ describe('initPerformanceMonitoring', () => {
         expect(() => initPerformanceMonitoring()).not.toThrow();
     });
 
+});
+
+describe('initPerformanceMonitoring — part 4', () => {
+    beforeEach(() => {
+        observerInstances.length = 0;
+        vi.stubGlobal('PerformanceObserver', MockObserver);
+        // Reset any existing event listeners
+        vi.spyOn(globalThis, 'addEventListener');
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+    });
+
     it('handles CLS observer throwing (layout-shift not supported)', () => {
         vi.stubGlobal('PerformanceObserver', class {
             constructor() {}
@@ -239,6 +280,7 @@ describe('initPerformanceMonitoring', () => {
 
         expect(() => initPerformanceMonitoring()).not.toThrow();
     });
+
 });
 
 describe('rate function (via initPerformanceMonitoring integration)', () => {

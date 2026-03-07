@@ -30,23 +30,22 @@ async function createTestEvent(
   return event;
 }
 
-describe('Quest Progress (integration)', () => {
-  let testApp: TestApp;
-  let adminToken: string;
+let testApp: TestApp;
+let adminToken: string;
 
-  beforeAll(async () => {
-    testApp = await getTestApp();
-    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-  });
+async function setupQPTestApp() {
+  testApp = await getTestApp();
+  adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+}
 
-  afterEach(async () => {
-    testApp.seed = await truncateAllTables(testApp.db);
-    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-  });
+async function cleanupQP() {
+  testApp.seed = await truncateAllTables(testApp.db);
+  adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+}
 
-  // ===================================================================
-  // PUT /plugins/wow-classic/events/:eventId/quest-progress (updateProgress)
-  // ===================================================================
+describe('Quest Progress — updateProgress (integration)', () => {
+  beforeAll(() => setupQPTestApp());
+  afterEach(() => cleanupQP());
 
   describe('PUT /plugins/wow-classic/events/:eventId/quest-progress', () => {
     it('should insert new quest progress entry', async () => {
@@ -111,10 +110,11 @@ describe('Quest Progress (integration)', () => {
       expect(res.status).toBe(400);
     });
   });
+});
 
-  // ===================================================================
-  // GET /plugins/wow-classic/events/:eventId/quest-progress
-  // ===================================================================
+describe('Quest Progress — getProgress (integration)', () => {
+  beforeAll(() => setupQPTestApp());
+  afterEach(() => cleanupQP());
 
   describe('GET /plugins/wow-classic/events/:eventId/quest-progress', () => {
     it('should return all progress entries with usernames', async () => {
@@ -176,10 +176,11 @@ describe('Quest Progress (integration)', () => {
       expect(res.status).toBe(401);
     });
   });
+});
 
-  // ===================================================================
-  // GET /plugins/wow-classic/events/:eventId/quest-coverage
-  // ===================================================================
+describe('Quest Progress — questCoverage (integration)', () => {
+  beforeAll(() => setupQPTestApp());
+  afterEach(() => cleanupQP());
 
   describe('GET /plugins/wow-classic/events/:eventId/quest-coverage', () => {
     it('should return coverage grouped by questId', async () => {

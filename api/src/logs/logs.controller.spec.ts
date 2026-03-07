@@ -34,7 +34,7 @@ const mockLogsService = {
   createScrubbedStream: jest.fn(),
 };
 
-describe('LogsController', () => {
+function describeLogsController() {
   let controller: LogsController;
 
   beforeEach(async () => {
@@ -53,7 +53,7 @@ describe('LogsController', () => {
     controller = module.get<LogsController>(LogsController);
   });
 
-  describe('listLogs', () => {
+  function describeListLogs() {
     it('returns all log files with total when no service filter', () => {
       const mockFiles = [
         {
@@ -140,9 +140,10 @@ describe('LogsController', () => {
 
       expect(result.total).toBe(5);
     });
-  });
+  }
+  describe('listLogs', () => describeListLogs());
 
-  describe('exportLogs', () => {
+  function describeExportLogs() {
     it('streams gzip archive when files exist (no filter)', () => {
       const mockFiles = [
         {
@@ -284,9 +285,10 @@ describe('LogsController', () => {
         controller.exportLogs(res, undefined, undefined, undefined),
       ).not.toThrow();
     });
-  });
+  }
+  describe('exportLogs', () => describeExportLogs());
 
-  describe('downloadFile', () => {
+  function describeDownloadFile() {
     it('streams single log file with correct headers', () => {
       const mockPath = '/data/logs/api.log';
       mockLogsService.getValidatedPath.mockReturnValue(mockPath);
@@ -355,9 +357,10 @@ describe('LogsController', () => {
         controller.downloadFile('api.log', res, undefined),
       ).not.toThrow();
     });
-  });
+  }
+  describe('downloadFile', () => describeDownloadFile());
 
-  describe('AdminGuard enforcement', () => {
+  function describeAdminGuardEnforcement() {
     it('AdminGuard blocks non-admin users', () => {
       const guard = new AdminGuard();
       const mockContext = {
@@ -394,5 +397,7 @@ describe('LogsController', () => {
 
       expect(guard.canActivate(mockContext)).toBe(false);
     });
-  });
-});
+  }
+  describe('AdminGuard enforcement', () => describeAdminGuardEnforcement());
+}
+describe('LogsController', () => describeLogsController());

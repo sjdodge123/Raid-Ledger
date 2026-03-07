@@ -113,8 +113,8 @@ describe('CommunityIdentityStep', () => {
         });
     });
 
-    describe('Touch target compliance (min-h-[44px])', () => {
-        it('community name input has min-h-[44px]', () => {
+    function touchTargetComplianceMinHGroup1() {
+it('community name input has min-h-[44px]', () => {
             const { container } = renderWithProviders(
                 <CommunityIdentityStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -122,7 +122,7 @@ describe('CommunityIdentityStep', () => {
             expect(nameInput!.className).toContain('min-h-[44px]');
         });
 
-        it('timezone select has min-h-[44px]', () => {
+it('timezone select has min-h-[44px]', () => {
             const { container } = renderWithProviders(
                 <CommunityIdentityStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -130,7 +130,7 @@ describe('CommunityIdentityStep', () => {
             expect(select!.className).toContain('min-h-[44px]');
         });
 
-        it('Upload Logo button has min-h-[44px]', () => {
+it('Upload Logo button has min-h-[44px]', () => {
             renderWithProviders(
                 <CommunityIdentityStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -138,7 +138,10 @@ describe('CommunityIdentityStep', () => {
             expect(uploadBtn.className).toContain('min-h-[44px]');
         });
 
-        it('Back button has min-h-[44px]', () => {
+    }
+
+    function touchTargetComplianceMinHGroup2() {
+it('Back button has min-h-[44px]', () => {
             renderWithProviders(
                 <CommunityIdentityStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -146,7 +149,7 @@ describe('CommunityIdentityStep', () => {
             expect(backBtn.className).toContain('min-h-[44px]');
         });
 
-        it('Skip button has min-h-[44px]', () => {
+it('Skip button has min-h-[44px]', () => {
             renderWithProviders(
                 <CommunityIdentityStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
@@ -154,13 +157,19 @@ describe('CommunityIdentityStep', () => {
             expect(skipBtn.className).toContain('min-h-[44px]');
         });
 
-        it('Next button has min-h-[44px]', () => {
+it('Next button has min-h-[44px]', () => {
             renderWithProviders(
                 <CommunityIdentityStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
             );
             const nextBtn = screen.getByRole('button', { name: /^next$/i });
             expect(nextBtn.className).toContain('min-h-[44px]');
         });
+
+    }
+
+    describe('Touch target compliance (min-h-[44px])', () => {
+        touchTargetComplianceMinHGroup1();
+        touchTargetComplianceMinHGroup2();
     });
 
     describe('Navigation', () => {

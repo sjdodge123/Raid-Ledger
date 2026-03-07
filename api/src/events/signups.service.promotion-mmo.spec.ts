@@ -34,6 +34,52 @@ describe('SignupsService — promotion (MMO)', () => {
     characterId: null,
     confirmationStatus: 'pending',
   };
+  function setupSelectChain() {
+    mockDb.select.mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([mockEvent]),
+        }),
+        leftJoin: jest.fn().mockReturnValue({
+          leftJoin: jest.fn().mockReturnValue({
+            where: jest
+              .fn()
+              .mockReturnValue({ orderBy: jest.fn().mockResolvedValue([]) }),
+          }),
+          where: jest
+            .fn()
+            .mockReturnValue({ orderBy: jest.fn().mockResolvedValue([]) }),
+        }),
+      }),
+    });
+  }
+
+  function setupMutationChains() {
+    mockDb.insert.mockReturnValue({
+      values: jest.fn().mockReturnValue({
+        onConflictDoNothing: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockSignup]),
+        }),
+        returning: jest.fn().mockResolvedValue([mockSignup]),
+      }),
+    });
+    mockDb.delete.mockReturnValue({
+      where: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([mockSignup]),
+      }),
+    });
+    mockDb.update.mockReturnValue({
+      set: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockSignup]),
+        }),
+      }),
+    });
+    mockDb.transaction.mockImplementation(
+      async (cb: (tx: typeof mockDb) => Promise<unknown>) => cb(mockDb),
+    );
+  }
+
   beforeEach(async () => {
     mockNotificationService = {
       create: jest.fn().mockResolvedValue(null),
@@ -57,60 +103,8 @@ describe('SignupsService — promotion (MMO)', () => {
       update: jest.fn(),
       transaction: jest.fn(),
     };
-
-    // Default select chain - event exists
-    const selectEventChain = {
-      from: jest.fn().mockReturnValue({
-        where: jest.fn().mockReturnValue({
-          limit: jest.fn().mockResolvedValue([mockEvent]),
-        }),
-        leftJoin: jest.fn().mockReturnValue({
-          leftJoin: jest.fn().mockReturnValue({
-            where: jest.fn().mockReturnValue({
-              orderBy: jest.fn().mockResolvedValue([]),
-            }),
-          }),
-          where: jest.fn().mockReturnValue({
-            orderBy: jest.fn().mockResolvedValue([]),
-          }),
-        }),
-      }),
-    };
-    mockDb.select.mockReturnValue(selectEventChain);
-
-    // Default insert chain (with onConflictDoNothing for ROK-364)
-    const insertChain = {
-      values: jest.fn().mockReturnValue({
-        onConflictDoNothing: jest.fn().mockReturnValue({
-          returning: jest.fn().mockResolvedValue([mockSignup]),
-        }),
-        returning: jest.fn().mockResolvedValue([mockSignup]),
-      }),
-    };
-    mockDb.insert.mockReturnValue(insertChain);
-
-    // Default delete chain
-    const deleteChain = {
-      where: jest.fn().mockReturnValue({
-        returning: jest.fn().mockResolvedValue([mockSignup]),
-      }),
-    };
-    mockDb.delete.mockReturnValue(deleteChain);
-
-    // Default update chain
-    const updateChain = {
-      set: jest.fn().mockReturnValue({
-        where: jest.fn().mockReturnValue({
-          returning: jest.fn().mockResolvedValue([mockSignup]),
-        }),
-      }),
-    };
-    mockDb.update.mockReturnValue(updateChain);
-
-    // Transaction mock — executes callback with mockDb as the tx context
-    mockDb.transaction.mockImplementation(
-      async (cb: (tx: typeof mockDb) => Promise<unknown>) => cb(mockDb),
-    );
+    setupSelectChain();
+    setupMutationChains();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -121,10 +115,7 @@ describe('SignupsService — promotion (MMO)', () => {
           provide: RosterNotificationBufferService,
           useValue: mockRosterNotificationBuffer,
         },
-        {
-          provide: BenchPromotionService,
-          useValue: mockBenchPromotionService,
-        },
+        { provide: BenchPromotionService, useValue: mockBenchPromotionService },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();

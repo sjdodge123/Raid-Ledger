@@ -69,7 +69,7 @@ vi.mock('../../hooks/use-logs', async (importOriginal) => {
 // Import after mock so we get the mocked versions
 import { downloadLogFile, exportLogs } from '../../hooks/use-logs';
 
-describe('LogsPanel', () => {
+describe('LogsPanel — part 1', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupLogsHandler();
@@ -135,7 +135,13 @@ describe('LogsPanel', () => {
     });
   });
 
-  describe('file list display', () => {
+});
+
+describe('file list display — part 1a', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupLogsHandler();
+  });
     it('renders all log files in a table', async () => {
       renderWithProviders(<LogsPanel />);
 
@@ -165,6 +171,14 @@ describe('LogsPanel', () => {
       // 3 files + export button (but export says "Export .tar.gz" not "Download")
       expect(downloadButtons).toHaveLength(3);
     });
+
+});
+
+describe('file list display — part 1b', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupLogsHandler();
+  });
 
     it('formats file sizes correctly', async () => {
       server.use(
@@ -203,6 +217,15 @@ describe('LogsPanel', () => {
       expect(screen.getByText('1.50 MB')).toBeInTheDocument();
     });
 
+});
+
+describe('LogsPanel — part 3', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupLogsHandler();
+  });
+
+  describe('file list display — part 2', () => {
     it('shows filter pills when files are present', async () => {
       renderWithProviders(<LogsPanel />);
       await screen.findByText('api.log');
@@ -210,6 +233,15 @@ describe('LogsPanel', () => {
       // "All" pill should be visible
       expect(screen.getByRole('button', { name: /all \(/i })).toBeInTheDocument();
     });
+
+  });
+
+});
+
+describe('LogsPanel — part 4', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupLogsHandler();
   });
 
   describe('service filter', () => {
@@ -280,7 +312,15 @@ describe('LogsPanel', () => {
     });
   });
 
-  describe('download file', () => {
+});
+
+describe('LogsPanel — part 5', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupLogsHandler();
+  });
+
+  describe('download file — part 1', () => {
     it('calls downloadLogFile with filename when download button is clicked', async () => {
       const user = userEvent.setup();
       renderWithProviders(<LogsPanel />);
@@ -345,6 +385,17 @@ describe('LogsPanel', () => {
       });
     });
 
+  });
+
+});
+
+describe('LogsPanel — part 6', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupLogsHandler();
+  });
+
+  describe('download file — part 2', () => {
     it('disables download button while download is in progress', async () => {
       const user = userEvent.setup();
       let resolveDownload!: () => void;
@@ -367,6 +418,15 @@ describe('LogsPanel', () => {
 
       resolveDownload();
     });
+
+  });
+
+});
+
+describe('LogsPanel — part 7', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupLogsHandler();
   });
 
   describe('export', () => {
@@ -439,6 +499,14 @@ describe('LogsPanel', () => {
     });
   });
 
+});
+
+describe('LogsPanel — part 8', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupLogsHandler();
+  });
+
   describe('heading and description', () => {
     it('renders the Container Logs heading', async () => {
       renderWithProviders(<LogsPanel />);
@@ -456,4 +524,5 @@ describe('LogsPanel', () => {
       expect(screen.getByText(/60-day retention/i)).toBeInTheDocument();
     });
   });
+
 });

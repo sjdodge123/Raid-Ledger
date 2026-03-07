@@ -4,7 +4,7 @@ import { computeAutoFill } from './roster-auto-fill';
 import { makePlayer } from './RosterBuilder.test-helpers';
 import type { RosterRole } from '@raid-ledger/contract';
 
-describe('computeAutoFill (unit)', () => {
+describe('computeAutoFill (unit) — part 1', () => {
     it('MMO: assigns by character role matching', () => {
         const pool = [
             makePlayer(1, 'tank', 'TankA'),
@@ -65,6 +65,9 @@ describe('computeAutoFill (unit)', () => {
         expect(result.newPool.length).toBe(3); // 8 - 5 = 3 remaining
     });
 
+});
+
+describe('computeAutoFill (unit) — part 2', () => {
     it('MMO: fills bench overflow', () => {
         const pool = Array.from({ length: 3 }, (_, i) => makePlayer(i + 1, null, `P${i + 1}`));
         const roleSlots = [
@@ -122,4 +125,5 @@ describe('computeAutoFill (unit)', () => {
         expect(newTank?.slot).toBe('tank');
         expect(newTank?.position).toBe(2); // Position 1 is occupied
     });
+
 });

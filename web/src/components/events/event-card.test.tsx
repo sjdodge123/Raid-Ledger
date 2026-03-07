@@ -70,12 +70,11 @@ describe('getRelativeTime', () => {
     });
 });
 
-describe('EventCard', () => {
+describe('EventCard — part 1', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(MOCK_NOW);
     });
-
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -135,6 +134,17 @@ describe('EventCard', () => {
         expect(screen.getByTestId('relative-time')).toBeInTheDocument();
     });
 
+});
+
+describe('EventCard — part 2', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('applies badge-overlay class to game cover container', () => {
         const { container } = render(<EventCard event={createMockEvent()} signupCount={0} />);
         const coverContainer = container.querySelector('.badge-overlay');
@@ -153,6 +163,7 @@ describe('EventCard', () => {
         expect(overlayContainer).toBeInTheDocument();
         expect(overlayContainer!.contains(gameTimeBadge)).toBe(true);
     });
+
 });
 
 describe('EventCardSkeleton', () => {
@@ -168,12 +179,11 @@ describe('EventCardSkeleton', () => {
     });
 });
 
-describe('EventCard badge-overlay class (ROK-473)', () => {
+describe('EventCard badge-overlay class (ROK-473) — part 1', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(MOCK_NOW);
     });
-
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -227,6 +237,17 @@ describe('EventCard badge-overlay class (ROK-473)', () => {
         render(<EventCard event={liveEvent} signupCount={0} />);
         const badge = screen.getByTestId('event-status-badge');
         expect(badge.className).toContain('bg-yellow-500/20');
+    });
+
+});
+
+describe('EventCard badge-overlay class (ROK-473) — part 2', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('ended status badge has dim color classes', () => {
@@ -284,5 +305,6 @@ describe('EventCard badge-overlay class (ROK-473)', () => {
         const badgeWrapper = gameTimeBadge?.closest('.absolute');
         expect(badgeWrapper).toHaveClass('top-2', 'left-2');
     });
+
 });
 

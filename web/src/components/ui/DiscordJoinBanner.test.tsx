@@ -76,7 +76,7 @@ function renderBanner(route = '/events') {
     );
 }
 
-describe('DiscordJoinBanner', () => {
+describe('DiscordJoinBanner — part 1', () => {
     beforeEach(() => {
         sessionStorage.clear();
         vi.clearAllMocks();
@@ -85,13 +85,14 @@ describe('DiscordJoinBanner', () => {
         mockUseAuth.mockReturnValue(authWithDiscord);
         mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
     });
-
     afterEach(() => {
         sessionStorage.clear();
     });
 
     // =========================================================
+
     // Visibility — SHOULD show banner
+
     // =========================================================
 
     describe('renders the banner', () => {
@@ -150,8 +151,25 @@ describe('DiscordJoinBanner', () => {
     });
 
     // =========================================================
+
     // Visibility — SHOULD NOT show banner
+
     // =========================================================
+
+});
+
+describe('DiscordJoinBanner — part 2', () => {
+    beforeEach(() => {
+        sessionStorage.clear();
+        vi.clearAllMocks();
+
+        // Sensible defaults: authenticated with Discord, bot online, not a member
+        mockUseAuth.mockReturnValue(authWithDiscord);
+        mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
+    });
+    afterEach(() => {
+        sessionStorage.clear();
+    });
 
     describe('hidden conditions', () => {
         it('is hidden when the user is NOT authenticated', () => {
@@ -196,83 +214,130 @@ describe('DiscordJoinBanner', () => {
     });
 
     // =========================================================
+
     // Route suppression
+
     // =========================================================
 
-    describe('route suppression', () => {
-        it('is NOT shown on the root path ("/")', () => {
-            const { container } = renderBanner('/');
-            expect(container.firstChild).toBeNull();
-        });
+});
 
-        it('is NOT shown on /login', () => {
-            const { container } = renderBanner('/login');
-            expect(container.firstChild).toBeNull();
-        });
+describe('route suppression — sub 1', () => {
+    beforeEach(() => {
+        sessionStorage.clear();
+        vi.clearAllMocks();
 
-        it('is NOT shown on /auth/success', () => {
-            const { container } = renderBanner('/auth/success');
-            expect(container.firstChild).toBeNull();
-        });
+        // Sensible defaults: authenticated with Discord, bot online, not a member
+        mockUseAuth.mockReturnValue(authWithDiscord);
+        mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
+    });
+    afterEach(() => {
+        sessionStorage.clear();
+    });
 
-        it('is NOT shown on /join', () => {
-            const { container } = renderBanner('/join');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on the root path ("/")', () => {
+        const { container } = renderBanner('/');
+        expect(container.firstChild).toBeNull();
+    });
 
-        it('is NOT shown on PUG claim flow (/i/:code)', () => {
-            const { container } = renderBanner('/i/abc123');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on /login', () => {
+        const { container } = renderBanner('/login');
+        expect(container.firstChild).toBeNull();
+    });
 
-        it('is NOT shown on any /i/* path', () => {
-            const { container } = renderBanner('/i/some-pug-code');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on /auth/success', () => {
+        const { container } = renderBanner('/auth/success');
+        expect(container.firstChild).toBeNull();
+    });
 
-        it('is NOT shown on /onboarding', () => {
-            const { container } = renderBanner('/onboarding');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on /join', () => {
+        const { container } = renderBanner('/join');
+        expect(container.firstChild).toBeNull();
+    });
 
-        it('is NOT shown on /onboarding/* sub-routes', () => {
-            const { container } = renderBanner('/onboarding/character');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on PUG claim flow (/i/:code)', () => {
+        const { container } = renderBanner('/i/abc123');
+        expect(container.firstChild).toBeNull();
+    });
 
-        it('is NOT shown on /admin/setup', () => {
-            const { container } = renderBanner('/admin/setup');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on any /i/* path', () => {
+        const { container } = renderBanner('/i/some-pug-code');
+        expect(container.firstChild).toBeNull();
+    });
 
-        it('is NOT shown on /admin/setup/* sub-routes', () => {
-            const { container } = renderBanner('/admin/setup/step-2');
-            expect(container.firstChild).toBeNull();
-        });
+    it('is NOT shown on /onboarding', () => {
+        const { container } = renderBanner('/onboarding');
+        expect(container.firstChild).toBeNull();
+    });
 
-        it('IS shown on a normal app route (/events)', () => {
-            renderBanner('/events');
-            expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
-        });
+});
 
-        it('IS shown on /players', () => {
-            renderBanner('/players');
-            expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
-        });
+describe('route suppression — sub 2', () => {
+    beforeEach(() => {
+        sessionStorage.clear();
+        vi.clearAllMocks();
 
-        it('IS shown on /profile', () => {
-            renderBanner('/profile');
-            expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
-        });
+        // Sensible defaults: authenticated with Discord, bot online, not a member
+        mockUseAuth.mockReturnValue(authWithDiscord);
+        mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
+    });
+    afterEach(() => {
+        sessionStorage.clear();
+    });
 
-        it('IS shown on /admin (not /admin/setup)', () => {
-            renderBanner('/admin');
-            expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
-        });
+    it('is NOT shown on /onboarding/* sub-routes', () => {
+        const { container } = renderBanner('/onboarding/character');
+        expect(container.firstChild).toBeNull();
+    });
+
+    it('is NOT shown on /admin/setup', () => {
+        const { container } = renderBanner('/admin/setup');
+        expect(container.firstChild).toBeNull();
+    });
+
+    it('is NOT shown on /admin/setup/* sub-routes', () => {
+        const { container } = renderBanner('/admin/setup/step-2');
+        expect(container.firstChild).toBeNull();
+    });
+
+    it('IS shown on a normal app route (/events)', () => {
+        renderBanner('/events');
+        expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
+    });
+
+    it('IS shown on /players', () => {
+        renderBanner('/players');
+        expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
+    });
+
+    it('IS shown on /profile', () => {
+        renderBanner('/profile');
+        expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
+    });
+
+    it('IS shown on /admin (not /admin/setup)', () => {
+        renderBanner('/admin');
+        expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
+    });
+
+});
+
+describe('DiscordJoinBanner — part 4', () => {
+    beforeEach(() => {
+        sessionStorage.clear();
+        vi.clearAllMocks();
+
+        // Sensible defaults: authenticated with Discord, bot online, not a member
+        mockUseAuth.mockReturnValue(authWithDiscord);
+        mockUseDiscordMembership.mockReturnValue({ data: notMemberData });
+    });
+    afterEach(() => {
+        sessionStorage.clear();
     });
 
     // =========================================================
+
     // Dismiss behavior
+
     // =========================================================
 
     describe('dismiss behavior', () => {
@@ -325,7 +390,9 @@ describe('DiscordJoinBanner', () => {
     });
 
     // =========================================================
+
     // Edge cases
+
     // =========================================================
 
     describe('edge cases', () => {
@@ -345,4 +412,5 @@ describe('DiscordJoinBanner', () => {
             expect(() => renderBanner('/events')).not.toThrow();
         });
     });
+
 });

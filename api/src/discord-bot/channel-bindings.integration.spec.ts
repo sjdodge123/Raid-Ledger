@@ -11,21 +11,20 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 
-describe('Channel Bindings CRUD (integration)', () => {
-  let testApp: TestApp;
+let testApp: TestApp;
 
-  beforeAll(async () => {
-    testApp = await getTestApp();
-  });
+beforeAll(async () => {
+  testApp = await getTestApp();
+});
 
-  afterEach(async () => {
-    testApp.seed = await truncateAllTables(testApp.db);
-  });
+afterEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+});
 
+describe('Channel Bindings CRUD — create and read', () => {
   it('should create a channel binding and persist to DB', async () => {
     const db = testApp.db;
 
-    // Insert a binding directly via DB (simulating what the service does)
     const [result] = await db
       .insert(schema.channelBindings)
       .values({
@@ -44,7 +43,6 @@ describe('Channel Bindings CRUD (integration)', () => {
     expect(result.channelId).toBe('555666777888');
     expect(result.gameId).toBe(testApp.seed.game.id);
 
-    // Read back from DB to verify persistence
     const [readBack] = await db
       .select()
       .from(schema.channelBindings)
@@ -60,7 +58,6 @@ describe('Channel Bindings CRUD (integration)', () => {
   it('should join game data when querying bindings with game references', async () => {
     const db = testApp.db;
 
-    // Create a binding referencing the seeded game
     await db.insert(schema.channelBindings).values({
       guildId: '111222333444',
       channelId: '999000111222',
@@ -70,7 +67,6 @@ describe('Channel Bindings CRUD (integration)', () => {
       config: {},
     });
 
-    // Query with game join — this is the pattern that failed in ROK-293
     const rows = await db
       .select({
         bindingId: schema.channelBindings.id,
@@ -88,12 +84,13 @@ describe('Channel Bindings CRUD (integration)', () => {
     expect(rows[0].gameName).toBe('Test Game');
     expect(rows[0].gameId).toBe(testApp.seed.game.id);
   });
+});
 
+describe('Channel Bindings CRUD — upsert', () => {
   it('should handle upsert (onConflictDoUpdate) for same guild+channel+series', async () => {
     const db = testApp.db;
     const seriesId = '550e8400-e29b-41d4-a716-446655440000';
 
-    // Create initial binding with a recurrence group ID
     await db.insert(schema.channelBindings).values({
       guildId: '111222333444',
       channelId: '555666777888',
@@ -104,7 +101,6 @@ describe('Channel Bindings CRUD (integration)', () => {
       config: {},
     });
 
-    // Upsert — same guild+channel+series should update (not insert)
     const [upserted] = await db
       .insert(schema.channelBindings)
       .values({
@@ -133,7 +129,6 @@ describe('Channel Bindings CRUD (integration)', () => {
     expect(upserted.bindingPurpose).toBe('game-voice-monitor');
     expect(upserted.config).toMatchObject({ minPlayers: 3 });
 
-    // Should still be only one row for this guild
     const allRows = await db
       .select()
       .from(schema.channelBindings)
@@ -141,7 +136,9 @@ describe('Channel Bindings CRUD (integration)', () => {
 
     expect(allRows.length).toBe(1);
   });
+});
 
+describe('Channel Bindings CRUD — delete', () => {
   it('should delete a channel binding', async () => {
     const db = testApp.db;
 
@@ -157,7 +154,6 @@ describe('Channel Bindings CRUD (integration)', () => {
       })
       .returning();
 
-    // Delete
     const deleted = await db
       .delete(schema.channelBindings)
       .where(eq(schema.channelBindings.id, created.id))
@@ -165,7 +161,6 @@ describe('Channel Bindings CRUD (integration)', () => {
 
     expect(deleted.length).toBe(1);
 
-    // Verify gone
     const remaining = await db
       .select()
       .from(schema.channelBindings)
@@ -173,11 +168,12 @@ describe('Channel Bindings CRUD (integration)', () => {
 
     expect(remaining.length).toBe(0);
   });
+});
 
+describe('Channel Bindings CRUD — FK cascade', () => {
   it('should cascade set null when referenced game is deleted', async () => {
     const db = testApp.db;
 
-    // Create a second game to delete (don't delete seeded game)
     const [tempGame] = await db
       .insert(schema.games)
       .values({
@@ -187,7 +183,6 @@ describe('Channel Bindings CRUD (integration)', () => {
       })
       .returning();
 
-    // Create binding referencing temp game
     const [binding] = await db
       .insert(schema.channelBindings)
       .values({
@@ -200,10 +195,8 @@ describe('Channel Bindings CRUD (integration)', () => {
       })
       .returning();
 
-    // Delete the game — FK should set gameId to null
     await db.delete(schema.games).where(eq(schema.games.id, tempGame.id));
 
-    // Verify binding still exists but gameId is null
     const [updated] = await db
       .select()
       .from(schema.channelBindings)

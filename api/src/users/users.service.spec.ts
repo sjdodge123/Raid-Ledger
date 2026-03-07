@@ -7,7 +7,7 @@ import {
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
-describe('UsersService', () => {
+function describeUsersService() {
   let service: UsersService;
   let mockDb: MockDb;
 
@@ -27,7 +27,7 @@ describe('UsersService', () => {
     service = module.get<UsersService>(UsersService);
   });
 
-  describe('findRecent', () => {
+  function describeFindRecent() {
     it('should return users created within the recent member window', async () => {
       const recentUser = {
         id: 1,
@@ -109,7 +109,8 @@ describe('UsersService', () => {
       expect(result[0]).toHaveProperty('createdAt');
       expect(result[0].createdAt).toBeInstanceOf(Date);
     });
-  });
+  }
+  describe('findRecent', () => describeFindRecent());
 
   describe('checkDisplayNameAvailability (ROK-219)', () => {
     it('should return true when display name is available', async () => {
@@ -147,7 +148,7 @@ describe('UsersService', () => {
     });
   });
 
-  describe('setDisplayName (ROK-219)', () => {
+  function describeSetDisplayName() {
     it('should update user display name', async () => {
       const updatedUser = {
         id: 1,
@@ -191,9 +192,10 @@ describe('UsersService', () => {
 
       expect(result.updatedAt).toBeInstanceOf(Date);
     });
-  });
+  }
+  describe('setDisplayName (ROK-219)', () => describeSetDisplayName());
 
-  describe('completeOnboarding (ROK-219)', () => {
+  function describeCompleteOnboarding() {
     it('should set onboardingCompletedAt timestamp', async () => {
       const now = new Date();
       const completedUser = {
@@ -239,9 +241,10 @@ describe('UsersService', () => {
       expect(result.onboardingCompletedAt).toBeDefined();
       expect(result.updatedAt).toBeDefined();
     });
-  });
+  }
+  describe('completeOnboarding (ROK-219)', () => describeCompleteOnboarding());
 
-  describe('resetOnboarding (ROK-312)', () => {
+  function describeResetOnboarding() {
     it('should set onboardingCompletedAt to null', async () => {
       const resetUser = {
         id: 1,
@@ -285,7 +288,8 @@ describe('UsersService', () => {
 
       expect(result.updatedAt).toBeInstanceOf(Date);
     });
-  });
+  }
+  describe('resetOnboarding (ROK-312)', () => describeResetOnboarding());
 
   describe('constants', () => {
     it('should export RECENT_MEMBER_DAYS as 30', () => {
@@ -296,4 +300,5 @@ describe('UsersService', () => {
       expect(RECENT_MEMBER_LIMIT).toBe(10);
     });
   });
-});
+}
+describe('UsersService', () => describeUsersService());

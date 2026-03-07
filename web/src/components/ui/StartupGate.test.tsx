@@ -26,7 +26,7 @@ function setStoreState(partial: Partial<{ status: string; hasBeenOnline: boolean
     useConnectivityStore.setState(partial as Parameters<typeof useConnectivityStore.setState>[0]);
 }
 
-describe('StartupGate', () => {
+describe('StartupGate — part 1', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         setStoreState({ status: 'checking', hasBeenOnline: false, check: vi.fn() });
@@ -36,7 +36,6 @@ describe('StartupGate', () => {
             writable: true,
         });
     });
-
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -80,72 +79,118 @@ describe('StartupGate', () => {
 
     });
 
-    describe('"Taking longer than usual" after 30 seconds', () => {
-        it('shows "Starting up..." before 30 seconds', () => {
-            setStoreState({ status: 'checking', hasBeenOnline: false });
+});
 
-            render(
-                <StartupGate>
-                    <div>App Content</div>
-                </StartupGate>,
-            );
+describe('"Taking longer than usual — sub 1', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        setStoreState({ status: 'checking', hasBeenOnline: false, check: vi.fn() });
+        // Default to a non-bypass path
+        Object.defineProperty(window, 'location', {
+            value: { pathname: '/' },
+            writable: true,
+        });
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
-            act(() => {
-                vi.advanceTimersByTime(29_999);
-            });
+    it('shows "Starting up..." before 30 seconds', () => {
+        setStoreState({ status: 'checking', hasBeenOnline: false });
 
-            expect(screen.getByText('Starting up...')).toBeInTheDocument();
-            expect(screen.queryByText('Taking longer than usual...')).not.toBeInTheDocument();
+        render(
+            <StartupGate>
+                <div>App Content</div>
+            </StartupGate>,
+        );
+
+        act(() => {
+            vi.advanceTimersByTime(29_999);
         });
 
-        it('shows "Taking longer than usual..." after 30 seconds', () => {
-            setStoreState({ status: 'checking', hasBeenOnline: false });
+        expect(screen.getByText('Starting up...')).toBeInTheDocument();
+        expect(screen.queryByText('Taking longer than usual...')).not.toBeInTheDocument();
+    });
 
-            render(
-                <StartupGate>
-                    <div>App Content</div>
-                </StartupGate>,
-            );
+    it('shows "Taking longer than usual..." after 30 seconds', () => {
+        setStoreState({ status: 'checking', hasBeenOnline: false });
 
-            act(() => {
-                vi.advanceTimersByTime(30_001);
-            });
+        render(
+            <StartupGate>
+                <div>App Content</div>
+            </StartupGate>,
+        );
 
-            expect(screen.getByText('Taking longer than usual...')).toBeInTheDocument();
-            expect(screen.queryByText('Starting up...')).not.toBeInTheDocument();
+        act(() => {
+            vi.advanceTimersByTime(30_001);
         });
 
-        it('shows "Retry now" button after 30 seconds', () => {
-            setStoreState({ status: 'checking', hasBeenOnline: false });
+        expect(screen.getByText('Taking longer than usual...')).toBeInTheDocument();
+        expect(screen.queryByText('Starting up...')).not.toBeInTheDocument();
+    });
 
-            render(
-                <StartupGate>
-                    <div>App Content</div>
-                </StartupGate>,
-            );
+});
 
-            act(() => {
-                vi.advanceTimersByTime(30_001);
-            });
+describe('"Taking longer than usual — sub 2', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        setStoreState({ status: 'checking', hasBeenOnline: false, check: vi.fn() });
+        // Default to a non-bypass path
+        Object.defineProperty(window, 'location', {
+            value: { pathname: '/' },
+            writable: true,
+        });
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
-            expect(screen.getByRole('button', { name: 'Retry now' })).toBeInTheDocument();
+    it('shows "Retry now" button after 30 seconds', () => {
+        setStoreState({ status: 'checking', hasBeenOnline: false });
+
+        render(
+            <StartupGate>
+                <div>App Content</div>
+            </StartupGate>,
+        );
+
+        act(() => {
+            vi.advanceTimersByTime(30_001);
         });
 
-        it('does NOT show "Retry now" button before 30 seconds', () => {
-            setStoreState({ status: 'checking', hasBeenOnline: false });
+        expect(screen.getByRole('button', { name: 'Retry now' })).toBeInTheDocument();
+    });
 
-            render(
-                <StartupGate>
-                    <div>App Content</div>
-                </StartupGate>,
-            );
+    it('does NOT show "Retry now" button before 30 seconds', () => {
+        setStoreState({ status: 'checking', hasBeenOnline: false });
 
-            act(() => {
-                vi.advanceTimersByTime(15_000);
-            });
+        render(
+            <StartupGate>
+                <div>App Content</div>
+            </StartupGate>,
+        );
 
-            expect(screen.queryByRole('button', { name: 'Retry now' })).not.toBeInTheDocument();
+        act(() => {
+            vi.advanceTimersByTime(15_000);
         });
+
+        expect(screen.queryByRole('button', { name: 'Retry now' })).not.toBeInTheDocument();
+    });
+
+});
+
+describe('StartupGate — part 3', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        setStoreState({ status: 'checking', hasBeenOnline: false, check: vi.fn() });
+        // Default to a non-bypass path
+        Object.defineProperty(window, 'location', {
+            value: { pathname: '/' },
+            writable: true,
+        });
+    });
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     describe('bypass for auth callback routes', () => {
@@ -203,4 +248,5 @@ describe('StartupGate', () => {
             expect(screen.queryByText('Raid Ledger')).not.toBeInTheDocument();
         });
     });
+
 });

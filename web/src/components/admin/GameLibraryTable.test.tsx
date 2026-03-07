@@ -80,7 +80,7 @@ function makeGame(overrides = {}) {
     };
 }
 
-describe('GameLibraryTable', () => {
+describe('GameLibraryTable — Loading & empty states', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockGames.items = [];
@@ -149,6 +149,27 @@ describe('GameLibraryTable', () => {
         expect(screen.getAllByText('World of Warcraft').length).toBeGreaterThanOrEqual(1);
     });
 
+});
+
+describe('GameLibraryTable — Mobile delete button — 44×44px touch target', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGames.items = [];
+        mockGames.total = 0;
+        mockGames.isLoading = false;
+        mockGames.isFetchingNextPage = false;
+        mockGames.hasNextPage = false;
+        mockGames.error = null;
+        mockDeleteGame.isPending = false;
+        mockDeleteGame.mutateAsync = vi.fn();
+        mockUnbanGame.isPending = false;
+        mockUnbanGame.mutateAsync = vi.fn();
+        mockHideGame.isPending = false;
+        mockHideGame.mutateAsync = vi.fn();
+        mockUnhideGame.isPending = false;
+        mockUnhideGame.mutateAsync = vi.fn();
+    });
+
     it('renders IGDB ID in mobile card', () => {
         mockGames.items = [makeGame()];
         mockGames.total = 1;
@@ -195,6 +216,27 @@ describe('GameLibraryTable', () => {
         expect(deleteBtn).toBeInTheDocument();
     });
 
+});
+
+describe('GameLibraryTable — Desktop table layout (hidden md:block)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGames.items = [];
+        mockGames.total = 0;
+        mockGames.isLoading = false;
+        mockGames.isFetchingNextPage = false;
+        mockGames.hasNextPage = false;
+        mockGames.error = null;
+        mockDeleteGame.isPending = false;
+        mockDeleteGame.mutateAsync = vi.fn();
+        mockUnbanGame.isPending = false;
+        mockUnbanGame.mutateAsync = vi.fn();
+        mockHideGame.isPending = false;
+        mockHideGame.mutateAsync = vi.fn();
+        mockUnhideGame.isPending = false;
+        mockUnhideGame.mutateAsync = vi.fn();
+    });
+
     it('mobile delete button is disabled while deleteGame is pending', () => {
         mockDeleteGame.isPending = true;
         mockGames.items = [makeGame()];
@@ -237,6 +279,27 @@ describe('GameLibraryTable', () => {
     });
 
     // ── Delete interaction ───────────────────────────────────────
+
+});
+
+describe('GameLibraryTable — Infinite scroll sentinel', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGames.items = [];
+        mockGames.total = 0;
+        mockGames.isLoading = false;
+        mockGames.isFetchingNextPage = false;
+        mockGames.hasNextPage = false;
+        mockGames.error = null;
+        mockDeleteGame.isPending = false;
+        mockDeleteGame.mutateAsync = vi.fn();
+        mockUnbanGame.isPending = false;
+        mockUnbanGame.mutateAsync = vi.fn();
+        mockHideGame.isPending = false;
+        mockHideGame.mutateAsync = vi.fn();
+        mockUnhideGame.isPending = false;
+        mockUnhideGame.mutateAsync = vi.fn();
+    });
 
     it('calls deleteGame.mutateAsync after confirm dialog approval', async () => {
         mockGames.items = [makeGame()];
@@ -282,6 +345,27 @@ describe('GameLibraryTable', () => {
 
     // ── Multiple games rendered ──────────────────────────────────
 
+});
+
+describe('GameLibraryTable — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGames.items = [];
+        mockGames.total = 0;
+        mockGames.isLoading = false;
+        mockGames.isFetchingNextPage = false;
+        mockGames.hasNextPage = false;
+        mockGames.error = null;
+        mockDeleteGame.isPending = false;
+        mockDeleteGame.mutateAsync = vi.fn();
+        mockUnbanGame.isPending = false;
+        mockUnbanGame.mutateAsync = vi.fn();
+        mockHideGame.isPending = false;
+        mockHideGame.mutateAsync = vi.fn();
+        mockUnhideGame.isPending = false;
+        mockUnhideGame.mutateAsync = vi.fn();
+    });
+
     it('renders a card for each game in the list', () => {
         const games = [
             makeGame({ id: 1, name: 'World of Warcraft', igdbId: 1942 }),
@@ -293,4 +377,5 @@ describe('GameLibraryTable', () => {
         expect(screen.getAllByText('World of Warcraft').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('Final Fantasy XIV').length).toBeGreaterThanOrEqual(1);
     });
+
 });

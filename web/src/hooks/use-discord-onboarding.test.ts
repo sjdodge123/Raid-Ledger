@@ -99,7 +99,7 @@ describe('useServerInvite', () => {
     });
 });
 
-describe('useGuildMembership', () => {
+describe('useGuildMembership — fetch behavior', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -144,6 +144,12 @@ describe('useGuildMembership', () => {
 
         expect(result.current.data).toEqual({ isMember: false });
     });
+});
+
+describe('useGuildMembership — edge cases', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
 
     it('should use queryKey ["discord", "guild-membership"]', async () => {
         mockFetchApi.mockResolvedValue({ isMember: false });
@@ -174,7 +180,6 @@ describe('useGuildMembership', () => {
     it('should accept enabled flag as a boolean to conditionally fetch', async () => {
         mockFetchApi.mockResolvedValue({ isMember: true });
 
-        // enabled=true should fetch
         const { result } = renderHook(() => useGuildMembership(true), {
             wrapper: createWrapper(),
         });

@@ -21,7 +21,7 @@ function createParticipant(
   };
 }
 
-describe('AdHocRoster', () => {
+describe('AdHocRoster — part 1', () => {
   it('renders roster heading', () => {
     render(<AdHocRoster participants={[]} activeCount={0} />);
 
@@ -87,6 +87,9 @@ describe('AdHocRoster', () => {
     expect(img?.src).toContain('cdn.discordapp.com/avatars/discord-avatar/abc123');
   });
 
+});
+
+describe('AdHocRoster — part 2', () => {
   it('renders fallback initial when no avatar', () => {
     const noAvatar = createParticipant({
       discordAvatarHash: null,
@@ -165,6 +168,9 @@ describe('AdHocRoster', () => {
     expect(screen.getByText('45m')).toBeInTheDocument();
   });
 
+});
+
+describe('AdHocRoster — part 3', () => {
   it('formats exact hour duration without minutes', () => {
     const exactHour = createParticipant({
       leftAt: '2026-02-10T19:00:00Z',
@@ -218,4 +224,5 @@ describe('AdHocRoster', () => {
 
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });
+
 });

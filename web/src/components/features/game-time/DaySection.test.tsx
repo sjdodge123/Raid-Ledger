@@ -72,8 +72,8 @@ describe('DaySection', () => {
         });
     });
 
-    describe('Preset Buttons', () => {
-        it('renders all four preset buttons', () => {
+    function presetButtonsGroup1() {
+it('renders all four preset buttons', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             expect(screen.getByText('Morning')).toBeInTheDocument();
             expect(screen.getByText('Afternoon')).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('DaySection', () => {
             expect(screen.getByText('Night')).toBeInTheDocument();
         });
 
-        it('shows time ranges for each preset', () => {
+it('shows time ranges for each preset', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             expect(screen.getByText('6a-12p')).toBeInTheDocument();
             expect(screen.getByText('12p-6p')).toBeInTheDocument();
@@ -89,38 +89,47 @@ describe('DaySection', () => {
             expect(screen.getByText('12a-6a')).toBeInTheDocument();
         });
 
-        it('calls onPreset when morning is clicked', () => {
+it('calls onPreset when morning is clicked', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             fireEvent.click(screen.getByText('Morning'));
             expect(mockOnPreset).toHaveBeenCalledWith(0, 'morning');
         });
 
-        it('calls onPreset when afternoon is clicked', () => {
+    }
+
+    function presetButtonsGroup2() {
+it('calls onPreset when afternoon is clicked', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             fireEvent.click(screen.getByText('Afternoon'));
             expect(mockOnPreset).toHaveBeenCalledWith(0, 'afternoon');
         });
 
-        it('calls onPreset when evening is clicked', () => {
+it('calls onPreset when evening is clicked', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             fireEvent.click(screen.getByText('Evening'));
             expect(mockOnPreset).toHaveBeenCalledWith(0, 'evening');
         });
 
-        it('calls onPreset when night is clicked', () => {
+it('calls onPreset when night is clicked', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             fireEvent.click(screen.getByText('Night'));
             expect(mockOnPreset).toHaveBeenCalledWith(0, 'night');
         });
 
-        it('hides presets in read-only mode', () => {
+it('hides presets in read-only mode', () => {
             render(<DaySection {...defaultProps} expanded={true} readOnly={true} />);
             expect(screen.queryByText('Morning')).not.toBeInTheDocument();
         });
+
+    }
+
+    describe('Preset Buttons', () => {
+        presetButtonsGroup1();
+        presetButtonsGroup2();
     });
 
-    describe('Hour Buttons', () => {
-        it('renders all 24 hour buttons when expanded', () => {
+    function hourButtonsGroup1() {
+it('renders all 24 hour buttons when expanded', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             const hourButtons = screen.getAllByRole('button').filter(
                 (btn) => btn.textContent?.match(/^\d+(a|p)$/)
@@ -128,52 +137,60 @@ describe('DaySection', () => {
             expect(hourButtons.length).toBe(24);
         });
 
-        it('formats midnight as 12a', () => {
+it('formats midnight as 12a', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             expect(screen.getByText('12a')).toBeInTheDocument();
         });
 
-        it('formats noon as 12p', () => {
+it('formats noon as 12p', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             expect(screen.getByText('12p')).toBeInTheDocument();
         });
 
-        it('formats AM hours correctly', () => {
+it('formats AM hours correctly', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             expect(screen.getByText('1a')).toBeInTheDocument();
             expect(screen.getByText('6a')).toBeInTheDocument();
             expect(screen.getByText('11a')).toBeInTheDocument();
         });
 
-        it('formats PM hours correctly', () => {
+    }
+
+    function hourButtonsGroup2() {
+it('formats PM hours correctly', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             expect(screen.getByText('1p')).toBeInTheDocument();
             expect(screen.getByText('6p')).toBeInTheDocument();
             expect(screen.getByText('11p')).toBeInTheDocument();
         });
 
-        it('calls onHourToggle when hour button is clicked', () => {
+it('calls onHourToggle when hour button is clicked', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             fireEvent.click(screen.getByText('6a'));
             expect(mockOnHourToggle).toHaveBeenCalledWith(0, 6);
         });
 
-        it('disables hour buttons in read-only mode', () => {
+it('disables hour buttons in read-only mode', () => {
             render(<DaySection {...defaultProps} expanded={true} readOnly={true} />);
             const hourBtn = screen.getByText('6a').closest('button');
             expect(hourBtn).toBeDisabled();
         });
 
-        it('does not call onHourToggle when disabled', () => {
+it('does not call onHourToggle when disabled', () => {
             render(<DaySection {...defaultProps} expanded={true} readOnly={true} />);
             fireEvent.click(screen.getByText('6a'));
             expect(mockOnHourToggle).not.toHaveBeenCalled();
         });
 
+    }
+
+    describe('Hour Buttons', () => {
+        hourButtonsGroup1();
+        hourButtonsGroup2();
     });
 
-    describe('Edge Cases', () => {
-        it('handles slots with no status (treats as available)', () => {
+    function edgeCasesGroup1() {
+it('handles slots with no status (treats as available)', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 0, hour: 6 } as GameTimeSlot,
             ];
@@ -181,7 +198,7 @@ describe('DaySection', () => {
             expect(screen.getByText('1h selected')).toBeInTheDocument();
         });
 
-        it('ignores slots from other days', () => {
+it('ignores slots from other days', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 1, hour: 6, status: 'available' },
                 { dayOfWeek: 2, hour: 7, status: 'available' },
@@ -190,12 +207,15 @@ describe('DaySection', () => {
             expect(screen.getByText('None')).toBeInTheDocument();
         });
 
-        it('handles empty slots array', () => {
+it('handles empty slots array', () => {
             render(<DaySection {...defaultProps} slots={[]} />);
             expect(screen.getByText('None')).toBeInTheDocument();
         });
 
-        it('handles all 24 hours selected', () => {
+    }
+
+    function edgeCasesGroup2() {
+it('handles all 24 hours selected', () => {
             const slots: GameTimeSlot[] = Array.from({ length: 24 }, (_, i) => ({
                 dayOfWeek: 0,
                 hour: i,
@@ -205,7 +225,7 @@ describe('DaySection', () => {
             expect(screen.getByText('24h selected')).toBeInTheDocument();
         });
 
-        it('only counts available slots (not blocked/committed)', () => {
+it('only counts available slots (not blocked/committed)', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 0, hour: 6, status: 'available' },
                 { dayOfWeek: 0, hour: 7, status: 'blocked' },
@@ -214,5 +234,11 @@ describe('DaySection', () => {
             render(<DaySection {...defaultProps} slots={slots} />);
             expect(screen.getByText('1h selected')).toBeInTheDocument();
         });
+
+    }
+
+    describe('Edge Cases', () => {
+        edgeCasesGroup1();
+        edgeCasesGroup2();
     });
 });

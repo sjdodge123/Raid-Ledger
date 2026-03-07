@@ -31,7 +31,7 @@ const handlers = {
     onDeactivate: vi.fn(),
 };
 
-describe('PluginCard', () => {
+describe('PluginCard — part 1', () => {
     it('renders plugin name, version and description', () => {
         render(<PluginCard plugin={basePlugin} {...handlers} isPending={false} />);
 
@@ -93,12 +93,16 @@ describe('PluginCard', () => {
     });
 
     // Action buttons by status
+
     it('shows Deactivate button for active plugins', () => {
         render(<PluginCard plugin={basePlugin} {...handlers} isPending={false} />);
         expect(screen.getByRole('button', { name: 'Deactivate' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Install' })).not.toBeInTheDocument();
     });
 
+});
+
+describe('PluginCard — part 2', () => {
     it('shows Activate and Uninstall buttons for inactive plugins', () => {
         const inactive = { ...basePlugin, status: 'inactive' as const };
         render(<PluginCard plugin={inactive} {...handlers} isPending={false} />);
@@ -150,4 +154,5 @@ describe('PluginCard', () => {
 
         expect(screen.getByRole('button', { name: 'Deactivate' })).toBeDisabled();
     });
+
 });

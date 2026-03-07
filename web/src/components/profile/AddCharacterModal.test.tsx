@@ -138,7 +138,7 @@ function renderModal(props: Partial<Parameters<typeof AddCharacterModal>[0]> = {
     );
 }
 
-describe('AddCharacterModal — armory-synced character', () => {
+describe('AddCharacterModal — armory-synced character — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -203,6 +203,13 @@ describe('AddCharacterModal — armory-synced character', () => {
         expect(roleSelect).not.toBeDisabled();
     });
 
+});
+
+describe('AddCharacterModal — armory-synced character — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('keeps the Main character checkbox enabled for armory-synced characters (when not already main)', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter({ isMain: false }) });
         const mainCheckbox = screen.getByRole('checkbox');
@@ -257,9 +264,10 @@ describe('AddCharacterModal — armory-synced character', () => {
         expect(screen.getByPlaceholderText('e.g. Arms')).toHaveValue('Elemental');
         expect(screen.getByPlaceholderText('e.g. Illidan')).toHaveValue('Illidan');
     });
+
 });
 
-describe('AddCharacterModal — manually-created character', () => {
+describe('AddCharacterModal — manually-created character — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -315,6 +323,13 @@ describe('AddCharacterModal — manually-created character', () => {
         expect(nameInput).not.toHaveAttribute('title');
     });
 
+});
+
+describe('AddCharacterModal — manually-created character — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('pre-fills form fields with character data for manual characters', () => {
         const char = createManualCharacter({
             name: 'Jaina',
@@ -328,6 +343,7 @@ describe('AddCharacterModal — manually-created character', () => {
         expect(screen.getByPlaceholderText('e.g. Arms')).toHaveValue('Frost');
         expect(screen.getByPlaceholderText('e.g. Illidan')).toHaveValue('Stormwind');
     });
+
 });
 
 describe('AddCharacterModal — general edit behavior', () => {

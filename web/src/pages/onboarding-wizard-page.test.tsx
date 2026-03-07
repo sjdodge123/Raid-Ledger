@@ -164,7 +164,7 @@ function renderWithRouter(ui: React.ReactElement, initialEntries = ['/onboarding
     );
 }
 
-describe('OnboardingWizardPage', () => {
+describe('OnboardingWizardPage — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockIsAdmin.mockReturnValue(false);
@@ -219,6 +219,14 @@ describe('OnboardingWizardPage', () => {
         renderWithRouter(<OnboardingWizardPage />);
 
         expect(screen.getByText('Calendar Page')).toBeInTheDocument();
+    });
+
+});
+
+describe('OnboardingWizardPage — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
     });
 
     it('allows re-run when ?rerun=1 even if onboarding completed', () => {
@@ -278,6 +286,14 @@ describe('OnboardingWizardPage', () => {
         // Discord join step is NOT shown when user hasn't linked Discord yet (ROK-403)
         expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
         expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
+    });
+
+});
+
+describe('OnboardingWizardPage — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
     });
 
     it('shows Skip All button on non-final steps', () => {

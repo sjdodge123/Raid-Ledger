@@ -57,69 +57,184 @@ const depManifest: PluginManifest = {
   dependencies: ['test-plugin'],
 };
 
-describe('PluginRegistryService — lifecycle', () => {
-  let service: PluginRegistryService;
-  let mockDb: Record<string, jest.Mock>;
-  let mockEventEmitter: { emit: jest.Mock };
+let service: PluginRegistryService;
+let mockDb: Record<string, jest.Mock>;
+let mockEventEmitter: { emit: jest.Mock };
 
-  let selectResults: unknown[];
-  let insertReturning: unknown[];
-  let deleteWhereFn: jest.Mock;
-  let updateSetFn: jest.Mock;
+let selectResults: unknown[];
+let insertReturning: unknown[];
+let deleteWhereFn: jest.Mock;
+let updateSetFn: jest.Mock;
 
-  beforeEach(async () => {
-    selectResults = [];
-    insertReturning = [];
-    deleteWhereFn = jest.fn().mockResolvedValue(undefined);
-    updateSetFn = jest.fn().mockReturnValue({
-      where: jest.fn().mockResolvedValue(undefined),
-    });
-
-    mockDb = {
-      select: jest.fn().mockImplementation(() => ({
-        from: jest.fn().mockImplementation(() => {
-          const fromResult = thenableResult(selectResults);
-          fromResult.where = jest
-            .fn()
-            .mockImplementation(() => thenableResult(selectResults));
-          return fromResult;
-        }),
-      })),
-      insert: jest.fn().mockReturnValue({
-        values: jest.fn().mockReturnValue({
-          returning: jest.fn().mockImplementation(() => insertReturning),
-        }),
+function buildMockDb() {
+  return {
+    select: jest.fn().mockImplementation(() => ({
+      from: jest.fn().mockImplementation(() => {
+        const fromResult = thenableResult(selectResults);
+        fromResult.where = jest
+          .fn()
+          .mockImplementation(() => thenableResult(selectResults));
+        return fromResult;
       }),
-      delete: jest.fn().mockReturnValue({
-        where: deleteWhereFn,
+    })),
+    insert: jest.fn().mockReturnValue({
+      values: jest.fn().mockReturnValue({
+        returning: jest.fn().mockImplementation(() => insertReturning),
       }),
-      update: jest.fn().mockReturnValue({
-        set: updateSetFn,
-      }),
-    };
+    }),
+    delete: jest.fn().mockReturnValue({ where: deleteWhereFn }),
+    update: jest.fn().mockReturnValue({ set: updateSetFn }),
+  };
+}
 
-    mockEventEmitter = {
-      emit: jest.fn(),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        PluginRegistryService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: EventEmitter2, useValue: mockEventEmitter },
-      ],
-    }).compile();
-
-    service = module.get<PluginRegistryService>(PluginRegistryService);
-
-    // onModuleInit calls refreshActiveCache, which does a DB select.
-    // Reset mocks after init so test assertions start clean.
-    jest.clearAllMocks();
+async function setupEach() {
+  selectResults = [];
+  insertReturning = [];
+  deleteWhereFn = jest.fn().mockResolvedValue(undefined);
+  updateSetFn = jest.fn().mockReturnValue({
+    where: jest.fn().mockResolvedValue(undefined),
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  mockDb = buildMockDb();
+  mockEventEmitter = { emit: jest.fn() };
+
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      PluginRegistryService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: EventEmitter2, useValue: mockEventEmitter },
+    ],
+  }).compile();
+
+  service = module.get<PluginRegistryService>(PluginRegistryService);
+  jest.clearAllMocks();
+}
+
+function mockSelectWithCredentials(
+  pluginRecords: unknown[],
+  credentialKeys: unknown[],
+) {
+  let fromCallCount = 0;
+  mockDb.select.mockImplementation(() => ({
+    from: jest.fn().mockImplementation(() => {
+      fromCallCount++;
+      if (fromCallCount === 1) return thenableResult(pluginRecords);
+      const r = thenableResult(credentialKeys);
+      r.where = jest
+        .fn()
+        .mockImplementation(() => thenableResult(credentialKeys));
+      return r;
+    }),
+  }));
+}
+
+async function testListPluginsMerge() {
+  service.registerManifest(testManifest);
+  const installedAt = new Date('2025-01-01T00:00:00Z');
+  const pluginRecords = [
+    {
+      slug: 'test-plugin',
+      name: 'Test Plugin',
+      version: '1.0.0',
+      active: true,
+      installedAt,
+    },
+  ];
+  mockSelectWithCredentials(pluginRecords, []);
+
+  const result = await service.listPlugins();
+  expect(result).toHaveLength(1);
+  expect(result[0].slug).toBe('test-plugin');
+  expect(result[0].status).toBe('active');
+  expect(result[0].installedAt).toBe(installedAt.toISOString());
+}
+
+async function testConfiguredFlag() {
+  service.registerManifest(testManifest);
+  const bothKeys = [{ key: 'test_client_id' }, { key: 'test_client_secret' }];
+  mockSelectWithCredentials([], bothKeys);
+
+  const result = await service.listPlugins();
+  expect(result[0].integrations[0].configured).toBe(true);
+}
+
+async function testConfiguredFalseWhenKeyMissing() {
+  service.registerManifest(testManifest);
+  mockSelectWithCredentials([], [{ key: 'test_client_id' }]);
+
+  const result = await service.listPlugins();
+  expect(result[0].integrations[0].configured).toBe(false);
+}
+
+async function testInstallEmitsEvent() {
+  service.registerManifest(testManifest);
+  const installedAt = new Date();
+  insertReturning = [
+    {
+      id: 1,
+      slug: 'test-plugin',
+      name: 'Test Plugin',
+      version: '1.0.0',
+      active: true,
+      installedAt,
+      updatedAt: installedAt,
+    },
+  ];
+
+  const record = await service.install('test-plugin');
+  expect(record.slug).toBe('test-plugin');
+  expect(mockDb.insert).toHaveBeenCalled();
+  expect(mockEventEmitter.emit).toHaveBeenCalledWith(PLUGIN_EVENTS.INSTALLED, {
+    slug: 'test-plugin',
+    manifest: testManifest,
   });
+}
+
+async function testDeactivateRemovesAdapters() {
+  service.registerManifest(testManifest);
+  const adapter = { fetchProfile: jest.fn() };
+  service.registerAdapter('character-sync', 'test-game', adapter);
+  expect(service.getAdapter('character-sync', 'test-game')).toBe(adapter);
+
+  selectResults = [{ slug: 'test-plugin', active: true }];
+  await service.deactivate('test-plugin');
+
+  expect(service.getAdapter('character-sync', 'test-game')).toBeUndefined();
+}
+
+async function testIsActiveAfterInstall() {
+  service.registerManifest(testManifest);
+  const installedAt = new Date();
+  insertReturning = [
+    {
+      id: 1,
+      slug: 'test-plugin',
+      name: 'Test Plugin',
+      version: '1.0.0',
+      active: true,
+      installedAt,
+      updatedAt: installedAt,
+    },
+  ];
+
+  let selectCallCount = 0;
+  mockDb.select.mockImplementation(() => ({
+    from: jest.fn().mockImplementation(() => ({
+      where: jest.fn().mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) return thenableResult([]);
+        return thenableResult([{ slug: 'test-plugin' }]);
+      }),
+    })),
+  }));
+
+  await service.install('test-plugin');
+  expect(service.isActive('test-plugin')).toBe(true);
+}
+
+describe('PluginRegistryService — manifest registration', () => {
+  beforeEach(() => setupEach());
+  afterEach(() => jest.clearAllMocks());
 
   describe('registerManifest()', () => {
     it('should store manifest in memory', () => {
@@ -141,157 +256,38 @@ describe('PluginRegistryService — lifecycle', () => {
       expect(result).toEqual([]);
     });
 
-    it('should merge manifests with DB records', async () => {
-      service.registerManifest(testManifest);
-
-      const installedAt = new Date('2025-01-01T00:00:00Z');
-      const pluginRecords = [
-        {
-          slug: 'test-plugin',
-          name: 'Test Plugin',
-          version: '1.0.0',
-          active: true,
-          installedAt,
-        },
-      ];
-
-      let fromCallCount = 0;
-      mockDb.select.mockImplementation(() => ({
-        from: jest.fn().mockImplementation(() => {
-          fromCallCount++;
-          if (fromCallCount === 1) {
-            // select().from(plugins) — bare call for all records
-            return thenableResult(pluginRecords);
-          }
-          // Batch credential check — return no keys configured
-          const r = thenableResult([]);
-          r.where = jest.fn().mockImplementation(() => thenableResult([]));
-          return r;
-        }),
-      }));
-
-      const result = await service.listPlugins();
-      expect(result).toHaveLength(1);
-      expect(result[0].slug).toBe('test-plugin');
-      expect(result[0].status).toBe('active');
-      expect(result[0].installedAt).toBe(installedAt.toISOString());
-    });
+    it('should merge manifests with DB records', () => testListPluginsMerge());
 
     it('should include author from manifest', async () => {
       service.registerManifest(testManifest);
-
-      mockDb.select.mockImplementation(() => ({
-        from: jest.fn().mockImplementation(() => {
-          const r = thenableResult([]);
-          r.where = jest.fn().mockImplementation(() => thenableResult([]));
-          return r;
-        }),
-      }));
-
+      mockSelectWithCredentials([], []);
       const result = await service.listPlugins();
       expect(result[0].author).toEqual({ name: 'Test Author' });
     });
 
     it('should return not_installed for manifests without DB records', async () => {
       service.registerManifest(testManifest);
-
-      mockDb.select.mockImplementation(() => ({
-        from: jest.fn().mockImplementation(() => {
-          const r = thenableResult([]);
-          r.where = jest.fn().mockImplementation(() => thenableResult([]));
-          return r;
-        }),
-      }));
-
+      mockSelectWithCredentials([], []);
       const result = await service.listPlugins();
       expect(result[0].status).toBe('not_installed');
       expect(result[0].installedAt).toBeNull();
     });
 
-    it('should resolve configured flag for integrations', async () => {
-      service.registerManifest(testManifest);
+    it('should resolve configured flag for integrations', () =>
+      testConfiguredFlag());
 
-      let fromCallCount = 0;
-      mockDb.select.mockImplementation(() => ({
-        from: jest.fn().mockImplementation(() => {
-          fromCallCount++;
-          if (fromCallCount === 1) {
-            // plugins table — not installed
-            return thenableResult([]);
-          }
-          // Batch credential check — both keys exist
-          const r = thenableResult([
-            { key: 'test_client_id' },
-            { key: 'test_client_secret' },
-          ]);
-          r.where = jest
-            .fn()
-            .mockImplementation(() =>
-              thenableResult([
-                { key: 'test_client_id' },
-                { key: 'test_client_secret' },
-              ]),
-            );
-          return r;
-        }),
-      }));
-
-      const result = await service.listPlugins();
-      expect(result[0].integrations[0].configured).toBe(true);
-    });
-
-    it('should set configured=false when any credential key is missing', async () => {
-      service.registerManifest(testManifest);
-
-      let fromCallCount = 0;
-      mockDb.select.mockImplementation(() => ({
-        from: jest.fn().mockImplementation(() => {
-          fromCallCount++;
-          if (fromCallCount === 1) {
-            // plugins table — not installed
-            return thenableResult([]);
-          }
-          // Batch credential check — only one key exists
-          const r = thenableResult([{ key: 'test_client_id' }]);
-          r.where = jest
-            .fn()
-            .mockImplementation(() =>
-              thenableResult([{ key: 'test_client_id' }]),
-            );
-          return r;
-        }),
-      }));
-
-      const result = await service.listPlugins();
-      expect(result[0].integrations[0].configured).toBe(false);
-    });
+    it('should set configured=false when any credential key is missing', () =>
+      testConfiguredFalseWhenKeyMissing());
   });
+});
+
+describe('PluginRegistryService — install & uninstall', () => {
+  beforeEach(() => setupEach());
+  afterEach(() => jest.clearAllMocks());
 
   describe('install()', () => {
-    it('should create DB record and emit INSTALLED event', async () => {
-      service.registerManifest(testManifest);
-
-      const installedAt = new Date();
-      insertReturning = [
-        {
-          id: 1,
-          slug: 'test-plugin',
-          name: 'Test Plugin',
-          version: '1.0.0',
-          active: true,
-          installedAt,
-          updatedAt: installedAt,
-        },
-      ];
-
-      const record = await service.install('test-plugin');
-      expect(record.slug).toBe('test-plugin');
-      expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
-        PLUGIN_EVENTS.INSTALLED,
-        { slug: 'test-plugin', manifest: testManifest },
-      );
-    });
+    it('should create DB record and emit INSTALLED event', () =>
+      testInstallEmitsEvent());
 
     it('should throw NotFoundException if manifest not found', async () => {
       await expect(service.install('nonexistent')).rejects.toThrow(
@@ -302,7 +298,6 @@ describe('PluginRegistryService — lifecycle', () => {
     it('should throw BadRequestException if already installed', async () => {
       service.registerManifest(testManifest);
       selectResults = [{ slug: 'test-plugin' }];
-
       await expect(service.install('test-plugin')).rejects.toThrow(
         BadRequestException,
       );
@@ -311,14 +306,11 @@ describe('PluginRegistryService — lifecycle', () => {
     it('should check dependencies are installed first', async () => {
       service.registerManifest(testManifest);
       service.registerManifest(depManifest);
-
-      // Both selects (existing check + dep check) return empty
       mockDb.select.mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: jest.fn().mockImplementation(() => thenableResult([])),
         })),
       }));
-
       await expect(service.install('dep-plugin')).rejects.toThrow(
         BadRequestException,
       );
@@ -364,6 +356,11 @@ describe('PluginRegistryService — lifecycle', () => {
       expect(mockDb.delete).toHaveBeenCalledTimes(4);
     });
   });
+});
+
+describe('PluginRegistryService — activate & deactivate', () => {
+  beforeEach(() => setupEach());
+  afterEach(() => jest.clearAllMocks());
 
   describe('activate()', () => {
     it('should set active=true and emit ACTIVATED event', async () => {
@@ -420,22 +417,14 @@ describe('PluginRegistryService — lifecycle', () => {
       expect(mockEventEmitter.emit).not.toHaveBeenCalled();
     });
 
-    it('should remove adapters for the plugin gameSlugs on deactivation', async () => {
-      service.registerManifest(testManifest);
-
-      // Register adapters for the manifest's gameSlugs
-      const adapter = { fetchProfile: jest.fn() };
-      service.registerAdapter('character-sync', 'test-game', adapter);
-      expect(service.getAdapter('character-sync', 'test-game')).toBe(adapter);
-
-      selectResults = [{ slug: 'test-plugin', active: true }];
-
-      await service.deactivate('test-plugin');
-
-      // Adapter should be removed after deactivation
-      expect(service.getAdapter('character-sync', 'test-game')).toBeUndefined();
-    });
+    it('should remove adapters for the plugin gameSlugs on deactivation', () =>
+      testDeactivateRemovesAdapters());
   });
+});
+
+describe('PluginRegistryService — ensureInstalled & isActive', () => {
+  beforeEach(() => setupEach());
+  afterEach(() => jest.clearAllMocks());
 
   describe('ensureInstalled()', () => {
     it('should auto-install a registered manifest if not in DB', async () => {
@@ -474,40 +463,8 @@ describe('PluginRegistryService — lifecycle', () => {
       expect(service.isActive('test-plugin')).toBe(false);
     });
 
-    it('should return true after activating a plugin', async () => {
-      // Simulate install so cache gets refreshed with active plugin
-      service.registerManifest(testManifest);
-
-      const installedAt = new Date();
-      insertReturning = [
-        {
-          id: 1,
-          slug: 'test-plugin',
-          name: 'Test Plugin',
-          version: '1.0.0',
-          active: true,
-          installedAt,
-          updatedAt: installedAt,
-        },
-      ];
-
-      // After install, refreshActiveCache is called — mock it to return the slug
-      let selectCallCount = 0;
-      mockDb.select.mockImplementation(() => ({
-        from: jest.fn().mockImplementation(() => ({
-          where: jest.fn().mockImplementation(() => {
-            selectCallCount++;
-            // First call: check existing (should be empty)
-            if (selectCallCount === 1) return thenableResult([]);
-            // Subsequent calls (refreshActiveCache): return active slugs
-            return thenableResult([{ slug: 'test-plugin' }]);
-          }),
-        })),
-      }));
-
-      await service.install('test-plugin');
-      expect(service.isActive('test-plugin')).toBe(true);
-    });
+    it('should return true after activating a plugin', () =>
+      testIsActiveAfterInstall());
   });
 
   describe('getActiveSlugsSync()', () => {

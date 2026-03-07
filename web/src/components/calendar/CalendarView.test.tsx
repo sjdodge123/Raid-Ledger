@@ -29,7 +29,7 @@ const renderWithProviders = (ui: React.ReactElement, initialRoute = '/calendar')
     );
 };
 
-describe('CalendarView', () => {
+describe('CalendarView — part 1', () => {
     beforeEach(() => {
         localStorage.clear();
         // Reset Zustand store to default (week) after clearing localStorage
@@ -37,7 +37,6 @@ describe('CalendarView', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-02-10T12:00:00Z'));
     });
-
     afterEach(() => {
         vi.useRealTimers();
     });
@@ -97,6 +96,20 @@ describe('CalendarView', () => {
             const monthBtn = screen.getByRole('button', { name: 'Month' });
             expect(monthBtn).toHaveAttribute('aria-pressed', 'true');
         });
+    });
+
+});
+
+describe('CalendarView — part 2', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        // Reset Zustand store to default (week) after clearing localStorage
+        useCalendarViewStore.setState({ viewPref: 'week' });
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-02-10T12:00:00Z'));
+    });
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     describe('Empty State', () => {
@@ -160,4 +173,5 @@ describe('CalendarView', () => {
         });
 
     });
+
 });

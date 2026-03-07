@@ -71,8 +71,8 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
   let mockRedis: Record<string, jest.Mock>;
   let mockSettingsService: Record<string, jest.Mock>;
 
-  beforeEach(async () => {
-    mockDb = {
+  function createMockDb() {
+    return {
       select: jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: jest
@@ -89,28 +89,25 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
         }),
       }),
       update: jest.fn().mockReturnValue({
-        set: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue(undefined),
-        }),
+        set: jest
+          .fn()
+          .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
       }),
     };
+  }
 
+  beforeEach(async () => {
+    mockDb = createMockDb();
     mockRedis = {
       get: jest.fn().mockResolvedValue(null),
       setex: jest.fn().mockResolvedValue('OK'),
       keys: jest.fn().mockResolvedValue([]),
       del: jest.fn().mockResolvedValue(0),
     };
-
     mockSettingsService = {
       getIgdbConfig: jest.fn().mockResolvedValue(null),
       isIgdbConfigured: jest.fn().mockResolvedValue(false),
-      get: jest.fn().mockResolvedValue(null), // adult filter off by default
-    };
-
-    const mockSyncQueue = {
-      add: jest.fn().mockResolvedValue({ id: 'test-job-id' }),
-      name: 'igdb-sync',
+      get: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -120,12 +117,16 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
         { provide: REDIS_CLIENT, useValue: mockRedis },
         {
           provide: ConfigService,
-          useValue: {
-            get: jest.fn().mockReturnValue('test-val'),
-          },
+          useValue: { get: jest.fn().mockReturnValue('test-val') },
         },
         { provide: SettingsService, useValue: mockSettingsService },
-        { provide: getQueueToken(IGDB_SYNC_QUEUE), useValue: mockSyncQueue },
+        {
+          provide: getQueueToken(IGDB_SYNC_QUEUE),
+          useValue: {
+            add: jest.fn().mockResolvedValue({ id: 'test-job-id' }),
+            name: 'igdb-sync',
+          },
+        },
         {
           provide: CronJobService,
           useValue: {

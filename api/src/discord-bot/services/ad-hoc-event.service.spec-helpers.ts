@@ -48,15 +48,10 @@ export interface AdHocMocks {
   gracePeriodQueue: { enqueue: jest.Mock; cancel: jest.Mock };
 }
 
-/** Set up the test module and return service + mocks. */
-export async function setupAdHocTestModule(): Promise<{
-  service: AdHocEventService;
-  mocks: AdHocMocks;
-}> {
-  const db = createDrizzleMock();
-
-  const mocks: AdHocMocks = {
-    db,
+/** Create default ad-hoc mock objects. */
+export function createAdHocMocks(): AdHocMocks {
+  return {
+    db: createDrizzleMock(),
     settingsService: { get: jest.fn() },
     participantService: {
       addParticipant: jest.fn().mockResolvedValue(undefined),
@@ -75,48 +70,54 @@ export async function setupAdHocTestModule(): Promise<{
       cancel: jest.fn().mockResolvedValue(undefined),
     },
   };
+}
 
+/** Build providers array for ad-hoc event test module. */
+function buildAdHocProviders(mocks: AdHocMocks) {
+  return [
+    AdHocEventService,
+    { provide: DrizzleAsyncProvider, useValue: mocks.db },
+    { provide: SettingsService, useValue: mocks.settingsService },
+    { provide: UsersService, useValue: mocks.usersService },
+    { provide: AdHocParticipantService, useValue: mocks.participantService },
+    { provide: ChannelBindingsService, useValue: mocks.channelBindingsService },
+    { provide: AdHocGracePeriodQueueService, useValue: mocks.gracePeriodQueue },
+    {
+      provide: AdHocNotificationService,
+      useValue: {
+        notifySpawn: jest.fn(),
+        queueUpdate: jest.fn(),
+        notifyCompleted: jest.fn(),
+        flush: jest.fn(),
+      },
+    },
+    {
+      provide: AdHocEventsGateway,
+      useValue: {
+        emitRosterUpdate: jest.fn(),
+        emitStatusChange: jest.fn(),
+        emitEndTimeExtended: jest.fn(),
+      },
+    },
+    {
+      provide: VoiceAttendanceService,
+      useValue: {
+        handleJoin: jest.fn(),
+        handleLeave: jest.fn(),
+        getActiveCount: jest.fn().mockReturnValue(0),
+      },
+    },
+  ];
+}
+
+/** Set up the test module and return service + mocks. */
+export async function setupAdHocTestModule(): Promise<{
+  service: AdHocEventService;
+  mocks: AdHocMocks;
+}> {
+  const mocks = createAdHocMocks();
   const module: TestingModule = await Test.createTestingModule({
-    providers: [
-      AdHocEventService,
-      { provide: DrizzleAsyncProvider, useValue: db },
-      { provide: SettingsService, useValue: mocks.settingsService },
-      { provide: UsersService, useValue: mocks.usersService },
-      { provide: AdHocParticipantService, useValue: mocks.participantService },
-      {
-        provide: ChannelBindingsService,
-        useValue: mocks.channelBindingsService,
-      },
-      {
-        provide: AdHocGracePeriodQueueService,
-        useValue: mocks.gracePeriodQueue,
-      },
-      {
-        provide: AdHocNotificationService,
-        useValue: {
-          notifySpawn: jest.fn(),
-          queueUpdate: jest.fn(),
-          notifyCompleted: jest.fn(),
-          flush: jest.fn(),
-        },
-      },
-      {
-        provide: AdHocEventsGateway,
-        useValue: {
-          emitRosterUpdate: jest.fn(),
-          emitStatusChange: jest.fn(),
-          emitEndTimeExtended: jest.fn(),
-        },
-      },
-      {
-        provide: VoiceAttendanceService,
-        useValue: {
-          handleJoin: jest.fn(),
-          handleLeave: jest.fn(),
-          getActiveCount: jest.fn().mockReturnValue(0),
-        },
-      },
-    ],
+    providers: buildAdHocProviders(mocks),
   }).compile();
 
   const service = module.get(AdHocEventService);

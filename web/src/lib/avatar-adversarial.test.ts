@@ -6,7 +6,7 @@ vi.mock('./config', () => ({
     API_BASE_URL: 'http://localhost:3000',
 }));
 
-describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
+describe('resolveAvatar — adversarial edge cases (ROK-352) — part 1', () => {
     describe('Malformed / invalid avatarPreference objects', () => {
         it('falls through to default when preference type is an unrecognized string', () => {
             const user = {
@@ -73,6 +73,9 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
         });
     });
 
+});
+
+describe('resolveAvatar — adversarial edge cases (ROK-352) — part 2', () => {
     describe('Preference for character that no longer exists', () => {
         it('falls through when character was deleted (no longer in characters array)', () => {
             const user: AvatarUser = {
@@ -139,6 +142,9 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
         });
     });
 
+});
+
+describe('resolveAvatar — adversarial edge cases (ROK-352) — part 3', () => {
     describe('Custom avatar URL edge cases', () => {
         it('custom preference builds correct full URL with API_BASE_URL prefix', () => {
             const user: AvatarUser = {
@@ -205,9 +211,10 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
             });
         });
     });
+
 });
 
-describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
+describe('toAvatarUser — adversarial edge cases (ROK-352) — part 1', () => {
     describe('avatarPreference passthrough', () => {
         it('passes through avatarPreference: null as null', () => {
             const result = toAvatarUser({
@@ -264,6 +271,9 @@ describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
         });
     });
 
+});
+
+describe('toAvatarUser — adversarial edge cases (ROK-352) — part 2', () => {
     describe('Discord avatar URL construction', () => {
         it('builds Discord CDN URL from discordId + avatar hash', () => {
             const result = toAvatarUser({
@@ -321,6 +331,9 @@ describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
         });
     });
 
+});
+
+describe('toAvatarUser — adversarial edge cases (ROK-352) — part 3', () => {
     describe('Integration: toAvatarUser -> resolveAvatar with preference', () => {
         it('resolves correct avatar end-to-end with character preference', () => {
             const rawUser = {
@@ -360,4 +373,5 @@ describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
             expect(result.url).toBe('https://cdn.discordapp.com/avatars/111222333/abc123.png');
         });
     });
+
 });

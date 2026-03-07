@@ -79,31 +79,37 @@ function createMockClient(): MockDiscordClient {
   );
 }
 
-describe('DiscordBotClientService.isGuildMember (ROK-403)', () => {
-  let service: DiscordBotClientService;
+function createMockGuild(fetchBehavior: jest.Mock) {
+  return {
+    members: { fetch: fetchBehavior },
+  };
+}
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DiscordBotClientService,
-        {
-          provide: EventEmitter2,
-          useValue: {
-            emit: jest.fn(),
-            emitAsync: jest.fn().mockResolvedValue([]),
-          },
+let service: DiscordBotClientService;
+
+beforeEach(async () => {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      DiscordBotClientService,
+      {
+        provide: EventEmitter2,
+        useValue: {
+          emit: jest.fn(),
+          emitAsync: jest.fn().mockResolvedValue([]),
         },
-      ],
-    }).compile();
+      },
+    ],
+  }).compile();
 
-    service = module.get<DiscordBotClientService>(DiscordBotClientService);
-    jest.clearAllMocks();
-  });
+  service = module.get<DiscordBotClientService>(DiscordBotClientService);
+  jest.clearAllMocks();
+});
 
-  afterEach(async () => {
-    await service.disconnect();
-  });
+afterEach(async () => {
+  await service.disconnect();
+});
 
+describe('isGuildMember — no client or not ready (ROK-403)', () => {
   it('should return false when client is not connected (no client)', async () => {
     const result = await service.isGuildMember('123456789');
 
@@ -130,17 +136,16 @@ describe('DiscordBotClientService.isGuildMember (ROK-403)', () => {
 
     expect(result).toBe(false);
   });
+});
 
+describe('isGuildMember — member found (ROK-403)', () => {
   it('should return true when member is found in the guild', async () => {
     const client = createMockClient();
     client.isReady.mockReturnValue(true);
 
-    const mockMember = { user: { id: '123456789' } };
-    const mockGuild = {
-      members: {
-        fetch: jest.fn().mockResolvedValue(mockMember),
-      },
-    };
+    const mockGuild = createMockGuild(
+      jest.fn().mockResolvedValue({ user: { id: '123456789' } }),
+    );
     client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
     setClient(service, client);
 
@@ -150,15 +155,46 @@ describe('DiscordBotClientService.isGuildMember (ROK-403)', () => {
     expect(mockGuild.members.fetch).toHaveBeenCalledWith('123456789');
   });
 
+  it('should pass the exact discordUserId to guild.members.fetch', async () => {
+    const client = createMockClient();
+    client.isReady.mockReturnValue(true);
+
+    const expectedId = '987654321098765432';
+    const mockGuild = createMockGuild(
+      jest.fn().mockResolvedValue({ user: { id: expectedId } }),
+    );
+    client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
+    setClient(service, client);
+
+    await service.isGuildMember(expectedId);
+
+    expect(mockGuild.members.fetch).toHaveBeenCalledWith(expectedId);
+  });
+
+  it('should return true for a truthy member object (even with minimal shape)', async () => {
+    const client = createMockClient();
+    client.isReady.mockReturnValue(true);
+
+    const mockGuild = createMockGuild(
+      jest.fn().mockResolvedValue({ id: '111', user: { id: '111' } }),
+    );
+    client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
+    setClient(service, client);
+
+    const result = await service.isGuildMember('111');
+
+    expect(result).toBe(true);
+  });
+});
+
+describe('isGuildMember — member not found (ROK-403)', () => {
   it('should return false when member is not in the guild (fetch throws)', async () => {
     const client = createMockClient();
     client.isReady.mockReturnValue(true);
 
-    const mockGuild = {
-      members: {
-        fetch: jest.fn().mockRejectedValue(new Error('Unknown Member')),
-      },
-    };
+    const mockGuild = createMockGuild(
+      jest.fn().mockRejectedValue(new Error('Unknown Member')),
+    );
     client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
     setClient(service, client);
 
@@ -174,53 +210,14 @@ describe('DiscordBotClientService.isGuildMember (ROK-403)', () => {
     const discordApiError = Object.assign(new Error('Unknown Member'), {
       code: 10007,
     });
-    const mockGuild = {
-      members: {
-        fetch: jest.fn().mockRejectedValue(discordApiError),
-      },
-    };
+    const mockGuild = createMockGuild(
+      jest.fn().mockRejectedValue(discordApiError),
+    );
     client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
     setClient(service, client);
 
     const result = await service.isGuildMember('555555555');
 
     expect(result).toBe(false);
-  });
-
-  it('should pass the exact discordUserId to guild.members.fetch', async () => {
-    const client = createMockClient();
-    client.isReady.mockReturnValue(true);
-
-    const expectedId = '987654321098765432';
-    const mockMember = { user: { id: expectedId } };
-    const mockGuild = {
-      members: {
-        fetch: jest.fn().mockResolvedValue(mockMember),
-      },
-    };
-    client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
-    setClient(service, client);
-
-    await service.isGuildMember(expectedId);
-
-    expect(mockGuild.members.fetch).toHaveBeenCalledWith(expectedId);
-  });
-
-  it('should return true for a truthy member object (even with minimal shape)', async () => {
-    const client = createMockClient();
-    client.isReady.mockReturnValue(true);
-
-    // fetch returns some truthy object (member)
-    const mockGuild = {
-      members: {
-        fetch: jest.fn().mockResolvedValue({ id: '111', user: { id: '111' } }),
-      },
-    };
-    client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
-    setClient(service, client);
-
-    const result = await service.isGuildMember('111');
-
-    expect(result).toBe(true);
   });
 });

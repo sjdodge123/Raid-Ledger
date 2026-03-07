@@ -40,7 +40,7 @@ function makeKeyboardEvent(
     } as unknown as React.KeyboardEvent<HTMLElement> & { preventDefault: ReturnType<typeof vi.fn> };
 }
 
-describe('useKeyboardNav', () => {
+describe('useKeyboardNav — part 1', () => {
     afterEach(() => {
         document.body.innerHTML = '';
     });
@@ -113,6 +113,13 @@ describe('useKeyboardNav', () => {
         });
     });
 
+});
+
+describe('useKeyboardNav — part 2', () => {
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
     describe('horizontal orientation', () => {
         it('ArrowRight moves focus to next item', () => {
             const container = createContainer(3);
@@ -161,6 +168,13 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(downEvent);
             expect(document.activeElement).toBe(items[0]);
         });
+    });
+
+});
+
+describe('useKeyboardNav — part 3', () => {
+    afterEach(() => {
+        document.body.innerHTML = '';
     });
 
     describe('Home and End keys', () => {
@@ -232,6 +246,13 @@ describe('useKeyboardNav', () => {
         });
     });
 
+});
+
+describe('useKeyboardNav — part 4', () => {
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
     describe('Escape key', () => {
         it('Escape calls onEscape', () => {
             const onEscape = vi.fn();
@@ -298,4 +319,5 @@ describe('useKeyboardNav', () => {
             expect(event.preventDefault).not.toHaveBeenCalled();
         });
     });
+
 });

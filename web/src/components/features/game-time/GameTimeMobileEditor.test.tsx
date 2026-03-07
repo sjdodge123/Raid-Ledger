@@ -83,8 +83,8 @@ describe('GameTimeMobileEditor', () => {
         });
     });
 
-    describe('Hour Toggle', () => {
-        it('adds hour when toggled on', () => {
+    function hourToggleGroup1() {
+it('adds hour when toggled on', () => {
             render(<GameTimeMobileEditor {...defaultProps} />);
 
             const sundayHeader = screen.getByText('Sunday').closest('button')!;
@@ -98,7 +98,7 @@ describe('GameTimeMobileEditor', () => {
             ]);
         });
 
-        it('removes hour when toggled off', () => {
+it('removes hour when toggled off', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 0, hour: 6, status: 'available' },
             ];
@@ -113,7 +113,10 @@ describe('GameTimeMobileEditor', () => {
             expect(mockOnChange).toHaveBeenCalledWith([]);
         });
 
-        it('does not toggle hours in read-only mode', () => {
+    }
+
+    function hourToggleGroup2() {
+it('does not toggle hours in read-only mode', () => {
             render(<GameTimeMobileEditor {...defaultProps} readOnly={true} />);
 
             const sundayHeader = screen.getByText('Sunday').closest('button')!;
@@ -125,7 +128,10 @@ describe('GameTimeMobileEditor', () => {
             expect(mockOnChange).not.toHaveBeenCalled();
         });
 
-        it('preserves other hours when toggling', () => {
+    }
+
+    function hourToggleGroup3() {
+it('preserves other hours when toggling', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 0, hour: 6, status: 'available' },
                 { dayOfWeek: 1, hour: 7, status: 'available' },
@@ -144,10 +150,17 @@ describe('GameTimeMobileEditor', () => {
                 { dayOfWeek: 0, hour: 8, status: 'available' },
             ]);
         });
+
+    }
+
+    describe('Hour Toggle', () => {
+        hourToggleGroup1();
+        hourToggleGroup2();
+        hourToggleGroup3();
     });
 
-    describe('Preset Application', () => {
-        it('applies morning preset (6a-12p)', () => {
+    function presetApplicationGroup1() {
+it('applies morning preset (6a-12p)', () => {
             render(<GameTimeMobileEditor {...defaultProps} />);
 
             const sundayHeader = screen.getByText('Sunday').closest('button')!;
@@ -168,7 +181,10 @@ describe('GameTimeMobileEditor', () => {
             );
         });
 
-        it('applies afternoon preset (12p-6p)', () => {
+    }
+
+    function presetApplicationGroup2() {
+it('applies afternoon preset (12p-6p)', () => {
             render(<GameTimeMobileEditor {...defaultProps} />);
 
             const sundayHeader = screen.getByText('Sunday').closest('button')!;
@@ -182,7 +198,7 @@ describe('GameTimeMobileEditor', () => {
             expect(hours).toEqual([12, 13, 14, 15, 16, 17]);
         });
 
-        it('applies evening preset (6p-12a)', () => {
+it('applies evening preset (6p-12a)', () => {
             render(<GameTimeMobileEditor {...defaultProps} />);
 
             const sundayHeader = screen.getByText('Sunday').closest('button')!;
@@ -196,7 +212,10 @@ describe('GameTimeMobileEditor', () => {
             expect(hours).toEqual([18, 19, 20, 21, 22, 23]);
         });
 
-        it('applies night preset (12a-6a)', () => {
+    }
+
+    function presetApplicationGroup3() {
+it('applies night preset (12a-6a)', () => {
             render(<GameTimeMobileEditor {...defaultProps} />);
 
             const sundayHeader = screen.getByText('Sunday').closest('button')!;
@@ -210,7 +229,10 @@ describe('GameTimeMobileEditor', () => {
             expect(hours).toEqual([0, 1, 2, 3, 4, 5]);
         });
 
-        it('removes preset hours when all are active (toggle off)', () => {
+    }
+
+    function presetApplicationGroup4() {
+it('removes preset hours when all are active (toggle off)', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 0, hour: 6, status: 'available' },
                 { dayOfWeek: 0, hour: 7, status: 'available' },
@@ -230,7 +252,10 @@ describe('GameTimeMobileEditor', () => {
             expect(mockOnChange).toHaveBeenCalledWith([]);
         });
 
-        it('adds only missing hours in preset', () => {
+    }
+
+    function presetApplicationGroup5() {
+it('adds only missing hours in preset', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 0, hour: 6, status: 'available' },
                 { dayOfWeek: 0, hour: 7, status: 'available' },
@@ -248,7 +273,7 @@ describe('GameTimeMobileEditor', () => {
             expect(hours).toEqual([6, 7, 8, 9, 10, 11]);
         });
 
-        it('does not apply presets in read-only mode', () => {
+it('does not apply presets in read-only mode', () => {
             render(<GameTimeMobileEditor {...defaultProps} readOnly={true} />);
 
             const sundayHeader = screen.getByText('Sunday').closest('button')!;
@@ -257,6 +282,15 @@ describe('GameTimeMobileEditor', () => {
             // Presets should not be visible in read-only mode
             expect(screen.queryByText('Morning')).not.toBeInTheDocument();
         });
+
+    }
+
+    describe('Preset Application', () => {
+        presetApplicationGroup1();
+        presetApplicationGroup2();
+        presetApplicationGroup3();
+        presetApplicationGroup4();
+        presetApplicationGroup5();
     });
 
     describe('Read-Only Mode', () => {
@@ -290,8 +324,8 @@ describe('GameTimeMobileEditor', () => {
         });
     });
 
-    describe('Edge Cases', () => {
-        it('handles undefined readOnly prop (defaults to editable)', () => {
+    function edgeCasesGroup1() {
+it('handles undefined readOnly prop (defaults to editable)', () => {
             const props = { ...defaultProps };
             delete (props as { readOnly?: boolean }).readOnly;
 
@@ -303,7 +337,7 @@ describe('GameTimeMobileEditor', () => {
             expect(screen.getByText('Morning')).toBeInTheDocument();
         });
 
-        it('handles empty slots array', () => {
+it('handles empty slots array', () => {
             render(<GameTimeMobileEditor {...defaultProps} slots={[]} />);
 
             expect(screen.getByText('Sunday')).toBeInTheDocument();
@@ -312,7 +346,7 @@ describe('GameTimeMobileEditor', () => {
             });
         });
 
-        it('handles slots with no status (treats as available)', () => {
+it('handles slots with no status (treats as available)', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 0, hour: 6 } as GameTimeSlot,
             ];
@@ -321,7 +355,10 @@ describe('GameTimeMobileEditor', () => {
             expect(screen.getByText('1h selected')).toBeInTheDocument();
         });
 
-        it('handles slots for all 7 days', () => {
+    }
+
+    function edgeCasesGroup2() {
+it('handles slots for all 7 days', () => {
             const slots: GameTimeSlot[] = Array.from({ length: 7 }, (_, i) => ({
                 dayOfWeek: i,
                 hour: 12,
@@ -333,7 +370,7 @@ describe('GameTimeMobileEditor', () => {
             expect(selectedTexts.length).toBe(7);
         });
 
-        it('handles removing a slot that does not exist', () => {
+it('handles removing a slot that does not exist', () => {
             render(<GameTimeMobileEditor {...defaultProps} />);
 
             const sundayHeader = screen.getByText('Sunday').closest('button')!;
@@ -348,7 +385,10 @@ describe('GameTimeMobileEditor', () => {
             ]);
         });
 
-        it('preserves slots from other days when toggling', () => {
+    }
+
+    function edgeCasesGroup3() {
+it('preserves slots from other days when toggling', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 1, hour: 10, status: 'available' },
                 { dayOfWeek: 2, hour: 15, status: 'available' },
@@ -367,6 +407,13 @@ describe('GameTimeMobileEditor', () => {
                 { dayOfWeek: 0, hour: 6, status: 'available' },
             ]);
         });
+
+    }
+
+    describe('Edge Cases', () => {
+        edgeCasesGroup1();
+        edgeCasesGroup2();
+        edgeCasesGroup3();
     });
 
 });

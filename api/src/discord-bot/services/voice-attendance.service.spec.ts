@@ -82,7 +82,7 @@ describe('VoiceAttendanceService', () => {
   });
 
   describe('getVoiceSessions', () => {
-    it('returns sessions formatted as DTOs', async () => {
+    async function testReturnssessionsformattedasdtos() {
       const now = new Date();
       const mockSessions = [
         {
@@ -121,11 +121,15 @@ describe('VoiceAttendanceService', () => {
           }),
         ]),
       });
+    }
+
+    it('returns sessions formatted as DTOs', async () => {
+      await testReturnssessionsformattedasdtos();
     });
   });
 
   describe('getVoiceAttendanceSummary', () => {
-    it('returns summary with correct counts', async () => {
+    async function testReturnssummarywithcorrectcounts() {
       const now = new Date();
       const makeSess = (classification: string | null) => ({
         id: `uuid-${Math.random()}`,
@@ -162,6 +166,10 @@ describe('VoiceAttendanceService', () => {
         noShow: 1,
         unclassified: 1,
       });
+    }
+
+    it('returns summary with correct counts', async () => {
+      await testReturnssummarywithcorrectcounts();
     });
   });
 });

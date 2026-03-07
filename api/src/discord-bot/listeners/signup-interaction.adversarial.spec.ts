@@ -10,36 +10,48 @@ import {
   setupUpdateEmbedMocks,
 } from './signup-interaction.spec-helpers';
 
-describe('SignupInteractionListener — character select adversarial edge cases', () => {
-  let mocks: SignupInteractionMocks;
-  const originalClientUrl = process.env.CLIENT_URL;
+let mocks: SignupInteractionMocks;
+const originalClientUrl = process.env.CLIENT_URL;
 
-  beforeEach(async () => {
+async function setupAdversarialModule() {
+  delete process.env.CLIENT_URL;
+  mocks = await createSignupInteractionTestModule();
+}
+
+async function teardownAdversarialModule() {
+  jest.clearAllMocks();
+  await mocks.module.close();
+  if (originalClientUrl !== undefined) {
+    process.env.CLIENT_URL = originalClientUrl;
+  } else {
     delete process.env.CLIENT_URL;
-    mocks = await createSignupInteractionTestModule();
-  });
+  }
+}
 
-  afterEach(async () => {
-    jest.clearAllMocks();
-    await mocks.module.close();
-    if (originalClientUrl !== undefined) {
-      process.env.CLIENT_URL = originalClientUrl;
-    } else {
-      delete process.env.CLIENT_URL;
-    }
-  });
+function makeCharacterList(
+  characters: Array<{
+    id: string;
+    name: string;
+    class: string | null;
+    spec: string | null;
+    level: number | null;
+    isMain: boolean;
+  }>,
+) {
+  return { data: characters, meta: { total: characters.length } };
+}
 
+function longNameTests() {
   it('should error gracefully when character name exceeds Discord label limit (>100 chars)', async () => {
     const userId = 'user-adv-longname';
     const longName = 'A'.repeat(101);
-
     const event = { id: 1001, title: 'Raid Night', gameId: 1 };
 
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 1, hasRoles: true });
 
-    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: [
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce(
+      makeCharacterList([
         {
           id: 'char-long',
           name: longName,
@@ -56,26 +68,25 @@ describe('SignupInteractionListener — character select adversarial edge cases'
           level: 60,
           isMain: false,
         },
-      ],
-      meta: { total: 2 },
-    });
+      ]),
+    );
 
     const interaction = makeButtonInteraction(
       `${SIGNUP_BUTTON_IDS.SIGNUP}:1001`,
       userId,
     );
-
     await expect(
       mocks.listener.handleButtonInteraction(interaction),
     ).resolves.not.toThrow();
-
     expect(interaction.reply).not.toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Pick a character'),
       }),
     );
   });
+}
 
+function nullFieldsTests() {
   it('should build dropdown label gracefully when class, spec, and level are null', async () => {
     const userId = 'user-adv-nullfields';
     const event = { id: 1002, title: 'Casual Night', gameId: 1 };
@@ -83,8 +94,8 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 1, hasRoles: true });
 
-    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: [
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce(
+      makeCharacterList([
         {
           id: 'char-null-fields-1',
           name: 'Ghost',
@@ -101,19 +112,16 @@ describe('SignupInteractionListener — character select adversarial edge cases'
           level: null,
           isMain: false,
         },
-      ],
-      meta: { total: 2 },
-    });
+      ]),
+    );
 
     const interaction = makeButtonInteraction(
       `${SIGNUP_BUTTON_IDS.SIGNUP}:1002`,
       userId,
     );
-
     await expect(
       mocks.listener.handleButtonInteraction(interaction),
     ).resolves.not.toThrow();
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Pick a character'),
@@ -129,8 +137,8 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 1, hasRoles: true });
 
-    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: [
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce(
+      makeCharacterList([
         {
           id: 'char-class-only-1',
           name: 'Uther',
@@ -147,26 +155,25 @@ describe('SignupInteractionListener — character select adversarial edge cases'
           level: null,
           isMain: false,
         },
-      ],
-      meta: { total: 2 },
-    });
+      ]),
+    );
 
     const interaction = makeButtonInteraction(
       `${SIGNUP_BUTTON_IDS.SIGNUP}:1003`,
       userId,
     );
-
     await expect(
       mocks.listener.handleButtonInteraction(interaction),
     ).resolves.not.toThrow();
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Pick a character'),
       }),
     );
   });
+}
 
+function dropdownLimitTests() {
   it('should show all 25 characters when user has exactly 25', async () => {
     const userId = 'user-adv-exactly25';
     const event = { id: 1004, title: 'Big Roster Night', gameId: 1 };
@@ -182,18 +189,15 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       level: 60,
       isMain: i === 0,
     }));
-
-    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: characters,
-      meta: { total: 25 },
-    });
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce(
+      makeCharacterList(characters),
+    );
 
     const interaction = makeButtonInteraction(
       `${SIGNUP_BUTTON_IDS.SIGNUP}:1004`,
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction);
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Pick a character'),
@@ -218,18 +222,15 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       level: 60,
       isMain: false,
     }));
-
-    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: characters,
-      meta: { total: 30 },
-    });
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce(
+      makeCharacterList(characters),
+    );
 
     const interaction = makeButtonInteraction(
       `${SIGNUP_BUTTON_IDS.SIGNUP}:1005`,
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction);
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Pick a character'),
@@ -237,7 +238,9 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     );
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
   });
+}
 
+function invalidCharSelectTests() {
   it('should show error message when character select submits an invalid/deleted character ID', async () => {
     const userId = 'user-adv-invalidchar';
 
@@ -248,7 +251,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         }),
       }),
     });
-
     mocks.mockDb.select.mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
@@ -275,7 +277,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       userId,
     );
     await mocks.listener.handleSelectMenuInteraction(interaction);
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Something went wrong'),
@@ -283,16 +284,17 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       }),
     );
   });
+}
 
+function rateLimitTests() {
   it('should rate-limit a second signup button click while character dropdown is visible', async () => {
     const userId = 'user-adv-concurrent';
-
     const event1 = { id: 1006, title: 'Concurrent Event', gameId: 1 };
     setupLinkedUserAndEvent(mocks, userId, event1);
     setupGameRegistryQuery(mocks, { id: 1, hasRoles: true });
 
-    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: [
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce(
+      makeCharacterList([
         {
           id: 'char-a',
           name: 'Char A',
@@ -309,16 +311,14 @@ describe('SignupInteractionListener — character select adversarial edge cases'
           level: 60,
           isMain: false,
         },
-      ],
-      meta: { total: 2 },
-    });
+      ]),
+    );
 
     const interaction1 = makeButtonInteraction(
       `${SIGNUP_BUTTON_IDS.SIGNUP}:1006`,
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction1);
-
     expect(interaction1.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Pick a character'),
@@ -330,7 +330,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction2);
-
     expect(interaction2.deferReply).toHaveBeenCalledWith({ ephemeral: true });
     expect(interaction2.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -339,7 +338,9 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     );
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
   });
+}
 
+function cancelledMidFlowTests() {
   it('should show error when signup service throws during character select (event cancelled mid-flow)', async () => {
     const userId = 'user-adv-cancelled';
 
@@ -350,7 +351,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         }),
       }),
     });
-
     mocks.mockDb.select.mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
@@ -373,7 +373,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       userId,
     );
     await mocks.listener.handleSelectMenuInteraction(interaction);
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Something went wrong'),
@@ -381,7 +380,9 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       }),
     );
   });
+}
 
+function nullGameIdTests() {
   it('should do plain signup (no character flow) when event gameId is null', async () => {
     const userId = 'user-adv-nullgameid';
     const event = { id: 1009, title: 'Game Night', gameId: null };
@@ -403,19 +404,19 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       }),
     );
   });
+}
 
+function nudgeVisibilityTests() {
   it('should NOT show nudge when hasRoles is null', async () => {
     const userId = 'user-adv-hasroles-null';
     const event = { id: 1010, title: 'Null Roles Game', gameId: 3 };
 
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 3, hasRoles: null });
-
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [],
       meta: { total: 0 },
     });
-
     process.env.CLIENT_URL = 'https://example.com';
     setupUpdateEmbedMocks(mocks);
 
@@ -424,12 +425,9 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction);
-
     expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(1010, 42);
     expect(interaction.editReply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: expect.not.stringContaining('Tip'),
-      }),
+      expect.objectContaining({ content: expect.not.stringContaining('Tip') }),
     );
   });
 
@@ -439,12 +437,10 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 4, hasRoles: false });
-
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [],
       meta: { total: 0 },
     });
-
     process.env.CLIENT_URL = 'https://example.com';
     setupUpdateEmbedMocks(mocks);
 
@@ -453,28 +449,22 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction);
-
     expect(interaction.editReply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: expect.not.stringContaining('Tip'),
-      }),
+      expect.objectContaining({ content: expect.not.stringContaining('Tip') }),
     );
   });
 
   it('should NOT show nudge when CLIENT_URL is not set, even if hasRoles is true', async () => {
     const userId = 'user-adv-noclienturl';
     delete process.env.CLIENT_URL;
-
     const event = { id: 1012, title: 'Raid Night', gameId: 1 };
 
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 1, hasRoles: true });
-
     mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
       data: [],
       meta: { total: 0 },
     });
-
     setupUpdateEmbedMocks(mocks);
 
     const interaction = makeButtonInteraction(
@@ -482,24 +472,22 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction);
-
     expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(1012, 42);
     expect(interaction.editReply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: expect.not.stringContaining('Tip'),
-      }),
+      expect.objectContaining({ content: expect.not.stringContaining('Tip') }),
     );
   });
+}
 
+function mainCharSelectionTests() {
   it('should show no default selection when no character is marked as main', async () => {
     const userId = 'user-adv-nomain';
     const event = { id: 1013, title: 'No Main Event', gameId: 1 };
 
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 1, hasRoles: true });
-
-    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: [
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce(
+      makeCharacterList([
         {
           id: 'char-alt-1',
           name: 'Alt One',
@@ -516,16 +504,14 @@ describe('SignupInteractionListener — character select adversarial edge cases'
           level: 55,
           isMain: false,
         },
-      ],
-      meta: { total: 2 },
-    });
+      ]),
+    );
 
     const interaction = makeButtonInteraction(
       `${SIGNUP_BUTTON_IDS.SIGNUP}:1013`,
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction);
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Pick a character'),
@@ -541,9 +527,8 @@ describe('SignupInteractionListener — character select adversarial edge cases'
 
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 1, hasRoles: true });
-
-    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: [
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce(
+      makeCharacterList([
         {
           id: 'char-main',
           name: 'Main Char',
@@ -560,16 +545,14 @@ describe('SignupInteractionListener — character select adversarial edge cases'
           level: 40,
           isMain: false,
         },
-      ],
-      meta: { total: 2 },
-    });
+      ]),
+    );
 
     const interaction = makeButtonInteraction(
       `${SIGNUP_BUTTON_IDS.SIGNUP}:1014`,
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction);
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Pick a character'),
@@ -577,7 +560,9 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     );
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
   });
+}
 
+function embedUpdateAfterCharSelectTest() {
   it('should call updateEmbedSignupCount after successful character select signup', async () => {
     const userId = 'user-adv-embedupdate';
 
@@ -588,7 +573,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         }),
       }),
     });
-
     mocks.mockDb.select.mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
@@ -620,8 +604,7 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         embedState: 'posted',
       },
     ];
-    const msgChain = makeChain(msgRecord);
-    mocks.mockDb.select.mockReturnValueOnce(msgChain);
+    mocks.mockDb.select.mockReturnValueOnce(makeChain(msgRecord));
 
     const interaction = makeSelectMenuInteraction(
       `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:1015`,
@@ -647,14 +630,15 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     );
     expect(mocks.mockClientService.editEmbed).toHaveBeenCalled();
   });
+}
 
+function errorPropagationTests() {
   it('should propagate error gracefully when findAllForUser throws', async () => {
     const userId = 'user-adv-findall-throws';
     const event = { id: 1016, title: 'Error Event', gameId: 1 };
 
     setupLinkedUserAndEvent(mocks, userId, event);
     setupGameRegistryQuery(mocks, { id: 1, hasRoles: true });
-
     mocks.mockCharactersService.findAllForUser.mockRejectedValueOnce(
       new Error('Database timeout'),
     );
@@ -666,7 +650,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     await expect(
       mocks.listener.handleButtonInteraction(interaction),
     ).resolves.not.toThrow();
-
     expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -679,7 +662,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
     const userId = 'user-adv-eventnotfound';
 
     mocks.mockSignupsService.findByDiscordUser.mockResolvedValueOnce(null);
-
     mocks.mockDb.select.mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
@@ -687,7 +669,6 @@ describe('SignupInteractionListener — character select adversarial edge cases'
         }),
       }),
     });
-
     mocks.mockDb.select.mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
@@ -701,12 +682,65 @@ describe('SignupInteractionListener — character select adversarial edge cases'
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction);
-
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Event not found'),
       }),
     );
     expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
+  });
+}
+
+describe('SignupInteractionListener — character select adversarial edge cases', () => {
+  beforeEach(async () => {
+    await setupAdversarialModule();
+  });
+
+  afterEach(async () => {
+    await teardownAdversarialModule();
+  });
+
+  describe('long character names', () => {
+    longNameTests();
+  });
+
+  describe('null character fields', () => {
+    nullFieldsTests();
+  });
+
+  describe('dropdown limits', () => {
+    dropdownLimitTests();
+  });
+
+  describe('invalid character selection', () => {
+    invalidCharSelectTests();
+  });
+
+  describe('rate limiting during character flow', () => {
+    rateLimitTests();
+  });
+
+  describe('cancelled mid-flow', () => {
+    cancelledMidFlowTests();
+  });
+
+  describe('null gameId events', () => {
+    nullGameIdTests();
+  });
+
+  describe('nudge visibility', () => {
+    nudgeVisibilityTests();
+  });
+
+  describe('main character selection', () => {
+    mainCharSelectionTests();
+  });
+
+  describe('embed update after char select', () => {
+    embedUpdateAfterCharSelectTest();
+  });
+
+  describe('error propagation', () => {
+    errorPropagationTests();
   });
 });

@@ -4,7 +4,7 @@ import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 
-describe('SystemController', () => {
+function describeSystemController() {
   let controller: SystemController;
   let mockUsersService: Partial<UsersService>;
   let mockSettingsService: Partial<SettingsService>;
@@ -42,7 +42,7 @@ describe('SystemController', () => {
     controller = module.get<SystemController>(SystemController);
   });
 
-  describe('getStatus', () => {
+  function describeGetStatus() {
     it('should return isFirstRun: true when no users exist (AC-4)', async () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(0);
       (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
@@ -199,5 +199,7 @@ describe('SystemController', () => {
 
       expect(result.authProviders).toEqual([]);
     });
-  });
-});
+  }
+  describe('getStatus', () => describeGetStatus());
+}
+describe('SystemController', () => describeSystemController());

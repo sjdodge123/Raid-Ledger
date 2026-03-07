@@ -55,6 +55,85 @@ describe('EventsController', () => {
 
   const mockUser = { id: 1, role: 'member' as UserRole };
 
+  function createMockAttendanceService() {
+    return {
+      recordAttendance: jest.fn().mockResolvedValue({}),
+      getAttendanceSummary: jest.fn().mockResolvedValue({
+        eventId: 1,
+        totalSignups: 0,
+        attended: 0,
+        noShow: 0,
+        excused: 0,
+        unmarked: 0,
+        attendanceRate: 0,
+        noShowRate: 0,
+        signups: [],
+      }),
+    };
+  }
+
+  function createMockVoiceAttendanceService() {
+    return {
+      getVoiceSessions: jest
+        .fn()
+        .mockResolvedValue({ eventId: 1, sessions: [] }),
+      getVoiceAttendanceSummary: jest.fn().mockResolvedValue({
+        eventId: 1,
+        totalTracked: 0,
+        full: 0,
+        partial: 0,
+        late: 0,
+        earlyLeaver: 0,
+        noShow: 0,
+        unclassified: 0,
+        sessions: [],
+      }),
+    };
+  }
+
+  function buildTestProviders() {
+    return [
+      { provide: EventsService, useValue: mockEventsService },
+      { provide: SignupsService, useValue: mockSignupsService },
+      { provide: AttendanceService, useValue: createMockAttendanceService() },
+      { provide: PugsService, useValue: mockPugsService },
+      {
+        provide: ShareService,
+        useValue: {
+          shareToDiscordChannels: jest
+            .fn()
+            .mockResolvedValue({ channelsPosted: 0, channelsSkipped: 0 }),
+        },
+      },
+      {
+        provide: AdHocEventService,
+        useValue: {
+          getAdHocRoster: jest.fn().mockResolvedValue({
+            eventId: 1,
+            participants: [],
+            activeCount: 0,
+          }),
+        },
+      },
+      {
+        provide: AnalyticsService,
+        useValue: { getEventMetrics: jest.fn().mockResolvedValue({}) },
+      },
+      {
+        provide: VoiceAttendanceService,
+        useValue: createMockVoiceAttendanceService(),
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
+      },
+      {
+        provide: DiscordBotClientService,
+        useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
+      },
+    ];
+  }
+
   beforeEach(async () => {
     mockEventsService = {
       create: jest.fn().mockResolvedValue(mockEvent),
@@ -88,80 +167,7 @@ describe('EventsController', () => {
         EventsSignupsController,
         EventsAttendanceController,
       ],
-      providers: [
-        { provide: EventsService, useValue: mockEventsService },
-        { provide: SignupsService, useValue: mockSignupsService },
-        {
-          provide: AttendanceService,
-          useValue: {
-            recordAttendance: jest.fn().mockResolvedValue({}),
-            getAttendanceSummary: jest.fn().mockResolvedValue({
-              eventId: 1,
-              totalSignups: 0,
-              attended: 0,
-              noShow: 0,
-              excused: 0,
-              unmarked: 0,
-              attendanceRate: 0,
-              noShowRate: 0,
-              signups: [],
-            }),
-          },
-        },
-        { provide: PugsService, useValue: mockPugsService },
-        {
-          provide: ShareService,
-          useValue: {
-            shareToDiscordChannels: jest
-              .fn()
-              .mockResolvedValue({ channelsPosted: 0, channelsSkipped: 0 }),
-          },
-        },
-        {
-          provide: AdHocEventService,
-          useValue: {
-            getAdHocRoster: jest.fn().mockResolvedValue({
-              eventId: 1,
-              participants: [],
-              activeCount: 0,
-            }),
-          },
-        },
-        {
-          provide: AnalyticsService,
-          useValue: {
-            getEventMetrics: jest.fn().mockResolvedValue({}),
-          },
-        },
-        {
-          provide: VoiceAttendanceService,
-          useValue: {
-            getVoiceSessions: jest.fn().mockResolvedValue({
-              eventId: 1,
-              sessions: [],
-            }),
-            getVoiceAttendanceSummary: jest.fn().mockResolvedValue({
-              eventId: 1,
-              totalTracked: 0,
-              full: 0,
-              partial: 0,
-              late: 0,
-              earlyLeaver: 0,
-              noShow: 0,
-              unclassified: 0,
-              sessions: [],
-            }),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
-        },
-      ],
+      providers: buildTestProviders(),
     }).compile();
 
     controller = module.get<EventsController>(EventsController);

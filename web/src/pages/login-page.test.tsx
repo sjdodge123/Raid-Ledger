@@ -46,7 +46,7 @@ const renderWithRouter = (ui: React.ReactElement) => {
     return render(<BrowserRouter>{ui}</BrowserRouter>);
 };
 
-describe('LoginPage', () => {
+describe('LoginPage — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -111,6 +111,13 @@ describe('LoginPage', () => {
         expect(screen.getByLabelText('Password')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
         expect(screen.getByText(/hide username login/i)).toBeInTheDocument();
+    });
+
+});
+
+describe('LoginPage — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
     it('auto-expands local login on first run with auth providers configured', () => {
@@ -179,4 +186,5 @@ describe('LoginPage', () => {
         expect(screen.getByText(/continue with discord/i)).toBeInTheDocument();
         expect(screen.getByText(/continue with github/i)).toBeInTheDocument();
     });
+
 });

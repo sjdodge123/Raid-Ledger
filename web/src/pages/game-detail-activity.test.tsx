@@ -142,7 +142,7 @@ function setupDefaultMocks(
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -196,6 +196,13 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             const skeletons = container.querySelectorAll('.animate-pulse');
             expect(skeletons.length).toBeGreaterThan(0);
         });
+    });
+
+});
+
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
     describe('now playing', () => {
@@ -253,6 +260,13 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
         });
     });
 
+});
+
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('community playtime', () => {
         it('shows total community playtime formatted', () => {
             setupDefaultMocks(
@@ -284,6 +298,13 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
 
             expect(screen.queryByText(/total community playtime/)).not.toBeInTheDocument();
         });
+    });
+
+});
+
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
     describe('top players', () => {
@@ -350,6 +371,13 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
         });
     });
 
+});
+
+describe('GameDetailPage — CommunityActivitySection (ROK-443) — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('period selector', () => {
         it('calls useGameActivity with initial period week', () => {
             setupDefaultMocks({ topPlayers: [], totalSeconds: 0 });
@@ -385,4 +413,5 @@ describe('GameDetailPage — CommunityActivitySection (ROK-443)', () => {
             expect(useGamesDiscoverHook.useGameActivity).toHaveBeenCalledWith(42, 'all');
         });
     });
+
 });

@@ -59,7 +59,7 @@ function renderJoinPage(search: string = '') {
     );
 }
 
-describe('JoinPage', () => {
+describe('JoinPage — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockNavigate.mockReset();
@@ -70,7 +70,9 @@ describe('JoinPage', () => {
     });
 
     // ============================================================
+
     // Invalid link rendering
+
     // ============================================================
 
     describe('invalid link rendering', () => {
@@ -128,7 +130,9 @@ describe('JoinPage', () => {
     });
 
     // ============================================================
+
     // Auth loading state
+
     // ============================================================
 
     describe('auth loading state', () => {
@@ -141,8 +145,22 @@ describe('JoinPage', () => {
     });
 
     // ============================================================
+
     // Unauthenticated user redirect
+
     // ============================================================
+
+});
+
+describe('JoinPage — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNavigate.mockReset();
+        // Clear sessionStorage
+        sessionStorage.clear();
+        // Default: auth loading
+        mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
+    });
 
     describe('unauthenticated user', () => {
         it('should store intent in sessionStorage and redirect to Discord OAuth', async () => {
@@ -184,81 +202,119 @@ describe('JoinPage', () => {
     });
 
     // ============================================================
+
     // Authenticated user — redeem intent
+
     // ============================================================
 
-    describe('authenticated user — successful redemption', () => {
-        it('should call redeemIntent with token when authenticated', async () => {
-            mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
-            vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
-                success: true,
-                eventId: 42,
-                message: "You're signed up!",
-            });
+});
 
-            renderJoinPage('?intent=signup&eventId=42&token=valid-token');
+describe('authenticated user — successful redemption — sub 1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNavigate.mockReset();
+        // Clear sessionStorage
+        sessionStorage.clear();
+        // Default: auth loading
+        mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
+    });
 
-            await waitFor(() => {
-                expect(apiClient.redeemIntent).toHaveBeenCalledWith('valid-token');
-            });
+    it('should call redeemIntent with token when authenticated', async () => {
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+        vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
+            success: true,
+            eventId: 42,
+            message: "You're signed up!",
         });
 
-        it('should show success toast and navigate to event page on success', async () => {
-            mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
-            vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
-                success: true,
-                eventId: 42,
-                message: "You're signed up!",
-            });
+        renderJoinPage('?intent=signup&eventId=42&token=valid-token');
 
-            renderJoinPage('?intent=signup&eventId=42&token=valid-token');
-
-            await waitFor(() => {
-                expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true });
-            });
-
-            expect(toastModule.toast.success).toHaveBeenCalledWith(
-                expect.stringContaining("signed up"),
-                expect.any(Object),
-            );
-        });
-
-        it('should show info toast and navigate to event page when token is expired', async () => {
-            mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
-            vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
-                success: false,
-                eventId: 42,
-                message: 'Intent token is invalid, expired, or already used',
-            });
-
-            renderJoinPage('?intent=signup&eventId=42&token=expired-token');
-
-            await waitFor(() => {
-                expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true });
-            });
-
-            expect(toastModule.toast.info).toHaveBeenCalledWith(
-                expect.stringContaining('expired'),
-                expect.any(Object),
-            );
-        });
-
-        it('should navigate to event page even when redeemIntent throws', async () => {
-            mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
-            vi.mocked(apiClient.redeemIntent).mockRejectedValueOnce(
-                new Error('Network error'),
-            );
-
-            renderJoinPage('?intent=signup&eventId=42&token=bad-token');
-
-            await waitFor(() => {
-                expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true });
-            });
+        await waitFor(() => {
+            expect(apiClient.redeemIntent).toHaveBeenCalledWith('valid-token');
         });
     });
 
+    it('should show success toast and navigate to event page on success', async () => {
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+        vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
+            success: true,
+            eventId: 42,
+            message: "You're signed up!",
+        });
+
+        renderJoinPage('?intent=signup&eventId=42&token=valid-token');
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true });
+        });
+
+        expect(toastModule.toast.success).toHaveBeenCalledWith(
+            expect.stringContaining("signed up"),
+            expect.any(Object),
+        );
+    });
+
+});
+
+describe('authenticated user — successful redemption — sub 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNavigate.mockReset();
+        // Clear sessionStorage
+        sessionStorage.clear();
+        // Default: auth loading
+        mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
+    });
+
+    it('should show info toast and navigate to event page when token is expired', async () => {
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+        vi.mocked(apiClient.redeemIntent).mockResolvedValueOnce({
+            success: false,
+            eventId: 42,
+            message: 'Intent token is invalid, expired, or already used',
+        });
+
+        renderJoinPage('?intent=signup&eventId=42&token=expired-token');
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true });
+        });
+
+        expect(toastModule.toast.info).toHaveBeenCalledWith(
+            expect.stringContaining('expired'),
+            expect.any(Object),
+        );
+    });
+
+    it('should navigate to event page even when redeemIntent throws', async () => {
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+        vi.mocked(apiClient.redeemIntent).mockRejectedValueOnce(
+            new Error('Network error'),
+        );
+
+        renderJoinPage('?intent=signup&eventId=42&token=bad-token');
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith('/events/42', { replace: true });
+        });
+    });
+
+});
+
+describe('JoinPage — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockNavigate.mockReset();
+        // Clear sessionStorage
+        sessionStorage.clear();
+        // Default: auth loading
+        mockUseAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
+    });
+
     // ============================================================
+
     // Processing state display
+
     // ============================================================
 
     describe('processing state display', () => {
@@ -277,7 +333,9 @@ describe('JoinPage', () => {
     });
 
     // ============================================================
+
     // Single-use (processedRef)
+
     // ============================================================
 
     describe('single-use guard', () => {
@@ -296,4 +354,5 @@ describe('JoinPage', () => {
             });
         });
     });
+
 });

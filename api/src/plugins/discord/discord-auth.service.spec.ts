@@ -2,32 +2,32 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DiscordAuthService } from './discord-auth.service';
 import { SettingsService } from '../../settings/settings.service';
 
+let service: DiscordAuthService;
+let mockSettingsService: { isDiscordConfigured: jest.Mock };
+
+async function setupEach() {
+  mockSettingsService = {
+    isDiscordConfigured: jest.fn(),
+  };
+
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      DiscordAuthService,
+      { provide: SettingsService, useValue: mockSettingsService },
+    ],
+  }).compile();
+
+  service = module.get<DiscordAuthService>(DiscordAuthService);
+}
+
 describe('DiscordAuthService', () => {
-  let service: DiscordAuthService;
-  let mockSettingsService: { isDiscordConfigured: jest.Mock };
+  beforeEach(() => setupEach());
 
-  beforeEach(async () => {
-    mockSettingsService = {
-      isDiscordConfigured: jest.fn(),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DiscordAuthService,
-        { provide: SettingsService, useValue: mockSettingsService },
-      ],
-    }).compile();
-
-    service = module.get<DiscordAuthService>(DiscordAuthService);
-  });
-
-  describe('providerKey', () => {
+  describe('providerKey & getLoginMethod', () => {
     it('should return "discord"', () => {
       expect(service.providerKey).toBe('discord');
     });
-  });
 
-  describe('getLoginMethod', () => {
     it('should return a LoginMethod with correct fields', () => {
       const method = service.getLoginMethod();
 

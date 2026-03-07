@@ -3,48 +3,44 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PluginAdminController } from './plugin-admin.controller';
 import { PluginRegistryService } from './plugin-registry.service';
 
-describe('PluginAdminController', () => {
-  let controller: PluginAdminController;
-  let registry: {
-    listPlugins: jest.Mock;
-    install: jest.Mock;
-    uninstall: jest.Mock;
-    activate: jest.Mock;
-    deactivate: jest.Mock;
+let controller: PluginAdminController;
+let registry: {
+  listPlugins: jest.Mock;
+  install: jest.Mock;
+  uninstall: jest.Mock;
+  activate: jest.Mock;
+  deactivate: jest.Mock;
+};
+
+async function setupEach() {
+  registry = {
+    listPlugins: jest.fn().mockResolvedValue([]),
+    install: jest.fn().mockResolvedValue({ slug: 'test', active: true }),
+    uninstall: jest.fn().mockResolvedValue(undefined),
+    activate: jest.fn().mockResolvedValue(undefined),
+    deactivate: jest.fn().mockResolvedValue(undefined),
   };
 
-  beforeEach(async () => {
-    registry = {
-      listPlugins: jest.fn().mockResolvedValue([]),
-      install: jest.fn().mockResolvedValue({ slug: 'test', active: true }),
-      uninstall: jest.fn().mockResolvedValue(undefined),
-      activate: jest.fn().mockResolvedValue(undefined),
-      deactivate: jest.fn().mockResolvedValue(undefined),
-    };
+  const module: TestingModule = await Test.createTestingModule({
+    controllers: [PluginAdminController],
+    providers: [{ provide: PluginRegistryService, useValue: registry }],
+  }).compile();
 
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [PluginAdminController],
-      providers: [{ provide: PluginRegistryService, useValue: registry }],
-    }).compile();
+  controller = module.get<PluginAdminController>(PluginAdminController);
+}
 
-    controller = module.get<PluginAdminController>(PluginAdminController);
-  });
+describe('PluginAdminController', () => {
+  beforeEach(() => setupEach());
+  afterEach(() => jest.clearAllMocks());
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('listPlugins()', () => {
+  describe('listPlugins & install', () => {
     it('should return data wrapper around registry results', async () => {
       const plugins = [{ slug: 'test', name: 'Test' }];
       registry.listPlugins.mockResolvedValue(plugins);
-
       const result = await controller.listPlugins();
       expect(result).toEqual({ data: plugins });
     });
-  });
 
-  describe('install()', () => {
     it('should call registry.install and return success', async () => {
       const result = await controller.install('test-plugin');
       expect(registry.install).toHaveBeenCalledWith('test-plugin');
@@ -68,21 +64,19 @@ describe('PluginAdminController', () => {
     });
   });
 
-  describe('uninstall()', () => {
+  describe('uninstall & activate', () => {
     it('should call registry.uninstall and return success', async () => {
       const result = await controller.uninstall('test-plugin');
       expect(registry.uninstall).toHaveBeenCalledWith('test-plugin');
       expect(result.success).toBe(true);
     });
 
-    it('should reject invalid slug format', async () => {
+    it('should reject invalid slug format for uninstall', async () => {
       await expect(controller.uninstall('')).rejects.toThrow(
         BadRequestException,
       );
     });
-  });
 
-  describe('activate()', () => {
     it('should call registry.activate and return success', async () => {
       const result = await controller.activate('test-plugin');
       expect(registry.activate).toHaveBeenCalledWith('test-plugin');
@@ -97,7 +91,7 @@ describe('PluginAdminController', () => {
     });
   });
 
-  describe('deactivate()', () => {
+  describe('deactivate', () => {
     it('should call registry.deactivate and return success', async () => {
       const result = await controller.deactivate('test-plugin');
       expect(registry.deactivate).toHaveBeenCalledWith('test-plugin');

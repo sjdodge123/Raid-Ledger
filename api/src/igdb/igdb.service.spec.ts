@@ -92,12 +92,8 @@ describe('IgdbService', () => {
     },
   ];
 
-  beforeEach(async () => {
-    // Default select results — tests can override selectResults before calling service
-    selectResults = mockGames;
-
-    // Mock database operations using thenable pattern
-    mockDb = {
+  function createMockDb() {
+    return {
       select: jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: jest
@@ -114,15 +110,17 @@ describe('IgdbService', () => {
         }),
       }),
     };
+  }
 
-    // Mock Redis operations
+  beforeEach(async () => {
+    selectResults = mockGames;
+    mockDb = createMockDb();
     mockRedis = {
-      get: jest.fn().mockResolvedValue(null), // Default: cache miss
+      get: jest.fn().mockResolvedValue(null),
       setex: jest.fn().mockResolvedValue('OK'),
       keys: jest.fn().mockResolvedValue([]),
       del: jest.fn().mockResolvedValue(0),
     };
-
     mockConfigService = {
       get: jest.fn((key: string) => {
         const config: Record<string, string> = {
@@ -133,25 +131,27 @@ describe('IgdbService', () => {
       }),
     };
 
-    const mockSettingsService = {
-      get: jest.fn().mockResolvedValue(null),
-      getIgdbConfig: jest.fn().mockResolvedValue(null), // Fall through to env vars
-      isIgdbConfigured: jest.fn().mockResolvedValue(false),
-    };
-
-    const mockSyncQueue = {
-      add: jest.fn().mockResolvedValue({ id: 'test-job-id' }),
-      name: 'igdb-sync',
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         IgdbService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: REDIS_CLIENT, useValue: mockRedis },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: SettingsService, useValue: mockSettingsService },
-        { provide: getQueueToken(IGDB_SYNC_QUEUE), useValue: mockSyncQueue },
+        {
+          provide: SettingsService,
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            getIgdbConfig: jest.fn().mockResolvedValue(null),
+            isIgdbConfigured: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: getQueueToken(IGDB_SYNC_QUEUE),
+          useValue: {
+            add: jest.fn().mockResolvedValue({ id: 'test-job-id' }),
+            name: 'igdb-sync',
+          },
+        },
         {
           provide: CronJobService,
           useValue: {

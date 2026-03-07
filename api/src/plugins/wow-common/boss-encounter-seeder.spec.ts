@@ -46,44 +46,46 @@ jest.mock('fs/promises', () => ({
   }),
 }));
 
-describe('BossEncounterSeeder', () => {
-  let seeder: BossEncounterSeeder;
-  let mockDb: {
-    insert: jest.Mock;
-    delete: jest.Mock;
-    select: jest.Mock;
+let seeder: BossEncounterSeeder;
+let mockDb: {
+  insert: jest.Mock;
+  delete: jest.Mock;
+  select: jest.Mock;
+};
+
+async function setupEach() {
+  const mockReturning = jest.fn().mockResolvedValue([{ id: 1 }]);
+  const mockOnConflictDoUpdate = jest
+    .fn()
+    .mockReturnValue({ returning: mockReturning });
+  const mockValues = jest
+    .fn()
+    .mockReturnValue({ onConflictDoUpdate: mockOnConflictDoUpdate });
+
+  // Mock for select().from() — returns boss rows for loot FK resolution
+  const mockFrom = jest.fn().mockResolvedValue([
+    { id: 1, name: 'Ragnaros', expansion: 'classic' },
+    { id: 2, name: 'Lucifron', expansion: 'classic' },
+  ]);
+
+  mockDb = {
+    insert: jest.fn().mockReturnValue({ values: mockValues }),
+    delete: jest.fn().mockResolvedValue(undefined),
+    select: jest.fn().mockReturnValue({ from: mockFrom }),
   };
 
-  beforeEach(async () => {
-    const mockReturning = jest.fn().mockResolvedValue([{ id: 1 }]);
-    const mockOnConflictDoUpdate = jest
-      .fn()
-      .mockReturnValue({ returning: mockReturning });
-    const mockValues = jest
-      .fn()
-      .mockReturnValue({ onConflictDoUpdate: mockOnConflictDoUpdate });
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      BossEncounterSeeder,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+    ],
+  }).compile();
 
-    // Mock for select().from() — returns boss rows for loot FK resolution
-    const mockFrom = jest.fn().mockResolvedValue([
-      { id: 1, name: 'Ragnaros', expansion: 'classic' },
-      { id: 2, name: 'Lucifron', expansion: 'classic' },
-    ]);
+  seeder = module.get<BossEncounterSeeder>(BossEncounterSeeder);
+}
 
-    mockDb = {
-      insert: jest.fn().mockReturnValue({ values: mockValues }),
-      delete: jest.fn().mockResolvedValue(undefined),
-      select: jest.fn().mockReturnValue({ from: mockFrom }),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        BossEncounterSeeder,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-      ],
-    }).compile();
-
-    seeder = module.get<BossEncounterSeeder>(BossEncounterSeeder);
-  });
+describe('BossEncounterSeeder', () => {
+  beforeEach(() => setupEach());
 
   describe('seed()', () => {
     it('should insert boss encounters from bundled data', async () => {

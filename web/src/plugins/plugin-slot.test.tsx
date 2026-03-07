@@ -12,7 +12,7 @@ function TestComponent2(props: { message?: string }) {
     return <div data-testid="test-component-2">{props.message ?? 'second'}</div>;
 }
 
-describe('PluginSlot', () => {
+describe('PluginSlot — part 1', () => {
     beforeEach(() => {
         clearRegistry();
         usePluginStore.setState({
@@ -70,6 +70,17 @@ describe('PluginSlot', () => {
         expect(screen.getByTestId('test-component')).toBeInTheDocument();
     });
 
+});
+
+describe('PluginSlot — part 2', () => {
+    beforeEach(() => {
+        clearRegistry();
+        usePluginStore.setState({
+            activeSlugs: new Set<string>(),
+            initialized: false,
+        });
+    });
+
     it('passes context props to the rendered component', () => {
         registerSlotComponent({
             pluginSlug: 'blizzard',
@@ -111,6 +122,17 @@ describe('PluginSlot', () => {
         // Priority 0 (custom) before priority 10 (blizzard)
         expect(components[0]).toHaveTextContent('second');
         expect(components[1]).toHaveTextContent('default');
+    });
+
+});
+
+describe('PluginSlot — part 3', () => {
+    beforeEach(() => {
+        clearRegistry();
+        usePluginStore.setState({
+            activeSlugs: new Set<string>(),
+            initialized: false,
+        });
     });
 
     it('wraps content in div with className when provided', () => {
@@ -169,4 +191,5 @@ describe('PluginSlot', () => {
         // Badges only appear on admin UI cards, not on PluginSlot
         expect(container.querySelector('[title="WoW Plugin"]')).toBeNull();
     });
+
 });

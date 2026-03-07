@@ -53,7 +53,7 @@ function renderCard(event?: CalendarEvent, overlapFn?: (s: Date, e: Date) => boo
 
 // --- Tests ---
 
-describe('WeekEventCard', () => {
+describe('WeekEventCard — part 1', () => {
     describe('tier selection', () => {
         it('selects minimal tier for events under 150 minutes', () => {
             const { container } = renderCard(eventWithDuration(120));
@@ -119,6 +119,9 @@ describe('WeekEventCard', () => {
         });
     });
 
+});
+
+describe('WeekEventCard — part 2', () => {
     describe('avatar rendering', () => {
         const mockSignups = [
             { id: 1, username: 'Player1', avatar: null, discordId: '1' },

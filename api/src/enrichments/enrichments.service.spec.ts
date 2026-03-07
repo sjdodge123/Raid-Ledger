@@ -6,7 +6,7 @@ import { EnrichmentsService } from './enrichments.service';
 import { ENRICHMENT_QUEUE } from './enrichments.constants';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
-describe('EnrichmentsService', () => {
+function describeEnrichmentsService() {
   let service: EnrichmentsService;
   let mockDb: MockDb;
   let mockQueue: { add: jest.Mock };
@@ -29,7 +29,7 @@ describe('EnrichmentsService', () => {
     service = module.get<EnrichmentsService>(EnrichmentsService);
   });
 
-  describe('getEnrichmentsForEntity()', () => {
+  function describeGetEnrichmentsForEntity() {
     it('should return mapped enrichment rows', async () => {
       const fetchedAt = new Date('2026-03-01T12:00:00Z');
       mockDb.where.mockResolvedValueOnce([
@@ -69,7 +69,9 @@ describe('EnrichmentsService', () => {
 
       expect(result).toEqual([]);
     });
-  });
+  }
+  describe('getEnrichmentsForEntity()', () =>
+    describeGetEnrichmentsForEntity());
 
   describe('upsertEnrichment()', () => {
     it('should call insert with onConflictDoUpdate', async () => {
@@ -83,8 +85,8 @@ describe('EnrichmentsService', () => {
     });
   });
 
-  describe('enqueueCharacterEnrichments()', () => {
-    it('should enqueue jobs for each enricher with enrichCharacter', async () => {
+  function describeEnqueueCharacterEnrichments() {
+    async function testEnqueueJobsForEachEnricherWithEnrichCharacter() {
       const enricherA = {
         key: 'raider-io',
         gameSlugs: ['world-of-warcraft'],
@@ -116,7 +118,9 @@ describe('EnrichmentsService', () => {
         },
         expect.objectContaining({ attempts: 3 }),
       );
-    });
+    }
+    it('should enqueue jobs for each enricher with enrichCharacter', () =>
+      testEnqueueJobsForEachEnricherWithEnrichCharacter());
 
     it('should skip enrichers without enrichCharacter method', async () => {
       const enricherNoChar = {
@@ -146,7 +150,9 @@ describe('EnrichmentsService', () => {
 
       expect(count).toBe(0);
     });
-  });
+  }
+  describe('enqueueCharacterEnrichments()', () =>
+    describeEnqueueCharacterEnrichments());
 
   describe('enqueueEventEnrichments()', () => {
     it('should enqueue jobs for enrichers with enrichEvent', async () => {
@@ -175,7 +181,7 @@ describe('EnrichmentsService', () => {
     });
   });
 
-  describe('runCharacterEnrichment()', () => {
+  function describeRunCharacterEnrichment() {
     it('should call enricher and upsert result', async () => {
       const enricher = {
         key: 'raider-io',
@@ -235,9 +241,10 @@ describe('EnrichmentsService', () => {
       // Should not attempt DB lookup
       expect(mockDb.select).not.toHaveBeenCalled();
     });
-  });
+  }
+  describe('runCharacterEnrichment()', () => describeRunCharacterEnrichment());
 
-  describe('runEventEnrichment()', () => {
+  function describeRunEventEnrichment() {
     it('should call enricher and upsert result', async () => {
       const enricher = {
         key: 'event-stats',
@@ -315,9 +322,10 @@ describe('EnrichmentsService', () => {
         ),
       ).rejects.toThrow('API down');
     });
-  });
+  }
+  describe('runEventEnrichment()', () => describeRunEventEnrichment());
 
-  describe('runCharacterEnrichment() — adversarial', () => {
+  function describeRunCharacterEnrichmentAdversarial() {
     it('should propagate errors thrown by enrichCharacter', async () => {
       const enricher = {
         key: 'raider-io',
@@ -390,9 +398,11 @@ describe('EnrichmentsService', () => {
         }),
       );
     });
-  });
+  }
+  describe('runCharacterEnrichment() — adversarial', () =>
+    describeRunCharacterEnrichmentAdversarial());
 
-  describe('enqueueEventEnrichments() — adversarial', () => {
+  function describeEnqueueEventEnrichmentsAdversarial() {
     it('should skip enrichers without enrichEvent method', async () => {
       const charOnlyEnricher = {
         key: 'char-only',
@@ -446,10 +456,12 @@ describe('EnrichmentsService', () => {
       expect(count).toBe(2);
       expect(mockQueue.add).toHaveBeenCalledTimes(2);
     });
-  });
+  }
+  describe('enqueueEventEnrichments() — adversarial', () =>
+    describeEnqueueEventEnrichmentsAdversarial());
 
-  describe('getEnrichmentsForEntity() — adversarial', () => {
-    it('should map multiple enrichment rows independently', async () => {
+  function describeGetEnrichmentsForEntityAdversarial() {
+    async function testMapMultipleEnrichmentRowsIndependently() {
       const ts1 = new Date('2026-01-01T00:00:00Z');
       const ts2 = new Date('2026-02-15T12:30:00Z');
 
@@ -492,7 +504,9 @@ describe('EnrichmentsService', () => {
         data: { highestParse: 95 },
         fetchedAt: '2026-02-15T12:30:00.000Z',
       });
-    });
+    }
+    it('should map multiple enrichment rows independently', () =>
+      testMapMultipleEnrichmentRowsIndependently());
 
     it('should not include internal DB fields (id, createdAt, updatedAt) in returned shape', async () => {
       const fetchedAt = new Date('2026-03-01T00:00:00Z');
@@ -522,9 +536,11 @@ describe('EnrichmentsService', () => {
         'fetchedAt',
       ]);
     });
-  });
+  }
+  describe('getEnrichmentsForEntity() — adversarial', () =>
+    describeGetEnrichmentsForEntityAdversarial());
 
-  describe('upsertEnrichment() — adversarial', () => {
+  function describeUpsertEnrichmentAdversarial() {
     it('should insert with correct entity fields and timestamps', async () => {
       const beforeCall = Date.now();
       await service.upsertEnrichment('event', 'event-42', 'warcraftlogs', {
@@ -582,9 +598,11 @@ describe('EnrichmentsService', () => {
       expect(conflictCall.set).not.toHaveProperty('entityType');
       expect(conflictCall.set).not.toHaveProperty('entityId');
     });
-  });
+  }
+  describe('upsertEnrichment() — adversarial', () =>
+    describeUpsertEnrichmentAdversarial());
 
-  describe('enqueueCharacterEnrichments() — adversarial', () => {
+  function describeEnqueueCharacterEnrichmentsAdversarial() {
     it('should enqueue with correct BullMQ retry options', async () => {
       const enricher = {
         key: 'raider-io',
@@ -639,5 +657,8 @@ describe('EnrichmentsService', () => {
         expect.any(Object),
       );
     });
-  });
-});
+  }
+  describe('enqueueCharacterEnrichments() — adversarial', () =>
+    describeEnqueueCharacterEnrichmentsAdversarial());
+}
+describe('EnrichmentsService', () => describeEnrichmentsService());

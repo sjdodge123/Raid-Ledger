@@ -29,144 +29,119 @@ jest.mock('discord.js', () => {
   };
 });
 
-describe('RegisterCommandsService', () => {
-  let service: RegisterCommandsService;
-  let clientService: jest.Mocked<DiscordBotClientService>;
-  let settingsService: jest.Mocked<SettingsService>;
-  let mockEventCreateCommand: jest.Mocked<EventCreateCommand>;
-  let mockEventsListCommand: jest.Mocked<EventsListCommand>;
-  let mockRosterViewCommand: jest.Mocked<RosterViewCommand>;
-  let mockRestPut: jest.Mock;
+const mockBotConfig = { token: 'bot-token-123', enabled: true };
 
-  const mockBotConfig = {
-    token: 'bot-token-123',
-    enabled: true,
+function makeMockCommand(name: string, description: string) {
+  return {
+    commandName: name,
+    getDefinition: jest.fn().mockReturnValue({ name, description }),
+    handleInteraction: jest.fn(),
+    handleAutocomplete: jest.fn(),
   };
+}
+
+const allCommandBodies = [
+  { name: 'event', description: 'Event commands' },
+  { name: 'events', description: 'List events' },
+  { name: 'roster', description: 'View roster' },
+  { name: 'bind', description: 'Bind channel' },
+  { name: 'unbind', description: 'Unbind channel' },
+  { name: 'bindings', description: 'List bindings' },
+  { name: 'invite', description: 'Invite user to event' },
+  { name: 'help', description: 'List all available bot commands' },
+  { name: 'playing', description: 'Set what game you are playing' },
+];
+
+const commandClassMap: Record<string, unknown> = {
+  event: EventCreateCommand,
+  events: EventsListCommand,
+  roster: RosterViewCommand,
+  bind: BindCommand,
+  unbind: UnbindCommand,
+  bindings: BindingsCommand,
+  invite: InviteCommand,
+  help: HelpCommand,
+  playing: PlayingCommand,
+};
+
+function makeProviders(mockRestPut: jest.Mock) {
+  (REST as unknown as jest.Mock).mockImplementation(() => ({
+    setToken: jest.fn().mockReturnThis(),
+    put: mockRestPut,
+  }));
+  return [
+    RegisterCommandsService,
+    {
+      provide: DiscordBotClientService,
+      useValue: {
+        getGuildId: jest.fn().mockReturnValue('guild-123'),
+        getClientId: jest.fn().mockReturnValue('client-456'),
+      },
+    },
+    {
+      provide: SettingsService,
+      useValue: {
+        getDiscordBotConfig: jest.fn().mockResolvedValue(mockBotConfig),
+      },
+    },
+    ...allCommandBodies.map((cmd) => ({
+      provide: commandClassMap[cmd.name]! as string,
+      useValue: makeMockCommand(cmd.name, cmd.description),
+    })),
+  ];
+}
+
+async function buildModule(mockRestPut: jest.Mock) {
+  const providers = makeProviders(mockRestPut);
+  return Test.createTestingModule({ providers }).compile();
+}
+
+describe('RegisterCommandsService — global registration', () => {
+  let service: RegisterCommandsService;
+  let settingsService: jest.Mocked<SettingsService>;
+  let mockRestPut: jest.Mock;
 
   beforeEach(async () => {
     mockRestPut = jest.fn().mockResolvedValue({});
+    const module: TestingModule = await buildModule(mockRestPut);
+    service = module.get(RegisterCommandsService);
+    settingsService = module.get(SettingsService);
+  });
 
-    (REST as unknown as jest.Mock).mockImplementation(() => ({
-      setToken: jest.fn().mockReturnThis(),
-      put: mockRestPut,
-    }));
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
 
-    mockEventCreateCommand = {
-      commandName: 'event',
-      getDefinition: jest
-        .fn()
-        .mockReturnValue({ name: 'event', description: 'Event commands' }),
-      handleInteraction: jest.fn(),
-      handleAutocomplete: jest.fn(),
-    } as unknown as jest.Mocked<EventCreateCommand>;
+  it('should register all commands globally', async () => {
+    await service.registerCommands();
+    expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
+    expect(Routes.applicationCommands).toHaveBeenCalledWith('client-456');
+    expect(mockRestPut).toHaveBeenCalledWith('/global-route', {
+      body: allCommandBodies,
+    });
+  });
 
-    mockEventsListCommand = {
-      commandName: 'events',
-      getDefinition: jest
-        .fn()
-        .mockReturnValue({ name: 'events', description: 'List events' }),
-      handleInteraction: jest.fn(),
-    } as unknown as jest.Mocked<EventsListCommand>;
+  it('should still register globally when no guild is found', async () => {
+    const clientService = (service as any)
+      .clientService as jest.Mocked<DiscordBotClientService>;
+    clientService.getGuildId.mockReturnValue(null);
+    await service.registerCommands();
+    expect(mockRestPut).toHaveBeenCalledWith('/global-route', {
+      body: allCommandBodies,
+    });
+    expect(Routes.applicationGuildCommands).not.toHaveBeenCalled();
+  });
+});
 
-    mockRosterViewCommand = {
-      commandName: 'roster',
-      getDefinition: jest
-        .fn()
-        .mockReturnValue({ name: 'roster', description: 'View roster' }),
-      handleInteraction: jest.fn(),
-      handleAutocomplete: jest.fn(),
-    } as unknown as jest.Mocked<RosterViewCommand>;
+describe('RegisterCommandsService — skip conditions', () => {
+  let service: RegisterCommandsService;
+  let clientService: jest.Mocked<DiscordBotClientService>;
+  let settingsService: jest.Mocked<SettingsService>;
+  let mockRestPut: jest.Mock;
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        RegisterCommandsService,
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            getClientId: jest.fn().mockReturnValue('client-456'),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getDiscordBotConfig: jest.fn().mockResolvedValue(mockBotConfig),
-          },
-        },
-        {
-          provide: EventCreateCommand,
-          useValue: mockEventCreateCommand,
-        },
-        {
-          provide: EventsListCommand,
-          useValue: mockEventsListCommand,
-        },
-        {
-          provide: RosterViewCommand,
-          useValue: mockRosterViewCommand,
-        },
-        {
-          provide: BindCommand,
-          useValue: {
-            commandName: 'bind',
-            getDefinition: jest
-              .fn()
-              .mockReturnValue({ name: 'bind', description: 'Bind channel' }),
-          },
-        },
-        {
-          provide: UnbindCommand,
-          useValue: {
-            commandName: 'unbind',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'unbind',
-              description: 'Unbind channel',
-            }),
-          },
-        },
-        {
-          provide: BindingsCommand,
-          useValue: {
-            commandName: 'bindings',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'bindings',
-              description: 'List bindings',
-            }),
-          },
-        },
-        {
-          provide: InviteCommand,
-          useValue: {
-            commandName: 'invite',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'invite',
-              description: 'Invite user to event',
-            }),
-          },
-        },
-        {
-          provide: HelpCommand,
-          useValue: {
-            commandName: 'help',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'help',
-              description: 'List all available bot commands',
-            }),
-          },
-        },
-        {
-          provide: PlayingCommand,
-          useValue: {
-            commandName: 'playing',
-            getDefinition: jest.fn().mockReturnValue({
-              name: 'playing',
-              description: 'Set what game you are playing',
-            }),
-          },
-        },
-      ],
-    }).compile();
-
+  beforeEach(async () => {
+    mockRestPut = jest.fn().mockResolvedValue({});
+    const module: TestingModule = await buildModule(mockRestPut);
     service = module.get(RegisterCommandsService);
     clientService = module.get(DiscordBotClientService);
     settingsService = module.get(SettingsService);
@@ -176,98 +151,53 @@ describe('RegisterCommandsService', () => {
     jest.clearAllMocks();
   });
 
-  describe('registerCommands', () => {
-    it('should register all commands globally when config is available', async () => {
-      await service.registerCommands();
+  it('should skip registration when no bot config', async () => {
+    (settingsService.getDiscordBotConfig as jest.Mock).mockResolvedValue(null);
+    await service.registerCommands();
+    expect(mockRestPut).not.toHaveBeenCalled();
+  });
 
-      expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
-      expect(mockEventCreateCommand.getDefinition).toHaveBeenCalled();
-      expect(mockEventsListCommand.getDefinition).toHaveBeenCalled();
-      expect(mockRosterViewCommand.getDefinition).toHaveBeenCalled();
-      expect(Routes.applicationCommands).toHaveBeenCalledWith('client-456');
-      expect(mockRestPut).toHaveBeenCalledWith('/global-route', {
-        body: [
-          { name: 'event', description: 'Event commands' },
-          { name: 'events', description: 'List events' },
-          { name: 'roster', description: 'View roster' },
-          { name: 'bind', description: 'Bind channel' },
-          { name: 'unbind', description: 'Unbind channel' },
-          { name: 'bindings', description: 'List bindings' },
-          { name: 'invite', description: 'Invite user to event' },
-          { name: 'help', description: 'List all available bot commands' },
-          { name: 'playing', description: 'Set what game you are playing' },
-        ],
-      });
-    });
+  it('should skip registration when client ID is not available', async () => {
+    clientService.getClientId.mockReturnValue(null);
+    await service.registerCommands();
+    expect(mockRestPut).not.toHaveBeenCalled();
+  });
 
-    it('should still register globally when no guild is found (skip guild cleanup)', async () => {
-      clientService.getGuildId.mockReturnValue(null);
+  it('should handle REST API errors gracefully', async () => {
+    mockRestPut.mockRejectedValue(new Error('Discord API error'));
+    await expect(service.registerCommands()).resolves.not.toThrow();
+  });
+});
 
-      await service.registerCommands();
+describe('RegisterCommandsService — guild commands & REST', () => {
+  let service: RegisterCommandsService;
+  let clientService: jest.Mocked<DiscordBotClientService>;
+  let mockRestPut: jest.Mock;
 
-      expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
-      // Global registration still happens
-      expect(mockRestPut).toHaveBeenCalledWith('/global-route', {
-        body: [
-          { name: 'event', description: 'Event commands' },
-          { name: 'events', description: 'List events' },
-          { name: 'roster', description: 'View roster' },
-          { name: 'bind', description: 'Bind channel' },
-          { name: 'unbind', description: 'Unbind channel' },
-          { name: 'bindings', description: 'List bindings' },
-          { name: 'invite', description: 'Invite user to event' },
-          { name: 'help', description: 'List all available bot commands' },
-          { name: 'playing', description: 'Set what game you are playing' },
-        ],
-      });
-      // Guild cleanup is skipped
-      expect(Routes.applicationGuildCommands).not.toHaveBeenCalled();
-    });
+  beforeEach(async () => {
+    mockRestPut = jest.fn().mockResolvedValue({});
+    const module: TestingModule = await buildModule(mockRestPut);
+    service = module.get(RegisterCommandsService);
+    clientService = module.get(DiscordBotClientService);
+  });
 
-    it('should skip registration when no bot config is found', async () => {
-      (settingsService.getDiscordBotConfig as jest.Mock).mockResolvedValue(
-        null,
-      );
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
 
-      await service.registerCommands();
+  it('should clear stale guild commands when guild is set', async () => {
+    clientService.getGuildId.mockReturnValue('my-guild-id');
+    clientService.getClientId.mockReturnValue('my-client-id');
+    await service.registerCommands();
+    expect(Routes.applicationCommands).toHaveBeenCalledWith('my-client-id');
+    expect(Routes.applicationGuildCommands).toHaveBeenCalledWith(
+      'my-client-id',
+      'my-guild-id',
+    );
+  });
 
-      expect(mockRestPut).not.toHaveBeenCalled();
-    });
-
-    it('should skip registration when client ID is not available', async () => {
-      clientService.getClientId.mockReturnValue(null);
-
-      await service.registerCommands();
-
-      expect(mockRestPut).not.toHaveBeenCalled();
-    });
-
-    it('should handle REST API errors gracefully without throwing', async () => {
-      mockRestPut.mockRejectedValue(new Error('Discord API error'));
-
-      // Should not throw
-      await expect(service.registerCommands()).resolves.not.toThrow();
-    });
-
-    it('should register globally with client ID and clear stale guild commands', async () => {
-      clientService.getGuildId.mockReturnValue('my-guild-id');
-      clientService.getClientId.mockReturnValue('my-client-id');
-
-      await service.registerCommands();
-
-      // Global registration uses only clientId
-      expect(Routes.applicationCommands).toHaveBeenCalledWith('my-client-id');
-      // Stale guild commands are cleared
-      expect(Routes.applicationGuildCommands).toHaveBeenCalledWith(
-        'my-client-id',
-        'my-guild-id',
-      );
-    });
-
-    it('should create REST client with bot token from config', async () => {
-      await service.registerCommands();
-
-      expect(REST).toHaveBeenCalledWith({ version: '10' });
-    });
+  it('should create REST client with bot token from config', async () => {
+    await service.registerCommands();
+    expect(REST).toHaveBeenCalledWith({ version: '10' });
   });
 });

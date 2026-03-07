@@ -41,7 +41,7 @@ const mockUsers = [
     },
 ];
 
-describe('ReliabilityLeaderboard', () => {
+describe('ReliabilityLeaderboard — part 1', () => {
     beforeEach(() => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
@@ -97,6 +97,17 @@ describe('ReliabilityLeaderboard', () => {
         expect(cellTexts).toContain('1');
         expect(cellTexts).toContain('2');
         expect(cellTexts).toContain('3');
+    });
+
+});
+
+describe('ReliabilityLeaderboard — part 2', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
     });
 
     it('shows empty state when no users', async () => {
@@ -165,6 +176,17 @@ describe('ReliabilityLeaderboard', () => {
         });
     });
 
+});
+
+describe('ReliabilityLeaderboard — part 3', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
+    });
+
     it('clicking same header again toggles sort direction', async () => {
         const user = userEvent.setup();
         renderWithProviders(<ReliabilityLeaderboard />);
@@ -197,4 +219,5 @@ describe('ReliabilityLeaderboard', () => {
         // Loading skeleton uses animate-pulse
         expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
+
 });

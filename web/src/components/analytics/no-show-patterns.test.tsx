@@ -40,7 +40,7 @@ const mockUsers = [
     },
 ];
 
-describe('NoShowPatterns', () => {
+describe('NoShowPatterns — part 1', () => {
     beforeEach(() => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
@@ -95,6 +95,17 @@ describe('NoShowPatterns', () => {
         });
     });
 
+});
+
+describe('NoShowPatterns — part 2', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
+    });
+
     it('shows "No repeat offenders found." when no users have 2+ no-shows', async () => {
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
@@ -142,6 +153,17 @@ describe('NoShowPatterns', () => {
         renderWithProviders(<NoShowPatterns />);
         await waitFor(() => screen.getByText('Repeat Offenders'));
         expect(screen.queryByText('Day-of-Week Activity')).not.toBeInTheDocument();
+    });
+
+});
+
+describe('NoShowPatterns — part 3', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
     });
 
     it('shows error state when request fails', async () => {
@@ -194,4 +216,5 @@ describe('NoShowPatterns', () => {
         const noShowElements = screen.getAllByText('3 no-shows');
         expect(noShowElements.length).toBeLessThanOrEqual(10);
     });
+
 });

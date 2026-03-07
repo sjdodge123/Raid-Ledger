@@ -7,7 +7,7 @@ import { join } from 'path';
  *
  * This test fails CI if a new integration is added without a canary probe.
  */
-describe('Canary coverage', () => {
+function describeCanaryCoverage() {
   const pluginsDir = join(__dirname, '..', 'plugins');
   const canaryDir = __dirname;
 
@@ -90,4 +90,5 @@ describe('Canary coverage', () => {
     // At minimum, we should have canary files
     expect(canaryFiles.length).toBeGreaterThan(0);
   });
-});
+}
+describe('Canary coverage', () => describeCanaryCoverage());

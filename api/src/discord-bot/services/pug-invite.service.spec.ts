@@ -115,7 +115,70 @@ describe('PugInviteService', () => {
     },
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      PugInviteService,
+      {
+        provide: DrizzleAsyncProvider,
+        useValue: mockDb,
+      },
+    ];
+  }
+
+  function buildProvidersMocksA() {
+    return [
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getClient: jest.fn().mockReturnValue({
+            isReady: () => true,
+            guilds: {
+              cache: {
+                first: () => createMockGuild([defaultMember]),
+              },
+            },
+          }),
+          sendEmbedDM: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocksB() {
+    return [
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveChannelForEvent: jest.fn().mockResolvedValue('channel-789'),
+          resolveVoiceChannelForEvent: jest
+            .fn()
+            .mockResolvedValue('channel-789'),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest.fn().mockResolvedValue({
+            communityName: 'Test Guild',
+            communityLogoPath: null,
+            communityAccentColor: null,
+          }),
+          getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
+          getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [...buildProvidersMocksA(), ...buildProvidersMocksB()];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     process.env.CLIENT_URL = 'http://localhost:5173';
 
     mockDb = {
@@ -126,54 +189,16 @@ describe('PugInviteService', () => {
     };
 
     module = await Test.createTestingModule({
-      providers: [
-        PugInviteService,
-        {
-          provide: DrizzleAsyncProvider,
-          useValue: mockDb,
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getClient: jest.fn().mockReturnValue({
-              isReady: () => true,
-              guilds: {
-                cache: {
-                  first: () => createMockGuild([defaultMember]),
-                },
-              },
-            }),
-            sendEmbedDM: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveChannelForEvent: jest.fn().mockResolvedValue('channel-789'),
-            resolveVoiceChannelForEvent: jest
-              .fn()
-              .mockResolvedValue('channel-789'),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest.fn().mockResolvedValue({
-              communityName: 'Test Guild',
-              communityLogoPath: null,
-              communityAccentColor: null,
-            }),
-            getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
-            getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(PugInviteService);
     clientService = module.get(DiscordBotClientService);
     channelResolver = module.get(ChannelResolverService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(async () => {
@@ -370,7 +395,7 @@ describe('PugInviteService', () => {
       expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
-    it('should atomically claim matching pending slots and send DM', async () => {
+    async function testShouldatomicallyclaimmatchingpendingslotsandsend() {
       const claimedSlot = {
         ...mockPugSlot,
         discordUsername: 'newplayer',
@@ -408,6 +433,10 @@ describe('PugInviteService', () => {
         expect.anything(),
         expect.anything(),
       );
+    }
+
+    it('should atomically claim matching pending slots and send DM', async () => {
+      await testShouldatomicallyclaimmatchingpendingslotsandsend();
     });
 
     it('should not send DM for already invited/accepted/claimed slots (atomic guard)', async () => {

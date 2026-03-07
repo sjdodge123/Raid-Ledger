@@ -4,64 +4,64 @@ import { BossEncountersService } from './boss-encounters.service';
 import { Reflector } from '@nestjs/core';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 
-describe('BossEncountersController', () => {
-  let controller: BossEncountersController;
-  let mockService: {
-    getBossesForInstance: jest.Mock;
-    getLootForBoss: jest.Mock;
+let controller: BossEncountersController;
+let mockService: {
+  getBossesForInstance: jest.Mock;
+  getLootForBoss: jest.Mock;
+};
+
+const mockBosses = [
+  {
+    id: 1,
+    instanceId: 409,
+    name: 'Ragnaros',
+    order: 10,
+    expansion: 'classic',
+    sodModified: false,
+  },
+];
+
+const mockLoot = [
+  {
+    id: 1,
+    bossId: 1,
+    itemId: 17182,
+    itemName: 'Sulfuras, Hand of Ragnaros',
+    slot: 'Main Hand',
+    quality: 'Legendary',
+    itemLevel: 80,
+    dropRate: '0.0400',
+    expansion: 'classic',
+    classRestrictions: null,
+    iconUrl: null,
+  },
+];
+
+async function setupEach() {
+  mockService = {
+    getBossesForInstance: jest.fn().mockResolvedValue(mockBosses),
+    getLootForBoss: jest.fn().mockResolvedValue(mockLoot),
   };
 
-  const mockBosses = [
-    {
-      id: 1,
-      instanceId: 409,
-      name: 'Ragnaros',
-      order: 10,
-      expansion: 'classic',
-      sodModified: false,
-    },
-  ];
-
-  const mockLoot = [
-    {
-      id: 1,
-      bossId: 1,
-      itemId: 17182,
-      itemName: 'Sulfuras, Hand of Ragnaros',
-      slot: 'Main Hand',
-      quality: 'Legendary',
-      itemLevel: 80,
-      dropRate: '0.0400',
-      expansion: 'classic',
-      classRestrictions: null,
-      iconUrl: null,
-    },
-  ];
-
-  beforeEach(async () => {
-    mockService = {
-      getBossesForInstance: jest.fn().mockResolvedValue(mockBosses),
-      getLootForBoss: jest.fn().mockResolvedValue(mockLoot),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [BossEncountersController],
-      providers: [
-        { provide: BossEncountersService, useValue: mockService },
-        { provide: Reflector, useValue: new Reflector() },
-        {
-          provide: PluginRegistryService,
-          useValue: {
-            getActiveSlugsSync: jest
-              .fn()
-              .mockReturnValue(new Set(['blizzard'])),
-          },
+  const module: TestingModule = await Test.createTestingModule({
+    controllers: [BossEncountersController],
+    providers: [
+      { provide: BossEncountersService, useValue: mockService },
+      { provide: Reflector, useValue: new Reflector() },
+      {
+        provide: PluginRegistryService,
+        useValue: {
+          getActiveSlugsSync: jest.fn().mockReturnValue(new Set(['blizzard'])),
         },
-      ],
-    }).compile();
+      },
+    ],
+  }).compile();
 
-    controller = module.get<BossEncountersController>(BossEncountersController);
-  });
+  controller = module.get<BossEncountersController>(BossEncountersController);
+}
+
+describe('BossEncountersController — getBossesForInstance', () => {
+  beforeEach(() => setupEach());
 
   describe('getBossesForInstance()', () => {
     it('should return bosses for an instance', async () => {
@@ -98,6 +98,10 @@ describe('BossEncountersController', () => {
       ).rejects.toThrow('Invalid variant');
     });
   });
+});
+
+describe('BossEncountersController — getLootForBoss', () => {
+  beforeEach(() => setupEach());
 
   describe('getLootForBoss()', () => {
     it('should return loot for a boss', async () => {

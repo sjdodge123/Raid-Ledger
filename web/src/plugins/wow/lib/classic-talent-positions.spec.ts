@@ -82,7 +82,7 @@ describe('nameToSlug (via buildWowheadTalentString slug matching)', () => {
 // buildWowheadTalentString — full class talent string build (Druid)
 // ---------------------------------------------------------------------------
 
-describe('buildWowheadTalentString', () => {
+describe('buildWowheadTalentString — part 1', () => {
     describe('full Druid talent string build', () => {
         it('produces correct Wowhead talent string for a Balance/Resto Druid', () => {
             // Build a Druid with points in Balance and Restoration, none in Feral.
@@ -170,6 +170,9 @@ describe('buildWowheadTalentString', () => {
         });
     });
 
+});
+
+describe('buildWowheadTalentString — part 2', () => {
     describe('empty/zero talent handling', () => {
         it('returns all-zero trees as "0" when no talents are spent', () => {
             const trees = [
@@ -221,7 +224,10 @@ describe('buildWowheadTalentString', () => {
         });
     });
 
-    describe('API-position fallback', () => {
+});
+
+describe('buildWowheadTalentString — part 3', () => {
+    describe('API-position fallback — part 1', () => {
         it('uses tierIndex/columnIndex when available (API path)', () => {
             // Provide talents with tier/column indices matching known positions.
             // For Druid Balance:
@@ -276,6 +282,12 @@ describe('buildWowheadTalentString', () => {
             expect(result!.startsWith('5')).toBe(true);
         });
 
+    });
+
+});
+
+describe('buildWowheadTalentString — part 4', () => {
+    describe('API-position fallback — part 2', () => {
         it('API positions produce same result as slug matching for known talents', () => {
             // Build the same talent set both ways and compare
             const slugTrees = [
@@ -334,8 +346,12 @@ describe('buildWowheadTalentString', () => {
             expect(result).not.toBeNull();
             expect(result!.startsWith('51')).toBe(true); // starlight-wrath(5) + natures-grasp(1)
         });
+
     });
 
+});
+
+describe('buildWowheadTalentString — part 5', () => {
     describe('trailing tree trimming', () => {
         it('trims trailing zero trees', () => {
             const trees = [
@@ -377,6 +393,9 @@ describe('buildWowheadTalentString', () => {
         });
     });
 
+});
+
+describe('buildWowheadTalentString — part 6', () => {
     describe('all classes have position maps', () => {
         it.each([
             'Druid', 'Hunter', 'Mage', 'Paladin', 'Priest',
@@ -428,6 +447,7 @@ describe('buildWowheadTalentString', () => {
             expect(result).toBe('32');
         });
     });
+
 });
 
 // ---------------------------------------------------------------------------

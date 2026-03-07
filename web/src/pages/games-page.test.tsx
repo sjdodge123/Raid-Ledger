@@ -104,7 +104,7 @@ function mockSearch(data: Record<string, unknown> | null = null, isLoading = fal
     } as unknown as ReturnType<typeof useGameSearchModule.useGameSearch>);
 }
 
-describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
+describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockDiscover();
@@ -159,6 +159,15 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             fireEvent.change(searchInput, { target: { value: '' } });
             expect(screen.getByRole('button', { name: /genre filter/i })).toBeInTheDocument();
         });
+    });
+
+});
+
+describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscover();
+        mockSearch();
     });
 
     describe('Desktop Genre Filter Pills', () => {
@@ -223,6 +232,15 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
 
     });
 
+});
+
+describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscover();
+        mockSearch();
+    });
+
     describe('Genre selection', () => {
         it('selected genre row shows checkmark icon', () => {
             renderPage();
@@ -279,6 +297,15 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
         });
     });
 
+});
+
+describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscover();
+        mockSearch();
+    });
+
     describe('FAB filter button', () => {
         it('renders FAB with FunnelIcon when genres are available', () => {
             renderPage();
@@ -302,6 +329,15 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
             expect(filterBtn.querySelector('span.rounded-full')).not.toBeInTheDocument();
         });
+    });
+
+});
+
+describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscover();
+        mockSearch();
     });
 
     describe('Genre filter applied to content', () => {
@@ -348,6 +384,7 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(screen.getByText(/Try selecting a different genre/i)).toBeInTheDocument();
         });
     });
+
 });
 
 // ============================================================

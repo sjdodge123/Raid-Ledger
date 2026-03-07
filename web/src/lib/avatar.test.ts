@@ -6,8 +6,8 @@ vi.mock('./config', () => ({
     API_BASE_URL: 'http://localhost:3000',
 }));
 
-describe('resolveAvatar', () => {
-    describe('Avatar Preference (ROK-352)', () => {
+describe('resolveAvatar — part 1', () => {
+    describe('Avatar Preference (ROK-352) — part 1', () => {
         it('honors discord preference over custom avatar', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
@@ -71,6 +71,12 @@ describe('resolveAvatar', () => {
             });
         });
 
+    });
+
+});
+
+describe('resolveAvatar — part 2', () => {
+    describe('Avatar Preference (ROK-352) — part 2', () => {
         it('falls through when preferred character is not found', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
@@ -118,8 +124,12 @@ describe('resolveAvatar', () => {
                 type: 'custom',
             });
         });
+
     });
 
+});
+
+describe('resolveAvatar — part 3', () => {
     describe('Character Portrait Resolution', () => {
         it('returns character portrait when gameId matches and avatarUrl exists', () => {
             const user: AvatarUser = {
@@ -156,7 +166,10 @@ describe('resolveAvatar', () => {
         });
     });
 
-    describe('Discord Avatar Fallback', () => {
+});
+
+describe('resolveAvatar — part 4', () => {
+    describe('Discord Avatar Fallback — part 1', () => {
         it('falls back to Discord avatar when no character for game', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
@@ -219,6 +232,12 @@ describe('resolveAvatar', () => {
             });
         });
 
+    });
+
+});
+
+describe('resolveAvatar — part 5', () => {
+    describe('Discord Avatar Fallback — part 2', () => {
         it('returns Discord avatar when characters is undefined', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
@@ -231,6 +250,7 @@ describe('resolveAvatar', () => {
                 type: 'discord',
             });
         });
+
     });
 
     describe('Initials Fallback', () => {
@@ -265,6 +285,9 @@ describe('resolveAvatar', () => {
         });
     });
 
+});
+
+describe('resolveAvatar — part 6', () => {
     describe('Null/Undefined Handling', () => {
         it('handles null user gracefully', () => {
             const result = resolveAvatar(null);
@@ -329,4 +352,5 @@ describe('resolveAvatar', () => {
             });
         });
     });
+
 });

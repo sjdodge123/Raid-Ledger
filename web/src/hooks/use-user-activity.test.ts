@@ -58,7 +58,7 @@ const mockActivityResponse = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('useUserActivity (ROK-443)', () => {
+describe('useUserActivity (ROK-443) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -134,6 +134,13 @@ describe('useUserActivity (ROK-443)', () => {
         expect(result.current.data?.data[1].isMostPlayed).toBe(false);
     });
 
+});
+
+describe('useUserActivity (ROK-443) — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('should return isLoading=true before data arrives', () => {
         // Never resolves
         mockGetUserActivity.mockReturnValue(new Promise(() => {}));
@@ -188,4 +195,5 @@ describe('useUserActivity (ROK-443)', () => {
 
         expect(result.current.error).toBeInstanceOf(Error);
     });
+
 });

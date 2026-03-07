@@ -54,7 +54,7 @@ function makeMetrics(overrides: Partial<EventMetricsResponseDto> = {}): EventMet
     };
 }
 
-describe('VoiceTimeline', () => {
+describe('VoiceTimeline — part 1', () => {
     it('renders nothing when voiceSummary is null', () => {
         const { container } = render(
             <VoiceTimeline metrics={makeMetrics({ voiceSummary: null })} />,
@@ -114,6 +114,9 @@ describe('VoiceTimeline', () => {
         expect(screen.getByText('Alice#1234')).toBeInTheDocument();
     });
 
+});
+
+describe('VoiceTimeline — part 2', () => {
     it('renders legend items for all classifications', () => {
         render(<VoiceTimeline metrics={makeMetrics()} />);
         expect(screen.getByText('Full')).toBeInTheDocument();
@@ -180,6 +183,9 @@ describe('VoiceTimeline', () => {
         expect(timelineEl).toBeInTheDocument();
     });
 
+});
+
+describe('VoiceTimeline — part 3', () => {
     it('renders multiple session bars for multiple users', () => {
         const session2 = makeSession({ id: 2, discordUsername: 'Bob#5678' });
         const metrics = makeMetrics({
@@ -199,4 +205,5 @@ describe('VoiceTimeline', () => {
         expect(screen.getByText('Alice#1234')).toBeInTheDocument();
         expect(screen.getByText('Bob#5678')).toBeInTheDocument();
     });
+
 });

@@ -56,83 +56,75 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
     },
   });
 
+  function buildTestProviders() {
+    return [
+      {
+        provide: UsersService,
+        useValue: {
+          findById: jest.fn(),
+          findRecent: jest.fn(),
+          findAll: jest.fn(),
+          getHeartedGames: jest.fn(),
+          unlinkDiscord: jest.fn(),
+          setCustomAvatar: jest.fn(),
+          findAllWithRoles: jest.fn(),
+          setRole: jest.fn(),
+          checkDisplayNameAvailability: jest.fn(),
+          setDisplayName: jest.fn(),
+          completeOnboarding: jest.fn(),
+          resetOnboarding: jest.fn(),
+          findAdmin: jest.fn(),
+          deleteUser: jest.fn(),
+        },
+      },
+      {
+        provide: AvatarService,
+        useValue: {
+          checkRateLimit: jest.fn(),
+          validateAndProcess: jest.fn(),
+          save: jest.fn(),
+          delete: jest.fn(),
+        },
+      },
+      {
+        provide: PreferencesService,
+        useValue: {
+          getUserPreferences: jest.fn(),
+          setUserPreference: jest.fn(),
+        },
+      },
+      {
+        provide: GameTimeService,
+        useValue: {
+          getCompositeView: jest.fn(),
+          saveTemplate: jest.fn(),
+          saveOverrides: jest.fn(),
+          createAbsence: jest.fn(),
+          deleteAbsence: jest.fn(),
+          getAbsences: jest.fn(),
+        },
+      },
+      { provide: CharactersService, useValue: { findAllForUser: jest.fn() } },
+      { provide: EventsService, useValue: { findUpcomingByUser: jest.fn() } },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn(),
+          getGuildInfo: jest.fn(),
+          getClient: jest.fn(),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveChannelForEvent: jest.fn() },
+      },
+    ];
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersMeController],
-      providers: [
-        {
-          provide: UsersService,
-          useValue: {
-            findById: jest.fn(),
-            findRecent: jest.fn(),
-            findAll: jest.fn(),
-            getHeartedGames: jest.fn(),
-            unlinkDiscord: jest.fn(),
-            setCustomAvatar: jest.fn(),
-            findAllWithRoles: jest.fn(),
-            setRole: jest.fn(),
-            checkDisplayNameAvailability: jest.fn(),
-            setDisplayName: jest.fn(),
-            completeOnboarding: jest.fn(),
-            resetOnboarding: jest.fn(),
-            findAdmin: jest.fn(),
-            deleteUser: jest.fn(),
-          },
-        },
-        {
-          provide: AvatarService,
-          useValue: {
-            checkRateLimit: jest.fn(),
-            validateAndProcess: jest.fn(),
-            save: jest.fn(),
-            delete: jest.fn(),
-          },
-        },
-        {
-          provide: PreferencesService,
-          useValue: {
-            getUserPreferences: jest.fn(),
-            setUserPreference: jest.fn(),
-          },
-        },
-        {
-          provide: GameTimeService,
-          useValue: {
-            getCompositeView: jest.fn(),
-            saveTemplate: jest.fn(),
-            saveOverrides: jest.fn(),
-            createAbsence: jest.fn(),
-            deleteAbsence: jest.fn(),
-            getAbsences: jest.fn(),
-          },
-        },
-        {
-          provide: CharactersService,
-          useValue: {
-            findAllForUser: jest.fn(),
-          },
-        },
-        {
-          provide: EventsService,
-          useValue: {
-            findUpcomingByUser: jest.fn(),
-          },
-        },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn(),
-            getGuildInfo: jest.fn(),
-            getClient: jest.fn(),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveChannelForEvent: jest.fn(),
-          },
-        },
-      ],
+      providers: buildTestProviders(),
     }).compile();
 
     controller = module.get<UsersMeController>(UsersMeController);

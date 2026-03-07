@@ -61,7 +61,7 @@ function renderDrawer(isOpen = true, initialRoute = '/') {
     return { onClose };
 }
 
-describe('MoreDrawer', () => {
+describe('MoreDrawer — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -125,6 +125,13 @@ describe('MoreDrawer', () => {
         expect(themeToggle).toBeInTheDocument();
     });
 
+});
+
+describe('MoreDrawer — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('calls onFeedbackClick and closes drawer when Send Feedback is clicked', () => {
         const onClose = vi.fn();
         const onFeedbackClick = vi.fn();
@@ -154,6 +161,7 @@ describe('MoreDrawer', () => {
     });
 
     // Profile accordion tests
+
     it('expands profile submenu on toggle click', () => {
         renderDrawer();
         expect(screen.queryByTestId('profile-submenu')).not.toBeInTheDocument();
@@ -185,6 +193,13 @@ describe('MoreDrawer', () => {
         expect(screen.getByText('Re-run Setup Wizard')).toBeInTheDocument();
     });
 
+});
+
+describe('MoreDrawer — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('profile toggle has aria-expanded=false when collapsed', () => {
         renderDrawer(true, '/events');
         const toggle = screen.getByTestId('more-drawer-profile-toggle');
@@ -196,6 +211,7 @@ describe('MoreDrawer', () => {
         const toggle = screen.getByTestId('more-drawer-profile-toggle');
         expect(toggle).toHaveAttribute('aria-expanded', 'true');
     });
+
 });
 
 // Admin user tests

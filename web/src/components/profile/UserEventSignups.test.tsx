@@ -55,7 +55,7 @@ const renderWithProviders = (component: React.ReactElement) => {
     );
 };
 
-describe('UserEventSignups', () => {
+describe('UserEventSignups — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -118,6 +118,13 @@ describe('UserEventSignups', () => {
         expect(screen.getAllByText('Raid 2')).toHaveLength(2);
     });
 
+});
+
+describe('UserEventSignups — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('shows count badge with total events', () => {
         const mockEvents: UserEventSignupsResponseDto = {
             data: [createMockEvent()],
@@ -176,6 +183,13 @@ describe('UserEventSignups', () => {
         expect(screen.queryByText('View all')).not.toBeInTheDocument();
     });
 
+});
+
+describe('UserEventSignups — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('renders both desktop and mobile event layouts', () => {
         const mockEvents: UserEventSignupsResponseDto = {
             data: [
@@ -200,4 +214,5 @@ describe('UserEventSignups', () => {
         const allCards = container.querySelectorAll('[class*="cursor-pointer"], button[class*="rounded"]');
         expect(allCards.length).toBeGreaterThanOrEqual(3);
     });
+
 });

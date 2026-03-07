@@ -88,61 +88,74 @@ function renderProfileRoutes(initialPath: string) {
 
 // ─── AC7: Route Redirects ────────────────────────────────────────────────────
 
-describe('AC7: old profile paths redirect to consolidated paths (ROK-359)', () => {
-    it('redirects /profile/identity/discord to /profile/identity', () => {
+function ac7OldProfilePathsRedirectGroup1() {
+it('redirects /profile/identity/discord to /profile/identity', () => {
         renderProfileRoutes('/profile/identity/discord');
         expect(screen.getByTestId('identity-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/identity/avatar to /profile/identity', () => {
+it('redirects /profile/identity/avatar to /profile/identity', () => {
         renderProfileRoutes('/profile/identity/avatar');
         expect(screen.getByTestId('identity-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/preferences/appearance to /profile/preferences', () => {
+it('redirects /profile/preferences/appearance to /profile/preferences', () => {
         renderProfileRoutes('/profile/preferences/appearance');
         expect(screen.getByTestId('preferences-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/preferences/timezone to /profile/preferences', () => {
+it('redirects /profile/preferences/timezone to /profile/preferences', () => {
         renderProfileRoutes('/profile/preferences/timezone');
         expect(screen.getByTestId('preferences-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/preferences/notifications to /profile/notifications', () => {
+it('redirects /profile/preferences/notifications to /profile/notifications', () => {
         renderProfileRoutes('/profile/preferences/notifications');
         expect(screen.getByTestId('notifications-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/gaming to /profile/gaming/game-time', () => {
+}
+
+function ac7OldProfilePathsRedirectGroup2() {
+it('redirects /profile/gaming to /profile/gaming/game-time', () => {
         renderProfileRoutes('/profile/gaming');
         expect(screen.getByTestId('game-time-panel')).toBeInTheDocument();
     });
 
-    it('renders /profile/gaming/game-time directly', () => {
+it('renders /profile/gaming/game-time directly', () => {
         renderProfileRoutes('/profile/gaming/game-time');
         expect(screen.getByTestId('game-time-panel')).toBeInTheDocument();
     });
 
-    it('renders /profile/gaming/characters directly', () => {
+it('renders /profile/gaming/characters directly', () => {
         renderProfileRoutes('/profile/gaming/characters');
         expect(screen.getByTestId('characters-panel')).toBeInTheDocument();
     });
 
-    it('renders /profile/gaming/watched-games directly', () => {
+it('renders /profile/gaming/watched-games directly', () => {
         renderProfileRoutes('/profile/gaming/watched-games');
         expect(screen.getByTestId('watched-games-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/account to /profile/identity', () => {
+it('redirects /profile/account to /profile/identity', () => {
         renderProfileRoutes('/profile/account');
         expect(screen.getByTestId('identity-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/danger/delete-account to /profile/identity', () => {
+}
+
+function ac7OldProfilePathsRedirectGroup3() {
+it('redirects /profile/danger/delete-account to /profile/identity', () => {
         renderProfileRoutes('/profile/danger/delete-account');
         expect(screen.getByTestId('identity-panel')).toBeInTheDocument();
     });
+
+}
+
+describe('AC7: old profile paths redirect to consolidated paths (ROK-359)', () => {
+    ac7OldProfilePathsRedirectGroup1();
+    ac7OldProfilePathsRedirectGroup2();
+    ac7OldProfilePathsRedirectGroup3();
 });
 
 // ─── AC6: Panels render inline via Outlet ───────────────────────────────────

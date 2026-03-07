@@ -97,7 +97,7 @@ function renderWithRouter(ui: React.ReactElement) {
     );
 }
 
-describe('AdminSetupWizard', () => {
+describe('AdminSetupWizard — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockUseAuth.mockReturnValue({
@@ -149,6 +149,23 @@ describe('AdminSetupWizard', () => {
         });
     });
 
+});
+
+describe('AdminSetupWizard — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'admin',
+                role: 'admin',
+                discordId: 'local:admin',
+            },
+        });
+        mockIsAdmin.mockReturnValue(true);
+        mockUseOnboarding.mockReturnValue(defaultOnboarding);
+    });
+
     describe('Mobile stepper ("Step X of Y")', () => {
         it('renders mobile "Step X of Y" text on step 1', () => {
             renderWithRouter(<AdminSetupWizard />);
@@ -185,6 +202,23 @@ describe('AdminSetupWizard', () => {
             const skipButton = screen.getByRole('button', { name: /skip setup/i });
             expect(skipButton).toBeInTheDocument();
         });
+    });
+
+});
+
+describe('AdminSetupWizard — part 3', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'admin',
+                role: 'admin',
+                discordId: 'local:admin',
+            },
+        });
+        mockIsAdmin.mockReturnValue(true);
+        mockUseOnboarding.mockReturnValue(defaultOnboarding);
     });
 
     describe('Step content rendering', () => {
@@ -233,6 +267,23 @@ describe('AdminSetupWizard', () => {
         });
     });
 
+});
+
+describe('AdminSetupWizard — part 4', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'admin',
+                role: 'admin',
+                discordId: 'local:admin',
+            },
+        });
+        mockIsAdmin.mockReturnValue(true);
+        mockUseOnboarding.mockReturnValue(defaultOnboarding);
+    });
+
     describe('Step number display', () => {
         it('shows "Step 2 of 4" after advancing to step 1', () => {
             // Server step = 1
@@ -261,4 +312,5 @@ describe('AdminSetupWizard', () => {
             expect(screen.getByText(/step 4 of 4/i)).toBeInTheDocument();
         });
     });
+
 });

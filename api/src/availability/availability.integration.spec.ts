@@ -41,7 +41,7 @@ async function createMemberAndLogin(
   return { userId: user.id, token: loginRes.body.access_token as string };
 }
 
-describe('Availability (integration)', () => {
+function describeAvailability() {
   let testApp: TestApp;
 
   beforeAll(async () => {
@@ -56,7 +56,7 @@ describe('Availability (integration)', () => {
   // Basic CRUD
   // ===================================================================
 
-  describe('CRUD operations', () => {
+  function describeCRUDOperations() {
     it('should create an availability window and return it', async () => {
       const { token } = await createMemberAndLogin(
         testApp,
@@ -223,13 +223,14 @@ describe('Availability (integration)', () => {
 
       expect(getRes.status).toBe(404);
     });
-  });
+  }
+  describe('CRUD operations', () => describeCRUDOperations());
 
   // ===================================================================
   // Conflict Detection (tsrange overlap)
   // ===================================================================
 
-  describe('conflict detection', () => {
+  function describeConflictDetection() {
     it('should detect overlapping committed window on create', async () => {
       const { token } = await createMemberAndLogin(
         testApp,
@@ -402,14 +403,15 @@ describe('Availability (integration)', () => {
       expect(noOverlapRes.status).toBe(201);
       expect(noOverlapRes.body.conflicts).toBeUndefined();
     });
-  });
+  }
+  describe('conflict detection', () => describeConflictDetection());
 
   // ===================================================================
   // Batch User Range Query
   // ===================================================================
 
-  describe('batch user range query', () => {
-    it('should return availability for multiple users in a time range', async () => {
+  function describeBatchUserRangeQuery() {
+    async function testReturnAvailabilityForMultipleUsersInATimeRange() {
       const { userId: u1 } = await createMemberAndLogin(
         testApp,
         'batch_u1',
@@ -468,14 +470,17 @@ describe('Availability (integration)', () => {
       expect(result.get(u2)?.length).toBe(1);
       expect(result.get(u1)?.[0].status).toBe('available');
       expect(result.get(u2)?.[0].status).toBe('committed');
-    });
-  });
+    }
+    it('should return availability for multiple users in a time range', () =>
+      testReturnAvailabilityForMultipleUsersInATimeRange());
+  }
+  describe('batch user range query', () => describeBatchUserRangeQuery());
 
   // ===================================================================
   // Ownership Enforcement
   // ===================================================================
 
-  describe('ownership enforcement', () => {
+  function describeOwnershipEnforcement() {
     it("should forbid accessing another user's availability window", async () => {
       const { token: token1 } = await createMemberAndLogin(
         testApp,
@@ -541,13 +546,14 @@ describe('Availability (integration)', () => {
 
       expect(deleteRes.status).toBe(403);
     });
-  });
+  }
+  describe('ownership enforcement', () => describeOwnershipEnforcement());
 
   // ===================================================================
   // Validation
   // ===================================================================
 
-  describe('validation', () => {
+  function describeValidation() {
     it('should reject window where end time is before start time', async () => {
       const { token } = await createMemberAndLogin(
         testApp,
@@ -589,7 +595,8 @@ describe('Availability (integration)', () => {
 
       expect(res.status).toBe(400);
     });
-  });
+  }
+  describe('validation', () => describeValidation());
 
   // ===================================================================
   // Auth Guards
@@ -609,4 +616,5 @@ describe('Availability (integration)', () => {
       expect(res.status).toBe(401);
     });
   });
-});
+}
+describe('Availability (integration)', () => describeAvailability());

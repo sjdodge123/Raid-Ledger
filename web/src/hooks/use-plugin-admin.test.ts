@@ -38,7 +38,7 @@ function createWrapper() {
     };
 }
 
-describe('usePluginAdmin', () => {
+describe('usePluginAdmin — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -110,6 +110,13 @@ describe('usePluginAdmin', () => {
         expect(mockUninstallPlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
 
+});
+
+describe('usePluginAdmin — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('should call activatePlugin on activate mutation', async () => {
         mockGetPlugins.mockResolvedValue([]);
         mockActivatePlugin.mockResolvedValue(undefined);
@@ -147,4 +154,5 @@ describe('usePluginAdmin', () => {
 
         expect(mockDeactivatePlugin).toHaveBeenCalledWith('test-plugin', expect.anything());
     });
+
 });

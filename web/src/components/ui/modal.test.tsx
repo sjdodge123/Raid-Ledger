@@ -3,11 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { axe } from 'vitest-axe';
 import { Modal } from './modal';
 
-describe('Modal', () => {
+describe('Modal — part 1', () => {
     beforeEach(() => {
         document.body.style.overflow = '';
     });
-
     afterEach(() => {
         document.body.style.overflow = '';
     });
@@ -48,7 +47,15 @@ describe('Modal', () => {
         expect(screen.getByText('My Dialog Title')).toBeInTheDocument();
     });
 
-    describe('ARIA semantics (ROK-342)', () => {
+});
+
+describe('ARIA semantics (ROK-342) — part 1', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
         it('dialog has role="dialog"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="ARIA Test">
@@ -106,6 +113,17 @@ describe('Modal', () => {
             expect(closeBtn).toBeInTheDocument();
         });
 
+});
+
+describe('Modal — part 3', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+
+    describe('ARIA semantics (ROK-342) — part 2', () => {
         it('backdrop has aria-hidden="true"', () => {
             render(
                 <Modal isOpen={true} onClose={vi.fn()} title="Test">
@@ -116,6 +134,7 @@ describe('Modal', () => {
             const backdrop = dialog.parentElement?.querySelector('[aria-hidden="true"]');
             expect(backdrop).toBeInTheDocument();
         });
+
     });
 
     describe('Escape key closes modal (ROK-342 AC)', () => {
@@ -154,6 +173,16 @@ describe('Modal', () => {
         });
     });
 
+});
+
+describe('Modal — part 4', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+
     describe('backdrop click closes modal', () => {
         it('calls onClose when backdrop is clicked', () => {
             const onClose = vi.fn();
@@ -180,6 +209,16 @@ describe('Modal', () => {
             fireEvent.click(closeBtn);
             expect(onClose).toHaveBeenCalledOnce();
         });
+    });
+
+});
+
+describe('Modal — part 5', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
     });
 
     describe('body scroll locking', () => {
@@ -217,6 +256,16 @@ describe('Modal', () => {
             unmount();
             expect(document.body.style.overflow).toBe('');
         });
+    });
+
+});
+
+describe('Modal — part 6', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
     });
 
     describe('custom props', () => {
@@ -272,6 +321,16 @@ describe('Modal', () => {
         });
     });
 
+});
+
+describe('Modal — part 7', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+
     describe('accessibility', () => {
         it('has no accessibility violations when open', async () => {
             const { container } = render(
@@ -282,4 +341,5 @@ describe('Modal', () => {
             expect(await axe(container)).toHaveNoViolations();
         });
     });
+
 });

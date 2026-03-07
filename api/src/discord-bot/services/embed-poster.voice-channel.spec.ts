@@ -53,58 +53,74 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
     return chain;
   };
 
-  beforeEach(async () => {
+  function buildProvidersCore() {
+    return [
+      EmbedPosterService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuildId: jest.fn().mockReturnValue('guild-123'),
+          sendEmbed: jest.fn().mockResolvedValue(mockMessage),
+        },
+      },
+    ];
+  }
+
+  function buildProvidersMocks() {
+    return [
+      {
+        provide: DiscordEmbedFactory,
+        useValue: {
+          buildEventEmbed: jest
+            .fn()
+            .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveChannelForEvent: jest.fn().mockResolvedValue('channel-abc'),
+          resolveVoiceChannelForScheduledEvent: jest
+            .fn()
+            .mockResolvedValue(null),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getBranding: jest
+            .fn()
+            .mockResolvedValue({ communityName: 'Test Guild' }),
+          getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
+          getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+        },
+      },
+    ];
+  }
+
+  function buildProviders() {
+    return [...buildProvidersCore(), ...buildProvidersMocks()];
+  }
+  async function setupBlock() {
     mockDb = {
       select: jest.fn(),
       insert: jest.fn().mockReturnValue(makeInsertChain()),
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EmbedPosterService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(true),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            sendEmbed: jest.fn().mockResolvedValue(mockMessage),
-          },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventEmbed: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveChannelForEvent: jest.fn().mockResolvedValue('channel-abc'),
-            resolveVoiceChannelForScheduledEvent: jest
-              .fn()
-              .mockResolvedValue(null),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getBranding: jest
-              .fn()
-              .mockResolvedValue({ communityName: 'Test Guild' }),
-            getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
-            getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
-          },
-        },
-      ],
+      providers: buildProviders(),
     }).compile();
 
     service = module.get(EmbedPosterService);
     embedFactory = module.get(DiscordEmbedFactory);
     channelResolver = module.get(ChannelResolverService);
     clientService = module.get(DiscordBotClientService);
+  }
+
+  beforeEach(async () => {
+    await setupBlock();
   });
 
   afterEach(() => {

@@ -33,12 +33,8 @@ function buildMockRequest(userId = 1): AuthenticatedRequest {
   };
 }
 
-async function buildModule(overrides: {
-  mockUsersService?: Record<string, jest.Mock>;
-  mockSignupsService?: Record<string, jest.Mock>;
-  mockIntentTokenService?: Record<string, jest.Mock>;
-}) {
-  const mockUsersService = overrides.mockUsersService ?? {
+function defaultUsersService(): Record<string, jest.Mock> {
+  return {
     findById: jest.fn().mockResolvedValue({
       id: 1,
       username: 'testuser',
@@ -49,8 +45,10 @@ async function buildModule(overrides: {
     createOrUpdate: jest.fn(),
     relinkDiscord: jest.fn(),
   };
+}
 
-  const mockSignupsService = overrides.mockSignupsService ?? {
+function defaultSignupsService(): Record<string, jest.Mock> {
+  return {
     signup: jest.fn().mockResolvedValue({ id: 1, eventId: 42 }),
     claimAnonymousSignups: jest.fn().mockResolvedValue(0),
     cancel: jest.fn(),
@@ -60,63 +58,79 @@ async function buildModule(overrides: {
     updateStatus: jest.fn(),
     cancelByDiscordUser: jest.fn(),
   };
+}
 
-  const mockIntentTokenService = overrides.mockIntentTokenService ?? {
+function buildProviders(
+  users: Record<string, jest.Mock>,
+  signups: Record<string, jest.Mock>,
+  intents: Record<string, jest.Mock>,
+) {
+  return [
+    {
+      provide: AuthService,
+      useValue: { login: jest.fn().mockReturnValue({ access_token: 'tok' }) },
+    },
+    { provide: IntentTokenService, useValue: intents },
+    { provide: UsersService, useValue: users },
+    {
+      provide: PreferencesService,
+      useValue: {
+        getUserPreference: jest.fn().mockResolvedValue(null),
+        getUserPreferences: jest.fn().mockResolvedValue([]),
+        setUserPreference: jest.fn().mockResolvedValue(undefined),
+      },
+    },
+    { provide: SignupsService, useValue: signups },
+    {
+      provide: ConfigService,
+      useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },
+    },
+    {
+      provide: JwtService,
+      useValue: {
+        verify: jest.fn().mockReturnValue({ sub: 1 }),
+        sign: jest.fn(),
+      },
+    },
+    {
+      provide: SettingsService,
+      useValue: { getDiscordOAuthConfig: jest.fn(), getBranding: jest.fn() },
+    },
+    {
+      provide: CharactersService,
+      useValue: {
+        findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+        getAvatarUrlByName: jest.fn().mockResolvedValue(null),
+      },
+    },
+    { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+    {
+      provide: REDIS_CLIENT,
+      useValue: {
+        get: jest.fn(),
+        set: jest.fn(),
+        setex: jest.fn(),
+        del: jest.fn(),
+      },
+    },
+  ];
+}
+
+async function buildModule(overrides: {
+  mockUsersService?: Record<string, jest.Mock>;
+  mockSignupsService?: Record<string, jest.Mock>;
+  mockIntentTokenService?: Record<string, jest.Mock>;
+}) {
+  const users = overrides.mockUsersService ?? defaultUsersService();
+  const signups = overrides.mockSignupsService ?? defaultSignupsService();
+  const intents = overrides.mockIntentTokenService ?? {
     generate: jest.fn(),
     validate: jest.fn(),
   };
 
   const module: TestingModule = await Test.createTestingModule({
     controllers: [AuthController],
-    providers: [
-      {
-        provide: AuthService,
-        useValue: { login: jest.fn().mockReturnValue({ access_token: 'tok' }) },
-      },
-      { provide: IntentTokenService, useValue: mockIntentTokenService },
-      { provide: UsersService, useValue: mockUsersService },
-      {
-        provide: PreferencesService,
-        useValue: {
-          getUserPreference: jest.fn().mockResolvedValue(null),
-          getUserPreferences: jest.fn().mockResolvedValue([]),
-          setUserPreference: jest.fn().mockResolvedValue(undefined),
-        },
-      },
-      { provide: SignupsService, useValue: mockSignupsService },
-      {
-        provide: ConfigService,
-        useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },
-      },
-      {
-        provide: JwtService,
-        useValue: {
-          verify: jest.fn().mockReturnValue({ sub: 1 }),
-          sign: jest.fn(),
-        },
-      },
-      {
-        provide: SettingsService,
-        useValue: { getDiscordOAuthConfig: jest.fn(), getBranding: jest.fn() },
-      },
-      {
-        provide: CharactersService,
-        useValue: {
-          findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
-          getAvatarUrlByName: jest.fn().mockResolvedValue(null),
-        },
-      },
-      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
-      {
-        provide: REDIS_CLIENT,
-        useValue: {
-          get: jest.fn(),
-          set: jest.fn(),
-          setex: jest.fn(),
-          del: jest.fn(),
-        },
-      },
-    ],
+    providers: buildProviders(users, signups, intents),
   }).compile();
 
   return module.get<AuthController>(AuthController);

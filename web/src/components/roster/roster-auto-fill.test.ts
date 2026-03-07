@@ -35,8 +35,8 @@ function mmoSlotCount(role: RosterRole): number {
     return counts[role] ?? 0;
 }
 
-describe('computeAutoFill', () => {
-    describe('ROK-539: flex player role priority (tank/healer before DPS)', () => {
+describe('computeAutoFill — part 1', () => {
+    describe('ROK-539: flex player role priority (tank/healer before DPS) — part 1', () => {
         it('slots player with [dps, healer] prefs into healer when healer slot is open', () => {
             const pool = [
                 makePoolPlayer({
@@ -100,6 +100,12 @@ describe('computeAutoFill', () => {
             expect(assignment.slot).toBe('tank');
         });
 
+    });
+
+});
+
+describe('computeAutoFill — part 2', () => {
+    describe('ROK-539: flex player role priority (tank/healer before DPS) — part 2', () => {
         it('prefers tank over healer over DPS for a player with all three prefs', () => {
             const pool = [
                 makePoolPlayer({
@@ -156,5 +162,7 @@ describe('computeAutoFill', () => {
             // Flex player falls to next priority (healer slot still open, gets healer too)
             expect(player1!.slot).toBe('healer');
         });
+
     });
+
 });

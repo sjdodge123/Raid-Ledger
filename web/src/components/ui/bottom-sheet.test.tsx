@@ -3,12 +3,11 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { BottomSheet } from './bottom-sheet';
 
-describe('BottomSheet', () => {
+describe('BottomSheet — part 1', () => {
     beforeEach(() => {
         // Reset document.body.style.overflow before each test
         document.body.style.overflow = '';
     });
-
     afterEach(() => {
         // Clean up after each test
         document.body.style.overflow = '';
@@ -67,6 +66,18 @@ describe('BottomSheet', () => {
         expect(dialog).toBeInTheDocument();
     });
 
+});
+
+describe('BottomSheet — part 2', () => {
+    beforeEach(() => {
+        // Reset document.body.style.overflow before each test
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        // Clean up after each test
+        document.body.style.overflow = '';
+    });
+
     it('renders close button when title is provided', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}} title="Filter by Game">
@@ -120,6 +131,18 @@ describe('BottomSheet', () => {
             fireEvent.click(backdrop as HTMLElement);
             expect(handleClose).toHaveBeenCalledTimes(1);
         }
+    });
+
+});
+
+describe('BottomSheet — part 3', () => {
+    beforeEach(() => {
+        // Reset document.body.style.overflow before each test
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        // Clean up after each test
+        document.body.style.overflow = '';
     });
 
     it('calls onClose when Escape key pressed', () => {
@@ -186,6 +209,18 @@ describe('BottomSheet', () => {
         expect(document.body.style.overflow).toBe('');
     });
 
+});
+
+describe('BottomSheet — part 4', () => {
+    beforeEach(() => {
+        // Reset document.body.style.overflow before each test
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        // Clean up after each test
+        document.body.style.overflow = '';
+    });
+
     it('cleans up body scroll on unmount', () => {
         const { unmount } = render(
             <BottomSheet isOpen={true} onClose={() => {}}>
@@ -212,6 +247,7 @@ describe('BottomSheet', () => {
     });
 
     // Swipe gesture tests — touch handlers are on the drag handle (.cursor-grab)
+
     it('handles touch start', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
@@ -248,6 +284,18 @@ describe('BottomSheet', () => {
 
         // The transform should be applied on the sheet (dialog ref)
         expect(dialog.style.transform).toBe('translateY(50px)');
+    });
+
+});
+
+describe('BottomSheet — part 5', () => {
+    beforeEach(() => {
+        // Reset document.body.style.overflow before each test
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        // Clean up after each test
+        document.body.style.overflow = '';
     });
 
     it('does not apply negative transform on upward swipe', () => {
@@ -298,6 +346,18 @@ describe('BottomSheet', () => {
         await waitFor(() => {
             expect(handleClose).toHaveBeenCalledTimes(1);
         });
+    });
+
+});
+
+describe('BottomSheet — part 6', () => {
+    beforeEach(() => {
+        // Reset document.body.style.overflow before each test
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        // Clean up after each test
+        document.body.style.overflow = '';
     });
 
     it('does not call onClose when dragged down <150px and <40% of height', () => {

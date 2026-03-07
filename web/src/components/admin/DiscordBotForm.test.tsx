@@ -70,7 +70,7 @@ vi.mock('../../hooks/use-admin-settings', () => ({
     }),
 }));
 
-describe('DiscordBotForm', () => {
+describe('DiscordBotForm — Basic rendering', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockDiscordBotStatus.data = null;
@@ -141,6 +141,26 @@ describe('DiscordBotForm', () => {
         expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
     });
 
+});
+
+describe('DiscordBotForm — Test Connection button', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscordBotStatus.data = null;
+        mockDiscordChannels.data = null;
+        mockDiscordDefaultChannel.data = null;
+        mockUpdateDiscordBot.isPending = false;
+        mockUpdateDiscordBot.mutateAsync = vi.fn();
+        mockTestDiscordBot.isPending = false;
+        mockTestDiscordBot.mutateAsync = vi.fn();
+        mockClearDiscordBot.isPending = false;
+        mockClearDiscordBot.mutateAsync = vi.fn();
+        mockCheckDiscordBotPermissions.isPending = false;
+        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
+        mockSetDiscordChannel.isPending = false;
+        mockSetDiscordChannel.mutateAsync = vi.fn();
+    });
+
     it('does not submit form when bot token is empty', async () => {
         render(<DiscordBotForm />);
         const form = screen.getByLabelText('Bot Token').closest('form')!;
@@ -189,6 +209,26 @@ describe('DiscordBotForm', () => {
         expect(screen.getByRole('button', { name: 'Test Connection' })).toBeInTheDocument();
     });
 
+});
+
+describe('DiscordBotForm — Clear button', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscordBotStatus.data = null;
+        mockDiscordChannels.data = null;
+        mockDiscordDefaultChannel.data = null;
+        mockUpdateDiscordBot.isPending = false;
+        mockUpdateDiscordBot.mutateAsync = vi.fn();
+        mockTestDiscordBot.isPending = false;
+        mockTestDiscordBot.mutateAsync = vi.fn();
+        mockClearDiscordBot.isPending = false;
+        mockClearDiscordBot.mutateAsync = vi.fn();
+        mockCheckDiscordBotPermissions.isPending = false;
+        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
+        mockSetDiscordChannel.isPending = false;
+        mockSetDiscordChannel.mutateAsync = vi.fn();
+    });
+
     it('shows "Testing..." when testDiscordBot is pending', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         mockTestDiscordBot.isPending = true;
@@ -231,6 +271,26 @@ describe('DiscordBotForm', () => {
         render(<DiscordBotForm />);
         fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
         expect(mockClearDiscordBot.mutateAsync).not.toHaveBeenCalled();
+    });
+
+});
+
+describe('DiscordBotForm — Enable Bot toggle', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscordBotStatus.data = null;
+        mockDiscordChannels.data = null;
+        mockDiscordDefaultChannel.data = null;
+        mockUpdateDiscordBot.isPending = false;
+        mockUpdateDiscordBot.mutateAsync = vi.fn();
+        mockTestDiscordBot.isPending = false;
+        mockTestDiscordBot.mutateAsync = vi.fn();
+        mockClearDiscordBot.isPending = false;
+        mockClearDiscordBot.mutateAsync = vi.fn();
+        mockCheckDiscordBotPermissions.isPending = false;
+        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
+        mockSetDiscordChannel.isPending = false;
+        mockSetDiscordChannel.mutateAsync = vi.fn();
     });
 
     it('calls clearDiscordBot when confirm dialog is accepted', async () => {
@@ -285,6 +345,26 @@ describe('DiscordBotForm', () => {
         expect(screen.queryByText('Offline')).not.toBeInTheDocument();
     });
 
+});
+
+describe('DiscordBotForm — part 5', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscordBotStatus.data = null;
+        mockDiscordChannels.data = null;
+        mockDiscordDefaultChannel.data = null;
+        mockUpdateDiscordBot.isPending = false;
+        mockUpdateDiscordBot.mutateAsync = vi.fn();
+        mockTestDiscordBot.isPending = false;
+        mockTestDiscordBot.mutateAsync = vi.fn();
+        mockClearDiscordBot.isPending = false;
+        mockClearDiscordBot.mutateAsync = vi.fn();
+        mockCheckDiscordBotPermissions.isPending = false;
+        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
+        mockSetDiscordChannel.isPending = false;
+        mockSetDiscordChannel.mutateAsync = vi.fn();
+    });
+
     it('shows "Online" status when bot is connected', () => {
         mockDiscordBotStatus.data = {
             configured: true,
@@ -326,6 +406,26 @@ describe('DiscordBotForm', () => {
         expect(screen.getByRole('button', { name: 'Test Permissions' })).toBeInTheDocument();
     });
 
+});
+
+describe('DiscordBotForm — Channel selector', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscordBotStatus.data = null;
+        mockDiscordChannels.data = null;
+        mockDiscordDefaultChannel.data = null;
+        mockUpdateDiscordBot.isPending = false;
+        mockUpdateDiscordBot.mutateAsync = vi.fn();
+        mockTestDiscordBot.isPending = false;
+        mockTestDiscordBot.mutateAsync = vi.fn();
+        mockClearDiscordBot.isPending = false;
+        mockClearDiscordBot.mutateAsync = vi.fn();
+        mockCheckDiscordBotPermissions.isPending = false;
+        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
+        mockSetDiscordChannel.isPending = false;
+        mockSetDiscordChannel.mutateAsync = vi.fn();
+    });
+
     it('does not show Test Permissions button when offline', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         render(<DiscordBotForm />);
@@ -349,4 +449,5 @@ describe('DiscordBotForm', () => {
     });
 
     // Channel selector tests moved to discord-panel (ROK-359: channel selector relocated to Channel Bindings tab)
+
 });

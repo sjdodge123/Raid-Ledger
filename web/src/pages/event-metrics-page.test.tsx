@@ -67,7 +67,7 @@ const mockMetrics: EventMetricsResponseDto = {
     ],
 };
 
-describe('EventMetricsPage', () => {
+describe('EventMetricsPage — part 1', () => {
     beforeEach(() => {
         server.use(
             http.get(`${API_BASE}/events/:id/metrics`, () =>
@@ -131,12 +131,34 @@ describe('EventMetricsPage', () => {
         });
     });
 
+});
+
+describe('EventMetricsPage — part 2', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
+
     it('does NOT render voice timeline section when voiceSummary is null', async () => {
         renderWithProviders(<EventMetricsPage />, {
             initialEntries: ['/events/10/metrics'],
         });
         await waitFor(() => screen.getByText('Roster Breakdown'));
         expect(screen.queryByText('Voice Timeline')).not.toBeInTheDocument();
+    });
+
+});
+
+describe('EventMetricsPage — part 3', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
     });
 
     it('renders voice timeline section when voiceSummary has sessions', async () => {
@@ -186,6 +208,17 @@ describe('EventMetricsPage', () => {
         });
     });
 
+});
+
+describe('EventMetricsPage — part 4', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
+
     it('shows error state when metrics request fails', async () => {
         server.use(
             http.get(`${API_BASE}/events/:id/metrics`, () =>
@@ -232,6 +265,17 @@ describe('EventMetricsPage', () => {
         });
     });
 
+});
+
+describe('EventMetricsPage — part 5', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
+
     it('shows loading skeleton while data is fetching', () => {
         server.use(
             http.get(`${API_BASE}/events/:id/metrics`, async () => {
@@ -258,6 +302,17 @@ describe('EventMetricsPage', () => {
         });
         await waitFor(() => screen.getByText('Epic Raid Night'));
         expect(screen.queryByText('World of Warcraft')).not.toBeInTheDocument();
+    });
+
+});
+
+describe('EventMetricsPage — part 6', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
     });
 
     it('renders voice status columns in roster when voice data is present', async () => {
@@ -313,6 +368,17 @@ describe('EventMetricsPage', () => {
         });
     });
 
+});
+
+describe('EventMetricsPage — part 7', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/events/:id/metrics`, () =>
+                HttpResponse.json(mockMetrics),
+            ),
+        );
+    });
+
     it('does not render voice status columns in roster when no voice data', async () => {
         renderWithProviders(<EventMetricsPage />, {
             initialEntries: ['/events/10/metrics'],
@@ -321,4 +387,5 @@ describe('EventMetricsPage', () => {
         expect(screen.queryByText('Voice Status')).not.toBeInTheDocument();
         expect(screen.queryByText('Voice Duration')).not.toBeInTheDocument();
     });
+
 });
