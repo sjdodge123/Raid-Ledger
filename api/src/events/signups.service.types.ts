@@ -79,6 +79,11 @@ export type RosterSnapshotEntry = {
   position: number;
 };
 
+export interface DuplicateSignupParams extends SignupTxParams {
+  autoBench: boolean;
+  hasCharacter: boolean;
+}
+
 export interface DisplaceTentativeParams {
   tx: Tx;
   eventId: number;

@@ -34,6 +34,7 @@ import type {
 } from '@raid-ledger/contract';
 import type {
   SignupTxParams,
+  DuplicateSignupParams,
   DirectSlotParams,
   NewSignupParams,
   DiscordSlotParams,
@@ -138,13 +139,7 @@ export class SignupsService {
     const { tx, eventRow, eventId, userId, dto, user } = p;
     const autoBench = await this.checkAutoBench(tx, eventRow, eventId, dto);
     const hasCharacter = !!dto?.characterId;
-    const rows = await this.insertSignupRow(
-      tx,
-      eventId,
-      userId,
-      dto,
-      hasCharacter,
-    );
+    const rows = await this.insertSignupRow(tx, eventId, userId, dto);
 
     if (rows.length === 0) {
       return this.handleDuplicateSignup({
@@ -197,8 +192,8 @@ export class SignupsService {
     eventId: number,
     userId: number,
     dto?: CreateSignupDto,
-    hasCharacter = false,
   ) {
+    const hasCharacter = !!dto?.characterId;
     return tx
       .insert(schema.eventSignups)
       .values({
@@ -216,29 +211,11 @@ export class SignupsService {
       .returning();
   }
 
-  private async handleDuplicateSignup(p: {
-    tx: PostgresJsDatabase<typeof schema>;
-    eventRow: typeof schema.events.$inferSelect;
-    eventId: number;
-    userId: number;
-    dto: CreateSignupDto | undefined;
-    autoBench: boolean;
-    hasCharacter: boolean;
-    user: typeof schema.users.$inferSelect | undefined;
-  }) {
-    const {
-      tx,
-      eventRow,
-      eventId,
-      userId,
-      dto,
-      autoBench,
-      hasCharacter,
-      user,
-    } = p;
+  private async handleDuplicateSignup(p: DuplicateSignupParams) {
+    const { tx, eventRow, eventId, userId, dto, user } = p;
     const existing = await this.fetchExistingSignup(tx, eventId, userId);
 
-    await this.reactivateIfCancelled(tx, existing, dto, hasCharacter);
+    await this.reactivateIfCancelled(tx, existing, dto, p.hasCharacter);
     await this.updatePreferredRolesIfNeeded(tx, existing, dto);
     await this.ensureAssignment(
       tx,
@@ -246,7 +223,7 @@ export class SignupsService {
       eventId,
       existing,
       dto,
-      autoBench,
+      p.autoBench,
     );
 
     const character = existing.characterId
@@ -2605,32 +2582,40 @@ export class SignupsService {
       return;
 
     const newPrefs = sortByRolePriority(newSignup.preferredRoles);
-    if (await this.tryDirectAllocation(tx, eventId, newSignupId, newPrefs, ctx))
-      return;
-    if (
-      await this.tryChainRearrangement({
-        tx,
-        eventId,
-        newSignupId,
-        newPrefs,
-        ctx,
-      })
-    )
-      return;
-    if (
-      await this.tryTentativeDisplacement(
-        tx,
-        eventId,
-        newSignupId,
-        newPrefs,
-        newSignup.status,
-        ctx,
-      )
-    )
-      return;
+    const placed = await this.runAllocationStrategies(
+      tx,
+      eventId,
+      newSignupId,
+      newPrefs,
+      newSignup.status,
+      ctx,
+    );
+    if (!placed) {
+      this.logger.log(
+        `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement or tentative displacement available)`,
+      );
+    }
+  }
 
-    this.logger.log(
-      `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement or tentative displacement available)`,
+  private async runAllocationStrategies(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    newSignupId: number,
+    newPrefs: string[],
+    status: string,
+    ctx: AllocationContext,
+  ): Promise<boolean> {
+    if (await this.tryDirectAllocation(tx, eventId, newSignupId, newPrefs, ctx))
+      return true;
+    const cp = { tx, eventId, newSignupId, newPrefs, ctx };
+    if (await this.tryChainRearrangement(cp)) return true;
+    return this.tryTentativeDisplacement(
+      tx,
+      eventId,
+      newSignupId,
+      newPrefs,
+      status,
+      ctx,
     );
   }
 
@@ -2725,35 +2710,33 @@ export class SignupsService {
     newPrefs: string[];
     ctx: AllocationContext;
   }): Promise<boolean> {
-    const { tx, eventId, newSignupId, newPrefs, ctx } = p;
     const chain = this.findRearrangementChain(
-      newPrefs,
-      ctx.currentAssignments,
-      ctx.allSignups,
-      ctx.roleCapacity,
-      ctx.filledPerRole,
+      p.newPrefs,
+      p.ctx.currentAssignments,
+      p.ctx.allSignups,
+      p.ctx.roleCapacity,
+      p.ctx.filledPerRole,
     );
     if (!chain) return false;
 
-    await this.executeChainMoves(tx, chain, ctx);
-    const { freedRole } = chain;
-    const freedPosition = chain.moves[0].position;
-    await this.insertAndConfirmSlot(
-      tx,
-      eventId,
-      newSignupId,
-      freedRole,
-      freedPosition,
-    );
-    this.logger.log(
-      `Auto-allocated signup ${newSignupId} to ${freedRole} slot ${freedPosition} (${chain.moves.length}-step chain rearrangement)`,
-    );
-    await this.benchPromotionService.cancelPromotion(
-      eventId,
-      freedRole,
-      freedPosition,
-    );
+    await this.executeChainMoves(p.tx, chain, p.ctx);
+    await this.applyChainResult(p.tx, p.eventId, p.newSignupId, chain);
     return true;
+  }
+
+  private async applyChainResult(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    newSignupId: number,
+    chain: { freedRole: string; moves: { position: number }[] },
+  ) {
+    const { freedRole } = chain;
+    const pos = chain.moves[0].position;
+    await this.insertAndConfirmSlot(tx, eventId, newSignupId, freedRole, pos);
+    this.logger.log(
+      `Auto-allocated signup ${newSignupId} to ${freedRole} slot ${pos} (${chain.moves.length}-step chain rearrangement)`,
+    );
+    await this.benchPromotionService.cancelPromotion(eventId, freedRole, pos);
   }
 
   private async executeChainMoves(
@@ -3004,38 +2987,21 @@ export class SignupsService {
   private async displaceTentativeForSlot(
     p: DisplaceTentativeParams,
   ): Promise<boolean> {
-    const {
-      tx,
-      eventId,
-      newSignupId,
-      newPrefs,
-      currentAssignments,
-      allSignups,
-      roleCapacity,
-      occupiedPositions,
-      findPos,
-    } = p;
-    const signupById = new Map(allSignups.map((s) => [s.id, s]));
+    const signupById = new Map(p.allSignups.map((s) => [s.id, s]));
 
-    for (const role of newPrefs) {
-      if (!(role in roleCapacity)) continue;
+    for (const role of p.newPrefs) {
+      if (!(role in p.roleCapacity)) continue;
       const victim = findOldestTentativeOccupant(
-        currentAssignments,
+        p.currentAssignments,
         role,
         signupById,
       );
       if (!victim) continue;
 
       const displaced = await this.executeDisplacement({
-        tx,
-        eventId,
-        newSignupId,
+        ...p,
         role,
         victim,
-        currentAssignments,
-        roleCapacity,
-        occupiedPositions,
-        findPos,
         signupById,
       });
       if (displaced) return true;
@@ -3046,91 +3012,78 @@ export class SignupsService {
   private async executeDisplacement(
     p: ExecuteDisplacementParams,
   ): Promise<boolean> {
-    const {
-      tx,
-      eventId,
-      newSignupId,
-      role,
-      victim,
-      currentAssignments,
-      roleCapacity,
-      occupiedPositions,
-      findPos,
-      signupById,
-    } = p;
     const rearrangedToRole = await this.tryRearrangeVictim({
-      tx,
-      victim,
-      displacedRole: role,
-      currentAssignments,
-      roleCapacity,
-      occupiedPositions,
-      findPos,
-      signupById,
+      tx: p.tx,
+      victim: p.victim,
+      displacedRole: p.role,
+      currentAssignments: p.currentAssignments,
+      roleCapacity: p.roleCapacity,
+      occupiedPositions: p.occupiedPositions,
+      findPos: p.findPos,
+      signupById: p.signupById,
     });
 
     if (!rearrangedToRole)
-      await this.removeVictimAssignment(tx, victim, role, occupiedPositions);
-    const freedPosition = rearrangedToRole ? findPos(role) : victim.position;
+      await this.removeVictimAssignment(
+        p.tx,
+        p.victim,
+        p.role,
+        p.occupiedPositions,
+      );
+    const pos = rearrangedToRole ? p.findPos(p.role) : p.victim.position;
+    await this.placeAndNotifyDisplacement(p, pos, rearrangedToRole);
+    return true;
+  }
+
+  private async placeAndNotifyDisplacement(
+    p: ExecuteDisplacementParams,
+    pos: number,
+    rearrangedToRole: string | undefined,
+  ) {
     await this.insertAndConfirmSlot(
-      tx,
-      eventId,
-      newSignupId,
-      role,
-      freedPosition,
+      p.tx,
+      p.eventId,
+      p.newSignupId,
+      p.role,
+      pos,
     );
-    occupiedPositions[role]?.add(freedPosition);
+    p.occupiedPositions[p.role]?.add(pos);
     this.logger.log(
-      `ROK-459: Auto-allocated confirmed signup ${newSignupId} to ${role} slot ${freedPosition} (tentative displacement)`,
+      `ROK-459: Auto-allocated confirmed signup ${p.newSignupId} to ${p.role} slot ${pos} (tentative displacement)`,
     );
-    await this.benchPromotionService.cancelPromotion(
-      eventId,
-      role,
-      freedPosition,
-    );
+    await this.benchPromotionService.cancelPromotion(p.eventId, p.role, pos);
     this.fireDisplacedNotification({
-      tx,
-      eventId,
-      victimSignupId: victim.signupId,
-      role,
+      tx: p.tx,
+      eventId: p.eventId,
+      victimSignupId: p.victim.signupId,
+      role: p.role,
       rearrangedToRole,
     });
-    return true;
   }
 
   private async tryRearrangeVictim(
     p: RearrangeVictimParams,
   ): Promise<string | undefined> {
-    const {
-      tx,
-      victim,
-      displacedRole,
-      currentAssignments,
-      roleCapacity,
-      occupiedPositions,
-      findPos,
-      signupById,
-    } = p;
-    const victimPrefs = signupById.get(victim.signupId)?.preferredRoles ?? [];
-    const altRoles = victimPrefs.filter(
-      (r) => r !== displacedRole && r in roleCapacity,
+    const prefs = p.signupById.get(p.victim.signupId)?.preferredRoles ?? [];
+    const altRoles = prefs.filter(
+      (r) => r !== p.displacedRole && r in p.roleCapacity,
     );
 
     for (const altRole of altRoles) {
-      const filledInAlt = currentAssignments.filter(
+      const filled = p.currentAssignments.filter(
         (a) => a.role === altRole,
       ).length;
-      if (filledInAlt >= roleCapacity[altRole]) continue;
+      if (filled >= p.roleCapacity[altRole]) continue;
 
-      const newPos = findPos(altRole);
-      await tx
+      const newPos = p.findPos(altRole);
+      await p.tx
         .update(schema.rosterAssignments)
         .set({ role: altRole, position: newPos })
-        .where(eq(schema.rosterAssignments.id, victim.id));
-      occupiedPositions[displacedRole]?.delete(victim.position);
-      occupiedPositions[altRole]?.add(newPos);
+        .where(eq(schema.rosterAssignments.id, p.victim.id));
+      p.occupiedPositions[p.displacedRole]?.delete(p.victim.position);
+      p.occupiedPositions[altRole]?.add(newPos);
       this.logger.log(
-        `ROK-459: Rearranged tentative signup ${victim.signupId} from ${displacedRole} slot ${victim.position} to ${altRole} slot ${newPos}`,
+        `ROK-459: Rearranged tentative signup ${p.victim.signupId} from ${p.displacedRole} slot ${p.victim.position} to ${altRole} slot ${newPos}`,
       );
       return altRole;
     }
@@ -3678,8 +3631,7 @@ function tryOccupantMoves(
       return { freedRole, moves: newMoves };
     }
 
-    const newUsed = new Set(entry.usedSignupIds);
-    newUsed.add(occupant.signupId);
+    const newUsed = new Set([...entry.usedSignupIds, occupant.signupId]);
     queue.push({
       roleToFree: altRole,
       moves: newMoves,
