@@ -34,6 +34,18 @@ import {
   demoteExistingMain,
 } from './characters-mapping.helpers';
 
+type CharProfile = { name: string; realm: string; [k: string]: unknown };
+
+interface ImportTxParams {
+  tx: PostgresJsDatabase<typeof schema>;
+  userId: number;
+  gameId: number;
+  profile: CharProfile;
+  dto: ImportWowCharacterDto;
+  equipment: unknown;
+  talents: unknown;
+}
+
 /**
  * Service for managing player characters (ROK-130).
  * Supports Main/Alt designation with enforced single main per game.
@@ -427,15 +439,8 @@ export class CharactersService {
   }
 
   /** Execute the import transaction body. */
-  private async executeImportTx(
-    tx: PostgresJsDatabase<typeof schema>,
-    userId: number,
-    gameId: number,
-    profile: { name: string; realm: string; [k: string]: unknown },
-    dto: ImportWowCharacterDto,
-    equipment: unknown,
-    talents: unknown,
-  ): Promise<CharacterDto> {
+  private async executeImportTx(p: ImportTxParams): Promise<CharacterDto> {
+    const { tx, userId, gameId, profile, dto, equipment, talents } = p;
     await this.checkDuplicateClaim(
       tx,
       gameId,
@@ -471,7 +476,7 @@ export class CharactersService {
     talents: unknown,
   ): Promise<CharacterDto> {
     return this.db.transaction(async (tx) => {
-      return this.executeImportTx(
+      return this.executeImportTx({
         tx,
         userId,
         gameId,
@@ -479,7 +484,7 @@ export class CharactersService {
         dto,
         equipment,
         talents,
-      );
+      });
     });
   }
 

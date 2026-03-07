@@ -261,13 +261,13 @@ export async function handleNewLinkedSignup(
   }
 
   if (event.gameId) {
-    const handled = await tryGameSignupFlow(
+    const handled = await tryGameSignupFlow({
       interaction,
       eventId,
       linkedUser,
       event,
       deps,
-    );
+    });
     if (handled) return;
   }
 
@@ -367,19 +367,23 @@ async function tryCharacterSignupPath(
   return null;
 }
 
-async function tryGameSignupFlow(
-  interaction: ButtonInteraction,
-  eventId: number,
-  linkedUser: typeof schema.users.$inferSelect,
-  event: typeof schema.events.$inferSelect,
-  deps: SignupInteractionDeps,
-): Promise<boolean> {
+type GameSignupFlowArgs = {
+  interaction: ButtonInteraction;
+  eventId: number;
+  linkedUser: typeof schema.users.$inferSelect;
+  event: typeof schema.events.$inferSelect;
+  deps: SignupInteractionDeps;
+};
+
+async function tryGameSignupFlow(a: GameSignupFlowArgs): Promise<boolean> {
+  const { interaction, eventId, linkedUser, event, deps } = a;
   const ctx = await loadGameSignupContext(linkedUser, event, deps);
   if (!ctx) return false;
+  const uid = linkedUser.id;
   const charResult = await tryCharacterSignupPath({
     interaction,
     eventId,
-    userId: linkedUser.id,
+    userId: uid,
     event,
     ctx,
     deps,
@@ -389,14 +393,14 @@ async function tryGameSignupFlow(
     await showRoleSelect(interaction, eventId, deps);
     return true;
   }
-  return signupWithoutCharacter(
+  return signupWithoutCharacter({
     interaction,
     eventId,
-    linkedUser.id,
+    userId: uid,
     event,
-    ctx.game,
+    game: ctx.game,
     deps,
-  );
+  });
 }
 
 async function signupSingleCharacter(
@@ -415,14 +419,17 @@ async function signupSingleCharacter(
   return true;
 }
 
-async function signupWithoutCharacter(
-  interaction: ButtonInteraction,
-  eventId: number,
-  userId: number,
-  event: typeof schema.events.$inferSelect,
-  game: { hasRoles: boolean },
-  deps: SignupInteractionDeps,
-): Promise<boolean> {
+interface NoCharSignupArgs {
+  interaction: ButtonInteraction;
+  eventId: number;
+  userId: number;
+  event: typeof schema.events.$inferSelect;
+  game: { hasRoles: boolean };
+  deps: SignupInteractionDeps;
+}
+
+async function signupWithoutCharacter(a: NoCharSignupArgs): Promise<boolean> {
+  const { interaction, eventId, userId, event, game, deps } = a;
   await deps.signupsService.signup(eventId, userId);
   const clientUrl = process.env.CLIENT_URL ?? '';
   const nudge =

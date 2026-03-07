@@ -83,13 +83,13 @@ async function handleLinkedTentative(
   }
 
   if (event.gameId) {
-    const handled = await tryLinkedTentativeGameFlow(
+    const handled = await tryLinkedTentativeGameFlow({
       interaction,
       eventId,
       linkedUser,
       event,
       deps,
-    );
+    });
     if (handled) return;
   }
 
@@ -198,13 +198,18 @@ async function tryTentativeCharPath(
   return null;
 }
 
+type TentativeGameFlowArgs = {
+  interaction: ButtonInteraction;
+  eventId: number;
+  linkedUser: typeof schema.users.$inferSelect;
+  event: typeof schema.events.$inferSelect;
+  deps: SignupInteractionDeps;
+};
+
 async function tryLinkedTentativeGameFlow(
-  interaction: ButtonInteraction,
-  eventId: number,
-  linkedUser: typeof schema.users.$inferSelect,
-  event: typeof schema.events.$inferSelect,
-  deps: SignupInteractionDeps,
+  a: TentativeGameFlowArgs,
 ): Promise<boolean> {
+  const { interaction, eventId, linkedUser, event, deps } = a;
   const ctx = await loadTentativeGameContext(linkedUser, event, deps);
   if (!ctx) return false;
   const charResult = await tryTentativeCharPath({

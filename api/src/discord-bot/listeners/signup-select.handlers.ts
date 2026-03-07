@@ -122,14 +122,14 @@ async function dispatchRoleSelect(
   signupStatus?: 'tentative',
 ): Promise<void> {
   if (characterId) {
-    await handleLinkedRoleSelect(
+    await handleLinkedRoleSelect({
       interaction,
       eventId,
       deps,
       characterId,
       roleCtx,
       signupStatus,
-    );
+    });
   } else {
     await handleUnlinkedRoleSelect(
       interaction,
@@ -157,17 +157,20 @@ function buildRoleSignupOptions(
   return { preferredRoles: selectedRoles };
 }
 
+interface LinkedRoleSelectArgs {
+  interaction: StringSelectMenuInteraction;
+  eventId: number;
+  deps: SignupInteractionDeps;
+  characterId: string;
+  roleCtx: RoleSelectInfo;
+  signupStatus?: 'tentative';
+}
+
 /**
  * Role select for a linked user with a character.
  */
-async function handleLinkedRoleSelect(
-  interaction: StringSelectMenuInteraction,
-  eventId: number,
-  deps: SignupInteractionDeps,
-  characterId: string,
-  roleCtx: RoleSelectInfo,
-  signupStatus?: 'tentative',
-): Promise<void> {
+async function handleLinkedRoleSelect(a: LinkedRoleSelectArgs): Promise<void> {
+  const { interaction, deps, characterId, roleCtx, signupStatus } = a;
   const linkedUser = await findLinkedUser(interaction.user.id, deps);
   if (!linkedUser) {
     await replyNoLinkedAccount(interaction);
@@ -179,7 +182,7 @@ async function handleLinkedRoleSelect(
   );
   await signupWithCharacter(
     deps,
-    eventId,
+    a.eventId,
     linkedUser.id,
     characterId,
     opts,
@@ -187,7 +190,7 @@ async function handleLinkedRoleSelect(
   );
   await confirmCharRoleSignup(
     interaction,
-    eventId,
+    a.eventId,
     deps,
     linkedUser.id,
     characterId,
