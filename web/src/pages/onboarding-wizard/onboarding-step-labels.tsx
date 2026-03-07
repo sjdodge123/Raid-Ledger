@@ -39,37 +39,34 @@ export function ConnectStepLabel({ user, isCurrent, isVisited }: {
     );
 }
 
+/** Saved character avatar + name label */
+function SavedCharLabel({ avatarUrl, name, isCurrent, isVisited }: {
+    avatarUrl: string | null; name: string; isCurrent: boolean; isVisited: boolean;
+}): JSX.Element {
+    return (
+        <>
+            {avatarUrl ? (
+                <img src={avatarUrl} alt={name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
+            ) : (
+                <StepDot isCurrent={isCurrent} isVisited={isVisited} />
+            )}
+            <span className="truncate max-w-[6rem]">{name}</span>
+        </>
+    );
+}
+
 /**
  * Breadcrumb label for character steps — shows avatar + name when saved,
  * falls back to game name + dot when empty.
  */
 export function CharacterStepLabel({ game, charIndex, isCurrent, isVisited }: {
-    game: GameRegistryDto;
-    charIndex: number;
-    isCurrent: boolean;
-    isVisited: boolean;
+    game: GameRegistryDto; charIndex: number; isCurrent: boolean; isVisited: boolean;
 }): JSX.Element {
     const { data: myCharsData } = useMyCharacters(game.id);
-    const chars = myCharsData?.data ?? [];
-    const char = chars[charIndex];
-
+    const char = (myCharsData?.data ?? [])[charIndex];
     if (char) {
-        return (
-            <>
-                {char.avatarUrl ? (
-                    <img
-                        src={char.avatarUrl}
-                        alt={char.name}
-                        className="w-4 h-4 rounded-full object-cover flex-shrink-0"
-                    />
-                ) : (
-                    <StepDot isCurrent={isCurrent} isVisited={isVisited} />
-                )}
-                <span className="truncate max-w-[6rem]">{char.name}</span>
-            </>
-        );
+        return <SavedCharLabel avatarUrl={char.avatarUrl} name={char.name} isCurrent={isCurrent} isVisited={isVisited} />;
     }
-
     return (
         <>
             <StepDot isCurrent={isCurrent} isVisited={isVisited} />

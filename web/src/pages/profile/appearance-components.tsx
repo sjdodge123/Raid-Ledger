@@ -42,6 +42,28 @@ function ModeIcon({ icon, className }: { icon: 'sun' | 'moon' | 'monitor'; class
     );
 }
 
+/** Mode selector button group (light / dark / auto) */
+function ModeSelector({ themeMode, setMode }: {
+    themeMode: ThemeModePreference; setMode: (m: ThemeModePreference) => void;
+}): JSX.Element {
+    return (
+        <div className="flex gap-3 mb-6">
+            {MODE_OPTIONS.map((opt) => (
+                <button key={opt.mode} onClick={() => setMode(opt.mode)}
+                    className={`flex-1 flex flex-col items-center gap-1.5 px-4 py-3 rounded-lg border-2 transition-colors ${
+                        themeMode === opt.mode
+                            ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
+                            : 'border-edge bg-panel text-secondary hover:border-edge-strong'
+                    }`}>
+                    <ModeIcon icon={opt.icon} className="w-5 h-5" />
+                    <div className="font-medium text-sm">{opt.label}</div>
+                    <div className="text-xs text-muted">{opt.subtitle}</div>
+                </button>
+            ))}
+        </div>
+    );
+}
+
 /** Appearance section with mode selector and theme pickers (AC-4) */
 export function AppearanceSection(): JSX.Element {
     const themeMode = useThemeStore((s) => s.themeMode);
@@ -50,10 +72,8 @@ export function AppearanceSection(): JSX.Element {
     const setMode = useThemeStore((s) => s.setMode);
     const setLightTheme = useThemeStore((s) => s.setLightTheme);
     const setDarkTheme = useThemeStore((s) => s.setDarkTheme);
-
     const lightThemes = getLightThemes();
     const darkThemes = getDarkThemes();
-
     const showLightPicker = themeMode === 'light' || themeMode === 'auto';
     const showDarkPicker = themeMode === 'dark' || themeMode === 'auto';
 
@@ -61,20 +81,7 @@ export function AppearanceSection(): JSX.Element {
         <div className="bg-surface border border-edge-subtle rounded-xl p-6">
             <h2 className="text-xl font-semibold text-foreground mb-1">Appearance</h2>
             <p className="text-sm text-muted mb-5">Choose your preferred color scheme and theme</p>
-            <div className="flex gap-3 mb-6">
-                {MODE_OPTIONS.map((opt) => (
-                    <button key={opt.mode} onClick={() => setMode(opt.mode)}
-                        className={`flex-1 flex flex-col items-center gap-1.5 px-4 py-3 rounded-lg border-2 transition-colors ${
-                            themeMode === opt.mode
-                                ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
-                                : 'border-edge bg-panel text-secondary hover:border-edge-strong'
-                        }`}>
-                        <ModeIcon icon={opt.icon} className="w-5 h-5" />
-                        <div className="font-medium text-sm">{opt.label}</div>
-                        <div className="text-xs text-muted">{opt.subtitle}</div>
-                    </button>
-                ))}
-            </div>
+            <ModeSelector themeMode={themeMode} setMode={setMode} />
             {showLightPicker && <ThemePicker label={themeMode === 'auto' ? 'Light Mode Theme' : 'Light Themes'} themes={lightThemes} activeId={lightTheme} onSelect={setLightTheme} />}
             {showDarkPicker && <ThemePicker label={themeMode === 'auto' ? 'Dark Mode Theme' : 'Dark Themes'} themes={darkThemes} activeId={darkTheme} onSelect={setDarkTheme} />}
         </div>

@@ -1,6 +1,8 @@
 import type { JSX } from 'react';
 import { useState } from 'react';
 
+const INPUT_CLASS = 'w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all';
+
 /** Password visibility toggle button */
 function PasswordToggle({ showPassword, onToggle }: {
     showPassword: boolean; onToggle: () => void;
@@ -23,6 +25,36 @@ function PasswordToggle({ showPassword, onToggle }: {
     );
 }
 
+/** Username input field */
+function UsernameField({ value, onChange }: {
+    value: string; onChange: (v: string) => void;
+}): JSX.Element {
+    return (
+        <div>
+            <label htmlFor="username" className="block text-sm font-medium text-secondary mb-1.5">Username</label>
+            <input id="username" type="text" value={value} onChange={(e) => onChange(e.target.value)}
+                className={INPUT_CLASS} placeholder="admin" required />
+        </div>
+    );
+}
+
+/** Password input field with visibility toggle */
+function PasswordField({ value, onChange }: {
+    value: string; onChange: (v: string) => void;
+}): JSX.Element {
+    const [showPassword, setShowPassword] = useState(false);
+    return (
+        <div>
+            <label htmlFor="password" className="block text-sm font-medium text-secondary mb-1.5">Password</label>
+            <div className="relative">
+                <input id="password" type={showPassword ? 'text' : 'password'} value={value} onChange={(e) => onChange(e.target.value)}
+                    className={`${INPUT_CLASS} pr-12`} placeholder="--------" required />
+                <PasswordToggle showPassword={showPassword} onToggle={() => setShowPassword(!showPassword)} />
+            </div>
+        </div>
+    );
+}
+
 interface LocalLoginFormProps {
     onSubmit: (username: string, password: string) => Promise<void>;
     isLoading: boolean;
@@ -33,7 +65,6 @@ interface LocalLoginFormProps {
 export function LocalLoginForm({ onSubmit, isLoading, error }: LocalLoginFormProps): JSX.Element {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = (e: React.FormEvent): void => {
         e.preventDefault();
@@ -42,35 +73,29 @@ export function LocalLoginForm({ onSubmit, isLoading, error }: LocalLoginFormPro
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-                <label htmlFor="username" className="block text-sm font-medium text-secondary mb-1.5">Username</label>
-                <input id="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    placeholder="admin" required />
-            </div>
-            <div>
-                <label htmlFor="password" className="block text-sm font-medium text-secondary mb-1.5">Password</label>
-                <div className="relative">
-                    <input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                        className="w-full px-4 py-3 pr-12 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                        placeholder="--------" required />
-                    <PasswordToggle showPassword={showPassword} onToggle={() => setShowPassword(!showPassword)} />
-                </div>
-            </div>
+            <UsernameField value={username} onChange={setUsername} />
+            <PasswordField value={password} onChange={setPassword} />
             {error && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                     <p className="text-sm text-red-400">{error}</p>
                 </div>
             )}
-            <button type="submit" disabled={isLoading}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900">
-                {isLoading ? (
-                    <span className="flex items-center justify-center gap-2">
-                        <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
-                        Signing in...
-                    </span>
-                ) : 'Sign In'}
-            </button>
+            <SubmitButton isLoading={isLoading} />
         </form>
+    );
+}
+
+/** Submit button with loading spinner */
+function SubmitButton({ isLoading }: { isLoading: boolean }): JSX.Element {
+    return (
+        <button type="submit" disabled={isLoading}
+            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900">
+            {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                    Signing in...
+                </span>
+            ) : 'Sign In'}
+        </button>
     );
 }

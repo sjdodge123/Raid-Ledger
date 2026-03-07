@@ -4,43 +4,57 @@ import { SteamIcon } from '../../components/icons/SteamIcon';
 import { RoleBadge } from '../../components/ui/role-badge';
 import { isDiscordLinked } from '../../lib/avatar';
 
+/** Clickable avatar button with hover overlay */
+function AvatarButton({ avatarUrl, username, onClick }: {
+    avatarUrl: string; username: string; onClick: () => void;
+}): JSX.Element {
+    return (
+        <button type="button" onClick={onClick} className="relative group flex-shrink-0" aria-label="Change avatar">
+            <img src={avatarUrl} alt={username}
+                className="w-16 h-16 rounded-full border-2 border-emerald-500/50 object-cover"
+                onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
+            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </div>
+        </button>
+    );
+}
+
+/** Discord linked status badge or local account label */
+function AccountStatusLabel({ hasDiscordLinked }: { hasDiscordLinked: boolean }): JSX.Element {
+    if (hasDiscordLinked) {
+        return (
+            <div className="flex items-center gap-2 mt-0.5">
+                <span className="inline-flex items-center gap-1 text-sm text-emerald-400">
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Discord linked
+                </span>
+            </div>
+        );
+    }
+    return <p className="text-sm text-muted mt-0.5">Local account</p>;
+}
+
 /** User identity card with avatar and role badge */
 export function UserIdentityCard({ user, currentAvatarUrl, onOpenAvatarModal }: {
     user: { username: string; role?: UserRole; discordId: string | null };
     currentAvatarUrl: string;
     onOpenAvatarModal: () => void;
 }): JSX.Element {
-    const hasDiscordLinked = isDiscordLinked(user.discordId);
     return (
         <div className="flex items-center gap-4 p-4 bg-panel rounded-lg border border-edge">
-            <button type="button" onClick={onOpenAvatarModal} className="relative group flex-shrink-0" aria-label="Change avatar">
-                <img src={currentAvatarUrl} alt={user.username}
-                    className="w-16 h-16 rounded-full border-2 border-emerald-500/50 object-cover"
-                    onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
-                <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                </div>
-            </button>
+            <AvatarButton avatarUrl={currentAvatarUrl} username={user.username} onClick={onOpenAvatarModal} />
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="text-lg font-bold text-foreground">{user.username}</span>
                     <RoleBadge role={user.role} />
                 </div>
-                {hasDiscordLinked ? (
-                    <div className="flex items-center gap-2 mt-0.5">
-                        <span className="inline-flex items-center gap-1 text-sm text-emerald-400">
-                            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            Discord linked
-                        </span>
-                    </div>
-                ) : (
-                    <p className="text-sm text-muted mt-0.5">Local account</p>
-                )}
+                <AccountStatusLabel hasDiscordLinked={isDiscordLinked(user.discordId)} />
             </div>
         </div>
     );
@@ -62,6 +76,61 @@ export function DiscordLinkCta({ onLink }: { onLink: () => void }): JSX.Element 
     );
 }
 
+/** Steam linked info panel with sync/unlink buttons */
+function SteamLinkedPanel({ personaName, isPublic, syncLibrary, unlinkSteam }: {
+    personaName: string | null | undefined; isPublic: boolean | undefined;
+    syncLibrary: { mutate: () => void; isPending: boolean };
+    unlinkSteam: { mutate: () => void; isPending: boolean };
+}): JSX.Element {
+    return (
+        <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">
+            <div className="flex items-center justify-between gap-4">
+                <SteamLinkedInfo personaName={personaName} isPublic={isPublic} />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={() => syncLibrary.mutate()} disabled={syncLibrary.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
+                        {syncLibrary.isPending ? 'Syncing...' : 'Sync Library'}
+                    </button>
+                    <span className="text-muted">|</span>
+                    <button onClick={() => unlinkSteam.mutate()} disabled={unlinkSteam.isPending} className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50">
+                        {unlinkSteam.isPending ? 'Unlinking...' : 'Unlink'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/** Steam linked account info (icon + name + privacy warning) */
+function SteamLinkedInfo({ personaName, isPublic }: {
+    personaName: string | null | undefined; isPublic: boolean | undefined;
+}): JSX.Element {
+    return (
+        <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#1B2838] flex items-center justify-center flex-shrink-0">
+                <SteamIcon className="w-5 h-5 text-white" />
+            </div>
+            <div>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{personaName || 'Steam Linked'}</span>
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        Linked
+                    </span>
+                </div>
+                {isPublic === false && (
+                    <p className="text-xs text-amber-400 mt-0.5">
+                        Profile is private — set Game Details to Public in{' '}
+                        <a href="https://steamcommunity.com/my/edit/settings" target="_blank" rel="noopener noreferrer" className="underline">Steam Privacy Settings</a>
+                        {' '}for library sync
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+}
+
 /** Steam account section — linked or link CTA */
 export function SteamSection({ steamStatus, linkSteam, unlinkSteam, syncLibrary }: {
     steamStatus: { data?: { linked: boolean; personaName?: string | null; isPublic?: boolean } | undefined };
@@ -70,44 +139,7 @@ export function SteamSection({ steamStatus, linkSteam, unlinkSteam, syncLibrary 
     syncLibrary: { mutate: () => void; isPending: boolean };
 }): JSX.Element {
     if (steamStatus.data?.linked) {
-        return (
-            <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[#1B2838] flex items-center justify-center flex-shrink-0">
-                            <SteamIcon className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-foreground">{steamStatus.data.personaName || 'Steam Linked'}</span>
-                                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
-                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                    </svg>
-                                    Linked
-                                </span>
-                            </div>
-                            {steamStatus.data.isPublic === false && (
-                                <p className="text-xs text-amber-400 mt-0.5">
-                                    Profile is private — set Game Details to Public in{' '}
-                                    <a href="https://steamcommunity.com/my/edit/settings" target="_blank" rel="noopener noreferrer" className="underline">Steam Privacy Settings</a>
-                                    {' '}for library sync
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                        <button onClick={() => syncLibrary.mutate()} disabled={syncLibrary.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
-                            {syncLibrary.isPending ? 'Syncing...' : 'Sync Library'}
-                        </button>
-                        <span className="text-muted">|</span>
-                        <button onClick={() => unlinkSteam.mutate()} disabled={unlinkSteam.isPending} className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50">
-                            {unlinkSteam.isPending ? 'Unlinking...' : 'Unlink'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
+        return <SteamLinkedPanel personaName={steamStatus.data.personaName} isPublic={steamStatus.data.isPublic} syncLibrary={syncLibrary} unlinkSteam={unlinkSteam} />;
     }
     return (
         <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">

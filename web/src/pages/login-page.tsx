@@ -10,21 +10,9 @@ import { DiscordIcon } from '../components/icons/DiscordIcon';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LocalLoginForm } from './login/LocalLoginForm';
 
-/**
- * Login page with pluggable auth providers and local username/password options.
- * When auth providers are configured (e.g. Discord), OAuth is shown prominently
- * with local login collapsed behind a toggle.
- */
-export function LoginPage(): JSX.Element {
-    const navigate = useNavigate();
-    const { login } = useAuth();
-    const { data: systemStatus } = useSystemStatus();
-    const [isLoading, setIsLoading] = useState(false);
-    const [isRedirecting, setIsRedirecting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [showLocalLogin, setShowLocalLogin] = useState(false);
+/** Watches for OAuth error query param and displays a toast */
+function useOAuthErrorHandler(): void {
     const [searchParams, setSearchParams] = useSearchParams();
-
     useEffect(() => {
         const oauthError = searchParams.get('error');
         if (oauthError === 'oauth_failed') {
@@ -33,32 +21,56 @@ export function LoginPage(): JSX.Element {
             setSearchParams(searchParams, { replace: true });
         }
     }, [searchParams, setSearchParams]);
+}
 
+/** Derives community display info from system status */
+function useCommunityInfo(): {
+    isFirstRun: boolean; authProviders: LoginMethodDto[];
+    hasProviders: boolean; communityName: string; communityLogoUrl: string | null;
+} {
+    const { data: systemStatus } = useSystemStatus();
     const isFirstRun = systemStatus?.isFirstRun ?? false;
     const authProviders: LoginMethodDto[] = systemStatus?.authProviders ?? [];
     const hasProviders = authProviders.length > 0;
     const communityName = systemStatus?.communityName || 'Raid Ledger';
     const communityLogoUrl = systemStatus?.communityLogoUrl ? `${API_BASE_URL}${systemStatus.communityLogoUrl}` : null;
+    return { isFirstRun, authProviders, hasProviders, communityName, communityLogoUrl };
+}
 
-    useEffect(() => {
-        if (isFirstRun && hasProviders) setShowLocalLogin(true);
-    }, [isFirstRun, hasProviders]);
+/** Redirect logic after successful login */
+function handlePostLoginRedirect(
+    user: { role?: string; onboardingCompletedAt: string | null },
+    isFirstRun: boolean,
+    navigate: ReturnType<typeof useNavigate>,
+): void {
+    const hasSeenWelcome = localStorage.getItem('rl-welcome-shown');
+    if (isFirstRun && !hasSeenWelcome) {
+        localStorage.setItem('rl-welcome-shown', 'true');
+        setTimeout(() => toast.info('Welcome! Visit your Profile to add characters.', { duration: 6000 }), 1000);
+    }
+    if (user.role !== 'admin' && !user.onboardingCompletedAt) {
+        toast.success('Welcome! Let\'s get you set up.');
+        navigate('/onboarding', { replace: true });
+        return;
+    }
+    navigate(consumeAuthRedirect() || '/calendar', { replace: true });
+}
+
+/** Hook encapsulating local login state and handler */
+function useLocalLogin(isFirstRun: boolean): {
+    isLoading: boolean; error: string | null;
+    handleLocalLogin: (username: string, password: string) => Promise<void>;
+} {
+    const navigate = useNavigate();
+    const { login } = useAuth();
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const handleLocalLogin = async (username: string, password: string): Promise<void> => {
         setError(null);
         setIsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/local`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password }),
-            });
-            const data = await response.json().catch(() => ({ message: 'Server unavailable' }));
-            if (!response.ok) throw new Error(data.message || 'Invalid credentials');
-            const user = await login(data.access_token);
-            if (!user) throw new Error('Failed to authenticate');
-            toast.success('Logged in successfully!');
-            handlePostLoginRedirect(user);
+            await performLocalLogin({ username, password, login, isFirstRun, navigate });
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Login failed';
             setError(message);
@@ -68,19 +80,24 @@ export function LoginPage(): JSX.Element {
         }
     };
 
-    const handlePostLoginRedirect = (user: { role?: string; onboardingCompletedAt: string | null }): void => {
-        const hasSeenWelcome = localStorage.getItem('rl-welcome-shown');
-        if (isFirstRun && !hasSeenWelcome) {
-            localStorage.setItem('rl-welcome-shown', 'true');
-            setTimeout(() => toast.info('Welcome! Visit your Profile to add characters.', { duration: 6000 }), 1000);
-        }
-        if (user.role !== 'admin' && !user.onboardingCompletedAt) {
-            toast.success('Welcome! Let\'s get you set up.');
-            navigate('/onboarding', { replace: true });
-            return;
-        }
-        navigate(consumeAuthRedirect() || '/calendar', { replace: true });
-    };
+    return { isLoading, error, handleLocalLogin };
+}
+
+/**
+ * Login page with pluggable auth providers and local username/password options.
+ * When auth providers are configured (e.g. Discord), OAuth is shown prominently
+ * with local login collapsed behind a toggle.
+ */
+export function LoginPage(): JSX.Element {
+    const [isRedirecting, setIsRedirecting] = useState(false);
+    const [localLoginToggled, setLocalLoginToggled] = useState<boolean | null>(null);
+
+    useOAuthErrorHandler();
+    const { isFirstRun, authProviders, hasProviders, communityName, communityLogoUrl } = useCommunityInfo();
+    const { isLoading, error, handleLocalLogin } = useLocalLogin(isFirstRun);
+
+    // Show local login by default on first run with providers; otherwise respect user toggle
+    const showLocalLogin = localLoginToggled ?? (isFirstRun && hasProviders);
 
     const handleProviderLogin = (provider: LoginMethodDto): void => {
         setIsRedirecting(true);
@@ -92,34 +109,35 @@ export function LoginPage(): JSX.Element {
             <div className="w-full max-w-md">
                 <div className="bg-panel/50 backdrop-blur-sm rounded-2xl shadow-xl border border-edge/50 p-8">
                     <LoginHeader communityName={communityName} communityLogoUrl={communityLogoUrl} />
-                    {hasProviders ? (
-                        <>
-                            <ProviderButtons providers={authProviders} isRedirecting={isRedirecting} onLogin={handleProviderLogin} />
-                            <div className="text-center mt-6">
-                                <button type="button" onClick={() => setShowLocalLogin(!showLocalLogin)} className="text-sm text-muted hover:text-secondary transition-colors">
-                                    {showLocalLogin ? 'Hide username login' : 'Sign in with username instead'}
-                                </button>
-                            </div>
-                            {showLocalLogin && (
-                                <div className="mt-4">
-                                    <div className="relative mb-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-edge" /></div></div>
-                                    <LocalLoginForm onSubmit={handleLocalLogin} isLoading={isLoading} error={error} />
-                                </div>
-                            )}
-                        </>
-                    ) : (
-                        <LocalLoginForm onSubmit={handleLocalLogin} isLoading={isLoading} error={error} />
-                    )}
-                    {isFirstRun && (
-                        <div className="mt-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                            <p className="text-sm text-blue-300 text-center">First time? Your admin credentials are in the container logs.</p>
-                        </div>
-                    )}
+                    <LoginBody hasProviders={hasProviders} authProviders={authProviders} isRedirecting={isRedirecting}
+                        onProviderLogin={handleProviderLogin} showLocalLogin={showLocalLogin}
+                        onToggleLocal={() => setLocalLoginToggled(!showLocalLogin)}
+                        onLocalLogin={handleLocalLogin} isLoading={isLoading} error={error} />
+                    <FirstRunBanner isFirstRun={isFirstRun} />
                 </div>
                 <p className="mt-6 text-center text-sm text-dim">Coordinate raids. Track attendance. Conquer together.</p>
             </div>
         </div>
     );
+}
+
+/** Executes the local auth API call and redirects on success */
+async function performLocalLogin({ username, password, login, isFirstRun, navigate }: {
+    username: string; password: string;
+    login: (token: string) => Promise<{ role?: string; onboardingCompletedAt: string | null } | null>;
+    isFirstRun: boolean; navigate: ReturnType<typeof useNavigate>;
+}): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/auth/local`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+    });
+    const data = await response.json().catch(() => ({ message: 'Server unavailable' }));
+    if (!response.ok) throw new Error(data.message || 'Invalid credentials');
+    const user = await login(data.access_token);
+    if (!user) throw new Error('Failed to authenticate');
+    toast.success('Logged in successfully!');
+    handlePostLoginRedirect(user, isFirstRun, navigate);
 }
 
 /** Login page header with logo and community name */
@@ -135,6 +153,43 @@ function LoginHeader({ communityName, communityLogoUrl }: {
             )}
             <h1 className="text-2xl font-bold text-foreground mt-2">{communityName}</h1>
             <p className="text-muted mt-1">Sign in to manage your raids</p>
+        </div>
+    );
+}
+
+/** Main login body — provider buttons or local login form */
+function LoginBody({ hasProviders, authProviders, isRedirecting, onProviderLogin, showLocalLogin, onToggleLocal, onLocalLogin, isLoading, error }: {
+    hasProviders: boolean; authProviders: LoginMethodDto[]; isRedirecting: boolean;
+    onProviderLogin: (p: LoginMethodDto) => void; showLocalLogin: boolean; onToggleLocal: () => void;
+    onLocalLogin: (u: string, p: string) => Promise<void>; isLoading: boolean; error: string | null;
+}): JSX.Element {
+    if (!hasProviders) {
+        return <LocalLoginForm onSubmit={onLocalLogin} isLoading={isLoading} error={error} />;
+    }
+    return (
+        <>
+            <ProviderButtons providers={authProviders} isRedirecting={isRedirecting} onLogin={onProviderLogin} />
+            <div className="text-center mt-6">
+                <button type="button" onClick={onToggleLocal} className="text-sm text-muted hover:text-secondary transition-colors">
+                    {showLocalLogin ? 'Hide username login' : 'Sign in with username instead'}
+                </button>
+            </div>
+            {showLocalLogin && (
+                <div className="mt-4">
+                    <div className="relative mb-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-edge" /></div></div>
+                    <LocalLoginForm onSubmit={onLocalLogin} isLoading={isLoading} error={error} />
+                </div>
+            )}
+        </>
+    );
+}
+
+/** First-run info banner */
+function FirstRunBanner({ isFirstRun }: { isFirstRun: boolean }): JSX.Element | null {
+    if (!isFirstRun) return null;
+    return (
+        <div className="mt-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <p className="text-sm text-blue-300 text-center">First time? Your admin credentials are in the container logs.</p>
         </div>
     );
 }
