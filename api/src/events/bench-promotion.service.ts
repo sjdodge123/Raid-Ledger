@@ -128,32 +128,59 @@ export class BenchPromotionProcessor extends WorkerHost {
   async process(job: Job<BenchPromotionJobData>): Promise<void> {
     const { eventId, vacatedRole, vacatedPosition } = job.data;
 
-    // 1. Verify event exists and autoUnbench is still enabled
+    const event = await this.verifyAutoUnbench(eventId);
+    if (!event) return;
+
+    const slotOccupied = await this.isSlotOccupied(
+      eventId,
+      vacatedRole,
+      vacatedPosition,
+    );
+    if (slotOccupied) return;
+
+    const benchPlayer = await this.findLongestWaitingBench(eventId);
+    if (!benchPlayer) return;
+
+    await this.moveBenchPlayer(
+      benchPlayer,
+      vacatedRole,
+      vacatedPosition,
+      eventId,
+      event.title,
+    );
+  }
+
+  private async verifyAutoUnbench(eventId: number) {
     const [event] = await this.db
       .select()
       .from(schema.events)
       .where(eq(schema.events.id, eventId))
       .limit(1);
+    if (!event || !event.autoUnbench) return null;
+    return event;
+  }
 
-    if (!event || !event.autoUnbench) return;
-
-    // 2. Check the slot is still empty
+  private async isSlotOccupied(
+    eventId: number,
+    role: string,
+    position: number,
+  ) {
     const [existing] = await this.db
       .select()
       .from(schema.rosterAssignments)
       .where(
         and(
           eq(schema.rosterAssignments.eventId, eventId),
-          eq(schema.rosterAssignments.role, vacatedRole),
-          eq(schema.rosterAssignments.position, vacatedPosition),
+          eq(schema.rosterAssignments.role, role),
+          eq(schema.rosterAssignments.position, position),
         ),
       )
       .limit(1);
+    return !!existing;
+  }
 
-    if (existing) return; // Slot was manually filled during grace window
-
-    // 3. Find the longest-waiting bench player (FIFO)
-    const benchPlayers = await this.db
+  private async findLongestWaitingBench(eventId: number) {
+    const rows = await this.db
       .select({
         assignmentId: schema.rosterAssignments.id,
         signupId: schema.rosterAssignments.signupId,
@@ -172,12 +199,20 @@ export class BenchPromotionProcessor extends WorkerHost {
       )
       .orderBy(asc(schema.eventSignups.signedUpAt))
       .limit(1);
+    return rows[0] ?? null;
+  }
 
-    if (benchPlayers.length === 0) return;
-
-    const benchPlayer = benchPlayers[0];
-
-    // 4. Move bench player to the vacated slot
+  private async moveBenchPlayer(
+    benchPlayer: {
+      assignmentId: number;
+      signupId: number;
+      userId: number | null;
+    },
+    vacatedRole: string,
+    vacatedPosition: number,
+    eventId: number,
+    eventTitle: string,
+  ) {
     await this.db
       .update(schema.rosterAssignments)
       .set({ role: vacatedRole, position: vacatedPosition })
@@ -187,35 +222,47 @@ export class BenchPromotionProcessor extends WorkerHost {
       `Promoted bench player (signup ${benchPlayer.signupId}) to ${vacatedRole}:${vacatedPosition} for event ${eventId}`,
     );
 
-    // 5. Notify the promoted player (only RL members, not anonymous Discord users)
     if (benchPlayer.userId) {
-      // ROK-538: Look up Discord embed URL for the event
-      const discordUrl =
-        await this.notificationService.getDiscordEmbedUrl(eventId);
-      // ROK-507: Resolve voice channel for the event
-      const voiceChannelId =
-        await this.notificationService.resolveVoiceChannelForEvent(eventId);
-      await this.notificationService.create({
-        userId: benchPlayer.userId,
-        type: 'bench_promoted',
-        title: 'Promoted from Bench!',
-        message: `A slot opened up in "${event.title}" and you've been moved from the bench to the roster!`,
-        payload: {
-          eventId,
-          role: vacatedRole,
-          position: vacatedPosition,
-          ...(discordUrl ? { discordUrl } : {}),
-          ...(voiceChannelId ? { voiceChannelId } : {}),
-        },
-      });
+      await this.notifyPromotedPlayer(
+        benchPlayer.userId,
+        eventId,
+        eventTitle,
+        vacatedRole,
+        vacatedPosition,
+      );
     }
 
-    // 6. Emit signup event so Discord embed is re-synced (ROK-458)
     this.eventEmitter.emit(SIGNUP_EVENTS.UPDATED, {
       eventId,
       userId: benchPlayer.userId,
       signupId: benchPlayer.signupId,
       action: 'bench_promoted',
     } satisfies SignupEventPayload);
+  }
+
+  private async notifyPromotedPlayer(
+    userId: number,
+    eventId: number,
+    eventTitle: string,
+    role: string,
+    position: number,
+  ) {
+    const discordUrl =
+      await this.notificationService.getDiscordEmbedUrl(eventId);
+    const voiceChannelId =
+      await this.notificationService.resolveVoiceChannelForEvent(eventId);
+    await this.notificationService.create({
+      userId,
+      type: 'bench_promoted',
+      title: 'Promoted from Bench!',
+      message: `A slot opened up in "${eventTitle}" and you've been moved from the bench to the roster!`,
+      payload: {
+        eventId,
+        role,
+        position,
+        ...(discordUrl ? { discordUrl } : {}),
+        ...(voiceChannelId ? { voiceChannelId } : {}),
+      },
+    });
   }
 }

@@ -63,8 +63,7 @@ export const mockCharacter = {
   updatedAt: new Date(),
 };
 
-/** Build the NestJS testing module with all mocked providers */
-export async function createSignupsTestModule(): Promise<SignupsMocks> {
+function buildMockServices() {
   const mockNotificationService = {
     create: jest.fn().mockResolvedValue(null),
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
@@ -79,7 +78,16 @@ export async function createSignupsTestModule(): Promise<SignupsMocks> {
     cancelPromotion: jest.fn().mockResolvedValue(undefined),
     isEligible: jest.fn().mockResolvedValue(false),
   };
+  const mockEventEmitter = { emit: jest.fn() };
+  return {
+    mockNotificationService,
+    mockRosterNotificationBuffer,
+    mockBenchPromotionService,
+    mockEventEmitter,
+  };
+}
 
+function buildMockDb(): Record<string, jest.Mock> {
   const mockDb: Record<string, jest.Mock> = {
     select: jest.fn(),
     insert: jest.fn(),
@@ -88,7 +96,6 @@ export async function createSignupsTestModule(): Promise<SignupsMocks> {
     transaction: jest.fn(),
   };
 
-  // Default select chain - event exists
   const selectEventChain = {
     from: jest.fn().mockReturnValue({
       where: jest.fn().mockReturnValue({
@@ -108,67 +115,64 @@ export async function createSignupsTestModule(): Promise<SignupsMocks> {
   };
   mockDb.select.mockReturnValue(selectEventChain);
 
-  // Default insert chain (with onConflictDoNothing for ROK-364)
-  const insertChain = {
+  mockDb.insert.mockReturnValue({
     values: jest.fn().mockReturnValue({
       onConflictDoNothing: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockSignup]),
       }),
       returning: jest.fn().mockResolvedValue([mockSignup]),
     }),
-  };
-  mockDb.insert.mockReturnValue(insertChain);
+  });
 
-  // Default delete chain
-  const deleteChain = {
+  mockDb.delete.mockReturnValue({
     where: jest.fn().mockReturnValue({
       returning: jest.fn().mockResolvedValue([mockSignup]),
     }),
-  };
-  mockDb.delete.mockReturnValue(deleteChain);
+  });
 
-  // Default update chain
-  const updateChain = {
+  mockDb.update.mockReturnValue({
     set: jest.fn().mockReturnValue({
       where: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockSignup]),
       }),
     }),
-  };
-  mockDb.update.mockReturnValue(updateChain);
+  });
 
-  // Transaction mock
   mockDb.transaction.mockImplementation(
     async (cb: (tx: typeof mockDb) => Promise<unknown>) => cb(mockDb),
   );
 
-  const mockEventEmitter = { emit: jest.fn() };
+  return mockDb;
+}
+
+/** Build the NestJS testing module with all mocked providers */
+export async function createSignupsTestModule(): Promise<SignupsMocks> {
+  const services = buildMockServices();
+  const mockDb = buildMockDb();
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       SignupsService,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
-      { provide: NotificationService, useValue: mockNotificationService },
+      {
+        provide: NotificationService,
+        useValue: services.mockNotificationService,
+      },
       {
         provide: RosterNotificationBufferService,
-        useValue: mockRosterNotificationBuffer,
+        useValue: services.mockRosterNotificationBuffer,
       },
       {
         provide: BenchPromotionService,
-        useValue: mockBenchPromotionService,
+        useValue: services.mockBenchPromotionService,
       },
-      { provide: EventEmitter2, useValue: mockEventEmitter },
+      { provide: EventEmitter2, useValue: services.mockEventEmitter },
     ],
   }).compile();
 
-  const service = module.get<SignupsService>(SignupsService);
-
   return {
-    service,
+    service: module.get<SignupsService>(SignupsService),
     mockDb,
-    mockNotificationService,
-    mockRosterNotificationBuffer,
-    mockBenchPromotionService,
-    mockEventEmitter,
+    ...services,
   };
 }
