@@ -216,21 +216,6 @@ async function confirmCharRoleSignup(
   await deps.updateEmbedSignupCount(eventId);
 }
 
-async function replyWithRoleConfirmation(
-  interaction: StringSelectMenuInteraction,
-  eventId: number,
-  deps: SignupInteractionDeps,
-  charName: string,
-  rolesLabel: string,
-  signupStatus?: 'tentative',
-): Promise<void> {
-  await interaction.editReply({
-    content: formatRoleConfirmation(signupStatus, charName, rolesLabel),
-    components: [],
-  });
-  await deps.updateEmbedSignupCount(eventId);
-}
-
 async function replyNoLinkedAccount(
   interaction: StringSelectMenuInteraction,
 ): Promise<void> {

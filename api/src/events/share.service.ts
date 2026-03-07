@@ -7,6 +7,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import {
   DiscordEmbedFactory,
   type EmbedContext,
+  type EmbedEventData,
 } from '../discord-bot/services/discord-embed.factory';
 import { SettingsService } from '../settings/settings.service';
 import { EventsService } from './events.service';
@@ -105,11 +106,11 @@ export class ShareService {
   }
 
   private async postToChannels(
-    guild: any,
+    guild: import('discord.js').Guild,
     bindings: { channelId: string }[],
     postedChannelIds: Set<string>,
     eventId: number,
-    eventData: any,
+    eventData: EmbedEventData,
     context: EmbedContext,
   ): Promise<ShareEventResponseDto> {
     let channelsPosted = 0;
@@ -135,10 +136,10 @@ export class ShareService {
   }
 
   private async postToChannel(
-    guild: any,
+    guild: import('discord.js').Guild,
     channelId: string,
     eventId: number,
-    eventData: any,
+    eventData: EmbedEventData,
     context: EmbedContext,
   ): Promise<boolean> {
     try {
@@ -156,10 +157,10 @@ export class ShareService {
   }
 
   private async trySendEmbed(
-    guild: any,
+    guild: import('discord.js').Guild,
     channelId: string,
     eventId: number,
-    eventData: any,
+    eventData: EmbedEventData,
     context: EmbedContext,
   ): Promise<boolean> {
     const channel = await guild.channels.fetch(channelId);

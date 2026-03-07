@@ -3278,19 +3278,6 @@ type SignupRow = typeof schema.eventSignups.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect | null;
 type CharacterRow = typeof schema.characters.$inferSelect | null;
 
-type DisplaceAssignment = {
-  id: number;
-  signupId: number;
-  role: string | null;
-  position: number;
-};
-type DisplaceSignup = {
-  id: number;
-  preferredRoles: string[] | null;
-  status: string;
-  signedUpAt: Date | null;
-};
-
 type BfsEntry = {
   roleToFree: string;
   moves: ChainMoveEntry[];

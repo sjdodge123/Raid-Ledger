@@ -383,7 +383,6 @@ export class DemoDataService {
       allUsers,
       origEvents,
       generated.notifs,
-      generated.notifPrefs,
     );
     return {
       availability: allAvailValues.length,
@@ -820,7 +819,6 @@ export class DemoDataService {
     allUsers: (typeof schema.users.$inferSelect)[],
     origEvents: (typeof schema.events.$inferSelect)[],
     generatedNotifs: ReturnType<typeof generateNotifications>,
-    _notifPrefs: ReturnType<typeof generateNotifPreferences>,
   ): Promise<number> {
     let count = 0;
     count += await this.insertAdminNotifications(origEvents, allUsers);
