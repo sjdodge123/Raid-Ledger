@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/use-auth';
 import { formatDistanceToNow } from 'date-fns';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 import { UserEventSignups } from '../components/profile/UserEventSignups';
-import type { CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
+import type { UserHeartedGameDto, UserProfileDto } from '@raid-ledger/contract';
 import {
     HeartedGameCard, GroupedCharacters, ActivitySection,
     GuestProfile,
@@ -55,7 +55,7 @@ function HeartedGamesSection({ heartedGames }: { heartedGames: UserHeartedGameDt
 
 /** Loaded profile content */
 function ProfileContent({ profile, numericId, isOwnProfile, heartedGames, games }: {
-    profile: { username: string; createdAt: string; characters: CharacterDto[] };
+    profile: UserProfileDto;
     numericId: number | undefined; isOwnProfile: boolean;
     heartedGames: UserHeartedGameDto[]; games: { id: number; name: string }[];
 }): JSX.Element {

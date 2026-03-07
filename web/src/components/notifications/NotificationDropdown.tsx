@@ -29,7 +29,7 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
             <div className="flex items-center justify-between px-4 py-3 border-b border-edge">
                 <h3 className="text-lg font-semibold text-foreground">Notifications</h3>
                 {notifications.length > 0 && (
-                    <button onClick={markAllRead} className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">Mark All Read</button>
+                    <button onClick={() => markAllRead()} className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">Mark All Read</button>
                 )}
             </div>
             <div className="max-h-[70vh] sm:max-h-[400px] overflow-y-auto">

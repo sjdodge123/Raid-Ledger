@@ -20,7 +20,7 @@ const PRESET_COLORS = [
  */
 const DEFAULT_COLOR = '#10B981';
 
-function useBrandingForm(branding: { communityName?: string; communityAccentColor?: string } | undefined) {
+function useBrandingForm(branding: { communityName?: string | null; communityAccentColor?: string | null } | undefined) {
     const [nameValue, setNameValue] = useState('');
     const [colorValue, setColorValue] = useState(DEFAULT_COLOR);
     const [nameInit, setNameInit] = useState(false);
@@ -31,7 +31,7 @@ function useBrandingForm(branding: { communityName?: string; communityAccentColo
 
     const hasNameChange = branding ? nameValue.trim() !== (branding.communityName || '') : false;
     const hasColorChange = branding ? colorValue !== (branding.communityAccentColor || DEFAULT_COLOR) : false;
-    const syncFromResponse = useCallback((data: { communityName?: string; communityAccentColor?: string }) => {
+    const syncFromResponse = useCallback((data: { communityName?: string | null; communityAccentColor?: string | null }) => {
         setNameValue(data.communityName || ''); setColorValue(data.communityAccentColor || DEFAULT_COLOR);
     }, []);
 

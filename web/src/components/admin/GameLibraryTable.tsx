@@ -118,7 +118,7 @@ function buildActionProps(h: ReturnType<typeof useGameHandlers>) {
 
 function GameListContent({ items, total, actionProps, sentinelRef, isFetchingNextPage, hasNextPage }: {
     items: GameItem[]; total: number; actionProps: ReturnType<typeof buildActionProps>;
-    sentinelRef: React.RefObject<HTMLDivElement | null>; isFetchingNextPage: boolean; hasNextPage: boolean;
+    sentinelRef: React.RefCallback<HTMLDivElement>; isFetchingNextPage: boolean; hasNextPage: boolean;
 }) {
     return (
         <>

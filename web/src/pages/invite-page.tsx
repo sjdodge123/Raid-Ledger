@@ -1,15 +1,18 @@
+import type { JSX } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { useMyCharacters } from '../hooks/use-characters';
 import { resolveInviteCode, claimInviteCode } from '../lib/api-client';
-import type { InviteCodeResolveResponseDto, PugRole } from '@raid-ledger/contract';
+import type { InviteCodeResolveResponseDto, PugRole, CharacterDto } from '@raid-ledger/contract';
 import { LoadingSpinner } from '../components/ui/loading-spinner';
 import { toast } from '../lib/toast';
 import { API_BASE_URL } from '../lib/config';
 import { formatRole } from '../lib/role-colors';
 import { STEP_LABELS } from './invite/invite-labels';
 import { EventHeader, AuthStep, SuccessStep, CharacterStep } from './invite/invite-steps';
+
+type InviteGameInfo = NonNullable<NonNullable<InviteCodeResolveResponseDto['event']>['game']>;
 
 function useInviteClaim(opts: {
     code: string | undefined; navigate: ReturnType<typeof useNavigate>;
@@ -176,8 +179,8 @@ function InviteInvalid({ error, onNavigate }: { error: string | null; onNavigate
 function InviteStepRouter({ step, resolveData, claim, imp, characters, gameInfo, navigate, code }: {
     step: number; resolveData: InviteCodeResolveResponseDto;
     claim: ReturnType<typeof useInviteClaim>; imp: ReturnType<typeof useImportHandler>;
-    characters: { id: string; name: string; effectiveRole?: string | null; roleOverride: string | null; role: string | null; createdAt: string }[];
-    gameInfo: InviteCodeResolveResponseDto['event'] extends { game?: infer G } ? G : undefined;
+    characters: CharacterDto[];
+    gameInfo: InviteGameInfo | null | undefined;
     navigate: ReturnType<typeof useNavigate>; code: string | undefined;
 }): JSX.Element | null {
     const { event } = resolveData;
@@ -232,8 +235,8 @@ function InviteAuthView({ event, stepLabels, totalSteps, navigate, code }: {
 function InviteCharacterView({ event, stepLabels, totalSteps, claim, imp, characters, gameInfo }: {
     event: InviteCodeResolveResponseDto['event']; stepLabels: typeof STEP_LABELS; totalSteps: number;
     claim: ReturnType<typeof useInviteClaim>; imp: ReturnType<typeof useImportHandler>;
-    characters: { id: string; name: string; effectiveRole?: string | null; roleOverride: string | null; role: string | null; createdAt: string }[];
-    gameInfo: InviteCodeResolveResponseDto['event'] extends { game?: infer G } ? G : undefined;
+    characters: CharacterDto[];
+    gameInfo: InviteGameInfo | null | undefined;
 }): JSX.Element {
     const isBlizzardGame = gameInfo?.isBlizzardGame === true;
     const hasRoles = gameInfo?.hasRoles === true;

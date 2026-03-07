@@ -13,7 +13,7 @@ const CloseIcon = (
     </svg>
 );
 
-function BannerContent({ data }: { data: { latestVersion: string; currentVersion: string } }) {
+function BannerContent({ data }: { data: { latestVersion: string | null; currentVersion: string } }) {
     return (
         <div className="flex items-start gap-3">
             {WarningIcon}

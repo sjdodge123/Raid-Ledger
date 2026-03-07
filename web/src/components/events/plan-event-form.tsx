@@ -74,7 +74,7 @@ function buildSubmitDto(form: FormState, registryGameId: number | null | undefin
     return {
         title: form.title.trim(),
         description: form.description.trim() || undefined,
-        gameId: registryGameId,
+        gameId: registryGameId ?? undefined,
         slotConfig: buildSlotConfig(form),
         maxAttendees: form.maxAttendees ? parseInt(form.maxAttendees) : undefined,
         autoUnbench: form.autoUnbench,

@@ -9,7 +9,7 @@ import { useConvertEventToPlan } from '../../hooks/use-event-plans';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DAYS, DURATION_PRESETS, formatHour, toLocalInput, nextOccurrence } from './reschedule-utils';
 import { PollBanner, GridLegend, StartTimeInput, DurationSelector, ConfirmationBar } from './reschedule-controls';
-import type { GameTimePreviewBlock, GameTimeEventBlock } from '../features/game-time/GameTimeGrid';
+import type { GameTimePreviewBlock, GameTimeEventBlock, HeatmapCell } from '../features/game-time/GameTimeGrid';
 
 interface RescheduleModalProps {
     isOpen: boolean;
@@ -49,12 +49,12 @@ function useRescheduleState(currentStartTime: string, currentEndTime: string) {
 }
 
 function useCurrentEventBlocks(props: {
-    eventId: number; eventTitle: string; gameSlug?: string | null; gameName?: string | null;
+    eventId: number; eventTitle?: string; gameSlug?: string | null; gameName?: string | null;
     coverUrl?: string | null; description?: string | null; creatorUsername?: string;
     signupCount?: number; dayOfWeek: number; hour: number; durationHours: number;
 }) {
     return useMemo((): GameTimeEventBlock[] => [{
-        eventId: props.eventId, title: props.eventTitle, gameSlug: props.gameSlug ?? null,
+        eventId: props.eventId, title: props.eventTitle ?? '', gameSlug: props.gameSlug ?? null,
         gameName: props.gameName ?? null, coverUrl: props.coverUrl ?? null, signupId: 0,
         confirmationStatus: 'confirmed', dayOfWeek: props.dayOfWeek,
         startHour: props.hour, endHour: props.hour + props.durationHours,
@@ -64,7 +64,7 @@ function useCurrentEventBlocks(props: {
         props.dayOfWeek, props.hour, props.durationHours, props.description, props.creatorUsername, props.signupCount]);
 }
 
-function usePreviewBlocks(gridSelection: { day: number; hour: number } | null, durationHours: number, eventTitle: string, gameName?: string | null, gameSlug?: string | null, coverUrl?: string | null) {
+function usePreviewBlocks(gridSelection: { day: number; hour: number } | null, durationHours: number, eventTitle?: string, gameName?: string | null, gameSlug?: string | null, coverUrl?: string | null) {
     return useMemo((): GameTimePreviewBlock[] | undefined => {
         if (!gridSelection) return undefined;
         return [{ dayOfWeek: gridSelection.day, startHour: gridSelection.hour,
@@ -77,7 +77,7 @@ function usePreviewBlocks(gridSelection: { day: number; hour: number } | null, d
 function GridBody(props: {
     isLoading: boolean; signupCount: number;
     currentEventBlocks: GameTimeEventBlock[]; previewBlocks: GameTimePreviewBlock[] | undefined;
-    heatmapOverlay: unknown; onCellClick: (day: number, hour: number) => void;
+    heatmapOverlay: HeatmapCell[] | undefined; onCellClick: (day: number, hour: number) => void;
 }) {
     if (props.isLoading) {
         return <div className="flex items-center justify-center py-12 text-muted">Loading availability data...</div>;
@@ -111,8 +111,8 @@ function parseTimes(newStartTime: string | null, durationMs: number) {
  * RescheduleModal (ROK-223)
  */
 function useRescheduleModalData(eventId: number, isOpen: boolean, currentStartTime: string, currentEndTime: string, props: {
-    eventTitle?: string; gameSlug?: string; gameName?: string; coverUrl?: string;
-    description?: string; creatorUsername?: string; signupCount?: number;
+    eventTitle?: string; gameSlug?: string | null; gameName?: string | null; coverUrl?: string | null;
+    description?: string | null; creatorUsername?: string; signupCount?: number;
 }) {
     const { data: gameTimeData, isLoading } = useAggregateGameTime(eventId, isOpen);
     const s = useRescheduleState(currentStartTime, currentEndTime);
@@ -173,7 +173,7 @@ function RescheduleContentBody({ d, eventTitle, reschedule, convertToPlan, handl
                     <StartTimeInput newStartTime={d.s.newStartTime} onStartChange={(v) => { d.s.setNewStartTime(v); d.s.setGridSelection(null); }} />
                     <DurationSelector durationMinutes={d.s.durationMinutes} setDurationMinutes={d.s.setDurationMinutes} customDuration={d.s.customDuration} setCustomDuration={d.s.setCustomDuration} />
                 </div>
-                {!!d.s.newStartTime && <ConfirmationBar eventTitle={eventTitle} isValid={d.isValid} parsedStart={d.parsedStart} parsedEnd={d.parsedEnd} selectionSummary={d.summary} signupCount={d.signupCount} isPending={reschedule.isPending} onClear={() => { d.s.setNewStartTime(null); d.s.setGridSelection(null); }} onConfirm={() => handleRescheduleConfirm(d, reschedule, handleClose)} />}
+                {!!d.s.newStartTime && <ConfirmationBar eventTitle={eventTitle ?? ''} isValid={d.isValid} parsedStart={d.parsedStart} parsedEnd={d.parsedEnd} selectionSummary={d.summary} signupCount={d.signupCount} isPending={reschedule.isPending} onClear={() => { d.s.setNewStartTime(null); d.s.setGridSelection(null); }} onConfirm={() => handleRescheduleConfirm(d, reschedule, handleClose)} />}
             </div>
         </div>
     );

@@ -18,7 +18,7 @@ function DiscordJoinHeader({ guildName }: { guildName: string }) {
     );
 }
 
-function JoinServerContent({ isLoading, invite }: { isLoading: boolean; invite: { url?: string } | undefined }) {
+function JoinServerContent({ isLoading, invite }: { isLoading: boolean; invite: { url?: string | null; guildName?: string | null } | undefined }) {
     if (isLoading) return <div className="flex items-center justify-center py-4"><span className="w-5 h-5 border-2 border-[#5865F2]/30 border-t-[#5865F2] rounded-full animate-spin" /></div>;
     if (invite?.url) {
         return (

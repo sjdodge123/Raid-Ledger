@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { UserMenu } from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from '../notifications';
-import { useAuth } from '../../hooks/use-auth';
+import { useAuth, type User } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { API_BASE_URL } from '../../lib/config';
@@ -32,7 +32,7 @@ function navClass(current: string, target: string) {
     return `font-medium transition-colors ${current === target ? 'text-emerald-400' : 'text-secondary hover:text-foreground'}`;
 }
 
-function DesktopNav({ pathname, user }: { pathname: string; user: unknown }) {
+function DesktopNav({ pathname, user }: { pathname: string; user: User | null }) {
     return (
         <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
             {NAV_LINKS.map(({ to, label }) => <Link key={to} to={to} className={navClass(pathname, to)}>{label}</Link>)}
@@ -46,7 +46,7 @@ function DesktopNav({ pathname, user }: { pathname: string; user: unknown }) {
     );
 }
 
-function DesktopActions({ user }: { user: unknown }) {
+function DesktopActions({ user }: { user: User | null }) {
     return (
         <div className="hidden md:flex items-center gap-4">
             <ThemeToggle />

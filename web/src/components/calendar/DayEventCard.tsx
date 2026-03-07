@@ -138,7 +138,7 @@ function DayEventBlockContent({ event, d }: { event: CalendarEvent; d: ReturnTyp
     );
 }
 
-function buildDayEventBgStyle(coverUrl: string | undefined, colors: { bg: string; border: string }) {
+function buildDayEventBgStyle(coverUrl: string | null | undefined, colors: { bg: string; border: string }) {
     return {
         backgroundImage: coverUrl
             ? `linear-gradient(90deg, ${colors.bg}f5 0%, ${colors.bg}dd 20%, ${colors.bg}aa 40%, ${colors.bg}aa 60%, ${colors.bg}dd 80%, ${colors.bg}f5 100%), url(${coverUrl})`

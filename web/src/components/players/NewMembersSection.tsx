@@ -27,7 +27,7 @@ function NewMembersSkeleton() {
     );
 }
 
-function NewMemberAvatar({ player }: { player: { id: number; username: string; createdAt: string; avatarUrl?: string | null } }) {
+function NewMemberAvatar({ player }: { player: { id: number; username: string; createdAt: string; avatar: string | null; avatarUrl?: string | null } }) {
     const avatar = resolveAvatar(toAvatarUser(player));
     const joinedAgo = formatDistanceToNow(new Date(player.createdAt), { addSuffix: false });
 

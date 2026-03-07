@@ -9,7 +9,7 @@ interface MonthEventComponentProps {
     onChipClick: (e: React.MouseEvent, eventStart: Date) => void;
 }
 
-function chipStyle(coverUrl: string | undefined, bgColor: string) {
+function chipStyle(coverUrl: string | null | undefined, bgColor: string) {
     if (!coverUrl) return {};
     return {
         backgroundImage: `linear-gradient(135deg, ${bgColor}dd 50%, ${bgColor}88 100%), url(${coverUrl})`,

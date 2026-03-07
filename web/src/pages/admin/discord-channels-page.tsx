@@ -4,7 +4,7 @@ import { useChannelBindings } from '../../hooks/use-channel-bindings';
 import { usePluginStore } from '../../stores/plugin-store';
 import { toast } from '../../lib/toast';
 import { ChannelBindingList } from '../../components/admin/ChannelBindingList';
-import type { UpdateChannelBindingDto } from '@raid-ledger/contract';
+import type { UpdateChannelBindingDto, ChannelBindingDto } from '@raid-ledger/contract';
 
 export function DiscordChannelsPage() {
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
@@ -122,7 +122,7 @@ function RoutingPriorityInfo() {
 }
 
 function ChannelBindingsSection({ bindings, onUpdate, onDelete, isUpdating, isDeleting }: {
-    bindings: { isLoading: boolean; isError: boolean; error: Error | null; data: { data: unknown[] } | undefined };
+    bindings: { isLoading: boolean; isError: boolean; error: Error | null; data: { data: ChannelBindingDto[] } | undefined };
     onUpdate: (id: string, dto: UpdateChannelBindingDto) => void;
     onDelete: (id: string) => void; isUpdating: boolean; isDeleting: boolean;
 }) {

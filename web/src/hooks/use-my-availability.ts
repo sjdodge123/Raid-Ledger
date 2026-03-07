@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getMyAvailability, type AvailabilityQueryParams } from '../lib/api-client';
-import type { RosterAvailabilityResponse } from '@raid-ledger/contract';
+import type { RosterAvailabilityResponse, AvailabilityStatus } from '@raid-ledger/contract';
 
 /**
  * React Query hook for fetching current user's availability (ROK-182).
@@ -12,7 +12,7 @@ import type { RosterAvailabilityResponse } from '@raid-ledger/contract';
  */
 interface AvailabilityEntry {
     timeRange: { start: string; end: string };
-    status: string;
+    status: AvailabilityStatus;
     gameId?: number | null;
     sourceEventId?: number | null;
 }

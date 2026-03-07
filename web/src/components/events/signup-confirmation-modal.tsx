@@ -31,7 +31,7 @@ function resolveDefaultRole(characters: CharacterDto[], charId: string | null, p
 
 function useSignupSelectionReset(
     sessionKey: number, defaultCharacterId: string | null, characters: CharacterDto[], preSelectedRole: CharacterRole | undefined,
-    setSelectedCharacterId: (v: string | null) => void, setSelectedRole: (v: CharacterRole | null) => void,
+    setSelectedCharacterId: React.Dispatch<React.SetStateAction<string | null>>, setSelectedRole: (v: CharacterRole | null) => void,
     setSelectedRoles: (v: CharacterRole[]) => void, setShowCreateForm: (v: boolean) => void,
 ) {
     useEffect(() => {

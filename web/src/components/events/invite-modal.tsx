@@ -12,6 +12,7 @@ import {
     type DiscordMemberSearchResult,
 } from '../../lib/api-client';
 import { useCreatePug } from '../../hooks/use-pugs';
+import type { PugRole } from '@raid-ledger/contract';
 import { MemberList, MotdSection } from './invite-modal-sections';
 
 interface InviteModalProps {
@@ -95,7 +96,7 @@ function ShareSection({ eventId, isSharing, setIsSharing }: { eventId: number; i
 
 const COPY_ICON_PATH = 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z';
 
-async function generateInviteLink(createPug: ReturnType<typeof useCreatePug>, defaultPugRole: string, setIsSubmitting: (v: boolean) => void, setGeneratedInviteUrl: (v: string | null) => void) {
+async function generateInviteLink(createPug: ReturnType<typeof useCreatePug>, defaultPugRole: PugRole, setIsSubmitting: (v: boolean) => void, setGeneratedInviteUrl: (v: string | null) => void) {
     setIsSubmitting(true);
     try {
         const pugSlot = await createPug.mutateAsync({ role: defaultPugRole });
@@ -111,7 +112,7 @@ async function generateInviteLink(createPug: ReturnType<typeof useCreatePug>, de
 function PugInviteSection({ eventId, isSubmitting, setIsSubmitting, generatedInviteUrl, setGeneratedInviteUrl, defaultPugRole }: {
     eventId: number; isSubmitting: boolean; setIsSubmitting: (v: boolean) => void;
     generatedInviteUrl: string | null; setGeneratedInviteUrl: (v: string | null) => void;
-    defaultPugRole: string;
+    defaultPugRole: PugRole;
 }) {
     const createPug = useCreatePug(eventId);
     return (
@@ -158,7 +159,7 @@ function filterDisplayMembers(members: DiscordMemberSearchResult[], searchQuery:
 }
 
 async function handlePugInvite(
-    createPug: ReturnType<typeof useCreatePug>, defaultPugRole: string, s: ReturnType<typeof useInviteModalState>,
+    createPug: ReturnType<typeof useCreatePug>, defaultPugRole: PugRole, s: ReturnType<typeof useInviteModalState>,
     discordUsername: string, isOnServer = false,
 ) {
     s.setIsSubmitting(true);
@@ -209,7 +210,7 @@ export function InviteModal({
 function InviteModalBody({ eventId, onClose, s, displayMembers, getMemberStatus: statusGetter, onMemberClick, defaultPugRole }: {
     eventId: number; onClose: () => void; s: ReturnType<typeof useInviteModalState>;
     displayMembers: DiscordMemberSearchResult[]; getMemberStatus: (m: DiscordMemberSearchResult) => 'invited' | 'signed_up' | 'member' | null;
-    onMemberClick: (m: DiscordMemberSearchResult) => void; defaultPugRole: string;
+    onMemberClick: (m: DiscordMemberSearchResult) => void; defaultPugRole: PugRole;
 }) {
     return (
         <Modal isOpen={true} onClose={onClose} title="Invite Players" maxWidth="max-w-lg">

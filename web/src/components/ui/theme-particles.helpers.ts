@@ -24,7 +24,7 @@ export function rand(min: number, max: number) {
     return min + Math.random() * (max - min);
 }
 
-function spawnMotion(cfg: ParticleConfig, w: number, h: number, speed: number) {
+function spawnMotion(cfg: ParticleConfig, _w: number, h: number, speed: number) {
     let y: number, vy: number, vx = rand(-cfg.drift, cfg.drift);
     if (cfg.behavior === 'fall') { y = rand(0, h); vy = speed; }
     else if (cfg.behavior === 'rise') { y = rand(0, h); vy = -speed; }

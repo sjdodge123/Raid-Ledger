@@ -10,7 +10,7 @@ interface MobilePlayerCardProps {
  * Mobile-optimized player card — vertical layout with 64px avatar.
  * Renders below md breakpoint in a 2-column grid.
  */
-function PlayerAvatar({ url, username }: { url?: string; username: string }) {
+function PlayerAvatar({ url, username }: { url?: string | null; username: string }) {
     return (
         <>
             {url ? (

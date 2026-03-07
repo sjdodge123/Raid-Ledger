@@ -139,7 +139,7 @@ function CalendarEmptyState({ view }: { view: View }) {
     );
 }
 
-function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((d: Date) => void) | undefined, calendarView: string | undefined, selectedGames: number[] | undefined) {
+function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((d: Date) => void) | undefined, calendarView: CalendarViewMode | undefined, selectedGames: Set<string> | undefined) {
     const navigate = useNavigate();
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
@@ -162,8 +162,8 @@ function useEventWrappers(eventOverlapsGameTime: (s: Date, e: Date) => boolean, 
 
 function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handleSelectEvent, wrappers, calendarView, onCalendarViewChange }: {
     s: ReturnType<typeof useCalendarViewState>; className: string; isHeaderHidden: boolean;
-    eventPropGetter: (e: CalendarEvent) => { style: Record<string, string> }; handleSelectEvent: (e: CalendarEvent) => void;
-    wrappers: ReturnType<typeof useEventWrappers>; calendarView: string | undefined; onCalendarViewChange: ((v: string) => void) | undefined;
+    eventPropGetter: (e: CalendarEvent) => { style: React.CSSProperties }; handleSelectEvent: (e: CalendarEvent) => void;
+    wrappers: ReturnType<typeof useEventWrappers>; calendarView: CalendarViewMode | undefined; onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined;
 }) {
     return (
         <div className={`calendar-container calendar-view-${s.view} ${className}`}>
@@ -190,7 +190,7 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
 }
 
 function useCalendarInteractions(
-    s: ReturnType<typeof useCalendarViewState>, onCalendarViewChange: ((v: string) => void) | undefined,
+    s: ReturnType<typeof useCalendarViewState>, onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined,
     eventOverlapsGameTime: (start: Date, end: Date) => boolean,
 ) {
     const handleMonthChipClick = useCallback((e: React.MouseEvent, eventStart: Date) => {

@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useRef, useCallback } from 'react';
-import type { IgdbGameDto } from '@raid-ledger/contract';
+import type { IgdbGameDto, EventTypeDto } from '@raid-ledger/contract';
 import { GameSearchInput } from '../game-search-input';
 import { useGameRegistry, useEventTypes } from '../../../hooks/use-game-registry';
 import { PluginSlot } from '../../../plugins';
@@ -174,7 +174,7 @@ function useGameDetailsData(props: GameDetailsSectionProps) {
 }
 
 function handleEventTypeChange(
-    raw: string, eventTypes: Array<{ id: number; name: string; slug?: string }>,
+    raw: string, eventTypes: EventTypeDto[],
     onEventTypeIdChange: (id: number | null) => void, onSelectedInstancesChange: (i: Record<string, unknown>[]) => void,
     onEventTypeDefaults?: (defaults: Partial<SlotState>) => void,
 ) {

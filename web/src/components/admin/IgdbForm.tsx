@@ -119,7 +119,7 @@ function tokenStatusLabel(status: string) {
     return 'Not fetched';
 }
 
-function HealthInfo({ health }: { health: { tokenStatus: string; tokenExpiresAt?: string | null; lastApiCallAt?: string | null; lastApiCallSuccess?: boolean } }) {
+function HealthInfo({ health }: { health: { tokenStatus: string; tokenExpiresAt?: string | null; lastApiCallAt?: string | null; lastApiCallSuccess?: boolean | null } }) {
     return (
         <div className="flex flex-wrap gap-3 text-sm">
             <div className="flex items-center gap-2">

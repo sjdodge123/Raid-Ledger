@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CharacterRole, GameRegistryDto } from '@raid-ledger/contract';
+import type { CharacterRole, GameRegistryDto, CharacterDto } from '@raid-ledger/contract';
 import { useCreateCharacter, useDeleteCharacter } from '../../hooks/use-character-mutations';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { PluginSlot } from '../../plugins';
@@ -41,7 +41,7 @@ function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: b
 }
 
 function SavedCharacterView({ savedCharacter, onDelete, isDeleting, onAddAnother }: {
-    savedCharacter: { id: string }; onDelete: (id: string) => void; isDeleting: boolean; onAddAnother?: () => void;
+    savedCharacter: CharacterDto; onDelete: (id: string) => void; isDeleting: boolean; onAddAnother?: () => void;
 }) {
     return (
         <div className="max-w-md mx-auto space-y-3">

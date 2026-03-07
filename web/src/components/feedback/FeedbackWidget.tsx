@@ -53,7 +53,7 @@ function buildPayload(category: FeedbackCategory, message: string, includeClient
     return payload;
 }
 
-function buildSentryOptions(category: FeedbackCategory, message: string, feedbackId: number) {
+function buildSentryOptions(category: FeedbackCategory, _message: string, feedbackId: number) {
     return {
         level: (category === 'bug' ? 'error' : 'info') as 'error' | 'info',
         tags: { feedback_category: category, feedback_id: String(feedbackId), source: 'feedback_widget' },

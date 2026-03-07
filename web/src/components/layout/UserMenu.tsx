@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth, isAdmin, isOperatorOrAdmin } from '../../hooks/use-auth';
+import { useAuth, isAdmin, isOperatorOrAdmin, type User } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { API_BASE_URL } from '../../lib/config';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { DiscordIcon } from '../icons/DiscordIcon';
 import { useQuery } from '@tanstack/react-query';
 import { getAuthToken } from '../../hooks/use-auth';
+import type { UserRole } from '@raid-ledger/contract';
 import { RoleBadge } from '../ui/role-badge';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 
@@ -69,7 +70,7 @@ function AvatarButton({ avatarUrl, username, isOpen, onClick }: {
 }
 
 function ProfileLink({ username, role, isImpersonating, onClose }: {
-    username: string; role: string; isImpersonating: boolean; onClose: () => void;
+    username: string; role?: UserRole; isImpersonating: boolean; onClose: () => void;
 }) {
     return (
         <Link to="/profile" className="block p-3 border-b border-edge hover:bg-panel/50 transition-colors" onClick={onClose}>
@@ -175,7 +176,7 @@ function ImpersonateSection({ showMenu, onToggle, users, search, onSearch, onSel
 }
 
 function DropdownContent({ user, isImpersonating, onClose, onLogout, onExitImpersonation, onImpersonate, impersonateUsers, trapRef }: {
-    user: { username: string; role: string }; isImpersonating: boolean; onClose: () => void;
+    user: User; isImpersonating: boolean; onClose: () => void;
     onLogout: () => void; onExitImpersonation: () => void; onImpersonate: (id: number) => void;
     impersonateUsers: ImpersonateUser[] | undefined; trapRef: React.RefObject<HTMLDivElement | null>;
 }) {

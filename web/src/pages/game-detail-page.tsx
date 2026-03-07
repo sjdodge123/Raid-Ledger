@@ -87,7 +87,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
 }
 
 function GameMediaSections({ game, streamsData }: {
-    game: { screenshots: { url: string }[]; videos: { videoId: string; name?: string }[]; name: string };
+    game: { screenshots: string[]; videos: { videoId: string; name?: string }[]; name: string };
     streamsData: ReturnType<typeof useGameStreams>['data'];
 }): JSX.Element {
     return (

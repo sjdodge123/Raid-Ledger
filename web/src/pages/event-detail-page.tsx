@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
-import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
+import { useAuth, isOperatorOrAdmin, type User } from '../hooks/use-auth';
 import { useRoster } from '../hooks/use-roster';
 import { EventBanner } from '../components/events/EventBanner';
 import { RosterBuilder } from '../components/roster';
@@ -73,7 +73,7 @@ function useBannerCollapse(event: EventResponseDto | undefined) {
     return { bannerRef, isBannerCollapsed };
 }
 
-function useEventDetailDerived(event: EventResponseDto | undefined, roster: EventRosterDto | undefined, user: { id: number } | null | undefined, isAuthenticated: boolean) {
+function useEventDetailDerived(event: EventResponseDto | undefined, roster: EventRosterDto | undefined, user: User | null | undefined, isAuthenticated: boolean) {
     const { games } = useGameRegistry();
     const gameRegistryEntry = games.find((g) => g.id === event?.game?.id || g.slug === event?.game?.slug);
     const gameHasRoles = gameRegistryEntry?.hasRoles ?? event?.game?.hasRoles ?? false;
@@ -208,7 +208,7 @@ export function EventDetailPage(): JSX.Element | null {
     if (page.eventLoading) return <div className="event-detail-page"><EventDetailSkeleton /></div>;
     if (!page.event) return null;
 
-    return <EventDetailBody page={page} voice={voice} bannerRef={bannerRef} isBannerCollapsed={isBannerCollapsed} derived={derived} handlers={handlers} modals={modals} />;
+    return <EventDetailBody page={page as PageState & { event: EventResponseDto }} voice={voice} bannerRef={bannerRef} isBannerCollapsed={isBannerCollapsed} derived={derived} handlers={handlers} modals={modals} />;
 }
 
 function EventDetailError({ message, onBack }: { message: string; onBack: () => void }) {

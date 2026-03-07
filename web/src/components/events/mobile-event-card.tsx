@@ -1,6 +1,6 @@
 import React from 'react';
 import type { EventResponseDto } from '@raid-ledger/contract';
-import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS_LABELS } from '../../lib/event-utils';
+import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS_LABELS, type EventDisplayStatus } from '../../lib/event-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 
@@ -59,7 +59,7 @@ function AvatarStack({ signupAvatars }: { signupAvatars: Array<{ url: string | n
 /**
  * Mobile-optimized event card — horizontal layout with game color bar.
  */
-function MobileCardHeader({ title, status }: { title: string; status: string }) {
+function MobileCardHeader({ title, status }: { title: string; status: EventDisplayStatus }) {
     return (
         <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold text-foreground text-sm leading-tight truncate">{title}</h3>

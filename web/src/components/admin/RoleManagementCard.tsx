@@ -7,7 +7,7 @@ import { InfiniteScrollSentinel } from '../ui/infinite-scroll-sentinel';
 import { Modal } from '../ui/modal';
 import { toast } from '../../lib/toast';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
-import type { UserRole } from '@raid-ledger/contract';
+import type { UserRole, UserManagementDto } from '@raid-ledger/contract';
 
 const SearchIcon = (
     <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,7 +60,7 @@ function UserRowActions({ user, isCurrentUser, isAdmin, isDisabled, onRoleChange
 }
 
 function UserRow({ user, currentUserId, onRoleChange, onRemove, isUpdating, isRemoving }: {
-    user: { id: number; username: string; role: string; discordId?: string | null; discordAvatar?: string | null; avatarUrl?: string | null };
+    user: UserManagementDto;
     currentUserId: number | undefined; onRoleChange: (id: number, name: string, role: Exclude<UserRole, 'admin'>) => void;
     onRemove: (u: { id: number; username: string }) => void; isUpdating: boolean; isRemoving: boolean;
 }) {

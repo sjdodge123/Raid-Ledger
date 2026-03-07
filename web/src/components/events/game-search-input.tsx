@@ -156,7 +156,7 @@ export function GameSearchInput({ value, onChange, error, initialSuggestions }: 
         <div className="relative" ref={s.containerRef}>
             <label htmlFor="game-search" className="block text-sm font-medium text-secondary mb-2">Game</label>
             <SearchInputField inputRef={s.inputRef} query={s.query} value={value} isLoading={s.isLoading}
-                error={error} hasInitialSuggestions={s.hasInitialSuggestions}
+                error={error}
                 onInputChange={(e) => { s.setQuery(e.target.value); s.setIsOpen(true); if (value && e.target.value !== value.name) onChange(null); }}
                 onFocus={() => (s.query.length >= 2 || s.hasInitialSuggestions) && s.setIsOpen(true)}
                 onClear={s.handleClear} />
@@ -168,9 +168,9 @@ export function GameSearchInput({ value, onChange, error, initialSuggestions }: 
     );
 }
 
-function SearchInputField({ inputRef, query, value, isLoading, error, hasInitialSuggestions, onInputChange, onFocus, onClear }: {
+function SearchInputField({ inputRef, query, value, isLoading, error, onInputChange, onFocus, onClear }: {
     inputRef: React.RefObject<HTMLInputElement | null>; query: string; value: IgdbGameDto | null;
-    isLoading: boolean; error?: string; hasInitialSuggestions: boolean;
+    isLoading: boolean; error?: string;
     onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void; onFocus: () => void; onClear: () => void;
 }) {
     return (

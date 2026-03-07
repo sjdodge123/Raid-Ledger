@@ -25,7 +25,7 @@ function setupCanvas(canvas: HTMLCanvasElement) {
 }
 
 function startAnimation(
-    canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D,
+    _canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D,
     cfg: ReturnType<typeof Object>, w: number, h: number,
     state: ReturnType<typeof createTickState>,
     themeId: string, rafRef: React.MutableRefObject<number>,

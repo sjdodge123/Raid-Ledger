@@ -135,7 +135,7 @@ function EventsContent({ activeTab, setActiveTab, searchQuery, setSearchQuery, i
   gameIdFilter: string | undefined; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
   isLoading: boolean; displayEvents: EventResponseDto[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
   slotSet: Set<string> | null; overlapSet: Set<number> | null;
-  sentinelRef: React.RefObject<HTMLDivElement | null>; isFetchingNextPage: boolean; hasNextPage: boolean; navigate: (path: string) => void;
+  sentinelRef: React.RefCallback<HTMLDivElement>; isFetchingNextPage: boolean; hasNextPage: boolean; navigate: (path: string) => void;
 }) {
   return (
     <div className="py-8 px-4">

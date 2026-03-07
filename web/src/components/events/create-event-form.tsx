@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
-import type { CreateEventDto, UpdateEventDto, RecurrenceDto, TemplateConfigDto } from '@raid-ledger/contract';
+import type { CreateEventDto, UpdateEventDto, RecurrenceDto, TemplateConfigDto, EventResponseDto } from '@raid-ledger/contract';
 import { createEvent, updateEvent } from '../../lib/api-client';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
@@ -109,7 +109,7 @@ function useTemplateActions(form: FormState) {
     };
 }
 
-function submitForm(form: FormState, errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
+function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
     resolved: string, registryGameId: number | null | undefined,
     mutate: (dto: CreateEventDto) => void) {
     const validationErrors = validateForm(form);
