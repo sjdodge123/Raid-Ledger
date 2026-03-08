@@ -23,6 +23,7 @@ import {
   buildEventUpdatePayload,
   setChannelOverride,
   applyGameChange,
+  findSeriesEventIds,
 } from './bind.helpers';
 import {
   resolveChannel,
@@ -147,6 +148,9 @@ export class BindCommand
   ): Promise<void> {
     try {
       await this.executeBindAndReply(interaction, guildId, ch, game, series);
+      if (series) {
+        await this.resyncSeriesEvents(series.id);
+      }
     } catch (err: unknown) {
       this.logger.error('Failed to create channel binding:', err);
       await interaction.editReply(
@@ -183,6 +187,20 @@ export class BindCommand
       replacedChannelIds,
     );
     await interaction.editReply({ embeds: [embed], components });
+  }
+
+  /** Re-syncs Discord embeds/scheduled events for all events in a series. */
+  private async resyncSeriesEvents(recurrenceGroupId: string): Promise<void> {
+    const ids = await findSeriesEventIds(this.db, recurrenceGroupId);
+    for (const id of ids) {
+      const payload = await buildEventUpdatePayload(this.db, id);
+      if (payload) {
+        this.eventEmitter.emit(APP_EVENT_EVENTS.UPDATED, payload);
+      }
+    }
+    this.logger.log(
+      `Re-synced ${ids.length} events for series ${recurrenceGroupId}`,
+    );
   }
 
   // ─── Event binding ────────────────────────────────────
