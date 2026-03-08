@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { BindingPurpose } from '@raid-ledger/contract';
 import {
   SlashCommandBuilder,
   ChannelType,
@@ -146,8 +147,22 @@ export class BindCommand
     game: { id: number; name: string } | null,
     series: { id: string; title: string } | null,
   ): Promise<void> {
+    const isSeriesVoice = series && ch.bindingChannelType === 'voice';
+    const behavior = isSeriesVoice
+      ? 'game-voice-monitor'
+      : this.channelBindingsService.detectBehavior(
+          ch.bindingChannelType,
+          game?.id ?? null,
+        );
     try {
-      await this.executeBindAndReply(interaction, guildId, ch, game, series);
+      await this.executeBindAndReply(
+        interaction,
+        guildId,
+        ch,
+        behavior,
+        game,
+        series,
+      );
       if (series) {
         await this.resyncSeriesEvents(series.id);
       }
@@ -163,13 +178,10 @@ export class BindCommand
     interaction: ChatInputCommandInteraction,
     guildId: string,
     ch: ResolvedChannel & { channelId: string },
+    behavior: BindingPurpose,
     game: { id: number; name: string } | null,
     series: { id: string; title: string } | null,
   ): Promise<void> {
-    const behavior = this.channelBindingsService.detectBehavior(
-      ch.bindingChannelType,
-      game?.id ?? null,
-    );
     const { replacedChannelIds } = await this.channelBindingsService.bind(
       guildId,
       ch.channelId,

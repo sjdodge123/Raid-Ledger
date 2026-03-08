@@ -309,7 +309,7 @@ export class ChannelBindingsService {
         and(
           eq(schema.channelBindings.guildId, guildId),
           eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
-          eq(schema.channelBindings.bindingPurpose, 'game-voice-monitor'),
+          eq(schema.channelBindings.channelType, 'voice'),
         ),
       )
       .limit(1);
