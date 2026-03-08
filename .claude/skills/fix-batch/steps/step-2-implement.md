@@ -42,7 +42,58 @@ Update state for each story: `status: "queued"` → `"worktree_ready"`
 
 ---
 
-## 2c. Create Team and Spawn Dev Agents
+## 2c. Spike Investigation (Unknown Root Cause Bugs Only)
+
+For any story where `root_cause: unknown`, run an investigation agent **before** spawning the dev agent. This ensures the dev has a clear fix target.
+
+**Skip this step entirely** if all stories have `root_cause: known` or `root_cause: n/a`.
+
+For each unknown-root-cause story, spawn an Explore agent:
+
+```
+Agent(subagent_type: "Explore", description: "Spike ROK-<num>",
+      prompt: """
+      Investigate bug ROK-<num>: <story title>
+
+      ## Symptoms
+      <paste story description / symptoms from Linear>
+
+      ## Task
+      1. Trace the code path that produces this behavior
+      2. Identify the exact root cause (file, function, line if possible)
+      3. Propose a fix approach (1-2 sentences)
+      4. List any files that will need changes
+
+      Be thorough — check service logic, listeners, processors, and database queries.
+      """)
+```
+
+Spike agents can run in parallel (they're read-only). When each completes:
+
+1. **Record findings** in state:
+   ```yaml
+   spike_summary: |
+     Root cause: <1-2 sentence explanation>
+     Fix location: <file(s) and function(s)>
+     Approach: <proposed fix>
+   root_cause: known  # upgrade from unknown
+   ```
+
+2. **Update the story description in Linear** with the spike findings:
+   ```
+   mcp__linear__save_issue({
+     id: "<linear_id>",
+     description: "<original description>\n\n## Spike Findings\n<spike_summary>"
+   })
+   ```
+
+3. If the spike reveals the story is **full-scope** (contract changes, migrations, 3+ modules), remove it from the batch and recommend `/build`. Update state: `status: "deferred"`.
+
+Once all spikes are complete, proceed to spawn dev agents.
+
+---
+
+## 2d. Create Team and Spawn Dev Agents
 
 ```
 TeamCreate({ team_name: "fix-batch-YYYY-MM-DD", description: "Fix batch for YYYY-MM-DD" })
@@ -74,7 +125,7 @@ pipeline.next_action: |
 
 ---
 
-## 2d. When Dev Completes → Merge into Batch Branch
+## 2e. When Dev Completes → Merge into Batch Branch
 
 When a dev agent messages completion:
 
@@ -119,7 +170,7 @@ When a dev agent messages completion:
 
 ---
 
-## 2e. Post-Compaction Recovery
+## 2f. Post-Compaction Recovery
 
 If you've just recovered from compaction and state shows stories in `dev_active`:
 
@@ -128,7 +179,7 @@ If you've just recovered from compaction and state shows stories in `dev_active`
    ```bash
    cd <worktree_path> && git log --oneline -5
    ```
-3. If dev committed → merge into batch branch (step 2d)
+3. If dev committed → merge into batch branch (step 2e)
 4. If dev didn't commit → re-spawn dev (the worktree has their partial work)
 
 ---

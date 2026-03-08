@@ -11,7 +11,25 @@ git checkout fix/batch-YYYY-MM-DD
 
 ---
 
-## 3a. Build
+## 3a. Verify Regression Tests (Bug stories only)
+
+Before running the test suites, confirm each Bug-labeled story in the batch includes a regression test:
+
+```bash
+# Check for Playwright regression tests
+grep -n "Regression: ROK-" scripts/verify-ui.spec.ts
+
+# Check for unit/integration regression tests
+grep -rn "Regression: ROK-" api/src/ web/src/
+```
+
+For each Bug story, verify a matching `Regression: ROK-<num>` test block exists in either the Playwright smoke file or a unit/integration test file. If a Bug story is missing its regression test, flag it — do not proceed until every Bug fix has a corresponding regression test.
+
+Update state: `gates.regression: PASS` (or `FAIL`)
+
+---
+
+## 3b. Build
 
 ```bash
 npm run build -w packages/contract
@@ -23,7 +41,7 @@ If build fails: diagnose which story caused it. Fix directly, commit as `fix: re
 
 ---
 
-## 3b. TypeScript
+## 3c. TypeScript
 
 ```bash
 npx tsc --noEmit -p api/tsconfig.json
@@ -34,7 +52,7 @@ If type errors: fix directly, commit as `fix: resolve type errors`.
 
 ---
 
-## 3c. Lint
+## 3d. Lint
 
 ```bash
 npm run lint -w api
@@ -45,7 +63,7 @@ If lint errors: fix directly, commit as `fix: resolve lint issues`.
 
 ---
 
-## 3d. Unit Tests
+## 3e. Unit Tests
 
 ```bash
 npm run test -w api
@@ -62,7 +80,7 @@ Update state: `gates.ci: PASS` (or `FAIL`)
 
 ---
 
-## 3e. Integration Tests
+## 3f. Integration Tests
 
 ```bash
 npm run test:integration -w api
@@ -76,7 +94,7 @@ Update state: `gates.integration: PASS` (or `FAIL`)
 
 ---
 
-## 3f. Playwright Smoke Tests (MANDATORY)
+## 3g. Playwright Smoke Tests (MANDATORY)
 
 Run the Playwright smoke suite against the deployed app. This is required for every batch — not just UI changes — because backend changes can break UI flows.
 
@@ -103,7 +121,7 @@ Update state: `gates.playwright: PASS` (or `FAIL`)
 
 ---
 
-## 3g. Push Batch Branch
+## 3h. Push Batch Branch
 
 ```bash
 git push -u origin fix/batch-YYYY-MM-DD
@@ -111,7 +129,7 @@ git push -u origin fix/batch-YYYY-MM-DD
 
 ---
 
-## 3h. Update State
+## 3i. Update State
 
 ```yaml
 pipeline:
@@ -120,6 +138,7 @@ pipeline:
     All validation passed on batch branch. Read steps/step-4-ship.md.
     Create PR, enable auto-merge, sync Linear, cleanup.
   gates:
+    regression: PASS
     ci: PASS
     integration: PASS
     playwright: PASS

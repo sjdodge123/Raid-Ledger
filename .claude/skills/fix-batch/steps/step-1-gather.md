@@ -100,9 +100,21 @@ mcp__linear__create_issue_label({
 For each candidate story, determine:
 
 - **Scope:** light / standard / full (using the decision rules in SKILL.md)
+- **Root cause:** known / unknown (Bug label only — see below)
 - **Serialization conflicts:** Does it overlap files with other stories in the batch?
 
 **Full-scope stories are NOT eligible.** If a story looks full-scope (contract changes, migrations, 3+ modules), flag it and recommend `/build` instead.
+
+### Root Cause Assessment (Bug stories only)
+
+For stories labeled **Bug**, assess whether the root cause is **known** or **unknown**:
+
+| Root cause | Criteria | Action |
+|------------|----------|--------|
+| **known** | Story description identifies the specific code/logic causing the bug, includes file paths or a clear fix approach | Proceed directly to dev |
+| **unknown** | Story describes symptoms only, no clear root cause, or the fix location is ambiguous | Spike investigation before dev (Step 2c) |
+
+Non-Bug stories (Tech Debt, Chore, Performance, Spike) skip this assessment — they always go directly to dev.
 
 ---
 
@@ -113,10 +125,11 @@ Present a summary table to the operator:
 ```
 ## Fix Batch — <YYYY-MM-DD>
 
-| # | Story | Label | Scope | Notes |
-|---|-------|-------|-------|-------|
-| 1 | ROK-XXX: Title | Bug | standard | Single module |
-| 2 | ROK-YYY: Title | Tech Debt | light | Style cleanup |
+| # | Story | Label | Scope | Root Cause | Notes |
+|---|-------|-------|-------|------------|-------|
+| 1 | ROK-XXX: Title | Bug | standard | unknown | Needs spike before dev |
+| 2 | ROK-YYY: Title | Bug | standard | known | Fix location identified |
+| 3 | ROK-ZZZ: Title | Tech Debt | light | — | Style cleanup |
 
 **Flagged (not eligible — recommend /build):**
 - ROK-ZZZ: Title — full scope (contract changes)
@@ -142,6 +155,7 @@ pipeline:
   next_action: |
     Read steps/step-2-implement.md. Create batch branch, worktrees, and spawn dev agents.
   gates:
+    regression: PENDING
     integration: PENDING
     ci: PENDING
     smoke: PENDING
@@ -152,10 +166,12 @@ pipeline:
       linear_id: "<uuid from Linear>"
       label: "Bug"
       scope: standard
+      root_cause: unknown  # known | unknown | n/a (non-Bug stories)
       status: "queued"
       branch: "fix/rok-xxx"
       worktree: "../Raid-Ledger--rok-xxx"
       dev_commit_sha: null
+      spike_summary: null  # filled by investigation agent if root_cause is unknown
       next_action: "Queued. Waiting for worktree creation in Step 2."
 ```
 

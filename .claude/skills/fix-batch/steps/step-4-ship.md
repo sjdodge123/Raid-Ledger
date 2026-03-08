@@ -81,7 +81,7 @@ git pull --rebase origin main
 # Delete batch branch (local + remote already deleted by squash merge)
 git branch -d fix/batch-YYYY-MM-DD 2>/dev/null
 
-# Any remaining story worktrees (should be cleaned up in Step 2d)
+# Any remaining story worktrees (should be cleaned up in Step 2e)
 git worktree prune
 ```
 

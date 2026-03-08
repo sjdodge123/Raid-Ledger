@@ -31,16 +31,17 @@ Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linea
 ## Pipeline Overview (4 steps)
 
 ```
-Step 1: Gather    → Linear search by label, profile, present, operator approves
-Step 2: Implement → Batch branch, parallel dev worktrees, merge all into batch branch
+Step 1: Gather    → Linear search by label, profile (incl. root cause assessment), present, operator approves
+Step 2: Implement → Batch branch, worktrees, spike unknown bugs, parallel devs, merge into batch branch
 Step 3: Validate  → Build + typecheck + lint + unit tests + integration tests + optional smoke
 Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 ```
 
-**Three gates before PR:**
-1. **Unit tests** — all workspaces pass
-2. **Integration tests** — `npm run test:integration -w api`
-3. **CI** — build + type check + lint (validated as part of gate 1-2 process)
+**Four gates before PR:**
+1. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
+2. **Unit tests** — all workspaces pass
+3. **Integration tests** — `npm run test:integration -w api`
+4. **CI** — build + type check + lint (validated as part of gate 1-2 process)
 
 ---
 
@@ -162,6 +163,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 
 | Agent | Template | When | Model | Lifetime |
 |-------|----------|------|-------|----------|
-| Dev | `templates/dev-fix.md` | Step 2 (one per story) | opus | Per-story |
+| Spike | Explore subagent | Step 2c (unknown root cause bugs only) | opus | Per-story |
+| Dev | `templates/dev-fix.md` | Step 2d (one per story) | opus | Per-story |
 
-2 agent types total: Lead + Dev.
+3 agent types total: Lead + Spike (conditional) + Dev.
