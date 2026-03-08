@@ -14,8 +14,8 @@ import { CronJobService } from '../../cron-jobs/cron-job.service';
 /** Look-ahead window: find events ending within the next 5 minutes (ms). */
 const WINDOW_AHEAD_MS = 5 * 60 * 1000;
 
-/** Look-behind window: catch events that ended within the last 2 minutes (ms). */
-const WINDOW_BEHIND_MS = 2 * 60 * 1000;
+/** Look-behind window: catch events that ended within the last 5 minutes (ms). */
+const WINDOW_BEHIND_MS = 5 * 60 * 1000;
 
 /**
  * Auto-extends events (scheduled and ad-hoc) when voice channel activity
@@ -61,10 +61,14 @@ export class EventAutoExtendService {
 
   async checkAndExtendEvents(): Promise<void> {
     const enabled = await this.settingsService.getEventAutoExtendEnabled();
-    if (!enabled) return;
+    if (!enabled) {
+      this.logger.debug('Auto-extend is disabled, skipping');
+      return;
+    }
     const config = await this.loadExtendConfig();
     const now = new Date();
     const candidates = await this.queryCandidates(now);
+    this.logger.debug(`Auto-extend candidates found: ${candidates.length}`);
     if (candidates.length === 0) return;
     for (const c of candidates) {
       await this.tryExtendCandidate(c, config);

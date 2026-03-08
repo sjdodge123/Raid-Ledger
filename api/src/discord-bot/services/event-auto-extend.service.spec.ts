@@ -450,6 +450,34 @@ describe('EventAutoExtendService — multiple candidates', () => {
   });
 });
 
+describe('Regression: lookback window catches events ending at odd times (ROK-736)', () => {
+  let ctx: AutoExtendCtx;
+
+  beforeEach(async () => {
+    ctx = await buildAutoExtendModule();
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('finds an event whose effective end is 4 minutes in the past', async () => {
+    const originalEnd = new Date(Date.now() - 4 * 60 * 1000);
+    const candidate = makeCandidate({
+      id: 99,
+      originalEnd,
+      extendedUntil: null,
+    });
+    ctx.mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
+    const uc = createUpdateChain();
+    ctx.mockDb.update.mockReturnValue(uc);
+    ctx.voiceAttendanceService.getActiveCount.mockReturnValue(3);
+    await ctx.service.checkAndExtendEvents();
+    expect(ctx.mockDb.update).toHaveBeenCalled();
+    expect(uc.set).toHaveBeenCalledWith(
+      expect.objectContaining({ extendedUntil: expect.any(Date) }),
+    );
+  });
+});
+
 describe('EventAutoExtendService — ad-hoc embed update & cron', () => {
   let ctx: AutoExtendCtx;
 
