@@ -33,6 +33,7 @@ import {
   tryCompleteEvent,
   tryEditEndTime,
   tryEditDescription,
+  resolveVoiceForEdit,
 } from './scheduled-event.discord-ops';
 
 export type { ScheduledEventData } from './scheduled-event.helpers';
@@ -278,12 +279,12 @@ export class ScheduledEventService {
     gameId?: number | null,
   ): Promise<void> {
     const description = await this.buildDescription(eventId, eventData);
-    const voiceChannelId =
-      event.notificationChannelOverride ??
-      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-        gameId,
-        event.recurrenceGroupId,
-      ));
+    const voiceChannelId = await resolveVoiceForEdit(
+      guild,
+      event,
+      gameId,
+      this.channelResolver,
+    );
     try {
       await timedDiscordCall(
         'scheduledEvents.edit',
