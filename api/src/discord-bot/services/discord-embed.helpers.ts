@@ -140,7 +140,8 @@ function formatMentionLine(
   },
   emojiService: DiscordEmojiService,
 ): string {
-  const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
+  const rawLabel = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
+  const label = m.status === 'left' ? `~~${rawLabel}~~` : rawLabel;
   const tentativePrefix = m.status === 'tentative' ? '\u23F3 ' : '';
   const classEmoji = m.className ? emojiService.getClassEmoji(m.className) : '';
   const prefs =

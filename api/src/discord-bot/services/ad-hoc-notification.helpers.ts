@@ -120,11 +120,12 @@ function assembleEmbedData(
     maxAttendees: event.maxAttendees,
     slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
     game: game ?? undefined,
-    signupMentions: active.map((p) => ({
+    signupMentions: participants.map((p) => ({
       discordId: p.discordUserId,
       username: p.discordUsername,
       role: null,
       preferredRoles: null,
+      ...(p.isActive ? {} : { status: 'left' }),
     })),
   };
   if (voiceChannelId) data.voiceChannelId = voiceChannelId;

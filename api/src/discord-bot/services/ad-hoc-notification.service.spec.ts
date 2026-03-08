@@ -333,4 +333,51 @@ describe('AdHocNotificationService', () => {
       expect(clientService.editEmbed).not.toHaveBeenCalled();
     });
   });
+
+  describe('processUpdate — running participant list (ROK-680)', () => {
+    async function spawnAndTrack(eventId: number) {
+      channelBindingsService.getBindingById.mockResolvedValue({
+        id: 'binding-flush',
+        config: { notificationChannelId: 'flush-channel' },
+      });
+      mockBuildEmbedData(mockDb, { id: eventId });
+      await service.notifySpawn(
+        eventId,
+        'binding-flush',
+        { id: eventId, title: 'Quick Play' },
+        [{ discordUserId: 'u1', discordUsername: 'P1' }],
+      );
+      embedFactory.buildEventEmbed.mockClear();
+      embedFactory.buildEventEmbed.mockReturnValue({
+        embed: fakeEmbed,
+        row: undefined,
+      });
+      clientService.editEmbed.mockClear();
+    }
+
+    it('includes left participants in embed data during flush', async () => {
+      await spawnAndTrack(100);
+      service.queueUpdate(100, 'binding-flush');
+      // Mock DB: participants query returns 1 active + 1 left
+      mockDb.where.mockResolvedValueOnce([
+        { discordUserId: 'u1', discordUsername: 'P1', leftAt: null },
+        { discordUserId: 'u2', discordUsername: 'P2', leftAt: new Date() },
+      ]);
+      // Mock event + game for buildEmbedEventData
+      mockBuildEmbedData(mockDb, { id: 100 });
+      jest.advanceTimersByTime(5000);
+      // Wait for async flush
+      await jest.advanceTimersByTimeAsync(0);
+      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signupMentions: expect.arrayContaining([
+            expect.objectContaining({ discordId: 'u1' }),
+            expect.objectContaining({ discordId: 'u2', status: 'left' }),
+          ]),
+        }),
+        expect.any(Object),
+        expect.any(Object),
+      );
+    });
+  });
 });
