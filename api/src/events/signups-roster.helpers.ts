@@ -99,6 +99,7 @@ export function buildSignupResponseDto(
   signup: typeof schema.eventSignups.$inferSelect,
   user: typeof schema.users.$inferSelect | undefined,
   character: typeof schema.characters.$inferSelect | null,
+  assignedSlot?: string,
 ): SignupResponseDto {
   return {
     id: signup.id,
@@ -119,12 +120,14 @@ export function buildSignupResponseDto(
       (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
     attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
     attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
+    ...(assignedSlot ? { assignedSlot: assignedSlot as RosterRole } : {}),
   };
 }
 
 /** Build signup response for anonymous Discord participants (ROK-137). */
 export function buildAnonymousSignupResponseDto(
   signup: typeof schema.eventSignups.$inferSelect,
+  assignedSlot?: string,
 ): SignupResponseDto {
   return {
     id: signup.id,
@@ -149,6 +152,7 @@ export function buildAnonymousSignupResponseDto(
       (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
     attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
     attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
+    ...(assignedSlot ? { assignedSlot: assignedSlot as RosterRole } : {}),
   };
 }
 

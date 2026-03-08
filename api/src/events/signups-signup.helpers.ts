@@ -8,13 +8,33 @@ import * as schema from '../drizzle/schema';
 import type { CreateSignupDto } from '@raid-ledger/contract';
 import type { Tx, EventRow, SignupRow } from './signups.service.types';
 
+/** Compute the total non-bench capacity from a slotConfig object. */
+export function computeSlotCapacity(
+  slotConfig: Record<string, unknown>,
+): number | null {
+  const type = slotConfig.type as string;
+  if (type === 'mmo') {
+    const tank = (slotConfig.tank as number) ?? 2;
+    const healer = (slotConfig.healer as number) ?? 4;
+    const dps = (slotConfig.dps as number) ?? 14;
+    const flex = (slotConfig.flex as number) ?? 0;
+    return tank + healer + dps + flex;
+  }
+  if (type === 'generic') {
+    return (slotConfig.player as number) ?? null;
+  }
+  return null;
+}
+
 export async function checkAutoBench(
   tx: Tx,
   eventRow: EventRow,
   eventId: number,
   dto?: CreateSignupDto,
 ): Promise<boolean> {
-  if (!eventRow.maxAttendees || dto?.slotRole === 'bench') return false;
+  if (dto?.slotRole === 'bench') return false;
+  const capacity = resolveRosterCapacity(eventRow);
+  if (capacity === null) return false;
   const [{ count }] = await tx
     .select({ count: sql<number>`count(*)` })
     .from(schema.eventSignups)
@@ -28,7 +48,14 @@ export async function checkAutoBench(
         sql`${schema.rosterAssignments.role} != 'bench'`,
       ),
     );
-  return Number(count) >= eventRow.maxAttendees;
+  return Number(count) >= capacity;
+}
+
+/** Resolve the total non-bench roster capacity for an event. */
+function resolveRosterCapacity(eventRow: EventRow): number | null {
+  const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
+  if (slotConfig) return computeSlotCapacity(slotConfig);
+  return eventRow.maxAttendees ?? null;
 }
 
 export async function insertSignupRow(

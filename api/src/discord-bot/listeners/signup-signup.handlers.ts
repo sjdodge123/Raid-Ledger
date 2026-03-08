@@ -9,6 +9,7 @@ import {
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -249,9 +250,9 @@ export async function handleNewLinkedSignup(
     if (handled) return;
   }
 
-  await deps.signupsService.signup(eventId, linkedUser.id);
+  const result = await deps.signupsService.signup(eventId, linkedUser.id);
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!`,
+    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}`,
   });
   await deps.updateEmbedSignupCount(eventId);
 }

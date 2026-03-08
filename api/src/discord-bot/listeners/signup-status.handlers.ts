@@ -8,6 +8,7 @@ import {
   handleLinkedTentative,
   tryMmoTentativeRedirect,
 } from './signup-status-tentative.handlers';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -70,13 +71,15 @@ async function handleUnlinkedTentative(
 ): Promise<void> {
   if (await tryMmoTentativeRedirect(interaction, eventId, deps)) return;
 
-  await deps.signupsService.signupDiscord(eventId, {
+  const result = await deps.signupsService.signupDiscord(eventId, {
     discordUserId,
     discordUsername: interaction.user.username,
     discordAvatarHash: interaction.user.avatar,
     status: 'tentative',
   });
-  await interaction.editReply({ content: "You're marked as **tentative**." });
+  await interaction.editReply({
+    content: `You're marked as **tentative**.${benchSuffix(result.assignedSlot)}`,
+  });
   await deps.updateEmbedSignupCount(eventId);
 }
 
@@ -164,7 +167,7 @@ async function quickSignupAnonymous(
   eventId: number,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  await deps.signupsService.signupDiscord(eventId, {
+  const result = await deps.signupsService.signupDiscord(eventId, {
     discordUserId: interaction.user.id,
     discordUsername: interaction.user.username,
     discordAvatarHash: interaction.user.avatar,
@@ -175,7 +178,7 @@ async function quickSignupAnonymous(
     ? `\n[Create an account](${clientUrl}) to manage characters and get reminders.`
     : '';
   await interaction.editReply({
-    content: `You're signed up as **${interaction.user.username}**!${accountLink}`,
+    content: `You're signed up as **${interaction.user.username}**!${benchSuffix(result.assignedSlot)}${accountLink}`,
   });
   await deps.updateEmbedSignupCount(eventId);
 }

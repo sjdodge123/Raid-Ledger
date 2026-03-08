@@ -18,19 +18,18 @@ import type {
 } from './signups.service.types';
 import * as signupH from './signups-signup.helpers';
 import * as discordH from './signups-discord.helpers';
-import * as cancelH from './signups-cancel.helpers';
-import * as rosterH from './signups-roster.helpers';
+import { getCharacterById } from './signups-cancel.helpers';
+import { buildSignupResponseDto } from './signups-roster.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
-type Logger = {
-  log: (msg: string, ...a: unknown[]) => void;
-  warn: (msg: string, ...a: unknown[]) => void;
-};
 
 export interface FlowDeps {
   db: Tx;
-  logger: Logger;
+  logger: {
+    log: (msg: string, ...a: unknown[]) => void;
+    warn: (msg: string, ...a: unknown[]) => void;
+  };
   cancelPromotion: (
     eventId: number,
     role: string,
@@ -82,11 +81,11 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
     p.autoBench,
   );
   const character = existing.characterId
-    ? await cancelH.getCharacterById(tx, existing.characterId)
+    ? await getCharacterById(tx, existing.characterId)
     : null;
   return {
     isDuplicate: true as const,
-    response: rosterH.buildSignupResponseDto(existing, user, character),
+    response: buildSignupResponseDto(existing, user, character),
   };
 }
 
@@ -116,7 +115,12 @@ async function ensureAssignment(
         .where(eq(schema.eventSignups.id, existing.id));
     }
     await deps.autoAllocateSignup(tx, eventId, existing.id, slotConfig);
-    await signupH.syncConfirmationStatus(tx, existing);
+    const hasAssignment = await checkHasAssignment(tx, existing.id);
+    if (hasAssignment) {
+      await signupH.syncConfirmationStatus(tx, existing);
+    } else {
+      await assignBenchFallback(deps, tx, eventId, existing.id);
+    }
   } else {
     const confirmed = await assignDirectSlot(deps, {
       tx,
@@ -168,16 +172,14 @@ async function handleNewSignup(deps: FlowDeps, p: NewSignupParams) {
   const { tx, eventRow, eventId, userId, inserted, dto, autoBench } = p;
   deps.logger.log(`User ${userId} signed up for event ${eventId}`);
   if (signupH.shouldUseAutoAllocationNew(eventRow, dto, autoBench)) {
-    const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
-    const hasPrefs = dto?.preferredRoles && dto.preferredRoles.length > 0;
-    if (!hasPrefs && dto?.slotRole) {
-      await tx
-        .update(schema.eventSignups)
-        .set({ preferredRoles: [dto.slotRole] })
-        .where(eq(schema.eventSignups.id, inserted.id));
-    }
-    await deps.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
-    await signupH.syncConfirmationStatus(tx, inserted);
+    await runAutoAllocWithBenchFallback(
+      deps,
+      tx,
+      eventRow,
+      eventId,
+      inserted,
+      dto,
+    );
   } else {
     const confirmed = await assignDirectSlot(deps, {
       tx,
@@ -194,6 +196,65 @@ async function handleNewSignup(deps: FlowDeps, p: NewSignupParams) {
   return { isDuplicate: false as const, signup: inserted };
 }
 
+/** Run MMO auto-allocation, then bench-fallback if no assignment was made. */
+async function runAutoAllocWithBenchFallback(
+  deps: FlowDeps,
+  tx: Tx,
+  eventRow: typeof schema.events.$inferSelect,
+  eventId: number,
+  inserted: typeof schema.eventSignups.$inferSelect,
+  dto: CreateSignupDto | undefined,
+): Promise<void> {
+  const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
+  const hasPrefs = dto?.preferredRoles && dto.preferredRoles.length > 0;
+  if (!hasPrefs && dto?.slotRole) {
+    await tx
+      .update(schema.eventSignups)
+      .set({ preferredRoles: [dto.slotRole] })
+      .where(eq(schema.eventSignups.id, inserted.id));
+  }
+  await deps.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
+  const hasAssignment = await checkHasAssignment(tx, inserted.id);
+  if (hasAssignment) {
+    await signupH.syncConfirmationStatus(tx, inserted);
+  } else {
+    await assignBenchFallback(deps, tx, eventId, inserted.id);
+  }
+}
+
+/** Check whether a signup has any roster assignment. */
+async function checkHasAssignment(tx: Tx, signupId: number): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: schema.rosterAssignments.id })
+    .from(schema.rosterAssignments)
+    .where(eq(schema.rosterAssignments.signupId, signupId))
+    .limit(1);
+  return !!row;
+}
+
+/** Assign a signup to the bench as a fallback (ROK-626). */
+export async function assignBenchFallback(
+  deps: FlowDeps,
+  tx: Tx,
+  eventId: number,
+  signupId: number,
+  label = 'signup',
+): Promise<void> {
+  const position = await rosterQH.findNextPosition(
+    tx,
+    eventId,
+    'bench',
+    undefined,
+    true,
+  );
+  await tx
+    .insert(schema.rosterAssignments)
+    .values({ eventId, signupId, role: 'bench', position, isOverride: 0 });
+  deps.logger.log(
+    `Auto-benched ${label} ${signupId} at bench position ${position}`,
+  );
+}
+
 export async function discordSignupTxBody(
   deps: FlowDeps,
   tx: Tx,
@@ -206,32 +267,23 @@ export async function discordSignupTxBody(
     return discordH.fetchExistingDiscordSignup(tx, eventId, dto.discordUserId);
   }
   const [inserted] = rows;
-  const slotConfig = event.slotConfig as Record<string, unknown> | null;
-  const isMMO = slotConfig?.type === 'mmo';
-  const hasPrefs = dto.preferredRoles && dto.preferredRoles.length > 0;
-  const hasSingleRole = !hasPrefs && dto.role;
-  if (isMMO && (hasPrefs || hasSingleRole)) {
-    await discordH.allocateMmoDiscordSlot(
+  const autoBench = await signupH.checkAutoBench(tx, event, eventId);
+  if (autoBench) {
+    await assignBenchFallback(
+      deps,
       tx,
       eventId,
       inserted.id,
-      dto,
-      hasSingleRole,
-      (t, eId, sId, sc) => deps.autoAllocateSignup(t, eId, sId, sc),
-      slotConfig,
+      'anonymous signup',
     );
   } else {
-    await discordH.allocateGenericDiscordSlot(
+    await discordH.allocateDiscordSlot(
       tx,
       event,
       eventId,
-      inserted.id,
+      inserted,
       dto,
-      isMMO,
-      hasPrefs,
-      hasSingleRole,
-      (t, ev, eId) => rosterQH.resolveGenericSlotRole(t, ev, eId),
-      (t, eId, role) => rosterQH.findNextPosition(t, eId, role),
+      (t, eId, sId, sc) => deps.autoAllocateSignup(t, eId, sId, sc),
     );
   }
   deps.logger.log(

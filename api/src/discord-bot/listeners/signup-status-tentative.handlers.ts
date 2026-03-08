@@ -4,20 +4,22 @@ import * as schema from '../../drizzle/schema';
 import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
 import { fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 
-/** Sign up as tentative. */
+/** Sign up as tentative. Returns assignedSlot for bench feedback. */
 export async function signupAsTentative(
   eventId: number,
   userId: number,
   deps: SignupInteractionDeps,
-): Promise<void> {
-  await deps.signupsService.signup(eventId, userId);
+): Promise<string | undefined> {
+  const result = await deps.signupsService.signup(eventId, userId);
   await deps.signupsService.updateStatus(
     eventId,
     { userId },
     { status: 'tentative' },
   );
   await deps.updateEmbedSignupCount(eventId);
+  return result.assignedSlot ?? undefined;
 }
 
 /** Tentative flow for a linked user without an existing signup. */
@@ -44,8 +46,10 @@ export async function handleLinkedTentative(
     if (handled) return;
   }
 
-  await signupAsTentative(eventId, linkedUser.id, deps);
-  await interaction.editReply({ content: "You're marked as **tentative**." });
+  const assignedSlot = await signupAsTentative(eventId, linkedUser.id, deps);
+  await interaction.editReply({
+    content: `You're marked as **tentative**.${benchSuffix(assignedSlot)}`,
+  });
 }
 
 async function loadTentativeGameContext(
@@ -191,7 +195,7 @@ async function tentativeSingleCharacter(
     { status: 'tentative' },
   );
   await interaction.editReply({
-    content: `You're marked as **tentative** with **${char.name}**.`,
+    content: `You're marked as **tentative** with **${char.name}**.${benchSuffix(result.assignedSlot)}`,
   });
   await deps.updateEmbedSignupCount(eventId);
   return true;

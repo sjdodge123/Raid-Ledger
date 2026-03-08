@@ -5,6 +5,7 @@ import { showRoleSelect } from './signup-signup.handlers';
 import { findLinkedUser, safeEditReply } from './signup-interaction.helpers';
 import { replyNoLinkedAccount } from './signup-select-role.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 
 /**
  * Handle character selection for linked users.
@@ -120,12 +121,13 @@ async function signupWithCharacterDirect(
     );
   }
   const character = await deps.charactersService.findOne(userId, characterId);
+  const bench = benchSuffix(signupResult.assignedSlot);
 
   await interaction.editReply({
     content:
       signupStatus === 'tentative'
         ? `You're marked as **tentative** with **${character.name}**.`
-        : `Signed up as **${character.name}**!`,
+        : `Signed up as **${character.name}**!${bench}`,
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);
