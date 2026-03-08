@@ -219,6 +219,20 @@ export async function applyGameChange(
   return { change: `Game reassigned to **${gameMatch.name}**` };
 }
 
+/** Derives the game from the first event in a series (if any). */
+export async function findSeriesGame(
+  db: PostgresJsDatabase<typeof schemaType>,
+  recurrenceGroupId: string,
+): Promise<{ id: number; name: string } | null> {
+  const [row] = await db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.events)
+    .innerJoin(schema.games, eq(schema.events.gameId, schema.games.id))
+    .where(eq(schema.events.recurrenceGroupId, recurrenceGroupId))
+    .limit(1);
+  return row ?? null;
+}
+
 /** Finds future event IDs in a recurrence group for re-syncing after bind. */
 export async function findSeriesEventIds(
   db: PostgresJsDatabase<typeof schemaType>,

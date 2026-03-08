@@ -25,6 +25,7 @@ import {
   setChannelOverride,
   applyGameChange,
   findSeriesEventIds,
+  findSeriesGame,
 } from './bind.helpers';
 import {
   resolveChannel,
@@ -127,10 +128,13 @@ export class BindCommand
       await interaction.editReply('Could not determine the target channel.');
       return;
     }
-    const game = await resolveGame(this.db, interaction);
+    let game = await resolveGame(this.db, interaction);
     if (game === false) return;
     const series = await resolveSeries(this.db, interaction);
     if (series === false) return;
+    if (!game && series) {
+      game = await findSeriesGame(this.db, series.id);
+    }
     await this.tryBindChannel(
       interaction,
       guildId,
