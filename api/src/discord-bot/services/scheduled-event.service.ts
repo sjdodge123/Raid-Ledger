@@ -18,6 +18,7 @@ import {
 } from './scheduled-event.helpers';
 import {
   findStartCandidates,
+  findCompletionCandidates,
   getScheduledEventId,
   getEventWithOverride,
   saveScheduledEventId,
@@ -76,6 +77,28 @@ export class ScheduledEventService {
       const result = await tryStartEvent(guild, c);
       if (result.cleared) await clearScheduledEventId(this.db, c.id);
       else if (result.error) this.logApiError('start', c.id, result.error);
+    }
+  }
+
+  /** Cron: auto-complete Discord Scheduled Events past their end time (ROK-717). */
+  @Cron('18,48 * * * * *', {
+    name: 'ScheduledEventService_completeScheduledEvents',
+  })
+  async handleCompleteScheduledEvents(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'ScheduledEventService_completeScheduledEvents',
+      () => this.completeExpiredEvents(),
+    );
+  }
+
+  /** Find and complete events past their effective end time (ROK-717). */
+  async completeExpiredEvents(): Promise<void> {
+    if (!this.clientService.isConnected()) return;
+    const guild = this.clientService.getGuild();
+    if (!guild) return;
+    const candidates = await findCompletionCandidates(this.db);
+    for (const c of candidates) {
+      await this.completeScheduledEvent(c.id);
     }
   }
 
@@ -255,7 +278,12 @@ export class ScheduledEventService {
     gameId?: number | null,
   ): Promise<void> {
     const description = await this.buildDescription(eventId, eventData);
-    const voiceChannelId = await this.resolveEditVoice(event, gameId);
+    const voiceChannelId =
+      event.notificationChannelOverride ??
+      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+        gameId,
+        event.recurrenceGroupId,
+      ));
     try {
       await timedDiscordCall(
         'scheduledEvents.edit',
@@ -280,22 +308,6 @@ export class ScheduledEventService {
         event.notificationChannelOverride,
       );
     }
-  }
-
-  private async resolveEditVoice(
-    event: Pick<
-      ScheduledEventRecord,
-      'notificationChannelOverride' | 'recurrenceGroupId'
-    >,
-    gameId?: number | null,
-  ): Promise<string | null | undefined> {
-    return (
-      event.notificationChannelOverride ??
-      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-        gameId,
-        event.recurrenceGroupId,
-      ))
-    );
   }
 
   private async resolveVoiceChannel(
