@@ -67,12 +67,23 @@ export class SettingsService implements OnModuleInit {
     await this.loadCache();
   }
 
+  /**
+   * Ensures the settings cache is available. On cold start (cache never loaded),
+   * blocks until the cache is populated. On warm cache with expired TTL,
+   * serves stale data and triggers a non-blocking background refresh.
+   */
   private async ensureCache(): Promise<void> {
     if (Date.now() - this.cacheLoadedAt < CACHE_TTL_MS) return;
-    if (!this.cacheLoadPromise) this.cacheLoadPromise = this.loadCache();
-    await this.cacheLoadPromise;
+    const isColdCache = this.cacheLoadedAt === 0;
+    if (!this.cacheLoadPromise) {
+      this.cacheLoadPromise = this.loadCache();
+    }
+    if (isColdCache) {
+      await this.cacheLoadPromise;
+    }
   }
 
+  /** Loads all settings from DB, decrypts, and replaces the cache. */
   private async loadCache(): Promise<void> {
     try {
       const rows = await this.db.select().from(appSettings);
@@ -87,6 +98,8 @@ export class SettingsService implements OnModuleInit {
       this.cache = fresh;
       this.cacheLoadedAt = Date.now();
       this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
+    } catch (err: unknown) {
+      this.logger.error('Background cache refresh failed', err);
     } finally {
       this.cacheLoadPromise = null;
     }
