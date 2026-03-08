@@ -582,6 +582,13 @@
       "when": 1772870400000,
       "tag": "0082_cleanup_orphaned_cron_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1772946000000,
+      "tag": "0083_add_event_signups_event_id_status_index",
+      "breakpoints": true
     }
   ]
 }
