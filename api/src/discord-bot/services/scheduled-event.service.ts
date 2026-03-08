@@ -278,12 +278,7 @@ export class ScheduledEventService {
     gameId?: number | null,
   ): Promise<void> {
     const description = await this.buildDescription(eventId, eventData);
-    const voiceChannelId =
-      event.notificationChannelOverride ??
-      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-        gameId,
-        event.recurrenceGroupId,
-      ));
+    const voiceChannelId = await this.resolveVoiceForEdit(guild, event, gameId);
     try {
       await timedDiscordCall(
         'scheduledEvents.edit',
@@ -323,6 +318,28 @@ export class ScheduledEventService {
         recurrenceGroupId,
       )) ??
       null
+    );
+  }
+
+  /**
+   * Resolve the voice channel for a scheduled event edit (ROK-716).
+   * If notificationChannelOverride is set and is a voice channel, use it.
+   * If it's a text channel, fall back to the channel resolver.
+   * If it's not in cache, use it optimistically (may be an uncached voice channel).
+   */
+  private async resolveVoiceForEdit(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    event: ScheduledEventRecord,
+    gameId?: number | null,
+  ): Promise<string | null> {
+    const override = event.notificationChannelOverride;
+    if (override) {
+      const cached = guild.channels.cache.get(override);
+      if (!cached || cached.isVoiceBased()) return override;
+    }
+    return this.channelResolver.resolveVoiceChannelForScheduledEvent(
+      gameId,
+      event.recurrenceGroupId,
     );
   }
 
