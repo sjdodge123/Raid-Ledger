@@ -127,6 +127,7 @@ export class EmbedSyncProcessor extends WorkerHost {
       row,
     );
     await this.persistState(record.id, newState);
+    await this.maybeDeleteBumpMessage(record, newState, eventId);
     this.logTransition(previousState, newState, eventId, reason, perfStart);
     this.triggerSideEffects(newState, eventId, eventData);
   }
@@ -140,6 +141,30 @@ export class EmbedSyncProcessor extends WorkerHost {
       .update(schema.discordEventMessages)
       .set({ embedState: newState, updatedAt: new Date() })
       .where(eq(schema.discordEventMessages.id, recordId));
+  }
+
+  /** Delete the recruitment bump message when the event becomes full (ROK-728). */
+  private async maybeDeleteBumpMessage(
+    record: typeof schema.discordEventMessages.$inferSelect,
+    newState: EmbedState,
+    eventId: number,
+  ): Promise<void> {
+    if (newState !== EMBED_STATES.FULL || !record.bumpMessageId) return;
+    try {
+      await this.clientService.deleteMessage(
+        record.channelId,
+        record.bumpMessageId,
+      );
+      await this.db
+        .update(schema.discordEventMessages)
+        .set({ bumpMessageId: null, updatedAt: new Date() })
+        .where(eq(schema.discordEventMessages.id, record.id));
+      this.logger.log(`Deleted recruitment bump message for event ${eventId}`);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to delete bump message for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+      );
+    }
   }
 
   /** Log state transition and performance data. */

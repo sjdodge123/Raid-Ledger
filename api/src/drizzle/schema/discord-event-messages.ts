@@ -27,6 +27,8 @@ export const discordEventMessages = pgTable(
     embedState: varchar('embed_state', { length: 30 })
       .notNull()
       .default('posted'),
+    /** Discord message ID of the recruitment bump message (ROK-728). Nullable — only set when a bump has been posted. */
+    bumpMessageId: varchar('bump_message_id', { length: 255 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

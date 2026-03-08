@@ -603,6 +603,13 @@
       "when": 1772957000000,
       "tag": "0085_event_series_partial_index",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1773100000000,
+      "tag": "0086_add_bump_message_id",
+      "breakpoints": true
     }
   ]
 }
