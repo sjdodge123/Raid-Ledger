@@ -2,7 +2,7 @@ import type { ButtonInteraction } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
-import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
+import { fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 
 /** Sign up as tentative. */
