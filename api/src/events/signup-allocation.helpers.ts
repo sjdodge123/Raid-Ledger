@@ -134,6 +134,16 @@ async function buildAllocationContext(
   };
 }
 
+/** Checks if a full role has a tentative occupant that a confirmed player
+ *  should displace instead of taking a lower-priority open slot. */
+function hasTentativeOccupant(role: string, ctx: AllocationContext): boolean {
+  const signupById = new Map(ctx.allSignups.map((s) => [s.id, s]));
+  return ctx.currentAssignments.some(
+    (a) =>
+      a.role === role && signupById.get(a.signupId)?.status === 'tentative',
+  );
+}
+
 /** Tries to place the signup directly into an open preferred-role slot. */
 async function tryDirectSlot(
   tx: PostgresJsDatabase<typeof schema>,
@@ -143,20 +153,22 @@ async function tryDirectSlot(
   findPos: (role: string) => number,
   benchPromo: BenchPromotionService,
 ): Promise<boolean> {
+  const status = ctx.allSignups.find((s) => s.id === signupId)?.status;
   for (const role of ctx.newPrefs) {
-    if (
-      role in ctx.roleCapacity &&
-      ctx.filledPerRole[role] < ctx.roleCapacity[role]
-    ) {
-      const position = findPos(role);
-      await insertAssignment(tx, eventId, signupId, role, position);
-      await confirmSignup(tx, signupId);
-      logger.log(
-        `Auto-allocated signup ${signupId} to ${role} slot ${position} (direct match)`,
-      );
-      await benchPromo.cancelPromotion(eventId, role, position);
-      return true;
+    if (!(role in ctx.roleCapacity)) continue;
+    if (ctx.filledPerRole[role] >= ctx.roleCapacity[role]) {
+      if (status !== 'tentative' && hasTentativeOccupant(role, ctx))
+        return false;
+      continue;
     }
+    const position = findPos(role);
+    await insertAssignment(tx, eventId, signupId, role, position);
+    await confirmSignup(tx, signupId);
+    logger.log(
+      `Auto-allocated signup ${signupId} to ${role} slot ${position} (direct match)`,
+    );
+    await benchPromo.cancelPromotion(eventId, role, position);
+    return true;
   }
   return false;
 }
