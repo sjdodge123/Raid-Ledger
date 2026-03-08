@@ -31,14 +31,6 @@ import {
   bothExist,
 } from './settings-bot.helpers';
 
-export { SETTINGS_EVENTS } from './settings.types';
-export type {
-  DiscordOAuthConfig,
-  IgdbConfig,
-  BlizzardConfig,
-  BrandingConfig,
-  DiscordBotConfig,
-} from './settings.types';
 import { SETTINGS_EVENTS } from './settings.types';
 import type {
   DiscordOAuthConfig,

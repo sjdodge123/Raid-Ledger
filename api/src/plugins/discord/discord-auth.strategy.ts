@@ -4,11 +4,9 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { Request } from 'express';
 import { AuthService } from '../../auth/auth.service';
-import {
-  SettingsService,
-  SETTINGS_EVENTS,
-} from '../../settings/settings.service';
-import type { DiscordOAuthConfig } from '../../settings/settings.service';
+import { SettingsService } from '../../settings/settings.service';
+import { SETTINGS_EVENTS } from '../../settings/settings.types';
+import type { DiscordOAuthConfig } from '../../settings/settings.types';
 
 /**
  * Dynamic Discord OAuth strategy that supports hot-reload.

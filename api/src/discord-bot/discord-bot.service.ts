@@ -6,11 +6,9 @@ import {
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { DiscordBotClientService } from './discord-bot-client.service';
-import {
-  SettingsService,
-  DiscordBotConfig,
-  SETTINGS_EVENTS,
-} from '../settings/settings.service';
+import { SettingsService } from '../settings/settings.service';
+import type { DiscordBotConfig } from '../settings/settings.types';
+import { SETTINGS_EVENTS } from '../settings/settings.types';
 import { friendlyDiscordErrorMessage } from './discord-bot.constants';
 import type {
   DiscordBotStatusResponse,
