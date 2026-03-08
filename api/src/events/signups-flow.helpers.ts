@@ -107,7 +107,9 @@ async function ensureAssignment(
   if (existingAssignment) return;
   if (signupH.shouldUseAutoAllocation(eventRow, existing, dto, autoBench)) {
     const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
-    if (dto?.slotRole) {
+    const hasPrefs =
+      existing.preferredRoles && existing.preferredRoles.length > 0;
+    if (!hasPrefs && dto?.slotRole) {
       await tx
         .update(schema.eventSignups)
         .set({ preferredRoles: [dto.slotRole] })
@@ -167,7 +169,8 @@ async function handleNewSignup(deps: FlowDeps, p: NewSignupParams) {
   deps.logger.log(`User ${userId} signed up for event ${eventId}`);
   if (signupH.shouldUseAutoAllocationNew(eventRow, dto, autoBench)) {
     const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
-    if (dto?.slotRole) {
+    const hasPrefs = dto?.preferredRoles && dto.preferredRoles.length > 0;
+    if (!hasPrefs && dto?.slotRole) {
       await tx
         .update(schema.eventSignups)
         .set({ preferredRoles: [dto.slotRole] })
