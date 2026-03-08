@@ -37,10 +37,11 @@ Step 3: Validate  → Build + typecheck + lint + unit tests + integration tests 
 Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 ```
 
-**Three gates before PR:**
-1. **Unit tests** — all workspaces pass
-2. **Integration tests** — `npm run test:integration -w api`
-3. **CI** — build + type check + lint (validated as part of gate 1-2 process)
+**Four gates before PR:**
+1. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
+2. **Unit tests** — all workspaces pass
+3. **Integration tests** — `npm run test:integration -w api`
+4. **CI** — build + type check + lint (validated as part of gate 1-2 process)
 
 ---
 

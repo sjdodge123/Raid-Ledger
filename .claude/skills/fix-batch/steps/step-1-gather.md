@@ -155,6 +155,7 @@ pipeline:
   next_action: |
     Read steps/step-2-implement.md. Create batch branch, worktrees, and spawn dev agents.
   gates:
+    regression: PENDING
     integration: PENDING
     ci: PENDING
     smoke: PENDING
