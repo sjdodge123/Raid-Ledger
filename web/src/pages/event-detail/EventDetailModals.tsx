@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import { lazy, Suspense } from 'react';
 import { Modal } from '../../components/ui/modal';
-import type { CharacterRole, PugSlotResponseDto, EventRosterDto } from '@raid-ledger/contract';
+import type { CharacterRole, PugSlotResponseDto, EventRosterDto, SeriesScope } from '@raid-ledger/contract';
 
 // ROK-343: Lazy load modals
 const SignupConfirmationModal = lazy(() =>
@@ -15,6 +15,9 @@ const CancelEventModal = lazy(() =>
 );
 const InviteModal = lazy(() =>
     import('../../components/events/invite-modal').then(m => ({ default: m.InviteModal })),
+);
+const SeriesScopeModal = lazy(() =>
+    import('../../components/events/series-scope-modal').then(m => ({ default: m.SeriesScopeModal })),
 );
 
 interface ConfirmModalProps {
@@ -176,5 +179,30 @@ export function RemoveConfirmModal(props: RemoveConfirmModalProps): JSX.Element 
                 </div>
             )}
         </Modal>
+    );
+}
+
+interface SeriesScopeModalProps {
+    show: boolean;
+    action: 'edit' | 'delete' | 'cancel';
+    eventId: number;
+    onClose: () => void;
+    onSeriesConfirm: (action: 'edit' | 'delete' | 'cancel', scope: SeriesScope) => void;
+    isPending?: boolean;
+}
+
+/** Series scope selection modal wrapper (ROK-429). */
+export function SeriesScopeModalSection(props: SeriesScopeModalProps): JSX.Element | null {
+    if (!props.show) return null;
+    return (
+        <Suspense fallback={null}>
+            <SeriesScopeModal
+                isOpen={props.show}
+                onClose={props.onClose}
+                onConfirm={(scope) => props.onSeriesConfirm(props.action, scope)}
+                action={props.action}
+                isPending={props.isPending}
+            />
+        </Suspense>
     );
 }

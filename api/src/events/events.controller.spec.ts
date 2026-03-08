@@ -8,6 +8,7 @@ import { SignupsService } from './signups.service';
 import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
+import { EventSeriesService } from './event-series.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { AnalyticsService } from './analytics.service';
@@ -94,6 +95,14 @@ describe('EventsController', () => {
   function buildTestProviders() {
     return [
       { provide: EventsService, useValue: mockEventsService },
+      {
+        provide: EventSeriesService,
+        useValue: {
+          update: jest.fn().mockResolvedValue(undefined),
+          delete: jest.fn().mockResolvedValue(undefined),
+          cancel: jest.fn().mockResolvedValue(undefined),
+        },
+      },
       { provide: SignupsService, useValue: mockSignupsService },
       { provide: AttendanceService, useValue: createMockAttendanceService() },
       { provide: PugsService, useValue: mockPugsService },

@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
-import type { CreateEventDto, UpdateEventDto, RecurrenceDto, TemplateConfigDto, EventResponseDto } from '@raid-ledger/contract';
-import { createEvent, updateEvent } from '../../lib/api-client';
+import type { CreateEventDto, UpdateEventDto, RecurrenceDto, TemplateConfigDto, EventResponseDto, SeriesScope } from '@raid-ledger/contract';
+import { createEvent, updateEvent, updateSeries } from '../../lib/api-client';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
@@ -20,17 +20,21 @@ import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount } from './create-event-form.utils';
 import { FormSection, TemplatesBar, WhenSection, SaveTemplateBar, FormFooter } from './create-event-form-sections';
 
-function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined) {
+function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope) {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const isSeriesEdit = isEditMode && !!seriesScope && seriesScope !== 'this';
 
     return useMutation({
-        mutationFn: (dto: CreateEventDto) => isEditMode ? updateEvent(editEventId!, dto as UpdateEventDto) : createEvent(dto),
+        mutationFn: (dto: CreateEventDto) => {
+            if (isSeriesEdit) return updateSeries(editEventId!, seriesScope!, dto as UpdateEventDto).then(() => undefined);
+            return isEditMode ? updateEvent(editEventId!, dto as UpdateEventDto) : createEvent(dto);
+        },
         onSuccess: (event) => {
-            toast.success(isEditMode ? 'Event updated!' : 'Event created successfully!');
+            toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
             queryClient.invalidateQueries({ queryKey: ['events'] });
             if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
-            navigate(`/events/${event.id}`);
+            navigate(event ? `/events/${event.id}` : `/events/${editEventId}`);
         },
         onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
     });
@@ -123,14 +127,14 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
     mutate(buildSubmitDto(form, resolved, registryGameId));
 }
 
-function useCreateEventFormState(editEvent?: EventResponseDto) {
+function useCreateEventFormState(editEvent?: EventResponseDto, seriesScope?: SeriesScope) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = getTimezoneAbbr(resolved);
     const [form, setForm] = useState<FormState>(() => getInitialState(editEvent, resolved));
     const [errors, setErrors] = useState<FormErrors>({});
     const registryGameId = useRegistryGameId(form.game);
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
-    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id);
+    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope);
     const tpl = useTemplateActions(form);
     const endTimePreview = useEndTimePreview(form.startDate, form.startTime, form.durationMinutes, resolved);
     const recurrenceCount = useMemo(() => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil), [form.recurrenceFrequency, form.startDate, form.recurrenceUntil]);
@@ -143,10 +147,10 @@ function useCreateEventFormState(editEvent?: EventResponseDto) {
     return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
 }
 
-export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
+export function CreateEventForm({ event: editEvent, seriesScope }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
-    const s = useCreateEventFormState(editEvent);
+    const s = useCreateEventFormState(editEvent, seriesScope);
 
     return (
         <form onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate); }} className="space-y-4 sm:space-y-8">

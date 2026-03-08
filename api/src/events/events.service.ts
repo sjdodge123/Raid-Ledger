@@ -23,7 +23,6 @@ import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { EmbedEventData } from '../discord-bot/services/discord-embed.factory';
 import {
   mapEventToResponse,
-  buildLifecyclePayload,
   buildEmbedEventData,
   getVariantContext,
 } from './event-response.helpers';
@@ -40,21 +39,19 @@ import {
 } from './event-lifecycle.helpers';
 import {
   buildBaseValues,
-  insertRecurringEvents,
-  insertSingleEvent,
   resolveRecurrenceGroupId,
 } from './event-create.helpers';
+import {
+  createRecurringFlow,
+  createSingleFlow,
+  emitEventLifecycle,
+} from './event-create-flow.helpers';
 import {
   findExistingEvent,
   assertCanUpdate,
   buildUpdateData,
 } from './event-update.helpers';
-import {
-  findUserByDiscordId,
-  assertNotSignedUp,
-  getInviterUsername,
-  emitMemberInvite,
-} from './event-invite.helpers';
+import { inviteMemberFlow } from './event-invite.helpers';
 import { findOneEvent, findEventsByIds } from './event-find.helpers';
 
 @Injectable()
@@ -79,8 +76,10 @@ export class EventsService {
     const durationMs = endTime.getTime() - startTime.getTime();
     const groupId = resolveRecurrenceGroupId(dto);
     const baseValues = buildBaseValues(creatorId, dto, groupId);
+    const deps = this.createFlowDeps();
     if (dto.recurrence) {
-      return this.createRecurring(
+      return createRecurringFlow(
+        deps,
         dto,
         baseValues,
         startTime,
@@ -88,7 +87,7 @@ export class EventsService {
         creatorId,
       );
     }
-    return this.createSingle(baseValues, startTime, endTime, creatorId);
+    return createSingleFlow(deps, baseValues, startTime, endTime, creatorId);
   }
 
   /** Lists events with filtering and pagination. */
@@ -155,10 +154,7 @@ export class EventsService {
       .update(schema.events)
       .set(updateData)
       .where(eq(schema.events.id, id));
-    this.logger.log(`Event updated: ${id} by user ${userId}`);
-    const updated = await this.findOne(id);
-    this.emitEventLifecycle(APP_EVENT_EVENTS.UPDATED, updated);
-    return updated;
+    return this.postMutate(id, userId, 'updated', APP_EVENT_EVENTS.UPDATED);
   }
 
   /** Deletes an event after ownership verification. */
@@ -182,10 +178,12 @@ export class EventsService {
       isAdmin,
       dto,
     );
-    this.logger.log(`Event cancelled: ${eventId} by user ${userId}`);
-    const cancelled = await this.findOne(eventId);
-    this.emitEventLifecycle(APP_EVENT_EVENTS.CANCELLED, cancelled);
-    return cancelled;
+    return this.postMutate(
+      eventId,
+      userId,
+      'cancelled',
+      APP_EVENT_EVENTS.CANCELLED,
+    );
   }
 
   /** Returns roster availability for an event's signed-up users. */
@@ -228,10 +226,12 @@ export class EventsService {
       isAdmin,
       dto,
     );
-    this.logger.log(`Event rescheduled: ${eventId} by user ${userId}`);
-    const rescheduled = await this.findOne(eventId);
-    this.emitEventLifecycle(APP_EVENT_EVENTS.UPDATED, rescheduled);
-    return rescheduled;
+    return this.postMutate(
+      eventId,
+      userId,
+      'rescheduled',
+      APP_EVENT_EVENTS.UPDATED,
+    );
   }
 
   /** Invites a registered member to an event via Discord ID. */
@@ -242,22 +242,19 @@ export class EventsService {
     discordId: string,
   ): Promise<{ message: string }> {
     const event = await this.findOne(eventId);
-    const targetUser = await findUserByDiscordId(this.db, discordId);
-    await assertNotSignedUp(this.db, eventId, targetUser);
-    const inviterName = await getInviterUsername(this.db, inviterId);
-    await emitMemberInvite(
+    const result = await inviteMemberFlow(
+      this.db,
       this.notificationService,
       this.eventEmitter,
       event,
       eventId,
-      targetUser,
-      inviterName,
+      inviterId,
       discordId,
     );
     this.logger.log(
-      `User ${inviterId} invited member ${targetUser.id} (${targetUser.username}) to event ${eventId}`,
+      `User ${inviterId} invited ${result.targetUser.username} to event ${eventId}`,
     );
-    return { message: `Invite sent to ${targetUser.username}` };
+    return { message: result.message };
   }
 
   /** Builds embed data for Discord embed rendering. */
@@ -273,53 +270,26 @@ export class EventsService {
     return getVariantContext(this.db, eventId);
   }
 
-  private async createRecurring(
-    dto: CreateEventDto,
-    baseValues: Record<string, unknown>,
-    startTime: Date,
-    durationMs: number,
-    creatorId: number,
-  ): Promise<EventResponseDto & { allEventIds: number[] }> {
-    const events = await insertRecurringEvents(
-      this.db,
-      dto,
-      baseValues,
-      startTime,
-      durationMs,
-    );
-    this.logger.log(
-      `Recurring event: ${events.length} instances by user ${creatorId}`,
-    );
-    const allResponses = await this.findByIds(events.map((e) => e.id));
-    for (const r of allResponses)
-      this.emitEventLifecycle(APP_EVENT_EVENTS.CREATED, r);
-    const first =
-      allResponses.find((r) => r.id === events[0].id) ?? allResponses[0];
-    return { ...first, allEventIds: events.map((e) => e.id) };
-  }
-
-  private async createSingle(
-    baseValues: Record<string, unknown>,
-    startTime: Date,
-    endTime: Date,
-    creatorId: number,
+  /** Logs, re-fetches, and emits a lifecycle event after a mutation. */
+  private async postMutate(
+    eventId: number,
+    userId: number,
+    action: string,
+    emitKey: string,
   ): Promise<EventResponseDto> {
-    const event = await insertSingleEvent(
-      this.db,
-      baseValues,
-      startTime,
-      endTime,
-    );
-    this.logger.log(`Event created: ${event.id} by user ${creatorId}`);
-    const created = await this.findOne(event.id);
-    this.emitEventLifecycle(APP_EVENT_EVENTS.CREATED, created);
-    return created;
+    this.logger.log(`Event ${action}: ${eventId} by user ${userId}`);
+    const event = await this.findOne(eventId);
+    emitEventLifecycle(this.eventEmitter, emitKey, event);
+    return event;
   }
 
-  private emitEventLifecycle(
-    eventName: string,
-    eventResponse: EventResponseDto,
-  ): void {
-    this.eventEmitter.emit(eventName, buildLifecyclePayload(eventResponse));
+  private createFlowDeps() {
+    return {
+      db: this.db,
+      eventEmitter: this.eventEmitter,
+      logger: this.logger,
+      findByIds: (ids: number[]) => this.findByIds(ids),
+      findOne: (id: number) => this.findOne(id),
+    };
   }
 }

@@ -114,6 +114,8 @@ export const events = pgTable(
       table.channelBindingId,
       table.isAdHoc,
     ),
+    // NOTE: Actual DB index is a partial index (WHERE recurrence_group_id IS NOT NULL)
+    // via migration 0083. Drizzle DSL doesn't support partial indexes natively.
     index('idx_events_recurrence_group_id').on(table.recurrenceGroupId),
     index('idx_events_cancelled_at').on(table.cancelledAt),
     index('idx_events_discord_scheduled_event_id').on(

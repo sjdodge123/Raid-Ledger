@@ -308,3 +308,31 @@ describe('EventCard badge-overlay class (ROK-473) — part 2', () => {
 
 });
 
+describe('EventCard — series badge (ROK-429)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('shows series badge when event has recurrenceGroupId', () => {
+        const event = createMockEvent({ recurrenceGroupId: 'abc-123' });
+        render(<EventCard event={event} signupCount={0} />);
+        expect(screen.getByTestId('series-badge')).toBeInTheDocument();
+    });
+
+    it('does not show series badge without recurrenceGroupId', () => {
+        const event = createMockEvent({ recurrenceGroupId: null });
+        render(<EventCard event={event} signupCount={0} />);
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+
+    it('does not show series badge when field is undefined', () => {
+        const event = createMockEvent();
+        render(<EventCard event={event} signupCount={0} />);
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+});
+

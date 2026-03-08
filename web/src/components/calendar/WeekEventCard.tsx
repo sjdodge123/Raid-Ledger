@@ -1,6 +1,7 @@
 import { format, differenceInMinutes } from 'date-fns';
 import { getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
+import { SeriesBadge } from '../events/SeriesBadge';
 import type { CalendarEvent } from './CalendarView';
 
 interface WeekEventCardProps {
@@ -31,11 +32,14 @@ function getAvatarConfig(tier: Tier) {
     return null;
 }
 
-function WeekEventHeader({ title, tier, overlaps }: { title: string; tier: Tier; overlaps: boolean }) {
+function WeekEventHeader({ title, tier, overlaps, isSeries }: { title: string; tier: Tier; overlaps: boolean; isSeries: boolean }) {
     return (
         <div className="week-event-header" style={{ position: 'relative' }}>
             <span className={`week-event-title ${tier === 'minimal' ? 'week-event-title--minimal' : ''}`}>{title}</span>
-            {overlaps && <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }} title="Overlaps with your game time" />}
+            <div className="absolute top-0.5 right-0.5 flex items-center gap-1">
+                {isSeries && <SeriesBadge />}
+                {overlaps && <span className="w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }} title="Overlaps with your game time" />}
+            </div>
         </div>
     );
 }
@@ -69,7 +73,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
                 : `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
             backgroundSize: 'cover', backgroundPosition: 'center', borderLeft: `3px solid ${colors.border}`,
         }}>
-            <WeekEventHeader title={event.title} tier={tier} overlaps={overlaps} />
+            <WeekEventHeader title={event.title} tier={tier} overlaps={overlaps} isSeries={!!event.resource?.recurrenceGroupId} />
             <div className="week-event-details">
                 <span className="week-event-game">{event.resource?.game?.name || 'Event'}</span>
                 <span className="week-event-time">{format(event.start, 'h:mm a')}{event.end ? ` - ${format(event.end, 'h:mm a')}` : ''}</span>

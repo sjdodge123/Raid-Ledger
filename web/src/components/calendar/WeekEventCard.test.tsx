@@ -176,3 +176,15 @@ describe('WeekEventCard — part 2', () => {
     });
 
 });
+
+describe('WeekEventCard — series badge (ROK-429)', () => {
+    it('shows series badge for recurring events', () => {
+        renderCard(createMockEvent({ recurrenceGroupId: 'abc' }));
+        expect(screen.getByTestId('series-badge')).toBeInTheDocument();
+    });
+
+    it('does not show series badge for non-recurring events', () => {
+        renderCard(createMockEvent());
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+});

@@ -396,3 +396,23 @@ describe('DayEventCard — part 4', () => {
     });
 
 });
+
+describe('DayEventCard — series badge (ROK-429)', () => {
+    beforeEach(() => {
+        mockRosterData = null;
+        mockRosterLoading = false;
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-02-10T19:00:00Z'));
+    });
+
+    it('shows series badge for recurring events', () => {
+        const event = createMockEvent({ recurrenceGroupId: 'abc-123' });
+        renderCard(event);
+        expect(screen.getByTestId('series-badge')).toBeInTheDocument();
+    });
+
+    it('does not show series badge for non-recurring events', () => {
+        renderCard();
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+});

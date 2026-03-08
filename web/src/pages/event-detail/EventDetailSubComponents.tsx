@@ -70,13 +70,25 @@ function resolveBackNavigation(fromCalendar: boolean, navState: { calendarDate?:
     else { navigate('/calendar'); }
 }
 
+function useTopbarActions(isSeries: boolean, eventId: number, onCancel: () => void, onDelete?: () => void, onSeriesAction?: (action: 'edit' | 'delete' | 'cancel') => void) {
+    const navigate = useNavigate();
+    return {
+        navigate,
+        handleEdit: () => { if (isSeries && onSeriesAction) onSeriesAction('edit'); else navigate(`/events/${eventId}/edit`); },
+        handleCancel: () => { if (isSeries && onSeriesAction) onSeriesAction('cancel'); else onCancel(); },
+        handleDelete: () => { if (isSeries && onSeriesAction) onSeriesAction('delete'); else onDelete?.(); },
+    };
+}
+
 /** Top bar with back + action buttons */
-export function EventDetailTopbar({ fromCalendar, navState, hasHistory, isAuthenticated, canManageRoster, isCancelled, isEnded, eventId, onInvite, onReschedule, onCancel }: {
+export function EventDetailTopbar({ fromCalendar, navState, hasHistory, isAuthenticated, canManageRoster, isCancelled, isEnded, eventId, recurrenceGroupId, onInvite, onReschedule, onCancel, onDelete, onSeriesAction }: {
     fromCalendar: boolean; navState: { calendarDate?: string; calendarView?: string } | null;
     hasHistory: boolean; isAuthenticated: boolean; canManageRoster: boolean; isCancelled: boolean;
-    isEnded: boolean; eventId: number; onInvite: () => void; onReschedule: () => void; onCancel: () => void;
+    isEnded: boolean; eventId: number; recurrenceGroupId?: string | null;
+    onInvite: () => void; onReschedule: () => void; onCancel: () => void;
+    onDelete?: () => void; onSeriesAction?: (action: 'edit' | 'delete' | 'cancel') => void;
 }): JSX.Element {
-    const navigate = useNavigate();
+    const { navigate, handleEdit, handleCancel, handleDelete } = useTopbarActions(!!recurrenceGroupId, eventId, onCancel, onDelete, onSeriesAction);
     return (
         <div className="event-detail-topbar">
             <button onClick={() => resolveBackNavigation(fromCalendar, navState, hasHistory, navigate)} className="event-detail-back" aria-label="Go back">
@@ -86,13 +98,26 @@ export function EventDetailTopbar({ fromCalendar, navState, hasHistory, isAuthen
                 <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
             )}
             {canManageRoster && !isCancelled && !isEnded && (
-                <div className="grid grid-cols-2 gap-2 sm:flex">
-                    <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
-                    <button onClick={onReschedule} className="btn btn-secondary btn-sm">Reschedule</button>
-                    <button onClick={() => navigate(`/events/${eventId}/edit`)} className="btn btn-secondary btn-sm">Edit Event</button>
-                    <button onClick={onCancel} className="btn btn-danger btn-sm">Cancel Event</button>
-                </div>
+                <TopbarManagerButtons onInvite={onInvite} onReschedule={onReschedule} onEdit={handleEdit} onCancel={handleCancel} onDelete={handleDelete} />
             )}
+            {canManageRoster && !isEnded && isCancelled && (
+                <button onClick={handleDelete} className="btn btn-danger btn-sm">Delete Event</button>
+            )}
+        </div>
+    );
+}
+
+/** Manager action buttons for event topbar. */
+function TopbarManagerButtons({ onInvite, onReschedule, onEdit, onCancel, onDelete }: {
+    onInvite: () => void; onReschedule: () => void; onEdit: () => void; onCancel: () => void; onDelete: () => void;
+}) {
+    return (
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+            <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
+            <button onClick={onReschedule} className="btn btn-secondary btn-sm">Reschedule</button>
+            <button onClick={onEdit} className="btn btn-secondary btn-sm">Edit Event</button>
+            <button onClick={onDelete} className="btn btn-danger btn-sm">Delete Event</button>
+            <button onClick={onCancel} className="btn btn-danger btn-sm">Cancel Event</button>
         </div>
     );
 }

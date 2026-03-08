@@ -105,3 +105,6 @@ export * from './steam.schema.js';
 
 // Container Logs (ROK-681)
 export * from './logs.schema.js';
+
+// Event Series (ROK-429)
+export * from './event-series.schema.js';
