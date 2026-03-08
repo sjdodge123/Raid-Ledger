@@ -300,14 +300,14 @@ function describeGameTimeService() {
 
     /**
      * Set up mock DB responses for getCompositeView.
-     * Call order:
+     * Call order (template + events + overrides + absences run in parallel):
      * 1. getTemplate query (via .where)
      * 2. signedUpEvents query (via .where)
-     * 3. Batch allSignups query (via .where with inArray)
-     * 4. Batch allCounts query (via .where with inArray + groupBy)
-     * 5. Characters query (via .where with inArray) — only if signups exist
-     * 6. Overrides query (.where with gte/lte)
-     * 7. Absences query (.where with lte/gte)
+     * 3. overrides query (.where with gte/lte)
+     * 4. absences query (.where with lte/gte)
+     * 5. Batch allSignups query (via .where with inArray) — after parallel block
+     * 6. Batch allCounts query (via .where with inArray + groupBy)
+     * 7. Characters query (via .where with inArray) — only if signups exist
      */
     function setupCompositeViewMocks(
       templateSlots: Array<{ dayOfWeek: number; startHour: number }>,
@@ -315,16 +315,18 @@ function describeGameTimeService() {
     ) {
       whereCallIndex = 0;
       const hasEvents = new Set(events.map((e) => e.eventId)).size > 0;
+      // Order matches fetchAllCompositeData Promise.all:
+      // template, events, overrides, absences (parallel), then signups (sequential)
       const results: unknown[] = [templateSlots, events];
 
-      if (hasEvents) {
-        results.push([]); // batch allSignups (empty)
-        results.push([]); // batch allCounts (empty)
-      }
-
-      // Overrides and absences (empty by default)
+      // Overrides and absences (empty by default, run in parallel block)
       results.push([]); // overrides
       results.push([]); // absences
+
+      if (hasEvents) {
+        results.push([]); // batch allSignups (after parallel block)
+        results.push([]); // batch allCounts (after parallel block)
+      }
 
       whereResults = results;
     }
