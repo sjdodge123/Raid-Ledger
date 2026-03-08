@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -110,7 +110,11 @@ export class RoleGapAlertService {
       );
   }
 
-  /** Query critical role count rows from the DB. */
+  /**
+   * Query critical role count rows from the DB.
+   * Counts all roster-assigned signups except declined/roached_out,
+   * matching the roster UI filter (ROK-733).
+   */
   private async queryRoleCounts(eventIds: number[]) {
     return this.db
       .select({
@@ -126,7 +130,8 @@ export class RoleGapAlertService {
       .where(
         and(
           inArray(schema.rosterAssignments.eventId, eventIds),
-          eq(schema.eventSignups.status, 'signed_up'),
+          ne(schema.eventSignups.status, 'declined'),
+          ne(schema.eventSignups.status, 'roached_out'),
           inArray(
             schema.rosterAssignments.role,
             MMO_CRITICAL_ROLES as unknown as string[],

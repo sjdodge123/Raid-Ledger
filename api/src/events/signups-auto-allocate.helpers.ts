@@ -15,6 +15,7 @@ import {
   buildOccupiedPositions,
   sortByRolePriority,
   findFirstAvailableInSet,
+  findOldestTentativeOccupant,
   bfsRearrangementChain,
 } from './signups-allocation.helpers';
 import * as tentH from './signups-tentative.helpers';
@@ -70,16 +71,19 @@ export async function tryDirectAllocation(
   eventId: number,
   newSignupId: number,
   newPrefs: string[],
+  status: string,
   ctx: AllocationContext,
   logger: { log: (msg: string) => void },
   cancelPromotion: (e: number, r: string, p: number) => Promise<void>,
 ): Promise<boolean> {
+  const signupById = new Map(ctx.allSignups.map((s) => [s.id, s]));
   for (const role of newPrefs) {
-    if (
-      !(role in ctx.roleCapacity) ||
-      ctx.filledPerRole[role] >= ctx.roleCapacity[role]
-    )
+    if (!(role in ctx.roleCapacity)) continue;
+    if (ctx.filledPerRole[role] >= ctx.roleCapacity[role]) {
+      if (shouldDeferToTentativeDisplacement(role, status, ctx, signupById))
+        return false;
       continue;
+    }
     const position = findFirstAvailableInSet(ctx.occupiedPositions[role]);
     await insertAndConfirmSlot(tx, eventId, newSignupId, role, position);
     logger.log(
@@ -89,6 +93,23 @@ export async function tryDirectAllocation(
     return true;
   }
   return false;
+}
+
+/** Returns true when a confirmed player should skip direct allocation to
+ *  let tentative displacement handle a higher-priority role instead. */
+function shouldDeferToTentativeDisplacement(
+  fullRole: string,
+  status: string,
+  ctx: AllocationContext,
+  signupById: Map<number, { status: string; signedUpAt: Date | null }>,
+): boolean {
+  if (status === 'tentative') return false;
+  const victim = findOldestTentativeOccupant(
+    ctx.currentAssignments,
+    fullRole,
+    signupById,
+  );
+  return !!victim;
 }
 
 export async function tryChainRearrangement(
@@ -221,6 +242,7 @@ async function runAllocationStrategies(
       eventId,
       newSignupId,
       newPrefs,
+      status,
       ctx,
       logger,
       cancelPromotion,

@@ -28,6 +28,25 @@ export async function findStartCandidates(
     );
 }
 
+export async function findCompletionCandidates(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<Array<{ id: number; discordScheduledEventId: string | null }>> {
+  const now = new Date();
+  return db
+    .select({
+      id: schema.events.id,
+      discordScheduledEventId: schema.events.discordScheduledEventId,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        isNotNull(schema.events.discordScheduledEventId),
+        isNull(schema.events.cancelledAt),
+        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) < ${now.toISOString()}::timestamptz`,
+      ),
+    );
+}
+
 export async function getScheduledEventId(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
