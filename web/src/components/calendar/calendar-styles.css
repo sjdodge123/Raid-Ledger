@@ -190,9 +190,10 @@
     background: transparent !important;
 }
 
-/* Month view: subtle emerald tint on today's cell */
+/* Month view: emerald highlight on today's cell */
 .rbc-month-view .rbc-day-bg.rbc-today {
-    background: rgba(16, 185, 129, 0.08) !important;
+    background: rgba(16, 185, 129, 0.12) !important;
+    box-shadow: inset 0 2px 0 0 rgba(16, 185, 129, 0.6);
 }
 
 /* Scope the today border to the day-slot column only, not individual events */
@@ -1296,6 +1297,7 @@
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-month-view .rbc-day-bg.rbc-today {
     background: rgba(16, 185, 129, 0.1) !important;
+    box-shadow: inset 0 2px 0 0 rgba(16, 185, 129, 0.5);
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-date-cell>a {
