@@ -15,6 +15,19 @@ import type { Response, Request } from 'express';
 export class DiscordAuthGuard extends AuthGuard('discord') {
   private readonly guardLogger = new Logger('DiscordAuthGuard');
 
+  /**
+   * Pass prompt=none to skip Discord's consent screen for returning users.
+   * If the user hasn't authorized before, Discord returns consent_required
+   * and we retry without it (see handleRequest).
+   */
+  getAuthenticateOptions(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest<Request>();
+    if (req.query.consent !== '1') {
+      return { prompt: 'none' };
+    }
+    return {};
+  }
+
   /** Handle authentication result, redirecting on failure. */
   handleRequest<TUser>(
     err: Error | null,
@@ -32,6 +45,14 @@ export class DiscordAuthGuard extends AuthGuard('discord') {
       const httpCtx = context.switchToHttp();
       const req = httpCtx.getRequest<Request>();
       const res = httpCtx.getResponse<Response>();
+
+      // First-time users need to authorize — retry with the consent screen
+      const errCode = (err as unknown as Record<string, unknown>)?.code;
+      if (errCode === 'consent_required' || errCode === 'interaction_required') {
+        res.redirect('/auth/discord?consent=1');
+        return undefined as unknown as TUser;
+      }
+
       const clientUrl =
         process.env.CLIENT_URL ||
         `${(req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol || 'http'}://${req.headers.host || 'localhost'}`;

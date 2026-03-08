@@ -112,8 +112,6 @@ export class DiscordAuthStrategy
     // Ensure callback URL is current before authenticating
     if (this.isStrategyConfigured) {
       const strategy = this as unknown as { _callbackURL: string };
-      // The callbackURL stored in the strategy should already be up to date
-      // via reloadConfig, but we log for debugging
       this.logger.debug(
         `Authenticating with callback URL: ${strategy._callbackURL}`,
       );
