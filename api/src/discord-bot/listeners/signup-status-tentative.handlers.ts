@@ -1,23 +1,9 @@
 import type { ButtonInteraction } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { showRoleSelect } from './signup-signup.handlers';
+import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
+import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
-import type { showCharacterSelect as ShowCharSelectFn } from '../utils/signup-dropdown-builders';
-import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
-
-/** Fetch event by ID. */
-export async function fetchEvent(
-  eventId: number,
-  deps: SignupInteractionDeps,
-): Promise<typeof schema.events.$inferSelect | null> {
-  const [event] = await deps.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
-  return event ?? null;
-}
 
 /** Sign up as tentative. */
 export async function signupAsTentative(
@@ -32,19 +18,6 @@ export async function signupAsTentative(
     { status: 'tentative' },
   );
   await deps.updateEmbedSignupCount(eventId);
-}
-
-/** Find linked user by Discord ID. */
-export async function findLinkedUser(
-  discordUserId: string,
-  deps: SignupInteractionDeps,
-): Promise<typeof schema.users.$inferSelect | null> {
-  const [user] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordUserId))
-    .limit(1);
-  return user ?? null;
 }
 
 /** Tentative flow for a linked user without an existing signup. */
@@ -191,17 +164,14 @@ async function showTentativeCharacterSelect(
   characters: import('@raid-ledger/contract').CharacterDto[],
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const m = (await import('../utils/signup-dropdown-builders.js')) as {
-    showCharacterSelect: typeof ShowCharSelectFn;
-  };
-  await m.showCharacterSelect(interaction, {
-    customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
+  await showCharacterSelect(
+    interaction,
     eventId,
     eventTitle,
     characters,
-    emojiService: deps.emojiService,
-    customIdSuffix: 'tentative',
-  });
+    deps,
+    'tentative',
+  );
 }
 
 async function tentativeSingleCharacter(

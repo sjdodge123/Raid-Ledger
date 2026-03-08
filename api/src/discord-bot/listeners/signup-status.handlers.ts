@@ -1,11 +1,10 @@
 import type { ButtonInteraction } from 'discord.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
+import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import { showRoleSelect } from './signup-signup.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import {
-  fetchEvent,
-  findLinkedUser,
   handleLinkedTentative,
   tryMmoTentativeRedirect,
 } from './signup-status-tentative.handlers';
