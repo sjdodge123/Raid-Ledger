@@ -15,6 +15,7 @@ import {
   fetchGameActivity,
   deleteUserTransaction,
 } from './users-query.helpers';
+import { invalidateAuthUser } from '../auth/auth-user-cache';
 
 /** Number of days to look back for "recently joined" users. */
 export const RECENT_MEMBER_DAYS = 30;
@@ -79,6 +80,7 @@ export class UsersService {
       .set({ role, updatedAt: new Date() })
       .where(eq(schema.users.id, userId))
       .returning();
+    invalidateAuthUser(userId);
     return updated;
   }
 
@@ -105,6 +107,7 @@ export class UsersService {
       .set({ discordId, username, avatar, updatedAt: new Date() })
       .where(eq(schema.users.id, userId))
       .returning();
+    invalidateAuthUser(userId);
     return updated;
   }
 
@@ -122,6 +125,7 @@ export class UsersService {
       })
       .where(eq(schema.users.id, userId))
       .returning();
+    invalidateAuthUser(userId);
     return updated;
   }
 
@@ -145,6 +149,7 @@ export class UsersService {
       .set({ discordId: rawDiscordId, username, avatar, updatedAt: new Date() })
       .where(eq(schema.users.id, userId))
       .returning();
+    invalidateAuthUser(userId);
     return updated;
   }
 

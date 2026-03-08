@@ -5,6 +5,8 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { getCachedAuthUser, setCachedAuthUser } from './auth-user-cache';
+
 interface JwtPayload {
   sub: number;
   username: string;
@@ -25,6 +27,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    const cached = getCachedAuthUser(payload.sub);
+    if (cached) {
+      return {
+        id: payload.sub,
+        username: payload.username,
+        role: cached.role,
+        discordId: cached.discordId,
+        impersonatedBy: payload.impersonatedBy || null,
+      };
+    }
+
     const [user] = await this.db
       .select({ role: schema.users.role, discordId: schema.users.discordId })
       .from(schema.users)
@@ -34,6 +47,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
     }
+
+    setCachedAuthUser(payload.sub, {
+      role: user.role,
+      discordId: user.discordId,
+    });
 
     return {
       id: payload.sub,

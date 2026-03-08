@@ -6,6 +6,7 @@ import {
   showCharacterSelect as sharedShowCharacterSelect,
   showRoleSelect as sharedShowRoleSelect,
 } from '../utils/signup-dropdown-builders';
+import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
 
@@ -30,7 +31,7 @@ export async function handleExistingSignup(
     deps,
   );
 
-  const linkedUser = await findLinkedUserByDiscordId(interaction.user.id, deps);
+  const linkedUser = await findLinkedUser(interaction.user.id, deps);
   if (!linkedUser) {
     await interaction.editReply({ content: alreadySignedUpMessage() });
     return;
@@ -44,18 +45,6 @@ export async function handleExistingSignup(
     deps,
   );
   if (!handled) await replyReactivationResult(interaction, wasReactivated);
-}
-
-async function findLinkedUserByDiscordId(
-  discordId: string,
-  deps: SignupInteractionDeps,
-): Promise<typeof schema.users.$inferSelect | null> {
-  const [user] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordId))
-    .limit(1);
-  return user ?? null;
 }
 
 async function replyReactivationResult(
@@ -265,18 +254,6 @@ export async function handleNewLinkedSignup(
     content: `You're signed up for **${event.title}**!`,
   });
   await deps.updateEmbedSignupCount(eventId);
-}
-
-async function fetchEvent(
-  eventId: number,
-  deps: SignupInteractionDeps,
-): Promise<typeof schema.events.$inferSelect | null> {
-  const [event] = await deps.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
-  return event ?? null;
 }
 
 /** Wrapper for shared character select dropdown. */

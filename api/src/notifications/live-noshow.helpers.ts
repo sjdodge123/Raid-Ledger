@@ -98,40 +98,36 @@ async function fetchNonBenchSignups(
     );
 }
 
-/** Resolve discord ID for a signup, falling back to user table. */
-async function resolveDiscordId(
+/** Batch-resolve discord IDs for signups that lack one, falling back to user table. */
+async function batchResolveDiscordIds(
   db: PostgresJsDatabase<typeof schema>,
-  signup: AbsentPlayer,
-): Promise<string | null> {
-  if (signup.discordUserId) return signup.discordUserId;
-  if (!signup.userId) return null;
-  const [user] = await db
-    .select({ discordId: schema.users.discordId })
+  signups: AbsentPlayer[],
+): Promise<Map<number, string>> {
+  const needLookup = signups.filter((s) => !s.discordUserId && s.userId);
+  const userIds = needLookup.map((s) => s.userId!);
+  if (userIds.length === 0) return new Map();
+  const users = await db
+    .select({ id: schema.users.id, discordId: schema.users.discordId })
     .from(schema.users)
-    .where(eq(schema.users.id, signup.userId))
-    .limit(1);
-  return user?.discordId ?? null;
+    .where(inArray(schema.users.id, userIds));
+  return new Map(
+    users.filter((u) => u.discordId !== null).map((u) => [u.id, u.discordId!]),
+  );
 }
 
-/** Check if a user has meaningful voice presence for an event. */
-async function hasVoicePresence(
+/** Batch-fetch voice session durations for an event. */
+async function batchFetchVoiceSessions(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
-  discordUserId: string,
-): Promise<boolean> {
-  const [voiceSession] = await db
-    .select({ totalDurationSec: schema.eventVoiceSessions.totalDurationSec })
+): Promise<Map<string, number>> {
+  const sessions = await db
+    .select({
+      discordUserId: schema.eventVoiceSessions.discordUserId,
+      totalDurationSec: schema.eventVoiceSessions.totalDurationSec,
+    })
     .from(schema.eventVoiceSessions)
-    .where(
-      and(
-        eq(schema.eventVoiceSessions.eventId, eventId),
-        eq(schema.eventVoiceSessions.discordUserId, discordUserId),
-      ),
-    )
-    .limit(1);
-  return (
-    !!voiceSession && voiceSession.totalDurationSec >= PRESENCE_THRESHOLD_SEC
-  );
+    .where(eq(schema.eventVoiceSessions.eventId, eventId));
+  return new Map(sessions.map((s) => [s.discordUserId, s.totalDurationSec]));
 }
 
 /** Get signed-up players who have no meaningful voice presence. */
@@ -141,12 +137,21 @@ export async function getAbsentSignedUpPlayers(
   isUserActive: (eventId: number, discordId: string) => boolean,
 ): Promise<AbsentPlayer[]> {
   const signups = await fetchNonBenchSignups(db, eventId);
+  if (signups.length === 0) return [];
+  const [fallbackDiscordIds, voiceSessions] = await Promise.all([
+    batchResolveDiscordIds(db, signups),
+    batchFetchVoiceSessions(db, eventId),
+  ]);
   const absent: AbsentPlayer[] = [];
   for (const signup of signups) {
-    const discordUserId = await resolveDiscordId(db, signup);
+    const discordUserId =
+      signup.discordUserId ??
+      (signup.userId ? fallbackDiscordIds.get(signup.userId) : undefined) ??
+      null;
     if (!discordUserId) continue;
     if (isUserActive(eventId, discordUserId)) continue;
-    if (await hasVoicePresence(db, eventId, discordUserId)) continue;
+    const totalDuration = voiceSessions.get(discordUserId) ?? 0;
+    if (totalDuration >= PRESENCE_THRESHOLD_SEC) continue;
     absent.push({ ...signup, discordUserId });
   }
   return absent;
@@ -169,23 +174,32 @@ export async function getPhase1RemindedUserIds(
   return rows.map((r) => r.userId);
 }
 
-/** Get display name and roster role for a player in an event. */
-export async function getPlayerDisplayInfo(
+/** Batch-fetch user display names by ID. */
+async function fetchUserDisplayNames(
   db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  userId: number,
-): Promise<{ displayName: string; role: string | null }> {
-  const [user] = await db
+  userIds: number[],
+) {
+  return db
     .select({
+      id: schema.users.id,
       username: schema.users.username,
       displayName: schema.users.displayName,
     })
     .from(schema.users)
-    .where(eq(schema.users.id, userId))
-    .limit(1);
-  const displayName = user?.displayName ?? user?.username ?? 'Unknown';
-  const [assignment] = await db
-    .select({ role: schema.rosterAssignments.role })
+    .where(inArray(schema.users.id, userIds));
+}
+
+/** Batch-fetch roster roles for users in an event. */
+async function fetchRosterRoles(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  userIds: number[],
+) {
+  return db
+    .select({
+      userId: schema.eventSignups.userId,
+      role: schema.rosterAssignments.role,
+    })
     .from(schema.rosterAssignments)
     .innerJoin(
       schema.eventSignups,
@@ -194,11 +208,40 @@ export async function getPlayerDisplayInfo(
     .where(
       and(
         eq(schema.rosterAssignments.eventId, eventId),
-        eq(schema.eventSignups.userId, userId),
+        inArray(schema.eventSignups.userId, userIds),
       ),
-    )
-    .limit(1);
-  return { displayName, role: assignment?.role ?? null };
+    );
+}
+
+/** Batch-fetch display names and roster roles for multiple players. */
+export async function batchFetchPlayerDisplayInfo(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  userIds: number[],
+): Promise<Map<number, { displayName: string; role: string | null }>> {
+  if (userIds.length === 0) return new Map();
+  const [users, assignments] = await Promise.all([
+    fetchUserDisplayNames(db, userIds),
+    fetchRosterRoles(db, eventId, userIds),
+  ]);
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const roleMap = new Map(
+    assignments
+      .filter((a) => a.userId !== null)
+      .map((a) => [a.userId!, a.role]),
+  );
+  const result = new Map<
+    number,
+    { displayName: string; role: string | null }
+  >();
+  for (const uid of userIds) {
+    const user = userMap.get(uid);
+    result.set(uid, {
+      displayName: user?.displayName ?? user?.username ?? 'Unknown',
+      role: roleMap.get(uid) ?? null,
+    });
+  }
+  return result;
 }
 
 /** Batch-fetch discord IDs and voice sessions for Phase 2 checking. */

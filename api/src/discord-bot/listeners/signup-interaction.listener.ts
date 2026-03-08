@@ -29,6 +29,7 @@ import {
   isDiscordInteractionError,
   safeReply,
   safeEditReply,
+  findLinkedUser,
 } from './signup-interaction.helpers';
 import {
   handleExistingSignup,
@@ -232,11 +233,7 @@ export class SignupInteractionListener {
       return;
     }
 
-    const [linkedUser] = await this.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.discordId, discordUserId))
-      .limit(1);
+    const linkedUser = await findLinkedUser(discordUserId, { db: this.db });
 
     if (linkedUser) {
       await handleNewLinkedSignup(interaction, eventId, linkedUser, deps);

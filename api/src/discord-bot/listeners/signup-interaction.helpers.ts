@@ -2,6 +2,9 @@ import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
 } from 'discord.js';
+import { eq } from 'drizzle-orm';
+import * as schema from '../../drizzle/schema';
+import type { SignupInteractionDeps } from './signup-interaction.types';
 
 /**
  * Rate-limit tracker for signup button interactions.
@@ -100,4 +103,30 @@ export async function safeEditReply(
     }
     throw error;
   }
+}
+
+/** Find a linked Raid Ledger user by their Discord ID. */
+export async function findLinkedUser(
+  discordUserId: string,
+  deps: Pick<SignupInteractionDeps, 'db'>,
+): Promise<typeof schema.users.$inferSelect | null> {
+  const [user] = await deps.db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.discordId, discordUserId))
+    .limit(1);
+  return user ?? null;
+}
+
+/** Fetch an event by ID. */
+export async function fetchEvent(
+  eventId: number,
+  deps: Pick<SignupInteractionDeps, 'db'>,
+): Promise<typeof schema.events.$inferSelect | null> {
+  const [event] = await deps.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return event ?? null;
 }
