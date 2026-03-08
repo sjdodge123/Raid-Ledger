@@ -200,9 +200,9 @@ describe('shouldUseAutoAllocation', () => {
     const signup = {
       preferredRoles: ['dps'],
     } as Parameters<typeof shouldUseAutoAllocation>[1];
-    expect(shouldUseAutoAllocation(genericEvent, signup, undefined, false)).toBe(
-      false,
-    );
+    expect(
+      shouldUseAutoAllocation(genericEvent, signup, undefined, false),
+    ).toBe(false);
   });
 
   it('returns false when autoBench is true', () => {
@@ -254,9 +254,9 @@ describe('shouldUseAutoAllocation', () => {
     const signup = {
       preferredRoles: ['dps'],
     } as Parameters<typeof shouldUseAutoAllocation>[1];
-    expect(shouldUseAutoAllocation(noConfigEvent, signup, undefined, false)).toBe(
-      false,
-    );
+    expect(
+      shouldUseAutoAllocation(noConfigEvent, signup, undefined, false),
+    ).toBe(false);
   });
 });
 
@@ -267,11 +267,7 @@ describe('shouldUseAutoAllocationNew', () => {
 
   it('returns false when autoBench is true', () => {
     expect(
-      shouldUseAutoAllocationNew(
-        mmoEvent,
-        { preferredRoles: ['dps'] },
-        true,
-      ),
+      shouldUseAutoAllocationNew(mmoEvent, { preferredRoles: ['dps'] }, true),
     ).toBe(false);
   });
 

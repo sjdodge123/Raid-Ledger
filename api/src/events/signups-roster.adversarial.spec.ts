@@ -119,9 +119,7 @@ describe('buildAnonymousSignupResponseDto — assignedSlot edge cases', () => {
     'includes assignedSlot when value is %s',
     (slot) => {
       const result = buildAnonymousSignupResponseDto(
-        anonSignup as Parameters<
-          typeof buildAnonymousSignupResponseDto
-        >[0],
+        anonSignup as Parameters<typeof buildAnonymousSignupResponseDto>[0],
         slot,
       );
       expect(result.assignedSlot).toBe(slot);
