@@ -37,14 +37,10 @@ function createMockDeps(mockDb: MockDb): AdHocNotificationDeps {
       resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
     } as unknown as AdHocNotificationDeps['channelResolver'],
     settingsService: {
-      getBranding: jest
-        .fn()
-        .mockResolvedValue({ communityName: 'Test Guild' }),
+      getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
       getClientUrl: jest.fn().mockResolvedValue('http://localhost'),
       getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
-      getDiscordBotDefaultChannel: jest
-        .fn()
-        .mockResolvedValue('default-ch'),
+      getDiscordBotDefaultChannel: jest.fn().mockResolvedValue('default-ch'),
     } as unknown as AdHocNotificationDeps['settingsService'],
   };
 }
@@ -169,10 +165,14 @@ describe('buildEmbedEventData — edge cases (ROK-680)', () => {
   });
 
   it('includes game cover URL when present', async () => {
-    mockEventAndGame(mockDb, {}, {
-      name: 'WoW',
-      coverUrl: 'https://example.com/wow.jpg',
-    });
+    mockEventAndGame(
+      mockDb,
+      {},
+      {
+        name: 'WoW',
+        coverUrl: 'https://example.com/wow.jpg',
+      },
+    );
     const result = await buildEmbedEventData(deps, 1, []);
     expect(result!.game).toEqual({
       name: 'WoW',
@@ -268,70 +268,73 @@ describe('resolveNotificationChannel — fallback chain', () => {
   });
 
   it('returns null when binding is not found', async () => {
-    (deps.channelBindingsService.getBindingById as jest.Mock)
-      .mockResolvedValue(null);
+    (deps.channelBindingsService.getBindingById as jest.Mock).mockResolvedValue(
+      null,
+    );
     const result = await resolveNotificationChannel(deps, 'missing');
     expect(result).toBeNull();
   });
 
   it('returns config channel when present', async () => {
-    (deps.channelBindingsService.getBindingById as jest.Mock)
-      .mockResolvedValue({
+    (deps.channelBindingsService.getBindingById as jest.Mock).mockResolvedValue(
+      {
         id: 'b1',
         config: { notificationChannelId: 'config-ch' },
-      });
+      },
+    );
     const result = await resolveNotificationChannel(deps, 'b1');
     expect(result).toBe('config-ch');
   });
 
   it('falls back to game-announcements binding', async () => {
-    (deps.channelBindingsService.getBindingById as jest.Mock)
-      .mockResolvedValue({
+    (deps.channelBindingsService.getBindingById as jest.Mock).mockResolvedValue(
+      {
         id: 'b1',
         config: {},
         gameId: 5,
         guildId: 'guild-1',
-      });
-    (deps.channelBindingsService.getBindings as jest.Mock)
-      .mockResolvedValue([
-        {
-          bindingPurpose: 'game-announcements',
-          gameId: 5,
-          channelId: 'announce-ch',
-        },
-      ]);
+      },
+    );
+    (deps.channelBindingsService.getBindings as jest.Mock).mockResolvedValue([
+      {
+        bindingPurpose: 'game-announcements',
+        gameId: 5,
+        channelId: 'announce-ch',
+      },
+    ]);
     const result = await resolveNotificationChannel(deps, 'b1');
     expect(result).toBe('announce-ch');
   });
 
   it('falls back to default bot channel when no announcement binding', async () => {
-    (deps.channelBindingsService.getBindingById as jest.Mock)
-      .mockResolvedValue({
+    (deps.channelBindingsService.getBindingById as jest.Mock).mockResolvedValue(
+      {
         id: 'b1',
         config: {},
         gameId: 5,
         guildId: 'guild-1',
-      });
-    (deps.channelBindingsService.getBindings as jest.Mock)
-      .mockResolvedValue([
-        {
-          bindingPurpose: 'voice-lobby',
-          gameId: 5,
-          channelId: 'lobby-ch',
-        },
-      ]);
+      },
+    );
+    (deps.channelBindingsService.getBindings as jest.Mock).mockResolvedValue([
+      {
+        bindingPurpose: 'voice-lobby',
+        gameId: 5,
+        channelId: 'lobby-ch',
+      },
+    ]);
     const result = await resolveNotificationChannel(deps, 'b1');
     expect(result).toBe('default-ch');
   });
 
   it('falls back to default when binding has null gameId', async () => {
-    (deps.channelBindingsService.getBindingById as jest.Mock)
-      .mockResolvedValue({
+    (deps.channelBindingsService.getBindingById as jest.Mock).mockResolvedValue(
+      {
         id: 'b1',
         config: {},
         gameId: null,
         guildId: 'guild-1',
-      });
+      },
+    );
     const result = await resolveNotificationChannel(deps, 'b1');
     expect(result).toBe('default-ch');
   });

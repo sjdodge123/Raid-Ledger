@@ -189,9 +189,7 @@ describe('buildAdHocUpdateEmbed — active/left fields (ROK-680)', () => {
       mockContext,
     );
     const json = embed.toJSON();
-    const activeField = json.fields?.find((f) =>
-      f.name.includes('Active'),
-    );
+    const activeField = json.fields?.find((f) => f.name.includes('Active'));
     const leftField = json.fields?.find((f) => f.name.includes('Left'));
     expect(activeField).toBeDefined();
     expect(activeField!.name).toContain('1');
@@ -204,9 +202,7 @@ describe('buildAdHocUpdateEmbed — active/left fields (ROK-680)', () => {
   it('omits left field when no participants have left', () => {
     const { embed } = buildAdHocUpdateEmbed(
       { id: 1, title: 'Quick Play' },
-      [
-        { discordUserId: 'u1', discordUsername: 'P1', isActive: true },
-      ],
+      [{ discordUserId: 'u1', discordUsername: 'P1', isActive: true }],
       mockContext,
     );
     const json = embed.toJSON();
@@ -224,9 +220,7 @@ describe('buildAdHocUpdateEmbed — active/left fields (ROK-680)', () => {
       mockContext,
     );
     const json = embed.toJSON();
-    const activeField = json.fields?.find((f) =>
-      f.name.includes('Active'),
-    );
+    const activeField = json.fields?.find((f) => f.name.includes('Active'));
     expect(activeField!.name).toContain('0');
     expect(activeField!.value).toBe('None');
   });
@@ -238,9 +232,7 @@ describe('buildAdHocUpdateEmbed — active/left fields (ROK-680)', () => {
       mockContext,
     );
     const json = embed.toJSON();
-    const activeField = json.fields?.find((f) =>
-      f.name.includes('Active'),
-    );
+    const activeField = json.fields?.find((f) => f.name.includes('Active'));
     expect(activeField!.name).toContain('0');
     expect(activeField!.value).toBe('None');
   });
@@ -322,9 +314,7 @@ describe('buildAdHocCompletedEmbed — participant listing', () => {
       mockContext,
     );
     const json = embed.toJSON();
-    const field = json.fields?.find((f) =>
-      f.name.includes('Participants'),
-    );
+    const field = json.fields?.find((f) => f.name.includes('Participants'));
     expect(field!.name).toContain('0');
     expect(field!.value).toBe('None');
   });

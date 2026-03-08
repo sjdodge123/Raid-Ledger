@@ -48,7 +48,10 @@ export class DiscordAuthGuard extends AuthGuard('discord') {
 
       // First-time users need to authorize — retry with the consent screen
       const errCode = (err as unknown as Record<string, unknown>)?.code;
-      if (errCode === 'consent_required' || errCode === 'interaction_required') {
+      if (
+        errCode === 'consent_required' ||
+        errCode === 'interaction_required'
+      ) {
         res.redirect('/auth/discord?consent=1');
         return undefined as unknown as TUser;
       }
