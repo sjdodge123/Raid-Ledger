@@ -243,14 +243,18 @@ export class EventsController {
     @Request() req: AuthenticatedRequest,
     @Query('scope') scope: string,
   ): Promise<{ message: string }> {
-    const parsed = SeriesScopeSchema.parse(scope);
-    await this.seriesService.delete(
-      id,
-      req.user.id,
-      isOperatorOrAdmin(req.user.role),
-      parsed,
-    );
-    return { message: 'Series deleted successfully' };
+    try {
+      const parsed = SeriesScopeSchema.parse(scope);
+      await this.seriesService.delete(
+        id,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        parsed,
+      );
+      return { message: 'Series deleted successfully' };
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   @Patch(':id/series/cancel')

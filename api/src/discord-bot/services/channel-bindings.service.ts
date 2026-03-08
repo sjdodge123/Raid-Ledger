@@ -297,6 +297,8 @@ export class ChannelBindingsService {
   /**
    * Get the voice channel binding for a specific event series in a guild.
    * ROK-599: Series-specific voice binding takes priority over game-specific binding.
+   * Filters by channelType (not bindingPurpose) because series bindings may be
+   * stored as 'general-lobby' when no game is specified (ROK-429).
    */
   async getVoiceChannelForSeries(
     guildId: string,
