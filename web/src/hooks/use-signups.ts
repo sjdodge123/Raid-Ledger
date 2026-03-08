@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { signupForEvent, cancelSignup, confirmSignup, updateSignupStatus } from '../lib/api-client';
 import type { UpdateSignupStatusDto } from '@raid-ledger/contract';
+import { invalidateRosterQueries } from './use-roster';
 
 /**
  * Hook for signing up to an event
@@ -13,12 +14,7 @@ export function useSignup(eventId: number) {
     return useMutation({
         mutationFn: (options?: { note?: string; slotRole?: string; slotPosition?: number; characterId?: string; preferredRoles?: string[] }) =>
             signupForEvent(eventId, options),
-        onSuccess: () => {
-            // Invalidate roster query to refetch updated roster
-            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
-            // Also invalidate roster assignments for RosterBuilder
-            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster', 'assignments'] });
-        },
+        onSuccess: () => invalidateRosterQueries(queryClient, eventId),
     });
 }
 
@@ -30,12 +26,7 @@ export function useCancelSignup(eventId: number) {
 
     return useMutation({
         mutationFn: () => cancelSignup(eventId),
-        onSuccess: () => {
-            // Invalidate roster query to refetch updated roster
-            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
-            // Also invalidate roster assignments for RosterBuilder
-            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster', 'assignments'] });
-        },
+        onSuccess: () => invalidateRosterQueries(queryClient, eventId),
     });
 }
 
@@ -49,8 +40,7 @@ export function useConfirmSignup(eventId: number) {
         mutationFn: ({ signupId, characterId }: { signupId: number; characterId: string }) =>
             confirmSignup(eventId, signupId, characterId),
         onSuccess: () => {
-            // Invalidate roster query to refetch updated roster with character info
-            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'], exact: true });
         },
     });
 }
@@ -65,9 +55,6 @@ export function useUpdateSignupStatus(eventId: number) {
     return useMutation({
         mutationFn: (status: UpdateSignupStatusDto['status']) =>
             updateSignupStatus(eventId, status),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
-            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster', 'assignments'] });
-        },
+        onSuccess: () => invalidateRosterQueries(queryClient, eventId),
     });
 }
