@@ -50,6 +50,9 @@ function makeSelectChain(resolvedValue: unknown[]) {
       where: jest.fn().mockReturnValue({
         limit: jest.fn().mockResolvedValue(resolvedValue),
       }),
+      innerJoin: jest.fn().mockReturnValue({
+        where: jest.fn().mockResolvedValue(resolvedValue),
+      }),
     }),
   };
 }
@@ -150,6 +153,8 @@ async function setupEach() {
 async function testAnonymousSignup() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    // ROK-626: getAssignedSlotRole (no assignment)
     .mockReturnValueOnce(makeSelectChain([]));
   const result = await service.signupDiscord(1, {
     discordUserId: 'discord-anon-456',
@@ -205,7 +210,9 @@ async function testDuplicateReturnsExisting() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
-    .mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]));
+    .mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]))
+    // ROK-626: getAssignedSlotRole (duplicate path — signup exists)
+    .mockReturnValueOnce(makeSelectChain([]));
   mockDb.insert.mockReturnValueOnce({
     values: jest.fn().mockReturnValue({
       onConflictDoNothing: jest.fn().mockReturnValue({
@@ -224,7 +231,9 @@ async function testRosterAssignmentWithRole() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
-    .mockReturnValueOnce(makeSelectChainNoLimit([]));
+    .mockReturnValueOnce(makeSelectChainNoLimit([]))
+    // ROK-626: getAssignedSlotRole
+    .mockReturnValueOnce(makeSelectChain([{ role: 'dps' }]));
   mockDb.insert
     .mockReturnValueOnce({
       values: jest.fn().mockReturnValue({
@@ -246,6 +255,8 @@ async function testTentativeStatus() {
   const tentativeSignup = { ...mockAnonymousSignup, status: 'tentative' };
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    // ROK-626: getAssignedSlotRole
     .mockReturnValueOnce(makeSelectChain([]));
   mockDb.insert.mockReturnValueOnce({
     values: jest.fn().mockReturnValue({
@@ -278,8 +289,12 @@ async function testAutoSlotGeneric() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([genericEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    // ROK-626: checkAutoBench (not full → normal allocation)
+    .mockReturnValueOnce(makeSelectChain([{ count: 0 }]))
     .mockReturnValueOnce(makeSelectChainNoLimit([]))
-    .mockReturnValueOnce(makeSelectChainNoLimit([]));
+    .mockReturnValueOnce(makeSelectChainNoLimit([]))
+    // ROK-626: getAssignedSlotRole
+    .mockReturnValueOnce(makeSelectChain([{ role: 'player' }]));
   mockDb.insert
     .mockReturnValueOnce({
       values: jest.fn().mockReturnValue({
@@ -299,6 +314,10 @@ async function testAutoSlotGeneric() {
 async function testNoAutoSlotMmo() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([mmoEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    // ROK-626: checkAutoBench (not full → normal flow, no roles → no assignment)
+    .mockReturnValueOnce(makeSelectChain([{ count: 0 }]))
+    // ROK-626: getAssignedSlotRole
     .mockReturnValueOnce(makeSelectChain([]));
   mockDb.insert.mockReturnValueOnce({
     values: jest.fn().mockReturnValue({
@@ -314,42 +333,50 @@ async function testNoAutoSlotMmo() {
   expect(mockDb.insert).toHaveBeenCalledTimes(1);
 }
 
-async function testNoAutoSlotFull() {
+async function testAutoBenchWhenFull() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([genericEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
-    .mockReturnValueOnce(
-      makeSelectChainNoLimit([
-        { position: 1 },
-        { position: 2 },
-        { position: 3 },
-        { position: 4 },
-      ]),
-    );
-  mockDb.insert.mockReturnValueOnce({
-    values: jest.fn().mockReturnValue({
-      onConflictDoNothing: jest.fn().mockReturnValue({
-        returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+    // ROK-626: checkAutoBench (full → auto-bench)
+    .mockReturnValueOnce(makeSelectChain([{ count: 4 }]))
+    // findNextPosition for bench slot
+    .mockReturnValueOnce(makeSelectChainNoLimit([]))
+    // ROK-626: getAssignedSlotRole
+    .mockReturnValueOnce(makeSelectChain([{ role: 'bench' }]));
+  mockDb.insert
+    .mockReturnValueOnce({
+      values: jest.fn().mockReturnValue({
+        onConflictDoNothing: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+        }),
       }),
-    }),
-  });
-  await service.signupDiscord(1, {
+    })
+    // bench roster assignment insert
+    .mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+  const result = await service.signupDiscord(1, {
     discordUserId: 'discord-anon-456',
     discordUsername: 'AnonUser',
   });
-  expect(mockDb.insert).toHaveBeenCalledTimes(1);
+  // ROK-626: 2 inserts — signup row + bench roster assignment
+  expect(mockDb.insert).toHaveBeenCalledTimes(2);
+  // ROK-626: response includes assignedSlot
+  expect(result.assignedSlot).toBe('bench');
 }
 
 async function testAutoSlotMaxAttendees() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([maxAttendeesEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    // ROK-626: checkAutoBench (not full → normal allocation)
+    .mockReturnValueOnce(makeSelectChain([{ count: 2 }]))
     .mockReturnValueOnce(
       makeSelectChainNoLimit([{ position: 1 }, { position: 2 }]),
     )
     .mockReturnValueOnce(
       makeSelectChainNoLimit([{ position: 1 }, { position: 2 }]),
-    );
+    )
+    // ROK-626: getAssignedSlotRole
+    .mockReturnValueOnce(makeSelectChain([{ role: 'player' }]));
   mockDb.insert
     .mockReturnValueOnce({
       values: jest.fn().mockReturnValue({
@@ -369,6 +396,8 @@ async function testAutoSlotMaxAttendees() {
 async function testNoAutoSlotNoConfig() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]))
+    // ROK-626: getAssignedSlotRole
     .mockReturnValueOnce(makeSelectChain([]));
   mockDb.insert.mockReturnValueOnce({
     values: jest.fn().mockReturnValue({
@@ -388,7 +417,11 @@ async function testExplicitRoleOverAutoSlot() {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([genericEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
-    .mockReturnValueOnce(makeSelectChainNoLimit([]));
+    // ROK-626: checkAutoBench (not full → normal allocation)
+    .mockReturnValueOnce(makeSelectChain([{ count: 0 }]))
+    .mockReturnValueOnce(makeSelectChainNoLimit([]))
+    // ROK-626: getAssignedSlotRole
+    .mockReturnValueOnce(makeSelectChain([{ role: 'dps' }]));
   mockDb.insert
     .mockReturnValueOnce({
       values: jest.fn().mockReturnValue({
@@ -424,7 +457,8 @@ describe('SignupsService — signupDiscord', () => {
 describe('SignupsService — signupDiscord auto-slot', () => {
   it('should auto-assign for generic event', () => testAutoSlotGeneric());
   it('should NOT auto-slot for MMO events', () => testNoAutoSlotMmo());
-  it('should NOT auto-slot when full', () => testNoAutoSlotFull());
+  it('should auto-bench when roster is full (ROK-626)', () =>
+    testAutoBenchWhenFull());
   it('should auto-slot with maxAttendees', () => testAutoSlotMaxAttendees());
   it('should NOT auto-slot without config', () => testNoAutoSlotNoConfig());
   it('should prefer explicit role', () => testExplicitRoleOverAutoSlot());

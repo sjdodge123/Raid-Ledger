@@ -92,10 +92,18 @@ export class SignupsService {
       action: 'signup_created',
     });
     this.rosterNotificationBuffer.bufferJoin(eventId, userId);
-    const character = dto?.characterId
-      ? await cancelH.getCharacterById(this.db, dto.characterId)
-      : null;
-    return rosterH.buildSignupResponseDto(result.signup, user, character);
+    const [character, assignedSlot] = await Promise.all([
+      dto?.characterId
+        ? cancelH.getCharacterById(this.db, dto.characterId)
+        : Promise.resolve(null),
+      rosterQH.getAssignedSlotRole(this.db, result.signup.id),
+    ]);
+    return rosterH.buildSignupResponseDto(
+      result.signup,
+      user,
+      character,
+      assignedSlot ?? undefined,
+    );
   }
 
   async signupDiscord(
@@ -120,7 +128,11 @@ export class SignupsService {
       signupId: result.id,
       action: 'discord_signup_created',
     });
-    return rosterH.buildAnonymousSignupResponseDto(result);
+    const assignedSlot = await rosterQH.getAssignedSlotRole(this.db, result.id);
+    return rosterH.buildAnonymousSignupResponseDto(
+      result,
+      assignedSlot ?? undefined,
+    );
   }
 
   async updateStatus(
@@ -273,19 +285,7 @@ export class SignupsService {
   }
 
   async getRoster(eventId: number): Promise<EventRosterDto> {
-    const signups = await rosterQH.fetchRosterSignups(this.db, eventId);
-    if (signups.length === 0)
-      await rosterQH.verifyEventExists(this.db, eventId);
-    const responses = signups.map((row) =>
-      row.event_signups.userId
-        ? rosterH.buildSignupResponseDto(
-            row.event_signups,
-            row.users ?? undefined,
-            row.characters,
-          )
-        : rosterH.buildAnonymousSignupResponseDto(row.event_signups),
-    );
-    return { eventId, signups: responses, count: responses.length };
+    return rosterQH.buildRosterResponse(this.db, eventId);
   }
 
   async getRosterWithAssignments(

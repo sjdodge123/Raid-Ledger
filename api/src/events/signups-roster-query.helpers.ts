@@ -9,9 +9,14 @@ import * as schema from '../drizzle/schema';
 import type {
   RosterWithAssignments,
   RosterAssignmentResponse,
+  EventRosterDto,
 } from '@raid-ledger/contract';
 import type { Tx } from './signups.service.types';
-import { buildRosterAssignmentResponseDto } from './signups-roster.helpers';
+import {
+  buildRosterAssignmentResponseDto,
+  buildSignupResponseDto,
+  buildAnonymousSignupResponseDto,
+} from './signups-roster.helpers';
 
 export async function fetchRosterSignups(db: Tx, eventId: number) {
   return db
@@ -189,6 +194,19 @@ export async function resolveGenericSlotRole(
   return 'player';
 }
 
+/** Look up the assigned roster slot for a signup (ROK-626). */
+export async function getAssignedSlotRole(
+  db: Tx,
+  signupId: number,
+): Promise<string | null> {
+  const [assignment] = await db
+    .select({ role: schema.rosterAssignments.role })
+    .from(schema.rosterAssignments)
+    .where(eq(schema.rosterAssignments.signupId, signupId))
+    .limit(1);
+  return assignment?.role ?? null;
+}
+
 /** Find next position for a slot role. */
 export async function findNextPosition(
   tx: Tx,
@@ -208,4 +226,23 @@ export async function findNextPosition(
       ),
     );
   return positions.reduce((max, r) => Math.max(max, r.position), 0) + 1;
+}
+
+/** Build the full EventRosterDto from fetched signup rows. */
+export async function buildRosterResponse(
+  db: Tx,
+  eventId: number,
+): Promise<EventRosterDto> {
+  const signups = await fetchRosterSignups(db, eventId);
+  if (signups.length === 0) await verifyEventExists(db, eventId);
+  const responses = signups.map((row) =>
+    row.event_signups.userId
+      ? buildSignupResponseDto(
+          row.event_signups,
+          row.users ?? undefined,
+          row.characters,
+        )
+      : buildAnonymousSignupResponseDto(row.event_signups),
+  );
+  return { eventId, signups: responses, count: responses.length };
 }

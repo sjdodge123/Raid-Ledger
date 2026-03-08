@@ -73,6 +73,8 @@ export const SignupResponseSchema = z.object({
     /** Post-event attendance tracking (ROK-421) */
     attendanceStatus: AttendanceStatusSchema.nullable().optional(),
     attendanceRecordedAt: z.string().datetime().nullable().optional(),
+    /** ROK-626: Assigned slot role for bench feedback (null = no assignment yet) */
+    assignedSlot: z.enum(['tank', 'healer', 'dps', 'flex', 'player', 'bench']).nullable().optional(),
 });
 
 export type SignupResponseDto = z.infer<typeof SignupResponseSchema>;

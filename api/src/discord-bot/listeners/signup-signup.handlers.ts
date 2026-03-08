@@ -9,6 +9,7 @@ import {
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -117,24 +118,30 @@ async function loadGameContext(
     .where(eq(schema.events.id, eventId))
     .limit(1);
   if (!event) return 'not_found';
-  if (!event.gameId) return null;
+  const slotConfig = event.slotConfig as Record<string, unknown> | null;
+  const isMMO = slotConfig?.type === 'mmo';
+
+  if (!event.gameId) {
+    return isMMO ? { eventTitle: event.title, characters: [], isMMO } : null;
+  }
 
   const [game] = await deps.db
     .select()
     .from(schema.games)
     .where(eq(schema.games.id, event.gameId))
     .limit(1);
-  if (!game) return null;
+  if (!game) {
+    return isMMO ? { eventTitle: event.title, characters: [], isMMO } : null;
+  }
 
   const characterList = await deps.charactersService.findAllForUser(
     userId,
     event.gameId,
   );
-  const slotConfig = event.slotConfig as Record<string, unknown> | null;
   return {
     eventTitle: event.title,
     characters: characterList.data,
-    isMMO: slotConfig?.type === 'mmo',
+    isMMO,
   };
 }
 
@@ -249,9 +256,9 @@ export async function handleNewLinkedSignup(
     if (handled) return;
   }
 
-  await deps.signupsService.signup(eventId, linkedUser.id);
+  const result = await deps.signupsService.signup(eventId, linkedUser.id);
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!`,
+    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}`,
   });
   await deps.updateEmbedSignupCount(eventId);
 }

@@ -1,6 +1,7 @@
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import type { PugInviteDeps } from './pug-invite.helpers';
+import { checkAutoBench } from '../../events/signups-signup.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
 type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
@@ -88,12 +89,14 @@ async function createAnonymousPugSignup(
   try {
     const [signup] = await insertAnonymousSignup(deps, slot, discordUserId);
     if (signup) {
-      await assignAnonymousRoster(deps, slot.eventId, signup.id, role);
+      const effectiveRole = await resolveEffectiveRole(deps, slot, role);
+      await assignAnonymousRoster(deps, slot.eventId, signup.id, effectiveRole);
       deps.logger.log(
-        'Created anonymous signup %d for PUG %s on event %d',
+        'Created anonymous signup %d for PUG %s on event %d (%s)',
         signup.id,
         slot.discordUsername,
         slot.eventId,
+        effectiveRole,
       );
     }
   } catch (err) {
@@ -103,6 +106,22 @@ async function createAnonymousPugSignup(
       err instanceof Error ? err.message : 'Unknown error',
     );
   }
+}
+
+/** ROK-626: Check if roster is full and return 'bench' if so. */
+async function resolveEffectiveRole(
+  deps: PugInviteDeps,
+  slot: PugSlot,
+  role: string,
+): Promise<string> {
+  const [event] = await deps.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, slot.eventId))
+    .limit(1);
+  if (!event) return role;
+  const isFull = await checkAutoBench(deps.db, event, slot.eventId);
+  return isFull ? 'bench' : role;
 }
 
 /** Insert the anonymous signup row. */

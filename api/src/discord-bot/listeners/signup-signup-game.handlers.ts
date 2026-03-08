@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 
 type NewSignupCtx = {
   game: { hasRoles: boolean };
@@ -124,7 +125,9 @@ async function signupSingleCharacter(
   await deps.signupsService.confirmSignup(eventId, result.id, userId, {
     characterId: char.id,
   });
-  await interaction.editReply({ content: `Signed up as **${char.name}**!` });
+  await interaction.editReply({
+    content: `Signed up as **${char.name}**!${benchSuffix(result.assignedSlot)}`,
+  });
   await deps.updateEmbedSignupCount(eventId);
   return true;
 }
@@ -140,14 +143,14 @@ interface NoCharSignupArgs {
 
 async function signupWithoutCharacter(a: NoCharSignupArgs): Promise<boolean> {
   const { interaction, eventId, userId, event, game, deps } = a;
-  await deps.signupsService.signup(eventId, userId);
+  const result = await deps.signupsService.signup(eventId, userId);
   const clientUrl = process.env.CLIENT_URL ?? '';
   const nudge =
     game.hasRoles && clientUrl
       ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
       : '';
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!${nudge}`,
+    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${nudge}`,
   });
   await deps.updateEmbedSignupCount(eventId);
   return true;

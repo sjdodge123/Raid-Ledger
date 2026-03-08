@@ -86,7 +86,7 @@ function useEventDetailDerived(event: EventResponseDto | undefined, roster: Even
     const isEnded = event ? getEventStatus(event.startTime, event.endTime) === 'ended' : false;
     const { data: rosterAssignments } = useRoster(Number(event?.id ?? 0));
     const isInPool = isSignedUp && rosterAssignments?.pool.some(p => p.userId === user?.id);
-    const canJoinSlot = isAuthenticated && (!isSignedUp || isInPool) && !canManageRoster && !isCancelled;
+    const canJoinSlot = isAuthenticated && (!isSignedUp || isInPool) && !isCancelled;
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
 
     return { gameRegistryEntry, shouldShowCharacterModal, userSignup, isSignedUp, canManageRoster, isCancelled, isEnded, rosterAssignments, canJoinSlot, isMMOGame };

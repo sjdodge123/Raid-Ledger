@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { findLinkedUser } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
+import { benchSuffix } from './signup-bench-feedback.helpers';
 
 type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
 
@@ -35,7 +36,7 @@ export function buildRoleSignupOptions(
   return { preferredRoles: selectedRoles };
 }
 
-/** Sign up a user and confirm with a character, optionally marking tentative. */
+/** Sign up a user and confirm with a character, optionally marking tentative. Returns assignedSlot for bench feedback. */
 export async function signupWithCharacter(
   deps: SignupInteractionDeps,
   eventId: number,
@@ -43,7 +44,7 @@ export async function signupWithCharacter(
   characterId: string,
   opts: { slotRole?: SlotRole; preferredRoles?: ('tank' | 'healer' | 'dps')[] },
   signupStatus?: 'tentative',
-): Promise<void> {
+): Promise<string | undefined> {
   const signupResult = await deps.signupsService.signup(eventId, userId, opts);
   await deps.signupsService.confirmSignup(eventId, signupResult.id, userId, {
     characterId,
@@ -56,6 +57,7 @@ export async function signupWithCharacter(
       { status: 'tentative' },
     );
   }
+  return signupResult.assignedSlot ?? undefined;
 }
 
 interface LinkedRoleSelectArgs {
@@ -81,7 +83,7 @@ export async function handleLinkedRoleSelect(
     roleCtx.selectedRoles,
     roleCtx.primaryRole,
   );
-  await signupWithCharacter(
+  const assignedSlot = await signupWithCharacter(
     deps,
     a.eventId,
     linkedUser.id,
@@ -97,6 +99,7 @@ export async function handleLinkedRoleSelect(
     characterId,
     roleCtx.rolesLabel,
     signupStatus,
+    assignedSlot,
   );
 }
 
@@ -108,10 +111,11 @@ async function confirmCharRoleSignup(
   characterId: string,
   rolesLabel: string,
   signupStatus?: 'tentative',
+  assignedSlot?: string,
 ): Promise<void> {
   const character = await deps.charactersService.findOne(userId, characterId);
   await interaction.editReply({
-    content: formatRoleConfirmation(signupStatus, character.name, rolesLabel),
+    content: `${formatRoleConfirmation(signupStatus, character.name, rolesLabel)}${benchSuffix(assignedSlot)}`,
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);
@@ -173,7 +177,7 @@ async function signupAnonymousWithRoles(
   roleCtx: RoleSelectInfo,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  await deps.signupsService.signupDiscord(eventId, {
+  const result = await deps.signupsService.signupDiscord(eventId, {
     discordUserId: interaction.user.id,
     discordUsername: interaction.user.username,
     discordAvatarHash: interaction.user.avatar,
@@ -185,11 +189,11 @@ async function signupAnonymousWithRoles(
     status: signupStatus ?? undefined,
   });
   await interaction.editReply({
-    content: formatAnonymousRoleConfirmation(
+    content: `${formatAnonymousRoleConfirmation(
       interaction.user.username,
       roleCtx.rolesLabel,
       signupStatus,
-    ),
+    )}${benchSuffix(result.assignedSlot)}`,
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);
@@ -222,7 +226,7 @@ async function handleLinkedNoCharRoleSelect(
     roleCtx.selectedRoles,
     roleCtx.primaryRole,
   );
-  await deps.signupsService.signup(eventId, linkedUser.id, opts);
+  const result = await deps.signupsService.signup(eventId, linkedUser.id, opts);
   if (signupStatus === 'tentative')
     await markTentative(deps, eventId, linkedUser.id);
 
@@ -232,6 +236,7 @@ async function handleLinkedNoCharRoleSelect(
     deps,
     roleCtx.rolesLabel,
     signupStatus,
+    result.assignedSlot ?? undefined,
   );
 }
 
@@ -253,10 +258,11 @@ async function confirmNoCharSignup(
   deps: SignupInteractionDeps,
   rolesLabel: string,
   signupStatus?: 'tentative',
+  assignedSlot?: string,
 ): Promise<void> {
   const eventTitle = await fetchEventTitle(eventId, deps);
   await interaction.editReply({
-    content: formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel),
+    content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel)}${benchSuffix(assignedSlot)}`,
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);

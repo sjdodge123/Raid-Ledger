@@ -19,6 +19,9 @@ function createMockTx() {
         where: jest.fn().mockReturnValue({
           limit: jest.fn().mockResolvedValue([]),
         }),
+        innerJoin: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([{ count: 0 }]),
+        }),
       }),
     }),
     insert: jest.fn().mockImplementation(() => ({
@@ -146,11 +149,29 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
         }),
       }));
 
-      // checkAutoBench select: no maxAttendees so returns false
+      // ROK-626: checkAutoBench uses innerJoin to count non-bench assignments
+      mockTx.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          innerJoin: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([{ count: 0 }]),
+          }),
+        }),
+      });
+      // ROK-626: checkHasAssignment (after autoAllocate)
       mockTx.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([]),
+            limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
+        }),
+      });
+      // syncConfirmationStatus
+      mockTx.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([{ confirmationStatus: 'confirmed' }]),
           }),
         }),
       });
@@ -200,6 +221,33 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
           };
         }),
       }));
+
+      // ROK-626: checkAutoBench (not full)
+      mockTx.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          innerJoin: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([{ count: 0 }]),
+          }),
+        }),
+      });
+      // ROK-626: checkHasAssignment (after autoAllocate)
+      mockTx.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
+        }),
+      });
+      // syncConfirmationStatus
+      mockTx.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([{ confirmationStatus: 'confirmed' }]),
+          }),
+        }),
+      });
 
       const params: SignupTxParams = {
         tx: mockTx as unknown as SignupTxParams['tx'],
@@ -251,11 +299,16 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
         }),
       }));
 
-      // Select calls (checkAutoBench skipped — maxAttendees is null):
-      // 1. fetchExistingSignup
-      // 2. check existing roster assignment
-      // 3. syncConfirmationStatus
+      // ROK-626: checkAutoBench uses innerJoin (slotConfig present, not skipped)
       mockTx.select
+        // checkAutoBench: count non-bench roster assignments
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            innerJoin: jest.fn().mockReturnValue({
+              where: jest.fn().mockResolvedValue([{ count: 0 }]),
+            }),
+          }),
+        })
         // fetchExistingSignup
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
@@ -269,6 +322,14 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
               limit: jest.fn().mockResolvedValue([]),
+            }),
+          }),
+        })
+        // checkHasAssignment (after autoAllocate)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ id: 1 }]),
             }),
           }),
         })
