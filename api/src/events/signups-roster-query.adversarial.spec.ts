@@ -141,6 +141,6 @@ describe('slotConfigFromEvent', () => {
       flex: 0,
       bench: 0,
     });
-    expect(result.bench).toBe(0);
+    expect(result!.bench).toBe(0);
   });
 });

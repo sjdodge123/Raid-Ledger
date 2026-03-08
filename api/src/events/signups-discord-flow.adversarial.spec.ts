@@ -5,7 +5,7 @@
 import * as signupH from './signups-signup.helpers';
 import * as discordH from './signups-discord.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
-import { discordSignupTxBody, assignBenchFallback } from './signups-flow.helpers';
+import { discordSignupTxBody } from './signups-flow.helpers';
 import type { FlowDeps } from './signups-flow.helpers';
 
 jest.mock('./signups-signup.helpers');
@@ -88,11 +88,7 @@ describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
 
     await discordSignupTxBody(deps, tx, mockEvent, 1, mockDto);
 
-    expect(mockSignupH.checkAutoBench).toHaveBeenCalledWith(
-      tx,
-      mockEvent,
-      1,
-    );
+    expect(mockSignupH.checkAutoBench).toHaveBeenCalledWith(tx, mockEvent, 1);
     expect(mockDiscordH.allocateDiscordSlot).toHaveBeenCalled();
   });
 

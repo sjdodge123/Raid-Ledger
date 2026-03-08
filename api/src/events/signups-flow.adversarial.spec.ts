@@ -23,9 +23,7 @@ function createMockTx() {
   } as unknown as Parameters<typeof assignDirectSlot>[1]['tx'];
 }
 
-function createMockDeps(
-  overrides?: Partial<FlowDeps>,
-): FlowDeps {
+function createMockDeps(overrides?: Partial<FlowDeps>): FlowDeps {
   return {
     db: {} as FlowDeps['db'],
     logger: { log: jest.fn(), warn: jest.fn() },
@@ -172,9 +170,7 @@ describe('assignBenchFallback', () => {
     expect(deps.logger.log).toHaveBeenCalledWith(
       expect.stringContaining('Auto-benched'),
     );
-    expect(deps.logger.log).toHaveBeenCalledWith(
-      expect.stringContaining('42'),
-    );
+    expect(deps.logger.log).toHaveBeenCalledWith(expect.stringContaining('42'));
   });
 
   it('uses custom label in log message', async () => {
@@ -205,16 +201,15 @@ describe('assignBenchFallback', () => {
     const tx = {
       select: jest.fn().mockReturnValue({
         from: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue([
-            { position: 1 },
-            { position: 3 },
-          ]),
+          where: jest
+            .fn()
+            .mockResolvedValue([{ position: 1 }, { position: 3 }]),
         }),
       }),
       insert: jest.fn().mockReturnValue({
         values: insertValues,
       }),
-    } as unknown as Parameters<typeof assignBenchFallback>[2];
+    } as unknown as Parameters<typeof assignBenchFallback>[1];
 
     await assignBenchFallback(deps, tx, 1, 42);
 
