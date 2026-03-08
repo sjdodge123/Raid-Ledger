@@ -109,7 +109,7 @@ function createMockDeps(): FlowDeps & {
     cancelPromotion: jest.fn().mockResolvedValue(undefined),
     autoAllocateSignup: jest
       .fn()
-      .mockImplementation((_tx, _eventId, signupId) => {
+      .mockImplementation(async (_tx, _eventId, signupId) => {
         autoAllocateCalls.push({ signupId });
       }),
     autoAllocateCalls,
