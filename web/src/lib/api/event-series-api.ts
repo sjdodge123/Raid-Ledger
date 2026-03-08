@@ -34,10 +34,3 @@ export async function cancelSeries(
         body: JSON.stringify({ scope, reason }),
     });
 }
-
-/** Delete a single event (ROK-429). */
-export async function deleteEvent(
-    eventId: number,
-): Promise<{ message: string }> {
-    return fetchApi(`/events/${eventId}`, { method: 'DELETE' });
-}

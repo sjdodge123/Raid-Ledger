@@ -287,3 +287,10 @@ export async function rescheduleEvent(
         EventResponseSchema,
     );
 }
+
+/** Delete a single event (ROK-429). */
+export async function deleteEvent(
+    eventId: number,
+): Promise<{ message: string }> {
+    return fetchApi(`/events/${eventId}`, { method: 'DELETE' });
+}

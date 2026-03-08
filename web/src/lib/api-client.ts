@@ -23,6 +23,7 @@ export {
     createEvent,
     updateEvent,
     cancelEvent,
+    deleteEvent,
     getMyDashboard,
     signupForEvent,
     cancelSignup,
@@ -149,7 +150,6 @@ export {
     updateSeries,
     deleteSeries,
     cancelSeries,
-    deleteEvent,
 } from './api/event-series-api';
 
 // Analytics
