@@ -40,20 +40,17 @@ function makeSibling(id: number, dayOffset: number) {
 
 describe('updateSeriesEvents', () => {
   let mockDb: MockDb;
-  let mockEmitter: { emit: jest.Mock };
 
   beforeEach(() => {
     mockDb = createDrizzleMock();
-    mockEmitter = { emit: jest.fn() };
   });
 
-  it('updates only anchor for scope=this', async () => {
+  it('updates only anchor for scope=this and returns its ID', async () => {
     const anchor = makeAnchor();
     mockDb.limit.mockResolvedValueOnce([anchor]);
 
-    await updateSeriesEvents(
+    const ids = await updateSeriesEvents(
       mockDb as never,
-      mockEmitter as never,
       1,
       CREATOR_ID,
       false,
@@ -62,18 +59,17 @@ describe('updateSeriesEvents', () => {
     );
 
     expect(mockDb.update).toHaveBeenCalled();
-    expect(mockEmitter.emit).toHaveBeenCalledTimes(1);
+    expect(ids).toEqual([1]);
   });
 
-  it('updates all events for scope=all', async () => {
+  it('updates all events for scope=all and returns all IDs', async () => {
     const anchor = makeAnchor();
     const siblings = [anchor, makeSibling(2, 7), makeSibling(3, 14)];
     mockDb.limit.mockResolvedValueOnce([anchor]);
     mockDb.orderBy.mockResolvedValueOnce(siblings);
 
-    await updateSeriesEvents(
+    const ids = await updateSeriesEvents(
       mockDb as never,
-      mockEmitter as never,
       1,
       CREATOR_ID,
       false,
@@ -82,7 +78,7 @@ describe('updateSeriesEvents', () => {
     );
 
     expect(mockDb.update).toHaveBeenCalledTimes(3);
-    expect(mockEmitter.emit).toHaveBeenCalledTimes(3);
+    expect(ids).toEqual([1, 2, 3]);
   });
 
   it('throws ForbiddenException for non-owner non-admin', async () => {
@@ -90,35 +86,26 @@ describe('updateSeriesEvents', () => {
     mockDb.limit.mockResolvedValueOnce([anchor]);
 
     await expect(
-      updateSeriesEvents(
-        mockDb as never,
-        mockEmitter as never,
-        1,
-        999,
-        false,
-        'this',
-        { title: 'Nope' },
-      ),
+      updateSeriesEvents(mockDb as never, 1, 999, false, 'this', {
+        title: 'Nope',
+      }),
     ).rejects.toThrow(ForbiddenException);
   });
 });
 
 describe('deleteSeriesEvents', () => {
   let mockDb: MockDb;
-  let mockEmitter: { emit: jest.Mock };
 
   beforeEach(() => {
     mockDb = createDrizzleMock();
-    mockEmitter = { emit: jest.fn() };
   });
 
-  it('deletes only anchor for scope=this', async () => {
+  it('deletes only anchor for scope=this and returns its ID', async () => {
     const anchor = makeAnchor();
     mockDb.limit.mockResolvedValueOnce([anchor]);
 
-    await deleteSeriesEvents(
+    const ids = await deleteSeriesEvents(
       mockDb as never,
-      mockEmitter as never,
       1,
       CREATOR_ID,
       false,
@@ -126,18 +113,17 @@ describe('deleteSeriesEvents', () => {
     );
 
     expect(mockDb.delete).toHaveBeenCalledTimes(1);
-    expect(mockEmitter.emit).toHaveBeenCalledTimes(1);
+    expect(ids).toEqual([1]);
   });
 
-  it('deletes all events for scope=all', async () => {
+  it('deletes all events for scope=all and returns all IDs', async () => {
     const anchor = makeAnchor();
     const siblings = [anchor, makeSibling(2, 7), makeSibling(3, 14)];
     mockDb.limit.mockResolvedValueOnce([anchor]);
     mockDb.orderBy.mockResolvedValueOnce(siblings);
 
-    await deleteSeriesEvents(
+    const ids = await deleteSeriesEvents(
       mockDb as never,
-      mockEmitter as never,
       1,
       CREATOR_ID,
       false,
@@ -145,7 +131,7 @@ describe('deleteSeriesEvents', () => {
     );
 
     expect(mockDb.delete).toHaveBeenCalledTimes(3);
-    expect(mockEmitter.emit).toHaveBeenCalledTimes(3);
+    expect(ids).toEqual([1, 2, 3]);
   });
 });
 
@@ -186,7 +172,7 @@ describe('cancelSeriesEvents', () => {
     mockDb.limit.mockResolvedValueOnce([anchor]);
     setupCancelMocks();
 
-    await cancelSeriesEvents(
+    const ids = await cancelSeriesEvents(
       mockDb as never,
       mockNotification as never,
       1,
@@ -197,6 +183,7 @@ describe('cancelSeriesEvents', () => {
     );
 
     expect(mockDb.update).toHaveBeenCalled();
+    expect(ids).toEqual([1]);
   });
 
   it('cancels all events for scope=all', async () => {
@@ -206,7 +193,7 @@ describe('cancelSeriesEvents', () => {
     mockDb.orderBy.mockResolvedValueOnce(siblings);
     setupCancelMocks();
 
-    await cancelSeriesEvents(
+    const ids = await cancelSeriesEvents(
       mockDb as never,
       mockNotification as never,
       1,
@@ -217,6 +204,7 @@ describe('cancelSeriesEvents', () => {
     );
 
     expect(mockDb.update).toHaveBeenCalledTimes(3);
+    expect(ids).toEqual([1, 2, 3]);
   });
 
   it('skips already-cancelled events', async () => {
@@ -227,7 +215,7 @@ describe('cancelSeriesEvents', () => {
     mockDb.orderBy.mockResolvedValueOnce([anchor, cancelled]);
     setupCancelMocks();
 
-    await cancelSeriesEvents(
+    const ids = await cancelSeriesEvents(
       mockDb as never,
       mockNotification as never,
       1,
@@ -239,5 +227,6 @@ describe('cancelSeriesEvents', () => {
 
     // Only 1 update (the non-cancelled anchor), not 2
     expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(ids).toEqual([1, 2]);
   });
 });

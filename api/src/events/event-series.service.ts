@@ -13,6 +13,12 @@ import type {
 } from '@raid-ledger/contract';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotificationService } from '../notifications/notification.service';
+import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
+import { findOneEvent } from './event-find.helpers';
+import {
+  mapEventToResponse,
+  buildLifecyclePayload,
+} from './event-response-map.helpers';
 import {
   updateSeriesEvents,
   deleteSeriesEvents,
@@ -38,9 +44,8 @@ export class EventSeriesService {
     scope: SeriesScope,
     dto: UpdateEventDto,
   ): Promise<void> {
-    await updateSeriesEvents(
+    const ids = await updateSeriesEvents(
       this.db,
-      this.eventEmitter,
       id,
       userId,
       isAdmin,
@@ -48,6 +53,7 @@ export class EventSeriesService {
       dto,
     );
     this.logger.log(`Series updated: ${id} scope=${scope} by user ${userId}`);
+    await this.emitLifecycleForIds(ids, APP_EVENT_EVENTS.UPDATED);
   }
 
   /** Deletes a series of events with scope selection. */
@@ -57,15 +63,11 @@ export class EventSeriesService {
     isAdmin: boolean,
     scope: SeriesScope,
   ): Promise<void> {
-    await deleteSeriesEvents(
-      this.db,
-      this.eventEmitter,
-      id,
-      userId,
-      isAdmin,
-      scope,
-    );
+    const ids = await deleteSeriesEvents(this.db, id, userId, isAdmin, scope);
     this.logger.log(`Series deleted: ${id} scope=${scope} by user ${userId}`);
+    for (const eid of ids) {
+      this.eventEmitter.emit(APP_EVENT_EVENTS.DELETED, { eventId: eid });
+    }
   }
 
   /** Cancels a series of events with scope selection. */
@@ -76,7 +78,7 @@ export class EventSeriesService {
     scope: SeriesScope,
     dto: CancelEventDto,
   ): Promise<void> {
-    await cancelSeriesEvents(
+    const ids = await cancelSeriesEvents(
       this.db,
       this.notificationService,
       id,
@@ -86,5 +88,22 @@ export class EventSeriesService {
       dto,
     );
     this.logger.log(`Series cancelled: ${id} scope=${scope} by user ${userId}`);
+    await this.emitLifecycleForIds(ids, APP_EVENT_EVENTS.CANCELLED);
+  }
+
+  /** Re-fetches events and emits full lifecycle payloads. */
+  private async emitLifecycleForIds(
+    ids: number[],
+    eventName: string,
+  ): Promise<void> {
+    for (const eid of ids) {
+      try {
+        const row = await findOneEvent(this.db, eid);
+        const response = mapEventToResponse(row);
+        this.eventEmitter.emit(eventName, buildLifecyclePayload(response));
+      } catch {
+        this.logger.warn(`Could not emit ${eventName} for event ${eid}`);
+      }
+    }
   }
 }

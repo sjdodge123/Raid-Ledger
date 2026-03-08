@@ -12,8 +12,6 @@ import * as schema from '../drizzle/schema';
 import type { UpdateEventDto, CancelEventDto } from '@raid-ledger/contract';
 import type { SeriesScope } from '@raid-ledger/contract';
 import type { NotificationService } from '../notifications/notification.service';
-import type { EventEmitter2 } from '@nestjs/event-emitter';
-import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import {
   findExistingOrThrow,
   assertOwnerOrAdmin,
@@ -79,27 +77,15 @@ export async function resolveTargetEvents(
   return findSeriesEvents(db, anchor.recurrenceGroupId, fromStart);
 }
 
-/** Emits a lifecycle event for each target. */
-function emitForTargets(
-  eventEmitter: EventEmitter2,
-  key: string,
-  targets: EventSelect[],
-): void {
-  for (const evt of targets) {
-    eventEmitter.emit(key, { eventId: evt.id });
-  }
-}
-
-/** Updates series events within a transaction. */
+/** Updates series events within a transaction. Returns affected IDs. */
 export async function updateSeriesEvents(
   db: PostgresJsDatabase<typeof schema>,
-  eventEmitter: EventEmitter2,
   id: number,
   userId: number,
   isAdmin: boolean,
   scope: SeriesScope,
   dto: UpdateEventDto,
-): Promise<void> {
+): Promise<number[]> {
   const anchor = await findExistingOrThrow(db, id);
   assertOwnerOrAdmin(anchor, userId, isAdmin, 'update');
   const targets = await resolveTargetEvents(db, anchor, scope);
@@ -120,7 +106,7 @@ export async function updateSeriesEvents(
     }
   });
 
-  emitForTargets(eventEmitter, APP_EVENT_EVENTS.UPDATED, targets);
+  return targets.map((e) => e.id);
 }
 
 /** Builds update data for a target event, applying time delta. */
@@ -144,26 +130,26 @@ function buildUpdateForTarget(
   return buildUpdateData(dtoForTarget, target);
 }
 
-/** Deletes series events within a transaction. */
+/** Deletes series events within a transaction. Returns affected IDs. */
 export async function deleteSeriesEvents(
   db: PostgresJsDatabase<typeof schema>,
-  eventEmitter: EventEmitter2,
   id: number,
   userId: number,
   isAdmin: boolean,
   scope: SeriesScope,
-): Promise<void> {
+): Promise<number[]> {
   const anchor = await findExistingOrThrow(db, id);
   assertOwnerOrAdmin(anchor, userId, isAdmin, 'delete');
   const targets = await resolveTargetEvents(db, anchor, scope);
   const targetIds = targets.map((e) => e.id);
-  emitForTargets(eventEmitter, APP_EVENT_EVENTS.DELETED, targets);
 
   await db.transaction(async (tx) => {
     for (const eid of targetIds) {
       await tx.delete(schema.events).where(eq(schema.events.id, eid));
     }
   });
+
+  return targetIds;
 }
 
 /** Sends cancellation notifications for non-cancelled targets. */
@@ -180,7 +166,7 @@ async function notifySeriesCancellations(
   }
 }
 
-/** Cancels series events within a transaction. */
+/** Cancels series events within a transaction. Returns affected IDs. */
 export async function cancelSeriesEvents(
   db: PostgresJsDatabase<typeof schema>,
   notificationService: NotificationService,
@@ -189,7 +175,7 @@ export async function cancelSeriesEvents(
   isAdmin: boolean,
   scope: SeriesScope,
   dto: CancelEventDto,
-): Promise<void> {
+): Promise<number[]> {
   const anchor = await findExistingOrThrow(db, id);
   assertOwnerOrAdmin(anchor, userId, isAdmin, 'cancel');
   const targets = await resolveTargetEvents(db, anchor, scope);
@@ -210,4 +196,5 @@ export async function cancelSeriesEvents(
   });
 
   await notifySeriesCancellations(db, notificationService, targets, dto);
+  return targets.map((e) => e.id);
 }
