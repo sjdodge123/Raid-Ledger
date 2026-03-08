@@ -6,7 +6,7 @@
  *  - 'all': every event in the recurrence group
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { eq, and, gte } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { UpdateEventDto, CancelEventDto } from '@raid-ledger/contract';
@@ -33,13 +33,15 @@ export async function findSeriesEvents(
 ): Promise<EventSelect[]> {
   const conditions = [eq(schema.events.recurrenceGroupId, groupId)];
   if (fromStart) {
-    conditions.push(gte(schema.events.duration, fromStart as never));
+    conditions.push(
+      sql`lower(${schema.events.duration}) >= ${fromStart.toISOString()}::timestamptz`,
+    );
   }
   const events = await db
     .select()
     .from(schema.events)
     .where(and(...conditions))
-    .orderBy(schema.events.duration);
+    .orderBy(sql`lower(${schema.events.duration})`);
   if (events.length === 0) {
     throw new NotFoundException('No events found in this series');
   }
