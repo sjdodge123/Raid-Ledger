@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEvents, getEvent, getEventRoster, getEventVariantContext, cancelEvent } from '../lib/api-client';
+import { getEvents, getEvent, getEventRoster, getEventVariantContext, cancelEvent, deleteEvent, updateSeries, deleteSeries, cancelSeries } from '../lib/api-client';
 import type { EventListParams } from '../lib/api-client';
 import { useInfiniteList } from './use-infinite-list';
-import type { EventResponseDto } from '@raid-ledger/contract';
+import type { EventResponseDto, SeriesScope, UpdateEventDto } from '@raid-ledger/contract';
 
 /**
  * Hook to fetch paginated event list.
@@ -72,11 +72,56 @@ export function useEventVariantContext(eventId: number | undefined, enabled = tr
  */
 export function useCancelEvent(eventId: number) {
     const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: (reason?: string) => cancelEvent(eventId, reason),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+        },
+    });
+}
+
+/** Hook to delete an event (ROK-429). */
+export function useDeleteEvent(eventId: number) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: () => deleteEvent(eventId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+        },
+    });
+}
+
+/** Hook to update a series of events (ROK-429). */
+export function useUpdateSeries(eventId: number) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (args: { scope: SeriesScope; data: UpdateEventDto }) =>
+            updateSeries(eventId, args.scope, args.data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+        },
+    });
+}
+
+/** Hook to delete a series of events (ROK-429). */
+export function useDeleteSeries(eventId: number) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (scope: SeriesScope) => deleteSeries(eventId, scope),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+        },
+    });
+}
+
+/** Hook to cancel a series of events (ROK-429). */
+export function useCancelSeries(eventId: number) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (args: { scope: SeriesScope; reason?: string }) =>
+            cancelSeries(eventId, args.scope, args.reason),
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });

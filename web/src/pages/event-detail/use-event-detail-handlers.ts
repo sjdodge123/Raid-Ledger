@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from '../../lib/toast';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../../hooks/use-signups';
 import { useUpdateRoster, useSelfUnassign, useAdminRemoveUser, buildRosterUpdate } from '../../hooks/use-roster';
 import { useUpdateAutoUnbench } from '../../hooks/use-auto-unbench';
 import { useCreatePug, useDeletePug, usePugs, useRegeneratePugInviteCode } from '../../hooks/use-pugs';
-import type { RosterAssignmentResponse, RosterRole, PugRole, CharacterRole } from '@raid-ledger/contract';
+import { useDeleteEvent, useDeleteSeries, useCancelSeries } from '../../hooks/use-events';
+import type { RosterAssignmentResponse, RosterRole, PugRole, CharacterRole, SeriesScope } from '@raid-ledger/contract';
 
 /**
  * Custom hook encapsulating all event detail page handler logic.
@@ -130,6 +132,30 @@ function useSlotClickHandler(options: { isAuthenticated: boolean; shouldShowChar
     }, [options.isAuthenticated, options.shouldShowCharacterModal, signupHandlers]);
 }
 
+function useSeriesHandlers(eventId: number) {
+    const navigate = useNavigate();
+    const deleteEvent = useDeleteEvent(eventId);
+    const deleteSeries = useDeleteSeries(eventId);
+    const cancelSeries = useCancelSeries(eventId);
+
+    const handleDelete = useCallback(async () => {
+        try { await deleteEvent.mutateAsync(); toast.success('Event deleted'); navigate('/calendar'); }
+        catch (err) { toast.error('Failed to delete', { description: err instanceof Error ? err.message : 'Please try again.' }); }
+    }, [deleteEvent, navigate]);
+
+    const handleSeriesConfirm = useCallback(async (action: 'edit' | 'delete' | 'cancel', scope: SeriesScope) => {
+        if (action === 'edit') { navigate(`/events/${eventId}/edit?seriesScope=${scope}`); return; }
+        try {
+            if (action === 'delete') { await deleteSeries.mutateAsync(scope); toast.success('Series deleted'); navigate('/calendar'); }
+            else { await cancelSeries.mutateAsync({ scope }); toast.success('Series cancelled'); }
+        } catch (err) { toast.error(`Failed to ${action} series`, { description: err instanceof Error ? err.message : 'Please try again.' }); }
+    }, [eventId, navigate, deleteSeries, cancelSeries]);
+
+    const isSeriesPending = deleteSeries.isPending || cancelSeries.isPending;
+
+    return { handleDelete, handleSeriesConfirm, isSeriesPending };
+}
+
 export function useEventDetailHandlers(eventId: number, options: {
     canManageRoster: boolean; isAuthenticated: boolean; shouldShowCharacterModal: boolean;
 }) {
@@ -141,6 +167,7 @@ export function useEventDetailHandlers(eventId: number, options: {
     const [removeConfirm, setRemoveConfirm] = useState<{ signupId: number; username: string } | null>(null);
     const rosterHandlers = useRosterHandlers(eventId, options.canManageRoster, signupHandlers);
     const handleSlotClick = useSlotClickHandler(options, signupHandlers);
+    const seriesHandlers = useSeriesHandlers(eventId);
 
     const handleConfirmRemoveFromEvent = useCallback(async () => {
         if (!removeConfirm) return;
@@ -154,5 +181,6 @@ export function useEventDetailHandlers(eventId: number, options: {
         ...rosterHandlers, handleSlotClick,
         handleRemoveFromEvent: useCallback((signupId: number, username: string) => setRemoveConfirm({ signupId, username }), []),
         handleConfirmRemoveFromEvent,
+        ...seriesHandlers,
     };
 }

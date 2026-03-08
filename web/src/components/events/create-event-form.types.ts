@@ -1,4 +1,4 @@
-import type { IgdbGameDto, EventResponseDto } from '@raid-ledger/contract';
+import type { IgdbGameDto, EventResponseDto, SeriesScope } from '@raid-ledger/contract';
 
 export interface FormState {
     title: string;
@@ -38,6 +38,8 @@ export interface FormErrors {
 
 export interface EventFormProps {
     event?: EventResponseDto;
+    /** Series scope for bulk edit operations (ROK-429). */
+    seriesScope?: SeriesScope;
 }
 
 export const RECURRENCE_OPTIONS = [

@@ -5,6 +5,7 @@ import type { EventDisplayStatus } from '../../lib/event-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { LiveBadge } from './LiveBadge';
+import { SeriesBadge } from './SeriesBadge';
 
 interface EventCardProps {
     event: EventResponseDto;
@@ -66,7 +67,8 @@ function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPat
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
             )}
             {matchesGameTime && <GameTimeBadge />}
-            <div className="absolute top-2 right-2">
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+                {!!event.recurrenceGroupId && <SeriesBadge />}
                 {event.isAdHoc && event.adHocStatus === 'live' ? <LiveBadge /> : <StatusBadge status={status} />}
             </div>
             {event.game && (

@@ -8,6 +8,7 @@ import { getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { SignupConfirmationModal } from '../events/signup-confirmation-modal';
 import { useDayEventSignup } from './use-day-event-signup';
+import { SeriesBadge } from '../events/SeriesBadge';
 import type { CalendarEvent } from './CalendarView';
 import type { CharacterRole } from '@raid-ledger/contract';
 
@@ -121,12 +122,16 @@ function DayEventActions({ eventEnded, isAuthenticated, rosterLoading, isSignedU
 }
 
 function DayEventBlockContent({ event, d }: { event: CalendarEvent; d: ReturnType<typeof useDayEventData> }) {
+    const isSeries = !!event.resource?.recurrenceGroupId;
     return (
         <div className="day-event-content">
             <div className="day-event-header" style={{ position: 'relative' }}>
                 <span className="day-event-duration">{d.durationStr}</span>
                 <span className="day-event-title">{event.title}</span>
-                {d.overlaps && <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }} title="Overlaps with your game time" />}
+                <div className="absolute top-0.5 right-0.5 flex items-center gap-1">
+                    {isSeries && <SeriesBadge />}
+                    {d.overlaps && <span className="w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }} title="Overlaps with your game time" />}
+                </div>
             </div>
             <div className="day-event-meta">
                 <span className="day-event-game">{d.gameName}</span>

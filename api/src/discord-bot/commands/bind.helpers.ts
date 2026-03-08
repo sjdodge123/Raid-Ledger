@@ -4,7 +4,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
-import { and, sql, ilike, eq, notInArray } from 'drizzle-orm';
+import { and, sql, ilike, eq, notInArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
@@ -217,4 +217,35 @@ export async function applyGameChange(
     .set({ gameId: gameMatch.id, updatedAt: new Date() })
     .where(eq(schema.events.id, eventId));
   return { change: `Game reassigned to **${gameMatch.name}**` };
+}
+
+/** Derives the game from the first event in a series (if any). */
+export async function findSeriesGame(
+  db: PostgresJsDatabase<typeof schemaType>,
+  recurrenceGroupId: string,
+): Promise<{ id: number; name: string } | null> {
+  const [row] = await db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.events)
+    .innerJoin(schema.games, eq(schema.events.gameId, schema.games.id))
+    .where(eq(schema.events.recurrenceGroupId, recurrenceGroupId))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Finds future event IDs in a recurrence group for re-syncing after bind. */
+export async function findSeriesEventIds(
+  db: PostgresJsDatabase<typeof schemaType>,
+  recurrenceGroupId: string,
+): Promise<number[]> {
+  const rows = await db
+    .select({ id: schema.events.id })
+    .from(schema.events)
+    .where(
+      and(
+        eq(schema.events.recurrenceGroupId, recurrenceGroupId),
+        isNull(schema.events.cancelledAt),
+      ),
+    );
+  return rows.map((r) => r.id);
 }

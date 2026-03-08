@@ -15,6 +15,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { EventsService } from './events.service';
+import { EventSeriesService } from './event-series.service';
 import { SignupsService } from './signups.service';
 import { ShareService } from './share.service';
 import {
@@ -23,6 +24,9 @@ import {
   EventListQuerySchema,
   RescheduleEventSchema,
   CancelEventSchema,
+  UpdateSeriesSchema,
+  CancelSeriesSchema,
+  SeriesScopeSchema,
   EventResponseDto,
   EventListResponseDto,
   DashboardResponseDto,
@@ -45,6 +49,7 @@ interface AuthenticatedRequest {
 export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
+    private readonly seriesService: EventSeriesService,
     private readonly signupsService: SignupsService,
     private readonly shareService: ShareService,
   ) {}
@@ -207,6 +212,71 @@ export class EventsController {
       isOperatorOrAdmin(req.user.role),
       body.discordId,
     );
+  }
+
+  @Patch(':id/series')
+  @UseGuards(AuthGuard('jwt'))
+  async updateSeries(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<{ message: string }> {
+    try {
+      const dto = UpdateSeriesSchema.parse(body);
+      await this.seriesService.update(
+        id,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        dto.scope,
+        dto.data,
+      );
+      return { message: 'Series updated successfully' };
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  @Delete(':id/series')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteSeries(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Query('scope') scope: string,
+  ): Promise<{ message: string }> {
+    try {
+      const parsed = SeriesScopeSchema.parse(scope);
+      await this.seriesService.delete(
+        id,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        parsed,
+      );
+      return { message: 'Series deleted successfully' };
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  @Patch(':id/series/cancel')
+  @UseGuards(AuthGuard('jwt'))
+  async cancelSeries(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<{ message: string }> {
+    try {
+      const dto = CancelSeriesSchema.parse(body);
+      await this.seriesService.cancel(
+        id,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        dto.scope,
+        dto,
+      );
+      return { message: 'Series cancelled successfully' };
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   @Post(':id/share')

@@ -3,6 +3,7 @@ import type { EventResponseDto } from '@raid-ledger/contract';
 import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS_LABELS, type EventDisplayStatus } from '../../lib/event-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { SeriesBadge } from './SeriesBadge';
 
 interface MobileEventCardProps {
     event: EventResponseDto;
@@ -59,14 +60,17 @@ function AvatarStack({ signupAvatars }: { signupAvatars: Array<{ url: string | n
 /**
  * Mobile-optimized event card — horizontal layout with game color bar.
  */
-function MobileCardHeader({ title, status }: { title: string; status: EventDisplayStatus }) {
+function MobileCardHeader({ title, status, isSeries }: { title: string; status: EventDisplayStatus; isSeries: boolean }) {
     return (
         <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold text-foreground text-sm leading-tight truncate">{title}</h3>
-            <span data-testid="mobile-event-status"
-                className={`badge-overlay flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-full border ${STATUS_STYLES[status]}`}>
-                {STATUS_LABELS[status]}
-            </span>
+            <div className="flex items-center gap-1 flex-shrink-0">
+                {isSeries && <SeriesBadge />}
+                <span data-testid="mobile-event-status"
+                    className={`badge-overlay px-1.5 py-0.5 text-[10px] font-medium rounded-full border ${STATUS_STYLES[status]}`}>
+                    {STATUS_LABELS[status]}
+                </span>
+            </div>
         </div>
     );
 }
@@ -110,7 +114,7 @@ export function MobileEventCard({ event, signupCount = 0, onClick, matchesGameTi
             style={{ borderLeftWidth: '4px', borderLeftColor: '#10b981' }}>
             <GameCoverThumb event={event} showPlaceholder={!gameCoverUrl || imageError} gameCoverUrl={gameCoverUrl} onError={() => setImageError(true)} />
             <div className="flex-1 min-w-0 p-3 flex flex-col justify-between gap-1">
-                <MobileCardHeader title={event.title} status={status} />
+                <MobileCardHeader title={event.title} status={status} isSeries={!!event.recurrenceGroupId} />
                 <div className="flex items-center gap-1.5 text-xs text-muted">
                     {event.game && <><span className="truncate">{event.game.name}</span><span className="text-dim">·</span></>}
                     <span className="whitespace-nowrap">{formatEventTime(event.startTime, resolved)}</span>

@@ -17,7 +17,7 @@ import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 type EventSelect = typeof schema.events.$inferSelect;
 
 /** Finds an event or throws NotFoundException. */
-async function findExistingOrThrow(
+export async function findExistingOrThrow(
   db: PostgresJsDatabase<typeof schema>,
   id: number,
 ): Promise<EventSelect> {
@@ -31,7 +31,7 @@ async function findExistingOrThrow(
 }
 
 /** Asserts the user owns the event or is an admin. */
-function assertOwnerOrAdmin(
+export function assertOwnerOrAdmin(
   event: EventSelect,
   userId: number,
   isAdmin: boolean,
@@ -56,7 +56,7 @@ export async function deleteEvent(
 }
 
 /** Fetches user IDs signed up for an event (for notification). */
-async function getSignedUpUserIds(
+export async function getSignedUpUserIds(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
 ): Promise<number[]> {
@@ -68,7 +68,7 @@ async function getSignedUpUserIds(
 }
 
 /** Sends cancellation notifications to all signed-up users. */
-async function notifyCancellation(
+export async function notifyCancellation(
   notificationService: NotificationService,
   eventId: number,
   existing: EventSelect,
@@ -127,7 +127,7 @@ export async function cancelEvent(
 }
 
 /** Resets confirmation status for active signups after reschedule. */
-async function resetSignupConfirmations(
+export async function resetSignupConfirmations(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
 ): Promise<void> {

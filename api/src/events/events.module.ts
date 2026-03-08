@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventsService } from './events.service';
+import { EventSeriesService } from './event-series.service';
 import { SignupsService } from './signups.service';
 import { SignupsAllocationService } from './signups-allocation.service';
 import { SignupsRosterService } from './signups-roster.service';
@@ -63,6 +64,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
   ],
   providers: [
     EventsService,
+    EventSeriesService,
     SignupsService,
     SignupsAllocationService,
     SignupsRosterService,

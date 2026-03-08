@@ -66,6 +66,31 @@ export async function getInviterUsername(
   return inviter?.username ?? 'Someone';
 }
 
+/** Full invite flow: find user, check signup, send invite. */
+export async function inviteMemberFlow(
+  db: PostgresJsDatabase<typeof schema>,
+  notificationService: NotificationService,
+  eventEmitter: EventEmitter2,
+  event: EventResponseDto,
+  eventId: number,
+  inviterId: number,
+  discordId: string,
+): Promise<{ message: string; targetUser: UserBasic }> {
+  const targetUser = await findUserByDiscordId(db, discordId);
+  await assertNotSignedUp(db, eventId, targetUser);
+  const inviterName = await getInviterUsername(db, inviterId);
+  await emitMemberInvite(
+    notificationService,
+    eventEmitter,
+    event,
+    eventId,
+    targetUser,
+    inviterName,
+    discordId,
+  );
+  return { message: `Invite sent to ${targetUser.username}`, targetUser };
+}
+
 /** Creates the invite notification and emits a Discord event if needed. */
 export async function emitMemberInvite(
   notificationService: NotificationService,

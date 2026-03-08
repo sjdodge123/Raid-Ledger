@@ -596,6 +596,13 @@
       "when": 1772956900000,
       "tag": "0084_add_event_signups_event_id_status_index",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1772957000000,
+      "tag": "0085_event_series_partial_index",
+      "breakpoints": true
     }
   ]
 }

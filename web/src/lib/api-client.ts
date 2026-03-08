@@ -144,6 +144,14 @@ export {
     convertEventToPlan,
 } from './api/event-plans-api';
 
+// Event Series (ROK-429)
+export {
+    updateSeries,
+    deleteSeries,
+    cancelSeries,
+    deleteEvent,
+} from './api/event-series-api';
+
 // Analytics
 export {
     getAttendanceTrends,

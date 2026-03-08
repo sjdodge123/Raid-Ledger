@@ -23,6 +23,7 @@ import {
     RescheduleModalSection,
     InviteModalSection,
     RemoveConfirmModal,
+    SeriesScopeModalSection,
 } from './event-detail/EventDetailModals';
 import { useEventDetailHandlers } from './event-detail/use-event-detail-handlers';
 import {
@@ -122,10 +123,12 @@ type EventDetailDerived = ReturnType<typeof useEventDetailDerived>;
 type EventDetailHandlers = ReturnType<typeof useEventDetailHandlers>;
 type ModalState = ReturnType<typeof useModalState>;
 
-function EventDetailModals({ event, eventId, derived, handlers, showCancelModal, setShowCancelModal, showRescheduleModal, setShowRescheduleModal, showInviteModal, setShowInviteModal, roster, searchParams, setSearchParams }: {
+function EventDetailModals({ event, eventId, derived, handlers, showCancelModal, setShowCancelModal, showRescheduleModal, setShowRescheduleModal, showInviteModal, setShowInviteModal, seriesAction, setSeriesAction, roster, searchParams, setSearchParams }: {
     event: EventResponseDto; eventId: number; derived: EventDetailDerived; handlers: EventDetailHandlers;
     showCancelModal: boolean; setShowCancelModal: (v: boolean) => void; showRescheduleModal: boolean; setShowRescheduleModal: (v: boolean) => void;
-    showInviteModal: boolean; setShowInviteModal: (v: boolean) => void; roster: EventRosterDto | undefined;
+    showInviteModal: boolean; setShowInviteModal: (v: boolean) => void;
+    seriesAction: 'edit' | 'delete' | 'cancel' | null; setSeriesAction: (v: 'edit' | 'delete' | 'cancel' | null) => void;
+    roster: EventRosterDto | undefined;
     searchParams: URLSearchParams; setSearchParams: ReturnType<typeof useSearchParams>[1];
 }) {
     const deepLinkAction = searchParams.get('action');
@@ -145,6 +148,8 @@ function EventDetailModals({ event, eventId, derived, handlers, showCancelModal,
                 onClose={() => { setShowRescheduleModal(false); clearDeepLink(); }} />
             <RemoveConfirmModal removeConfirm={handlers.removeConfirm} onClose={() => handlers.setRemoveConfirm(null)} onConfirm={handlers.handleConfirmRemoveFromEvent} isPending={handlers.adminRemoveUser.isPending} />
             <InviteModalSection show={showInviteModal} onClose={() => setShowInviteModal(false)} eventId={eventId} pugs={handlers.pugs} roster={roster} isMMOGame={derived.isMMOGame} />
+            <SeriesScopeModalSection show={seriesAction !== null} action={seriesAction ?? 'edit'} eventId={eventId}
+                onClose={() => setSeriesAction(null)} onSeriesConfirm={handlers.handleSeriesConfirm} isPending={handlers.isSeriesPending} />
         </>
     );
 }
@@ -154,29 +159,20 @@ function useModalState() {
     const [showRescheduleModal, setShowRescheduleModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
-    return { searchParams, setSearchParams, showRescheduleModal, setShowRescheduleModal, showCancelModal, setShowCancelModal, showInviteModal, setShowInviteModal };
+    const [seriesAction, setSeriesAction] = useState<'edit' | 'delete' | 'cancel' | null>(null);
+    return { searchParams, setSearchParams, showRescheduleModal, setShowRescheduleModal, showCancelModal, setShowCancelModal, showInviteModal, setShowInviteModal, seriesAction, setSeriesAction };
 }
 
 type PageState = ReturnType<typeof useEventDetailPageState>;
 type VoiceState = ReturnType<typeof useEventDetailVoice>;
 
-function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, handlers, modals }: {
-    page: PageState & { event: EventResponseDto }; voice: VoiceState; bannerRef: React.RefObject<HTMLDivElement | null>;
-    isBannerCollapsed: boolean; derived: EventDetailDerived; handlers: EventDetailHandlers; modals: ModalState;
+function EventDetailBodySections({ page, voice, derived, handlers }: {
+    page: PageState & { event: EventResponseDto }; voice: VoiceState; derived: EventDetailDerived; handlers: EventDetailHandlers;
 }) {
     return (
-        <div className="event-detail-page pb-20 md:pb-0">
-            <EventDetailTopbar fromCalendar={page.fromCalendar} navState={page.navState} hasHistory={page.hasHistory} isAuthenticated={page.isAuthenticated}
-                canManageRoster={derived.canManageRoster} isCancelled={derived.isCancelled} isEnded={derived.isEnded} eventId={page.eventId}
-                onInvite={() => modals.setShowInviteModal(true)} onReschedule={() => modals.setShowRescheduleModal(true)} onCancel={() => modals.setShowCancelModal(true)} />
-            <CancelledBanner event={page.event} isCancelled={derived.isCancelled} />
-            <div ref={bannerRef}>
-                <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator}
-                    description={page.event.description} voiceChannelName={voice.voiceChannel?.name ?? null} voiceChannelUrl={voice.voiceChannel?.url ?? null} />
-            </div>
+        <>
             <PostEventSections event={page.event} eventId={page.eventId} isCancelled={derived.isCancelled} isAdHoc={voice.isAdHoc} canManageRoster={derived.canManageRoster} />
             <MobileQuickInfo event={page.event} roster={page.roster} isSignedUp={derived.isSignedUp} alphabetical={alphabetical} />
-            {isBannerCollapsed && <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator} isCollapsed />}
             <RosterSlotSection event={page.event} eventId={page.eventId} roster={page.roster} rosterAssignments={derived.rosterAssignments}
                 isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp} userSignup={derived.userSignup}
                 canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />
@@ -186,6 +182,28 @@ function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, h
             <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} />
             <EventDetailRoster roster={page.roster} event={page.event} />
             <PluginSlot name="event-detail:content-sections" context={{ contentInstances: page.event.contentInstances ?? [], eventId: page.eventId, gameSlug: page.event.game?.slug, characterId: derived.userSignup?.character?.id }} />
+        </>
+    );
+}
+
+function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, handlers, modals }: {
+    page: PageState & { event: EventResponseDto }; voice: VoiceState; bannerRef: React.RefObject<HTMLDivElement | null>;
+    isBannerCollapsed: boolean; derived: EventDetailDerived; handlers: EventDetailHandlers; modals: ModalState;
+}) {
+    return (
+        <div className="event-detail-page pb-20 md:pb-0">
+            <EventDetailTopbar fromCalendar={page.fromCalendar} navState={page.navState} hasHistory={page.hasHistory} isAuthenticated={page.isAuthenticated}
+                canManageRoster={derived.canManageRoster} isCancelled={derived.isCancelled} isEnded={derived.isEnded} eventId={page.eventId}
+                recurrenceGroupId={page.event.recurrenceGroupId} onInvite={() => modals.setShowInviteModal(true)} onReschedule={() => modals.setShowRescheduleModal(true)}
+                onCancel={() => modals.setShowCancelModal(true)} onDelete={handlers.handleDelete} onSeriesAction={modals.setSeriesAction} />
+            <CancelledBanner event={page.event} isCancelled={derived.isCancelled} />
+            <div ref={bannerRef}>
+                <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator}
+                    description={page.event.description} voiceChannelName={voice.voiceChannel?.name ?? null} voiceChannelUrl={voice.voiceChannel?.url ?? null}
+                    recurrenceGroupId={page.event.recurrenceGroupId} />
+            </div>
+            {isBannerCollapsed && <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator} isCollapsed />}
+            <EventDetailBodySections page={page} voice={voice} derived={derived} handlers={handlers} />
             <EventDetailModals event={page.event} eventId={page.eventId} derived={derived} handlers={handlers} roster={page.roster} {...modals} />
         </div>
     );

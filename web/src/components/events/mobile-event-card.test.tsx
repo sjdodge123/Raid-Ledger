@@ -112,3 +112,18 @@ describe('MobileEventCard — avatars & badges', () => {
     });
 });
 
+describe('MobileEventCard — series badge (ROK-429)', () => {
+    beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(MOCK_NOW); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('shows series badge for recurring events', () => {
+        render(<MobileEventCard event={createMockEvent({ recurrenceGroupId: 'abc' })} />);
+        expect(screen.getByTestId('series-badge')).toBeInTheDocument();
+    });
+
+    it('does not show series badge for non-recurring events', () => {
+        render(<MobileEventCard event={createMockEvent()} />);
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+});
+

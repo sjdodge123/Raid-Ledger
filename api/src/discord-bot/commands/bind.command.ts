@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { BindingPurpose } from '@raid-ledger/contract';
 import {
   SlashCommandBuilder,
   ChannelType,
@@ -23,6 +24,8 @@ import {
   buildEventUpdatePayload,
   setChannelOverride,
   applyGameChange,
+  findSeriesEventIds,
+  findSeriesGame,
 } from './bind.helpers';
 import {
   resolveChannel,
@@ -125,10 +128,13 @@ export class BindCommand
       await interaction.editReply('Could not determine the target channel.');
       return;
     }
-    const game = await resolveGame(this.db, interaction);
+    let game = await resolveGame(this.db, interaction);
     if (game === false) return;
     const series = await resolveSeries(this.db, interaction);
     if (series === false) return;
+    if (!game && series) {
+      game = await findSeriesGame(this.db, series.id);
+    }
     await this.tryBindChannel(
       interaction,
       guildId,
@@ -145,8 +151,22 @@ export class BindCommand
     game: { id: number; name: string } | null,
     series: { id: string; title: string } | null,
   ): Promise<void> {
+    const behavior = this.channelBindingsService.detectBehavior(
+      ch.bindingChannelType,
+      game?.id ?? null,
+    );
     try {
-      await this.executeBindAndReply(interaction, guildId, ch, game, series);
+      await this.executeBindAndReply(
+        interaction,
+        guildId,
+        ch,
+        behavior,
+        game,
+        series,
+      );
+      if (series) {
+        await this.resyncSeriesEvents(series.id);
+      }
     } catch (err: unknown) {
       this.logger.error('Failed to create channel binding:', err);
       await interaction.editReply(
@@ -159,13 +179,10 @@ export class BindCommand
     interaction: ChatInputCommandInteraction,
     guildId: string,
     ch: ResolvedChannel & { channelId: string },
+    behavior: BindingPurpose,
     game: { id: number; name: string } | null,
     series: { id: string; title: string } | null,
   ): Promise<void> {
-    const behavior = this.channelBindingsService.detectBehavior(
-      ch.bindingChannelType,
-      game?.id ?? null,
-    );
     const { replacedChannelIds } = await this.channelBindingsService.bind(
       guildId,
       ch.channelId,
@@ -183,6 +200,20 @@ export class BindCommand
       replacedChannelIds,
     );
     await interaction.editReply({ embeds: [embed], components });
+  }
+
+  /** Re-syncs Discord embeds/scheduled events for all events in a series. */
+  private async resyncSeriesEvents(recurrenceGroupId: string): Promise<void> {
+    const ids = await findSeriesEventIds(this.db, recurrenceGroupId);
+    for (const id of ids) {
+      const payload = await buildEventUpdatePayload(this.db, id);
+      if (payload) {
+        this.eventEmitter.emit(APP_EVENT_EVENTS.UPDATED, payload);
+      }
+    }
+    this.logger.log(
+      `Re-synced ${ids.length} events for series ${recurrenceGroupId}`,
+    );
   }
 
   // ─── Event binding ────────────────────────────────────
