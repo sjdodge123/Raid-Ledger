@@ -16,6 +16,7 @@ import {
   classifyVoiceSession,
 } from './voice-attendance.service';
 import { ChannelBindingsService } from './channel-bindings.service';
+import { ChannelResolverService } from './channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
@@ -327,6 +328,10 @@ describe('VoiceAttendanceService — in-memory session lifecycle', () => {
         provide: DiscordBotClientService,
         useValue: { getClient: jest.fn(), getGuildId: jest.fn() },
       },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveVoiceChannelForEvent: jest.fn() },
+      },
     ];
   }
   async function setupBlock() {
@@ -507,6 +512,10 @@ describe('VoiceAttendanceService.autoPopulateAttendance', () => {
         {
           provide: DiscordBotClientService,
           useValue: { getClient: jest.fn(), getGuildId: jest.fn() },
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: { resolveVoiceChannelForEvent: jest.fn() },
         },
       ],
     }).compile();

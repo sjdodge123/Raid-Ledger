@@ -16,6 +16,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { VoiceAttendanceService } from './voice-attendance.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
+import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -55,6 +56,10 @@ async function buildService(): Promise<{
       {
         provide: DiscordBotClientService,
         useValue: { getClient: jest.fn(), getGuildId: jest.fn() },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: { resolveVoiceChannelForEvent: jest.fn() },
       },
     ],
   }).compile();
