@@ -147,13 +147,10 @@ export class BindCommand
     game: { id: number; name: string } | null,
     series: { id: string; title: string } | null,
   ): Promise<void> {
-    const isSeriesVoice = series && ch.bindingChannelType === 'voice';
-    const behavior = isSeriesVoice
-      ? 'game-voice-monitor'
-      : this.channelBindingsService.detectBehavior(
-          ch.bindingChannelType,
-          game?.id ?? null,
-        );
+    const behavior = this.channelBindingsService.detectBehavior(
+      ch.bindingChannelType,
+      game?.id ?? null,
+    );
     try {
       await this.executeBindAndReply(
         interaction,
