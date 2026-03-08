@@ -1,7 +1,7 @@
 /**
  * Tests for event series helper functions (ROK-429).
  */
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { createMockEvent } from '../common/testing/factories';
 import {
