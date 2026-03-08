@@ -13,7 +13,7 @@ import {
 } from '../../lib/api-client';
 import { useCreatePug } from '../../hooks/use-pugs';
 import type { PugRole } from '@raid-ledger/contract';
-import { MemberList, MotdSection } from './invite-modal-sections';
+import { MemberList, CopypastaSection } from './invite-modal-sections';
 
 interface InviteModalProps {
     isOpen: boolean;
@@ -233,7 +233,7 @@ function InviteModalBody({ eventId, onClose, s, displayMembers, getMemberStatus:
                 <PugInviteSection eventId={eventId} isSubmitting={s.isSubmitting} setIsSubmitting={s.setIsSubmitting}
                     generatedInviteUrl={s.generatedInviteUrl} setGeneratedInviteUrl={s.setGeneratedInviteUrl}
                     defaultPugRole={defaultPugRole} />
-                <MotdSection />
+                <CopypastaSection eventId={eventId} />
             </div>
         </Modal>
     );

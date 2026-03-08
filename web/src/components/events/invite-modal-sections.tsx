@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import type { DiscordMemberSearchResult } from '../../lib/api-client';
-import { useEvents } from '../../hooks/use-events';
-import { useBranding } from '../../hooks/use-branding';
+import { useEvent } from '../../hooks/use-events';
 import { toast } from '../../lib/toast';
 
 interface MemberListProps {
@@ -72,46 +71,38 @@ export function MemberList({ members, isLoadingMembers, isSearching, searchQuery
     );
 }
 
-function useMotdText() {
-    const { brandingQuery } = useBranding();
-    const communityName = brandingQuery.data?.communityName || 'Our Guild';
-    const { data: upcomingEventsData } = useEvents({ upcoming: true, limit: 3 });
+function useCopypastaText(eventId: number) {
+    const { data: event } = useEvent(eventId);
 
     return useMemo(() => {
+        if (!event) return '';
+        const d = new Date(event.startTime);
+        const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+        const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+        const lines = [`${event.title} — ${day} ${time}`];
+        if (event.description) lines.push(event.description);
         const siteHost = window.location.host;
-        const lines = [`${communityName} -- ${siteHost}`];
-        const events = upcomingEventsData?.data ?? [];
-        if (events.length > 0) {
-            const summaries = events.map((e) => {
-                const d = new Date(e.startTime);
-                const day = d.toLocaleDateString('en-US', { weekday: 'short' });
-                const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
-                return `${e.title} ${day} ${time}`;
-            });
-            lines.push(`Upcoming: ${summaries.join(' | ')}`);
-        }
-        lines.push(`Sign up & manage your characters at ${siteHost}`);
+        lines.push(`${siteHost}/events/${event.id}`);
         return lines.join('\n');
-    }, [communityName, upcomingEventsData]);
+    }, [event]);
 }
 
-export function MotdSection() {
-    const motdText = useMotdText();
+export function CopypastaSection({ eventId }: { eventId: number }) {
+    const copypastaText = useCopypastaText(eventId);
 
-    const handleCopyMotd = () => {
-        navigator.clipboard.writeText(motdText)
-            .then(() => toast.success('MOTD copied to clipboard!'))
-            .catch(() => toast.error('Failed to copy MOTD'));
+    const handleCopy = () => {
+        navigator.clipboard.writeText(copypastaText)
+            .then(() => toast.success('Copied to clipboard!'))
+            .catch(() => toast.error('Failed to copy'));
     };
 
     return (
         <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-secondary mb-2">MOTD Summary</label>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-secondary mb-2">Copypasta</label>
             <div className="relative rounded-lg border border-edge bg-surface">
-                <pre className="p-3 pr-16 text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed">{motdText}</pre>
-                <button type="button" onClick={handleCopyMotd} className="absolute top-2 right-2 btn btn-secondary btn-sm">Copy</button>
+                <pre className="p-3 pr-16 text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed">{copypastaText}</pre>
+                <button type="button" onClick={handleCopy} className="absolute top-2 right-2 btn btn-secondary btn-sm">Copy</button>
             </div>
-            <p className="mt-1.5 text-xs text-dim">Paste this into your in-game guild MOTD or chat.</p>
         </div>
     );
 }
