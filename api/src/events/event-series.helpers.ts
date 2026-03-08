@@ -131,10 +131,15 @@ function buildUpdateForTarget(
   timeDelta: number | null,
 ): Record<string, unknown> {
   const dtoForTarget = { ...dto };
-  if (timeDelta && target.id !== anchor.id) {
-    const shifted = applyTimeDelta(target.duration, timeDelta);
-    dtoForTarget.startTime = shifted[0].toISOString();
-    dtoForTarget.endTime = shifted[1].toISOString();
+  if (target.id !== anchor.id) {
+    if (timeDelta) {
+      const shifted = applyTimeDelta(target.duration, timeDelta);
+      dtoForTarget.startTime = shifted[0].toISOString();
+      dtoForTarget.endTime = shifted[1].toISOString();
+    } else {
+      delete dtoForTarget.startTime;
+      delete dtoForTarget.endTime;
+    }
   }
   return buildUpdateData(dtoForTarget, target);
 }
