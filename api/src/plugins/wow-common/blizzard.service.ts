@@ -1,9 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import {
-  SettingsService,
-  SETTINGS_EVENTS,
-} from '../../settings/settings.service';
+import { SettingsService } from '../../settings/settings.service';
+import { SETTINGS_EVENTS } from '../../settings/settings.types';
 import { memorySwr } from '../../common/swr-cache';
 import type { WowGameVariant } from '@raid-ledger/contract';
 import {
