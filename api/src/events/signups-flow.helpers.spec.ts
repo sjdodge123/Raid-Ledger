@@ -116,7 +116,7 @@ function createMockDeps(): FlowDeps & {
   };
 }
 
-describe('signups-flow.helpers — ROK-739 role preference preservation', () => {
+describe('Regression: ROK-739 — role preference preservation during signup', () => {
   describe('signupTxBody — new signup path', () => {
     it('should NOT overwrite preferredRoles when both preferredRoles and slotRole are present', async () => {
       const mockTx = createMockTx();
