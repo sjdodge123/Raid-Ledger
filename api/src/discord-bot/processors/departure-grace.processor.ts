@@ -17,6 +17,7 @@ import {
 } from '../queues/departure-grace.queue';
 import {
   verifyEventStillLive,
+  isDuringExtensionTime,
   verifySignupActive,
   moveToBench,
   notifyOrganizer,
@@ -78,6 +79,13 @@ export class DepartureGraceProcessor extends WorkerHost {
 
     const event = await verifyEventStillLive(d.db, eventId);
     if (!event) return;
+
+    if (isDuringExtensionTime(event)) {
+      this.logger.debug(
+        `Departure during extension time for event ${eventId}, skipping`,
+      );
+      return;
+    }
 
     const signup = await verifySignupActive(d.db, signupId, eventId);
     if (!signup) return;

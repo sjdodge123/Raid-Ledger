@@ -33,8 +33,12 @@ import {
 import * as classifyH from './voice-attendance-classify.helpers';
 import * as recoveryH from './voice-attendance-recovery.helpers';
 import * as flushH from './voice-attendance-flush.helpers';
+import * as snapshotH from './voice-attendance-snapshot.helpers';
+import { ChannelResolverService } from './channel-resolver.service';
 
 const FLUSH_INTERVAL_MS = 30 * 1000;
+/** Window for detecting recently started events (2 minutes). */
+const SNAPSHOT_WINDOW_MS = 2 * 60 * 1000;
 
 // Re-export for backward compatibility
 export { classifyVoiceSession };
@@ -45,6 +49,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   private sessions = new Map<string, InMemorySession>();
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private classifyRunning = false;
+  /** Track event IDs that have already been snapshotted (ROK-735). */
+  private readonly snapshotted = new Set<number>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -53,33 +59,26 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     private readonly cronJobService: CronJobService,
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly clientService: DiscordBotClientService,
+    private readonly channelResolver: ChannelResolverService,
   ) {}
 
   onModuleInit(): void {
-    this.startFlushInterval();
-  }
-
-  onModuleDestroy(): void {
-    this.stopFlushInterval();
-    this.flushToDb().catch((err) =>
-      this.logger.error(`Final flush failed: ${err}`),
-    );
-  }
-
-  private startFlushInterval(): void {
-    this.stopFlushInterval();
+    if (this.flushTimer) clearInterval(this.flushTimer);
     this.flushTimer = setInterval(() => {
-      this.flushToDb().catch((err) =>
-        this.logger.error(`Periodic flush failed: ${err}`),
+      this.flushToDb().catch((e) =>
+        this.logger.error(`Periodic flush failed: ${e}`),
       );
     }, FLUSH_INTERVAL_MS);
   }
 
-  private stopFlushInterval(): void {
+  onModuleDestroy(): void {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
+    this.flushToDb().catch((e) =>
+      this.logger.error(`Final flush failed: ${e}`),
+    );
   }
 
   handleJoin(
@@ -186,6 +185,50 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Cron: snapshot voice occupants for recently started events (ROK-735). */
+  @Cron('5 */1 * * * *', {
+    name: 'VoiceAttendanceService_snapshotOnEventStart',
+  })
+  async snapshotRecentlyStartedEvents(): Promise<void> {
+    if (!this.clientService.isConnected()) return;
+    await this.cronJobService.executeWithTracking(
+      'VoiceAttendanceService_snapshotOnEventStart',
+      () =>
+        snapshotH.runEventSnapshots(
+          this.db,
+          new Date(),
+          SNAPSHOT_WINDOW_MS,
+          this.snapshotted,
+          (gId, rId) =>
+            this.channelResolver.resolveVoiceChannelForEvent(gId, rId),
+          (eId, chId) => this.snapshotVoiceForEvent(eId, chId),
+          this.logger,
+        ),
+    );
+  }
+
+  /** Snapshot voice channel members for a single event (ROK-735). */
+  snapshotVoiceForEvent(eventId: number, voiceChannelId: string): number {
+    const guild = this.clientService.getGuild();
+    if (!guild) return 0;
+    const channel = snapshotH.resolveVoiceChannelFromGuild(
+      guild,
+      voiceChannelId,
+    );
+    if (!channel || channel.members.size === 0) return 0;
+    const members = snapshotH.extractVoiceMembers(channel);
+    for (const m of members) {
+      this.handleJoin(
+        eventId,
+        m.discordUserId,
+        m.displayName,
+        null,
+        m.avatarHash,
+      );
+    }
+    return members.length;
+  }
+
   @Cron('10 */1 * * * *', {
     name: 'VoiceAttendanceService_classifyCompletedEvents',
     waitForCompletion: true,
@@ -239,6 +282,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Classifying voice attendance for event ${event.id}`);
     await this.classifyEvent(event.id, event, graceMs);
     await this.autoPopulateAttendance(event.id);
+    this.snapshotted.delete(event.id);
     for (const key of this.sessions.keys()) {
       if (key.startsWith(`${event.id}:`)) this.sessions.delete(key);
     }

@@ -125,6 +125,70 @@ describe('DepartureGraceProcessor — guard: event no longer live', () => {
   });
 });
 
+// ─── Regression: departure during extension time (ROK-744) ────────────────
+
+describe('DepartureGraceProcessor — Regression: departure during extension time (ROK-744)', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('skips departure when grace expires during extension time', async () => {
+    const extendedEvent = createMockEvent({
+      id: 1,
+      isAdHoc: false,
+      cancelledAt: null,
+      creatorId: 99,
+      title: 'Extended Raid',
+      duration: [
+        new Date('2026-02-10T18:00:00Z'),
+        new Date('2026-02-10T20:00:00Z'),
+      ],
+      extendedUntil: new Date('2026-02-10T21:00:00Z'),
+    });
+
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-02-10T20:30:00Z'));
+
+    mockDb.limit.mockResolvedValueOnce([extendedEvent]);
+
+    await processor.process(makeJob(jobData));
+
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+    expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+    expect(mockDb.set).not.toHaveBeenCalledWith({ status: 'departed' });
+  });
+
+  it('still triggers departure during scheduled event time even with extendedUntil set', async () => {
+    const extendedEvent = createMockEvent({
+      id: 1,
+      isAdHoc: false,
+      cancelledAt: null,
+      creatorId: 99,
+      title: 'Extended Raid',
+      duration: [
+        new Date('2026-02-10T18:00:00Z'),
+        new Date('2026-02-10T20:00:00Z'),
+      ],
+      extendedUntil: new Date('2026-02-10T21:00:00Z'),
+    });
+
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-02-10T19:30:00Z'));
+
+    mockDb.limit
+      .mockResolvedValueOnce([extendedEvent])
+      .mockResolvedValueOnce([activeSignup])
+      .mockResolvedValueOnce([]);
+
+    await processor.process(makeJob(jobData));
+
+    expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      SIGNUP_EVENTS.UPDATED,
+      expect.objectContaining({ action: 'departed' }),
+    );
+  });
+});
+
 // ─── Guard: signup not found ───────────────────────────────────────────────
 
 describe('DepartureGraceProcessor — guard: signup not found', () => {
