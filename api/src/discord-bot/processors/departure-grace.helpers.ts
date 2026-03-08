@@ -34,6 +34,20 @@ interface AssignmentRow {
 }
 
 /**
+ * Check if the current time is during extension time (past the original
+ * scheduled end but before extendedUntil). Departures during extension
+ * time should be silently ignored — no notification, no status change.
+ */
+export function isDuringExtensionTime(
+  event: typeof schema.events.$inferSelect,
+): boolean {
+  if (!event.extendedUntil) return false;
+  const now = new Date();
+  const scheduledEnd = event.duration[1];
+  return now > scheduledEnd;
+}
+
+/**
  * Verify the event is still live (scheduled, not cancelled, within duration window).
  * Returns null if the event should be skipped.
  */
