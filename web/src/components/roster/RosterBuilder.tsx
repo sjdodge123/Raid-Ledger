@@ -18,7 +18,6 @@ interface RosterBuilderProps {
     canEdit: boolean;
     onSlotClick?: (role: RosterRole, position: number) => void;
     canJoin?: boolean;
-    signupSucceeded?: boolean;
     currentUserId?: number;
     onSelfRemove?: () => void;
     stickyExtra?: React.ReactNode;
@@ -96,13 +95,6 @@ function AdminButtons({ pool, allSlotsFilled, assignmentCount, actions }: {
     );
 }
 
-function usePendingSlot(signupSucceeded: boolean) {
-    const [pendingSlotKey, setPendingSlotKey] = React.useState<string | null>(null);
-    React.useEffect(() => { if (pendingSlotKey) { const t = setTimeout(() => setPendingSlotKey(null), 3000); return () => clearTimeout(t); } }, [pendingSlotKey]);
-    React.useEffect(() => { if (signupSucceeded && pendingSlotKey) setPendingSlotKey(null); }, [signupSucceeded, pendingSlotKey]);
-    return { pendingSlotKey, setPendingSlotKey };
-}
-
 function useAllSlotsFilled(roleSlots: { role: RosterRole }[], assignments: RosterAssignmentResponse[], getSlotCount: (r: RosterRole) => number) {
     return React.useMemo(() =>
         roleSlots.every(({ role }) => { const count = getSlotCount(role); return count === 0 || assignments.filter(a => a.slot === role).length >= count; }),
@@ -135,16 +127,15 @@ function RosterAssignmentPopup({ actions, pool, assignments, eventId, canSelfAss
 }
 
 function useRosterBuilderData(props: RosterBuilderProps) {
-    const { pool, assignments, slots, onRosterChange, signupSucceeded = false, currentUserId, pugs = [] } = props;
+    const { pool, assignments, slots, onRosterChange, currentUserId, pugs = [] } = props;
     const { announce } = useAriaLive();
-    const { pendingSlotKey, setPendingSlotKey } = usePendingSlot(signupSucceeded);
     const { isGenericGame, roleSlots, getSlotCount } = useRosterSlots(slots);
     const actions = useRosterActions({ pool, assignments, onRosterChange, roleSlots, getSlotCount, isGenericGame, announce });
     const availableSlots = useAvailableSlots(roleSlots, assignments, getSlotCount);
     const allSlotsFilled = useAllSlotsFilled(roleSlots, assignments, getSlotCount);
     const isCurrentUserInRoster = currentUserId != null && (pool.some(p => p.userId === currentUserId) || assignments.some(a => a.userId === currentUserId));
     const activePugs = pugs.filter(p => p.status === 'pending' || p.status === 'invited');
-    return { pendingSlotKey, setPendingSlotKey, isGenericGame, roleSlots, getSlotCount, actions, availableSlots, allSlotsFilled, isCurrentUserInRoster, activePugs };
+    return { isGenericGame, roleSlots, getSlotCount, actions, availableSlots, allSlotsFilled, isCurrentUserInRoster, activePugs };
 }
 
 export const RosterBuilder = memo(function RosterBuilder(props: RosterBuilderProps) {
@@ -160,7 +151,7 @@ export const RosterBuilder = memo(function RosterBuilder(props: RosterBuilderPro
             <RoleSlotGrid roleSlots={d.roleSlots} assignments={assignments} getSlotCount={d.getSlotCount}
                 isGenericGame={d.isGenericGame} canEdit={canEdit} canJoin={canJoin} currentUserId={currentUserId}
                 onSlotClick={onSlotClick} onSelfRemove={onSelfRemove} onAdminClick={d.actions.handleAdminSlotClick}
-                onRemove={d.actions.handleRemoveFromSlot} pendingSlotKey={d.pendingSlotKey} setPendingSlotKey={d.setPendingSlotKey} />
+                onRemove={d.actions.handleRemoveFromSlot} />
             <RosterAssignmentPopup actions={d.actions} pool={pool} assignments={assignments} eventId={eventId}
                 canSelfAssign={!!(canEdit && !d.isCurrentUserInRoster && currentUserId != null && onSlotClick)}
                 onSlotClick={onSlotClick} availableSlots={d.availableSlots} onGenerateInviteLink={onGenerateInviteLink}
@@ -217,14 +208,13 @@ interface RoleSlotGridProps {
     currentUserId?: number; onSlotClick?: (role: RosterRole, position: number) => void;
     onSelfRemove?: () => void; onAdminClick: (role: RosterRole, position: number) => void;
     onRemove: (signupId: number) => void;
-    pendingSlotKey: string | null; setPendingSlotKey: (k: string | null) => void;
 }
 
 function roleGroupLabel(role: RosterRole, label: string, isGeneric: boolean) {
     return isGeneric && role === 'player' ? 'Players' : label;
 }
 
-function RoleGroup({ role, label, color, assigned, count, isGenericGame, canEdit, canJoin, currentUserId, onSlotClick, onSelfRemove, onAdminClick, onRemove, pendingSlotKey, setPendingSlotKey }: {
+function RoleGroup({ role, label, color, assigned, count, isGenericGame, canEdit, canJoin, currentUserId, onSlotClick, onSelfRemove, onAdminClick, onRemove }: {
     role: RosterRole; label: string; color: string; assigned: RosterAssignmentResponse[]; count: number;
 } & Omit<RoleSlotGridProps, 'roleSlots' | 'assignments' | 'getSlotCount'>) {
     return (
@@ -242,9 +232,7 @@ function RoleGroup({ role, label, color, assigned, count, isGenericGame, canEdit
                             onJoinClick={canJoin && !item ? onSlotClick : undefined}
                             isCurrentUser={currentUserId != null && item?.userId === currentUserId}
                             onAdminClick={canEdit ? onAdminClick : undefined} onRemove={canEdit ? onRemove : undefined}
-                            onSelfRemove={!canEdit && onSelfRemove && currentUserId != null && item?.userId === currentUserId ? onSelfRemove : undefined}
-                            isPending={pendingSlotKey === `${role}-${position}`}
-                            onPendingChange={(pending) => setPendingSlotKey(pending ? `${role}-${position}` : null)} />
+                            onSelfRemove={!canEdit && onSelfRemove && currentUserId != null && item?.userId === currentUserId ? onSelfRemove : undefined} />
                     );
                 })}
             </div>

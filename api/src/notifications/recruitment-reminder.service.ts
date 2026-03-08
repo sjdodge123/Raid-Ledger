@@ -8,6 +8,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
+import { eq, and } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
@@ -210,13 +211,13 @@ export class RecruitmentReminderService {
     };
   }
 
-  /** Post a bump message in the event's Discord channel. */
-  private async postChannelBump(event: EligibleEvent): Promise<void> {
+  /** Check whether a channel bump should be skipped for this event. */
+  private shouldSkipBump(event: EligibleEvent): boolean {
     if (!this.discordBotClient.isConnected()) {
       this.logger.warn(
         `Bot not connected — skipping channel bump for event ${event.id}`,
       );
-      return;
+      return true;
     }
     if (
       event.maxAttendees !== null &&
@@ -225,14 +226,24 @@ export class RecruitmentReminderService {
       this.logger.debug(
         `Event ${event.id} is now full — skipping channel bump`,
       );
-      return;
+      return true;
     }
+    return false;
+  }
 
+  /** Post a bump message in the event's Discord channel. */
+  private async postChannelBump(event: EligibleEvent): Promise<void> {
+    if (this.shouldSkipBump(event)) return;
     try {
       const clientUrl =
         (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
       const { embed, row } = this.buildBumpEmbed(event, clientUrl);
-      await this.discordBotClient.sendEmbed(event.channelId, embed, row);
+      const message = await this.discordBotClient.sendEmbed(
+        event.channelId,
+        embed,
+        row,
+      );
+      await this.persistBumpMessageId(event, message.id);
       this.logger.log(
         `Posted recruitment bump for event ${event.id} in channel ${event.channelId}`,
       );
@@ -241,6 +252,22 @@ export class RecruitmentReminderService {
         `Failed to post channel bump for event ${event.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  /** Persist the bump message ID on the discord_event_messages record. */
+  private async persistBumpMessageId(
+    event: EligibleEvent,
+    bumpMessageId: string,
+  ): Promise<void> {
+    await this.db
+      .update(schema.discordEventMessages)
+      .set({ bumpMessageId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.discordEventMessages.eventId, event.id),
+          eq(schema.discordEventMessages.channelId, event.channelId),
+        ),
+      );
   }
 
   /** Build the bump embed and action row. */

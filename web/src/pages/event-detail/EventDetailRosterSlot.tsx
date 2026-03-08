@@ -55,7 +55,7 @@ export function RosterSlotSection({ event, eventId, roster, rosterAssignments, i
                 isAuthenticated={isAuthenticated} isSignedUp={isSignedUp} userSignup={userSignup} handlers={handlers} />
             <RosterBuilder pool={rosterAssignments.pool as never} assignments={rosterAssignments.assignments as never} slots={rosterAssignments.slots as never}
                 onRosterChange={handlers.handleRosterChange as never} canEdit={canManageRoster} onSlotClick={handlers.handleSlotClick} canJoin={canJoinSlot}
-                signupSucceeded={handlers.signup.isSuccess} currentUserId={user?.id}
+                currentUserId={user?.id}
                 onSelfRemove={isSignedUp && !canManageRoster ? handlers.handleSelfRemove : undefined}
                 onGenerateInviteLink={canManageRoster ? handlers.handleGenerateInviteLink : undefined}
                 pugs={handlers.pugs} onRemovePug={canManageRoster ? handlers.handleRemovePug : undefined}
