@@ -116,11 +116,13 @@ export class IgdbController {
         hasSpecs: schema.games.hasSpecs,
         enabled: schema.games.enabled,
         maxCharactersPerUser: schema.games.maxCharactersPerUser,
+        genres: schema.games.genres,
       })
       .from(schema.games)
       .where(eq(schema.games.enabled, true))
       .orderBy(schema.games.name);
-    return { data: rows, meta: { total: rows.length } };
+    const data = rows.map((r) => ({ ...r, genres: r.genres ?? [] }));
+    return { data, meta: { total: data.length } };
   }
 
   /** GET /games/:id/event-types -- Returns event types for a game. */

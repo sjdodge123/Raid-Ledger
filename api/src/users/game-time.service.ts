@@ -257,14 +257,15 @@ export class GameTimeService {
     return result;
   }
 
-  /** Fetch all data sources for composite view in parallel. */
-  private async fetchCompositeData(
+  /** Fetch all data sources for composite view in parallel (including template). */
+  private async fetchAllCompositeData(
     userId: number,
     weekStart: Date,
     weekEnd: Date,
   ) {
     const [startDate, endDate] = this.weekDateRange(weekStart, weekEnd);
     return Promise.all([
+      this.getTemplate(userId),
       fetchWeekSignedUpEvents(this.db, userId, weekStart, weekEnd),
       fetchOverrides(this.db, userId, startDate, endDate),
       fetchAbsences(this.db, userId, startDate, endDate),
@@ -279,13 +280,12 @@ export class GameTimeService {
   ): Promise<CompositeViewResult> {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
-    const template = await this.getTemplate(userId);
+    const [template, signedUpEvents, overrideRows, absenceRows] =
+      await this.fetchAllCompositeData(userId, weekStart, weekEnd);
     const remapped = template.slots.map((s) => ({
       ...s,
       dayOfWeek: (s.dayOfWeek + 1) % 7,
     }));
-    const [signedUpEvents, overrideRows, absenceRows] =
-      await this.fetchCompositeData(userId, weekStart, weekEnd);
     const signupsMap = await fetchSignupsPreview(this.db, [
       ...new Set(signedUpEvents.map((e) => e.eventId)),
     ]);

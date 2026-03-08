@@ -1,21 +1,17 @@
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { MobilePageToolbar } from '../layout/mobile-page-toolbar';
+import type { GenreOption } from '../../pages/events/genre-filter-helpers';
 
 export type EventsTab = 'upcoming' | 'past' | 'mine' | 'plans';
-
-interface GameOption {
-    id: number;
-    name: string;
-}
 
 interface EventsMobileToolbarProps {
     activeTab: EventsTab;
     onTabChange: (tab: EventsTab) => void;
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    games?: GameOption[];
-    selectedGameId?: string;
-    onGameChange?: (gameId: string) => void;
+    genreOptions?: GenreOption[];
+    selectedGenre?: string;
+    onGenreChange?: (genreKey: string) => void;
 }
 
 const TABS: { key: EventsTab; label: string }[] = [
@@ -40,24 +36,24 @@ function TabButtons({ activeTab, onTabChange }: { activeTab: EventsTab; onTabCha
     );
 }
 
-function SearchAndGameFilter({ searchQuery, onSearchChange, games, selectedGameId, onGameChange }: {
+function SearchAndGenreFilter({ searchQuery, onSearchChange, genreOptions, selectedGenre, onGenreChange }: {
     searchQuery: string; onSearchChange: (q: string) => void;
-    games?: GameOption[]; selectedGameId?: string; onGameChange?: (id: string) => void;
+    genreOptions?: GenreOption[]; selectedGenre?: string; onGenreChange?: (key: string) => void;
 }) {
     return (
         <div className="flex gap-2">
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
                 <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)}
                     placeholder="Search events..." aria-label="Search events"
                     className="w-full pl-10 pr-4 py-2.5 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
             </div>
-            {games && games.length > 1 && onGameChange && (
-                <select value={selectedGameId ?? ''} onChange={(e) => onGameChange(e.target.value)}
-                    aria-label="Filter by game"
-                    className="px-3 py-2.5 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            {genreOptions && genreOptions.length > 0 && onGenreChange && (
+                <select value={selectedGenre ?? ''} onChange={(e) => onGenreChange(e.target.value)}
+                    aria-label="Filter by genre"
+                    className="max-w-[8rem] truncate px-3 py-2.5 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     <option value="">All Games</option>
-                    {games.map((game) => <option key={game.id} value={String(game.id)}>{game.name}</option>)}
+                    {genreOptions.map((opt) => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
                 </select>
             )}
         </div>
@@ -66,15 +62,16 @@ function SearchAndGameFilter({ searchQuery, onSearchChange, games, selectedGameI
 
 /**
  * Mobile toolbar for Events page — filter tabs + search input (ROK-329).
+ * ROK-706: Genre-based filter dropdown replaces individual game dropdown.
  */
 export function EventsMobileToolbar({
-    activeTab, onTabChange, searchQuery, onSearchChange, games, selectedGameId, onGameChange,
+    activeTab, onTabChange, searchQuery, onSearchChange, genreOptions, selectedGenre, onGenreChange,
 }: EventsMobileToolbarProps) {
     return (
         <MobilePageToolbar className="space-y-3" aria-label="Events filters">
             <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
-            <SearchAndGameFilter searchQuery={searchQuery} onSearchChange={onSearchChange}
-                games={games} selectedGameId={selectedGameId} onGameChange={onGameChange} />
+            <SearchAndGenreFilter searchQuery={searchQuery} onSearchChange={onSearchChange}
+                genreOptions={genreOptions} selectedGenre={selectedGenre} onGenreChange={onGenreChange} />
         </MobilePageToolbar>
     );
 }

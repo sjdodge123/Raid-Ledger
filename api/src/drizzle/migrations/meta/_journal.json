@@ -582,6 +582,20 @@
       "when": 1772870400000,
       "tag": "0082_cleanup_orphaned_cron_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1772956800000,
+      "tag": "0083_gist_index_events_duration",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1772956900000,
+      "tag": "0084_add_event_signups_event_id_status_index",
+      "breakpoints": true
     }
   ]
 }

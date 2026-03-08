@@ -21,13 +21,20 @@ export function useRoster(eventId: number) {
  * Mutation hook for updating roster assignments (ROK-114).
  * Supports optimistic updates for immediate UI feedback during drag-and-drop.
  */
-function rosterKey(eventId: number) {
+/** Build the roster assignments query key for a given event. */
+export function rosterKey(eventId: number) {
     return ['events', eventId, 'roster', 'assignments'] as const;
 }
 
-function invalidateRosterQueries(queryClient: ReturnType<typeof useQueryClient>, eventId: number) {
-    queryClient.invalidateQueries({ queryKey: rosterKey(eventId) });
-    queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
+/**
+ * Invalidate both roster query caches using exact key match.
+ * ROK-704: Using exact: true prevents prefix-match cascade where
+ * invalidating ['events', id, 'roster'] would also match
+ * ['events', id, 'roster', 'assignments'], causing double refetches.
+ */
+export function invalidateRosterQueries(queryClient: ReturnType<typeof useQueryClient>, eventId: number): void {
+    queryClient.invalidateQueries({ queryKey: rosterKey(eventId), exact: true });
+    queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'], exact: true });
 }
 
 export function useUpdateRoster(eventId: number) {

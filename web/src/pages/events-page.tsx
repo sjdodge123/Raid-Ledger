@@ -16,14 +16,13 @@ import { FAB } from "../components/ui/fab";
 import type { EventResponseDto, GameTimeSlot } from "@raid-ledger/contract";
 import { eventOverlapsGameTime } from "./events/events-helpers";
 import { EventsPageHeader } from "./events/EventsPageHeader";
+import { buildGenreOptions, filterEventsByGenre, type GenreOption } from "./events/genre-filter-helpers";
 
 /**
  * Events List Page - displays upcoming events in a responsive grid
  */
-function buildEventQueryParams(activeTab: EventsTab, gameIdFilter: string | undefined) {
-  const params: import('../lib/api-client').EventListParams = {
-    ...(gameIdFilter ? { gameId: gameIdFilter } : {}),
-  };
+function buildEventQueryParams(activeTab: EventsTab) {
+  const params: import('../lib/api-client').EventListParams = {};
   switch (activeTab) {
     case 'past': params.upcoming = false; break;
     case 'mine': params.upcoming = true; params.signedUpAs = 'me'; break;
@@ -69,34 +68,38 @@ function filterAndSortEvents(items: EventResponseDto[], searchQuery: string, ove
 
 function useEventsPageState() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const gameIdFilter = searchParams.get("gameId") || undefined;
+  const genreFilter = searchParams.get("genre") || undefined;
   const tabParam = searchParams.get('tab') as EventsTab | null;
   const [activeTab, setActiveTab] = useState<EventsTab>(
     tabParam && ['upcoming', 'past', 'mine', 'plans'].includes(tabParam) ? tabParam : 'upcoming',
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [filterGameTime, setFilterGameTime] = useState(false);
-  return { searchParams, setSearchParams, gameIdFilter, activeTab, setActiveTab, searchQuery, setSearchQuery, filterGameTime, setFilterGameTime };
+  return { searchParams, setSearchParams, genreFilter, activeTab, setActiveTab, searchQuery, setSearchQuery, filterGameTime, setFilterGameTime };
 }
 
-function handleGameChange(gameId: string | undefined, searchParams: URLSearchParams, setSearchParams: (p: URLSearchParams) => void) {
+function handleGenreChange(genreKey: string | undefined, searchParams: URLSearchParams, setSearchParams: (p: URLSearchParams) => void): void {
   const next = new URLSearchParams(searchParams);
-  if (gameId) { next.set('gameId', gameId); } else { next.delete('gameId'); }
+  if (genreKey) { next.set('genre', genreKey); } else { next.delete('genre'); }
+  next.delete('gameId'); // clean up legacy param
   setSearchParams(next);
 }
 
 export function EventsPage() {
   const navigate = useNavigate();
   const state = useEventsPageState();
-  const eventQueryParams = useMemo(() => buildEventQueryParams(state.activeTab, state.gameIdFilter), [state.activeTab, state.gameIdFilter]);
+  const eventQueryParams = useMemo(() => buildEventQueryParams(state.activeTab), [state.activeTab]);
   const { items, isLoading, error, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfiniteEvents(eventQueryParams);
   const { isAuthenticated } = useAuth();
   const { data: gameTime } = useGameTime({ enabled: isAuthenticated });
   const { games: registryGames } = useGameRegistry();
 
-  const filteredGameName = useMemo(() => (!state.gameIdFilter || !items.length) ? null : (items[0]?.game?.name ?? null), [state.gameIdFilter, items]);
-  const { slotSet, overlapSet } = useGameTimeOverlaps(items, gameTime?.slots as GameTimeSlot[] | undefined);
-  const displayEvents = useMemo(() => filterAndSortEvents(items, state.searchQuery, overlapSet, state.filterGameTime, state.activeTab), [items, overlapSet, state.filterGameTime, state.searchQuery, state.activeTab]);
+  const genreOptions = useMemo(() => buildGenreOptions(registryGames), [registryGames]);
+  const genreFiltered = useMemo(() => filterEventsByGenre(items, registryGames, state.genreFilter), [items, registryGames, state.genreFilter]);
+  const genreLabel = useMemo(() => genreOptions.find((o) => o.key === state.genreFilter)?.label ?? null, [genreOptions, state.genreFilter]);
+
+  const { slotSet, overlapSet } = useGameTimeOverlaps(genreFiltered, gameTime?.slots as GameTimeSlot[] | undefined);
+  const displayEvents = useMemo(() => filterAndSortEvents(genreFiltered, state.searchQuery, overlapSet, state.filterGameTime, state.activeTab), [genreFiltered, overlapSet, state.filterGameTime, state.searchQuery, state.activeTab]);
 
   if (error) return <EventsErrorState message={error.message} />;
 
@@ -104,9 +107,9 @@ export function EventsPage() {
     <PullToRefresh onRefresh={refetch}>
       <div className="pb-20 md:pb-0">
         <EventsMobileToolbar activeTab={state.activeTab} onTabChange={state.setActiveTab} searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery}
-          games={registryGames} selectedGameId={state.gameIdFilter} onGameChange={(gameId) => handleGameChange(gameId, state.searchParams, state.setSearchParams)} />
+          genreOptions={genreOptions} selectedGenre={state.genreFilter} onGenreChange={(key) => handleGenreChange(key, state.searchParams, state.setSearchParams)} />
         <EventsContent activeTab={state.activeTab} setActiveTab={state.setActiveTab} searchQuery={state.searchQuery} setSearchQuery={state.setSearchQuery}
-          isAuthenticated={isAuthenticated} filteredGameName={filteredGameName} registryGames={registryGames} gameIdFilter={state.gameIdFilter}
+          isAuthenticated={isAuthenticated} genreLabel={genreLabel} genreOptions={genreOptions} genreFilter={state.genreFilter}
           searchParams={state.searchParams} setSearchParams={state.setSearchParams} isLoading={isLoading} displayEvents={displayEvents}
           filterGameTime={state.filterGameTime} setFilterGameTime={state.setFilterGameTime} slotSet={slotSet} overlapSet={overlapSet}
           sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} navigate={navigate} />
@@ -127,12 +130,12 @@ function EventsErrorState({ message }: { message: string }) {
   );
 }
 
-function EventsContent({ activeTab, setActiveTab, searchQuery, setSearchQuery, isAuthenticated, filteredGameName, registryGames,
-  gameIdFilter, searchParams, setSearchParams, isLoading, displayEvents, filterGameTime, setFilterGameTime, slotSet, overlapSet,
+function EventsContent({ activeTab, setActiveTab, searchQuery, setSearchQuery, isAuthenticated, genreLabel, genreOptions,
+  genreFilter, searchParams, setSearchParams, isLoading, displayEvents, filterGameTime, setFilterGameTime, slotSet, overlapSet,
   sentinelRef, isFetchingNextPage, hasNextPage, navigate }: {
   activeTab: EventsTab; setActiveTab: (t: EventsTab) => void; searchQuery: string; setSearchQuery: (q: string) => void;
-  isAuthenticated: boolean; filteredGameName: string | null; registryGames: { id: number; name: string }[];
-  gameIdFilter: string | undefined; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
+  isAuthenticated: boolean; genreLabel: string | null; genreOptions: GenreOption[];
+  genreFilter: string | undefined; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
   isLoading: boolean; displayEvents: EventResponseDto[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
   slotSet: Set<string> | null; overlapSet: Set<number> | null;
   sentinelRef: React.RefCallback<HTMLDivElement>; isFetchingNextPage: boolean; hasNextPage: boolean; navigate: (path: string) => void;
@@ -140,13 +143,13 @@ function EventsContent({ activeTab, setActiveTab, searchQuery, setSearchQuery, i
   return (
     <div className="py-8 px-4">
       <div className="max-w-7xl mx-auto">
-        <EventsPageHeader activeTab={activeTab} filteredGameName={filteredGameName} isAuthenticated={isAuthenticated} />
+        <EventsPageHeader activeTab={activeTab} filteredGameName={genreLabel} isAuthenticated={isAuthenticated} />
         <DesktopFilterTabs isAuthenticated={isAuthenticated} activeTab={activeTab} onTabChange={setActiveTab}
-          searchQuery={searchQuery} onSearchChange={setSearchQuery} registryGames={registryGames}
-          gameIdFilter={gameIdFilter} searchParams={searchParams} setSearchParams={setSearchParams} />
+          searchQuery={searchQuery} onSearchChange={setSearchQuery} genreOptions={genreOptions}
+          genreFilter={genreFilter} searchParams={searchParams} setSearchParams={setSearchParams} />
         {activeTab === 'plans' ? <EventPlansList /> : (
           <>
-            <GameFilterChip gameIdFilter={gameIdFilter} filteredGameName={filteredGameName} searchParams={searchParams} setSearchParams={setSearchParams} />
+            <GenreFilterChip genreFilter={genreFilter} genreLabel={genreLabel} searchParams={searchParams} setSearchParams={setSearchParams} />
             <GameTimeFilter slotSet={slotSet} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} />
             <EventsGrid isLoading={isLoading} displayEvents={displayEvents} filterGameTime={filterGameTime} setFilterGameTime={setFilterGameTime} overlapSet={overlapSet} navigate={navigate} />
             {!isLoading && displayEvents.length > 0 && <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />}
@@ -184,36 +187,36 @@ function DesktopSearchInput({ searchQuery, onSearchChange }: { searchQuery: stri
   );
 }
 
-function DesktopFilterTabs({ isAuthenticated, activeTab, onTabChange, searchQuery, onSearchChange, registryGames, gameIdFilter, searchParams, setSearchParams }: {
+function DesktopFilterTabs({ isAuthenticated, activeTab, onTabChange, searchQuery, onSearchChange, genreOptions, genreFilter, searchParams, setSearchParams }: {
   isAuthenticated: boolean; activeTab: EventsTab; onTabChange: (t: EventsTab) => void; searchQuery: string; onSearchChange: (q: string) => void;
-  registryGames: { id: number; name: string }[]; gameIdFilter: string | undefined; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
+  genreOptions: GenreOption[]; genreFilter: string | undefined; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
 }): JSX.Element | null {
   if (!isAuthenticated) return null;
   return (
     <div className="hidden md:flex items-center gap-4 mb-6">
       <DesktopTabButtons activeTab={activeTab} onTabChange={onTabChange} />
       <DesktopSearchInput searchQuery={searchQuery} onSearchChange={onSearchChange} />
-      {registryGames.length > 1 && (
-        <select value={gameIdFilter ?? ''} onChange={(e) => handleGameChange(e.target.value || undefined, searchParams, setSearchParams)} aria-label="Filter by game"
-          className="px-3 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none appearance-none pr-8">
+      {genreOptions.length > 0 && (
+        <select value={genreFilter ?? ''} onChange={(e) => handleGenreChange(e.target.value || undefined, searchParams, setSearchParams)} aria-label="Filter by genre"
+          className="max-w-[10rem] truncate px-3 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none appearance-none pr-8">
           <option value="">All Games</option>
-          {registryGames.map((game) => (<option key={game.id} value={String(game.id)}>{game.name}</option>))}
+          {genreOptions.map((opt) => (<option key={opt.key} value={opt.key}>{opt.label}</option>))}
         </select>
       )}
     </div>
   );
 }
 
-function GameFilterChip({ gameIdFilter, filteredGameName, searchParams, setSearchParams }: {
-  gameIdFilter: string | undefined; filteredGameName: string | null; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
+function GenreFilterChip({ genreFilter, genreLabel, searchParams, setSearchParams }: {
+  genreFilter: string | undefined; genreLabel: string | null; searchParams: URLSearchParams; setSearchParams: (p: URLSearchParams) => void;
 }): JSX.Element | null {
-  if (!gameIdFilter) return null;
+  if (!genreFilter || !genreLabel) return null;
   return (
     <div className="mb-4">
       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
-        {filteredGameName ?? "Loading..."}
-        <button onClick={() => { const next = new URLSearchParams(searchParams); next.delete("gameId"); setSearchParams(next); }}
-          className="flex items-center justify-center min-w-[44px] min-h-[44px] -mr-3 rounded-full hover:bg-violet-500/30 transition-colors" aria-label="Clear game filter">
+        {genreLabel}
+        <button onClick={() => handleGenreChange(undefined, searchParams, setSearchParams)}
+          className="flex items-center justify-center min-w-[44px] min-h-[44px] -mr-3 rounded-full hover:bg-violet-500/30 transition-colors" aria-label="Clear genre filter">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </span>
