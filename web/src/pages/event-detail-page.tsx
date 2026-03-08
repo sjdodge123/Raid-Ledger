@@ -199,7 +199,8 @@ function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, h
             <CancelledBanner event={page.event} isCancelled={derived.isCancelled} />
             <div ref={bannerRef}>
                 <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator}
-                    description={page.event.description} voiceChannelName={voice.voiceChannel?.name ?? null} voiceChannelUrl={voice.voiceChannel?.url ?? null} />
+                    description={page.event.description} voiceChannelName={voice.voiceChannel?.name ?? null} voiceChannelUrl={voice.voiceChannel?.url ?? null}
+                    recurrenceGroupId={page.event.recurrenceGroupId} />
             </div>
             {isBannerCollapsed && <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator} isCollapsed />}
             <EventDetailBodySections page={page} voice={voice} derived={derived} handlers={handlers} />

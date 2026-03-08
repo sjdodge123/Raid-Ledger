@@ -67,9 +67,9 @@ function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPat
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
             )}
             {matchesGameTime && <GameTimeBadge />}
-            <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-                {event.isAdHoc && event.adHocStatus === 'live' ? <LiveBadge /> : <StatusBadge status={status} />}
+            <div className="absolute top-2 right-2 flex items-center gap-1">
                 {!!event.recurrenceGroupId && <SeriesBadge />}
+                {event.isAdHoc && event.adHocStatus === 'live' ? <LiveBadge /> : <StatusBadge status={status} />}
             </div>
             {event.game && (
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">

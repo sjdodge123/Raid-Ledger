@@ -5,6 +5,7 @@ import { toAvatarUser } from '../../lib/avatar';
 import { formatDuration } from '../../utils/game-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
+import { SeriesBadge } from './SeriesBadge';
 import './EventBanner.css';
 
 interface EventBannerProps {
@@ -27,6 +28,7 @@ interface EventBannerProps {
     voiceChannelName?: string | null;
     voiceChannelUrl?: string | null;
     isCollapsed?: boolean;
+    recurrenceGroupId?: string | null;
 }
 
 function useFormattedTimes(startTime: string, endTime: string) {
@@ -95,10 +97,10 @@ function VoiceChannel({ name, url }: { name: string; url?: string | null }) {
     );
 }
 
-function FullBanner({ title, game, dateStr, timeStr, duration, creator, description, voiceChannelName, voiceChannelUrl }: {
+function FullBanner({ title, game, dateStr, timeStr, duration, creator, description, voiceChannelName, voiceChannelUrl, recurrenceGroupId }: {
     title: string; game: EventBannerProps['game']; dateStr: string; timeStr: string; duration: string;
     creator: EventBannerProps['creator']; description?: string | null;
-    voiceChannelName?: string | null; voiceChannelUrl?: string | null;
+    voiceChannelName?: string | null; voiceChannelUrl?: string | null; recurrenceGroupId?: string | null;
 }) {
     return (
         <div className="event-banner">
@@ -113,6 +115,12 @@ function FullBanner({ title, game, dateStr, timeStr, duration, creator, descript
                     {voiceChannelName && <VoiceChannel name={voiceChannelName} url={voiceChannelUrl} />}
                     <span className="event-banner__separator">•</span>
                     <span className="event-banner__creator"><CreatorLink creator={creator} /></span>
+                    {recurrenceGroupId && (
+                        <>
+                            <span className="event-banner__separator">•</span>
+                            <SeriesBadge showLabel />
+                        </>
+                    )}
                 </div>
                 {description && <p className="event-banner__description">{description}</p>}
             </div>
@@ -128,7 +136,7 @@ function FullBanner({ title, game, dateStr, timeStr, duration, creator, descript
  */
 export const EventBanner = memo(function EventBanner({
     title, game, startTime, endTime, creator, description,
-    voiceChannelName, voiceChannelUrl, isCollapsed = false,
+    voiceChannelName, voiceChannelUrl, isCollapsed = false, recurrenceGroupId,
 }: EventBannerProps) {
     const { dateStr, timeStr, duration } = useFormattedTimes(startTime, endTime);
     const scrollDirection = useScrollDirection();
@@ -141,5 +149,5 @@ export const EventBanner = memo(function EventBanner({
 
     return <FullBanner title={title} game={game} dateStr={dateStr} timeStr={timeStr}
         duration={duration} creator={creator} description={description}
-        voiceChannelName={voiceChannelName} voiceChannelUrl={voiceChannelUrl} />;
+        voiceChannelName={voiceChannelName} voiceChannelUrl={voiceChannelUrl} recurrenceGroupId={recurrenceGroupId} />;
 });
