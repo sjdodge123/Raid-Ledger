@@ -1,6 +1,7 @@
 import type { StringSelectMenuInteraction } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
+import { findLinkedUser } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 
 type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
@@ -32,19 +33,6 @@ export function buildRoleSignupOptions(
     return { slotRole: primaryRole as SlotRole, preferredRoles: selectedRoles };
   }
   return { preferredRoles: selectedRoles };
-}
-
-/** Find a linked user by Discord ID. */
-export async function findLinkedUser(
-  discordUserId: string,
-  deps: SignupInteractionDeps,
-): Promise<typeof schema.users.$inferSelect | null> {
-  const [user] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordUserId))
-    .limit(1);
-  return user ?? null;
 }
 
 /** Sign up a user and confirm with a character, optionally marking tentative. */

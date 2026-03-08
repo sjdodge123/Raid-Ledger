@@ -2,11 +2,8 @@ import type { StringSelectMenuInteraction } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { showRoleSelect } from './signup-signup.handlers';
-import { safeEditReply } from './signup-interaction.helpers';
-import {
-  findLinkedUser,
-  replyNoLinkedAccount,
-} from './signup-select-role.handlers';
+import { findLinkedUser, safeEditReply } from './signup-interaction.helpers';
+import { replyNoLinkedAccount } from './signup-select-role.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 
 /**
