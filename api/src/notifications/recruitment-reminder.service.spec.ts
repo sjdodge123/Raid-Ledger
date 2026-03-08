@@ -51,7 +51,12 @@ function makeEventRow(
 
 describe('RecruitmentReminderService', () => {
   let service: RecruitmentReminderService;
-  let mockDb: { execute: jest.Mock };
+  let mockDb: {
+    execute: jest.Mock;
+    update: jest.Mock;
+    set: jest.Mock;
+    where: jest.Mock;
+  };
   let mockRedis: { get: jest.Mock; set: jest.Mock };
   let mockNotificationService: {
     create: jest.Mock;
@@ -65,7 +70,12 @@ describe('RecruitmentReminderService', () => {
   let mockCronJobService: { executeWithTracking: jest.Mock };
 
   beforeEach(async () => {
-    mockDb = { execute: jest.fn() };
+    mockDb = {
+      execute: jest.fn(),
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockResolvedValue(undefined),
+    };
 
     mockRedis = {
       get: jest.fn().mockResolvedValue(null),
@@ -84,7 +94,7 @@ describe('RecruitmentReminderService', () => {
 
     mockDiscordBotClient = {
       isConnected: jest.fn().mockReturnValue(true),
-      sendEmbed: jest.fn().mockResolvedValue(undefined),
+      sendEmbed: jest.fn().mockResolvedValue({ id: 'bump-msg-001' }),
     };
 
     mockCronJobService = {
@@ -647,6 +657,43 @@ describe('RecruitmentReminderService', () => {
       // Should not throw — UTC fallback is used
       await expect(service.checkAndSendReminders()).resolves.not.toThrow();
       expect(mockNotificationService.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('checkAndSendReminders — bump message ID persistence (ROK-728)', () => {
+    it('should persist bump message ID after posting channel bump', async () => {
+      const event = makeEventRow({ id: 42 });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mockDiscordBotClient.sendEmbed.mockResolvedValue({ id: 'bump-msg-999' });
+
+      await service.checkAndSendReminders();
+
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ bumpMessageId: 'bump-msg-999' }),
+      );
+    });
+
+    it('should not persist bump message ID when bot is disconnected', async () => {
+      const event = makeEventRow();
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mockDiscordBotClient.isConnected.mockReturnValue(false);
+
+      await service.checkAndSendReminders();
+
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('should not persist bump message ID when event is full', async () => {
+      const event = makeEventRow({
+        max_attendees: 10,
+        signup_count: '10',
+      });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 });

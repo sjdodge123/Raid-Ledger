@@ -437,3 +437,141 @@ describe('EmbedSyncProcessor — slot-config fullness: FILLING', () => {
     );
   });
 });
+
+// =========================================================================
+// ROK-728 bump message cleanup on FULL transition
+// =========================================================================
+
+describe('EmbedSyncProcessor — bump message cleanup (ROK-728)', () => {
+  let processor: EmbedSyncProcessor;
+  let clientService: jest.Mocked<DiscordBotClientService>;
+  let mockDb: Record<string, jest.Mock>;
+
+  const recordWithBump = {
+    id: 'record-uuid',
+    eventId: 42,
+    guildId: 'guild-123',
+    channelId: 'channel-789',
+    messageId: 'msg-456',
+    embedState: EMBED_STATES.FILLING,
+    bumpMessageId: 'bump-msg-001',
+  };
+
+  const recordWithoutBump = {
+    ...recordWithBump,
+    bumpMessageId: null,
+  };
+
+  /** Event that will compute to FULL (signups >= maxAttendees). */
+  const fullEvent = {
+    id: 42,
+    title: 'Raid Night',
+    description: null,
+    duration: [FUTURE, FUTURE_END],
+    maxAttendees: 4,
+    cancelledAt: null,
+    gameId: 1,
+    slotConfig: null,
+    isAdHoc: false,
+    extendedUntil: null,
+    notificationChannelOverride: null,
+    recurrenceGroupId: null,
+  };
+
+  function setupDbForFullSync(record: Record<string, unknown>) {
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([record]))
+      .mockReturnValueOnce(makeSelectChain([fullEvent]))
+      .mockReturnValueOnce(makeSelectChain(makeSignupRows(4)))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }]));
+    mockDb.update.mockReturnValue(makeUpdateChain());
+  }
+
+  beforeEach(async () => {
+    mockDb = {
+      select: jest.fn().mockReturnValue(makeSelectChain()),
+      update: jest.fn().mockReturnValue(makeUpdateChain()),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: buildProviders(mockDb),
+    }).compile();
+
+    processor = module.get(EmbedSyncProcessor);
+    clientService = module.get(DiscordBotClientService);
+    (clientService as unknown as Record<string, jest.Mock>).deleteMessage = jest
+      .fn()
+      .mockResolvedValue(undefined);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('deletes bump message from Discord when event transitions to FULL', async () => {
+    setupDbForFullSync(recordWithBump);
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(clientService.deleteMessage).toHaveBeenCalledWith(
+      'channel-789',
+      'bump-msg-001',
+    );
+  });
+
+  it('clears bumpMessageId in DB after deleting from Discord', async () => {
+    setupDbForFullSync(recordWithBump);
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    // update() is called for state persist AND bump cleanup
+    expect(mockDb.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not attempt deletion when no bump message exists', async () => {
+    setupDbForFullSync(recordWithoutBump);
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(clientService.deleteMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not delete bump message when state is not FULL', async () => {
+    // Event with fewer signups -> FILLING state
+    const fillingEvent = { ...fullEvent, maxAttendees: 10 };
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([recordWithBump]))
+      .mockReturnValueOnce(makeSelectChain([fillingEvent]))
+      .mockReturnValueOnce(makeSelectChain(makeSignupRows(3)))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }]));
+    mockDb.update.mockReturnValue(makeUpdateChain());
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(clientService.deleteMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not throw when bump message deletion fails (graceful)', async () => {
+    setupDbForFullSync(recordWithBump);
+    (clientService.deleteMessage as jest.Mock).mockRejectedValue(
+      new Error('Unknown Message'),
+    );
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await expect(processor.process(job)).resolves.not.toThrow();
+  });
+});
