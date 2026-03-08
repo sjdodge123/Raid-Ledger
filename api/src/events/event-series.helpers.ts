@@ -6,7 +6,7 @@
  *  - 'all': every event in the recurrence group
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { UpdateEventDto, CancelEventDto } from '@raid-ledger/contract';
@@ -15,7 +15,6 @@ import type { NotificationService } from '../notifications/notification.service'
 import {
   findExistingOrThrow,
   assertOwnerOrAdmin,
-  getSignedUpUserIds,
   notifyCancellation,
   resetSignupConfirmations,
 } from './event-lifecycle.helpers';
@@ -130,7 +129,7 @@ function buildUpdateForTarget(
   return buildUpdateData(dtoForTarget, target);
 }
 
-/** Deletes series events within a transaction. Returns affected IDs. */
+/** Deletes series events in a single batched query. Returns affected IDs. */
 export async function deleteSeriesEvents(
   db: PostgresJsDatabase<typeof schema>,
   id: number,
@@ -143,30 +142,50 @@ export async function deleteSeriesEvents(
   const targets = await resolveTargetEvents(db, anchor, scope);
   const targetIds = targets.map((e) => e.id);
 
-  await db.transaction(async (tx) => {
-    for (const eid of targetIds) {
-      await tx.delete(schema.events).where(eq(schema.events.id, eid));
-    }
-  });
+  await db.delete(schema.events).where(inArray(schema.events.id, targetIds));
 
   return targetIds;
 }
 
-/** Sends cancellation notifications for non-cancelled targets. */
+/** Fetches signups for multiple events in a single query, grouped by event ID. */
+async function fetchSignupsByEventIds(
+  db: PostgresJsDatabase<typeof schema>,
+  eventIds: number[],
+): Promise<Map<number, number[]>> {
+  if (eventIds.length === 0) return new Map();
+  const signups = await db
+    .select({
+      eventId: schema.eventSignups.eventId,
+      userId: schema.eventSignups.userId,
+    })
+    .from(schema.eventSignups)
+    .where(inArray(schema.eventSignups.eventId, eventIds));
+  const map = new Map<number, number[]>();
+  for (const s of signups) {
+    if (s.userId === null) continue;
+    if (!map.has(s.eventId)) map.set(s.eventId, []);
+    map.get(s.eventId)!.push(s.userId);
+  }
+  return map;
+}
+
+/** Sends cancellation notifications for non-cancelled targets (batched). */
 async function notifySeriesCancellations(
   db: PostgresJsDatabase<typeof schema>,
   notificationService: NotificationService,
   targets: EventSelect[],
   dto: CancelEventDto,
 ): Promise<void> {
-  for (const evt of targets) {
-    if (evt.cancelledAt) continue;
-    const userIds = await getSignedUpUserIds(db, evt.id);
+  const toNotify = targets.filter((e) => !e.cancelledAt);
+  const eventIds = toNotify.map((e) => e.id);
+  const signupMap = await fetchSignupsByEventIds(db, eventIds);
+  for (const evt of toNotify) {
+    const userIds = signupMap.get(evt.id) ?? [];
     await notifyCancellation(notificationService, evt.id, evt, dto, userIds);
   }
 }
 
-/** Cancels series events within a transaction. Returns affected IDs. */
+/** Cancels series events in a single batched query. Returns affected IDs. */
 export async function cancelSeriesEvents(
   db: PostgresJsDatabase<typeof schema>,
   notificationService: NotificationService,
@@ -179,21 +198,19 @@ export async function cancelSeriesEvents(
   const anchor = await findExistingOrThrow(db, id);
   assertOwnerOrAdmin(anchor, userId, isAdmin, 'cancel');
   const targets = await resolveTargetEvents(db, anchor, scope);
+  const toCancelIds = targets.filter((e) => !e.cancelledAt).map((e) => e.id);
   const now = new Date();
 
-  await db.transaction(async (tx) => {
-    for (const evt of targets) {
-      if (evt.cancelledAt) continue;
-      await tx
-        .update(schema.events)
-        .set({
-          cancelledAt: now,
-          cancellationReason: dto.reason ?? null,
-          updatedAt: now,
-        })
-        .where(eq(schema.events.id, evt.id));
-    }
-  });
+  if (toCancelIds.length > 0) {
+    await db
+      .update(schema.events)
+      .set({
+        cancelledAt: now,
+        cancellationReason: dto.reason ?? null,
+        updatedAt: now,
+      })
+      .where(inArray(schema.events.id, toCancelIds));
+  }
 
   await notifySeriesCancellations(db, notificationService, targets, dto);
   return targets.map((e) => e.id);

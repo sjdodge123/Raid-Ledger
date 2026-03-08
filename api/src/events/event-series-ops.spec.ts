@@ -62,7 +62,7 @@ describe('updateSeriesEvents', () => {
     expect(ids).toEqual([1]);
   });
 
-  it('updates all events for scope=all and returns all IDs', async () => {
+  it('updates each event individually for scope=all (different data per event)', async () => {
     const anchor = makeAnchor();
     const siblings = [anchor, makeSibling(2, 7), makeSibling(3, 14)];
     mockDb.limit.mockResolvedValueOnce([anchor]);
@@ -77,6 +77,8 @@ describe('updateSeriesEvents', () => {
       { title: 'Updated All' },
     );
 
+    // Updates must remain per-event because buildUpdateForTarget
+    // produces different data for each event (time delta)
     expect(mockDb.update).toHaveBeenCalledTimes(3);
     expect(ids).toEqual([1, 2, 3]);
   });
@@ -116,7 +118,7 @@ describe('deleteSeriesEvents', () => {
     expect(ids).toEqual([1]);
   });
 
-  it('deletes all events for scope=all and returns all IDs', async () => {
+  it('uses a single batched delete for scope=all', async () => {
     const anchor = makeAnchor();
     const siblings = [anchor, makeSibling(2, 7), makeSibling(3, 14)];
     mockDb.limit.mockResolvedValueOnce([anchor]);
@@ -130,7 +132,8 @@ describe('deleteSeriesEvents', () => {
       'all',
     );
 
-    expect(mockDb.delete).toHaveBeenCalledTimes(3);
+    // Should use 1 batched delete, not N individual deletes
+    expect(mockDb.delete).toHaveBeenCalledTimes(1);
     expect(ids).toEqual([1, 2, 3]);
   });
 });
@@ -186,7 +189,7 @@ describe('cancelSeriesEvents', () => {
     expect(ids).toEqual([1]);
   });
 
-  it('cancels all events for scope=all', async () => {
+  it('uses a single batched update for scope=all', async () => {
     const anchor = makeAnchor();
     const siblings = [anchor, makeSibling(2, 7), makeSibling(3, 14)];
     mockDb.limit.mockResolvedValueOnce([anchor]);
@@ -203,11 +206,12 @@ describe('cancelSeriesEvents', () => {
       { reason: 'Holiday break' },
     );
 
-    expect(mockDb.update).toHaveBeenCalledTimes(3);
+    // Should use 1 batched update, not N individual updates
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
     expect(ids).toEqual([1, 2, 3]);
   });
 
-  it('skips already-cancelled events', async () => {
+  it('skips already-cancelled events in batched update', async () => {
     const anchor = makeAnchor();
     const cancelled = makeSibling(2, 7);
     (cancelled as Record<string, unknown>).cancelledAt = new Date();
@@ -225,8 +229,33 @@ describe('cancelSeriesEvents', () => {
       {},
     );
 
-    // Only 1 update (the non-cancelled anchor), not 2
+    // Only 1 batched update for the non-cancelled event
     expect(mockDb.update).toHaveBeenCalledTimes(1);
     expect(ids).toEqual([1, 2]);
+  });
+
+  it('fetches signups in a single batch query', async () => {
+    const anchor = makeAnchor();
+    const sibling = makeSibling(2, 7);
+    mockDb.limit.mockResolvedValueOnce([anchor]);
+    mockDb.orderBy.mockResolvedValueOnce([anchor, sibling]);
+    setupCancelMocks();
+
+    await cancelSeriesEvents(
+      mockDb as never,
+      mockNotification as never,
+      1,
+      CREATOR_ID,
+      false,
+      'all',
+      {},
+    );
+
+    // The signups query should only hit the DB once (batched via inArray),
+    // not once per event. We detect this via the from(eventSignups) call count.
+    const signupsFromCalls = mockDb.from.mock.calls.filter(
+      (args: unknown[]) => args[0] === schema.eventSignups,
+    );
+    expect(signupsFromCalls).toHaveLength(1);
   });
 });
