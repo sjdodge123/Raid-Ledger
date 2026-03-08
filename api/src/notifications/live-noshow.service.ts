@@ -15,7 +15,7 @@ import {
   findLiveEventsInNoShowWindow,
   getAbsentSignedUpPlayers,
   getPhase1RemindedUserIds,
-  getPlayerDisplayInfo,
+  batchFetchPlayerDisplayInfo,
   fetchPhase2Data,
 } from './live-noshow.helpers';
 
@@ -161,11 +161,7 @@ export class LiveNoShowService {
   > {
     const { discordIdByUserId, voiceSessionByDiscordId } =
       await fetchPhase2Data(this.db, event.id, phase1Reminded);
-    const stillAbsent: Array<{
-      userId: number;
-      displayName: string;
-      role: string | null;
-    }> = [];
+    const absentUserIds: number[] = [];
     for (const userId of phase1Reminded) {
       const discordId = discordIdByUserId.get(userId);
       if (discordId) {
@@ -173,14 +169,18 @@ export class LiveNoShowService {
         const totalDuration = voiceSessionByDiscordId.get(discordId) ?? 0;
         if (totalDuration >= PRESENCE_THRESHOLD_SEC) continue;
       }
-      const playerInfo = await getPlayerDisplayInfo(this.db, event.id, userId);
-      stillAbsent.push({
-        userId,
-        displayName: playerInfo.displayName,
-        role: playerInfo.role,
-      });
+      absentUserIds.push(userId);
     }
-    return stillAbsent;
+    if (absentUserIds.length === 0) return [];
+    const displayInfoMap = await batchFetchPlayerDisplayInfo(
+      this.db,
+      event.id,
+      absentUserIds,
+    );
+    return absentUserIds.map((userId) => {
+      const info = displayInfoMap.get(userId)!;
+      return { userId, displayName: info.displayName, role: info.role };
+    });
   }
 
   /** Build escalation message for the creator. */

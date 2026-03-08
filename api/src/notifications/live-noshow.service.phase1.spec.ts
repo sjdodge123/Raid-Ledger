@@ -6,19 +6,14 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
 /**
- * Build a select chain where .from().where().limit() is the terminal,
- * with support for optional .innerJoin() in the middle.
+ * Build a select chain where .from().where() is the terminal (no .limit()).
+ * Used for batch queries that return all matching rows.
  */
-function makeSelectFromWhereLimit(resolvedValue: unknown[]) {
-  const limitChain = {
-    limit: jest.fn().mockResolvedValue(resolvedValue),
-    where: jest.fn(),
-    innerJoin: jest.fn(),
-  };
-  limitChain.where.mockReturnValue(limitChain);
-  limitChain.innerJoin.mockReturnValue(limitChain);
+function makeSelectFromWhere(resolvedValue: unknown[]) {
   return {
-    from: jest.fn().mockReturnValue(limitChain),
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockResolvedValue(resolvedValue),
+    }),
   };
 }
 
@@ -88,16 +83,12 @@ describe('LiveNoShowService — phase1', () => {
     service = module.get<LiveNoShowService>(LiveNoShowService);
   });
 
-  // ─── checkNoShows (cron entry point) ─────────────────────────────────────
+  // --- checkNoShows (cron entry point) ---
 
   describe('checkNoShows', () => {
     it('should wrap execution in cronJobService.executeWithTracking', async () => {
-      // No live events — minimal DB mock to avoid errors
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue([]),
-        }),
-      });
+      // No live events
+      mockDb.select.mockReturnValue(makeSelectFromWhere([]));
 
       await service.checkNoShows();
 
@@ -108,14 +99,12 @@ describe('LiveNoShowService — phase1', () => {
     });
 
     it('should do nothing when voiceAttendance is not available', async () => {
-      // Re-create service without VoiceAttendanceService
       const module = await Test.createTestingModule({
         providers: [
           LiveNoShowService,
           { provide: DrizzleAsyncProvider, useValue: mockDb },
           { provide: NotificationService, useValue: mockNotificationService },
           { provide: CronJobService, useValue: mockCronJobService },
-          // No VoiceAttendanceService provided — @Optional() means it's null
         ],
       }).compile();
       const serviceWithoutVoice =
@@ -123,17 +112,12 @@ describe('LiveNoShowService — phase1', () => {
 
       await serviceWithoutVoice.checkNoShows();
 
-      // No DB queries should have been made
       expect(mockDb.select).not.toHaveBeenCalled();
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
     it('should do nothing when there are no live events in the window', async () => {
-      mockDb.select.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue([]), // no live events
-        }),
-      });
+      mockDb.select.mockReturnValue(makeSelectFromWhere([]));
 
       await service.checkNoShows();
 
@@ -141,7 +125,7 @@ describe('LiveNoShowService — phase1', () => {
     });
   });
 
-  // ─── Phase 1: no-show reminders ──────────────────────────────────────────
+  // --- Phase 1: no-show reminders ---
 
   describe('Phase 1 (no-show reminder at +5 min)', () => {
     it('should send reminder DM to absent signed-up player', async () => {
@@ -149,46 +133,39 @@ describe('LiveNoShowService — phase1', () => {
         startTime: new Date(Date.now() - 11 * 60 * 1000),
       });
 
-      // findLiveEventsInNoShowWindow
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        // getAbsentSignedUpPlayers: signups query
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                userId: 10,
-                discordUserId: 'discord-10',
-                discordUsername: 'PlayerOne',
-              },
-            ]),
-          }),
-        })
-        // getAbsentSignedUpPlayers: voice session query (.limit)
-        .mockReturnValueOnce(makeSelectFromWhereLimit([]));
-      // insertReminderDedup: hasReminderBeenSent (.limit) — not yet sent
-      // (handled by insert mock below)
+        // findLiveEventsInNoShowWindow
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        // fetchNonBenchSignups
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              userId: 10,
+              discordUserId: 'discord-10',
+              discordUsername: 'PlayerOne',
+            },
+          ]),
+        )
+        // batchFetchVoiceSessions (no sessions — absent)
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       mockDb.insert.mockReturnValue({
         values: jest.fn().mockReturnValue({
           onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([{ id: 1 }]), // inserted = true
+            returning: jest.fn().mockResolvedValue([{ id: 1 }]),
           }),
         }),
       });
 
-      // isUserActive returns false (absent)
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
 
       await service.checkNoShows();
@@ -212,36 +189,34 @@ describe('LiveNoShowService — phase1', () => {
       });
 
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              // userId is null — anonymous Discord signup
-              {
-                userId: null,
-                discordUserId: 'discord-anon',
-                discordUsername: 'AnonUser',
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce(makeSelectFromWhereLimit([])); // voice session check
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        // fetchNonBenchSignups: anonymous signup with discordUserId
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              userId: null,
+              discordUserId: 'discord-anon',
+              discordUsername: 'AnonUser',
+            },
+          ]),
+        )
+        // batchFetchVoiceSessions
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
 
       await service.checkNoShows();
 
+      // Anonymous signup has no userId, so sendPhase1Reminder skips
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
@@ -251,28 +226,26 @@ describe('LiveNoShowService — phase1', () => {
       });
 
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              // No discordUserId — can't check voice
-              { userId: 10, discordUserId: null, discordUsername: null },
-            ]),
-          }),
-        })
-        // Fallback user lookup — user also has no discordId
-        .mockReturnValueOnce(makeSelectFromWhereLimit([{ discordId: null }]));
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        // fetchNonBenchSignups: no discordUserId
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            { userId: 10, discordUserId: null, discordUsername: null },
+          ]),
+        )
+        // batchResolveDiscordIds: user has no discordId
+        .mockReturnValueOnce(makeSelectFromWhere([{ id: 10, discordId: null }]))
+        // batchFetchVoiceSessions
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       await service.checkNoShows();
 
@@ -285,29 +258,27 @@ describe('LiveNoShowService — phase1', () => {
       });
 
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                userId: 10,
-                discordUserId: 'discord-10',
-                discordUsername: 'PlayerOne',
-              },
-            ]),
-          }),
-        });
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              userId: 10,
+              discordUserId: 'discord-10',
+              discordUsername: 'PlayerOne',
+            },
+          ]),
+        )
+        // batchFetchVoiceSessions
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       // Player IS active in voice
       mockVoiceAttendance.isUserActive.mockReturnValue(true);
@@ -323,32 +294,30 @@ describe('LiveNoShowService — phase1', () => {
       });
 
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                userId: 10,
-                discordUserId: 'discord-10',
-                discordUsername: 'PlayerOne',
-              },
-            ]),
-          }),
-        })
-        // Voice session with 120 seconds total (at threshold)
         .mockReturnValueOnce(
-          makeSelectFromWhereLimit([{ totalDurationSec: 120 }]),
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              userId: 10,
+              discordUserId: 'discord-10',
+              discordUsername: 'PlayerOne',
+            },
+          ]),
+        )
+        // batchFetchVoiceSessions: 120 seconds (at threshold)
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            { discordUserId: 'discord-10', totalDurationSec: 120 },
+          ]),
         );
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
@@ -364,32 +333,30 @@ describe('LiveNoShowService — phase1', () => {
       });
 
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                userId: 10,
-                discordUserId: 'discord-10',
-                discordUsername: 'PlayerOne',
-              },
-            ]),
-          }),
-        })
-        // Only 60 seconds — brief join/leave, below threshold
         .mockReturnValueOnce(
-          makeSelectFromWhereLimit([{ totalDurationSec: 60 }]),
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              userId: 10,
+              discordUserId: 'discord-10',
+              discordUsername: 'PlayerOne',
+            },
+          ]),
+        )
+        // batchFetchVoiceSessions: only 60 seconds (below threshold)
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            { discordUserId: 'discord-10', totalDurationSec: 60 },
+          ]),
         );
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
@@ -422,38 +389,35 @@ describe('LiveNoShowService — phase1', () => {
       });
 
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                userId: 10,
-                discordUserId: 'discord-10',
-                discordUsername: 'PlayerOne',
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce(makeSelectFromWhereLimit([]));
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              userId: 10,
+              discordUserId: 'discord-10',
+              discordUsername: 'PlayerOne',
+            },
+          ]),
+        )
+        // batchFetchVoiceSessions
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
 
-      // onConflictDoNothing returns empty — already exists
+      // onConflictDoNothing returns empty -- already exists
       mockDb.insert.mockReturnValue({
         values: jest.fn().mockReturnValue({
           onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([]), // empty = already sent
+            returning: jest.fn().mockResolvedValue([]),
           }),
         }),
       });
@@ -469,37 +433,32 @@ describe('LiveNoShowService — phase1', () => {
       });
 
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                userId: 10,
-                discordUserId: 'discord-10',
-                discordUsername: 'PlayerOne',
-              },
-              {
-                userId: 11,
-                discordUserId: 'discord-11',
-                discordUsername: 'PlayerTwo',
-              },
-            ]),
-          }),
-        })
-        // Voice session queries for each player
-        .mockReturnValueOnce(makeSelectFromWhereLimit([]))
-        .mockReturnValueOnce(makeSelectFromWhereLimit([]));
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              userId: 10,
+              discordUserId: 'discord-10',
+              discordUsername: 'PlayerOne',
+            },
+            {
+              userId: 11,
+              discordUserId: 'discord-11',
+              discordUsername: 'PlayerTwo',
+            },
+          ]),
+        )
+        // batchFetchVoiceSessions (single batch query for all)
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
 
@@ -523,5 +482,5 @@ describe('LiveNoShowService — phase1', () => {
     });
   });
 
-  // ─── Phase 2: creator escalation ─────────────────────────────────────────
+  // --- Phase 2: creator escalation ---
 });

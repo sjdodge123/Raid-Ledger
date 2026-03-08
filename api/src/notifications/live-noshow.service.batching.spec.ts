@@ -34,6 +34,19 @@ function makeSelectFromWhere(resolvedValue: unknown[]) {
   };
 }
 
+/**
+ * Build a select chain for batch roster query: .from().innerJoin().where()
+ */
+function makeSelectFromJoinWhere(resolvedValue: unknown[]) {
+  return {
+    from: jest.fn().mockReturnValue({
+      innerJoin: jest.fn().mockReturnValue({
+        where: jest.fn().mockResolvedValue(resolvedValue),
+      }),
+    }),
+  };
+}
+
 describe('LiveNoShowService — batching', () => {
   let service: LiveNoShowService;
   let mockDb: Record<string, jest.Mock>;
@@ -43,28 +56,6 @@ describe('LiveNoShowService — batching', () => {
   };
   let mockCronJobService: { executeWithTracking: jest.Mock };
   let mockVoiceAttendance: { isUserActive: jest.Mock };
-
-  const makeEvent = (
-    overrides: Partial<{
-      id: number;
-      title: string;
-      creatorId: number;
-      startTime: Date;
-      endTime: Date;
-    }> = {},
-  ) => {
-    const startTime =
-      overrides.startTime ?? new Date(Date.now() - 12 * 60 * 1000);
-    const endTime =
-      overrides.endTime ?? new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
-    return {
-      id: overrides.id ?? 42,
-      title: overrides.title ?? 'Raid Night',
-      creatorId: overrides.creatorId ?? 1,
-      startTime,
-      endTime,
-    };
-  };
 
   beforeEach(async () => {
     mockDb = {
@@ -100,43 +91,36 @@ describe('LiveNoShowService — batching', () => {
     service = module.get<LiveNoShowService>(LiveNoShowService);
   });
 
-  // ─── checkNoShows (cron entry point) ─────────────────────────────────────
+  // --- checkNoShows (cron entry point) ---
 
   describe('Phase sequencing', () => {
     it('should run both Phase 1 and Phase 2 when event is past 15 min mark', async () => {
-      // 16 min old — past both thresholds
+      // 16 min old -- past both thresholds
       const startTime = new Date(Date.now() - 16 * 60 * 1000);
       const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
       mockDb.select
         // findLiveEventsInNoShowWindow
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: 42,
-                title: 'Raid',
-                creatorId: 1,
-                duration: [startTime, endTime],
-              },
-            ]),
-          }),
-        })
-        // Phase 2: hasReminderBeenSent — already escalated, skip rest of Phase 2
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: 42,
+              title: 'Raid',
+              creatorId: 1,
+              duration: [startTime, endTime],
+            },
+          ]),
+        )
+        // Phase 2: hasReminderBeenSent -- already escalated, skip rest of Phase 2
         .mockReturnValueOnce(
           jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ id: 99 }]))(),
         )
-        // Phase 1: signups query
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([]),
-          }),
-        });
+        // Phase 1: fetchNonBenchSignups
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       await service.checkNoShows();
 
-      // Phase 2 dedup check should have been called (hasReminderBeenSent)
-      // Phase 1 signups query should also have been called
+      // Phase 2 dedup check + Phase 1 signups query + findLiveEvents
       expect(mockDb.select).toHaveBeenCalledTimes(3);
     });
 
@@ -146,34 +130,28 @@ describe('LiveNoShowService — batching', () => {
 
       mockDb.select
         // findLiveEventsInNoShowWindow
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: 42,
-                title: 'Raid',
-                creatorId: 1,
-                duration: [startTime, endTime],
-              },
-            ]),
-          }),
-        })
-        // Phase 1: signups query
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([]),
-          }),
-        });
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: 42,
+              title: 'Raid',
+              creatorId: 1,
+              duration: [startTime, endTime],
+            },
+          ]),
+        )
+        // Phase 1: fetchNonBenchSignups
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       await service.checkNoShows();
 
-      // Only findLiveEventsInNoShowWindow + Phase 1 signups query (no Phase 2 dedup check)
+      // findLiveEvents + Phase 1 signups query (no Phase 2 dedup check)
       expect(mockDb.select).toHaveBeenCalledTimes(2);
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
   });
 
-  // ─── Multi-player Phase 2 batching ───────────────────────────────────────
+  // --- Multi-player Phase 2 batching ---
 
   describe('Phase 2 multi-player batching', () => {
     it('should batch multiple absent players into a single creator DM', async () => {
@@ -182,90 +160,55 @@ describe('LiveNoShowService — batching', () => {
 
       const selectCalls: jest.Mock[] = [
         // findLiveEventsInNoShowWindow
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: 42,
-                title: 'Raid Night',
-                creatorId: 1,
-                duration: [startTime, endTime],
-              },
-            ]),
-          }),
-        }),
-        // hasReminderBeenSent (escalation) — not sent
+        jest.fn().mockReturnValue(
+          makeSelectFromWhere([
+            {
+              id: 42,
+              title: 'Raid Night',
+              creatorId: 1,
+              duration: [startTime, endTime],
+            },
+          ]),
+        ),
+        // hasReminderBeenSent (escalation) -- not sent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
-        // getPhase1RemindedUserIds — two players
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest
-              .fn()
-              .mockResolvedValue([{ userId: 10 }, { userId: 11 }]),
-          }),
-        }),
-        // Batch-fetch discord IDs for reminded users
+        // getPhase1RemindedUserIds -- two players
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhere([{ userId: 10 }, { userId: 11 }]),
+          ),
+        // fetchPhase2Data: batch discord IDs
         jest.fn().mockReturnValue(
           makeSelectFromWhere([
             { id: 10, discordId: 'discord-10' },
             { id: 11, discordId: 'discord-11' },
           ]),
         ),
-        // Batch-fetch voice sessions — both absent
+        // fetchPhase2Data: batch voice sessions -- both absent
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
-        // getPlayerDisplayInfo for player 10: user
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhereLimit([
-              { username: 'PlayerOne', displayName: 'PlayerOne' },
-            ]),
-          ),
-        // getPlayerDisplayInfo for player 10: roster assignment
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            innerJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue([{ role: 'Tank' }]),
-              }),
-            }),
-          }),
-        }),
-        // getPlayerDisplayInfo for player 11: user
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhereLimit([
-              { username: 'PlayerTwo', displayName: 'PlayerTwo' },
-            ]),
-          ),
-        // getPlayerDisplayInfo for player 11: roster assignment
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            innerJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue([{ role: 'Healer' }]),
-              }),
-            }),
-          }),
-        }),
-        // Phase 1: signups query
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([]),
-          }),
-        }),
+        // batchFetchPlayerDisplayInfo: batch user lookup
+        jest.fn().mockReturnValue(
+          makeSelectFromWhere([
+            { id: 10, username: 'PlayerOne', displayName: 'PlayerOne' },
+            { id: 11, username: 'PlayerTwo', displayName: 'PlayerTwo' },
+          ]),
+        ),
+        // batchFetchPlayerDisplayInfo: batch roster assignment
+        jest.fn().mockReturnValue(
+          makeSelectFromJoinWhere([
+            { userId: 10, role: 'Tank' },
+            { userId: 11, role: 'Healer' },
+          ]),
+        ),
+        // Phase 1: fetchNonBenchSignups
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
       ];
 
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m)
-          return {
-            from: jest
-              .fn()
-              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-          };
+        if (!m) return makeSelectFromWhere([]);
         return m() as unknown;
       });
 
@@ -304,83 +247,48 @@ describe('LiveNoShowService — batching', () => {
       const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
       const selectCalls: jest.Mock[] = [
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: 42,
-                title: 'Raid Night',
-                creatorId: 1,
-                duration: [startTime, endTime],
-              },
-            ]),
-          }),
-        }),
+        jest.fn().mockReturnValue(
+          makeSelectFromWhere([
+            {
+              id: 42,
+              title: 'Raid Night',
+              creatorId: 1,
+              duration: [startTime, endTime],
+            },
+          ]),
+        ),
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])), // hasReminderBeenSent
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest
-              .fn()
-              .mockResolvedValue([{ userId: 10 }, { userId: 11 }]),
-          }),
-        }),
-        // Batch-fetch discord IDs for reminded users
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhere([{ userId: 10 }, { userId: 11 }]),
+          ),
+        // fetchPhase2Data: batch discord IDs
         jest.fn().mockReturnValue(
           makeSelectFromWhere([
             { id: 10, discordId: 'discord-10' },
             { id: 11, discordId: 'discord-11' },
           ]),
         ),
-        // Batch-fetch voice sessions — both absent
+        // fetchPhase2Data: batch voice sessions
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhereLimit([
-              { username: 'Alpha', displayName: 'Alpha' },
-            ]),
-          ),
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            innerJoin: jest.fn().mockReturnValue({
-              where: jest
-                .fn()
-                .mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
-            }),
-          }),
-        }),
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhereLimit([
-              { username: 'Beta', displayName: 'Beta' },
-            ]),
-          ),
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            innerJoin: jest.fn().mockReturnValue({
-              where: jest
-                .fn()
-                .mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
-            }),
-          }),
-        }),
-        jest.fn().mockReturnValue({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        }),
+        // batchFetchPlayerDisplayInfo: users
+        jest.fn().mockReturnValue(
+          makeSelectFromWhere([
+            { id: 10, username: 'Alpha', displayName: 'Alpha' },
+            { id: 11, username: 'Beta', displayName: 'Beta' },
+          ]),
+        ),
+        // batchFetchPlayerDisplayInfo: roster assignments
+        jest.fn().mockReturnValue(makeSelectFromJoinWhere([])),
+        // Phase 1: fetchNonBenchSignups
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
       ];
 
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m)
-          return {
-            from: jest
-              .fn()
-              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-          };
+        if (!m) return makeSelectFromWhere([]);
         return m() as unknown;
       });
 
@@ -407,115 +315,85 @@ describe('LiveNoShowService — batching', () => {
     });
   });
 
-  // ─── Edge cases ──────────────────────────────────────────────────────────
+  // --- Edge cases ---
 
   describe('edge cases', () => {
     it('should skip Phase 1 for players without discordUserId', async () => {
-      const event = makeEvent({
-        startTime: new Date(Date.now() - 11 * 60 * 1000),
-      });
+      const startTime = new Date(Date.now() - 11 * 60 * 1000);
+      const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
       mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: event.id,
-                title: event.title,
-                creatorId: event.creatorId,
-                duration: [event.startTime, event.endTime],
-              },
-            ]),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest
-              .fn()
-              .mockResolvedValue([
-                { userId: 10, discordUserId: null, discordUsername: null },
-              ]),
-          }),
-        })
-        // Fallback user lookup — user also has no discordId
-        .mockReturnValueOnce(makeSelectFromWhereLimit([{ discordId: null }]));
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: 42,
+              title: 'Raid Night',
+              creatorId: 1,
+              duration: [startTime, endTime],
+            },
+          ]),
+        )
+        // fetchNonBenchSignups
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            { userId: 10, discordUserId: null, discordUsername: null },
+          ]),
+        )
+        // batchResolveDiscordIds: user has null discordId
+        .mockReturnValueOnce(makeSelectFromWhere([{ id: 10, discordId: null }]))
+        // batchFetchVoiceSessions
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       await service.checkNoShows();
 
-      // No voice presence check and no notification for users with no discordUserId
       expect(mockVoiceAttendance.isUserActive).not.toHaveBeenCalled();
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
     it('should handle checkVoicePresence gracefully when user has no discordId in users table', async () => {
-      // When user.discordId is null, checkVoicePresence returns false (treated as absent).
-      // The service still calls getPlayerDisplayInfo for the absent player and sends the nudge.
       const startTime = new Date(Date.now() - 16 * 60 * 1000);
       const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
       const selectCalls: jest.Mock[] = [
         // findLiveEventsInNoShowWindow
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: 42,
-                title: 'Raid Night',
-                creatorId: 1,
-                duration: [startTime, endTime],
-              },
-            ]),
-          }),
-        }),
-        // hasReminderBeenSent — not sent
+        jest.fn().mockReturnValue(
+          makeSelectFromWhere([
+            {
+              id: 42,
+              title: 'Raid Night',
+              creatorId: 1,
+              duration: [startTime, endTime],
+            },
+          ]),
+        ),
+        // hasReminderBeenSent -- not sent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
         // getPhase1RemindedUserIds
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([{ userId: 10 }]),
-          }),
-        }),
-        // Batch-fetch discord IDs — user has null discordId
+        jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 10 }])),
+        // fetchPhase2Data: batch discord IDs -- user has null discordId
         jest
           .fn()
           .mockReturnValue(makeSelectFromWhere([{ id: 10, discordId: null }])),
-        // Batch-fetch voice sessions — no sessions
+        // fetchPhase2Data: batch voice sessions -- no sessions
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
-        // getPlayerDisplayInfo: user lookup
+        // batchFetchPlayerDisplayInfo: user lookup
         jest
           .fn()
           .mockReturnValue(
-            makeSelectFromWhereLimit([
-              { username: 'PlayerOne', displayName: 'PlayerOne' },
+            makeSelectFromWhere([
+              { id: 10, username: 'PlayerOne', displayName: 'PlayerOne' },
             ]),
           ),
-        // getPlayerDisplayInfo: roster assignment
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            innerJoin: jest.fn().mockReturnValue({
-              where: jest
-                .fn()
-                .mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
-            }),
-          }),
-        }),
-        // Phase 1 signups
-        jest.fn().mockReturnValue({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        }),
+        // batchFetchPlayerDisplayInfo: roster assignment
+        jest.fn().mockReturnValue(makeSelectFromJoinWhere([])),
+        // Phase 1: fetchNonBenchSignups
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
       ];
 
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m)
-          return {
-            from: jest
-              .fn()
-              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-          };
+        if (!m) return makeSelectFromWhere([]);
         return m() as unknown;
       });
 
@@ -529,7 +407,6 @@ describe('LiveNoShowService — batching', () => {
         }),
       });
 
-      // Should not throw — user with no discordId is treated as absent and included in nudge
       await service.checkNoShows();
 
       const nudgeCalls = mockNotificationService.create.mock.calls.filter(
@@ -537,70 +414,45 @@ describe('LiveNoShowService — batching', () => {
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
       expect(nudgeCalls).toHaveLength(1);
-      expect((nudgeCalls[0][0] as { userId: number }).userId).toBe(1); // creator receives nudge
+      expect((nudgeCalls[0][0] as { userId: number }).userId).toBe(1);
     });
 
     it('should handle user not found in users table during Phase 2 voice check', async () => {
-      // When user record is not found in batch, they have no discordId → treated as absent.
-      // The service still calls getPlayerDisplayInfo and sends the nudge.
       const startTime = new Date(Date.now() - 16 * 60 * 1000);
       const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
       const selectCalls: jest.Mock[] = [
         // findLiveEventsInNoShowWindow
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: 42,
-                title: 'Raid Night',
-                creatorId: 1,
-                duration: [startTime, endTime],
-              },
-            ]),
-          }),
-        }),
-        // hasReminderBeenSent — not sent
+        jest.fn().mockReturnValue(
+          makeSelectFromWhere([
+            {
+              id: 42,
+              title: 'Raid Night',
+              creatorId: 1,
+              duration: [startTime, endTime],
+            },
+          ]),
+        ),
+        // hasReminderBeenSent -- not sent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
         // getPhase1RemindedUserIds
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([{ userId: 10 }]),
-          }),
-        }),
-        // Batch-fetch discord IDs — user not found (empty result)
+        jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 10 }])),
+        // fetchPhase2Data: batch discord IDs -- user not found
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
-        // Batch-fetch voice sessions — no sessions
+        // fetchPhase2Data: batch voice sessions -- no sessions
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
-        // getPlayerDisplayInfo: user lookup (also not found — falls back to 'Unknown')
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
-        // getPlayerDisplayInfo: roster assignment
-        jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            innerJoin: jest.fn().mockReturnValue({
-              where: jest
-                .fn()
-                .mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
-            }),
-          }),
-        }),
-        // Phase 1 signups
-        jest.fn().mockReturnValue({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        }),
+        // batchFetchPlayerDisplayInfo: user lookup (not found -- falls back to 'Unknown')
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
+        // batchFetchPlayerDisplayInfo: roster assignment
+        jest.fn().mockReturnValue(makeSelectFromJoinWhere([])),
+        // Phase 1: fetchNonBenchSignups
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
       ];
 
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m)
-          return {
-            from: jest
-              .fn()
-              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-          };
+        if (!m) return makeSelectFromWhere([]);
         return m() as unknown;
       });
 
@@ -614,14 +466,12 @@ describe('LiveNoShowService — batching', () => {
         }),
       });
 
-      // Should not throw
       await service.checkNoShows();
 
       const nudgeCalls = mockNotificationService.create.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
-      // Creator still receives a nudge with "Unknown" as display name
       expect(nudgeCalls).toHaveLength(1);
       const payload = (
         nudgeCalls[0][0] as {
@@ -643,37 +493,27 @@ describe('LiveNoShowService — batching', () => {
       );
 
       mockDb.select
-        // findLiveEventsInNoShowWindow — returns 2 events
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              {
-                id: 1,
-                title: 'Event One',
-                creatorId: 10,
-                duration: [event1StartTime, event1EndTime],
-              },
-              {
-                id: 2,
-                title: 'Event Two',
-                creatorId: 20,
-                duration: [event2StartTime, event2EndTime],
-              },
-            ]),
-          }),
-        })
-        // Phase 1 for event 1: signups — no absent players
-        .mockReturnValueOnce({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        })
-        // Phase 1 for event 2: signups — no absent players
-        .mockReturnValueOnce({
-          from: jest
-            .fn()
-            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
-        });
+        // findLiveEventsInNoShowWindow -- returns 2 events
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: 1,
+              title: 'Event One',
+              creatorId: 10,
+              duration: [event1StartTime, event1EndTime],
+            },
+            {
+              id: 2,
+              title: 'Event Two',
+              creatorId: 20,
+              duration: [event2StartTime, event2EndTime],
+            },
+          ]),
+        )
+        // Phase 1 for event 1: fetchNonBenchSignups -- no players
+        .mockReturnValueOnce(makeSelectFromWhere([]))
+        // Phase 1 for event 2: fetchNonBenchSignups -- no players
+        .mockReturnValueOnce(makeSelectFromWhere([]));
 
       await service.checkNoShows();
 
