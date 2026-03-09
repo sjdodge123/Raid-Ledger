@@ -1,9 +1,11 @@
 import type { JSX } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { SteamLibraryEntryDto } from "@raid-ledger/contract";
-import type { UseInfiniteListResult } from "../../hooks/use-infinite-list";
+import { useUserSteamLibrary, useUserSteamLibraryModal } from "../../hooks/use-user-profile";
 import { formatPlaytime } from "../../lib/activity-utils";
 import { SteamIcon } from "../../components/icons/SteamIcon";
+import { Modal } from "../../components/ui/modal";
 import { InfiniteScrollSentinel } from "../../components/ui/infinite-scroll-sentinel";
 import { buildDiscordAvatarUrl } from "../../lib/avatar";
 import { useBranding } from "../../hooks/use-branding";
@@ -57,34 +59,77 @@ function SteamLibraryCard({
   );
 }
 
-/** ROK-754: Steam Library section with infinite scroll */
-export function SteamLibrarySection({
-  steamLibrary,
+/** Steam library modal with infinite scroll (ROK-745) */
+function SteamLibraryModal({
+  userId,
+  isOpen,
+  onClose,
+  total,
 }: {
-  steamLibrary: UseInfiniteListResult<SteamLibraryEntryDto>;
+  userId: number;
+  isOpen: boolean;
+  onClose: () => void;
+  total: number;
+}): JSX.Element {
+  const modal = useUserSteamLibraryModal(userId, isOpen);
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Steam Library (${total})`} maxWidth="max-w-2xl">
+      <div className="flex flex-col gap-2">
+        {modal.items.map((entry) => (
+          <SteamLibraryCard key={entry.gameId} entry={entry} />
+        ))}
+      </div>
+      {modal.items.length > 0 && (
+        <InfiniteScrollSentinel
+          sentinelRef={modal.sentinelRef}
+          isFetchingNextPage={modal.isFetchingNextPage}
+          hasNextPage={modal.hasNextPage}
+        />
+      )}
+    </Modal>
+  );
+}
+
+/** ROK-745: Steam Library section with show-10 + modal */
+export function SteamLibrarySection({
+  userId,
+}: {
+  userId: number;
 }): JSX.Element | null {
-  if (steamLibrary.items.length === 0 && !steamLibrary.isLoading) return null;
+  const { data, isLoading } = useUserSteamLibrary(userId);
+  const [showModal, setShowModal] = useState(false);
+  const items = data?.data ?? [];
+  const total = data?.meta?.total ?? 0;
+
+  if (items.length === 0 && !isLoading) return null;
   return (
     <div className="user-profile-section">
       <div className="flex items-center gap-2 mb-3">
         <SteamIcon className="w-5 h-5 text-muted" />
         <h2 className="user-profile-section-title mb-0">
           Steam Library
-          {steamLibrary.total > 0 ? ` (${steamLibrary.total})` : ""}
+          {total > 0 ? ` (${total})` : ""}
         </h2>
       </div>
       <div className="flex flex-col gap-2">
-        {steamLibrary.items.map((entry) => (
+        {items.map((entry) => (
           <SteamLibraryCard key={entry.gameId} entry={entry} />
         ))}
       </div>
-      {steamLibrary.items.length > 0 && (
-        <InfiniteScrollSentinel
-          sentinelRef={steamLibrary.sentinelRef}
-          isFetchingNextPage={steamLibrary.isFetchingNextPage}
-          hasNextPage={steamLibrary.hasNextPage}
-        />
+      {total > 10 && (
+        <button
+          onClick={() => setShowModal(true)}
+          className="mt-3 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+        >
+          Show All ({total})
+        </button>
       )}
+      <SteamLibraryModal
+        userId={userId}
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        total={total}
+      />
     </div>
   );
 }

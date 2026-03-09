@@ -183,6 +183,10 @@ export const GameInterestResponseSchema = z.object({
     players: z.array(InterestPlayerPreviewSchema).optional(),
     /** Source of the interest: manual, steam, or discord (ROK-444) */
     source: z.enum(['manual', 'steam', 'discord']).optional(),
+    /** ROK-745: Steam owners — first N players who own this game on Steam */
+    owners: z.array(InterestPlayerPreviewSchema).optional(),
+    /** ROK-745: Total count of Steam owners */
+    ownerCount: z.number().optional(),
 });
 
 export type GameInterestResponseDto = z.infer<typeof GameInterestResponseSchema>;

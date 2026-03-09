@@ -133,6 +133,30 @@ function describeGameInterestResponseSchemaSourceField() {
       expect(result.success).toBe(true);
     }
   });
+
+  it('accepts owners and ownerCount fields (ROK-745)', () => {
+    const result = GameInterestResponseSchema.safeParse({
+      wantToPlay: true,
+      count: 3,
+      owners: [
+        { id: 1, username: 'Player1', avatar: null, customAvatarUrl: null, discordId: '111' },
+      ],
+      ownerCount: 5,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('owners and ownerCount are optional', () => {
+    const result = GameInterestResponseSchema.safeParse({
+      wantToPlay: false,
+      count: 0,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.owners).toBeUndefined();
+      expect(result.data.ownerCount).toBeUndefined();
+    }
+  });
 }
 describe('GameInterestResponseSchema — source field (ROK-444)', () =>
   describeGameInterestResponseSchemaSourceField());
@@ -141,9 +165,12 @@ describe('GameInterestResponseSchema — source field (ROK-444)', () =>
 
 function describeIgdbControllerGetGameInterestSourceField() {
   /**
-   * getGameInterest uses Promise.all for 3 concurrent queries.
-   * The flat mock can handle this because each query terminates at a different
-   * method call (count at .where(), user interest at .limit(), players at .limit()).
+   * getGameInterest uses Promise.all for 5 concurrent queries:
+   *   1. getInterestCount: .where(eq(...)) terminal
+   *   2. getUserInterestSource: .where(and(...)).limit(1)
+   *   3. getInterestedPlayers: .where(eq(...)).orderBy(...).limit(8)
+   *   4. getSteamOwnerCount: .where(and(...)) terminal
+   *   5. getSteamOwners: .where(and(...)).orderBy(...).limit(8)
    */
 
   function buildInterestDb(
@@ -167,17 +194,15 @@ function describeIgdbControllerGetGameInterestSourceField() {
       db[m] = jest.fn().mockReturnThis();
     }
 
-    // Count query terminates at .where() (first .where call after the chain starts)
-    // User interest query terminates at .limit(1)
-    // getInterestedPlayers terminates at .limit(8)
+    // .where() calls: 1=count(terminal), 2=userInterest(chain),
+    //   3=interestedPlayers(chain), 4=steamOwnerCount(terminal), 5=steamOwners(chain)
     let whereCallCount = 0;
     db.where = jest.fn().mockImplementation(() => {
       whereCallCount++;
-      if (whereCallCount === 1) {
-        // Count query — terminates here
+      if (whereCallCount === 1 || whereCallCount === 4) {
+        // Count queries — terminal
         return Promise.resolve([{ count: source ? 1 : 0 }]);
       }
-      // Other .where calls: continue the chain
       return db;
     });
 
@@ -188,7 +213,7 @@ function describeIgdbControllerGetGameInterestSourceField() {
         // User interest query
         return Promise.resolve(source ? [{ source }] : []);
       }
-      // getInterestedPlayers
+      // getInterestedPlayers and getSteamOwners
       return Promise.resolve([]);
     });
 
@@ -228,6 +253,15 @@ function describeIgdbControllerGetGameInterestSourceField() {
     const result = await ctrl.getGameInterest(42, mockAuthReq(1));
 
     expect(typeof result.count).toBe('number');
+  });
+
+  it('returns ownerCount and owners fields (ROK-745)', async () => {
+    const db = buildInterestDb('manual');
+    const ctrl = await createController(buildMockService(db));
+    const result = await ctrl.getGameInterest(10, mockAuthReq(1));
+
+    expect(typeof result.ownerCount).toBe('number');
+    expect(Array.isArray(result.owners)).toBe(true);
   });
 }
 describe('IgdbController.getGameInterest — source field (ROK-444)', () =>

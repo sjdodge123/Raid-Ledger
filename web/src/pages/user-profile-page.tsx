@@ -1,8 +1,10 @@
 import type { JSX } from "react";
+import { useState } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import {
   useUserProfile,
   useUserHeartedGames,
+  useUserHeartedGamesModal,
   useUserSteamLibrary,
 } from "../hooks/use-user-profile";
 import { useGameRegistry } from "../hooks/use-game-registry";
@@ -11,7 +13,7 @@ import { formatDistanceToNow } from "date-fns";
 import { resolveAvatar, toAvatarUser } from "../lib/avatar";
 import { UserEventSignups } from "../components/profile/UserEventSignups";
 import type { UserProfileDto } from "@raid-ledger/contract";
-import type { UseInfiniteListResult } from "../hooks/use-infinite-list";
+import { Modal } from "../components/ui/modal";
 import { InfiniteScrollSentinel } from "../components/ui/infinite-scroll-sentinel";
 import {
   HeartedGameCard,
@@ -54,36 +56,73 @@ function UserNotFound(): JSX.Element {
   );
 }
 
-/** Hearted games list section with infinite scroll (ROK-754) */
-function HeartedGamesSection({
-  hearted,
+/** Hearted games modal with infinite scroll (ROK-745) */
+function HeartedGamesModal({
+  userId,
+  isOpen,
+  onClose,
+  total,
 }: {
-  hearted: UseInfiniteListResult<{
-    id: number;
-    name: string;
-    igdbId: number | null;
-    slug: string;
-    coverUrl: string | null;
-  }>;
-}): JSX.Element | null {
-  if (hearted.items.length === 0 && !hearted.isLoading) return null;
+  userId: number;
+  isOpen: boolean;
+  onClose: () => void;
+  total: number;
+}): JSX.Element {
+  const modal = useUserHeartedGamesModal(userId, isOpen);
   return (
-    <div className="user-profile-section">
-      <h2 className="user-profile-section-title">
-        Interested In{hearted.total > 0 ? ` (${hearted.total})` : ""}
-      </h2>
+    <Modal isOpen={isOpen} onClose={onClose} title={`Interested In (${total})`} maxWidth="max-w-2xl">
       <div className="flex flex-col gap-2">
-        {hearted.items.map((game) => (
+        {modal.items.map((game) => (
           <HeartedGameCard key={game.id} game={game} />
         ))}
       </div>
-      {hearted.items.length > 0 && (
+      {modal.items.length > 0 && (
         <InfiniteScrollSentinel
-          sentinelRef={hearted.sentinelRef}
-          isFetchingNextPage={hearted.isFetchingNextPage}
-          hasNextPage={hearted.hasNextPage}
+          sentinelRef={modal.sentinelRef}
+          isFetchingNextPage={modal.isFetchingNextPage}
+          hasNextPage={modal.hasNextPage}
         />
       )}
+    </Modal>
+  );
+}
+
+/** Hearted games list section with show-10 + modal (ROK-745) */
+function HeartedGamesSection({
+  userId,
+}: {
+  userId: number;
+}): JSX.Element | null {
+  const { data, isLoading } = useUserHeartedGames(userId);
+  const [showModal, setShowModal] = useState(false);
+  const items = data?.data ?? [];
+  const total = data?.meta?.total ?? 0;
+
+  if (items.length === 0 && !isLoading) return null;
+  return (
+    <div className="user-profile-section">
+      <h2 className="user-profile-section-title">
+        Interested In{total > 0 ? ` (${total})` : ""}
+      </h2>
+      <div className="flex flex-col gap-2">
+        {items.map((game) => (
+          <HeartedGameCard key={game.id} game={game} />
+        ))}
+      </div>
+      {total > 10 && (
+        <button
+          onClick={() => setShowModal(true)}
+          className="mt-3 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+        >
+          Show All ({total})
+        </button>
+      )}
+      <HeartedGamesModal
+        userId={userId}
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        total={total}
+      />
     </div>
   );
 }
@@ -104,8 +143,6 @@ function ProfileContent({
     addSuffix: true,
   });
   const profileAvatar = resolveAvatar(toAvatarUser(profile));
-  const hearted = useUserHeartedGames(numericId);
-  const steamLibrary = useUserSteamLibrary(numericId);
   return (
     <div className="user-profile-page">
       <div className="user-profile-card">
@@ -121,8 +158,8 @@ function ProfileContent({
         {profile.characters.length > 0 && (
           <GroupedCharacters characters={profile.characters} games={games} />
         )}
-        <HeartedGamesSection hearted={hearted} />
-        <SteamLibrarySection steamLibrary={steamLibrary} />
+        {numericId && <HeartedGamesSection userId={numericId} />}
+        {numericId && <SteamLibrarySection userId={numericId} />}
       </div>
     </div>
   );

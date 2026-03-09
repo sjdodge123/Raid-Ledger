@@ -3,6 +3,8 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { GameInterestResponseDto } from '@raid-ledger/contract';
 
+type Db = PostgresJsDatabase<typeof schema>;
+
 /**
  * Get interest count for a game.
  * @param db - Database connection
@@ -190,4 +192,64 @@ export async function removeInterest(
     getInterestedPlayers(db, gameId),
   ]);
   return { wantToPlay: false, count, players };
+}
+
+/**
+ * Count users who own a game via Steam (source = 'steam_library').
+ * @param db - Database connection
+ * @param gameId - Game ID
+ * @returns Owner count
+ */
+export async function getSteamOwnerCount(
+  db: Db,
+  gameId: number,
+): Promise<number> {
+  const [result] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, gameId),
+        eq(schema.gameInterests.source, 'steam_library'),
+      ),
+    );
+  return result?.count ?? 0;
+}
+
+/**
+ * Fetch first 8 Steam owners for avatar display (ROK-745).
+ * @param db - Database connection
+ * @param gameId - Game ID
+ * @returns Player preview list
+ */
+export async function getSteamOwners(
+  db: Db,
+  gameId: number,
+) {
+  const rows = await db
+    .select({
+      id: schema.users.id,
+      username: schema.users.username,
+      avatar: schema.users.avatar,
+      customAvatarUrl: schema.users.customAvatarUrl,
+      discordId: schema.users.discordId,
+    })
+    .from(schema.gameInterests)
+    .innerJoin(schema.users, eq(schema.gameInterests.userId, schema.users.id))
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, gameId),
+        eq(schema.gameInterests.source, 'steam_library'),
+      ),
+    )
+    .orderBy(schema.gameInterests.createdAt)
+    .limit(8);
+
+  return rows.map((p) => ({
+    id: p.id,
+    username: p.username,
+    avatar: p.avatar,
+    customAvatarUrl: p.customAvatarUrl,
+    discordId: p.discordId,
+  }));
 }

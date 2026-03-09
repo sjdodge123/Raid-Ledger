@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { UserProfilePage } from "./user-profile-page";
@@ -80,17 +81,12 @@ function setupDefaultProfileMocks() {
   } as unknown as ReturnType<typeof useGameRegistryHook.useGameRegistry>);
 
   vi.spyOn(useUserProfileHook, "useUserHeartedGames").mockReturnValue({
-    items: [],
-    total: 0,
+    data: { data: [], meta: { total: 0, page: 1, limit: 10, hasMore: false } },
     isLoading: false,
-    isFetchingNextPage: false,
-    hasNextPage: false,
     error: null,
-    sentinelRef: () => {},
-    refetch: async () => {},
   } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGames>);
 
-  vi.spyOn(useUserProfileHook, "useUserSteamLibrary").mockReturnValue({
+  vi.spyOn(useUserProfileHook, "useUserHeartedGamesModal").mockReturnValue({
     items: [],
     total: 0,
     isLoading: false,
@@ -99,7 +95,24 @@ function setupDefaultProfileMocks() {
     error: null,
     sentinelRef: () => {},
     refetch: async () => {},
+  } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGamesModal>);
+
+  vi.spyOn(useUserProfileHook, "useUserSteamLibrary").mockReturnValue({
+    data: { data: [], meta: { total: 0, page: 1, limit: 10, hasMore: false } },
+    isLoading: false,
+    error: null,
   } as unknown as ReturnType<typeof useUserProfileHook.useUserSteamLibrary>);
+
+  vi.spyOn(useUserProfileHook, "useUserSteamLibraryModal").mockReturnValue({
+    items: [],
+    total: 0,
+    isLoading: false,
+    isFetchingNextPage: false,
+    hasNextPage: false,
+    error: null,
+    sentinelRef: () => {},
+    refetch: async () => {},
+  } as unknown as ReturnType<typeof useUserProfileHook.useUserSteamLibraryModal>);
 
   vi.spyOn(useUserProfileHook, "useUserEventSignups").mockReturnValue({
     data: { data: [], total: 0 },
@@ -137,7 +150,6 @@ const renderWithProviders = (userId = "1") => {
 describe("AC1: Characters grouped by game with section headers — sub 1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
@@ -158,15 +170,10 @@ describe("AC1: Characters grouped by game with section headers — sub 1", () =>
 
     renderWithProviders();
 
-    // Verify game section headers exist
     expect(screen.getByText("World of Warcraft")).toBeInTheDocument();
     expect(screen.getByText("Final Fantasy XIV")).toBeInTheDocument();
-
-    // Verify character counts in headers
     expect(screen.getByText("2 characters")).toBeInTheDocument();
     expect(screen.getByText("1 character")).toBeInTheDocument();
-
-    // Verify characters appear in correct sections
     expect(screen.getByText("WowChar1")).toBeInTheDocument();
     expect(screen.getByText("WowChar2")).toBeInTheDocument();
     expect(screen.getByText("FF14Char")).toBeInTheDocument();
@@ -176,7 +183,6 @@ describe("AC1: Characters grouped by game with section headers — sub 1", () =>
 describe("AC1: Characters grouped by game with section headers — sub 2", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
@@ -216,7 +222,6 @@ describe("AC1: Characters grouped by game with section headers — sub 2", () =>
 
     renderWithProviders();
 
-    // Verify main Characters section header with total
     expect(screen.getByText("Characters (3)")).toBeInTheDocument();
   });
 });
@@ -224,7 +229,6 @@ describe("AC1: Characters grouped by game with section headers — sub 2", () =>
 describe("AC2: Styling matches reference (My Characters page) — sub 1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
@@ -241,7 +245,6 @@ describe("AC2: Styling matches reference (My Characters page) — sub 1", () => 
 
     const { container } = renderWithProviders();
 
-    // Verify divider line exists
     const divider = container.querySelector(".border-edge-subtle");
     expect(divider).toBeInTheDocument();
   });
@@ -250,7 +253,6 @@ describe("AC2: Styling matches reference (My Characters page) — sub 1", () => 
 describe("AC2: Styling matches reference (My Characters page) — sub 2", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
@@ -267,108 +269,62 @@ describe("AC2: Styling matches reference (My Characters page) — sub 2", () => 
 
     renderWithProviders();
 
-    // Verify section uses user-profile-section class - find the Characters section
     const charactersSection = screen
       .getByText("Characters (1)")
       .closest(".user-profile-section");
     expect(charactersSection).toBeInTheDocument();
 
-    // Verify section title uses user-profile-section-title class
     const sectionTitle = screen.getByText("Characters (1)");
     expect(sectionTitle).toHaveClass("user-profile-section-title");
   });
 });
 
-describe("AC3: Characters sorted within groups (main first, then displayOrder) — part 1 (sub 1)", () => {
+describe("AC3: Characters sorted (main first, displayOrder) — part 1 (sub 1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
   it("sorts main character first within game group", () => {
     const profile = createMockProfile({
       characters: [
-        createMockCharacter({
-          id: "char-1",
-          gameId: 1,
-          name: "Alt1",
-          isMain: false,
-          displayOrder: 1,
-        }),
-        createMockCharacter({
-          id: "char-2",
-          gameId: 1,
-          name: "MainChar",
-          isMain: true,
-          displayOrder: 2,
-        }),
-        createMockCharacter({
-          id: "char-3",
-          gameId: 1,
-          name: "Alt2",
-          isMain: false,
-          displayOrder: 3,
-        }),
+        createMockCharacter({ id: "char-1", gameId: 1, name: "Alt1", isMain: false, displayOrder: 1 }),
+        createMockCharacter({ id: "char-2", gameId: 1, name: "MainChar", isMain: true, displayOrder: 2 }),
+        createMockCharacter({ id: "char-3", gameId: 1, name: "Alt2", isMain: false, displayOrder: 3 }),
       ],
     });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     renderWithProviders();
 
-    // Get all character links
     const characterLinks = screen
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-    // First character should be the main
     expect(within(characterLinks[0]).getByText("MainChar")).toBeInTheDocument();
   });
 });
 
-describe("AC3: Characters sorted within groups (main first, then displayOrder) — part 1 (sub 2)", () => {
+describe("AC3: Characters sorted (main first, displayOrder) — part 1 (sub 2)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
   it("sorts by displayOrder when no main character", () => {
     const profile = createMockProfile({
       characters: [
-        createMockCharacter({
-          id: "char-1",
-          gameId: 1,
-          name: "Char3",
-          isMain: false,
-          displayOrder: 3,
-        }),
-        createMockCharacter({
-          id: "char-2",
-          gameId: 1,
-          name: "Char1",
-          isMain: false,
-          displayOrder: 1,
-        }),
-        createMockCharacter({
-          id: "char-3",
-          gameId: 1,
-          name: "Char2",
-          isMain: false,
-          displayOrder: 2,
-        }),
+        createMockCharacter({ id: "char-1", gameId: 1, name: "Char3", isMain: false, displayOrder: 3 }),
+        createMockCharacter({ id: "char-2", gameId: 1, name: "Char1", isMain: false, displayOrder: 1 }),
+        createMockCharacter({ id: "char-3", gameId: 1, name: "Char2", isMain: false, displayOrder: 2 }),
       ],
     });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     renderWithProviders();
@@ -377,7 +333,6 @@ describe("AC3: Characters sorted within groups (main first, then displayOrder) �
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-    // Verify order by displayOrder
     expect(within(characterLinks[0]).getByText("Char1")).toBeInTheDocument();
     expect(within(characterLinks[1]).getByText("Char2")).toBeInTheDocument();
     expect(within(characterLinks[2]).getByText("Char3")).toBeInTheDocument();
@@ -387,57 +342,30 @@ describe("AC3: Characters sorted within groups (main first, then displayOrder) �
 describe("UserProfilePage - Game Grouping (ROK-308) — part 4", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
-  describe("AC3: Characters sorted within groups (main first, then displayOrder) — part 2", () => {
+  describe("AC3: Characters sorted (main first, displayOrder) — part 2", () => {
     it("sorts main first, then remaining by displayOrder", () => {
       const profile = createMockProfile({
         characters: [
-          createMockCharacter({
-            id: "char-1",
-            gameId: 1,
-            name: "Alt2",
-            isMain: false,
-            displayOrder: 3,
-          }),
-          createMockCharacter({
-            id: "char-2",
-            gameId: 1,
-            name: "MainChar",
-            isMain: true,
-            displayOrder: 2,
-          }),
-          createMockCharacter({
-            id: "char-3",
-            gameId: 1,
-            name: "Alt1",
-            isMain: false,
-            displayOrder: 1,
-          }),
+          createMockCharacter({ id: "char-1", gameId: 1, name: "Alt2", isMain: false, displayOrder: 3 }),
+          createMockCharacter({ id: "char-2", gameId: 1, name: "MainChar", isMain: true, displayOrder: 2 }),
+          createMockCharacter({ id: "char-3", gameId: 1, name: "Alt1", isMain: false, displayOrder: 1 }),
         ],
       });
 
       vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-        data: profile,
-        isLoading: false,
-        error: null,
+        data: profile, isLoading: false, error: null,
       } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
       renderWithProviders();
 
       const characterLinks = screen
         .getAllByRole("link")
-        .filter((link) =>
-          link.getAttribute("href")?.startsWith("/characters/"),
-        );
+        .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-      // Main should be first
-      expect(
-        within(characterLinks[0]).getByText("MainChar"),
-      ).toBeInTheDocument();
-      // Then alts by displayOrder
+      expect(within(characterLinks[0]).getByText("MainChar")).toBeInTheDocument();
       expect(within(characterLinks[1]).getByText("Alt1")).toBeInTheDocument();
       expect(within(characterLinks[2]).getByText("Alt2")).toBeInTheDocument();
     });
@@ -447,9 +375,9 @@ describe("UserProfilePage - Game Grouping (ROK-308) — part 4", () => {
 describe("AC4: Section repositioned (Characters below Events)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
+
   it("renders sections in correct order: Events, Characters, Hearted Games", () => {
     const profile = createMockProfile({
       characters: [
@@ -458,42 +386,21 @@ describe("AC4: Section repositioned (Characters below Events)", () => {
     });
 
     const heartedGames: UserHeartedGameDto[] = [
-      {
-        id: 1,
-        igdbId: 12345,
-        name: "Final Fantasy XIV",
-        slug: "final-fantasy-xiv",
-        coverUrl: null,
-      },
+      { id: 1, igdbId: 12345, name: "Final Fantasy XIV", slug: "final-fantasy-xiv", coverUrl: null },
     ];
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     vi.spyOn(useUserProfileHook, "useUserHeartedGames").mockReturnValue({
-      items: heartedGames,
-      total: heartedGames.length,
+      data: {
+        data: heartedGames,
+        meta: { total: heartedGames.length, page: 1, limit: 10, hasMore: false },
+      },
       isLoading: false,
-      isFetchingNextPage: false,
-      hasNextPage: false,
       error: null,
-      sentinelRef: () => {},
-      refetch: async () => {},
     } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGames>);
-
-    vi.spyOn(useUserProfileHook, "useUserSteamLibrary").mockReturnValue({
-      items: [],
-      total: 0,
-      isLoading: false,
-      isFetchingNextPage: false,
-      hasNextPage: false,
-      error: null,
-      sentinelRef: () => {},
-      refetch: async () => {},
-    } as unknown as ReturnType<typeof useUserProfileHook.useUserSteamLibrary>);
 
     vi.spyOn(useUserProfileHook, "useUserEventSignups").mockReturnValue({
       data: { data: [], total: 0 },
@@ -509,7 +416,6 @@ describe("AC4: Section repositioned (Characters below Events)", () => {
         section.querySelector(".user-profile-section-title")?.textContent,
     );
 
-    // Events should come before Characters
     const eventsIndex = sectionTitles.indexOf("Upcoming Events");
     const charactersIndex = sectionTitles.indexOf("Characters (1)");
     const heartedIndex = sectionTitles.indexOf("Interested In (1)");
@@ -522,23 +428,17 @@ describe("AC4: Section repositioned (Characters below Events)", () => {
 describe("AC5: Edge cases — part 1 (sub 1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
   it("hides characters section when user has zero characters", () => {
-    const profile = createMockProfile({
-      characters: [],
-    });
+    const profile = createMockProfile({ characters: [] });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     renderWithProviders();
-
     expect(screen.queryByText(/Characters/)).not.toBeInTheDocument();
   });
 
@@ -551,14 +451,11 @@ describe("AC5: Edge cases — part 1 (sub 1)", () => {
     });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     renderWithProviders();
 
-    // Should only have one game section header
     expect(screen.getByText("World of Warcraft")).toBeInTheDocument();
     expect(screen.queryByText("Final Fantasy XIV")).not.toBeInTheDocument();
     expect(screen.getByText("2 characters")).toBeInTheDocument();
@@ -568,7 +465,6 @@ describe("AC5: Edge cases — part 1 (sub 1)", () => {
 describe("AC5: Edge cases — part 1 (sub 2)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
@@ -583,29 +479,24 @@ describe("AC5: Edge cases — part 1 (sub 2)", () => {
     });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     renderWithProviders();
 
-    // All three game sections should render
     expect(screen.getByText("World of Warcraft")).toBeInTheDocument();
     expect(screen.getByText("Final Fantasy XIV")).toBeInTheDocument();
     expect(screen.getByText("Elder Scrolls Online")).toBeInTheDocument();
 
-    // Verify counts
     const singleCharTexts = screen.getAllByText("1 character");
-    expect(singleCharTexts).toHaveLength(2); // WoW and ESO
-    expect(screen.getByText("2 characters")).toBeInTheDocument(); // FF14
+    expect(singleCharTexts).toHaveLength(2);
+    expect(screen.getByText("2 characters")).toBeInTheDocument();
   });
 });
 
 describe("AC5: Edge cases — part 2 (sub 1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
@@ -617,14 +508,11 @@ describe("AC5: Edge cases — part 2 (sub 1)", () => {
     });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     renderWithProviders();
 
-    // Should show Unknown Game fallback
     expect(screen.getByText("Unknown Game")).toBeInTheDocument();
     expect(screen.getByText("OrphanChar")).toBeInTheDocument();
   });
@@ -633,7 +521,6 @@ describe("AC5: Edge cases — part 2 (sub 1)", () => {
 describe("AC5: Edge cases — part 2 (sub 2)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
@@ -645,12 +532,9 @@ describe("AC5: Edge cases — part 2 (sub 2)", () => {
     });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
-    // Empty game registry
     vi.spyOn(useGameRegistryHook, "useGameRegistry").mockReturnValue({
       games: [],
       isLoading: false,
@@ -659,7 +543,6 @@ describe("AC5: Edge cases — part 2 (sub 2)", () => {
 
     renderWithProviders();
 
-    // All characters should show Unknown Game
     expect(screen.getByText("Unknown Game")).toBeInTheDocument();
     expect(screen.getByText("TestChar")).toBeInTheDocument();
   });
@@ -668,7 +551,6 @@ describe("AC5: Edge cases — part 2 (sub 2)", () => {
 describe("Character card rendering — sub 1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
@@ -676,24 +558,15 @@ describe("Character card rendering — sub 1", () => {
     const profile = createMockProfile({
       characters: [
         createMockCharacter({
-          id: "char-1",
-          gameId: 1,
-          name: "DetailedChar",
-          level: 60,
-          race: "Human",
-          class: "Warrior",
-          spec: "Protection",
-          faction: "alliance",
-          effectiveRole: "tank",
-          itemLevel: 450,
+          id: "char-1", gameId: 1, name: "DetailedChar",
+          level: 60, race: "Human", class: "Warrior", spec: "Protection",
+          faction: "alliance", effectiveRole: "tank", itemLevel: 450,
         }),
       ],
     });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     renderWithProviders();
@@ -703,7 +576,6 @@ describe("Character card rendering — sub 1", () => {
     expect(screen.getByText(/Lv\.60/)).toBeInTheDocument();
     expect(screen.getByText("Human")).toBeInTheDocument();
     expect(screen.getByText("Warrior")).toBeInTheDocument();
-    // Spec is rendered with a bullet prefix "• Protection"
     expect(screen.getByText(/Protection/)).toBeInTheDocument();
     expect(screen.getByText("TANK")).toBeInTheDocument();
     expect(screen.getByText(/450 iLvl/)).toBeInTheDocument();
@@ -713,25 +585,18 @@ describe("Character card rendering — sub 1", () => {
 describe("Character card rendering — sub 2", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
   it("links to character detail page", () => {
     const profile = createMockProfile({
       characters: [
-        createMockCharacter({
-          id: "char-uuid-123",
-          gameId: 1,
-          name: "LinkChar",
-        }),
+        createMockCharacter({ id: "char-uuid-123", gameId: 1, name: "LinkChar" }),
       ],
     });
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-      data: profile,
-      isLoading: false,
-      error: null,
+      data: profile, isLoading: false, error: null,
     } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
     renderWithProviders();
@@ -744,39 +609,95 @@ describe("Character card rendering — sub 2", () => {
 describe("UserProfilePage - Game Grouping (ROK-308) — part 9", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setupDefaultProfileMocks();
   });
 
   describe("Loading and error states", () => {
     it("renders loading skeleton", () => {
       vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-        data: undefined,
-        isLoading: true,
-        error: null,
+        data: undefined, isLoading: true, error: null,
       } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
       const { container } = renderWithProviders();
 
-      expect(
-        container.querySelector(".user-profile-skeleton"),
-      ).toBeInTheDocument();
+      expect(container.querySelector(".user-profile-skeleton")).toBeInTheDocument();
       expect(container.querySelector(".skeleton-avatar")).toBeInTheDocument();
     });
 
     it("renders error state when profile not found", () => {
       vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
-        data: null,
-        isLoading: false,
-        error: new Error("Not found"),
+        data: null, isLoading: false, error: new Error("Not found"),
       } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
       renderWithProviders();
 
       expect(screen.getByText("User Not Found")).toBeInTheDocument();
-      expect(
-        screen.getByText(/doesn't exist or has been removed/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/doesn't exist or has been removed/i)).toBeInTheDocument();
     });
+  });
+});
+
+// ─── ROK-745: Show 10 + Show All modal ─────────────────────────────────────
+
+describe("ROK-745: Hearted games show-10 + modal", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupDefaultProfileMocks();
+  });
+
+  it("shows Show All button when total > 10", () => {
+    const games = Array.from({ length: 10 }, (_, i) => ({
+      id: i + 1, igdbId: i + 100, name: `Game ${i + 1}`, slug: `game-${i + 1}`, coverUrl: null,
+    }));
+
+    vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
+      data: createMockProfile(), isLoading: false, error: null,
+    } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
+
+    vi.spyOn(useUserProfileHook, "useUserHeartedGames").mockReturnValue({
+      data: {
+        data: games,
+        meta: { total: 25, page: 1, limit: 10, hasMore: true },
+      },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGames>);
+
+    renderWithProviders();
+
+    expect(screen.getByText("Show All (25)")).toBeInTheDocument();
+  });
+
+  it("hides Show All button when total <= 10", () => {
+    const games = [
+      { id: 1, igdbId: 100, name: "Game 1", slug: "game-1", coverUrl: null },
+    ];
+
+    vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
+      data: createMockProfile(), isLoading: false, error: null,
+    } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
+
+    vi.spyOn(useUserProfileHook, "useUserHeartedGames").mockReturnValue({
+      data: {
+        data: games,
+        meta: { total: 1, page: 1, limit: 10, hasMore: false },
+      },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGames>);
+
+    renderWithProviders();
+
+    expect(screen.queryByText(/Show All/)).not.toBeInTheDocument();
+  });
+
+  it("hides section when no hearted games", () => {
+    vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
+      data: createMockProfile(), isLoading: false, error: null,
+    } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
+
+    renderWithProviders();
+
+    expect(screen.queryByText(/Interested In/)).not.toBeInTheDocument();
   });
 });

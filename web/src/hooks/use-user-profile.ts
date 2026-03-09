@@ -9,10 +9,14 @@ import {
 import { useInfiniteList } from "./use-infinite-list";
 import type {
   UserProfileDto,
+  UserHeartedGamesResponseDto,
   UserEventSignupsResponseDto,
   ActivityPeriod,
   UserActivityResponseDto,
 } from "@raid-ledger/contract";
+import type { SteamLibraryResponseDto } from "@raid-ledger/contract";
+
+const PREVIEW_LIMIT = 10;
 
 /**
  * Fetch a user's public profile by ID (ROK-181).
@@ -30,30 +34,60 @@ export function useUserProfile(userId: number | undefined) {
 }
 
 /**
- * ROK-282, ROK-754: Fetch games a user has hearted (paginated, infinite scroll).
+ * ROK-745: Fetch first 10 hearted games for inline preview.
  */
 export function useUserHeartedGames(userId: number | undefined) {
-  return useInfiniteList({
-    queryKey: ["userHeartedGames", userId],
-    queryFn: async (page: number) => {
+  return useQuery<UserHeartedGamesResponseDto>({
+    queryKey: ["userHeartedGames", userId, "preview"],
+    queryFn: async () => {
       if (!userId) throw new Error("User ID required");
-      return getUserHeartedGames(userId, page, 20);
+      return getUserHeartedGames(userId, 1, PREVIEW_LIMIT);
     },
     enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
 /**
- * ROK-754: Fetch a user's Steam library (paginated, infinite scroll).
+ * ROK-745: Fetch full hearted games list (infinite scroll inside modal).
+ */
+export function useUserHeartedGamesModal(userId: number | undefined, enabled: boolean) {
+  return useInfiniteList({
+    queryKey: ["userHeartedGames", userId, "modal"],
+    queryFn: async (page: number) => {
+      if (!userId) throw new Error("User ID required");
+      return getUserHeartedGames(userId, page, 20);
+    },
+    enabled: !!userId && enabled,
+  });
+}
+
+/**
+ * ROK-745: Fetch first 10 Steam library entries for inline preview.
  */
 export function useUserSteamLibrary(userId: number | undefined) {
+  return useQuery<SteamLibraryResponseDto>({
+    queryKey: ["userSteamLibrary", userId, "preview"],
+    queryFn: async () => {
+      if (!userId) throw new Error("User ID required");
+      return getUserSteamLibrary(userId, 1, PREVIEW_LIMIT);
+    },
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * ROK-745: Fetch full Steam library (infinite scroll inside modal).
+ */
+export function useUserSteamLibraryModal(userId: number | undefined, enabled: boolean) {
   return useInfiniteList({
-    queryKey: ["userSteamLibrary", userId],
+    queryKey: ["userSteamLibrary", userId, "modal"],
     queryFn: async (page: number) => {
       if (!userId) throw new Error("User ID required");
       return getUserSteamLibrary(userId, page, 20);
     },
-    enabled: !!userId,
+    enabled: !!userId && enabled,
   });
 }
 
