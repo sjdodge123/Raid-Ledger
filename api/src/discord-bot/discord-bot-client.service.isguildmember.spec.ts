@@ -56,7 +56,7 @@ jest.mock('discord.js', () => {
       MessageContent: 128,
     },
     Events: {
-      ClientReady: 'ready',
+      ClientReady: 'clientReady',
       Error: 'error',
     },
     PermissionsBitField: {

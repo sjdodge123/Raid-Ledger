@@ -3,6 +3,7 @@ import type { BindingPurpose } from '@raid-ledger/contract';
 import {
   SlashCommandBuilder,
   ChannelType,
+  MessageFlags,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
@@ -84,7 +85,7 @@ export class BindCommand
   async handleInteraction(
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const guildId = interaction.guildId;
     if (!guildId) {
       await interaction.editReply('This command can only be used in a server.');

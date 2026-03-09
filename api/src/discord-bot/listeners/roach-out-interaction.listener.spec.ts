@@ -6,6 +6,7 @@ import { EventsService } from '../../events/events.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { MessageFlags } from 'discord.js';
 import { ROACH_OUT_BUTTON_IDS } from '../discord-bot.constants';
 
 /** Test-friendly interface exposing private members needed by specs */
@@ -425,7 +426,9 @@ function buttonRoutingDeferTests() {
       `${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:42`,
     );
     await listener['handleButtonInteraction'](interaction);
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it('should return early when deferReply throws', async () => {

@@ -3,7 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UnbindCommand } from './unbind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { ChannelType } from 'discord.js';
+import { ChannelType, MessageFlags } from 'discord.js';
 
 const mockDb = {
   select: jest.fn().mockReturnValue({
@@ -89,7 +89,9 @@ describe('UnbindCommand — guard: defer & DM', () => {
   it('should defer reply as ephemeral', async () => {
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it('should reject usage outside a guild', async () => {

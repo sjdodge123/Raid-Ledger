@@ -5,6 +5,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
@@ -52,7 +53,7 @@ export class RosterViewCommand
   async handleInteraction(
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const eventInput = interaction.options.getString('event', true);
     try {
       const eventId = await this.resolveEventId(interaction, eventInput);

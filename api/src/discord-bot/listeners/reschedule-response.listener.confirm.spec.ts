@@ -4,6 +4,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { MessageFlags } from 'discord.js';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
@@ -243,7 +244,9 @@ function buttonRoutingTests() {
       `${RESCHEDULE_BUTTON_IDS.CONFIRM}:42`,
     );
     await listener['handleButtonInteraction'](interaction);
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it('returns error reply when deferReply throws', async () => {

@@ -1,5 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { MessageFlags } from 'discord.js';
 import type { ButtonInteraction } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -99,7 +100,7 @@ export class RoachOutInteractionListener {
       if (action === ROACH_OUT_BUTTON_IDS.CANCEL) {
         await interaction.deferUpdate();
       } else {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       }
       return true;
     } catch (error) {

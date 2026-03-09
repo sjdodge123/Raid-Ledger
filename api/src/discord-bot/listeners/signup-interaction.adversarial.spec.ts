@@ -1,3 +1,4 @@
+import { MessageFlags } from 'discord.js';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
   type SignupInteractionMocks,
@@ -330,7 +331,9 @@ function rateLimitTests() {
       userId,
     );
     await mocks.listener.handleButtonInteraction(interaction2);
-    expect(interaction2.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction2.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
     expect(interaction2.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Please wait'),
@@ -650,7 +653,9 @@ function errorPropagationTests() {
     await expect(
       mocks.listener.handleButtonInteraction(interaction),
     ).resolves.not.toThrow();
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Something went wrong'),

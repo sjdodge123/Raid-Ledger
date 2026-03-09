@@ -6,6 +6,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   type ChatInputCommandInteraction,
+  MessageFlags,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot.constants';
@@ -79,7 +80,7 @@ export class HelpCommand
     await interaction.reply({
       embeds: [embed],
       components,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 }

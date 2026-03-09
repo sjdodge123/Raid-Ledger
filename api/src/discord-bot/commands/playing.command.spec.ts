@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { MessageFlags } from 'discord.js';
 import { PlayingCommand } from './playing.command';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -103,7 +104,7 @@ describe('PlayingCommand — handleInteraction set', () => {
       'World of Warcraft',
     );
     expect(interaction.reply).toHaveBeenCalledWith(
-      expect.objectContaining({ ephemeral: true }),
+      expect.objectContaining({ flags: MessageFlags.Ephemeral }),
     );
   });
 
@@ -137,7 +138,7 @@ describe('PlayingCommand — handleInteraction clear', () => {
     expect(detector.clearManualOverride).toHaveBeenCalledWith('user-discord-1');
     expect(detector.setManualOverride).not.toHaveBeenCalled();
     expect(interaction.reply).toHaveBeenCalledWith(
-      expect.objectContaining({ ephemeral: true }),
+      expect.objectContaining({ flags: MessageFlags.Ephemeral }),
     );
   });
 
@@ -146,12 +147,12 @@ describe('PlayingCommand — handleInteraction clear', () => {
     const setInteraction = makeChatInteraction('Fortnite');
     await command.handleInteraction(setInteraction as any);
     expect(setInteraction.reply).toHaveBeenCalledWith(
-      expect.objectContaining({ ephemeral: true }),
+      expect.objectContaining({ flags: MessageFlags.Ephemeral }),
     );
     const clearInteraction = makeChatInteraction(null);
     await command.handleInteraction(clearInteraction as any);
     expect(clearInteraction.reply).toHaveBeenCalledWith(
-      expect.objectContaining({ ephemeral: true }),
+      expect.objectContaining({ flags: MessageFlags.Ephemeral }),
     );
   });
 });
