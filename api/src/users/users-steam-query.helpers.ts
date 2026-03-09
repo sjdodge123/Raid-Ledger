@@ -144,7 +144,14 @@ const STEAM_LIBRARY_COLUMNS = {
 
 /** Map raw Steam library rows to DTOs with seconds conversion. */
 function mapSteamLibraryRows(
-  rows: { gameId: number; gameName: string; coverUrl: string | null; slug: string; playtimeForever: number | null; playtime2weeks: number | null }[],
+  rows: {
+    gameId: number;
+    gameName: string;
+    coverUrl: string | null;
+    slug: string;
+    playtimeForever: number | null;
+    playtime2weeks: number | null;
+  }[],
 ): SteamLibraryEntryDto[] {
   return rows.map((row) => ({
     gameId: row.gameId,
@@ -152,9 +159,8 @@ function mapSteamLibraryRows(
     coverUrl: row.coverUrl,
     slug: row.slug,
     playtimeSeconds: minutesToSeconds(row.playtimeForever),
-    playtime2weeksSeconds: row.playtime2weeks !== null
-      ? minutesToSeconds(row.playtime2weeks)
-      : null,
+    playtime2weeksSeconds:
+      row.playtime2weeks !== null ? minutesToSeconds(row.playtime2weeks) : null,
   }));
 }
 

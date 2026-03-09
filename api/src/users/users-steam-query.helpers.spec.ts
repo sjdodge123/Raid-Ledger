@@ -136,7 +136,12 @@ describe('mergeActivityWithSteam', () => {
 
   it('should include Steam-only games alongside Discord games', () => {
     const discordRows: DiscordActivityRow[] = [
-      { gameId: 1, gameName: 'Discord Only', coverUrl: null, totalSeconds: 500 },
+      {
+        gameId: 1,
+        gameName: 'Discord Only',
+        coverUrl: null,
+        totalSeconds: 500,
+      },
     ];
     const steamRows: SteamPlaytimeRow[] = [
       {
