@@ -10,7 +10,7 @@ import { BindingsCommand } from '../commands/bindings.command';
 import { InviteCommand } from '../commands/invite.command';
 import { HelpCommand } from '../commands/help.command';
 import { PlayingCommand } from '../commands/playing.command';
-import { Events } from 'discord.js';
+import { Events, MessageFlags } from 'discord.js';
 
 let testModule: TestingModule;
 let listener: InteractionListener;
@@ -323,7 +323,7 @@ async function handleErrorReplyTest(handler: (i: unknown) => Promise<void>) {
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(mockReply).toHaveBeenCalledWith({
     content: 'Something went wrong. Please try again later.',
-    ephemeral: true,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -346,7 +346,7 @@ async function handleErrorFollowUpDeferredTest(
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(mockFollowUp).toHaveBeenCalledWith({
     content: 'Something went wrong. Please try again later.',
-    ephemeral: true,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -369,7 +369,7 @@ async function handleErrorFollowUpRepliedTest(
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(mockFollowUp).toHaveBeenCalledWith({
     content: 'Something went wrong. Please try again later.',
-    ephemeral: true,
+    flags: MessageFlags.Ephemeral,
   });
 }
 

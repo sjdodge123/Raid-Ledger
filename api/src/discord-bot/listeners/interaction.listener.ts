@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
+  MessageFlags,
   type Interaction,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
@@ -117,10 +118,12 @@ export class InteractionListener {
       const content = 'Something went wrong. Please try again later.';
       if (interaction.replied || interaction.deferred) {
         await interaction
-          .followUp({ content, ephemeral: true })
+          .followUp({ content, flags: MessageFlags.Ephemeral })
           .catch(() => {});
       } else {
-        await interaction.reply({ content, ephemeral: true }).catch(() => {});
+        await interaction
+          .reply({ content, flags: MessageFlags.Ephemeral })
+          .catch(() => {});
       }
     }
   }

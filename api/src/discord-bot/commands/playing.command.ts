@@ -3,6 +3,7 @@ import {
   SlashCommandBuilder,
   EmbedBuilder,
   type ChatInputCommandInteraction,
+  MessageFlags,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
@@ -71,7 +72,7 @@ export class PlayingCommand
       .setDescription(
         'Game override cleared. The bot will use Discord Rich Presence to detect your game.',
       );
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 
   /** Resolve game name and set override. */
@@ -92,7 +93,7 @@ export class PlayingCommand
         `You are now marked as playing **${resolved}**.\n` +
           'This override lasts 30 minutes or until you clear it with `/playing`.',
       );
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     this.logger.debug(
       `User ${interaction.user.id} set game override: "${resolved}"`,
     );

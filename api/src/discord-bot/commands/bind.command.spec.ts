@@ -3,7 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BindCommand } from './bind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { ChannelType } from 'discord.js';
+import { ChannelType, MessageFlags } from 'discord.js';
 
 const mockDb = {
   select: jest.fn().mockReturnValue({
@@ -101,7 +101,9 @@ describe('BindCommand — handleInteraction basics', () => {
   it('should defer reply as ephemeral', async () => {
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it('should reject DM usage', async () => {

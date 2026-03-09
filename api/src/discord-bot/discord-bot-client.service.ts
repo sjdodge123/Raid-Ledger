@@ -276,7 +276,7 @@ export class DiscordBotClientService {
   // ─── Private helpers ──────────────────────────────────────
 
   private setupReadyHandler(client: Client, resolve: () => void): void {
-    client.once('ready', () => {
+    client.once('clientReady', () => {
       clearTimeout(this.connectTimeout!);
       this.connectTimeout = null;
       this.connecting = false;

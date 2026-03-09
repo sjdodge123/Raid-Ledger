@@ -6,7 +6,7 @@ import { PreferencesService } from '../../users/preferences.service';
 import { SettingsService } from '../../settings/settings.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { ApplicationCommandOptionType } from 'discord.js';
+import { ApplicationCommandOptionType, MessageFlags } from 'discord.js';
 
 const originalClientUrl = process.env.CLIENT_URL;
 const mockUser = { id: 1, username: 'testuser', role: 'member' as const };
@@ -217,7 +217,9 @@ describe('EventCreateCommand — validation: defer & account', () => {
   it('should defer reply as ephemeral', async () => {
     const interaction = makeInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it('should reply with account linking message when no account', async () => {

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BindingsCommand } from './bindings.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
+import { MessageFlags } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { BindingRecord } from '../services/channel-bindings.service';
 
@@ -96,7 +97,9 @@ describe('BindingsCommand — guard: DM & defer', () => {
   it('should defer reply as ephemeral', async () => {
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it('should reject usage outside a guild', async () => {

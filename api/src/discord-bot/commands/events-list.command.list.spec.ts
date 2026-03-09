@@ -3,6 +3,7 @@ import { EventsListCommand } from './events-list.command';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
+import { MessageFlags } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot.constants';
 
 const originalClientUrl = process.env.CLIENT_URL;
@@ -129,7 +130,9 @@ describe('EventsListCommand — defer & empty', () => {
     const interaction = mockInteraction();
     eventsService.findAll.mockResolvedValue(makeFindAllResult([makeEvent()]));
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it('should reply with no events when empty', async () => {

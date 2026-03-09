@@ -1,6 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
+import { MessageFlags } from 'discord.js';
 import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
@@ -92,7 +93,7 @@ export class RescheduleResponseListener {
     const eventId = parseInt(idStr, 10);
     if (isNaN(eventId) || !isRescheduleAction(action)) return;
     try {
-      await i.deferReply({ ephemeral: true });
+      await i.deferReply({ flags: MessageFlags.Ephemeral });
     } catch {
       return;
     }

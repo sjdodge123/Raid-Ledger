@@ -1,6 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
+  MessageFlags,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
@@ -61,7 +62,7 @@ export class InviteCommand
   async handleInteraction(
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const eventId = interaction.options.getInteger('event', true);
     const targetUser = interaction.options.getUser('user', false);

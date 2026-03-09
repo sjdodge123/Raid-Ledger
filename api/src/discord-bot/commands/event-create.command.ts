@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   type ChatInputCommandInteraction,
+  MessageFlags,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
@@ -71,7 +72,7 @@ export class EventCreateCommand
   private async handleCreate(
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const user = await this.resolveUser(interaction);
     if (!user) return;
@@ -118,7 +119,7 @@ export class EventCreateCommand
   private async handlePlan(
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const user = await this.resolveUser(interaction);
     if (!user) return;
