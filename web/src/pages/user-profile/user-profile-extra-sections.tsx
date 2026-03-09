@@ -2,13 +2,12 @@ import type { JSX } from "react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { SteamLibraryEntryDto } from "@raid-ledger/contract";
-import { useUserSteamLibrary, useUserSteamLibraryModal } from "../../hooks/use-user-profile";
+import { useUserSteamLibrary } from "../../hooks/use-user-profile";
 import { formatPlaytime } from "../../lib/activity-utils";
 import { SteamIcon } from "../../components/icons/SteamIcon";
-import { Modal } from "../../components/ui/modal";
-import { InfiniteScrollSentinel } from "../../components/ui/infinite-scroll-sentinel";
 import { buildDiscordAvatarUrl } from "../../lib/avatar";
 import { useBranding } from "../../hooks/use-branding";
+import { SteamLibraryModal } from "./steam-library-modal";
 
 /** Cover image or placeholder for game cards */
 function GameCover({
@@ -56,37 +55,6 @@ function SteamLibraryCard({
         </span>
       </div>
     </Link>
-  );
-}
-
-/** Steam library modal with infinite scroll (ROK-745) */
-function SteamLibraryModal({
-  userId,
-  isOpen,
-  onClose,
-  total,
-}: {
-  userId: number;
-  isOpen: boolean;
-  onClose: () => void;
-  total: number;
-}): JSX.Element {
-  const modal = useUserSteamLibraryModal(userId, isOpen);
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Steam Library (${total})`} maxWidth="max-w-2xl">
-      <div className="flex flex-col gap-2">
-        {modal.items.map((entry) => (
-          <SteamLibraryCard key={entry.gameId} entry={entry} />
-        ))}
-      </div>
-      {modal.items.length > 0 && (
-        <InfiniteScrollSentinel
-          sentinelRef={modal.sentinelRef}
-          isFetchingNextPage={modal.isFetchingNextPage}
-          hasNextPage={modal.hasNextPage}
-        />
-      )}
-    </Modal>
   );
 }
 

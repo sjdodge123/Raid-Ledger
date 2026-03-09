@@ -4,8 +4,6 @@ import { useParams, Link, useLocation } from "react-router-dom";
 import {
   useUserProfile,
   useUserHeartedGames,
-  useUserHeartedGamesModal,
-  useUserSteamLibrary,
 } from "../hooks/use-user-profile";
 import { useGameRegistry } from "../hooks/use-game-registry";
 import { useAuth } from "../hooks/use-auth";
@@ -13,8 +11,6 @@ import { formatDistanceToNow } from "date-fns";
 import { resolveAvatar, toAvatarUser } from "../lib/avatar";
 import { UserEventSignups } from "../components/profile/UserEventSignups";
 import type { UserProfileDto } from "@raid-ledger/contract";
-import { Modal } from "../components/ui/modal";
-import { InfiniteScrollSentinel } from "../components/ui/infinite-scroll-sentinel";
 import {
   HeartedGameCard,
   GroupedCharacters,
@@ -22,6 +18,7 @@ import {
   GuestProfile,
   SteamLibrarySection,
 } from "./user-profile/user-profile-components";
+import { HeartedGamesModal } from "./user-profile/hearted-games-modal";
 import { isGuestRouteState } from "./user-profile/user-profile-helpers";
 import "./user-profile-page.css";
 
@@ -53,37 +50,6 @@ function UserNotFound(): JSX.Element {
         </Link>
       </div>
     </div>
-  );
-}
-
-/** Hearted games modal with infinite scroll (ROK-745) */
-function HeartedGamesModal({
-  userId,
-  isOpen,
-  onClose,
-  total,
-}: {
-  userId: number;
-  isOpen: boolean;
-  onClose: () => void;
-  total: number;
-}): JSX.Element {
-  const modal = useUserHeartedGamesModal(userId, isOpen);
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Interested In (${total})`} maxWidth="max-w-2xl">
-      <div className="flex flex-col gap-2">
-        {modal.items.map((game) => (
-          <HeartedGameCard key={game.id} game={game} />
-        ))}
-      </div>
-      {modal.items.length > 0 && (
-        <InfiniteScrollSentinel
-          sentinelRef={modal.sentinelRef}
-          isFetchingNextPage={modal.isFetchingNextPage}
-          hasNextPage={modal.hasNextPage}
-        />
-      )}
-    </Modal>
   );
 }
 
