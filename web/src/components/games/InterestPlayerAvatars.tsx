@@ -12,6 +12,8 @@ interface InterestPlayerAvatarsProps {
     maxVisible?: number;
     /** Game ID for the "+N more" overflow link to the filtered players page */
     gameId?: number;
+    /** Custom label formatter (default: "X players interested") */
+    formatLabel?: (totalCount: number, overflowCount: number) => string;
 }
 
 const INITIALS_COLORS = [
@@ -48,12 +50,13 @@ function CountLabel({ text, gameId }: { text: string; gameId?: number }) {
     return <span className="text-sm text-muted whitespace-nowrap">{text}</span>;
 }
 
-export function InterestPlayerAvatars({ players, totalCount, maxVisible = 6, gameId }: InterestPlayerAvatarsProps) {
+export function InterestPlayerAvatars({ players, totalCount, maxVisible = 6, gameId, formatLabel }: InterestPlayerAvatarsProps) {
     const visiblePlayers = useMemo(() => players.slice(0, maxVisible), [players, maxVisible]);
     const overflowCount = totalCount - visiblePlayers.length;
+    const labelFn = formatLabel ?? formatCountText;
 
     if (visiblePlayers.length === 0) {
-        return <CountLabel text={formatCountText(totalCount, 0)} gameId={gameId} />;
+        return <CountLabel text={labelFn(totalCount, 0)} gameId={gameId} />;
     }
 
     return (
@@ -61,7 +64,7 @@ export function InterestPlayerAvatars({ players, totalCount, maxVisible = 6, gam
             <div className="flex items-center">
                 {visiblePlayers.map((player, i) => <PlayerAvatar key={player.id} player={player} index={i} total={visiblePlayers.length} />)}
             </div>
-            <CountLabel text={formatCountText(totalCount, overflowCount)} gameId={gameId} />
+            <CountLabel text={labelFn(totalCount, overflowCount)} gameId={gameId} />
         </div>
     );
 }

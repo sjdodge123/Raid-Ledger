@@ -43,9 +43,14 @@ vi.mock("../components/events/event-card", () => ({
 vi.mock("../components/games/InterestPlayerAvatars", () => ({
   InterestPlayerAvatars: ({
     totalCount,
+    formatLabel,
   }: {
     totalCount: number;
-  }) => <div data-testid="interest-avatars">{totalCount} avatars</div>,
+    formatLabel?: (total: number, overflow: number) => string;
+  }) => {
+    const text = formatLabel ? formatLabel(totalCount, 0) : `${totalCount} players interested`;
+    return <div data-testid="interest-avatars">{text}</div>;
+  },
 }));
 
 vi.mock("../hooks/use-games-discover", () => ({

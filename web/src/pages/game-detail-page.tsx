@@ -206,16 +206,13 @@ function OwnedBySection({ owners, ownerCount, gameId }: {
     owners: InterestPlayerPreviewDto[]; ownerCount: number; gameId: number | undefined;
 }): JSX.Element | null {
     if (ownerCount === 0) return null;
-    const label = ownerCount === 1 ? '1 player owns this' : `${ownerCount} players own this`;
     return (
         <div className="flex flex-wrap items-center gap-4 mb-8">
-            <div className="flex items-center gap-2">
-                <SteamIcon className="w-5 h-5 text-muted" />
-                <span className="text-sm text-secondary">{label}</span>
-            </div>
-            {owners.length > 0 && (
-                <InterestPlayerAvatars players={owners} totalCount={ownerCount} maxVisible={6} gameId={gameId} />
-            )}
+            <SteamIcon className="w-5 h-5 text-muted" />
+            <InterestPlayerAvatars
+                players={owners} totalCount={ownerCount} maxVisible={6}
+                formatLabel={(total, overflow) => overflow > 0 ? `+${overflow} more` : `${total} player${total !== 1 ? 's' : ''} own${total === 1 ? 's' : ''} this`}
+            />
         </div>
     );
 }
