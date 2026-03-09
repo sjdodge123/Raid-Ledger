@@ -72,11 +72,11 @@ describe('SteamPanel — rendering', () => {
         ).toBeInTheDocument();
     });
 
-    it('renders the Save API Key button', async () => {
+    it('renders the Save Configuration button', async () => {
         renderWithProviders(<SteamPanel />);
 
         expect(
-            await screen.findByRole('button', { name: /save api key/i }),
+            await screen.findByRole('button', { name: /save configuration/i }),
         ).toBeInTheDocument();
     });
 
@@ -116,11 +116,11 @@ describe('SteamPanel — configured state', () => {
         ).toBeInTheDocument();
     });
 
-    it('shows configured status message', async () => {
+    it('shows setup instructions', async () => {
         renderWithProviders(<SteamPanel />);
 
         expect(
-            await screen.findByText('Steam API key is configured'),
+            await screen.findByText('Setup Instructions:'),
         ).toBeInTheDocument();
     });
 });
