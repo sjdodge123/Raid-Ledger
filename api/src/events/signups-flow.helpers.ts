@@ -193,7 +193,8 @@ async function handleNewSignup(deps: FlowDeps, p: NewSignupParams) {
     if (confirmed) inserted.confirmationStatus = 'confirmed';
   }
   await signupH.autoConfirmCreator(tx, eventRow, userId, inserted);
-  return { isDuplicate: false as const, signup: inserted };
+  const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
+  return { isDuplicate: false as const, signup: inserted, assignedSlot };
 }
 
 /** Run MMO auto-allocation, then bench-fallback if no assignment was made. */
@@ -264,7 +265,13 @@ export async function discordSignupTxBody(
 ) {
   const rows = await discordH.insertDiscordSignupRow(tx, eventId, dto);
   if (rows.length === 0) {
-    return discordH.fetchExistingDiscordSignup(tx, eventId, dto.discordUserId);
+    const existing = await discordH.fetchExistingDiscordSignup(
+      tx,
+      eventId,
+      dto.discordUserId,
+    );
+    const assignedSlot = await rosterQH.getAssignedSlotRole(tx, existing.id);
+    return { signup: existing, assignedSlot };
   }
   const [inserted] = rows;
   const autoBench = await signupH.checkAutoBench(tx, event, eventId);
@@ -289,5 +296,6 @@ export async function discordSignupTxBody(
   deps.logger.log(
     `Anonymous Discord user ${dto.discordUsername} (${dto.discordUserId}) signed up for event ${eventId}`,
   );
-  return inserted;
+  const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
+  return { signup: inserted, assignedSlot };
 }

@@ -1,5 +1,4 @@
 import type { ButtonInteraction } from 'discord.js';
-import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
@@ -10,6 +9,8 @@ import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
 import { benchSuffix } from './signup-bench-feedback.helpers';
+import { loadGameContext } from './signup-signup-context.helpers';
+import type { GameContext } from './signup-signup-context.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -99,50 +100,6 @@ async function offerCharacterRoleChange(
   if (!ctx) return false;
 
   return offerSelectionUI(interaction, eventId, ctx, existingSignup, deps);
-}
-
-interface GameContext {
-  eventTitle: string;
-  characters: import('@raid-ledger/contract').CharacterDto[];
-  isMMO: boolean;
-}
-
-async function loadGameContext(
-  eventId: number,
-  userId: number,
-  deps: SignupInteractionDeps,
-): Promise<GameContext | null | 'not_found'> {
-  const [event] = await deps.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
-  if (!event) return 'not_found';
-  const slotConfig = event.slotConfig as Record<string, unknown> | null;
-  const isMMO = slotConfig?.type === 'mmo';
-
-  if (!event.gameId) {
-    return isMMO ? { eventTitle: event.title, characters: [], isMMO } : null;
-  }
-
-  const [game] = await deps.db
-    .select()
-    .from(schema.games)
-    .where(eq(schema.games.id, event.gameId))
-    .limit(1);
-  if (!game) {
-    return isMMO ? { eventTitle: event.title, characters: [], isMMO } : null;
-  }
-
-  const characterList = await deps.charactersService.findAllForUser(
-    userId,
-    event.gameId,
-  );
-  return {
-    eventTitle: event.title,
-    characters: characterList.data,
-    isMMO,
-  };
 }
 
 function needsCharacterOrRole(

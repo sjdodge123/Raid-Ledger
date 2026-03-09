@@ -48,9 +48,9 @@ describe('computeSlotCapacity', () => {
   });
 
   it('uses MMO defaults when role fields are missing', () => {
-    // defaults: tank=2, healer=4, dps=14, flex=0
+    // defaults: tank=2, healer=4, dps=14, flex=5 (MMO_SLOT_DEFAULTS)
     const result = computeSlotCapacity({ type: 'mmo' });
-    expect(result).toBe(20);
+    expect(result).toBe(25);
   });
 
   it('returns player count for generic type', () => {
