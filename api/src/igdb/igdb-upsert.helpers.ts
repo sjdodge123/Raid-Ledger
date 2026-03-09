@@ -31,6 +31,8 @@ function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
     firstReleaseDate: row.firstReleaseDate,
     playerCount: row.playerCount,
     twitchGameId: row.twitchGameId,
+    steamAppId: row.steamAppId,
+    crossplay: row.crossplay,
     cachedAt: new Date(),
   };
 }
