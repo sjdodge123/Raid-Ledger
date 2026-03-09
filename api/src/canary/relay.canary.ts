@@ -1,11 +1,12 @@
 import { registerCanary } from './canary-runner.js';
 
-const RELAY_HUB_URL = 'https://hub.raid-ledger.com';
+const RELAY_HUB_URL =
+  process.env.CANARY_RELAY_URL ?? 'https://hub.raid-ledger.com';
 
 registerCanary({
   integrationKey: 'relay-hub',
   name: 'Relay Hub',
-  requiredEnvVars: [], // Public endpoint, no auth needed
+  requiredEnvVars: ['CANARY_RELAY_URL'],
   probe: async () => {
     // Simple connectivity check — the relay hub should respond to a GET
     const response = await fetch(`${RELAY_HUB_URL}/api/v1/health`, {
