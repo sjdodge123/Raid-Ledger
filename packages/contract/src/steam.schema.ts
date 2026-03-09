@@ -39,6 +39,8 @@ export const SteamSyncResultSchema = z.object({
   matched: z.number().int(),
   newInterests: z.number().int(),
   updatedPlaytime: z.number().int(),
+  /** Number of games imported from IGDB during backfill. */
+  imported: z.number().int().optional(),
 });
 
 export type SteamSyncResultDto = z.infer<typeof SteamSyncResultSchema>;
