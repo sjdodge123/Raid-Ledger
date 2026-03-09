@@ -35,6 +35,7 @@ jobs:
 
       - name: Run canary tests
         env:
+          GH_TOKEN: ${{ github.token }}
           CANARY_DISCORD_BOT_TOKEN: ${{ secrets.CANARY_DISCORD_BOT_TOKEN }}
           CANARY_IGDB_CLIENT_ID: ${{ secrets.CANARY_IGDB_CLIENT_ID }}
           CANARY_IGDB_CLIENT_SECRET: ${{ secrets.CANARY_IGDB_CLIENT_SECRET }}

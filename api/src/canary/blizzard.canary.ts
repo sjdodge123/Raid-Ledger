@@ -40,8 +40,11 @@ async function fetchBlizzardToken(clientId: string, clientSecret: string) {
 
 async function verifyBlizzardToken(accessToken: string) {
   const resp = await fetch(
-    `https://us.api.blizzard.com/data/wow/realm/index?namespace=dynamic-us&locale=en_US&access_token=${accessToken}`,
-    { signal: AbortSignal.timeout(10_000) },
+    `https://us.api.blizzard.com/data/wow/realm/index?namespace=dynamic-us&locale=en_US`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    },
   );
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
