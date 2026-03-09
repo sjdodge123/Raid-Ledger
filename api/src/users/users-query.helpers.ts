@@ -3,13 +3,17 @@
  * Extracted from users.service.ts for file size compliance (ROK-711).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, sql, asc, and, gte, desc } from 'drizzle-orm';
+import { eq, sql, asc, and, gte, desc, ne } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type {
   ActivityPeriod,
   GameActivityEntryDto,
 } from '@raid-ledger/contract';
 import { buildWordMatchFilters } from '../common/search.util';
+import {
+  mergeActivityWithSteam,
+  querySteamPlaytime,
+} from './users-steam-query.helpers';
 
 /** Basic user columns selected for list endpoints. */
 const USER_LIST_COLUMNS = {
@@ -128,6 +132,42 @@ export async function findAllWithRolesQuery(
   return { data: rows, total: Number(countResult.count) };
 }
 
+/** Select columns for hearted game queries. */
+const HEARTED_GAME_COLUMNS = {
+  id: schema.games.id,
+  igdbId: schema.games.igdbId,
+  name: schema.games.name,
+  slug: schema.games.slug,
+  coverUrl: schema.games.coverUrl,
+} as const;
+
+/** Fetch hearted games excluding Steam library entries (ROK-754). */
+export async function fetchHeartedGames(
+  db: PostgresJsDatabase<typeof schema>,
+  userId: number,
+  page: number,
+  limit: number,
+) {
+  const offset = (page - 1) * limit;
+  const whereClause = and(
+    eq(schema.gameInterests.userId, userId),
+    ne(schema.gameInterests.source, 'steam_library'),
+  );
+  const [countResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.gameInterests)
+    .where(whereClause);
+  const rows = await db
+    .select(HEARTED_GAME_COLUMNS)
+    .from(schema.gameInterests)
+    .innerJoin(schema.games, eq(schema.gameInterests.gameId, schema.games.id))
+    .where(whereClause)
+    .orderBy(asc(schema.games.name))
+    .limit(limit)
+    .offset(offset);
+  return { data: rows, total: Number(countResult.count) };
+}
+
 /** Activity query select columns. */
 const ACTIVITY_COLUMNS = {
   gameId: schema.gameActivityRollups.gameId,
@@ -207,18 +247,14 @@ export async function fetchGameActivity(
     if (pref && pref.value === false) return [];
   }
 
-  const rows =
+  const [discordRows, steamRows] = await Promise.all([
     period === 'all'
-      ? await queryActivityAllTime(db, userId)
-      : await queryActivityForPeriod(db, userId, period);
+      ? queryActivityAllTime(db, userId)
+      : queryActivityForPeriod(db, userId, period),
+    querySteamPlaytime(db, userId),
+  ]);
 
-  return rows.map((row, idx) => ({
-    gameId: row.gameId,
-    gameName: row.gameName,
-    coverUrl: row.coverUrl,
-    totalSeconds: row.totalSeconds,
-    isMostPlayed: idx === 0,
-  }));
+  return mergeActivityWithSteam(discordRows, steamRows, period);
 }
 
 /** Delete user-owned rows (sessions, credentials, availability, templates). */

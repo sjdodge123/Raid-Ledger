@@ -208,12 +208,49 @@ export const UserHeartedGameSchema = z.object({
 
 export type UserHeartedGameDto = z.infer<typeof UserHeartedGameSchema>;
 
-/** Response for user hearted games endpoint (ROK-282) */
+/** Pagination metadata shared across paginated endpoints */
+export const PaginationMetaSchema = z.object({
+    total: z.number().int(),
+    page: z.number().int(),
+    limit: z.number().int(),
+    hasMore: z.boolean(),
+});
+
+export type PaginationMetaDto = z.infer<typeof PaginationMetaSchema>;
+
+/** Response for user hearted games endpoint (ROK-282, ROK-754: paginated) */
 export const UserHeartedGamesResponseSchema = z.object({
     data: z.array(UserHeartedGameSchema),
+    meta: PaginationMetaSchema.optional(),
 });
 
 export type UserHeartedGamesResponseDto = z.infer<typeof UserHeartedGamesResponseSchema>;
+
+// ============================================================
+// ROK-754: Steam Library section on player profile
+// ============================================================
+
+/** A single game from the user's Steam library */
+export const SteamLibraryEntrySchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    coverUrl: z.string().nullable(),
+    slug: z.string(),
+    /** Playtime in seconds (converted from Steam minutes) */
+    playtimeSeconds: z.number(),
+    /** Playtime in the last 2 weeks in seconds (null if unavailable) */
+    playtime2weeksSeconds: z.number().nullable(),
+});
+
+export type SteamLibraryEntryDto = z.infer<typeof SteamLibraryEntrySchema>;
+
+/** Response for GET /users/:id/steam-library */
+export const SteamLibraryResponseSchema = z.object({
+    data: z.array(SteamLibraryEntrySchema),
+    meta: PaginationMetaSchema,
+});
+
+export type SteamLibraryResponseDto = z.infer<typeof SteamLibraryResponseSchema>;
 
 // ============================================================
 // ROK-443: Game Activity Display (Phase 2)

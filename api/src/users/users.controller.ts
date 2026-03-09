@@ -29,10 +29,13 @@ import {
   UserManagementListResponseDto,
   UserProfileDto,
   UpdateUserRoleSchema,
-  UserHeartedGamesResponseDto,
   UserEventSignupsResponseDto,
   ActivityPeriodSchema,
   UserActivityResponseDto,
+} from '@raid-ledger/contract';
+import type {
+  UserHeartedGamesResponseDto,
+  SteamLibraryResponseDto,
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
@@ -134,14 +137,48 @@ export class UsersController {
     return { data: result.data };
   }
 
-  /** Get games a user has hearted (ROK-282). */
+  /** Get games a user has hearted (ROK-282, ROK-754: paginated + steam filtered). */
   @Get(':id/hearted-games')
   async getHeartedGames(
     @Param('id', ParseIntPipe) id: number,
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
   ): Promise<UserHeartedGamesResponseDto> {
     const user = await this.usersService.findById(id);
     if (!user) throw new NotFoundException('User not found');
-    return { data: await this.usersService.getHeartedGames(id) };
+    const { page, limit } = parsePagination(pageStr, limitStr);
+    const result = await this.usersService.getHeartedGames(id, page, limit);
+    return {
+      data: result.data,
+      meta: {
+        total: result.total,
+        page,
+        limit,
+        hasMore: page * limit < result.total,
+      },
+    };
+  }
+
+  /** Get a user's Steam library (ROK-754). */
+  @Get(':id/steam-library')
+  async getSteamLibrary(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+  ): Promise<SteamLibraryResponseDto> {
+    const user = await this.usersService.findById(id);
+    if (!user) throw new NotFoundException('User not found');
+    const { page, limit } = parsePagination(pageStr, limitStr);
+    const result = await this.usersService.getSteamLibrary(id, page, limit);
+    return {
+      data: result.data,
+      meta: {
+        total: result.total,
+        page,
+        limit,
+        hasMore: page * limit < result.total,
+      },
+    };
   }
 
   /** Get a user's game activity (ROK-443). */

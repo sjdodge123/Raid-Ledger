@@ -2,7 +2,7 @@ import { Inject, Injectable, ConflictException, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql, ilike, asc, and, gte, desc, ne } from 'drizzle-orm';
+import { eq, sql, ilike, and, ne, gte, desc } from 'drizzle-orm';
 import type {
   UserRole,
   ActivityPeriod,
@@ -13,8 +13,10 @@ import {
   findAllUsers,
   findAllWithRolesQuery,
   fetchGameActivity,
+  fetchHeartedGames,
   deleteUserTransaction,
 } from './users-query.helpers';
+import { fetchSteamLibrary } from './users-steam-query.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 
 /** Number of days to look back for "recently joined" users. */
@@ -291,20 +293,9 @@ export class UsersService {
     return updated;
   }
 
-  /** Fetch games a user has hearted (ROK-282). */
-  async getHeartedGames(userId: number) {
-    return this.db
-      .select({
-        id: schema.games.id,
-        igdbId: schema.games.igdbId,
-        name: schema.games.name,
-        slug: schema.games.slug,
-        coverUrl: schema.games.coverUrl,
-      })
-      .from(schema.gameInterests)
-      .innerJoin(schema.games, eq(schema.gameInterests.gameId, schema.games.id))
-      .where(eq(schema.gameInterests.userId, userId))
-      .orderBy(asc(schema.games.name));
+  /** Fetch games a user has hearted, excluding Steam library entries (ROK-282, ROK-754). */
+  async getHeartedGames(userId: number, page = 1, limit = 20) {
+    return fetchHeartedGames(this.db, userId, page, limit);
   }
 
   /** Fetch a user's game activity (ROK-443). */
@@ -314,6 +305,11 @@ export class UsersService {
     requesterId?: number,
   ): Promise<GameActivityEntryDto[]> {
     return fetchGameActivity(this.db, userId, period, requesterId);
+  }
+
+  /** Fetch a user's Steam library with pagination (ROK-754). */
+  async getSteamLibrary(userId: number, page: number, limit: number) {
+    return fetchSteamLibrary(this.db, userId, page, limit);
   }
 
   /** Delete a user and cascade all related data (ROK-405). */
