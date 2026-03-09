@@ -14,6 +14,7 @@ function usePlayerSearch() {
     const [searchParams] = useSearchParams();
     const gameIdParam = searchParams.get('gameId');
     const gameId = gameIdParam ? parseInt(gameIdParam, 10) || undefined : undefined;
+    const source = searchParams.get('source') || undefined;
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -22,14 +23,15 @@ function usePlayerSearch() {
         return () => clearTimeout(timer);
     }, [search]);
 
-    return { gameId, search, setSearch, debouncedSearch };
+    return { gameId, source, search, setSearch, debouncedSearch };
 }
 
-function GameFilterBanner({ gameId, gameData }: { gameId: number | undefined; gameData: { name: string } | undefined }) {
+function GameFilterBanner({ gameId, gameData, source }: { gameId: number | undefined; gameData: { name: string } | undefined; source?: string }) {
     if (!gameId || !gameData) return null;
+    const label = source === 'steam_library' ? 'who own' : 'interested in';
     return (
         <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-3">
-            <span className="text-sm text-emerald-400">Showing players interested in <strong>{gameData.name}</strong></span>
+            <span className="text-sm text-emerald-400">Showing players {label} <strong>{gameData.name}</strong></span>
             <Link to="/players" className="ml-auto text-sm text-muted hover:text-foreground transition-colors">Clear filter</Link>
         </div>
     );
@@ -82,9 +84,10 @@ function PlayerGrid({ players, debouncedSearch }: { players: UserPreviewDto[]; d
 }
 
 export function PlayersPage() {
-    const { gameId, search, setSearch, debouncedSearch } = usePlayerSearch();
-    const { items: players, total, isLoading, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, gameId);
+    const { gameId, source, search, setSearch, debouncedSearch } = usePlayerSearch();
+    const { items: players, total, isLoading, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, gameId, source);
     const { data: gameData } = useGameDetail(gameId);
+    const countLabel = source === 'steam_library' ? 'own' : gameId ? 'interested' : 'registered';
 
     return (
         <PullToRefresh onRefresh={refetch}>
@@ -93,9 +96,9 @@ export function PlayersPage() {
                 <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
                     <div className="flex items-center justify-between flex-wrap gap-4">
                         <h1 className="text-2xl font-bold text-foreground">Players</h1>
-                        <span className="text-sm text-muted">{total} {gameId ? 'interested' : 'registered'}</span>
+                        <span className="text-sm text-muted">{total} {countLabel}</span>
                     </div>
-                    <GameFilterBanner gameId={gameId} gameData={gameData} />
+                    <GameFilterBanner gameId={gameId} gameData={gameData} source={source} />
                     {!debouncedSearch && !gameId && <NewMembersSection />}
                     <DesktopSearchInput search={search} setSearch={setSearch} />
                     {isLoading ? <PlayersLoadingSkeleton /> : <PlayerGrid players={players} debouncedSearch={debouncedSearch} />}

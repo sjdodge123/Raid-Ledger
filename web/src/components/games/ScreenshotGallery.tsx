@@ -43,9 +43,9 @@ export function ScreenshotGallery({ screenshots, gameName }: ScreenshotGalleryPr
 
     return (
         <>
-            <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="flex gap-3 overflow-x-auto p-1 -m-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {visibleScreenshots.map((url, i) => (
-                    <button key={url} onClick={() => setLightboxIndex(i)} className="flex-shrink-0 rounded-lg overflow-hidden hover:ring-2 hover:ring-emerald-500 transition-all">
+                    <button key={url} onClick={() => setLightboxIndex(i)} className="flex-shrink-0 rounded-lg overflow-hidden ring-2 ring-transparent hover:ring-emerald-500 transition-all">
                         <img src={url} alt={`${gameName} screenshot ${i + 1}`} className="h-36 w-auto object-cover" loading="lazy" onError={() => handleError(url)} />
                     </button>
                 ))}

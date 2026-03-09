@@ -211,6 +211,7 @@ function OwnedBySection({ owners, ownerCount, gameId }: {
             <SteamIcon className="w-5 h-5 text-muted" />
             <InterestPlayerAvatars
                 players={owners} totalCount={ownerCount} maxVisible={6}
+                linkTo={gameId ? `/players?gameId=${gameId}&source=steam_library` : undefined}
                 formatLabel={(total, overflow) => overflow > 0 ? `+${overflow} more` : `${total} player${total !== 1 ? 's' : ''} own${total === 1 ? 's' : ''} this`}
             />
         </div>

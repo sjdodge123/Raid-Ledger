@@ -64,6 +64,7 @@ export class UsersController {
     @Query('limit') limitStr?: string,
     @Query('search') search?: string,
     @Query('gameId') gameIdStr?: string,
+    @Query('source') source?: string,
   ): Promise<PlayersListResponseDto> {
     const { page, limit } = parsePagination(pageStr, limitStr);
     const gameId = gameIdStr ? parseInt(gameIdStr, 10) || undefined : undefined;
@@ -72,6 +73,7 @@ export class UsersController {
       limit,
       search || undefined,
       gameId,
+      source || undefined,
     );
     return {
       data: result.data,

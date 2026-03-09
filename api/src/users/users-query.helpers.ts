@@ -51,12 +51,14 @@ export async function findAllByGame(
   limit: number,
   search: string | undefined,
   gameId: number,
+  source?: string,
 ): Promise<UserListResult> {
   const offset = (page - 1) * limit;
   const searchCondition = buildSearchCondition(search);
-  const whereClause = searchCondition
-    ? and(eq(schema.gameInterests.gameId, gameId), searchCondition)
-    : eq(schema.gameInterests.gameId, gameId);
+  const conditions = [eq(schema.gameInterests.gameId, gameId)];
+  if (source) conditions.push(eq(schema.gameInterests.source, source));
+  if (searchCondition) conditions.push(searchCondition);
+  const whereClause = and(...conditions);
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.gameInterests)

@@ -22,14 +22,15 @@ export function usePlayers(page: number, search: string, gameId?: number) {
 /**
  * Infinite-scroll variant of usePlayers (ROK-361).
  */
-export function useInfinitePlayers(search: string, gameId?: number) {
+export function useInfinitePlayers(search: string, gameId?: number, source?: string) {
     return useInfiniteList<UserPreviewDto>({
-        queryKey: ['players', 'infinite', search, gameId],
+        queryKey: ['players', 'infinite', search, gameId, source],
         queryFn: (page) =>
             getPlayers({
                 page,
                 search: search || undefined,
                 gameId,
+                source,
             }),
     });
 }

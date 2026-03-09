@@ -16,11 +16,13 @@ export async function getPlayers(params?: {
   page?: number;
   search?: string;
   gameId?: number;
+  source?: string;
 }): Promise<PlayersListResponseDto> {
   const sp = new URLSearchParams();
   if (params?.page) sp.set("page", String(params.page));
   if (params?.search) sp.set("search", params.search);
   if (params?.gameId) sp.set("gameId", String(params.gameId));
+  if (params?.source) sp.set("source", params.source);
   const query = sp.toString();
   return fetchApi(`/users${query ? `?${query}` : ""}`);
 }
