@@ -67,10 +67,16 @@ function setupDefaultProfileMocks() {
     } as unknown as ReturnType<typeof useGameRegistryHook.useGameRegistry>);
 
     vi.spyOn(useUserProfileHook, 'useUserHeartedGames').mockReturnValue({
-        data: { data: [] },
-        isLoading: false,
-        error: null,
+        items: [], total: 0, isLoading: false, isFetchingNextPage: false,
+        hasNextPage: false, error: null, sentinelRef: () => {},
+        refetch: async () => {},
     } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGames>);
+
+    vi.spyOn(useUserProfileHook, 'useUserSteamLibrary').mockReturnValue({
+        items: [], total: 0, isLoading: false, isFetchingNextPage: false,
+        hasNextPage: false, error: null, sentinelRef: () => {},
+        refetch: async () => {},
+    } as unknown as ReturnType<typeof useUserProfileHook.useUserSteamLibrary>);
 
     vi.spyOn(useUserProfileHook, 'useUserEventSignups').mockReturnValue({
         data: { data: [], total: 0 },
@@ -391,10 +397,16 @@ describe('AC4: Section repositioned (Characters below Events)', () => {
         } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
         vi.spyOn(useUserProfileHook, 'useUserHeartedGames').mockReturnValue({
-            data: { data: heartedGames },
-            isLoading: false,
-            error: null,
+            items: heartedGames, total: heartedGames.length, isLoading: false,
+            isFetchingNextPage: false, hasNextPage: false, error: null,
+            sentinelRef: () => {}, refetch: async () => {},
         } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGames>);
+
+        vi.spyOn(useUserProfileHook, 'useUserSteamLibrary').mockReturnValue({
+            items: [], total: 0, isLoading: false, isFetchingNextPage: false,
+            hasNextPage: false, error: null, sentinelRef: () => {},
+            refetch: async () => {},
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserSteamLibrary>);
 
         vi.spyOn(useUserProfileHook, 'useUserEventSignups').mockReturnValue({
             data: { data: [], total: 0 },

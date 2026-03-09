@@ -71,9 +71,15 @@ function setupDefaultMocks(
     } as never);
 
     vi.spyOn(useUserProfileHook, 'useUserHeartedGames').mockReturnValue({
-        data: { data: [] },
-        isLoading: false,
-        error: null,
+        items: [], total: 0, isLoading: false, isFetchingNextPage: false,
+        hasNextPage: false, error: null, sentinelRef: () => {},
+        refetch: async () => {},
+    } as never);
+
+    vi.spyOn(useUserProfileHook, 'useUserSteamLibrary').mockReturnValue({
+        items: [], total: 0, isLoading: false, isFetchingNextPage: false,
+        hasNextPage: false, error: null, sentinelRef: () => {},
+        refetch: async () => {},
     } as never);
 
     vi.spyOn(useUserProfileHook, 'useUserEventSignups').mockReturnValue({

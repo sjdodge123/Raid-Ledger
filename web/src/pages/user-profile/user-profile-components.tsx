@@ -2,8 +2,10 @@ import type { JSX } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { CharacterDto, UserHeartedGameDto, ActivityPeriod, GameActivityEntryDto } from '@raid-ledger/contract';
+import type { CharacterDto, UserHeartedGameDto, ActivityPeriod, GameActivityEntryDto, SteamLibraryEntryDto } from '@raid-ledger/contract';
+import type { UseInfiniteListResult } from '../../hooks/use-infinite-list';
 import { formatPlaytime, PERIOD_LABELS } from '../../lib/activity-utils';
+import { SteamIcon } from '../../components/icons/SteamIcon';
 import { buildDiscordAvatarUrl } from '../../lib/avatar';
 import { useBranding } from '../../hooks/use-branding';
 import { useUserActivity } from '../../hooks/use-user-profile';
@@ -234,6 +236,46 @@ function GuestProfileHeader({ username, avatarUrl, communityName }: {
                 <p className="user-profile-meta">{username} is not currently a member of {communityName}</p>
                 <p className="user-profile-guest-note">This player was added as a guest via Discord</p>
             </div>
+        </div>
+    );
+}
+
+/** Single Steam library entry card (ROK-754) */
+function SteamLibraryCard({ entry }: { entry: SteamLibraryEntryDto }): JSX.Element {
+    return (
+        <Link to={`/games/${entry.gameId}`}
+            className="bg-panel border border-edge rounded-lg p-3 flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity">
+            {entry.coverUrl ? (
+                <img src={entry.coverUrl} alt={entry.gameName} className="w-10 h-14 rounded object-cover flex-shrink-0" loading="lazy" />
+            ) : (
+                <div className="w-10 h-14 rounded bg-overlay flex items-center justify-center text-muted flex-shrink-0 text-xs">?</div>
+            )}
+            <div className="flex-1 min-w-0">
+                <span className="font-medium text-foreground truncate block">{entry.gameName}</span>
+                <span className="text-sm text-muted">{formatPlaytime(entry.playtimeSeconds)}</span>
+            </div>
+        </Link>
+    );
+}
+
+/** ROK-754: Steam Library section with infinite scroll */
+export function SteamLibrarySection({ steamLibrary }: {
+    steamLibrary: UseInfiniteListResult<SteamLibraryEntryDto>;
+}): JSX.Element | null {
+    if (steamLibrary.items.length === 0 && !steamLibrary.isLoading) return null;
+    return (
+        <div className="user-profile-section">
+            <div className="flex items-center gap-2 mb-3">
+                <SteamIcon className="w-5 h-5 text-muted" />
+                <h2 className="user-profile-section-title mb-0">
+                    Steam Library{steamLibrary.total > 0 ? ` (${steamLibrary.total})` : ''}
+                </h2>
+            </div>
+            <div className="flex flex-col gap-2">
+                {steamLibrary.items.map((entry) => (<SteamLibraryCard key={entry.gameId} entry={entry} />))}
+            </div>
+            {steamLibrary.hasNextPage && <div ref={steamLibrary.sentinelRef} className="h-4" />}
+            {steamLibrary.isFetchingNextPage && <p className="text-muted text-sm text-center">Loading more...</p>}
         </div>
     );
 }

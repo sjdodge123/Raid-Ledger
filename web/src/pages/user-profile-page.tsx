@@ -1,15 +1,16 @@
 import type { JSX } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
-import { useUserProfile, useUserHeartedGames } from '../hooks/use-user-profile';
+import { useUserProfile, useUserHeartedGames, useUserSteamLibrary } from '../hooks/use-user-profile';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useAuth } from '../hooks/use-auth';
 import { formatDistanceToNow } from 'date-fns';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 import { UserEventSignups } from '../components/profile/UserEventSignups';
-import type { UserHeartedGameDto, UserProfileDto } from '@raid-ledger/contract';
+import type { UserProfileDto } from '@raid-ledger/contract';
+import type { UseInfiniteListResult } from '../hooks/use-infinite-list';
 import {
     HeartedGameCard, GroupedCharacters, ActivitySection,
-    GuestProfile,
+    GuestProfile, SteamLibrarySection,
 } from './user-profile/user-profile-components';
 import { isGuestRouteState } from './user-profile/user-profile-helpers';
 import './user-profile-page.css';
@@ -40,27 +41,35 @@ function UserNotFound(): JSX.Element {
     );
 }
 
-/** Hearted games list section */
-function HeartedGamesSection({ heartedGames }: { heartedGames: UserHeartedGameDto[] }): JSX.Element | null {
-    if (heartedGames.length === 0) return null;
+/** Hearted games list section with infinite scroll (ROK-754) */
+function HeartedGamesSection({ hearted }: {
+    hearted: UseInfiniteListResult<{ id: number; name: string; igdbId: number | null; slug: string; coverUrl: string | null }>;
+}): JSX.Element | null {
+    if (hearted.items.length === 0 && !hearted.isLoading) return null;
     return (
         <div className="user-profile-section">
-            <h2 className="user-profile-section-title">Interested In ({heartedGames.length})</h2>
+            <h2 className="user-profile-section-title">
+                Interested In{hearted.total > 0 ? ` (${hearted.total})` : ''}
+            </h2>
             <div className="flex flex-col gap-2">
-                {heartedGames.map((game) => (<HeartedGameCard key={game.id} game={game} />))}
+                {hearted.items.map((game) => (<HeartedGameCard key={game.id} game={game} />))}
             </div>
+            {hearted.hasNextPage && <div ref={hearted.sentinelRef} className="h-4" />}
+            {hearted.isFetchingNextPage && <p className="text-muted text-sm text-center">Loading more...</p>}
         </div>
     );
 }
 
 /** Loaded profile content */
-function ProfileContent({ profile, numericId, isOwnProfile, heartedGames, games }: {
+function ProfileContent({ profile, numericId, isOwnProfile, games }: {
     profile: UserProfileDto;
     numericId: number | undefined; isOwnProfile: boolean;
-    heartedGames: UserHeartedGameDto[]; games: { id: number; name: string }[];
+    games: { id: number; name: string }[];
 }): JSX.Element {
     const memberSince = formatDistanceToNow(new Date(profile.createdAt), { addSuffix: true });
     const profileAvatar = resolveAvatar(toAvatarUser(profile));
+    const hearted = useUserHeartedGames(numericId);
+    const steamLibrary = useUserSteamLibrary(numericId);
     return (
         <div className="user-profile-page">
             <div className="user-profile-card">
@@ -68,7 +77,8 @@ function ProfileContent({ profile, numericId, isOwnProfile, heartedGames, games 
                 {numericId && <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} />}
                 {numericId && <UserEventSignups userId={numericId} />}
                 {profile.characters.length > 0 && <GroupedCharacters characters={profile.characters} games={games} />}
-                <HeartedGamesSection heartedGames={heartedGames} />
+                <HeartedGamesSection hearted={hearted} />
+                <SteamLibrarySection steamLibrary={steamLibrary} />
             </div>
         </div>
     );
@@ -84,7 +94,6 @@ export function UserProfilePage(): JSX.Element {
     const location = useLocation();
     const { user: currentUser } = useAuth();
     const { data: profile, isLoading, error } = useUserProfile(numericId);
-    const { data: heartedGamesData } = useUserHeartedGames(numericId);
     const { games } = useGameRegistry();
 
     if (isLoading) return <UserProfileSkeleton />;
@@ -98,8 +107,7 @@ export function UserProfilePage(): JSX.Element {
     }
 
     return (
-        <ProfileContent profile={profile} numericId={numericId} isOwnProfile={currentUser?.id === numericId}
-            heartedGames={heartedGamesData?.data ?? []} games={games} />
+        <ProfileContent profile={profile} numericId={numericId} isOwnProfile={currentUser?.id === numericId} games={games} />
     );
 }
 

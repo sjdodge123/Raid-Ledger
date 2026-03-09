@@ -40,11 +40,22 @@ export async function getUserProfile(
     return response.data;
 }
 
-/** Fetch games a user has hearted (ROK-282) */
+/** Fetch games a user has hearted, paginated (ROK-282, ROK-754) */
 export async function getUserHeartedGames(
     userId: number,
+    page = 1,
+    limit = 20,
 ): Promise<UserHeartedGamesResponseDto> {
-    return fetchApi(`/users/${userId}/hearted-games`);
+    return fetchApi(`/users/${userId}/hearted-games?page=${page}&limit=${limit}`);
+}
+
+/** Fetch a user's Steam library, paginated (ROK-754) */
+export async function getUserSteamLibrary(
+    userId: number,
+    page = 1,
+    limit = 20,
+): Promise<import('@raid-ledger/contract').SteamLibraryResponseDto> {
+    return fetchApi(`/users/${userId}/steam-library?page=${page}&limit=${limit}`);
 }
 
 /** Fetch upcoming events a user has signed up for (ROK-299) */

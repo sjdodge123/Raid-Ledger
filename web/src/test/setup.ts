@@ -11,6 +11,15 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
+// Mock IntersectionObserver for tests that use infinite scroll (ROK-754)
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+    globalThis.IntersectionObserver = class IntersectionObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    } as unknown as typeof IntersectionObserver;
+}
+
 // Mock ResizeObserver for tests that use it (e.g., GameTimeGrid event overlays)
 if (typeof globalThis.ResizeObserver === 'undefined') {
     globalThis.ResizeObserver = class ResizeObserver {
