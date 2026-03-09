@@ -3,6 +3,7 @@ import { RosterViewCommand } from './roster-view.command';
 import { SignupsService } from '../../events/signups.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { MessageFlags } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot.constants';
 
 const originalClientUrl = process.env.CLIENT_URL;
@@ -138,7 +139,9 @@ describe('RosterViewCommand — defer & numeric ID', () => {
       makeRoster() as unknown as RosterReturn,
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
   });
 
   it('should resolve event by numeric ID', async () => {

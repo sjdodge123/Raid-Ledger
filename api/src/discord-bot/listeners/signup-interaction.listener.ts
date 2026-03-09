@@ -1,6 +1,10 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
+import {
+  ButtonInteraction,
+  MessageFlags,
+  StringSelectMenuInteraction,
+} from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -124,7 +128,7 @@ export class SignupInteractionListener {
     const parsed = this.parseButtonCustomId(interaction.customId);
     if (!parsed) return;
     try {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     } catch (error: unknown) {
       if (isDiscordInteractionError(error)) return;
       throw error;
@@ -154,7 +158,10 @@ export class SignupInteractionListener {
       );
       await safeReply(
         interaction,
-        { content: 'Something went wrong. Please try again.', ephemeral: true },
+        {
+          content: 'Something went wrong. Please try again.',
+          flags: MessageFlags.Ephemeral,
+        },
         this.logger,
       );
     }

@@ -80,6 +80,7 @@ describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
     mockDiscordH.allocateDiscordSlot.mockResolvedValue(undefined);
     mockSignupH.checkAutoBench.mockResolvedValue(false);
     mockRosterQH.findNextPosition.mockResolvedValue(1);
+    mockRosterQH.getAssignedSlotRole.mockResolvedValue(null);
   });
 
   it('calls allocateDiscordSlot when roster is not full', async () => {
@@ -118,7 +119,7 @@ describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
 
     const result = await discordSignupTxBody(deps, tx, mockEvent, 1, mockDto);
 
-    expect(result).toEqual(existingSignup);
+    expect(result).toEqual({ signup: existingSignup, assignedSlot: null });
     // checkAutoBench should NOT have been called for duplicates
     expect(mockSignupH.checkAutoBench).not.toHaveBeenCalled();
   });

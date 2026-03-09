@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
   ComponentType,
+  MessageFlags,
   type ChatInputCommandInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
   type StringSelectMenuInteraction,
@@ -43,7 +44,7 @@ export class EventsListCommand
   async handleInteraction(
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const result = await this.eventsService.findAll({

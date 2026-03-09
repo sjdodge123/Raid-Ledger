@@ -1,5 +1,6 @@
 import type {
   ButtonInteraction,
+  InteractionReplyOptions,
   StringSelectMenuInteraction,
 } from 'discord.js';
 import { eq } from 'drizzle-orm';
@@ -64,7 +65,7 @@ interface MinimalLogger {
  */
 export async function safeReply(
   interaction: ButtonInteraction | StringSelectMenuInteraction,
-  options: { content: string; ephemeral?: boolean },
+  options: InteractionReplyOptions & { content: string },
   logger: MinimalLogger,
 ): Promise<void> {
   try {

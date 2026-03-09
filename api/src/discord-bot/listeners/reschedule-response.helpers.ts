@@ -215,3 +215,15 @@ export function isSelectAction(action: string): boolean {
     ] as string[]
   ).includes(action);
 }
+
+export async function safeEditReply(
+  i: ButtonInteraction | StringSelectMenuInteraction,
+  options: Parameters<ButtonInteraction['editReply']>[0],
+): Promise<void> {
+  try {
+    await i.editReply(options);
+  } catch (error: unknown) {
+    if (isDiscordInteractionError(error)) return;
+    throw error;
+  }
+}
