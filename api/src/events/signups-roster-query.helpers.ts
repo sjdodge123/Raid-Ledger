@@ -17,6 +17,7 @@ import {
   buildSignupResponseDto,
   buildAnonymousSignupResponseDto,
 } from './signups-roster.helpers';
+import { MMO_SLOT_DEFAULTS } from './signups-signup.helpers';
 
 export async function fetchRosterSignups(db: Tx, eventId: number) {
   return db
@@ -117,11 +118,11 @@ export function slotConfigFromEvent(
   const type = config.type as string;
   if (type === 'mmo') {
     return {
-      tank: (config.tank as number) ?? 2,
-      healer: (config.healer as number) ?? 4,
-      dps: (config.dps as number) ?? 14,
-      flex: (config.flex as number) ?? 5,
-      bench: (config.bench as number) ?? 0,
+      tank: (config.tank as number) ?? MMO_SLOT_DEFAULTS.tank,
+      healer: (config.healer as number) ?? MMO_SLOT_DEFAULTS.healer,
+      dps: (config.dps as number) ?? MMO_SLOT_DEFAULTS.dps,
+      flex: (config.flex as number) ?? MMO_SLOT_DEFAULTS.flex,
+      bench: (config.bench as number) ?? MMO_SLOT_DEFAULTS.bench,
     };
   }
   return {
@@ -144,7 +145,7 @@ export async function getSlotConfigFromGenre(
     .limit(1);
   const genres = (game?.genres as number[]) ?? [];
   return genres.includes(MMO_GENRE_ID)
-    ? { tank: 2, healer: 4, dps: 14, flex: 5 }
+    ? { ...MMO_SLOT_DEFAULTS }
     : { player: 10, bench: 5 };
 }
 
@@ -245,4 +246,20 @@ export async function buildRosterResponse(
       : buildAnonymousSignupResponseDto(row.event_signups),
   );
   return { eventId, signups: responses, count: responses.length };
+}
+
+/** Build the full RosterWithAssignments from DB queries. */
+export async function buildRosterWithAssignments(
+  db: Tx,
+  eventId: number,
+): Promise<RosterWithAssignments> {
+  const [eventResult, rows] = await Promise.all([
+    fetchEventForRoster(db, eventId),
+    fetchSignupsWithAssignments(db, eventId),
+  ]);
+  const event = eventResult[0];
+  if (!event) throw new NotFoundException(`Event with ID ${eventId} not found`);
+  const { pool, assigned } = partitionAssignments(rows);
+  const slots = await resolveSlotConfig(db, event, assigned);
+  return { eventId, pool, assignments: assigned, slots };
 }

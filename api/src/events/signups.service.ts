@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -28,6 +28,7 @@ import * as cancelH from './signups-cancel.helpers';
 import * as rosterH from './signups-roster.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
 import * as flowH from './signups-flow.helpers';
+import * as discordSignupH from './signups-discord-signup.helpers';
 
 /** Service for managing event signups (FR-006), character confirmation (ROK-131), and anonymous Discord signups (ROK-137). */
 @Injectable()
@@ -92,17 +93,14 @@ export class SignupsService {
       action: 'signup_created',
     });
     this.rosterNotificationBuffer.bufferJoin(eventId, userId);
-    const [character, assignedSlot] = await Promise.all([
-      dto?.characterId
-        ? cancelH.getCharacterById(this.db, dto.characterId)
-        : Promise.resolve(null),
-      rosterQH.getAssignedSlotRole(this.db, result.signup.id),
-    ]);
+    const character = dto?.characterId
+      ? await cancelH.getCharacterById(this.db, dto.characterId)
+      : null;
     return rosterH.buildSignupResponseDto(
       result.signup,
       user,
       character,
-      assignedSlot ?? undefined,
+      result.assignedSlot ?? undefined,
     );
   }
 
@@ -110,8 +108,7 @@ export class SignupsService {
     eventId: number,
     dto: CreateDiscordSignupDto,
   ): Promise<SignupResponseDto> {
-    const event = await cancelH.fetchEventOrThrow(this.db, eventId);
-    const linkedUser = await discordH.findLinkedUser(
+    const linkedUser = await discordSignupH.findLinkedUserForDiscord(
       this.db,
       dto.discordUserId,
     );
@@ -120,19 +117,18 @@ export class SignupsService {
         preferredRoles: dto.preferredRoles,
         slotRole: dto.role,
       });
-    const result = await this.db.transaction((tx) =>
-      flowH.discordSignupTxBody(this.flowDeps, tx, event, eventId, dto),
+    const { response, signupId } = await discordSignupH.anonymousDiscordSignup(
+      this.db,
+      this.flowDeps,
+      eventId,
+      dto,
     );
     this.emit(SIGNUP_EVENTS.CREATED, {
       eventId,
-      signupId: result.id,
+      signupId,
       action: 'discord_signup_created',
     });
-    const assignedSlot = await rosterQH.getAssignedSlotRole(this.db, result.id);
-    return rosterH.buildAnonymousSignupResponseDto(
-      result,
-      assignedSlot ?? undefined,
-    );
+    return response;
   }
 
   async updateStatus(
@@ -291,16 +287,7 @@ export class SignupsService {
   async getRosterWithAssignments(
     eventId: number,
   ): Promise<RosterWithAssignments> {
-    const [eventResult, rows] = await Promise.all([
-      rosterQH.fetchEventForRoster(this.db, eventId),
-      rosterQH.fetchSignupsWithAssignments(this.db, eventId),
-    ]);
-    const event = eventResult[0];
-    if (!event)
-      throw new NotFoundException(`Event with ID ${eventId} not found`);
-    const { pool, assigned } = rosterQH.partitionAssignments(rows);
-    const slots = await rosterQH.resolveSlotConfig(this.db, event, assigned);
-    return { eventId, pool, assignments: assigned, slots };
+    return rosterQH.buildRosterWithAssignments(this.db, eventId);
   }
 
   async promoteFromBench(

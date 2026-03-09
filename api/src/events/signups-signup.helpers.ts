@@ -8,16 +8,25 @@ import * as schema from '../drizzle/schema';
 import type { CreateSignupDto } from '@raid-ledger/contract';
 import type { Tx, EventRow, SignupRow } from './signups.service.types';
 
+/** Shared MMO slot defaults used across capacity and roster-query helpers. */
+export const MMO_SLOT_DEFAULTS = {
+  tank: 2,
+  healer: 4,
+  dps: 14,
+  flex: 5,
+  bench: 0,
+} as const;
+
 /** Compute the total non-bench capacity from a slotConfig object. */
 export function computeSlotCapacity(
   slotConfig: Record<string, unknown>,
 ): number | null {
   const type = slotConfig.type as string;
   if (type === 'mmo') {
-    const tank = (slotConfig.tank as number) ?? 2;
-    const healer = (slotConfig.healer as number) ?? 4;
-    const dps = (slotConfig.dps as number) ?? 14;
-    const flex = (slotConfig.flex as number) ?? 0;
+    const tank = (slotConfig.tank as number) ?? MMO_SLOT_DEFAULTS.tank;
+    const healer = (slotConfig.healer as number) ?? MMO_SLOT_DEFAULTS.healer;
+    const dps = (slotConfig.dps as number) ?? MMO_SLOT_DEFAULTS.dps;
+    const flex = (slotConfig.flex as number) ?? MMO_SLOT_DEFAULTS.flex;
     return tank + healer + dps + flex;
   }
   if (type === 'generic') {

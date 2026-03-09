@@ -152,8 +152,8 @@ async function setupEach() {
 
 async function testAnonymousSignup() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     // ROK-626: getAssignedSlotRole (no assignment)
     .mockReturnValueOnce(makeSelectChain([]));
   const result = await service.signupDiscord(1, {
@@ -183,9 +183,7 @@ async function testLinkedUserDelegates() {
     confirmationStatus: 'pending',
     status: 'signed_up',
   });
-  mockDb.select
-    .mockReturnValueOnce(makeSelectChain([mockEvent]))
-    .mockReturnValueOnce(makeSelectChain([mockUser]));
+  mockDb.select.mockReturnValueOnce(makeSelectChain([mockUser]));
   await service.signupDiscord(1, {
     discordUserId: 'discord-user-123',
     discordUsername: 'linkeduser',
@@ -197,7 +195,9 @@ async function testLinkedUserDelegates() {
 }
 
 async function testEventNotFound() {
-  mockDb.select.mockReturnValueOnce(makeSelectChain([]));
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([]));
   await expect(
     service.signupDiscord(999, {
       discordUserId: 'discord-anon',
@@ -208,8 +208,8 @@ async function testEventNotFound() {
 
 async function testDuplicateReturnsExisting() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]))
     // ROK-626: getAssignedSlotRole (duplicate path — signup exists)
     .mockReturnValueOnce(makeSelectChain([]));
@@ -229,8 +229,8 @@ async function testDuplicateReturnsExisting() {
 
 async function testRosterAssignmentWithRole() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChainNoLimit([]))
     // ROK-626: getAssignedSlotRole
     .mockReturnValueOnce(makeSelectChain([{ role: 'dps' }]));
@@ -254,8 +254,8 @@ async function testRosterAssignmentWithRole() {
 async function testTentativeStatus() {
   const tentativeSignup = { ...mockAnonymousSignup, status: 'tentative' };
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     // ROK-626: getAssignedSlotRole
     .mockReturnValueOnce(makeSelectChain([]));
   mockDb.insert.mockReturnValueOnce({
@@ -287,8 +287,8 @@ const maxAttendeesEvent = { ...mockEvent, slotConfig: null, maxAttendees: 4 };
 
 async function testAutoSlotGeneric() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([genericEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([genericEvent]))
     // ROK-626: checkAutoBench (not full → normal allocation)
     .mockReturnValueOnce(makeSelectChain([{ count: 0 }]))
     .mockReturnValueOnce(makeSelectChainNoLimit([]))
@@ -313,8 +313,8 @@ async function testAutoSlotGeneric() {
 
 async function testNoAutoSlotMmo() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([mmoEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([mmoEvent]))
     // ROK-626: checkAutoBench (not full → normal flow, no roles → no assignment)
     .mockReturnValueOnce(makeSelectChain([{ count: 0 }]))
     // ROK-626: getAssignedSlotRole
@@ -335,8 +335,8 @@ async function testNoAutoSlotMmo() {
 
 async function testAutoBenchWhenFull() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([genericEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([genericEvent]))
     // ROK-626: checkAutoBench (full → auto-bench)
     .mockReturnValueOnce(makeSelectChain([{ count: 4 }]))
     // findNextPosition for bench slot
@@ -365,8 +365,8 @@ async function testAutoBenchWhenFull() {
 
 async function testAutoSlotMaxAttendees() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([maxAttendeesEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([maxAttendeesEvent]))
     // ROK-626: checkAutoBench (not full → normal allocation)
     .mockReturnValueOnce(makeSelectChain([{ count: 2 }]))
     .mockReturnValueOnce(
@@ -395,8 +395,8 @@ async function testAutoSlotMaxAttendees() {
 
 async function testNoAutoSlotNoConfig() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
     // ROK-626: getAssignedSlotRole
     .mockReturnValueOnce(makeSelectChain([]));
   mockDb.insert.mockReturnValueOnce({
@@ -415,8 +415,8 @@ async function testNoAutoSlotNoConfig() {
 
 async function testExplicitRoleOverAutoSlot() {
   mockDb.select
-    .mockReturnValueOnce(makeSelectChain([genericEvent]))
     .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([genericEvent]))
     // ROK-626: checkAutoBench (not full → normal allocation)
     .mockReturnValueOnce(makeSelectChain([{ count: 0 }]))
     .mockReturnValueOnce(makeSelectChainNoLimit([]))
