@@ -2,18 +2,26 @@ import { GameDetailDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { IGDB_CONFIG, type IgdbApiGame } from './igdb.constants';
 
+/** Match external_games category via `category` or `external_game_source` (IGDB API field rename). */
+function matchExternalCategory(
+  eg: NonNullable<IgdbApiGame['external_games']>[number],
+  categoryId: number,
+): boolean {
+  return eg.category === categoryId || eg.external_game_source === categoryId;
+}
+
 /** Extract Twitch category ID from external_games. */
 function extractTwitchGameId(game: IgdbApiGame): string | null {
-  const ext = game.external_games?.find(
-    (eg) => eg.category === IGDB_CONFIG.TWITCH_CATEGORY_ID,
+  const ext = game.external_games?.find((eg) =>
+    matchExternalCategory(eg, IGDB_CONFIG.TWITCH_CATEGORY_ID),
   );
   return ext?.uid ?? null;
 }
 
 /** Extract Steam AppID from external_games (ROK-417). */
 function extractSteamAppId(game: IgdbApiGame): number | null {
-  const ext = game.external_games?.find(
-    (eg) => eg.category === IGDB_CONFIG.STEAM_CATEGORY_ID,
+  const ext = game.external_games?.find((eg) =>
+    matchExternalCategory(eg, IGDB_CONFIG.STEAM_CATEGORY_ID),
   );
   const id = ext?.uid ? parseInt(ext.uid, 10) : null;
   return id && !isNaN(id) ? id : null;
