@@ -17,6 +17,7 @@ function describeSystemController() {
     mockSettingsService = {
       isDiscordConfigured: jest.fn(),
       isBlizzardConfigured: jest.fn().mockResolvedValue(false),
+      isSteamConfigured: jest.fn().mockResolvedValue(false),
       getDemoMode: jest.fn().mockResolvedValue(false),
       getBranding: jest.fn().mockResolvedValue({
         communityName: null,
@@ -198,6 +199,34 @@ function describeSystemController() {
       const result = await controller.getStatus();
 
       expect(result.authProviders).toEqual([]);
+    });
+
+    it('should return steamConfigured: true when Steam is configured (ROK-745)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockSettingsService.isSteamConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.steamConfigured).toBe(true);
+    });
+
+    it('should return steamConfigured: false when Steam is not configured (ROK-745)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockSettingsService.isSteamConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.steamConfigured).toBe(false);
     });
   }
   describe('getStatus', () => describeGetStatus());

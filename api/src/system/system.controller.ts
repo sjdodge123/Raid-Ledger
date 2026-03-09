@@ -45,6 +45,7 @@ export class SystemController {
     userCount: number,
     discordConfigured: boolean,
     blizzardConfigured: boolean,
+    steamConfigured: boolean,
     branding: {
       communityName: string | null;
       communityLogoPath: string | null;
@@ -59,6 +60,7 @@ export class SystemController {
       isFirstRun: userCount === 0,
       discordConfigured,
       blizzardConfigured,
+      steamConfigured,
       demoMode,
       activePlugins: [...this.pluginRegistry.getActiveSlugsSync()],
       communityName: branding.communityName ?? undefined,
@@ -77,6 +79,7 @@ export class SystemController {
       this.usersService.count(),
       this.settingsService.isDiscordConfigured(),
       this.settingsService.isBlizzardConfigured(),
+      this.settingsService.isSteamConfigured(),
       this.settingsService.getBranding(),
       this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
       this.settingsService.getDemoMode(),
@@ -95,6 +98,7 @@ export class SystemController {
       userCount,
       discordConfigured,
       blizzardConfigured,
+      steamConfigured,
       branding,
       onboardingCompletedRaw,
       demoMode,
@@ -104,6 +108,7 @@ export class SystemController {
       userCount,
       discordConfigured,
       blizzardConfigured,
+      steamConfigured,
       branding,
       onboardingCompletedRaw,
       demoMode,

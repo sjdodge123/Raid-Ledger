@@ -30,6 +30,7 @@ const DiscordIcon = (<svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentC
 /** Build core integration nav items with live status from hooks */
 export function buildCoreIntegrationItems(statuses: {
     igdb: { configured: boolean; loading: boolean };
+    steam: { configured: boolean; loading: boolean };
 }): NavItem[] {
     return [
         {
@@ -37,6 +38,12 @@ export function buildCoreIntegrationItems(statuses: {
             label: 'IGDB / Twitch',
             status: statuses.igdb.loading ? 'loading'
                 : statuses.igdb.configured ? 'online' : 'offline',
+        },
+        {
+            to: '/admin/settings/integrations/steam',
+            label: 'Steam',
+            status: statuses.steam.loading ? 'loading'
+                : statuses.steam.configured ? 'online' : 'offline',
         },
     ];
 }

@@ -75,10 +75,11 @@ export function ProfileSubmenuContent({ pathname, onClose }: { pathname: string;
 
 function useAdminNavSections() {
     const { plugins } = usePluginAdmin();
-    const { igdbStatus, oauthStatus, discordBotStatus } = useAdminSettings();
+    const { igdbStatus, steamStatus, oauthStatus, discordBotStatus } = useAdminSettings();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: { configured: igdbStatus.data?.configured ?? false, loading: igdbStatus.isLoading },
+        steam: { configured: steamStatus.data?.configured ?? false, loading: steamStatus.isLoading },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
     const discordItems = isDiscordActive

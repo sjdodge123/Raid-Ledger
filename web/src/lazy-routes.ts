@@ -129,6 +129,9 @@ export const DemoDataPanel = lazyWithRetry(() =>
 export const IgdbPanel = lazyWithRetry(() =>
     import('./pages/admin/igdb-panel').then((m) => ({ default: m.IgdbPanel })),
 );
+export const SteamPanel = lazyWithRetry(() =>
+    import('./pages/admin/steam-panel').then((m) => ({ default: m.SteamPanel })),
+);
 export const PluginsPanel = lazyWithRetry(() =>
     import('./pages/admin/plugins-panel').then((m) => ({ default: m.PluginsPanel })),
 );

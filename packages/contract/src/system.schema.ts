@@ -23,6 +23,8 @@ export const SystemStatusSchema = z.object({
     discordConfigured: z.boolean(),
     /** True when Blizzard API credentials are configured (ROK-234) */
     blizzardConfigured: z.boolean(),
+    /** True when Steam Web API key is configured (ROK-745) */
+    steamConfigured: z.boolean(),
     /** True when running in demo/test mode */
     demoMode: z.boolean().optional(),
     /** Active plugin slugs for frontend slot rendering (ROK-238) */
