@@ -1,11 +1,11 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
-import { MessageFlags } from 'discord.js';
-import type {
-  ButtonInteraction,
-  StringSelectMenuInteraction,
-  Interaction,
+import {
+  MessageFlags,
+  type ButtonInteraction,
+  type StringSelectMenuInteraction,
+  type Interaction,
 } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -21,12 +21,12 @@ import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
 import {
-  isDiscordInteractionError,
   isRescheduleAction,
   isSelectAction,
   parseRoleSelectParts,
   editDmEmbed,
   editDmEmbedFromSelect,
+  safeEditReply,
 } from './reschedule-response.helpers';
 import {
   handleLinkedConfirm,
@@ -101,7 +101,7 @@ export class RescheduleResponseListener {
       await this.routeButton(action, i, eventId);
     } catch (error) {
       this.logger.error('Reschedule error event %d:', eventId, error);
-      await this.safeEditReply(i, {
+      await safeEditReply(i, {
         content: 'Something went wrong. Please try again.',
       });
     }
@@ -204,7 +204,7 @@ export class RescheduleResponseListener {
       }
     } catch (error) {
       this.logger.error('Select error event %d:', eventId, error);
-      await this.safeEditReply(i, {
+      await safeEditReply(i, {
         content: 'Something went wrong. Please try again.',
         components: [],
       });
@@ -307,17 +307,5 @@ export class RescheduleResponseListener {
       i: StringSelectMenuInteraction,
       s: 'confirmed' | 'tentative' | 'declined',
     ) => editDmEmbedFromSelect(i, s, logger);
-  }
-
-  private async safeEditReply(
-    i: ButtonInteraction | StringSelectMenuInteraction,
-    options: Parameters<ButtonInteraction['editReply']>[0],
-  ): Promise<void> {
-    try {
-      await i.editReply(options);
-    } catch (error: unknown) {
-      if (isDiscordInteractionError(error)) return;
-      throw error;
-    }
   }
 }
