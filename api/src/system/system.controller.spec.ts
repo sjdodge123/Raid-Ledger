@@ -228,6 +228,38 @@ function describeSystemController() {
 
       expect(result.steamConfigured).toBe(false);
     });
+
+    it('should call isSteamConfigured from settings service (ROK-745)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      await controller.getStatus();
+
+      expect(mockSettingsService.isSteamConfigured).toHaveBeenCalled();
+    });
+
+    it('should include steamConfigured as boolean in full response shape (ROK-745)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(0);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+      (mockSettingsService.isSteamConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result).toMatchObject({
+        isFirstRun: expect.any(Boolean),
+        discordConfigured: expect.any(Boolean),
+        blizzardConfigured: expect.any(Boolean),
+        steamConfigured: expect.any(Boolean),
+        demoMode: expect.any(Boolean),
+        activePlugins: expect.any(Array),
+      });
+    });
   }
   describe('getStatus', () => describeGetStatus());
 }
