@@ -66,6 +66,8 @@ export const games = pgTable('games', {
   hasSpecs: boolean('has_specs').default(false).notNull(),
   /** Whether this game is enabled for event/character creation */
   enabled: boolean('enabled').default(true).notNull(),
+  /** ROK-772: ITAD (IsThereAnyDeal) game UUID for deal/price tracking */
+  itadGameId: text('itad_game_id').unique(),
   /** Maximum characters a user can register per game */
   maxCharactersPerUser: integer('max_characters_per_user')
     .default(10)

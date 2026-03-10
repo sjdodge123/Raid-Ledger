@@ -103,6 +103,9 @@ export * from './event-analytics.schema.js';
 // Steam Integration (ROK-417)
 export * from './steam.schema.js';
 
+// ITAD Integration (ROK-772)
+export * from './itad.schema.js';
+
 // Container Logs (ROK-681)
 export * from './logs.schema.js';
 

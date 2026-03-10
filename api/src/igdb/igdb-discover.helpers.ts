@@ -4,6 +4,7 @@ import Redis from 'ioredis';
 import * as schema from '../drizzle/schema';
 import { GameDetailDto } from '@raid-ledger/contract';
 import { mapDbRowToDetail } from './igdb.mappers';
+import { HEART_SOURCES } from './igdb-interest.helpers';
 
 /** Category definition for game discovery. */
 interface DiscoverCategory {
@@ -134,6 +135,7 @@ export async function fetchCommunityRow(
       count: sql<number>`count(*)::int`.as('count'),
     })
     .from(schema.gameInterests)
+    .where(inArray(schema.gameInterests.source, HEART_SOURCES))
     .groupBy(schema.gameInterests.gameId)
     .orderBy(sql`count(*) desc`)
     .limit(20);

@@ -1,22 +1,29 @@
 import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
-import { eq, inArray, and, isNotNull } from 'drizzle-orm';
+import { eq, inArray, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
 import { IgdbService } from '../igdb/igdb.service';
+import { ItadService } from '../itad/itad.service';
 import { getOwnedGames, getPlayerSummary } from './steam-http.util';
-import { backfillUnmatchedSteamGames } from './steam-backfill.helpers';
+import type { SteamOwnedGame } from './steam-http.util';
 import {
   updateExistingPlaytime,
   type PlaytimeUpdateEntry,
 } from './steam-playtime.helpers';
+import {
+  discoverGameViaItad,
+  type DiscoveryDeps,
+} from './steam-itad-discovery.helpers';
 import type { SteamSyncResultDto } from '@raid-ledger/contract';
+import { syncAllLinkedUsers } from './steam-bulk-sync.helpers';
 
 /**
- * Steam Library Sync Service (ROK-417).
- * Fetches owned games from Steam, matches to IGDB records via steam_app_id,
- * and populates game_interests with source='steam_library'.
+ * Steam Library Sync Service (ROK-417, ROK-774).
+ * Fetches owned games from Steam, discovers new games via ITAD,
+ * enriches from IGDB, and populates game_interests.
  */
 interface SteamClassifyCtx {
   gameByAppId: Map<number, { id: number }>;
@@ -36,17 +43,18 @@ export class SteamService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
     @Optional() private readonly igdbService?: IgdbService,
+    @Optional() private readonly itadService?: ItadService,
   ) {}
 
-  /**
-   * Sync a user's Steam library to game_interests.
-   * Returns sync stats (total owned, matched, new, updated).
-   */
   /** Build a zero-result sync DTO. */
   private emptySyncResult(totalOwned: number, matched = 0): SteamSyncResultDto {
     return { totalOwned, matched, newInterests: 0, updatedPlaytime: 0 };
   }
 
+  /**
+   * Sync a user's Steam library to game_interests.
+   * Pipeline: fetch owned → match DB → discover via ITAD → enrich IGDB → insert interests.
+   */
   async syncLibrary(userId: number): Promise<SteamSyncResultDto> {
     const { apiKey, steamId } = await this.validateSyncPrereqs(userId);
     const ownedGames = await this.fetchOwnedGamesIfPublic(
@@ -55,13 +63,78 @@ export class SteamService {
       userId,
     );
     if (ownedGames.length === 0) return this.emptySyncResult(0);
-    const { matchedGames, imported } = await this.matchWithBackfill(ownedGames);
-    if (matchedGames.length === 0)
-      return this.emptySyncResult(ownedGames.length);
+
+    // Phase 1: Match existing DB games
+    const dbMatches = await this.findMatchingGames(ownedGames);
+    const matchedAppIds = new Set(dbMatches.map((g) => g.steamAppId));
+
+    // Phase 2: Discover unmatched games via ITAD
+    const unmatched = ownedGames.filter((g) => !matchedAppIds.has(g.appid));
+    const discovered = await this.discoverUnmatchedGames(unmatched);
+
+    // Phase 3: Re-query all matches after discovery
+    const allMatches = await this.findMatchingGames(ownedGames);
+    if (allMatches.length === 0) return this.emptySyncResult(ownedGames.length);
+
+    // Phase 4: Partition into insert/update and persist
+    return this.persistInterests(userId, ownedGames, allMatches, discovered);
+  }
+
+  /** Discover unmatched Steam games via ITAD, returns count of discovered games. */
+  private async discoverUnmatchedGames(
+    unmatched: SteamOwnedGame[],
+  ): Promise<number> {
+    if (unmatched.length === 0 || !this.itadService) return 0;
+
+    const deps = await this.buildDiscoveryDeps();
+    if (!deps) return 0;
+
+    let discovered = 0;
+    for (const game of unmatched) {
+      try {
+        const result = await discoverGameViaItad(game.appid, deps);
+        if (result) discovered++;
+      } catch (err) {
+        this.logger.warn(
+          `ITAD discovery failed for appid ${game.appid}: ${err}`,
+        );
+      }
+    }
+
+    if (discovered > 0) {
+      this.logger.log(`ITAD discovery: ${discovered}/${unmatched.length} new`);
+    }
+    return discovered;
+  }
+
+  /** Build ITAD discovery dependencies from injected services. */
+  private async buildDiscoveryDeps(): Promise<DiscoveryDeps | null> {
+    if (!this.itadService) return null;
+    const adultFilterEnabled =
+      (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===
+      'true';
+
+    return {
+      db: this.db,
+      lookupBySteamAppId: (id) => this.itadService!.lookupBySteamAppId(id),
+      queryIgdb: this.igdbService
+        ? (body) => this.igdbService!.queryIgdb(body)
+        : undefined,
+      adultFilterEnabled,
+    };
+  }
+
+  /** Persist game interests and return sync result DTO. */
+  private async persistInterests(
+    userId: number,
+    ownedGames: SteamOwnedGame[],
+    allMatches: { id: number; steamAppId: number | null }[],
+    discovered: number,
+  ): Promise<SteamSyncResultDto> {
     const { toInsert, toUpdate } = await this.partitionGames(
       userId,
       ownedGames,
-      matchedGames,
+      allMatches,
     );
     const newInterests = await this.insertNewInterests(toInsert);
     const updatedPlaytime = await updateExistingPlaytime(
@@ -71,38 +144,10 @@ export class SteamService {
     );
     return this.buildSyncResult(
       ownedGames.length,
-      matchedGames.length,
+      allMatches.length,
       newInterests,
       updatedPlaytime,
-      imported > 0 ? imported : undefined,
-    );
-  }
-
-  /** Match owned games to DB, backfilling from IGDB if needed. */
-  private async matchWithBackfill(
-    ownedGames: Awaited<ReturnType<typeof getOwnedGames>>,
-  ) {
-    let matchedGames = await this.findMatchingGames(ownedGames);
-    const imported = await this.tryBackfill(ownedGames, matchedGames);
-    if (imported > 0) matchedGames = await this.findMatchingGames(ownedGames);
-    return { matchedGames, imported };
-  }
-
-  /** Try to backfill unmatched Steam games from IGDB. */
-  private async tryBackfill(
-    ownedGames: Awaited<ReturnType<typeof getOwnedGames>>,
-    matchedGames: { id: number; steamAppId: number | null }[],
-  ): Promise<number> {
-    if (!this.igdbService) return 0;
-    const matchedAppIds = new Set(matchedGames.map((g) => g.steamAppId));
-    const unmatched = ownedGames
-      .map((g) => g.appid)
-      .filter((id) => !matchedAppIds.has(id));
-    if (unmatched.length === 0) return 0;
-    return backfillUnmatchedSteamGames(
-      unmatched,
-      (body) => this.igdbService!.queryIgdb(body),
-      (games) => this.igdbService!.upsertGamesFromApi(games),
+      discovered > 0 ? discovered : undefined,
     );
   }
 
@@ -115,7 +160,8 @@ export class SteamService {
     imported?: number,
   ): SteamSyncResultDto {
     this.logger.log(
-      `Steam sync: ${totalOwned} owned, ${matched} matched, ${newInterests} new, ${updatedPlaytime} updated` +
+      `Steam sync: ${totalOwned} owned, ${matched} matched, ` +
+        `${newInterests} new, ${updatedPlaytime} updated` +
         (imported ? `, ${imported} imported` : ''),
     );
     return { totalOwned, matched, newInterests, updatedPlaytime, imported };
@@ -137,7 +183,7 @@ export class SteamService {
     apiKey: string,
     steamId: string,
     userId: number,
-  ): Promise<Awaited<ReturnType<typeof getOwnedGames>>> {
+  ): Promise<SteamOwnedGame[]> {
     const profile = await getPlayerSummary(apiKey, steamId);
     if (profile && profile.communityvisibilitystate !== 3) {
       this.logger.warn(
@@ -149,7 +195,7 @@ export class SteamService {
   }
 
   private async findMatchingGames(
-    ownedGames: Awaited<ReturnType<typeof getOwnedGames>>,
+    ownedGames: SteamOwnedGame[],
   ): Promise<{ id: number; steamAppId: number | null }[]> {
     const steamAppIds = ownedGames.map((g) => g.appid);
     return this.db
@@ -174,7 +220,7 @@ export class SteamService {
     return new Set(rows.map((i) => i.gameId));
   }
 
-  /** Row types for partition results. */
+  /** Build a game interest insert row. */
   private buildInsertRow(
     userId: number,
     gameId: number,
@@ -203,11 +249,7 @@ export class SteamService {
 
   /** Classify a single owned game as insert or update. */
   private classifySteamGame(
-    steamGame: {
-      appid: number;
-      playtime_forever: number;
-      playtime_2weeks?: number;
-    },
+    steamGame: SteamOwnedGame,
     ctx: SteamClassifyCtx,
   ): void {
     const dbGame = ctx.gameByAppId.get(steamGame.appid);
@@ -235,7 +277,7 @@ export class SteamService {
 
   private async partitionGames(
     userId: number,
-    ownedGames: Awaited<ReturnType<typeof getOwnedGames>>,
+    ownedGames: SteamOwnedGame[],
     matchedGames: { id: number; steamAppId: number | null }[],
   ) {
     const gameByAppId = new Map(matchedGames.map((g) => [g.steamAppId!, g]));
@@ -274,41 +316,8 @@ export class SteamService {
     return inserted.length;
   }
 
-  /**
-   * Sync all users who have linked Steam accounts.
-   * Used by the scheduled cron job.
-   */
-  async syncAllLinkedUsers(): Promise<{
-    usersProcessed: number;
-    totalNewInterests: number;
-  }> {
-    const usersWithSteam = await this.db
-      .select({ id: schema.users.id, steamId: schema.users.steamId })
-      .from(schema.users)
-      .where(isNotNull(schema.users.steamId));
-
-    let usersProcessed = 0;
-    let totalNewInterests = 0;
-
-    for (const user of usersWithSteam) {
-      try {
-        const result = await this.syncLibrary(user.id);
-        totalNewInterests += result.newInterests;
-        usersProcessed++;
-      } catch (error) {
-        this.logger.warn(
-          `Steam sync failed for user ${user.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        );
-      }
-
-      // Small delay between users to be nice to Steam API
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
-
-    this.logger.log(
-      `Steam bulk sync: ${usersProcessed}/${usersWithSteam.length} users, ${totalNewInterests} new interests`,
-    );
-
-    return { usersProcessed, totalNewInterests };
+  /** Sync all users who have linked Steam accounts (used by cron). */
+  async syncAllLinkedUsers() {
+    return syncAllLinkedUsers(this.db, (id) => this.syncLibrary(id));
   }
 }

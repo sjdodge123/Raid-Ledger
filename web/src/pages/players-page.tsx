@@ -28,7 +28,7 @@ function usePlayerSearch() {
 
 function GameFilterBanner({ gameId, gameData, source }: { gameId: number | undefined; gameData: { name: string } | undefined; source?: string }) {
     if (!gameId || !gameData) return null;
-    const label = source === 'steam_library' ? 'who own' : 'interested in';
+    const label = source === 'steam_library' ? 'who own' : source === 'steam_wishlist' ? 'who wishlisted' : 'interested in';
     return (
         <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-3">
             <span className="text-sm text-emerald-400">Showing players {label} <strong>{gameData.name}</strong></span>
@@ -87,7 +87,7 @@ export function PlayersPage() {
     const { gameId, source, search, setSearch, debouncedSearch } = usePlayerSearch();
     const { items: players, total, isLoading, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, gameId, source);
     const { data: gameData } = useGameDetail(gameId);
-    const countLabel = source === 'steam_library' ? 'own' : gameId ? 'interested' : 'registered';
+    const countLabel = source === 'steam_library' ? 'own' : source === 'steam_wishlist' ? 'wishlisted' : gameId ? 'interested' : 'registered';
 
     return (
         <PullToRefresh onRefresh={refetch}>

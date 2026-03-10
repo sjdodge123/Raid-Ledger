@@ -18,9 +18,9 @@ const allOfflineStatuses = {
 };
 
 describe('buildCoreIntegrationItems', () => {
-    it('returns 2 items (IGDB and Steam)', () => {
+    it('returns 3 items (IGDB, Steam, and ITAD)', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
-        expect(items).toHaveLength(2);
+        expect(items).toHaveLength(3);
     });
 
     it('includes IGDB with correct path', () => {
