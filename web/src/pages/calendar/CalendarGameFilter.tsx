@@ -3,13 +3,9 @@ import { useMemo, useState } from 'react';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { Modal } from '../../components/ui/modal';
 import { getGameColors } from '../../constants/game-colors';
-import type { GameWithLiked } from './game-filter-helpers';
+import type { GameInfo } from '../../stores/game-filter-store';
+import { sortGamesWithLikedFirst, type GameWithLiked } from './game-filter-helpers';
 
-interface GameInfo {
-    slug: string;
-    name: string;
-    coverUrl: string | null;
-}
 
 interface CalendarGameFilterSheetProps {
     isOpen: boolean;
@@ -83,15 +79,10 @@ export function CalendarGameFilterModal({
 
 /** Hook to sort games with liked first, annotating each with liked flag. */
 function useSortedGames(games: GameInfo[], likedSlugs?: Set<string>): GameWithLiked[] {
-    return useMemo(() => {
-        const slugs = likedSlugs ?? new Set<string>();
-        return games
-            .map((g) => ({ ...g, liked: slugs.has(g.slug) }))
-            .sort((a, b) => {
-                if (a.liked !== b.liked) return a.liked ? -1 : 1;
-                return a.name.localeCompare(b.name);
-            });
-    }, [games, likedSlugs]);
+    return useMemo(
+        () => sortGamesWithLikedFirst(games, likedSlugs ?? new Set<string>()),
+        [games, likedSlugs],
+    );
 }
 
 /** Shared filter action buttons (All / None + count). */
