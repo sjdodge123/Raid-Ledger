@@ -89,7 +89,7 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       expect(mockDb.select).toHaveBeenCalledTimes(1);
 
       // Expire TTL
-      jest.advanceTimersByTime(5 * 60_000 + 1_000);
+      jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
       // Set up a slow DB response for the background refresh
       let resolveRefresh!: (value: unknown[]) => void;
@@ -125,7 +125,7 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       await service.get(SETTING_KEYS.DEMO_MODE);
 
       // Expire TTL
-      jest.advanceTimersByTime(5 * 60_000 + 1_000);
+      jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
       // Background refresh returns new value
       mockDb._selectChain.from.mockResolvedValue([
@@ -154,7 +154,7 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       expect(mockDb.select).toHaveBeenCalledTimes(1);
 
       // Expire TTL
-      jest.advanceTimersByTime(5 * 60_000 + 1_000);
+      jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
       // Slow background refresh
       let resolveRefresh!: (value: unknown[]) => void;
@@ -234,7 +234,7 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       expect(mockDb.select).toHaveBeenCalledTimes(1);
 
       // Advance almost to TTL expiry
-      jest.advanceTimersByTime(4 * 60_000);
+      jest.advanceTimersByTime(29 * 60_000);
 
       // Write-through resets the TTL
       await service.set(SETTING_KEYS.DEMO_MODE, 'updated');
@@ -262,7 +262,7 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       await service.get(SETTING_KEYS.DEMO_MODE);
 
       // Expire TTL
-      jest.advanceTimersByTime(5 * 60_000 + 1_000);
+      jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
       // Background refresh fails
       mockDb._selectChain.from.mockRejectedValue(
@@ -288,14 +288,14 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       expect(mockDb.select).toHaveBeenCalledTimes(1);
 
       // First TTL expiry - background refresh fails
-      jest.advanceTimersByTime(5 * 60_000 + 1_000);
+      jest.advanceTimersByTime(30 * 60_000 + 1_000);
       mockDb._selectChain.from.mockRejectedValue(new Error('DB down'));
       await service.get(SETTING_KEYS.DEMO_MODE);
       await jest.advanceTimersByTimeAsync(0);
       expect(mockDb.select).toHaveBeenCalledTimes(2);
 
       // Second TTL expiry - should attempt refresh again
-      jest.advanceTimersByTime(5 * 60_000 + 1_000);
+      jest.advanceTimersByTime(30 * 60_000 + 1_000);
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.DEMO_MODE, 'recovered'),
       ]);

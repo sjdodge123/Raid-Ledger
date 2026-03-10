@@ -145,7 +145,7 @@ export class RecruitmentReminderService {
       this.settingsService
         .getClientUrl()
         .then((u) => u ?? 'http://localhost:5173'),
-      this.notificationService.resolveVoiceChannelId(event.gameId),
+      this.notificationService.resolveVoiceChannelForEvent(event.id),
     ]);
     const eventDate = new Date(event.startTime).toLocaleDateString('en-US', {
       weekday: 'short',

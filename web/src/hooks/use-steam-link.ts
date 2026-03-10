@@ -22,10 +22,9 @@ async function steamFetch<T>(path: string, method = 'GET', errorMsg = 'Request f
     return response.json();
 }
 
-function useSteamMutations() {
+function useUnlinkSteam() {
     const queryClient = useQueryClient();
-
-    const unlinkSteam = useMutation<void, Error>({
+    return useMutation<void, Error>({
         mutationFn: async () => { await steamFetch('/auth/steam/link', 'DELETE', 'Failed to unlink Steam'); },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
@@ -34,8 +33,11 @@ function useSteamMutations() {
         },
         onError: (err) => toast.error(err.message),
     });
+}
 
-    const syncLibrary = useMutation({
+function useSyncLibrary() {
+    const queryClient = useQueryClient();
+    return useMutation({
         mutationFn: () => steamFetch<{ success: boolean; message: string; matched: number; newInterests: number }>('/auth/steam/sync', 'POST', 'Sync failed'),
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
@@ -44,8 +46,11 @@ function useSteamMutations() {
         },
         onError: (err: Error) => toast.error(err.message),
     });
+}
 
-    const syncWishlist = useMutation({
+function useSyncWishlist() {
+    const queryClient = useQueryClient();
+    return useMutation({
         mutationFn: () => steamFetch<{ success: boolean; message: string }>('/auth/steam/sync-wishlist', 'POST', 'Wishlist sync failed'),
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
@@ -54,8 +59,6 @@ function useSteamMutations() {
         },
         onError: (err: Error) => toast.error(err.message),
     });
-
-    return { unlinkSteam, syncLibrary, syncWishlist };
 }
 
 export function useSteamLink() {
@@ -72,6 +75,8 @@ export function useSteamLink() {
         staleTime: 30_000,
     });
 
-    const mutations = useSteamMutations();
-    return { linkSteam, steamStatus, ...mutations };
+    const unlinkSteam = useUnlinkSteam();
+    const syncLibrary = useSyncLibrary();
+    const syncWishlist = useSyncWishlist();
+    return { linkSteam, steamStatus, unlinkSteam, syncLibrary, syncWishlist };
 }

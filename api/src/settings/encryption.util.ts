@@ -12,16 +12,33 @@ const SALT_LENGTH = 32;
 const KEY_LENGTH = 32;
 
 /**
+ * Cached derived key + the secret it was derived from.
+ * scryptSync is intentionally slow (~100ms per call on ARM/NAS hardware).
+ * Caching avoids re-deriving 40+ times per settings cache reload.
+ */
+let cachedKey: Buffer | null = null;
+let cachedKeySecret: string | null = null;
+
+/**
  * Derives encryption key from JWT_SECRET using scrypt.
  * Falls back to a default key for development if JWT_SECRET is not set.
+ * Result is cached per-process — only re-derives if JWT_SECRET changes.
  */
 function getEncryptionKey(): Buffer {
   const secret = process.env.JWT_SECRET || 'dev-encryption-key-change-me';
-  // Use a fixed salt derived from the secret for deterministic key generation
+  if (cachedKey && cachedKeySecret === secret) return cachedKey;
   const salt = Buffer.from(
     secret.slice(0, SALT_LENGTH).padEnd(SALT_LENGTH, '0'),
   );
-  return scryptSync(secret, salt, KEY_LENGTH);
+  cachedKey = scryptSync(secret, salt, KEY_LENGTH);
+  cachedKeySecret = secret;
+  return cachedKey;
+}
+
+/** @internal Exposed for testing only — clears the cached key. */
+export function _resetKeyCache(): void {
+  cachedKey = null;
+  cachedKeySecret = null;
 }
 
 /**
