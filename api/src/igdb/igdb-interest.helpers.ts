@@ -2,11 +2,18 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { GameInterestResponseDto } from '@raid-ledger/contract';
+import {
+  getSteamOwnerCount,
+  getSteamOwners,
+  getSteamWishlistCount,
+  isWishlistedByUser,
+  getSteamWishlisters,
+} from './igdb-steam-interest.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Sources that count as "interested" (hearts). Library/wishlist are separate. */
-const HEART_SOURCES = ['manual', 'discord', 'steam'] as const;
+export const HEART_SOURCES = ['manual', 'discord', 'steam'];
 
 /**
  * Get interest count for a game (hearts only, excludes library/wishlist).
@@ -24,7 +31,7 @@ export async function getInterestCount(
     .where(
       and(
         eq(schema.gameInterests.gameId, gameId),
-        inArray(schema.gameInterests.source, [...HEART_SOURCES]),
+        inArray(schema.gameInterests.source, HEART_SOURCES),
       ),
     );
   return result?.count ?? 0;
@@ -49,7 +56,7 @@ export async function getUserInterestSource(
       and(
         eq(schema.gameInterests.gameId, gameId),
         eq(schema.gameInterests.userId, userId),
-        inArray(schema.gameInterests.source, [...HEART_SOURCES]),
+        inArray(schema.gameInterests.source, HEART_SOURCES),
       ),
     )
     .limit(1);
@@ -79,7 +86,7 @@ export async function getInterestedPlayers(
     .where(
       and(
         eq(schema.gameInterests.gameId, gameId),
-        inArray(schema.gameInterests.source, [...HEART_SOURCES]),
+        inArray(schema.gameInterests.source, HEART_SOURCES),
       ),
     )
     .orderBy(schema.gameInterests.createdAt)
@@ -110,7 +117,7 @@ async function fetchBatchData(
       .where(
         and(
           inArray(schema.gameInterests.gameId, gameIds),
-          inArray(schema.gameInterests.source, [...HEART_SOURCES]),
+          inArray(schema.gameInterests.source, HEART_SOURCES),
         ),
       )
       .groupBy(schema.gameInterests.gameId),
@@ -121,7 +128,7 @@ async function fetchBatchData(
         and(
           inArray(schema.gameInterests.gameId, gameIds),
           eq(schema.gameInterests.userId, userId),
-          inArray(schema.gameInterests.source, [...HEART_SOURCES]),
+          inArray(schema.gameInterests.source, HEART_SOURCES),
         ),
       ),
   ]);
@@ -214,76 +221,6 @@ export async function removeInterest(
   return { wantToPlay: false, count, players };
 }
 
-/**
- * Count users who wishlisted a game via Steam (source = 'steam_wishlist').
- * @param db - Database connection
- * @param gameId - Game ID
- * @returns Wishlist count
- */
-export async function getSteamWishlistCount(
-  db: Db,
-  gameId: number,
-): Promise<number> {
-  const [result] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.gameInterests)
-    .where(
-      and(
-        eq(schema.gameInterests.gameId, gameId),
-        eq(schema.gameInterests.source, 'steam_wishlist'),
-      ),
-    );
-  return result?.count ?? 0;
-}
-
-/**
- * Check if a user has wishlisted a game via Steam.
- * @param db - Database connection
- * @param gameId - Game ID
- * @param userId - User ID
- * @returns true if user has wishlisted
- */
-export async function isWishlistedByUser(
-  db: Db,
-  gameId: number,
-  userId: number,
-): Promise<boolean> {
-  const [row] = await db
-    .select({ id: schema.gameInterests.id })
-    .from(schema.gameInterests)
-    .where(
-      and(
-        eq(schema.gameInterests.gameId, gameId),
-        eq(schema.gameInterests.userId, userId),
-        eq(schema.gameInterests.source, 'steam_wishlist'),
-      ),
-    )
-    .limit(1);
-  return !!row;
-}
-
-/**
- * Count users who own a game via Steam (source = 'steam_library').
- * @param db - Database connection
- * @param gameId - Game ID
- * @returns Owner count
- */
-export async function getSteamOwnerCount(
-  db: Db,
-  gameId: number,
-): Promise<number> {
-  const [result] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.gameInterests)
-    .where(
-      and(
-        eq(schema.gameInterests.gameId, gameId),
-        eq(schema.gameInterests.source, 'steam_library'),
-      ),
-    );
-  return result?.count ?? 0;
-}
-
 /** Build the parallel query array for game interest data. */
 function interestQueries(db: Db, gameId: number, userId: number) {
   return [
@@ -327,55 +264,4 @@ export async function fetchGameInterestData(
     wishlistedByMe,
     wishlisters,
   };
-}
-
-/**
- * Fetch first 8 Steam owners for avatar display (ROK-745).
- * @param db - Database connection
- * @param gameId - Game ID
- * @returns Player preview list
- */
-export async function getSteamOwners(db: Db, gameId: number) {
-  return fetchPlayersBySource(db, gameId, 'steam_library');
-}
-
-/**
- * Fetch first 8 Steam wishlisters for avatar display (ROK-774).
- */
-export async function getSteamWishlisters(db: Db, gameId: number) {
-  return fetchPlayersBySource(db, gameId, 'steam_wishlist');
-}
-
-/** Shared query for fetching player previews by interest source. */
-async function fetchPlayersBySource(
-  db: Db,
-  gameId: number,
-  source: string,
-) {
-  const rows = await db
-    .select({
-      id: schema.users.id,
-      username: schema.users.username,
-      avatar: schema.users.avatar,
-      customAvatarUrl: schema.users.customAvatarUrl,
-      discordId: schema.users.discordId,
-    })
-    .from(schema.gameInterests)
-    .innerJoin(schema.users, eq(schema.gameInterests.userId, schema.users.id))
-    .where(
-      and(
-        eq(schema.gameInterests.gameId, gameId),
-        eq(schema.gameInterests.source, source),
-      ),
-    )
-    .orderBy(schema.gameInterests.createdAt)
-    .limit(8);
-
-  return rows.map((p) => ({
-    id: p.id,
-    username: p.username,
-    avatar: p.avatar,
-    customAvatarUrl: p.customAvatarUrl,
-    discordId: p.discordId,
-  }));
 }

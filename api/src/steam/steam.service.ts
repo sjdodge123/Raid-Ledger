@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
-import { eq, inArray, and, isNotNull } from 'drizzle-orm';
+import { eq, inArray, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
@@ -18,6 +18,7 @@ import {
   type DiscoveryDeps,
 } from './steam-itad-discovery.helpers';
 import type { SteamSyncResultDto } from '@raid-ledger/contract';
+import { syncAllLinkedUsers } from './steam-bulk-sync.helpers';
 
 /**
  * Steam Library Sync Service (ROK-417, ROK-774).
@@ -94,7 +95,9 @@ export class SteamService {
         const result = await discoverGameViaItad(game.appid, deps);
         if (result) discovered++;
       } catch (err) {
-        this.logger.warn(`ITAD discovery failed for appid ${game.appid}: ${err}`);
+        this.logger.warn(
+          `ITAD discovery failed for appid ${game.appid}: ${err}`,
+        );
       }
     }
 
@@ -313,41 +316,8 @@ export class SteamService {
     return inserted.length;
   }
 
-  /**
-   * Sync all users who have linked Steam accounts.
-   * Used by the scheduled cron job.
-   */
-  async syncAllLinkedUsers(): Promise<{
-    usersProcessed: number;
-    totalNewInterests: number;
-  }> {
-    const usersWithSteam = await this.db
-      .select({ id: schema.users.id, steamId: schema.users.steamId })
-      .from(schema.users)
-      .where(isNotNull(schema.users.steamId));
-
-    let usersProcessed = 0;
-    let totalNewInterests = 0;
-
-    for (const user of usersWithSteam) {
-      try {
-        const result = await this.syncLibrary(user.id);
-        totalNewInterests += result.newInterests;
-        usersProcessed++;
-      } catch (error) {
-        this.logger.warn(
-          `Steam sync failed for user ${user.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        );
-      }
-
-      // Small delay between users to be nice to Steam API
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
-
-    this.logger.log(
-      `Steam bulk sync: ${usersProcessed}/${usersWithSteam.length} users, ${totalNewInterests} new interests`,
-    );
-
-    return { usersProcessed, totalNewInterests };
+  /** Sync all users who have linked Steam accounts (used by cron). */
+  async syncAllLinkedUsers() {
+    return syncAllLinkedUsers(this.db, (id) => this.syncLibrary(id));
   }
 }

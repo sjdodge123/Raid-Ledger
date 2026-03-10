@@ -34,6 +34,8 @@ export function useWantToPlay(gameId: number | undefined) {
             players: [],
             owners: [],
             ownerCount: 0,
+            wishlisters: [],
+            wishlistedCount: 0,
             isLoading: false,
             toggle: (wantToPlay: boolean) => ctx.toggle(gameId, wantToPlay),
             isToggling: ctx.togglingIds.has(gameId),

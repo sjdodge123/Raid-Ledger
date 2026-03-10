@@ -78,14 +78,16 @@ async function upsertGame(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
 ): Promise<{ id: number }[]> {
-  // Check if a game with this slug already exists (e.g. from IGDB import)
   const existing = await db.query.games.findFirst({
-    where: eq(schema.games.slug, row.slug!),
+    where: eq(schema.games.slug, row.slug ?? ''),
     columns: { id: true, steamAppId: true },
   });
 
   if (existing) {
-    // Update existing game with ITAD/Steam data instead of creating duplicate
+    // Don't merge if existing game already has a different Steam app ID
+    if (existing.steamAppId && existing.steamAppId !== row.steamAppId) {
+      return insertWithSlugRetry(db, row);
+    }
     await db
       .update(schema.games)
       .set({
@@ -131,7 +133,8 @@ async function insertWithSlugRetry(
 function isUniqueViolation(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   if ('code' in err && (err as { code: string }).code === '23505') return true;
-  if ('cause' in err) return isUniqueViolation((err as { cause: unknown }).cause);
+  if ('cause' in err)
+    return isUniqueViolation((err as { cause: unknown }).cause);
   return false;
 }
 

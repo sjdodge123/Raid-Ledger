@@ -86,16 +86,3 @@ async function attemptFetch<T>(
     return { data: null, retry: false };
   }
 }
-
-/** Simple test call: look up a well-known Steam app to validate the API key */
-export async function testItadApiKey(apiKey: string): Promise<boolean> {
-  try {
-    const url = buildUrl('/games/lookup/v1', { key: apiKey, appid: '440' });
-    const response = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT },
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}

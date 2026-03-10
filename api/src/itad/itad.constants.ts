@@ -3,8 +3,6 @@
  */
 
 export const ITAD_BASE_URL = 'https://api.isthereanydeal.com';
-export const ITAD_QUEUE = 'itad-operations';
-
 // ─── Rate Limit / Cache ──────────────────────────────────────
 /** Minimum delay between sequential ITAD API calls (ms) */
 export const ITAD_RATE_LIMIT_MS = 150;

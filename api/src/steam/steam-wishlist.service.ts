@@ -137,11 +137,15 @@ export class SteamWishlistService {
         const result = await discoverGameViaItad(item.appid, deps);
         if (result) discovered++;
       } catch (err) {
-        this.logger.warn(`ITAD wishlist discovery failed for ${item.appid}: ${err}`);
+        this.logger.warn(
+          `ITAD wishlist discovery failed for ${item.appid}: ${err}`,
+        );
       }
     }
     if (discovered > 0) {
-      this.logger.log(`ITAD wishlist discovery: ${discovered}/${unmatched.length} new`);
+      this.logger.log(
+        `ITAD wishlist discovery: ${discovered}/${unmatched.length} new`,
+      );
     }
     return discovered;
   }
@@ -150,7 +154,8 @@ export class SteamWishlistService {
   private async buildDiscoveryDeps(): Promise<DiscoveryDeps | null> {
     if (!this.itadService) return null;
     const adultFilterEnabled =
-      (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) === 'true';
+      (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===
+      'true';
     return {
       db: this.db,
       lookupBySteamAppId: (id) => this.itadService!.lookupBySteamAppId(id),
