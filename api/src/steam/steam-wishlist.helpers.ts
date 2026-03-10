@@ -130,7 +130,7 @@ export async function fetchSteamWishlist(
     eq(schemaRef.gameInterests.source, 'steam_wishlist'),
   );
   const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
+    .select({ count: sql<number>`count(*)::int` })
     .from(schemaRef.gameInterests)
     .where(whereClause);
   const rows = await db

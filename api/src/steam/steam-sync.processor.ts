@@ -31,28 +31,26 @@ export class SteamSyncProcessor extends WorkerHost implements OnModuleInit {
     this.queueHealth.register(this.syncQueue);
   }
 
-  async process(
-    job: Job<SteamSyncJobData>,
-  ): Promise<{ usersProcessed: number; totalNewInterests: number }> {
+  async process(job: Job<SteamSyncJobData>) {
     this.logger.log(`Starting Steam sync (trigger: ${job.data.trigger})`);
     await job.updateProgress(0);
 
-    const result = await this.steamService.syncAllLinkedUsers();
+    const library = await this.steamService.syncAllLinkedUsers();
 
     await job.updateProgress(50);
     this.logger.log(
-      `Steam library sync complete: ${result.usersProcessed} users, ${result.totalNewInterests} new interests`,
+      `Steam library sync complete: ${library.usersProcessed} users, ${library.totalNewInterests} new interests`,
     );
 
-    const wishlistResult =
+    const wishlist =
       await this.steamWishlistService.syncAllLinkedUsersWishlist();
 
     await job.updateProgress(100);
     this.logger.log(
-      `Steam wishlist sync complete: ${wishlistResult.usersProcessed} users, ${wishlistResult.totalNewInterests} new interests`,
+      `Steam wishlist sync complete: ${wishlist.usersProcessed} users, ${wishlist.totalNewInterests} new interests`,
     );
 
-    return result;
+    return { library, wishlist };
   }
 
   /**
