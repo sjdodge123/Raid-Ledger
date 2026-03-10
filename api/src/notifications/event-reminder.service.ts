@@ -70,20 +70,19 @@ export class EventReminderService {
   async handleReminders(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'EventReminderService_handleReminders',
-      async () => {
-        await this.processReminderWindows();
-      },
+      () => this.processReminderWindows(),
     );
   }
 
   /** Core reminder processing logic. */
-  private async processReminderWindows(): Promise<void> {
+  private async processReminderWindows(): Promise<void | false> {
     this.logger.debug('Running event reminder check...');
     const now = new Date();
     const candidateEvents = await this.fetchCandidateEvents(now);
     const defaultTimezone =
       (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
 
+    let didWork = false;
     for (const window of REMINDER_WINDOWS) {
       const eventsInWindow = candidateEvents.filter((event) => {
         if (!event[window.fieldKey]) return false;
@@ -91,6 +90,7 @@ export class EventReminderService {
         return msUntil >= -90_000 && msUntil <= window.ms;
       });
       if (eventsInWindow.length === 0) continue;
+      didWork = true;
       this.logger.debug(
         `${window.type}: ${eventsInWindow.length} events in window`,
       );
@@ -103,6 +103,7 @@ export class EventReminderService {
       );
     }
     await this.roleGapAlertService.checkRoleGaps(now, defaultTimezone);
+    if (!didWork) return false;
   }
 
   /** Fetch candidate events in the upcoming 24h window. */

@@ -251,14 +251,14 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async runClassification(): Promise<void> {
+  private async runClassification(): Promise<void | false> {
     const now = new Date();
     const endedEvents = await flushH.fetchEndedEvents(
       this.db,
       now,
       24 * 60 * 60 * 1000,
     );
-    if (endedEvents.length === 0) return;
+    if (endedEvents.length === 0) return false;
     const graceMs = (await this.getGraceMinutes()) * 60 * 1000;
     await this.flushToDb();
     for (const event of endedEvents) {

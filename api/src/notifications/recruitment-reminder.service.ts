@@ -52,16 +52,14 @@ export class RecruitmentReminderService {
   async handleCron(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'RecruitmentReminderService_checkAndSendReminders',
-      async () => {
-        await this.checkAndSendReminders();
-      },
+      () => this.checkAndSendReminders(),
     );
   }
 
   /** Check and send recruitment reminders for eligible events. */
-  async checkAndSendReminders(): Promise<void> {
+  async checkAndSendReminders(): Promise<void | false> {
     const events = await findEligibleEvents(this.db);
-    if (events.length === 0) return;
+    if (events.length === 0) return false;
     this.logger.log(
       `Found ${events.length} eligible events for recruitment reminders`,
     );

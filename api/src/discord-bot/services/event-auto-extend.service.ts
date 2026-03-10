@@ -53,23 +53,21 @@ export class EventAutoExtendService {
   async handleCheckExtensions(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'EventAutoExtendService_checkExtensions',
-      async () => {
-        await this.checkAndExtendEvents();
-      },
+      () => this.checkAndExtendEvents(),
     );
   }
 
-  async checkAndExtendEvents(): Promise<void> {
+  async checkAndExtendEvents(): Promise<void | false> {
     const enabled = await this.settingsService.getEventAutoExtendEnabled();
     if (!enabled) {
       this.logger.debug('Auto-extend is disabled, skipping');
-      return;
+      return false;
     }
     const config = await this.loadExtendConfig();
     const now = new Date();
     const candidates = await this.queryCandidates(now);
     this.logger.debug(`Auto-extend candidates found: ${candidates.length}`);
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) return false;
     for (const c of candidates) {
       await this.tryExtendCandidate(c, config);
     }

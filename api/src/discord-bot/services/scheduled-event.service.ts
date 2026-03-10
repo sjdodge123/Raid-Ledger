@@ -66,13 +66,13 @@ export class ScheduledEventService {
   }
 
   /** Find and start scheduled events (ROK-573). */
-  async startScheduledEvents(): Promise<void> {
-    if (!this.clientService.isConnected()) return;
+  async startScheduledEvents(): Promise<void | false> {
+    if (!this.clientService.isConnected()) return false;
     const guild = this.clientService.getGuild();
-    if (!guild) return;
+    if (!guild) return false;
 
     const candidates = await findStartCandidates(this.db);
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) return false;
 
     for (const c of candidates) {
       const result = await tryStartEvent(guild, c);
@@ -93,11 +93,12 @@ export class ScheduledEventService {
   }
 
   /** Find and complete events past their effective end time (ROK-717). */
-  async completeExpiredEvents(): Promise<void> {
-    if (!this.clientService.isConnected()) return;
+  async completeExpiredEvents(): Promise<void | false> {
+    if (!this.clientService.isConnected()) return false;
     const guild = this.clientService.getGuild();
-    if (!guild) return;
+    if (!guild) return false;
     const candidates = await findCompletionCandidates(this.db);
+    if (candidates.length === 0) return false;
     for (const c of candidates) {
       await this.completeScheduledEvent(c.id);
     }
