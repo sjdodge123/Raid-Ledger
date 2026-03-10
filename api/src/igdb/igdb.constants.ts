@@ -57,7 +57,7 @@ export interface IgdbApiGame {
     splitscreen?: boolean;
     platform?: number;
   }[];
-  external_games?: { category: number; uid: string }[];
+  external_games?: { category?: number; external_game_source?: number; uid: string }[];
 }
 
 /** Search result with source tracking */
@@ -110,8 +110,7 @@ export const IGDB_CONFIG = {
     'videos.video_id',
     'first_release_date',
     'multiplayer_modes.*',
-    'external_games.category',
-    'external_games.uid',
+    'external_games.*',
   ].join(', '),
 } as const;
 

@@ -30,6 +30,7 @@ const CHAIN_METHODS = [
   'set',
   'delete',
   'groupBy',
+  'having',
   '$dynamic',
   'execute',
   'as',

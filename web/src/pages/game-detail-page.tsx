@@ -8,8 +8,10 @@ import { ScreenshotGallery } from '../components/games/ScreenshotGallery';
 import { TwitchStreamEmbed } from '../components/games/TwitchStreamEmbed';
 import { EventCard } from '../components/events/event-card';
 import { InterestPlayerAvatars } from '../components/games/InterestPlayerAvatars';
+import { SteamIcon } from '../components/icons/SteamIcon';
 import { GENRE_MAP } from '../lib/game-utils';
 import { PLATFORM_MAP, MODE_MAP } from './game-detail/game-detail-constants';
+import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
 import type { EventResponseDto } from '@raid-ledger/contract';
 
@@ -77,7 +79,10 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
             <BackButton navigate={navigate} />
             <GameBanner game={game} rating={rating} genres={genres} platforms={platforms} modes={modes} />
             {isAuthenticated && (
-                <WantToPlaySection wantToPlay={wtp.wantToPlay} count={wtp.count} source={wtp.source} players={wtp.players} toggle={wtp.toggle} isToggling={wtp.isToggling} gameId={gameId} />
+                <>
+                    <WantToPlaySection wantToPlay={wtp.wantToPlay} count={wtp.count} source={wtp.source} players={wtp.players} toggle={wtp.toggle} isToggling={wtp.isToggling} gameId={gameId} />
+                    <OwnedBySection owners={wtp.owners ?? []} ownerCount={wtp.ownerCount ?? 0} gameId={gameId} />
+                </>
             )}
             {gameId && <CommunityActivitySection gameId={gameId} />}
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
@@ -192,6 +197,23 @@ function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggl
                 {wantToPlay ? 'Remove from List' : 'Want to Play'}
             </button>
             {count > 0 && <InterestPlayerAvatars players={players} totalCount={count} maxVisible={6} gameId={gameId} />}
+        </div>
+    );
+}
+
+/** Steam ownership section with avatars (ROK-745) */
+function OwnedBySection({ owners, ownerCount, gameId }: {
+    owners: InterestPlayerPreviewDto[]; ownerCount: number; gameId: number | undefined;
+}): JSX.Element | null {
+    if (ownerCount === 0) return null;
+    return (
+        <div className="flex flex-wrap items-center gap-4 mb-8">
+            <SteamIcon className="w-5 h-5 text-muted" />
+            <InterestPlayerAvatars
+                players={owners} totalCount={ownerCount} maxVisible={6}
+                linkTo={gameId ? `/players?gameId=${gameId}&source=steam_library` : undefined}
+                formatLabel={(total, overflow) => overflow > 0 ? `+${overflow} more` : `${total} player${total !== 1 ? 's' : ''} own${total === 1 ? 's' : ''} this`}
+            />
         </div>
     );
 }

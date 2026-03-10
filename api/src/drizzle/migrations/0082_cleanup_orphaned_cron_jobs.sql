@@ -9,7 +9,7 @@ WHERE cron_job_id IN (
 DELETE FROM cron_jobs WHERE name ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-';
 
 -- Add category column for job classification (replaces frontend-only hardcoded mapping)
-ALTER TABLE "cron_jobs" ADD COLUMN "category" text NOT NULL DEFAULT 'Other';
+ALTER TABLE "cron_jobs" ADD COLUMN IF NOT EXISTS "category" text NOT NULL DEFAULT 'Other';
 
 -- Backfill categories for existing core jobs
 UPDATE cron_jobs SET category = 'Data Sync' WHERE name IN (

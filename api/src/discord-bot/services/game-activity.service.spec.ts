@@ -42,51 +42,52 @@ import {
 /**
  * Build a mock DB with the correct terminal mock sequencing for autoHeartCheck.
  *
- * Because autoHeartCheck makes 4 DB queries (candidates, opted-out, interests,
- * suppressions), and each terminates at a different chain method, we set up
- * each terminal mock independently.
+ * autoHeartCheck makes 5 DB queries (Discord candidates, Steam candidates,
+ * opted-out, existing interests, suppressions), each terminating at a
+ * different chain method. We set up each terminal mock independently.
  */
 function buildAutoHeartMockDb({
   candidates,
+  steamCandidates = [],
   optedOut,
   existingInterests,
   suppressions,
 }: {
   candidates: { userId: number; gameId: number | null }[];
+  steamCandidates?: { userId: number; gameId: number | null }[];
   optedOut: { userId: number }[];
   existingInterests: { userId: number; gameId: number }[];
   suppressions: { userId: number; gameId: number }[];
 }) {
   const mockDb = createDrizzleMock();
 
-  // Add 'having' — not in base mock but needed for the candidates query
+  // Discord candidates query terminates at .having()
   const havingMock = jest.fn().mockResolvedValue(candidates);
   mockDb.having = havingMock;
 
-  // All 4 queries now terminate at .where() (candidates continues, others resolve):
-  //
-  // Call 1: candidates query .where(...).groupBy(...).having(...)
-  //         → .where returns this (continues to .groupBy)
-  // Call 2: opted-out query's terminal .where(and(...))
-  //         → resolves to optedOut array
-  // Call 3: interests query's terminal .where(inArray(...))
-  //         → resolves to existingInterests
-  // Call 4: suppressions query's terminal .where(inArray(...))
-  //         → resolves to suppressions
+  // Query sequence for .where():
+  // Call 1: Discord candidates .where(…).groupBy(…).having(…) → chain
+  // Call 2: Steam candidates .where(…) → terminal (resolves to steam data)
+  // Call 3: opted-out .where(…) → terminal
+  // Call 4: existing interests .where(…) → terminal
+  // Call 5: suppressions .where(…) → terminal
 
   let whereCallCount = 0;
   mockDb.where = jest.fn().mockImplementation(() => {
     whereCallCount++;
     if (whereCallCount === 1) {
-      return mockDb; // candidates chain continues
+      return mockDb; // Discord chain continues to groupBy
     }
     if (whereCallCount === 2) {
-      return Promise.resolve(optedOut);
+      return Promise.resolve(steamCandidates);
     }
     if (whereCallCount === 3) {
-      return Promise.resolve(existingInterests);
+      return Promise.resolve(optedOut);
     }
     if (whereCallCount === 4) {
+      return Promise.resolve(existingInterests);
+    }
+    if (whereCallCount === 5) {
       return Promise.resolve(suppressions);
     }
     return mockDb;
@@ -357,14 +358,18 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
 
   describe('early return when no candidates', () => {
     it('returns early and makes no further queries when candidates list is empty', async () => {
-      const mockDb = createDrizzleMock();
-      mockDb.having = jest.fn().mockResolvedValue([]);
+      const mockDb = buildAutoHeartMockDb({
+        candidates: [],
+        optedOut: [],
+        existingInterests: [],
+        suppressions: [],
+      });
 
       const service = await createService(mockDb);
 
       await service.autoHeartCheck();
 
-      // No insert, no opted-out query (where not called for opt-out)
+      // No insert, no opted-out query
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
   });

@@ -16,7 +16,7 @@ export const IGDB_GAME_WEIGHTS: IgdbGameWeight[] = [
   { igdbId: '14729', name: 'Final Fantasy XIV Online', weight: 6 },
   { igdbId: '25657', name: 'Destiny 2', weight: 5 },
   { igdbId: '104967', name: 'Valheim', weight: 4 },
-  { igdbId: '136210', name: 'World of Warcraft Classic', weight: 4 },
+  { igdbId: '75379', name: 'World of Warcraft Classic', weight: 4 },
   { igdbId: '250616', name: 'Helldivers 2', weight: 4 },
   { igdbId: '27134', name: 'Deep Rock Galactic', weight: 3 },
   { igdbId: '125165', name: 'Diablo IV', weight: 3 },
@@ -161,7 +161,7 @@ const FFXIV_TEMPLATES: EventTemplate[] = [
 
 const MMO_IGDB_IDS = new Set([
   '123',
-  '136210',
+  '75379',
   '1183',
   '1081',
   '26128',

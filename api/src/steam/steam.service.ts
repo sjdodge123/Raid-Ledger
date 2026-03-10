@@ -1,10 +1,16 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, inArray, and, isNotNull, sql } from 'drizzle-orm';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
+import { eq, inArray, and, isNotNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
+import { IgdbService } from '../igdb/igdb.service';
 import { getOwnedGames, getPlayerSummary } from './steam-http.util';
+import { backfillUnmatchedSteamGames } from './steam-backfill.helpers';
+import {
+  updateExistingPlaytime,
+  type PlaytimeUpdateEntry,
+} from './steam-playtime.helpers';
 import type { SteamSyncResultDto } from '@raid-ledger/contract';
 
 /**
@@ -18,11 +24,7 @@ interface SteamClassifyCtx {
   userId: number;
   now: Date;
   toInsert: ReturnType<SteamService['buildInsertRow']>[];
-  toUpdate: Array<{
-    gameId: number;
-    playtimeForever: number;
-    playtime2weeks: number | null;
-  }>;
+  toUpdate: PlaytimeUpdateEntry[];
 }
 
 @Injectable()
@@ -33,6 +35,7 @@ export class SteamService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
+    @Optional() private readonly igdbService?: IgdbService,
   ) {}
 
   /**
@@ -52,7 +55,7 @@ export class SteamService {
       userId,
     );
     if (ownedGames.length === 0) return this.emptySyncResult(0);
-    const matchedGames = await this.findMatchingGames(ownedGames);
+    const { matchedGames, imported } = await this.matchWithBackfill(ownedGames);
     if (matchedGames.length === 0)
       return this.emptySyncResult(ownedGames.length);
     const { toInsert, toUpdate } = await this.partitionGames(
@@ -61,16 +64,61 @@ export class SteamService {
       matchedGames,
     );
     const newInterests = await this.insertNewInterests(toInsert);
-    const updatedPlaytime = await this.updateExistingPlaytime(userId, toUpdate);
-    this.logger.log(
-      `Steam sync for user ${userId}: ${ownedGames.length} owned, ${matchedGames.length} matched, ${newInterests} new, ${updatedPlaytime} updated`,
+    const updatedPlaytime = await updateExistingPlaytime(
+      this.db,
+      userId,
+      toUpdate,
     );
-    return {
-      totalOwned: ownedGames.length,
-      matched: matchedGames.length,
+    return this.buildSyncResult(
+      ownedGames.length,
+      matchedGames.length,
       newInterests,
       updatedPlaytime,
-    };
+      imported > 0 ? imported : undefined,
+    );
+  }
+
+  /** Match owned games to DB, backfilling from IGDB if needed. */
+  private async matchWithBackfill(
+    ownedGames: Awaited<ReturnType<typeof getOwnedGames>>,
+  ) {
+    let matchedGames = await this.findMatchingGames(ownedGames);
+    const imported = await this.tryBackfill(ownedGames, matchedGames);
+    if (imported > 0) matchedGames = await this.findMatchingGames(ownedGames);
+    return { matchedGames, imported };
+  }
+
+  /** Try to backfill unmatched Steam games from IGDB. */
+  private async tryBackfill(
+    ownedGames: Awaited<ReturnType<typeof getOwnedGames>>,
+    matchedGames: { id: number; steamAppId: number | null }[],
+  ): Promise<number> {
+    if (!this.igdbService) return 0;
+    const matchedAppIds = new Set(matchedGames.map((g) => g.steamAppId));
+    const unmatched = ownedGames
+      .map((g) => g.appid)
+      .filter((id) => !matchedAppIds.has(id));
+    if (unmatched.length === 0) return 0;
+    return backfillUnmatchedSteamGames(
+      unmatched,
+      (body) => this.igdbService!.queryIgdb(body),
+      (games) => this.igdbService!.upsertGamesFromApi(games),
+    );
+  }
+
+  /** Build the final sync result DTO with logging. */
+  private buildSyncResult(
+    totalOwned: number,
+    matched: number,
+    newInterests: number,
+    updatedPlaytime: number,
+    imported?: number,
+  ): SteamSyncResultDto {
+    this.logger.log(
+      `Steam sync: ${totalOwned} owned, ${matched} matched, ${newInterests} new, ${updatedPlaytime} updated` +
+        (imported ? `, ${imported} imported` : ''),
+    );
+    return { totalOwned, matched, newInterests, updatedPlaytime, imported };
   }
 
   private async validateSyncPrereqs(
@@ -194,11 +242,7 @@ export class SteamService {
     const existingGameIds = await this.fetchExistingSteamInterests(userId);
     const now = new Date();
     const toInsert: ReturnType<SteamService['buildInsertRow']>[] = [];
-    const toUpdate: Array<{
-      gameId: number;
-      playtimeForever: number;
-      playtime2weeks: number | null;
-    }> = [];
+    const toUpdate: PlaytimeUpdateEntry[] = [];
     const ctx: SteamClassifyCtx = {
       gameByAppId,
       existingGameIds,
@@ -228,70 +272,6 @@ export class SteamService {
       .onConflictDoNothing()
       .returning({ id: schema.gameInterests.id });
     return inserted.length;
-  }
-
-  /** Build SQL CASE expressions for batch playtime update. */
-  private buildPlaytimeCases(
-    toUpdate: Array<{
-      gameId: number;
-      playtimeForever: number;
-      playtime2weeks: number | null;
-    }>,
-  ) {
-    const foreverCases = toUpdate
-      .map((u) => `WHEN game_id = ${u.gameId} THEN ${u.playtimeForever}`)
-      .join(' ');
-    const weeksCases = toUpdate
-      .map(
-        (u) =>
-          `WHEN game_id = ${u.gameId} THEN ${u.playtime2weeks === null ? 'NULL' : u.playtime2weeks}`,
-      )
-      .join(' ');
-    return { foreverCases, weeksCases };
-  }
-
-  /** Build the SET clause for batch playtime updates. */
-  private buildPlaytimeSetClause(
-    toUpdate: Array<{
-      gameId: number;
-      playtimeForever: number;
-      playtime2weeks: number | null;
-    }>,
-  ) {
-    const { foreverCases, weeksCases } = this.buildPlaytimeCases(toUpdate);
-    return {
-      playtimeForever: sql.raw(
-        `CASE ${foreverCases} ELSE playtime_forever END`,
-      ),
-      playtime2weeks: sql.raw(`CASE ${weeksCases} ELSE playtime_2weeks END`),
-      lastSyncedAt: new Date(),
-    };
-  }
-
-  private async updateExistingPlaytime(
-    userId: number,
-    toUpdate: Array<{
-      gameId: number;
-      playtimeForever: number;
-      playtime2weeks: number | null;
-    }>,
-  ): Promise<number> {
-    if (toUpdate.length === 0) return 0;
-    const result = await this.db
-      .update(schema.gameInterests)
-      .set(this.buildPlaytimeSetClause(toUpdate))
-      .where(
-        and(
-          eq(schema.gameInterests.userId, userId),
-          inArray(
-            schema.gameInterests.gameId,
-            toUpdate.map((u) => u.gameId),
-          ),
-          eq(schema.gameInterests.source, 'steam_library'),
-        ),
-      )
-      .returning({ id: schema.gameInterests.id });
-    return result.length;
   }
 
   /**

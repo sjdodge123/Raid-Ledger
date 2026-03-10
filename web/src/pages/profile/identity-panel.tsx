@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -109,11 +109,31 @@ function resolveCurrentAvatar(
     return optimisticUrl ?? (resolveAvatar(toAvatarUser({ ...user, characters })).url ?? '/default-avatar.svg');
 }
 
+/** Show toast feedback for Steam redirect query params and clean URL (ROK-745). */
+function useSteamRedirectFeedback(): void {
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const steamParam = params.get('steam');
+        if (steamParam === 'error') {
+            toast.error(params.get('message') || 'Steam linking failed');
+        } else if (steamParam === 'success') {
+            toast.success('Steam account linked successfully!');
+            if (params.get('steam_private') === 'true') {
+                toast.info('Set your Steam profile to public so we can sync your game library.');
+            }
+        }
+        if (steamParam) {
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+    }, []);
+}
+
 /**
  * Consolidated Identity panel (ROK-359).
  * Merges the old My Profile, Discord, Avatar, and Account panels into a single page.
  */
 export function IdentityPanel(): JSX.Element | null {
+    useSteamRedirectFeedback();
     const { user, isAuthenticated, refetch } = useAuth();
     const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
     const { data: systemStatus } = useSystemStatus();
@@ -130,10 +150,12 @@ export function IdentityPanel(): JSX.Element | null {
 
     const currentAvatarUrl = resolveCurrentAvatar(user, characters, optimisticUrl);
 
+    const showSteam = !!systemStatus?.steamConfigured;
+
     return (
         <IdentityPanelContent user={user} currentAvatarUrl={currentAvatarUrl}
             showDiscord={!!systemStatus?.discordConfigured} hasDiscordLinked={hasDiscordLinked}
-            onLinkDiscord={handleLinkDiscord} steamStatus={steamStatus} linkSteam={linkSteam}
+            onLinkDiscord={handleLinkDiscord} showSteam={showSteam} steamStatus={steamStatus} linkSteam={linkSteam}
             unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} autoHeart={autoHeart}
             avatarOptions={avatarOptions} handleAvatarSelect={handleAvatarSelect}
             avatarActions={avatarActions} />
@@ -141,10 +163,10 @@ export function IdentityPanel(): JSX.Element | null {
 }
 
 /** Inner content with modal state */
-function IdentityPanelContent({ user, currentAvatarUrl, showDiscord, hasDiscordLinked, onLinkDiscord, steamStatus, linkSteam, unlinkSteam, syncLibrary, autoHeart, avatarOptions, handleAvatarSelect, avatarActions }: {
+function IdentityPanelContent({ user, currentAvatarUrl, showDiscord, hasDiscordLinked, onLinkDiscord, showSteam, steamStatus, linkSteam, unlinkSteam, syncLibrary, autoHeart, avatarOptions, handleAvatarSelect, avatarActions }: {
     user: NonNullable<ReturnType<typeof useAuth>['user']>; currentAvatarUrl: string;
     showDiscord: boolean; hasDiscordLinked: boolean; onLinkDiscord: () => void;
-    steamStatus: ReturnType<typeof useSteamLink>['steamStatus']; linkSteam: () => void;
+    showSteam: boolean; steamStatus: ReturnType<typeof useSteamLink>['steamStatus']; linkSteam: () => void;
     unlinkSteam: ReturnType<typeof useSteamLink>['unlinkSteam']; syncLibrary: ReturnType<typeof useSteamLink>['syncLibrary'];
     autoHeart: ReturnType<typeof useAutoHeart>; avatarOptions: ReturnType<typeof buildAvatarOptions>;
     handleAvatarSelect: (url: string) => void; avatarActions: ReturnType<typeof useAvatarActions>;
@@ -158,7 +180,7 @@ function IdentityPanelContent({ user, currentAvatarUrl, showDiscord, hasDiscordL
         <div className="space-y-6">
             <IdentitySection user={user} currentAvatarUrl={currentAvatarUrl} showDiscord={showDiscord}
                 hasDiscordLinked={hasDiscordLinked} onLinkDiscord={onLinkDiscord}
-                steamStatus={steamStatus} linkSteam={linkSteam} unlinkSteam={unlinkSteam} syncLibrary={syncLibrary}
+                showSteam={showSteam} steamStatus={steamStatus} linkSteam={linkSteam} unlinkSteam={unlinkSteam} syncLibrary={syncLibrary}
                 autoHeart={autoHeart} onOpenAvatar={() => setShowAvatarModal(true)} />
             {!isImpersonating() && <DangerZone onOpenDeleteModal={() => setShowDeleteModal(true)} />}
             <AvatarSelectorModal isOpen={showAvatarModal} onClose={() => setShowAvatarModal(false)}
@@ -174,10 +196,10 @@ function IdentityPanelContent({ user, currentAvatarUrl, showDiscord, hasDiscordL
 }
 
 /** Identity card + linked accounts section */
-function IdentitySection({ user, currentAvatarUrl, showDiscord, hasDiscordLinked, onLinkDiscord, steamStatus, linkSteam, unlinkSteam, syncLibrary, autoHeart, onOpenAvatar }: {
+function IdentitySection({ user, currentAvatarUrl, showDiscord, hasDiscordLinked, onLinkDiscord, showSteam, steamStatus, linkSteam, unlinkSteam, syncLibrary, autoHeart, onOpenAvatar }: {
     user: Parameters<typeof UserIdentityCard>[0]['user']; currentAvatarUrl: string;
     showDiscord: boolean; hasDiscordLinked: boolean; onLinkDiscord: () => void;
-    steamStatus: Parameters<typeof SteamSection>[0]['steamStatus'];
+    showSteam: boolean; steamStatus: Parameters<typeof SteamSection>[0]['steamStatus'];
     linkSteam: () => void; unlinkSteam: Parameters<typeof SteamSection>[0]['unlinkSteam'];
     syncLibrary: Parameters<typeof SteamSection>[0]['syncLibrary'];
     autoHeart: { autoHeartEnabled: boolean; toggleAutoHeart: (v: boolean) => void; isPending: boolean };
@@ -189,7 +211,7 @@ function IdentitySection({ user, currentAvatarUrl, showDiscord, hasDiscordLinked
             <p className="text-sm text-muted mb-6">Your profile identity and linked accounts. Click your avatar to change it.</p>
             <UserIdentityCard user={user} currentAvatarUrl={currentAvatarUrl} onOpenAvatarModal={onOpenAvatar} />
             {showDiscord && !hasDiscordLinked && <DiscordLinkCta onLink={onLinkDiscord} />}
-            <SteamSection steamStatus={steamStatus} linkSteam={linkSteam} unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} />
+            {showSteam && <SteamSection steamStatus={steamStatus} linkSteam={linkSteam} unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} />}
             {hasDiscordLinked && <AutoHeartToggle enabled={autoHeart.autoHeartEnabled} onToggle={autoHeart.toggleAutoHeart} isPending={autoHeart.isPending} />}
         </div>
     );

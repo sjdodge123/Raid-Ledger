@@ -7,14 +7,22 @@ import type { Logger } from '@nestjs/common';
 /** Minimum cumulative playtime (seconds) to trigger auto-heart */
 export const AUTO_HEART_THRESHOLD_SECONDS = 18_000; // 5 hours
 
+/** Equivalent threshold in minutes for Steam playtime */
+const AUTO_HEART_THRESHOLD_MINUTES = 300; // 5 hours
+
 /**
  * Auto-heart games where a user's cumulative playtime exceeds threshold.
+ * Checks both Discord presence sessions and Steam library playtime.
  */
 export async function autoHeartCheck(
   db: PostgresJsDatabase<typeof schema>,
   logger: Logger,
 ): Promise<void> {
-  const candidates = await findHeartCandidates(db);
+  const [discordCandidates, steamCandidates] = await Promise.all([
+    findHeartCandidates(db),
+    findSteamHeartCandidates(db),
+  ]);
+  const candidates = deduplicateCandidates(discordCandidates, steamCandidates);
   if (candidates.length === 0) return;
 
   const candidateUserIds = [...new Set(candidates.map((c) => c.userId))];
@@ -63,6 +71,42 @@ async function findHeartCandidates(
     );
 }
 
+/** Find Steam library games with 5+ hours playtime. */
+async function findSteamHeartCandidates(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<Array<{ userId: number; gameId: number | null }>> {
+  return db
+    .select({
+      userId: tables.gameInterests.userId,
+      gameId: tables.gameInterests.gameId,
+    })
+    .from(tables.gameInterests)
+    .where(
+      and(
+        eq(tables.gameInterests.source, 'steam_library'),
+        gte(tables.gameInterests.playtimeForever, AUTO_HEART_THRESHOLD_MINUTES),
+      ),
+    );
+}
+
+/** Merge Discord and Steam candidates, deduplicating by userId+gameId. */
+function deduplicateCandidates(
+  ...sources: Array<Array<{ userId: number; gameId: number | null }>>
+): Array<{ userId: number; gameId: number | null }> {
+  const seen = new Set<string>();
+  const result: Array<{ userId: number; gameId: number | null }> = [];
+  for (const candidates of sources) {
+    for (const c of candidates) {
+      const key = `${c.userId}:${c.gameId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(c);
+      }
+    }
+  }
+  return result;
+}
+
 async function filterCandidates(
   db: PostgresJsDatabase<typeof schema>,
   candidates: Array<{ userId: number; gameId: number | null }>,
@@ -105,7 +149,12 @@ async function fetchExistingInterests(
       gameId: tables.gameInterests.gameId,
     })
     .from(tables.gameInterests)
-    .where(inArray(tables.gameInterests.userId, userIds));
+    .where(
+      and(
+        inArray(tables.gameInterests.userId, userIds),
+        inArray(tables.gameInterests.source, ['manual', 'discord']),
+      ),
+    );
   return new Set(rows.map((r) => `${r.userId}:${r.gameId}`));
 }
 

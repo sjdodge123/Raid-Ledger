@@ -14,12 +14,13 @@ import type { PluginInfoDto } from '@raid-ledger/contract';
 
 const allOfflineStatuses = {
     igdb: { configured: false, loading: false },
+    steam: { configured: false, loading: false },
 };
 
 describe('buildCoreIntegrationItems', () => {
-    it('returns 1 item (IGDB)', () => {
+    it('returns 2 items (IGDB and Steam)', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
-        expect(items).toHaveLength(1);
+        expect(items).toHaveLength(2);
     });
 
     it('includes IGDB with correct path', () => {
@@ -38,6 +39,7 @@ describe('buildCoreIntegrationItems', () => {
     it('sets IGDB status to online when configured', () => {
         const items = buildCoreIntegrationItems({
             igdb: { configured: true, loading: false },
+            steam: { configured: false, loading: false },
         });
         const igdb = items.find((i) => i.label === 'IGDB / Twitch');
         expect(igdb!.status).toBe('online');
@@ -46,9 +48,41 @@ describe('buildCoreIntegrationItems', () => {
     it('sets IGDB status to loading when loading', () => {
         const items = buildCoreIntegrationItems({
             igdb: { configured: false, loading: true },
+            steam: { configured: false, loading: false },
         });
         const igdb = items.find((i) => i.label === 'IGDB / Twitch');
         expect(igdb!.status).toBe('loading');
+    });
+
+    it('includes Steam with correct path', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const steam = items.find((i) => i.label === 'Steam');
+        expect(steam).toBeDefined();
+        expect(steam!.to).toBe('/admin/settings/integrations/steam');
+    });
+
+    it('sets Steam status to offline when not configured', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const steam = items.find((i) => i.label === 'Steam');
+        expect(steam!.status).toBe('offline');
+    });
+
+    it('sets Steam status to online when configured', () => {
+        const items = buildCoreIntegrationItems({
+            igdb: { configured: false, loading: false },
+            steam: { configured: true, loading: false },
+        });
+        const steam = items.find((i) => i.label === 'Steam');
+        expect(steam!.status).toBe('online');
+    });
+
+    it('sets Steam status to loading when loading', () => {
+        const items = buildCoreIntegrationItems({
+            igdb: { configured: false, loading: false },
+            steam: { configured: false, loading: true },
+        });
+        const steam = items.find((i) => i.label === 'Steam');
+        expect(steam!.status).toBe('loading');
     });
 });
 

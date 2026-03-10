@@ -12,6 +12,10 @@ interface InterestPlayerAvatarsProps {
     maxVisible?: number;
     /** Game ID for the "+N more" overflow link to the filtered players page */
     gameId?: number;
+    /** Custom link URL (overrides default /players?gameId=X) */
+    linkTo?: string;
+    /** Custom label formatter (default: "X players interested") */
+    formatLabel?: (totalCount: number, overflowCount: number) => string;
 }
 
 const INITIALS_COLORS = [
@@ -43,17 +47,19 @@ function PlayerAvatar({ player, index, total }: { player: InterestPlayerPreviewD
     );
 }
 
-function CountLabel({ text, gameId }: { text: string; gameId?: number }) {
-    if (gameId) return <Link to={`/players?gameId=${gameId}`} className="text-sm text-emerald-400 hover:text-emerald-300 whitespace-nowrap transition-colors">{text}</Link>;
+function CountLabel({ text, linkTo }: { text: string; linkTo?: string }) {
+    if (linkTo) return <Link to={linkTo} className="text-sm text-emerald-400 hover:text-emerald-300 whitespace-nowrap transition-colors">{text}</Link>;
     return <span className="text-sm text-muted whitespace-nowrap">{text}</span>;
 }
 
-export function InterestPlayerAvatars({ players, totalCount, maxVisible = 6, gameId }: InterestPlayerAvatarsProps) {
+export function InterestPlayerAvatars({ players, totalCount, maxVisible = 6, gameId, linkTo, formatLabel }: InterestPlayerAvatarsProps) {
     const visiblePlayers = useMemo(() => players.slice(0, maxVisible), [players, maxVisible]);
     const overflowCount = totalCount - visiblePlayers.length;
+    const labelFn = formatLabel ?? formatCountText;
+    const resolvedLink = linkTo ?? (gameId ? `/players?gameId=${gameId}` : undefined);
 
     if (visiblePlayers.length === 0) {
-        return <CountLabel text={formatCountText(totalCount, 0)} gameId={gameId} />;
+        return <CountLabel text={labelFn(totalCount, 0)} linkTo={resolvedLink} />;
     }
 
     return (
@@ -61,7 +67,7 @@ export function InterestPlayerAvatars({ players, totalCount, maxVisible = 6, gam
             <div className="flex items-center">
                 {visiblePlayers.map((player, i) => <PlayerAvatar key={player.id} player={player} index={i} total={visiblePlayers.length} />)}
             </div>
-            <CountLabel text={formatCountText(totalCount, overflowCount)} gameId={gameId} />
+            <CountLabel text={labelFn(totalCount, overflowCount)} linkTo={resolvedLink} />
         </div>
     );
 }

@@ -49,6 +49,8 @@ import {
   getInterestCount,
   addInterest,
   removeInterest,
+  getSteamOwners,
+  getSteamOwnerCount,
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
 
@@ -247,16 +249,20 @@ export class IgdbController {
     @Req() req: AuthRequest,
   ): Promise<GameInterestResponseDto> {
     const db = this.igdbService.database;
-    const [count, source, players] = await Promise.all([
+    const [count, source, players, ownerCount, owners] = await Promise.all([
       getInterestCount(db, id),
       getUserInterestSource(db, id, req.user.id),
       getInterestedPlayers(db, id),
+      getSteamOwnerCount(db, id),
+      getSteamOwners(db, id),
     ]);
     return {
       wantToPlay: source !== null,
       count,
       players,
       source: source ? (source as 'manual' | 'steam' | 'discord') : undefined,
+      ownerCount,
+      owners,
     };
   }
 

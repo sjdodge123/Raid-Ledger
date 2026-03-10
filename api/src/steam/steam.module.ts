@@ -8,6 +8,7 @@ import { SteamSyncProcessor } from './steam-sync.processor';
 import { STEAM_SYNC_QUEUE } from './steam-sync.constants';
 import { UsersModule } from '../users/users.module';
 import { SettingsModule } from '../settings/settings.module';
+import { IgdbModule } from '../igdb/igdb.module';
 
 /**
  * Steam Integration Module (ROK-417)
@@ -17,6 +18,7 @@ import { SettingsModule } from '../settings/settings.module';
   imports: [
     UsersModule,
     SettingsModule,
+    IgdbModule,
     BullModule.registerQueue({ name: STEAM_SYNC_QUEUE }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

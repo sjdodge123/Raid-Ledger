@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, isNotNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type {
@@ -23,9 +23,8 @@ export interface TokenState {
 
 /**
  * Query sync status from database.
- * @param db - Database connection
- * @param syncInProgress - Whether a sync is currently running
- * @returns Sync status DTO
+ * Uses max(cachedAt) filtered to IGDB-sourced games only, so non-IGDB
+ * game inserts (e.g. "Generic") don't make it say "just now".
  */
 export async function querySyncStatus(
   db: PostgresJsDatabase<typeof schema>,
@@ -36,7 +35,8 @@ export async function querySyncStatus(
       count: sql<number>`count(*)::int`,
       lastSync: sql<string | null>`max(${schema.games.cachedAt})::text`,
     })
-    .from(schema.games);
+    .from(schema.games)
+    .where(isNotNull(schema.games.igdbId));
   return {
     lastSyncAt: r[0]?.lastSync ?? null,
     gameCount: r[0]?.count ?? 0,

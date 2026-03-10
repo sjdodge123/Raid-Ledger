@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { and, eq, inArray, isNull, not } from 'drizzle-orm';
+import { and, eq, inArray, isNull, not, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { GameDetailDto } from '@raid-ledger/contract';
@@ -12,7 +12,11 @@ import { mapApiGameToDbRow, mapDbRowToDetail } from './igdb.mappers';
 
 const logger = new Logger('IgdbUpsertHelpers');
 
-/** Build the conflict-update set for game upsert. */
+/**
+ * Build the conflict-update set for game upsert.
+ * Uses COALESCE for twitchGameId/steamAppId so IGDB nulls
+ * don't overwrite manually-set or seed values.
+ */
 function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
   return {
     name: row.name,
@@ -30,7 +34,9 @@ function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
     videos: row.videos,
     firstReleaseDate: row.firstReleaseDate,
     playerCount: row.playerCount,
-    twitchGameId: row.twitchGameId,
+    twitchGameId: row.twitchGameId ?? sql`${schema.games.twitchGameId}`,
+    steamAppId: row.steamAppId ?? sql`${schema.games.steamAppId}`,
+    crossplay: row.crossplay,
     cachedAt: new Date(),
   };
 }
