@@ -5,6 +5,7 @@ import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
 import { fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
+import { derivePreferredRoles } from './signup-role-derive.helpers';
 
 /** Sign up as tentative. Returns assignedSlot for bench feedback. */
 export async function signupAsTentative(
@@ -185,7 +186,12 @@ async function tentativeSingleCharacter(
   char: import('@raid-ledger/contract').CharacterDto,
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
-  const result = await deps.signupsService.signup(eventId, userId);
+  const preferred = derivePreferredRoles(char);
+  const result = await deps.signupsService.signup(
+    eventId,
+    userId,
+    ...(preferred ? ([{ preferredRoles: preferred }] as const) : []),
+  );
   await deps.signupsService.confirmSignup(eventId, result.id, userId, {
     characterId: char.id,
   });
