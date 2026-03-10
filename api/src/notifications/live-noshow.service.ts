@@ -43,10 +43,10 @@ export class LiveNoShowService {
     await this.cronJobService.executeWithTracking(
       'LiveNoShowService_checkNoShows',
       async () => {
-        if (!this.voiceAttendance) return;
+        if (!this.voiceAttendance) return false;
         const now = new Date();
         const liveEvents = await findLiveEventsInNoShowWindow(this.db, now);
-        if (liveEvents.length === 0) return;
+        if (liveEvents.length === 0) return false;
         for (const event of liveEvents) {
           const msSinceStart = now.getTime() - event.startTime.getTime();
           if (msSinceStart >= PHASE2_OFFSET_MS) await this.checkPhase2(event);

@@ -47,12 +47,12 @@ export class PostEventReminderService {
   }
 
   /** Core logic for post-event PUG reminder processing. */
-  private async processPostEventReminders(): Promise<void> {
-    if (!this.clientService.isConnected()) return;
+  private async processPostEventReminders(): Promise<void | false> {
+    if (!this.clientService.isConnected()) return false;
     this.logger.debug('Running post-event PUG reminder check...');
 
     const qualifyingPugs = await this.findQualifyingPugs();
-    if (qualifyingPugs.length === 0) return;
+    if (qualifyingPugs.length === 0) return false;
 
     this.logger.log(
       `Found ${qualifyingPugs.length} qualifying PUGs for post-event reminder`,

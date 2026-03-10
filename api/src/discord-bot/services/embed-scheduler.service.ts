@@ -42,20 +42,18 @@ export class EmbedSchedulerService {
   async handleScheduledEmbeds(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'EmbedSchedulerService_handleScheduledEmbeds',
-      async () => {
-        await this.postDeferredEmbeds();
-      },
+      () => this.postDeferredEmbeds(),
     );
   }
 
   /** Find future non-cancelled events without discord_event_messages rows. */
-  private async postDeferredEmbeds(): Promise<void> {
+  private async postDeferredEmbeds(): Promise<void | false> {
     const timezone = (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
     const now = new Date();
     const events = await this.queryEventsWithoutEmbeds(now);
     if (events.length === 0) {
       this.logger.debug('No deferred embeds to post');
-      return;
+      return false;
     }
     let posted = 0;
     for (const event of events) {

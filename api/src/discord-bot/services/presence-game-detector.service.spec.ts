@@ -252,6 +252,24 @@ describe('PresenceGameDetectorService', () => {
 
       expect(result).toEqual({ gameId: null, gameName: 'SomeGame' });
     });
+
+    // ROK-753: Regression — "World of Warcraft Classic" was being matched
+    // to "NBA 2K18: Early Tip-Off Edition" via a low-quality trigram match.
+    // The raised similarity threshold (0.5) now rejects this false positive.
+    it('does not match "World of Warcraft Classic" to an unrelated game (ROK-753)', async () => {
+      mockLimitFn.mockResolvedValueOnce([]); // mapping — no match
+      mockLimitFn.mockResolvedValueOnce([]); // exact — no "World of Warcraft Classic" entry
+      mockLimitFn.mockResolvedValueOnce([]); // ilike — no case-insensitive match
+      mockLimitFn.mockResolvedValueOnce([]); // trigram — threshold rejects low-quality matches
+
+      const result = await service.resolveGame('World of Warcraft Classic');
+
+      // Should fall through to null, NOT match "NBA 2K18" or any unrelated game
+      expect(result).toEqual({
+        gameId: null,
+        gameName: 'World of Warcraft Classic',
+      });
+    });
   });
 
   // ─── detectGameForMember ────────────────────────────────────────────────────

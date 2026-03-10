@@ -93,7 +93,8 @@ export class IgdbService {
       'IgdbService_handleScheduledSync',
       async () => {
         const configured = await this.settingsService.isIgdbConfigured();
-        if (!configured && !this.configService.get('IGDB_CLIENT_ID')) return;
+        if (!configured && !this.configService.get('IGDB_CLIENT_ID'))
+          return false;
         await this.enqueueSync('scheduled');
       },
     );
