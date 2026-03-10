@@ -50,6 +50,8 @@ export const GameDetailSchema = z.object({
     }).nullable(),
     twitchGameId: z.string().nullable(),
     crossplay: z.boolean().nullable(),
+    /** ROK-772: ITAD game UUID */
+    itadGameId: z.string().nullable().optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;

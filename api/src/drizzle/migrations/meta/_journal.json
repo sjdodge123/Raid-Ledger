@@ -624,6 +624,13 @@
       "when": 1773200000000,
       "tag": "0088_fix_wow_classic_igdb_id",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1773163452079,
+      "tag": "0089_sloppy_wolfsbane",
+      "breakpoints": true
     }
   ]
 }

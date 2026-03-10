@@ -92,6 +92,33 @@ async function testOAuthToken(
   }
 }
 
+/** Test ITAD API key by doing a lookup for TF2 (appid 440). */
+export async function testItadApiKey(apiKey: string): Promise<TestResult> {
+  try {
+    const response = await fetch(
+      `https://api.isthereanydeal.com/games/lookup/v1?key=${encodeURIComponent(apiKey)}&appid=440`,
+    );
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, message: 'Invalid ITAD API key' };
+      }
+      return {
+        success: false,
+        message: `ITAD API returned HTTP ${response.status}`,
+      };
+    }
+
+    return { success: true, message: 'ITAD API key is valid!' };
+  } catch (error) {
+    logger.error('Failed to test ITAD API key:', error);
+    return {
+      success: false,
+      message: 'Failed to connect to ITAD API. Please check your network.',
+    };
+  }
+}
+
 /** Test Steam API key by calling GetSupportedAPIList. */
 export async function testSteamApiKey(apiKey: string): Promise<TestResult> {
   try {

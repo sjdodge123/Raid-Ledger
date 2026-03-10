@@ -31,6 +31,7 @@ const DiscordIcon = (<svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentC
 export function buildCoreIntegrationItems(statuses: {
     igdb: { configured: boolean; loading: boolean };
     steam: { configured: boolean; loading: boolean };
+    itad?: { configured: boolean; loading: boolean };
 }): NavItem[] {
     return [
         {
@@ -44,6 +45,12 @@ export function buildCoreIntegrationItems(statuses: {
             label: 'Steam',
             status: statuses.steam.loading ? 'loading'
                 : statuses.steam.configured ? 'online' : 'offline',
+        },
+        {
+            to: '/admin/settings/integrations/itad',
+            label: 'ITAD',
+            status: statuses.itad?.loading ? 'loading'
+                : statuses.itad?.configured ? 'online' : 'offline',
         },
     ];
 }

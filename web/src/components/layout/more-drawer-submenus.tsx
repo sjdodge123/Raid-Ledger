@@ -3,6 +3,7 @@ import { SECTIONS as PROFILE_SECTIONS } from '../profile/profile-nav-data';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { useItadSettings } from '../../hooks/admin/use-itad-settings';
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
@@ -76,10 +77,12 @@ export function ProfileSubmenuContent({ pathname, onClose }: { pathname: string;
 function useAdminNavSections() {
     const { plugins } = usePluginAdmin();
     const { igdbStatus, steamStatus, oauthStatus, discordBotStatus } = useAdminSettings();
+    const { itadStatus } = useItadSettings();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: { configured: igdbStatus.data?.configured ?? false, loading: igdbStatus.isLoading },
         steam: { configured: steamStatus.data?.configured ?? false, loading: steamStatus.isLoading },
+        itad: { configured: itadStatus.data?.configured ?? false, loading: itadStatus.isLoading },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
     const discordItems = isDiscordActive

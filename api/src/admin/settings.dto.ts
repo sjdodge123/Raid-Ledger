@@ -55,3 +55,6 @@ export class IgdbConfigDto {
 export class SteamConfigDto {
   @IsString() @IsNotEmpty({ message: 'API key is required' }) apiKey!: string;
 }
+export class ItadConfigDto {
+  @IsString() @IsNotEmpty({ message: 'API key is required' }) apiKey!: string;
+}

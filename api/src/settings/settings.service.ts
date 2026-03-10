@@ -386,4 +386,22 @@ export class SettingsService implements OnModuleInit {
     await this.delete(SETTING_KEYS.STEAM_API_KEY);
     this.eventEmitter.emit(SETTINGS_EVENTS.STEAM_UPDATED, null);
   }
+
+  // ─── ITAD ────────────────────────────────────────────────────
+
+  async getItadApiKey(): Promise<string | null> {
+    return this.get(SETTING_KEYS.ITAD_API_KEY);
+  }
+
+  async setItadApiKey(apiKey: string): Promise<void> {
+    await this.set(SETTING_KEYS.ITAD_API_KEY, apiKey);
+  }
+
+  async isItadConfigured(): Promise<boolean> {
+    return this.exists(SETTING_KEYS.ITAD_API_KEY);
+  }
+
+  async clearItadConfig(): Promise<void> {
+    await this.delete(SETTING_KEYS.ITAD_API_KEY);
+  }
 }
