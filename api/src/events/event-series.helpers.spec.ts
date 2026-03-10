@@ -89,4 +89,43 @@ describe('event-series.helpers', () => {
       expect(end.toISOString()).toBe('2026-03-10T21:00:00.000Z');
     });
   });
+
+  describe('computeTimeDelta + applyTimeDelta integration', () => {
+    it('correctly shifts a sibling duration using computed delta', () => {
+      const anchorStart = new Date('2026-03-10T18:00:00Z');
+      const newStartIso = '2026-03-10T19:30:00Z';
+      const delta = computeTimeDelta(anchorStart, newStartIso);
+
+      expect(delta).toBe(5400_000); // +1.5 hours
+
+      const siblingDuration = [
+        new Date('2026-03-17T18:00:00Z'),
+        new Date('2026-03-17T20:00:00Z'),
+      ] as [Date, Date];
+      const [start, end] = applyTimeDelta(siblingDuration, delta);
+
+      expect(start.toISOString()).toBe('2026-03-17T19:30:00.000Z');
+      expect(end.toISOString()).toBe('2026-03-17T21:30:00.000Z');
+    });
+
+    it('preserves duration length when shifting earlier', () => {
+      const anchorStart = new Date('2026-03-10T18:00:00Z');
+      const delta = computeTimeDelta(anchorStart, '2026-03-10T16:00:00Z');
+
+      const siblingDuration = [
+        new Date('2026-03-17T18:00:00Z'),
+        new Date('2026-03-17T20:00:00Z'),
+      ] as [Date, Date];
+      const [start, end] = applyTimeDelta(siblingDuration, delta);
+
+      // Duration length (2 hours) is preserved
+      const originalLen =
+        siblingDuration[1].getTime() - siblingDuration[0].getTime();
+      const shiftedLen = end.getTime() - start.getTime();
+      expect(shiftedLen).toBe(originalLen);
+
+      expect(start.toISOString()).toBe('2026-03-17T16:00:00.000Z');
+      expect(end.toISOString()).toBe('2026-03-17T18:00:00.000Z');
+    });
+  });
 });

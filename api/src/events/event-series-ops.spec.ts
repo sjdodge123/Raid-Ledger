@@ -60,6 +60,10 @@ describe('updateSeriesEvents', () => {
 
     expect(mockDb.update).toHaveBeenCalled();
     expect(ids).toEqual([1]);
+
+    const setData = mockDb.set.mock.calls[0][0];
+    expect(setData).toMatchObject({ title: 'Updated' });
+    expect(setData.updatedAt).toBeInstanceOf(Date);
   });
 
   it('updates each event individually for scope=all (different data per event)', async () => {
@@ -81,6 +85,100 @@ describe('updateSeriesEvents', () => {
     // produces different data for each event (time delta)
     expect(mockDb.update).toHaveBeenCalledTimes(3);
     expect(ids).toEqual([1, 2, 3]);
+
+    // Each .set() call should include the title for all events
+    for (const [setData] of mockDb.set.mock.calls) {
+      expect(setData).toMatchObject({ title: 'Updated All' });
+      expect(setData.updatedAt).toBeInstanceOf(Date);
+    }
+  });
+
+  it('passes time-delta-shifted durations to .set() for siblings in scope=all', async () => {
+    const anchor = makeAnchor();
+    const siblings = [anchor, makeSibling(2, 7), makeSibling(3, 14)];
+    mockDb.limit.mockResolvedValueOnce([anchor]);
+    mockDb.orderBy.mockResolvedValueOnce(siblings);
+
+    // Shift anchor 1 hour later: 18:00 → 19:00
+    await updateSeriesEvents(mockDb as never, 1, CREATOR_ID, false, 'all', {
+      title: 'Shifted',
+      startTime: '2026-03-10T19:00:00Z',
+    });
+
+    // Filter to update-data .set() calls (exclude signup-reset calls)
+    const updateCalls = mockDb.set.mock.calls.filter(
+      ([data]: [Record<string, unknown>]) => 'duration' in data,
+    );
+    expect(updateCalls).toHaveLength(3);
+
+    // Anchor gets the DTO startTime directly
+    const anchorData = updateCalls[0][0];
+    expect(anchorData.duration[0]).toEqual(new Date('2026-03-10T19:00:00Z'));
+    expect(anchorData.duration[1]).toEqual(new Date('2026-03-10T20:00:00Z'));
+
+    // Sibling at day +7: original 18:00→20:00, shifted +1h → 19:00→21:00
+    const sib1Data = updateCalls[1][0];
+    expect(sib1Data.duration[0]).toEqual(new Date('2026-03-17T19:00:00Z'));
+    expect(sib1Data.duration[1]).toEqual(new Date('2026-03-17T21:00:00Z'));
+
+    // Sibling at day +14: original 18:00→20:00, shifted +1h → 19:00→21:00
+    const sib2Data = updateCalls[2][0];
+    expect(sib2Data.duration[0]).toEqual(new Date('2026-03-24T19:00:00Z'));
+    expect(sib2Data.duration[1]).toEqual(new Date('2026-03-24T21:00:00Z'));
+  });
+
+  it('omits duration from sibling .set() data when no time delta', async () => {
+    const anchor = makeAnchor();
+    const siblings = [anchor, makeSibling(2, 7)];
+    mockDb.limit.mockResolvedValueOnce([anchor]);
+    mockDb.orderBy.mockResolvedValueOnce(siblings);
+
+    // Title-only update: no startTime/endTime in DTO
+    await updateSeriesEvents(mockDb as never, 1, CREATOR_ID, false, 'all', {
+      title: 'No Time Change',
+    });
+
+    const setCalls = mockDb.set.mock.calls;
+    expect(setCalls).toHaveLength(2);
+
+    // Neither set call should include duration
+    for (const [setData] of setCalls) {
+      expect(setData).toMatchObject({ title: 'No Time Change' });
+      expect(setData.duration).toBeUndefined();
+    }
+  });
+
+  it('applies time delta to following siblings only for scope=this_and_following', async () => {
+    const anchor = makeSibling(2, 7); // anchor is event 2 (day +7)
+    const following = makeSibling(3, 14);
+    mockDb.limit.mockResolvedValueOnce([anchor]);
+    mockDb.orderBy.mockResolvedValueOnce([anchor, following]);
+
+    // Shift anchor 30 min earlier: 18:00 → 17:30
+    await updateSeriesEvents(
+      mockDb as never,
+      2,
+      CREATOR_ID,
+      false,
+      'this_and_following',
+      { startTime: '2026-03-17T17:30:00Z' },
+    );
+
+    // Filter to update-data .set() calls (exclude signup-reset calls)
+    const updateCalls = mockDb.set.mock.calls.filter(
+      ([data]: [Record<string, unknown>]) => 'duration' in data,
+    );
+    expect(updateCalls).toHaveLength(2);
+
+    // Anchor gets its DTO startTime directly
+    const anchorData = updateCalls[0][0];
+    expect(anchorData.duration[0]).toEqual(new Date('2026-03-17T17:30:00Z'));
+    expect(anchorData.duration[1]).toEqual(new Date('2026-03-17T20:00:00Z'));
+
+    // Following sibling shifted -30min: 18:00→20:00 becomes 17:30→19:30
+    const followData = updateCalls[1][0];
+    expect(followData.duration[0]).toEqual(new Date('2026-03-24T17:30:00Z'));
+    expect(followData.duration[1]).toEqual(new Date('2026-03-24T19:30:00Z'));
   });
 
   it('throws ForbiddenException for non-owner non-admin', async () => {
