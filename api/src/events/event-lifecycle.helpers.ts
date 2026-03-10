@@ -136,7 +136,7 @@ export async function resetSignupConfirmations(
     .where(eq(schema.eventRemindersSent.eventId, eventId));
   await db
     .update(schema.eventSignups)
-    .set({ confirmationStatus: 'pending' })
+    .set({ confirmationStatus: 'pending', status: 'signed_up' })
     .where(
       and(
         eq(schema.eventSignups.eventId, eventId),

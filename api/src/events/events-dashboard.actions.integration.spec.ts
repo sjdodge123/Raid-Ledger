@@ -207,6 +207,63 @@ async function testRescheduleNotifications() {
   ).toBeDefined();
 }
 
+async function testRescheduleResetsTentativeStatus() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Tentative Reset Raid',
+  });
+  const { userId } = await createMemberAndLogin(
+    testApp,
+    'tentative_player',
+    'tentative@test.local',
+  );
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId,
+    userId,
+    status: 'tentative',
+    confirmationStatus: 'confirmed',
+  });
+  const newStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
+  await testApp.request
+    .patch(`/events/${eventId}/reschedule`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+  const [signup] = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, userId));
+  expect(signup.status).toBe('signed_up');
+  expect(signup.confirmationStatus).toBe('pending');
+}
+
+async function testRescheduleDoesNotResetDeclined() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Declined Keep Raid',
+  });
+  const { userId } = await createMemberAndLogin(
+    testApp,
+    'declined_player',
+    'declined_resched@test.local',
+  );
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId,
+    userId,
+    status: 'declined',
+    confirmationStatus: 'pending',
+  });
+  const newStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
+  await testApp.request
+    .patch(`/events/${eventId}/reschedule`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+  const [signup] = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, userId));
+  expect(signup.status).toBe('declined');
+}
+
 // ─── invite member tests ────────────────────────────────────────────────────
 
 async function testInviteByDiscordId() {
@@ -377,6 +434,10 @@ describe('Events — reschedule', () => {
     testRescheduleClearsReminders());
   it('should create notifications on reschedule', () =>
     testRescheduleNotifications());
+  it('should reset tentative signups to signed_up on reschedule (ROK-759)', () =>
+    testRescheduleResetsTentativeStatus());
+  it('should not reset declined signups on reschedule (ROK-759)', () =>
+    testRescheduleDoesNotResetDeclined());
 });
 
 describe('Events — invite member', () => {
