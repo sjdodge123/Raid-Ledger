@@ -6,12 +6,14 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
-import { itadFetch } from './itad-http.util';
+import { itadFetch, itadPost } from './itad-http.util';
 import type {
   ItadGame,
   ItadLookupResponse,
   ItadGameInfo,
+  ItadShopLookupResponse,
 } from './itad.constants';
+import { ITAD_STEAM_SHOP_ID } from './itad.constants';
 import {
   getCachedLookup,
   setCachedLookup,
@@ -22,6 +24,22 @@ import {
 } from './itad-cache.util';
 
 const DEFAULT_SEARCH_LIMIT = 20;
+
+/**
+ * Parse the shop lookup response into a map of ITAD UUID -> Steam App ID.
+ * Response format: { "app/{appId}": "itad-uuid", ... }
+ */
+function parseShopLookupResponse(
+  response: ItadShopLookupResponse,
+): Map<string, number> {
+  const result = new Map<string, number>();
+  for (const [shopKey, itadId] of Object.entries(response)) {
+    if (!itadId || !shopKey.startsWith('app/')) continue;
+    const appId = parseInt(shopKey.replace('app/', ''), 10);
+    if (!isNaN(appId)) result.set(itadId, appId);
+  }
+  return result;
+}
 
 @Injectable()
 export class ItadService {
@@ -92,6 +110,33 @@ export class ItadService {
 
     await setCachedInfo(this.redis, itadId, result);
     return result;
+  }
+
+  /**
+   * Batch-resolve ITAD game UUIDs to Steam App IDs via shop lookup.
+   * @param games - Array of { id, slug } from ITAD search results
+   * @returns Map of ITAD UUID to Steam App ID (number)
+   */
+  async lookupSteamAppIds(
+    games: { id: string; slug: string }[],
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (games.length === 0) return result;
+
+    const apiKey = await this.getApiKey();
+    if (!apiKey) return result;
+
+    const itadIds = games.map((g) => g.id);
+    const shopId = String(ITAD_STEAM_SHOP_ID);
+    const response = await itadPost<ItadShopLookupResponse>(
+      `/lookup/shop/${shopId}/id/v1`,
+      { key: apiKey, shops: shopId },
+      itadIds,
+    );
+
+    if (!response) return result;
+
+    return parseShopLookupResponse(response);
   }
 
   /** Read API key from settings. Logs a warning once if missing. */

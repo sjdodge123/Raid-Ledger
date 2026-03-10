@@ -68,6 +68,10 @@ export const games = pgTable('games', {
   enabled: boolean('enabled').default(true).notNull(),
   /** ROK-772: ITAD (IsThereAnyDeal) game UUID for deal/price tracking */
   itadGameId: text('itad_game_id').unique(),
+  /** ROK-773: ITAD boxart URL (fallback cover image) */
+  itadBoxartUrl: text('itad_boxart_url'),
+  /** ROK-773: ITAD tags (genre-like labels from ITAD) */
+  itadTags: jsonb('itad_tags').$type<string[]>().default([]),
   /** Maximum characters a user can register per game */
   maxCharactersPerUser: integer('max_characters_per_user')
     .default(10)

@@ -68,7 +68,7 @@ export interface IgdbApiGame {
 export interface SearchResult {
   games: GameDetailDto[];
   cached: boolean;
-  source: 'redis' | 'database' | 'igdb' | 'local';
+  source: 'redis' | 'database' | 'igdb' | 'itad' | 'local';
 }
 
 /** Constants for IGDB integration */

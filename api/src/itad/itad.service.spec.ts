@@ -4,9 +4,10 @@ import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
 import type { ItadGame, ItadGameInfo } from './itad.constants';
 
-// Mock the HTTP util — all ITAD calls go through itadFetch
+// Mock the HTTP util — all ITAD calls go through itadFetch/itadPost
 jest.mock('./itad-http.util', () => ({
   itadFetch: jest.fn(),
+  itadPost: jest.fn(),
 }));
 
 // Mock the cache util so we control cache hits/misses directly
@@ -20,8 +21,9 @@ jest.mock('./itad-cache.util', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { itadFetch } = require('./itad-http.util') as {
+const { itadFetch, itadPost } = require('./itad-http.util') as {
   itadFetch: jest.Mock;
+  itadPost: jest.Mock;
 };
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const cacheUtil = require('./itad-cache.util') as {
@@ -272,6 +274,73 @@ describe('ItadService', () => {
 
       expect(result).toBeNull();
       expect(cacheUtil.setCachedInfo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('lookupSteamAppIds', () => {
+    it('returns empty map when API key is not configured', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue(null);
+
+      const result = await service.lookupSteamAppIds([
+        { id: 'uuid-1', slug: 'elden-ring' },
+      ]);
+
+      expect(result.size).toBe(0);
+      expect(itadPost).not.toHaveBeenCalled();
+    });
+
+    it('returns empty map when given empty array', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+
+      const result = await service.lookupSteamAppIds([]);
+
+      expect(result.size).toBe(0);
+      expect(itadPost).not.toHaveBeenCalled();
+    });
+
+    it('maps ITAD game IDs to Steam app IDs', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      itadPost.mockResolvedValue({
+        'app/1245620': 'uuid-1',
+      });
+
+      const result = await service.lookupSteamAppIds([
+        { id: 'uuid-1', slug: 'elden-ring' },
+      ]);
+
+      expect(result.get('uuid-1')).toBe(1245620);
+      expect(itadPost).toHaveBeenCalledWith(
+        '/lookup/shop/61/id/v1',
+        expect.objectContaining({ key: 'test-key', shops: '61' }),
+        ['uuid-1'],
+      );
+    });
+
+    it('skips entries with null values from ITAD', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      itadPost.mockResolvedValue({
+        'app/1245620': 'uuid-1',
+        null: 'uuid-2',
+      });
+
+      const result = await service.lookupSteamAppIds([
+        { id: 'uuid-1', slug: 'elden-ring' },
+        { id: 'uuid-2', slug: 'no-steam' },
+      ]);
+
+      expect(result.get('uuid-1')).toBe(1245620);
+      expect(result.has('uuid-2')).toBe(false);
+    });
+
+    it('returns empty map when itadPost returns null', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      itadPost.mockResolvedValue(null);
+
+      const result = await service.lookupSteamAppIds([
+        { id: 'uuid-1', slug: 'test' },
+      ]);
+
+      expect(result.size).toBe(0);
     });
   });
 });

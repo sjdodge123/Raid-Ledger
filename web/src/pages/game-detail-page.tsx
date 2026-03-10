@@ -125,19 +125,20 @@ function BackButton({ navigate }: { navigate: NavigateFunction }): JSX.Element {
     );
 }
 
-/** Game banner with cover, info, and details grid */
+/** Game banner with cover, info, and details grid. ROK-773: IGDB cover > ITAD boxart > none */
 function GameBanner({ game, rating, genres, platforms, modes }: {
-    game: { name: string; coverUrl: string | null; summary: string | null; playerCount: { min: number; max: number } | null; crossplay: boolean | null; firstReleaseDate: string | null };
+    game: { name: string; coverUrl: string | null; itadBoxartUrl?: string | null; summary: string | null; playerCount: { min: number; max: number } | null; crossplay: boolean | null; firstReleaseDate: string | null };
     rating: number | null; genres: string[]; platforms: string[]; modes: string[];
 }): JSX.Element {
+    const displayCover = game.coverUrl ?? game.itadBoxartUrl ?? null;
     return (
         <div className="relative rounded-xl overflow-hidden mb-8">
             <div className="absolute inset-0">
-                {game.coverUrl && <img src={game.coverUrl} alt="" className="w-full h-full object-cover blur-2xl scale-110 opacity-30" />}
+                {displayCover && <img src={displayCover} alt="" className="w-full h-full object-cover blur-2xl scale-110 opacity-30" />}
                 <div className="absolute inset-0 bg-gradient-to-b from-backdrop/50 to-backdrop" />
             </div>
             <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row gap-6">
-                {game.coverUrl && <img src={game.coverUrl} alt={game.name} className="w-40 sm:w-48 aspect-[3/4] object-cover rounded-xl shadow-2xl flex-shrink-0" />}
+                {displayCover && <img src={displayCover} alt={game.name} className="w-40 sm:w-48 aspect-[3/4] object-cover rounded-xl shadow-2xl flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
                     <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">{game.name}</h1>
                     <MetaRow rating={rating} genres={genres} />

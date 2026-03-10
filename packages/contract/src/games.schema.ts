@@ -52,6 +52,10 @@ export const GameDetailSchema = z.object({
     crossplay: z.boolean().nullable(),
     /** ROK-772: ITAD game UUID */
     itadGameId: z.string().nullable().optional(),
+    /** ROK-773: ITAD boxart URL (fallback when no IGDB cover) */
+    itadBoxartUrl: z.string().nullable().optional(),
+    /** ROK-773: ITAD tags (genre-like labels from ITAD) */
+    itadTags: z.array(z.string()).optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;
@@ -62,7 +66,7 @@ export const GameSearchResponseSchema = z.object({
     meta: z.object({
         total: z.number(),
         cached: z.boolean(),
-        source: z.enum(['redis', 'database', 'igdb', 'local']).optional(),
+        source: z.enum(['redis', 'database', 'igdb', 'itad', 'local']).optional(),
     }),
 });
 

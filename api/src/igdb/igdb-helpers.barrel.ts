@@ -42,3 +42,11 @@ export {
   doSearchRefresh,
   type SearchDeps,
 } from './igdb-search-executor.helpers';
+export {
+  executeItadSearch,
+  type ItadSearchDeps,
+} from './igdb-itad-search.helpers';
+export {
+  buildExternalGamesQuery,
+  parseIgdbEnrichment,
+} from './igdb-itad-enrich.helpers';
