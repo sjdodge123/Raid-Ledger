@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { updatePreference } from '../lib/api-client';
+import { getAuthToken } from '../hooks/use-auth';
 
 export interface GameInfo {
     slug: string;
@@ -15,15 +17,20 @@ interface GameFilterState {
     hasInitialized: boolean;
     /** All slugs we've ever encountered (prevents re-auto-selecting deselected games). */
     seenSlugs: Set<string>;
+    /** Whether a saved filter has been loaded from preferences. */
+    hasSavedFilter: boolean;
+    /** Saved filter slugs (loaded before games may be known). */
+    savedFilterSlugs: string[] | null;
 
-    /**
-     * Called by CalendarView whenever the visible games list changes.
-     * Merges into allKnownGames and auto-selects only truly new games.
-     */
+    /** Merge incoming games and auto-select truly new ones. */
     reportGames: (games: GameInfo[]) => void;
     toggleGame: (slug: string) => void;
     selectAll: () => void;
     deselectAll: () => void;
+    /** Load a saved filter from user preferences. */
+    loadSavedFilter: (slugs: string[]) => void;
+    /** Persist the current filter selection to user preferences. */
+    saveFilter: () => void;
     /** Reset to initial state (for tests). */
     _reset: () => void;
 }
@@ -49,6 +56,7 @@ function discoverNewSlugs(
     return { nextSeen, newSlugs };
 }
 
+/** Apply game selection on first report, respecting saved filter if present. */
 function applyGameSelection(
     set: (partial: Partial<GameFilterState>) => void,
     state: GameFilterState,
@@ -58,9 +66,12 @@ function applyGameSelection(
     newSlugs: string[],
 ): void {
     if (!state.hasInitialized && games.length > 0) {
+        const selected = state.savedFilterSlugs
+            ? new Set(state.savedFilterSlugs)
+            : new Set(games.map((g) => g.slug));
         set({
             allKnownGames: nextAllKnown,
-            selectedGames: new Set(games.map((g) => g.slug)),
+            selectedGames: selected,
             seenSlugs: nextSeen,
             hasInitialized: true,
         });
@@ -77,20 +88,49 @@ function toggleSlug(selectedGames: Set<string>, slug: string): Set<string> {
     return next;
 }
 
-const INITIAL_FILTER_STATE = { allKnownGames: [] as GameInfo[], selectedGames: new Set<string>(), hasInitialized: false, seenSlugs: new Set<string>() };
+/** Persist filter to server (fire-and-forget). */
+function syncFilterToServer(slugs: string[]): void {
+    if (getAuthToken()) {
+        updatePreference('calendarGameFilter', slugs).catch(() => {
+            // Fire-and-forget — silent failure for offline/unauth
+        });
+    }
+}
+
+/** Apply a saved filter from preferences. */
+function applyLoadedFilter(
+    set: (partial: Partial<GameFilterState>) => void,
+    state: GameFilterState,
+    slugs: string[],
+): void {
+    if (state.hasInitialized) {
+        set({ selectedGames: new Set(slugs), hasSavedFilter: true, savedFilterSlugs: slugs });
+    } else {
+        set({ hasSavedFilter: true, savedFilterSlugs: slugs });
+    }
+}
+
+const INITIAL_STATE = {
+    allKnownGames: [] as GameInfo[],
+    selectedGames: new Set<string>(),
+    hasInitialized: false,
+    seenSlugs: new Set<string>(),
+    hasSavedFilter: false,
+    savedFilterSlugs: null as string[] | null,
+};
 
 export const useGameFilterStore = create<GameFilterState>((set, get) => ({
-    ...INITIAL_FILTER_STATE,
-
+    ...INITIAL_STATE,
     reportGames(games: GameInfo[]) {
         const state = get();
         const nextAllKnown = mergeKnownGames(state.allKnownGames, games);
         const { nextSeen, newSlugs } = discoverNewSlugs(state.seenSlugs, games);
         applyGameSelection(set, state, games, nextAllKnown, nextSeen, newSlugs);
     },
-
     toggleGame(slug: string) { set({ selectedGames: toggleSlug(get().selectedGames, slug) }); },
     selectAll() { set({ selectedGames: new Set(get().allKnownGames.map((g) => g.slug)) }); },
     deselectAll() { set({ selectedGames: new Set<string>() }); },
-    _reset() { set({ ...INITIAL_FILTER_STATE }); },
+    loadSavedFilter(slugs: string[]) { applyLoadedFilter(set, get(), slugs); },
+    saveFilter() { syncFilterToServer([...get().selectedGames]); },
+    _reset() { set({ ...INITIAL_STATE }); },
 }));
