@@ -7,11 +7,16 @@ import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { eq, inArray, and, isNotNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
 import { IgdbService } from '../igdb/igdb.service';
+import { ItadService } from '../itad/itad.service';
 import { getWishlist, getPlayerSummary } from './steam-http.util';
-import { backfillUnmatchedSteamGames } from './steam-backfill.helpers';
+import {
+  discoverGameViaItad,
+  type DiscoveryDeps,
+} from './steam-itad-discovery.helpers';
 import {
   computeWishlistDiff,
   fetchExistingWishlistIds,
@@ -28,6 +33,7 @@ export class SteamWishlistService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
     @Optional() private readonly igdbService?: IgdbService,
+    @Optional() private readonly itadService?: ItadService,
   ) {}
 
   /** Build a zero-result sync DTO. */
@@ -105,30 +111,54 @@ export class SteamWishlistService {
     );
   }
 
-  /** Match wishlist items to DB games, backfilling from IGDB. */
+  /** Match wishlist items to DB games, discovering unmatched via ITAD. */
   private async matchWithBackfill(items: SteamWishlistItem[]) {
     let matchedGames = await this.findMatchingGames(items);
-    const imported = await this.tryBackfill(items, matchedGames);
+    const imported = await this.discoverUnmatched(items, matchedGames);
     if (imported > 0) matchedGames = await this.findMatchingGames(items);
     return { matchedGames, imported };
   }
 
-  /** Try to backfill unmatched games from IGDB. */
-  private async tryBackfill(
+  /** Discover unmatched wishlist games via ITAD. */
+  private async discoverUnmatched(
     items: SteamWishlistItem[],
     matchedGames: { id: number; steamAppId: number | null }[],
   ): Promise<number> {
-    if (!this.igdbService) return 0;
+    if (!this.itadService) return 0;
+    const deps = await this.buildDiscoveryDeps();
+    if (!deps) return 0;
     const matchedAppIds = new Set(matchedGames.map((g) => g.steamAppId));
-    const unmatched = items
-      .map((i) => i.appid)
-      .filter((id) => !matchedAppIds.has(id));
+    const unmatched = items.filter((i) => !matchedAppIds.has(i.appid));
     if (unmatched.length === 0) return 0;
-    return backfillUnmatchedSteamGames(
-      unmatched,
-      (body) => this.igdbService!.queryIgdb(body),
-      (games) => this.igdbService!.upsertGamesFromApi(games),
-    );
+
+    let discovered = 0;
+    for (const item of unmatched) {
+      try {
+        const result = await discoverGameViaItad(item.appid, deps);
+        if (result) discovered++;
+      } catch (err) {
+        this.logger.warn(`ITAD wishlist discovery failed for ${item.appid}: ${err}`);
+      }
+    }
+    if (discovered > 0) {
+      this.logger.log(`ITAD wishlist discovery: ${discovered}/${unmatched.length} new`);
+    }
+    return discovered;
+  }
+
+  /** Build ITAD discovery dependencies. */
+  private async buildDiscoveryDeps(): Promise<DiscoveryDeps | null> {
+    if (!this.itadService) return null;
+    const adultFilterEnabled =
+      (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) === 'true';
+    return {
+      db: this.db,
+      lookupBySteamAppId: (id) => this.itadService!.lookupBySteamAppId(id),
+      queryIgdb: this.igdbService
+        ? (body) => this.igdbService!.queryIgdb(body)
+        : undefined,
+      adultFilterEnabled,
+    };
   }
 
   /** Find games in DB matching Steam AppIDs. */
