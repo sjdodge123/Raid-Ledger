@@ -225,7 +225,7 @@ export type PaginationMetaDto = z.infer<typeof PaginationMetaSchema>;
 /** Response for user hearted games endpoint (ROK-282, ROK-754: paginated) */
 export const UserHeartedGamesResponseSchema = z.object({
     data: z.array(UserHeartedGameSchema),
-    meta: PaginationMetaSchema.optional(),
+    meta: PaginationMetaSchema,
 });
 
 export type UserHeartedGamesResponseDto = z.infer<typeof UserHeartedGamesResponseSchema>;
