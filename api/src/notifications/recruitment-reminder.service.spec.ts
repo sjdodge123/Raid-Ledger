@@ -60,7 +60,7 @@ describe('RecruitmentReminderService', () => {
   let mockRedis: { get: jest.Mock; set: jest.Mock };
   let mockNotificationService: {
     create: jest.Mock;
-    resolveVoiceChannelId: jest.Mock;
+    resolveVoiceChannelForEvent: jest.Mock;
   };
   let mockSettingsService: {
     getDefaultTimezone: jest.Mock;
@@ -84,7 +84,7 @@ describe('RecruitmentReminderService', () => {
 
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-uuid-1' }),
-      resolveVoiceChannelId: jest.fn().mockResolvedValue(null),
+      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     };
 
     mockSettingsService = {
@@ -363,8 +363,10 @@ describe('RecruitmentReminderService', () => {
       );
     });
 
-    it('should include voiceChannelId in payload when resolveVoiceChannelId returns a value', async () => {
-      mockNotificationService.resolveVoiceChannelId.mockResolvedValue('vc-999');
+    it('should include voiceChannelId in payload when resolveVoiceChannelForEvent returns a value', async () => {
+      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
+        'vc-999',
+      );
 
       await service.checkAndSendReminders();
 
@@ -375,8 +377,10 @@ describe('RecruitmentReminderService', () => {
       );
     });
 
-    it('should NOT include voiceChannelId in payload when resolveVoiceChannelId returns null', async () => {
-      mockNotificationService.resolveVoiceChannelId.mockResolvedValue(null);
+    it('should NOT include voiceChannelId in payload when resolveVoiceChannelForEvent returns null', async () => {
+      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
+        null,
+      );
 
       await service.checkAndSendReminders();
 

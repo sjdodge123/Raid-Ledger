@@ -181,11 +181,10 @@ function buildReschedulePayload(
 async function resolveRescheduleContext(
   notificationService: NotificationService,
   eventId: number,
-  gameId: number | null,
 ): Promise<{ discordUrl: string | null; voiceChannelId: string | null }> {
   const discordUrl = await notificationService.getDiscordEmbedUrl(eventId);
   const voiceChannelId =
-    await notificationService.resolveVoiceChannelId(gameId);
+    await notificationService.resolveVoiceChannelForEvent(eventId);
   return { discordUrl, voiceChannelId };
 }
 
@@ -216,11 +215,7 @@ async function buildFullReschedulePayload(
   existing: EventSelect,
   dto: RescheduleEventDto,
 ): Promise<Record<string, unknown>> {
-  const ctx = await resolveRescheduleContext(
-    notificationService,
-    eventId,
-    existing.gameId,
-  );
+  const ctx = await resolveRescheduleContext(notificationService, eventId);
   return buildReschedulePayload(
     eventId,
     existing,

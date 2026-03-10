@@ -12,7 +12,7 @@ describe('EventReminderService', () => {
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelId: jest.Mock;
+    resolveVoiceChannelForEvent: jest.Mock;
   };
   let mockRoleGapAlertService: { checkRoleGaps: jest.Mock };
 
@@ -33,7 +33,7 @@ describe('EventReminderService', () => {
         createdAt: new Date().toISOString(),
       }),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-      resolveVoiceChannelId: jest.fn().mockResolvedValue(null),
+      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     };
 
     mockRoleGapAlertService = {

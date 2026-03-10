@@ -184,7 +184,7 @@ export class EventReminderService {
     );
     const [discordUrl, voiceChannelId] = await Promise.all([
       this.notificationService.getDiscordEmbedUrl(event.id),
-      this.notificationService.resolveVoiceChannelId(event.gameId),
+      this.notificationService.resolveVoiceChannelForEvent(event.id),
     ]);
     return { startTime, minutesUntil, discordUrl, voiceChannelId };
   }

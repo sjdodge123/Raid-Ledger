@@ -138,9 +138,8 @@ export class GameAffinityNotificationService {
     const discordUrl = input.discordMessage
       ? `https://discord.com/channels/${input.discordMessage.guildId}/${input.discordMessage.channelId}/${input.discordMessage.messageId}`
       : null;
-    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
-      input.gameId,
-    );
+    const voiceChannelId =
+      await this.notificationService.resolveVoiceChannelForEvent(input.eventId);
     return {
       eventId: input.eventId,
       gameId: input.gameId,
