@@ -5,8 +5,11 @@ import { GameInterestResponseDto } from '@raid-ledger/contract';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+/** Sources that count as "interested" (hearts). Library/wishlist are separate. */
+const HEART_SOURCES = ['manual', 'discord', 'steam'] as const;
+
 /**
- * Get interest count for a game.
+ * Get interest count for a game (hearts only, excludes library/wishlist).
  * @param db - Database connection
  * @param gameId - Game ID
  * @returns Interest count
@@ -18,7 +21,12 @@ export async function getInterestCount(
   const [result] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.gameInterests)
-    .where(eq(schema.gameInterests.gameId, gameId));
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, gameId),
+        inArray(schema.gameInterests.source, [...HEART_SOURCES]),
+      ),
+    );
   return result?.count ?? 0;
 }
 
@@ -41,6 +49,7 @@ export async function getUserInterestSource(
       and(
         eq(schema.gameInterests.gameId, gameId),
         eq(schema.gameInterests.userId, userId),
+        inArray(schema.gameInterests.source, [...HEART_SOURCES]),
       ),
     )
     .limit(1);
@@ -67,7 +76,12 @@ export async function getInterestedPlayers(
     })
     .from(schema.gameInterests)
     .innerJoin(schema.users, eq(schema.gameInterests.userId, schema.users.id))
-    .where(eq(schema.gameInterests.gameId, gameId))
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, gameId),
+        inArray(schema.gameInterests.source, [...HEART_SOURCES]),
+      ),
+    )
     .orderBy(schema.gameInterests.createdAt)
     .limit(8);
 
@@ -80,7 +94,7 @@ export async function getInterestedPlayers(
   }));
 }
 
-/** Fetch batch counts and user interests in parallel. */
+/** Fetch batch counts and user interests in parallel (hearts only). */
 async function fetchBatchData(
   db: PostgresJsDatabase<typeof schema>,
   gameIds: number[],
@@ -93,7 +107,12 @@ async function fetchBatchData(
         count: sql<number>`count(*)::int`.as('count'),
       })
       .from(schema.gameInterests)
-      .where(inArray(schema.gameInterests.gameId, gameIds))
+      .where(
+        and(
+          inArray(schema.gameInterests.gameId, gameIds),
+          inArray(schema.gameInterests.source, [...HEART_SOURCES]),
+        ),
+      )
       .groupBy(schema.gameInterests.gameId),
     db
       .select({ gameId: schema.gameInterests.gameId })
@@ -102,6 +121,7 @@ async function fetchBatchData(
         and(
           inArray(schema.gameInterests.gameId, gameIds),
           eq(schema.gameInterests.userId, userId),
+          inArray(schema.gameInterests.source, [...HEART_SOURCES]),
         ),
       ),
   ]);
