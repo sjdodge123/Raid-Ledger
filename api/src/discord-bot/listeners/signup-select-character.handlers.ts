@@ -6,6 +6,7 @@ import { findLinkedUser, safeEditReply } from './signup-interaction.helpers';
 import { replyNoLinkedAccount } from './signup-select-role.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
+import { derivePreferredRoles } from './signup-role-derive.helpers';
 
 /**
  * Handle character selection for linked users.
@@ -109,7 +110,13 @@ async function signupWithCharacterDirect(
   characterId: string,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  const signupResult = await deps.signupsService.signup(eventId, userId);
+  const character = await deps.charactersService.findOne(userId, characterId);
+  const preferred = derivePreferredRoles(character);
+  const signupResult = await deps.signupsService.signup(
+    eventId,
+    userId,
+    ...(preferred ? ([{ preferredRoles: preferred }] as const) : []),
+  );
   await deps.signupsService.confirmSignup(eventId, signupResult.id, userId, {
     characterId,
   });
@@ -120,7 +127,6 @@ async function signupWithCharacterDirect(
       { status: 'tentative' },
     );
   }
-  const character = await deps.charactersService.findOne(userId, characterId);
   const bench = benchSuffix(signupResult.assignedSlot);
 
   await interaction.editReply({
