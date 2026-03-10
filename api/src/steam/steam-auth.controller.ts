@@ -17,6 +17,7 @@ import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { SteamService } from './steam.service';
+import { SteamWishlistService } from './steam-wishlist.service';
 import {
   buildSteamOpenIdUrl,
   verifySteamOpenId,
@@ -45,6 +46,7 @@ export class SteamAuthController {
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
     private readonly steamService: SteamService,
+    private readonly steamWishlistService: SteamWishlistService,
   ) {}
 
   /**
@@ -269,6 +271,22 @@ export class SteamAuthController {
     return {
       success: true,
       message: `Synced ${result.matched} games (${result.newInterests} new, ${result.updatedPlaytime} updated playtime)`,
+      ...result,
+    };
+  }
+
+  /**
+   * POST /auth/steam/sync-wishlist
+   * Manually trigger a Steam wishlist sync for the current user.
+   */
+  @RateLimit('auth')
+  @Post('sync-wishlist')
+  @UseGuards(AuthGuard('jwt'))
+  async syncWishlist(@Req() req: AuthenticatedRequest) {
+    const result = await this.steamWishlistService.syncWishlist(req.user.id);
+    return {
+      success: true,
+      message: `Synced wishlist: ${result.matched} matched (${result.newInterests} new, ${result.removed} removed)`,
       ...result,
     };
   }

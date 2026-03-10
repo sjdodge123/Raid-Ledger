@@ -22,6 +22,7 @@ const VISIBILITY_FILTER = () =>
 export function buildDiscoverCategories(): DiscoverCategory[] {
   return [
     buildCommunityCategory(),
+    buildMostWishlistedCategory(),
     buildGenreCategory('Popular MMOs', 'popular-mmos', 5, 'popularity'),
     buildGenreCategory('Top Co-op Games', 'top-coop', 3, 'rating'),
     buildGenreCategory(
@@ -33,6 +34,15 @@ export function buildDiscoverCategories(): DiscoverCategory[] {
     buildReleaseDateCategory(),
     buildRatingCategory(),
   ];
+}
+
+/** Most wishlisted category (ROK-418, no DB filter — uses custom fetch). */
+function buildMostWishlistedCategory(): DiscoverCategory {
+  return {
+    category: 'Most Wishlisted',
+    slug: 'most-wishlisted',
+    cached: false,
+  };
 }
 
 /** Community wants-to-play category (no DB filter). */
@@ -78,6 +88,34 @@ function buildRatingCategory(): DiscoverCategory {
     slug: 'highest-rated',
     orderBy: sql`${schema.games.aggregatedRating} DESC NULLS LAST`,
   };
+}
+
+/**
+ * Fetch the "Most Wishlisted" row from game_interests (ROK-418).
+ * @param db - Database connection
+ * @param cat - Category definition
+ * @returns Discovery row with wishlisted games
+ */
+export async function fetchMostWishlistedRow(
+  db: PostgresJsDatabase<typeof schema>,
+  cat: DiscoverCategory,
+) {
+  const wishlistGames = await db
+    .select({
+      gameId: schema.gameInterests.gameId,
+      count: sql<number>`count(*)::int`.as('count'),
+    })
+    .from(schema.gameInterests)
+    .where(eq(schema.gameInterests.source, 'steam_wishlist'))
+    .groupBy(schema.gameInterests.gameId)
+    .orderBy(sql`count(*) desc`)
+    .limit(20);
+
+  if (wishlistGames.length === 0) {
+    return { category: cat.category, slug: cat.slug, games: [] };
+  }
+
+  return orderCommunityGames(db, cat, wishlistGames);
 }
 
 /**

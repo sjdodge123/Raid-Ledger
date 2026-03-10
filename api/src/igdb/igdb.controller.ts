@@ -40,6 +40,7 @@ import type { UserRole } from '@raid-ledger/contract';
 import {
   buildDiscoverCategories,
   fetchCommunityRow,
+  fetchMostWishlistedRow,
   fetchCategoryRow,
 } from './igdb-discover.helpers';
 import {
@@ -51,6 +52,8 @@ import {
   removeInterest,
   getSteamOwners,
   getSteamOwnerCount,
+  getSteamWishlistCount,
+  isWishlistedByUser,
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
 
@@ -93,11 +96,13 @@ export class IgdbController {
     const categories = buildDiscoverCategories();
 
     const rows = await Promise.all(
-      categories.map((cat) =>
-        cat.slug === 'community-wants-to-play'
-          ? fetchCommunityRow(db, cat)
-          : fetchCategoryRow(db, redis, cat, config.DISCOVER_CACHE_TTL),
-      ),
+      categories.map((cat) => {
+        if (cat.slug === 'community-wants-to-play')
+          return fetchCommunityRow(db, cat);
+        if (cat.slug === 'most-wishlisted')
+          return fetchMostWishlistedRow(db, cat);
+        return fetchCategoryRow(db, redis, cat, config.DISCOVER_CACHE_TTL);
+      }),
     );
     return { rows: rows.filter((r) => r.games.length > 0) };
   }
@@ -249,12 +254,22 @@ export class IgdbController {
     @Req() req: AuthRequest,
   ): Promise<GameInterestResponseDto> {
     const db = this.igdbService.database;
-    const [count, source, players, ownerCount, owners] = await Promise.all([
+    const [
+      count,
+      source,
+      players,
+      ownerCount,
+      owners,
+      wishlistedCount,
+      wishlistedByMe,
+    ] = await Promise.all([
       getInterestCount(db, id),
       getUserInterestSource(db, id, req.user.id),
       getInterestedPlayers(db, id),
       getSteamOwnerCount(db, id),
       getSteamOwners(db, id),
+      getSteamWishlistCount(db, id),
+      isWishlistedByUser(db, id, req.user.id),
     ]);
     return {
       wantToPlay: source !== null,
@@ -263,6 +278,8 @@ export class IgdbController {
       source: source ? (source as 'manual' | 'steam' | 'discord') : undefined,
       ownerCount,
       owners,
+      wishlistedCount,
+      wishlistedByMe,
     };
   }
 

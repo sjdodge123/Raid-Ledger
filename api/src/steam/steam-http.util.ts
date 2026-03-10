@@ -150,3 +150,36 @@ export async function getOwnedGames(
 
   return data.response.games ?? [];
 }
+
+/**
+ * Steam wishlist item from IWishlistService/GetWishlist.
+ */
+export interface SteamWishlistItem {
+  appid: number;
+  date_added: number;
+}
+
+/**
+ * Fetch a user's Steam wishlist via IWishlistService/GetWishlist/v1.
+ */
+export async function getWishlist(
+  apiKey: string,
+  steamId: string,
+): Promise<SteamWishlistItem[]> {
+  const params = new URLSearchParams({
+    key: apiKey,
+    steamid: steamId,
+    format: 'json',
+  });
+
+  const url = `${STEAM_API_BASE}/IWishlistService/GetWishlist/v1/?${params.toString()}`;
+  const response = await steamFetch(url);
+
+  if (!response.ok) return [];
+
+  const data = (await response.json()) as {
+    response: { items?: SteamWishlistItem[] };
+  };
+
+  return data.response.items ?? [];
+}

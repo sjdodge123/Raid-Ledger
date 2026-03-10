@@ -4,6 +4,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SteamService } from './steam.service';
+import { SteamWishlistService } from './steam-wishlist.service';
 import { SettingsService } from '../settings/settings.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { STEAM_SYNC_QUEUE, SteamSyncJobData } from './steam-sync.constants';
@@ -18,6 +19,7 @@ export class SteamSyncProcessor extends WorkerHost implements OnModuleInit {
 
   constructor(
     private readonly steamService: SteamService,
+    private readonly steamWishlistService: SteamWishlistService,
     private readonly settingsService: SettingsService,
     @InjectQueue(STEAM_SYNC_QUEUE) private readonly syncQueue: Queue,
     private readonly queueHealth: QueueHealthService,
@@ -37,9 +39,17 @@ export class SteamSyncProcessor extends WorkerHost implements OnModuleInit {
 
     const result = await this.steamService.syncAllLinkedUsers();
 
+    await job.updateProgress(50);
+    this.logger.log(
+      `Steam library sync complete: ${result.usersProcessed} users, ${result.totalNewInterests} new interests`,
+    );
+
+    const wishlistResult =
+      await this.steamWishlistService.syncAllLinkedUsersWishlist();
+
     await job.updateProgress(100);
     this.logger.log(
-      `Steam sync complete: ${result.usersProcessed} users, ${result.totalNewInterests} new interests`,
+      `Steam wishlist sync complete: ${wishlistResult.usersProcessed} users, ${wishlistResult.totalNewInterests} new interests`,
     );
 
     return result;

@@ -3,6 +3,7 @@ import {
   getUserProfile,
   getUserHeartedGames,
   getUserSteamLibrary,
+  getUserSteamWishlist,
   getUserEventSignups,
   getUserActivity,
 } from "../lib/api-client";
@@ -13,8 +14,9 @@ import type {
   UserEventSignupsResponseDto,
   ActivityPeriod,
   UserActivityResponseDto,
+  SteamLibraryResponseDto,
+  SteamWishlistResponseDto,
 } from "@raid-ledger/contract";
-import type { SteamLibraryResponseDto } from "@raid-ledger/contract";
 
 const PREVIEW_LIMIT = 10;
 
@@ -86,6 +88,35 @@ export function useUserSteamLibraryModal(userId: number | undefined, enabled: bo
     queryFn: async (page: number) => {
       if (!userId) throw new Error("User ID required");
       return getUserSteamLibrary(userId, page, 20);
+    },
+    enabled: !!userId && enabled,
+  });
+}
+
+/**
+ * ROK-418: Fetch first 10 Steam wishlist entries for inline preview.
+ */
+export function useUserSteamWishlist(userId: number | undefined) {
+  return useQuery<SteamWishlistResponseDto>({
+    queryKey: ["userSteamWishlist", userId, "preview"],
+    queryFn: async () => {
+      if (!userId) throw new Error("User ID required");
+      return getUserSteamWishlist(userId, 1, PREVIEW_LIMIT);
+    },
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * ROK-418: Fetch full Steam wishlist (infinite scroll inside modal).
+ */
+export function useUserSteamWishlistModal(userId: number | undefined, enabled: boolean) {
+  return useInfiniteList({
+    queryKey: ["userSteamWishlist", userId, "modal"],
+    queryFn: async (page: number) => {
+      if (!userId) throw new Error("User ID required");
+      return getUserSteamWishlist(userId, page, 20);
     },
     enabled: !!userId && enabled,
   });

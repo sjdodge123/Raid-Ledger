@@ -9,13 +9,17 @@ import { getSteamOwners, getSteamOwnerCount } from './igdb-interest.helpers';
 // ─── Shared mock builder ────────────────────────────────────────────────────
 
 function buildOwnerDb(
-  rows: { id: number; username: string; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[],
+  rows: {
+    id: number;
+    username: string;
+    avatar: string | null;
+    customAvatarUrl: string | null;
+    discordId: string | null;
+  }[],
   count: number,
 ): Record<string, jest.Mock> {
   const db: Record<string, jest.Mock> = {};
-  const chainMethods = [
-    'select', 'from', 'innerJoin', 'orderBy', 'groupBy',
-  ];
+  const chainMethods = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy'];
   for (const m of chainMethods) {
     db[m] = jest.fn().mockReturnThis();
   }
@@ -43,8 +47,20 @@ function buildOwnerDb(
 describe('getSteamOwners', () => {
   it('returns player previews for Steam owners', async () => {
     const mockPlayers = [
-      { id: 1, username: 'Player1', avatar: null, customAvatarUrl: null, discordId: '111' },
-      { id: 2, username: 'Player2', avatar: 'hash', customAvatarUrl: null, discordId: '222' },
+      {
+        id: 1,
+        username: 'Player1',
+        avatar: null,
+        customAvatarUrl: null,
+        discordId: '111',
+      },
+      {
+        id: 2,
+        username: 'Player2',
+        avatar: 'hash',
+        customAvatarUrl: null,
+        discordId: '222',
+      },
     ];
     const db = buildOwnerDb(mockPlayers, 2);
 

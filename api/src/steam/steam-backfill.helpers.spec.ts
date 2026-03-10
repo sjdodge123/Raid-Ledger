@@ -93,11 +93,7 @@ describe('backfillUnmatchedSteamGames', () => {
       (_, i) => i + 1,
     );
 
-    await backfillUnmatchedSteamGames(
-      appIds,
-      mockQueryIgdb,
-      mockUpsertGames,
-    );
+    await backfillUnmatchedSteamGames(appIds, mockQueryIgdb, mockUpsertGames);
 
     // Should only query up to MAX_BACKFILL_LOOKUPS, not all
     const totalQueried = (mockQueryIgdb.mock.calls as string[][])
@@ -112,9 +108,7 @@ describe('backfillUnmatchedSteamGames', () => {
   it('continues processing when a batch fails', async () => {
     mockQueryIgdb
       .mockRejectedValueOnce(new Error('IGDB timeout'))
-      .mockResolvedValueOnce([
-        { id: 1, name: 'Game', slug: 'game' },
-      ]);
+      .mockResolvedValueOnce([{ id: 1, name: 'Game', slug: 'game' }]);
 
     const appIds = Array.from(
       { length: BACKFILL_BATCH_SIZE * 2 },
@@ -134,11 +128,7 @@ describe('backfillUnmatchedSteamGames', () => {
   it('does not call upsertGames when IGDB returns empty', async () => {
     mockQueryIgdb.mockResolvedValueOnce([]);
 
-    await backfillUnmatchedSteamGames(
-      [12345],
-      mockQueryIgdb,
-      mockUpsertGames,
-    );
+    await backfillUnmatchedSteamGames([12345], mockQueryIgdb, mockUpsertGames);
 
     expect(mockUpsertGames).not.toHaveBeenCalled();
   });

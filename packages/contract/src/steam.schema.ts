@@ -67,3 +67,50 @@ export const SteamConfigStatusSchema = z.object({
 });
 
 export type SteamConfigStatusDto = z.infer<typeof SteamConfigStatusSchema>;
+
+// ==========================================
+// Steam Wishlist (ROK-418)
+// ==========================================
+
+/**
+ * Result of a Steam wishlist sync operation.
+ */
+export const SteamWishlistSyncResultSchema = z.object({
+  totalWishlisted: z.number().int(),
+  matched: z.number().int(),
+  newInterests: z.number().int(),
+  removed: z.number().int(),
+  /** Number of games imported from IGDB during backfill. */
+  imported: z.number().int().optional(),
+});
+
+export type SteamWishlistSyncResultDto = z.infer<typeof SteamWishlistSyncResultSchema>;
+
+/**
+ * A single game from the user's Steam wishlist.
+ */
+export const SteamWishlistEntrySchema = z.object({
+  gameId: z.number(),
+  gameName: z.string(),
+  coverUrl: z.string().nullable(),
+  slug: z.string(),
+  /** Unix timestamp when added to Steam wishlist */
+  dateAdded: z.number().nullable(),
+});
+
+export type SteamWishlistEntryDto = z.infer<typeof SteamWishlistEntrySchema>;
+
+/**
+ * Response for GET /users/:id/steam-wishlist.
+ */
+export const SteamWishlistResponseSchema = z.object({
+  data: z.array(SteamWishlistEntrySchema),
+  meta: z.object({
+    total: z.number().int(),
+    page: z.number().int(),
+    limit: z.number().int(),
+    hasMore: z.boolean(),
+  }),
+});
+
+export type SteamWishlistResponseDto = z.infer<typeof SteamWishlistResponseSchema>;

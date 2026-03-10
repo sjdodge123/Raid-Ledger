@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { SteamAuthController } from './steam-auth.controller';
 import { SteamService } from './steam.service';
+import { SteamWishlistService } from './steam-wishlist.service';
 import { SteamSyncProcessor } from './steam-sync.processor';
 import { STEAM_SYNC_QUEUE } from './steam-sync.constants';
 import { UsersModule } from '../users/users.module';
@@ -29,7 +30,7 @@ import { IgdbModule } from '../igdb/igdb.module';
     }),
   ],
   controllers: [SteamAuthController],
-  providers: [SteamService, SteamSyncProcessor],
-  exports: [SteamService],
+  providers: [SteamService, SteamWishlistService, SteamSyncProcessor],
+  exports: [SteamService, SteamWishlistService],
 })
 export class SteamModule {}

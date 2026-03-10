@@ -139,7 +139,13 @@ function describeGameInterestResponseSchemaSourceField() {
       wantToPlay: true,
       count: 3,
       owners: [
-        { id: 1, username: 'Player1', avatar: null, customAvatarUrl: null, discordId: '111' },
+        {
+          id: 1,
+          username: 'Player1',
+          avatar: null,
+          customAvatarUrl: null,
+          discordId: '111',
+        },
       ],
       ownerCount: 5,
     });
@@ -157,6 +163,28 @@ function describeGameInterestResponseSchemaSourceField() {
       expect(result.data.ownerCount).toBeUndefined();
     }
   });
+
+  it('accepts wishlistedCount and wishlistedByMe fields (ROK-418)', () => {
+    const result = GameInterestResponseSchema.safeParse({
+      wantToPlay: true,
+      count: 3,
+      wishlistedCount: 10,
+      wishlistedByMe: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('wishlistedCount and wishlistedByMe are optional', () => {
+    const result = GameInterestResponseSchema.safeParse({
+      wantToPlay: false,
+      count: 0,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.wishlistedCount).toBeUndefined();
+      expect(result.data.wishlistedByMe).toBeUndefined();
+    }
+  });
 }
 describe('GameInterestResponseSchema — source field (ROK-444)', () =>
   describeGameInterestResponseSchemaSourceField());
@@ -165,12 +193,14 @@ describe('GameInterestResponseSchema — source field (ROK-444)', () =>
 
 function describeIgdbControllerGetGameInterestSourceField() {
   /**
-   * getGameInterest uses Promise.all for 5 concurrent queries:
+   * getGameInterest uses Promise.all for 7 concurrent queries:
    *   1. getInterestCount: .where(eq(...)) terminal
    *   2. getUserInterestSource: .where(and(...)).limit(1)
    *   3. getInterestedPlayers: .where(eq(...)).orderBy(...).limit(8)
    *   4. getSteamOwnerCount: .where(and(...)) terminal
    *   5. getSteamOwners: .where(and(...)).orderBy(...).limit(8)
+   *   6. getSteamWishlistCount: .where(and(...)) terminal (ROK-418)
+   *   7. isWishlistedByUser: .where(and(...)).limit(1) (ROK-418)
    */
 
   function buildInterestDb(
@@ -195,11 +225,16 @@ function describeIgdbControllerGetGameInterestSourceField() {
     }
 
     // .where() calls: 1=count(terminal), 2=userInterest(chain),
-    //   3=interestedPlayers(chain), 4=steamOwnerCount(terminal), 5=steamOwners(chain)
+    //   3=interestedPlayers(chain), 4=steamOwnerCount(terminal),
+    //   5=steamOwners(chain), 6=wishlistCount(terminal), 7=wishlistedByUser(chain)
     let whereCallCount = 0;
     db.where = jest.fn().mockImplementation(() => {
       whereCallCount++;
-      if (whereCallCount === 1 || whereCallCount === 4) {
+      if (
+        whereCallCount === 1 ||
+        whereCallCount === 4 ||
+        whereCallCount === 6
+      ) {
         // Count queries — terminal
         return Promise.resolve([{ count: source ? 1 : 0 }]);
       }
@@ -213,7 +248,7 @@ function describeIgdbControllerGetGameInterestSourceField() {
         // User interest query
         return Promise.resolve(source ? [{ source }] : []);
       }
-      // getInterestedPlayers and getSteamOwners
+      // getInterestedPlayers, getSteamOwners, isWishlistedByUser
       return Promise.resolve([]);
     });
 
@@ -262,6 +297,15 @@ function describeIgdbControllerGetGameInterestSourceField() {
 
     expect(typeof result.ownerCount).toBe('number');
     expect(Array.isArray(result.owners)).toBe(true);
+  });
+
+  it('returns wishlistedCount and wishlistedByMe fields (ROK-418)', async () => {
+    const db = buildInterestDb('manual');
+    const ctrl = await createController(buildMockService(db));
+    const result = await ctrl.getGameInterest(10, mockAuthReq(1));
+
+    expect(typeof result.wishlistedCount).toBe('number');
+    expect(typeof result.wishlistedByMe).toBe('boolean');
   });
 }
 describe('IgdbController.getGameInterest — source field (ROK-444)', () =>
