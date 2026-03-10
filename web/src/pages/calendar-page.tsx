@@ -14,7 +14,7 @@ import { useGameRegistry } from '../hooks/use-game-registry';
 import { useGameFilterStore } from '../stores/game-filter-store';
 import { useLikedGameSlugs } from '../hooks/use-liked-game-slugs';
 import { CalendarGameFilterSheet, CalendarGameFilterModal, SectionedGameList } from './calendar/CalendarGameFilter';
-import { sortGamesWithLikedFirst } from './calendar/game-filter-helpers';
+import { sortGamesWithLikedFirst, type GameWithLiked } from './calendar/game-filter-helpers';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -105,7 +105,8 @@ export function CalendarPage(): JSX.Element {
     const likedSlugs = useLikedGameSlugs();
 
     const maxVisible = 5;
-    const inlineGames = allKnownGames.length > maxVisible ? allKnownGames.slice(0, maxVisible) : allKnownGames;
+    const sortedGames = useMemo(() => sortGamesWithLikedFirst(allKnownGames, likedSlugs), [allKnownGames, likedSlugs]);
+    const inlineGames = sortedGames.length > maxVisible ? sortedGames.slice(0, maxVisible) : sortedGames;
     const hasOverflow = allKnownGames.length > maxVisible;
     const filterProps = { allKnownGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, likedSlugs };
 
@@ -123,7 +124,7 @@ interface FilterProps {
 
 function CalendarPageLayout({ state, gameTimeSlots, inlineGames, hasOverflow, filterProps }: {
     state: ReturnType<typeof useCalendarState>; gameTimeSlots: Set<string> | undefined;
-    inlineGames: GameItem[]; hasOverflow: boolean; filterProps: FilterProps;
+    inlineGames: GameWithLiked[]; hasOverflow: boolean; filterProps: FilterProps;
 }): JSX.Element {
     return (
         <div className="pb-20 md:pb-0" style={{ overflowX: 'clip' }}>
@@ -146,7 +147,7 @@ function CalendarPageLayout({ state, gameTimeSlots, inlineGames, hasOverflow, fi
 
 function CalendarMainContent({ state, gameTimeSlots, inlineGames, hasOverflow, filterProps }: {
     state: ReturnType<typeof useCalendarState>; gameTimeSlots: Set<string> | undefined;
-    inlineGames: GameItem[]; hasOverflow: boolean; filterProps: FilterProps;
+    inlineGames: GameWithLiked[]; hasOverflow: boolean; filterProps: FilterProps;
 }): JSX.Element {
     return (
         <div className={`max-w-7xl mx-auto ${state.calendarView === 'schedule' ? 'py-0 md:py-6 md:px-4' : 'px-2 py-1 md:px-4 md:py-6'}`} style={{ overflowX: 'clip' }}>
@@ -167,12 +168,12 @@ function CalendarMainContent({ state, gameTimeSlots, inlineGames, hasOverflow, f
 }
 
 /** Desktop sidebar with mini calendar, game filter, and quick actions */
-function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal, likedSlugs }: {
+function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal }: {
     currentDate: Date; onDateSelect: (d: Date) => void;
-    allKnownGames: GameItem[]; inlineGames: GameItem[];
+    allKnownGames: GameItem[]; inlineGames: GameWithLiked[];
     selectedGames: Set<string>; toggleGame: (s: string) => void;
     selectAllGames: () => void; deselectAllGames: () => void;
-    hasOverflow: boolean; onShowFilterModal: () => void; likedSlugs: Set<string>;
+    hasOverflow: boolean; onShowFilterModal: () => void;
 }): JSX.Element {
     return (
         <aside className="calendar-sidebar">
@@ -180,24 +181,19 @@ function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, inlineGames
             {allKnownGames.length > 0 && (
                 <SidebarGameFilter allKnownGames={allKnownGames} inlineGames={inlineGames} selectedGames={selectedGames}
                     toggleGame={toggleGame} selectAllGames={selectAllGames} deselectAllGames={deselectAllGames}
-                    hasOverflow={hasOverflow} onShowFilterModal={onShowFilterModal} likedSlugs={likedSlugs} />
+                    hasOverflow={hasOverflow} onShowFilterModal={onShowFilterModal} />
             )}
             <SidebarQuickActions />
         </aside>
     );
 }
 
-function SidebarGameFilter({ allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal, likedSlugs }: {
-    allKnownGames: GameItem[]; inlineGames: GameItem[];
+function SidebarGameFilter({ allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal }: {
+    allKnownGames: GameItem[]; inlineGames: GameWithLiked[];
     selectedGames: Set<string>; toggleGame: (s: string) => void;
     selectAllGames: () => void; deselectAllGames: () => void;
-    hasOverflow: boolean; onShowFilterModal: () => void; likedSlugs: Set<string>;
+    hasOverflow: boolean; onShowFilterModal: () => void;
 }): JSX.Element {
-    const sortedInline = useMemo(
-        () => sortGamesWithLikedFirst(inlineGames, likedSlugs),
-        [inlineGames, likedSlugs],
-    );
-
     return (
         <div className="sidebar-section">
             <div className="game-filter-header">
@@ -208,7 +204,7 @@ function SidebarGameFilter({ allKnownGames, inlineGames, selectedGames, toggleGa
                 </div>
             </div>
             <div className="game-filter-list">
-                <SectionedGameList games={sortedInline} selectedGames={selectedGames}
+                <SectionedGameList games={inlineGames} selectedGames={selectedGames}
                     toggleGame={toggleGame} renderItem={SidebarGameItemWrapped} />
             </div>
             {hasOverflow && (
