@@ -7,7 +7,7 @@ import {
   getSteamOwnerCount,
   getSteamWishlistCount,
   isWishlistedByUser,
-} from './igdb-interest.helpers';
+} from './igdb-steam-interest.helpers';
 
 // ─── Shared mock builder ────────────────────────────────────────────────────
 
