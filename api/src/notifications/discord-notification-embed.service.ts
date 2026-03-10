@@ -175,12 +175,13 @@ export class DiscordNotificationEmbedService {
     );
   }
 
-  /** Resolve the timestamp for the embed footer (ROK-545). */
+  /** Resolve the timestamp for the embed footer (ROK-545, ROK-760). */
   private resolveTimestamp(input: NotificationEmbedInput): Date {
+    if (input.type === 'event_rescheduled' && input.payload?.newStartTime)
+      return new Date(input.payload.newStartTime as string);
     const eventTypes: NotificationType[] = [
       'event_reminder',
       'new_event',
-      'event_rescheduled',
       'event_cancelled',
       'subscribed_game',
       'recruitment_reminder',
@@ -188,8 +189,6 @@ export class DiscordNotificationEmbedService {
     ];
     if (eventTypes.includes(input.type) && input.payload?.startTime)
       return new Date(input.payload.startTime as string);
-    if (input.type === 'event_rescheduled' && input.payload?.newStartTime)
-      return new Date(input.payload.newStartTime as string);
     return new Date();
   }
 
