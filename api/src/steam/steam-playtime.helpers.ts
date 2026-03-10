@@ -1,4 +1,4 @@
-import { eq, inArray, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
