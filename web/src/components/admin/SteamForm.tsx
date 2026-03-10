@@ -8,7 +8,7 @@ const STEAM_RING = 'focus:ring-[#1B2838]';
 
 function SteamSetupInstructions() {
     return (
-        <div className="bg-[#1B2838]/30 border border-[#1B2838]/50 rounded-lg p-4 mb-6">
+        <div className="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 mb-6">
             <p className="text-sm text-foreground"><strong>Setup Instructions:</strong></p>
             <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
                 <li>Go to <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-300">steamcommunity.com/dev/apikey</a></li>
@@ -62,7 +62,7 @@ function SteamActionButtons({ configured, isPending, onTest, onClear }: {
     return (
         <div className="flex flex-wrap gap-3 pt-2">
             <button type="submit" disabled={isPending.save}
-                className="flex-1 py-3 px-4 bg-[#1B2838] hover:bg-[#2a475e] disabled:bg-[#1B2838]/50 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors">
+                className="flex-1 py-3 px-4 bg-[#1B2838] hover:bg-[#2a475e] disabled:bg-[#1B2838]/50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors">
                 {isPending.save ? 'Saving...' : 'Save Configuration'}
             </button>
             {configured && (
