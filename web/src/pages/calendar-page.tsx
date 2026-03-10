@@ -13,7 +13,8 @@ import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useGameFilterStore } from '../stores/game-filter-store';
 import { useLikedGameSlugs } from '../hooks/use-liked-game-slugs';
-import { CalendarGameFilterSheet, CalendarGameFilterModal } from './calendar/CalendarGameFilter';
+import { CalendarGameFilterSheet, CalendarGameFilterModal, SectionedGameList } from './calendar/CalendarGameFilter';
+import { sortGamesWithLikedFirst } from './calendar/game-filter-helpers';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -166,12 +167,12 @@ function CalendarMainContent({ state, gameTimeSlots, inlineGames, hasOverflow, f
 }
 
 /** Desktop sidebar with mini calendar, game filter, and quick actions */
-function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal }: {
+function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal, likedSlugs }: {
     currentDate: Date; onDateSelect: (d: Date) => void;
     allKnownGames: GameItem[]; inlineGames: GameItem[];
     selectedGames: Set<string>; toggleGame: (s: string) => void;
     selectAllGames: () => void; deselectAllGames: () => void;
-    hasOverflow: boolean; onShowFilterModal: () => void;
+    hasOverflow: boolean; onShowFilterModal: () => void; likedSlugs: Set<string>;
 }): JSX.Element {
     return (
         <aside className="calendar-sidebar">
@@ -179,19 +180,24 @@ function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, inlineGames
             {allKnownGames.length > 0 && (
                 <SidebarGameFilter allKnownGames={allKnownGames} inlineGames={inlineGames} selectedGames={selectedGames}
                     toggleGame={toggleGame} selectAllGames={selectAllGames} deselectAllGames={deselectAllGames}
-                    hasOverflow={hasOverflow} onShowFilterModal={onShowFilterModal} />
+                    hasOverflow={hasOverflow} onShowFilterModal={onShowFilterModal} likedSlugs={likedSlugs} />
             )}
             <SidebarQuickActions />
         </aside>
     );
 }
 
-function SidebarGameFilter({ allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal }: {
+function SidebarGameFilter({ allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal, likedSlugs }: {
     allKnownGames: GameItem[]; inlineGames: GameItem[];
     selectedGames: Set<string>; toggleGame: (s: string) => void;
     selectAllGames: () => void; deselectAllGames: () => void;
-    hasOverflow: boolean; onShowFilterModal: () => void;
+    hasOverflow: boolean; onShowFilterModal: () => void; likedSlugs: Set<string>;
 }): JSX.Element {
+    const sortedInline = useMemo(
+        () => sortGamesWithLikedFirst(inlineGames, likedSlugs),
+        [inlineGames, likedSlugs],
+    );
+
     return (
         <div className="sidebar-section">
             <div className="game-filter-header">
@@ -202,9 +208,8 @@ function SidebarGameFilter({ allKnownGames, inlineGames, selectedGames, toggleGa
                 </div>
             </div>
             <div className="game-filter-list">
-                {inlineGames.map((game) => (
-                    <SidebarGameItem key={game.slug} game={game} isSelected={selectedGames.has(game.slug)} onToggle={() => toggleGame(game.slug)} />
-                ))}
+                <SectionedGameList games={sortedInline} selectedGames={selectedGames}
+                    toggleGame={toggleGame} renderItem={SidebarGameItemWrapped} />
             </div>
             {hasOverflow && (
                 <button type="button" onClick={onShowFilterModal} className="game-filter-show-all">
@@ -231,6 +236,13 @@ function SidebarQuickActions(): JSX.Element {
             </div>
         </div>
     );
+}
+
+/** Wrapper to adapt SidebarGameItem for SectionedGameList renderItem interface. */
+function SidebarGameItemWrapped({ game, isSelected, onToggle }: {
+    game: GameItem & { liked: boolean }; isSelected: boolean; onToggle: () => void;
+}): JSX.Element {
+    return <SidebarGameItem game={game} isSelected={isSelected} onToggle={onToggle} />;
 }
 
 /** Single game filter item in sidebar */
