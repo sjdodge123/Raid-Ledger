@@ -203,12 +203,9 @@ describe('tryGameSignupFlow — adversarial edge cases (ROK-775)', () => {
       deps,
     });
 
-    expect(deps.signupsService.confirmSignup).toHaveBeenCalledWith(
-      10,
-      1,
-      42,
-      { characterId: 'edge-2' },
-    );
+    expect(deps.signupsService.confirmSignup).toHaveBeenCalledWith(10, 1, 42, {
+      characterId: 'edge-2',
+    });
   });
 
   it('does not pass preferredRoles for no-character signup', async () => {
