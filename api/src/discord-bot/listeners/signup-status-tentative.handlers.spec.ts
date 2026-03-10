@@ -127,3 +127,131 @@ describe('handleLinkedTentative — single char path (ROK-775)', () => {
     });
   });
 });
+
+describe('handleLinkedTentative — adversarial edge cases (ROK-775)', () => {
+  function setupTwoDbSelects(
+    deps: SignupInteractionDeps,
+    event: Record<string, unknown>,
+    game: Record<string, unknown>,
+  ): void {
+    (deps.db.select as jest.Mock)
+      .mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([event]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([game]),
+          }),
+        }),
+      });
+  }
+
+  it('omits preferredRoles when character has null role', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+    const event = {
+      id: 10,
+      title: 'Raid',
+      gameId: 1,
+      slotConfig: { type: 'generic' },
+    };
+    setupTwoDbSelects(deps, event, { id: 1, hasRoles: true });
+
+    const char = {
+      id: 'null-role',
+      name: 'NoRoleChar',
+      role: null,
+      roleOverride: null,
+    };
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: [char],
+    });
+
+    await handleLinkedTentative(interaction, 10, MOCK_USER, deps);
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(10, 42);
+  });
+
+  it('sets tentative status after signup with preferredRoles', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+    const event = {
+      id: 10,
+      title: 'Raid',
+      gameId: 1,
+      slotConfig: { type: 'generic' },
+    };
+    setupTwoDbSelects(deps, event, { id: 1, hasRoles: true });
+
+    const char = {
+      id: 'tent-char',
+      name: 'TentChar',
+      role: 'dps' as const,
+      roleOverride: null,
+    };
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: [char],
+    });
+
+    await handleLinkedTentative(interaction, 10, MOCK_USER, deps);
+
+    expect(deps.signupsService.updateStatus).toHaveBeenCalledWith(
+      10,
+      { userId: 42 },
+      { status: 'tentative' },
+    );
+  });
+
+  it('replies "Event not found" when event does not exist', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+
+    (deps.db.select as jest.Mock).mockReturnValueOnce({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+
+    await handleLinkedTentative(interaction, 999, MOCK_USER, deps);
+
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'Event not found.',
+    });
+    expect(deps.signupsService.signup).not.toHaveBeenCalled();
+  });
+
+  it('uses roleOverride when role is null on single char', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+    const event = {
+      id: 10,
+      title: 'Raid',
+      gameId: 1,
+      slotConfig: { type: 'generic' },
+    };
+    setupTwoDbSelects(deps, event, { id: 1, hasRoles: true });
+
+    const char = {
+      id: 'override-only',
+      name: 'OverrideOnly',
+      role: null,
+      roleOverride: 'healer' as const,
+    };
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: [char],
+    });
+
+    await handleLinkedTentative(interaction, 10, MOCK_USER, deps);
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(10, 42, {
+      preferredRoles: ['healer'],
+    });
+  });
+});

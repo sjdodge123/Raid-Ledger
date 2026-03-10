@@ -117,3 +117,148 @@ describe('handleCharacterSelectMenu — non-MMO (ROK-775)', () => {
     });
   });
 });
+
+describe('handleCharacterSelectMenu — adversarial edge cases (ROK-775)', () => {
+  function setupNonMmoFlow(
+    deps: SignupInteractionDeps,
+    linkedUser: Record<string, unknown>,
+    event: Record<string, unknown>,
+  ): void {
+    (deps.db.select as jest.Mock)
+      .mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([linkedUser]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([event]),
+          }),
+        }),
+      });
+  }
+
+  it('omits preferredRoles when character has no role', async () => {
+    const deps = createMockDeps();
+    const charId = 'null-role-char';
+    const interaction = {
+      deferUpdate: jest.fn().mockResolvedValue(undefined),
+      values: [charId],
+      user: { id: 'discord-789' },
+      editReply: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StringSelectMenuInteraction;
+
+    setupNonMmoFlow(
+      deps,
+      { id: 50, discordId: 'discord-789' },
+      { id: 10, slotConfig: { type: 'generic' } },
+    );
+
+    (deps.charactersService.findOne as jest.Mock).mockResolvedValue({
+      id: charId,
+      name: 'NullRoleChar',
+      role: null,
+      roleOverride: null,
+    });
+
+    await handleCharacterSelectMenu(interaction, 10, deps);
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(10, 50);
+  });
+
+  it('passes preferredRoles in tentative mode', async () => {
+    const deps = createMockDeps();
+    const charId = 'tent-char';
+    const interaction = {
+      deferUpdate: jest.fn().mockResolvedValue(undefined),
+      values: [charId],
+      user: { id: 'discord-tent' },
+      editReply: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StringSelectMenuInteraction;
+
+    setupNonMmoFlow(
+      deps,
+      { id: 55, discordId: 'discord-tent' },
+      { id: 20, slotConfig: { type: 'generic' } },
+    );
+
+    (deps.charactersService.findOne as jest.Mock).mockResolvedValue({
+      id: charId,
+      name: 'TentativeChar',
+      role: 'tank' as const,
+      roleOverride: null,
+    });
+
+    await handleCharacterSelectMenu(interaction, 20, deps, 'tentative');
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(20, 55, {
+      preferredRoles: ['tank'],
+    });
+    expect(deps.signupsService.updateStatus).toHaveBeenCalledWith(
+      20,
+      { userId: 55 },
+      { status: 'tentative' },
+    );
+  });
+
+  it('uses roleOverride when role is null', async () => {
+    const deps = createMockDeps();
+    const charId = 'override-null-role';
+    const interaction = {
+      deferUpdate: jest.fn().mockResolvedValue(undefined),
+      values: [charId],
+      user: { id: 'discord-ovr' },
+      editReply: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StringSelectMenuInteraction;
+
+    setupNonMmoFlow(
+      deps,
+      { id: 60, discordId: 'discord-ovr' },
+      { id: 15, slotConfig: { type: 'generic' } },
+    );
+
+    (deps.charactersService.findOne as jest.Mock).mockResolvedValue({
+      id: charId,
+      name: 'OverrideNullRole',
+      role: null,
+      roleOverride: 'dps' as const,
+    });
+
+    await handleCharacterSelectMenu(interaction, 15, deps);
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(15, 60, {
+      preferredRoles: ['dps'],
+    });
+  });
+
+  it('updates embed signup count after character select', async () => {
+    const deps = createMockDeps();
+    const charId = 'count-char';
+    const interaction = {
+      deferUpdate: jest.fn().mockResolvedValue(undefined),
+      values: [charId],
+      user: { id: 'discord-cnt' },
+      editReply: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StringSelectMenuInteraction;
+
+    setupNonMmoFlow(
+      deps,
+      { id: 70, discordId: 'discord-cnt' },
+      { id: 30, slotConfig: { type: 'generic' } },
+    );
+
+    (deps.charactersService.findOne as jest.Mock).mockResolvedValue({
+      id: charId,
+      name: 'CountChar',
+      role: 'healer' as const,
+      roleOverride: null,
+    });
+
+    await handleCharacterSelectMenu(interaction, 30, deps);
+
+    expect(deps.updateEmbedSignupCount).toHaveBeenCalledWith(30);
+  });
+});

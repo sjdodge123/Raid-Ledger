@@ -142,3 +142,144 @@ describe('tryGameSignupFlow — single character path (ROK-775)', () => {
     expect(deps.signupsService.signup).toHaveBeenCalledWith(10, 42);
   });
 });
+
+describe('tryGameSignupFlow — adversarial edge cases (ROK-775)', () => {
+  function setupSingleCharFlow(
+    deps: SignupInteractionDeps,
+    char: Record<string, unknown>,
+  ): void {
+    (deps.db.select as jest.Mock).mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([{ id: 1, hasRoles: true }]),
+        }),
+      }),
+    });
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: [char],
+    });
+  }
+
+  it('uses roleOverride when role is null', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+    const char = {
+      id: 'edge-1',
+      name: 'NullRoleChar',
+      role: null,
+      roleOverride: 'tank' as const,
+    };
+    setupSingleCharFlow(deps, char);
+
+    await tryGameSignupFlow({
+      interaction,
+      eventId: 10,
+      linkedUser: MOCK_USER,
+      event: MOCK_EVENT,
+      deps,
+    });
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(10, 42, {
+      preferredRoles: ['tank'],
+    });
+  });
+
+  it('confirms signup with character id after signup', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+    const char = {
+      id: 'edge-2',
+      name: 'ConfirmChar',
+      role: 'healer' as const,
+      roleOverride: null,
+    };
+    setupSingleCharFlow(deps, char);
+
+    await tryGameSignupFlow({
+      interaction,
+      eventId: 10,
+      linkedUser: MOCK_USER,
+      event: MOCK_EVENT,
+      deps,
+    });
+
+    expect(deps.signupsService.confirmSignup).toHaveBeenCalledWith(
+      10,
+      1,
+      42,
+      { characterId: 'edge-2' },
+    );
+  });
+
+  it('does not pass preferredRoles for no-character signup', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+
+    (deps.db.select as jest.Mock).mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([{ id: 1, hasRoles: true }]),
+        }),
+      }),
+    });
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: [],
+    });
+
+    await tryGameSignupFlow({
+      interaction,
+      eventId: 10,
+      linkedUser: MOCK_USER,
+      event: MOCK_EVENT,
+      deps,
+    });
+
+    expect(deps.signupsService.signup).toHaveBeenCalledWith(10, 42);
+  });
+
+  it('returns false when game is not found', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+
+    (deps.db.select as jest.Mock).mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+
+    const result = await tryGameSignupFlow({
+      interaction,
+      eventId: 10,
+      linkedUser: MOCK_USER,
+      event: MOCK_EVENT,
+      deps,
+    });
+
+    expect(result).toBe(false);
+    expect(deps.signupsService.signup).not.toHaveBeenCalled();
+  });
+
+  it('updates embed signup count after single char signup', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockInteraction();
+    const char = {
+      id: 'edge-3',
+      name: 'CountChar',
+      role: 'dps' as const,
+      roleOverride: null,
+    };
+    setupSingleCharFlow(deps, char);
+
+    await tryGameSignupFlow({
+      interaction,
+      eventId: 10,
+      linkedUser: MOCK_USER,
+      event: MOCK_EVENT,
+      deps,
+    });
+
+    expect(deps.updateEmbedSignupCount).toHaveBeenCalledWith(10);
+  });
+});
