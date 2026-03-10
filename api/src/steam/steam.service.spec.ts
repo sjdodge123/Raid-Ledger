@@ -71,8 +71,7 @@ describe('SteamService', () => {
       (steamHttp.getOwnedGames as jest.Mock).mockResolvedValue(ownedGames);
 
       // First findMatchingGames: only appid 100 matched
-      mockDb.where
-        .mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
+      mockDb.where.mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
 
       // ITAD finds game for appid 200
       mockItadService.lookupBySteamAppId.mockResolvedValue({
