@@ -127,6 +127,7 @@ export class DiscordBotClientService {
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
     extraRows?: ActionRowBuilder<ButtonBuilder>[],
+    content?: string,
   ): Promise<void> {
     if (!this.client?.isReady()) {
       throw new Error('Discord bot is not connected');
@@ -139,9 +140,11 @@ export class DiscordBotClientService {
     if (row) components.push(row);
 
     const payload: {
+      content?: string;
       embeds: EmbedBuilder[];
       components?: ActionRowBuilder<ButtonBuilder>[];
     } = { embeds: [embed] };
+    if (content) payload.content = content;
     if (components.length > 0) payload.components = components;
 
     await user.send(payload);
