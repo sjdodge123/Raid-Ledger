@@ -98,6 +98,8 @@ function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
         players: interest.data?.players ?? [],
         owners: interest.data?.owners ?? [],
         ownerCount: interest.data?.ownerCount ?? 0,
+        wishlisters: interest.data?.wishlisters ?? [],
+        wishlistedCount: interest.data?.wishlistedCount ?? 0,
         isLoading: interest.isLoading,
         toggle: (wantToPlay: boolean) => toggle.mutate(wantToPlay),
         isToggling: toggle.isPending,

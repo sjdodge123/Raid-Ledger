@@ -274,6 +274,7 @@ function interestQueries(db: Db, gameId: number, userId: number) {
     getSteamOwners(db, gameId),
     getSteamWishlistCount(db, gameId),
     isWishlistedByUser(db, gameId, userId),
+    getSteamWishlisters(db, gameId),
   ] as const;
 }
 
@@ -294,6 +295,7 @@ export async function fetchGameInterestData(
     owners,
     wishlistedCount,
     wishlistedByMe,
+    wishlisters,
   ] = await Promise.all(interestQueries(db, gameId, userId));
   return {
     count,
@@ -303,6 +305,7 @@ export async function fetchGameInterestData(
     owners,
     wishlistedCount,
     wishlistedByMe,
+    wishlisters,
   };
 }
 
@@ -313,6 +316,22 @@ export async function fetchGameInterestData(
  * @returns Player preview list
  */
 export async function getSteamOwners(db: Db, gameId: number) {
+  return fetchPlayersBySource(db, gameId, 'steam_library');
+}
+
+/**
+ * Fetch first 8 Steam wishlisters for avatar display (ROK-774).
+ */
+export async function getSteamWishlisters(db: Db, gameId: number) {
+  return fetchPlayersBySource(db, gameId, 'steam_wishlist');
+}
+
+/** Shared query for fetching player previews by interest source. */
+async function fetchPlayersBySource(
+  db: Db,
+  gameId: number,
+  source: string,
+) {
   const rows = await db
     .select({
       id: schema.users.id,
@@ -326,7 +345,7 @@ export async function getSteamOwners(db: Db, gameId: number) {
     .where(
       and(
         eq(schema.gameInterests.gameId, gameId),
-        eq(schema.gameInterests.source, 'steam_library'),
+        eq(schema.gameInterests.source, source),
       ),
     )
     .orderBy(schema.gameInterests.createdAt)

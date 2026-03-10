@@ -189,6 +189,8 @@ export const GameInterestResponseSchema = z.object({
     owners: z.array(InterestPlayerPreviewSchema).optional(),
     /** ROK-745: Total count of Steam owners */
     ownerCount: z.number().optional(),
+    /** ROK-774: Steam wishlisters — first N players who wishlisted this game */
+    wishlisters: z.array(InterestPlayerPreviewSchema).optional(),
     /** ROK-418: Number of users who wishlisted this game via Steam */
     wishlistedCount: z.number().optional(),
     /** ROK-418: Whether the current user has wishlisted this game on Steam */

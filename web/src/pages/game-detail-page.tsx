@@ -82,6 +82,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
                 <>
                     <WantToPlaySection wantToPlay={wtp.wantToPlay} count={wtp.count} source={wtp.source} players={wtp.players} toggle={wtp.toggle} isToggling={wtp.isToggling} gameId={gameId} />
                     <OwnedBySection owners={wtp.owners ?? []} ownerCount={wtp.ownerCount ?? 0} gameId={gameId} />
+                    <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
                 </>
             )}
             {gameId && <CommunityActivitySection gameId={gameId} />}
@@ -213,6 +214,23 @@ function OwnedBySection({ owners, ownerCount, gameId }: {
                 players={owners} totalCount={ownerCount} maxVisible={6}
                 linkTo={gameId ? `/players?gameId=${gameId}&source=steam_library` : undefined}
                 formatLabel={(total, overflow) => overflow > 0 ? `+${overflow} more` : `${total} player${total !== 1 ? 's' : ''} own${total === 1 ? 's' : ''} this`}
+            />
+        </div>
+    );
+}
+
+/** Steam wishlist section with avatars (ROK-774) */
+function WishlistedBySection({ wishlisters, wishlistedCount, gameId }: {
+    wishlisters: InterestPlayerPreviewDto[]; wishlistedCount: number; gameId: number | undefined;
+}): JSX.Element | null {
+    if (wishlistedCount === 0) return null;
+    return (
+        <div className="flex flex-wrap items-center gap-4 mb-8">
+            <SteamIcon className="w-5 h-5 text-muted" />
+            <InterestPlayerAvatars
+                players={wishlisters} totalCount={wishlistedCount} maxVisible={6}
+                linkTo={gameId ? `/players?gameId=${gameId}&source=steam_wishlist` : undefined}
+                formatLabel={(total, overflow) => overflow > 0 ? `+${overflow} more` : `${total} player${total !== 1 ? 's' : ''} wishlisted`}
             />
         </div>
     );

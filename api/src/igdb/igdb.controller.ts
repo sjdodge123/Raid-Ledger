@@ -261,6 +261,7 @@ export class IgdbController {
         : undefined,
       ownerCount: data.ownerCount,
       owners: data.owners,
+      wishlisters: data.wishlisters,
       wishlistedCount: data.wishlistedCount,
       wishlistedByMe: data.wishlistedByMe,
     };
