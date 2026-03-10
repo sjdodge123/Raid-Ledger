@@ -73,8 +73,37 @@ function mergeIgdbEnrichment(
   };
 }
 
-/** Insert a game row, handling slug collisions by appending the Steam app ID. */
-async function insertGameWithSlugRetry(
+/** Try to merge with an existing game by slug, or insert a new row. */
+async function upsertGame(
+  db: PostgresJsDatabase<typeof schema>,
+  row: GameInsertRow,
+): Promise<{ id: number }[]> {
+  // Check if a game with this slug already exists (e.g. from IGDB import)
+  const existing = await db.query.games.findFirst({
+    where: eq(schema.games.slug, row.slug!),
+    columns: { id: true, steamAppId: true },
+  });
+
+  if (existing) {
+    // Update existing game with ITAD/Steam data instead of creating duplicate
+    await db
+      .update(schema.games)
+      .set({
+        steamAppId: row.steamAppId,
+        itadGameId: row.itadGameId,
+        coverUrl: row.coverUrl ?? undefined,
+        hidden: row.hidden,
+      })
+      .where(eq(schema.games.id, existing.id));
+    logger.debug(`Merged ITAD data into existing game ${existing.id}`);
+    return [{ id: existing.id }];
+  }
+
+  return insertWithSlugRetry(db, row);
+}
+
+/** Insert a new game row, retrying with appended Steam app ID on slug collision. */
+async function insertWithSlugRetry(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
 ): Promise<{ id: number }[]> {
@@ -98,14 +127,12 @@ async function insertGameWithSlugRetry(
   }
 }
 
-/** Check if an error is a unique constraint violation. */
+/** Check if an error is a unique constraint violation (handles Drizzle wrapper). */
 function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: string }).code === '23505'
-  );
+  if (typeof err !== 'object' || err === null) return false;
+  if ('code' in err && (err as { code: string }).code === '23505') return true;
+  if ('cause' in err) return isUniqueViolation((err as { cause: unknown }).cause);
+  return false;
 }
 
 /** Apply the adult content filter and set hidden flag if needed. */
@@ -161,9 +188,9 @@ export async function discoverGameViaItad(
   );
 
   const insertRow: GameInsertRow = { ...row, hidden };
-  const [inserted] = await insertGameWithSlugRetry(deps.db, insertRow);
+  const [result] = await upsertGame(deps.db, insertRow);
 
-  return { gameId: inserted.id, source, hidden };
+  return { gameId: result.id, source, hidden };
 }
 
 /** Check if a game slug is already banned. */

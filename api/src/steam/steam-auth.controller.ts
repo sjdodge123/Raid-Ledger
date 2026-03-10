@@ -274,12 +274,17 @@ export class SteamAuthController {
   @Post('sync')
   @UseGuards(AuthGuard('jwt'))
   async syncLibrary(@Req() req: AuthenticatedRequest) {
-    const result = await this.steamService.syncLibrary(req.user.id);
-    return {
-      success: true,
-      message: `Synced ${result.matched} games (${result.newInterests} new, ${result.updatedPlaytime} updated playtime)`,
-      ...result,
-    };
+    try {
+      const result = await this.steamService.syncLibrary(req.user.id);
+      return {
+        success: true,
+        message: `Synced ${result.matched} games (${result.newInterests} new, ${result.updatedPlaytime} updated playtime)`,
+        ...result,
+      };
+    } catch (error) {
+      this.logger.error('Steam sync error:', error);
+      throw error;
+    }
   }
 
   /**

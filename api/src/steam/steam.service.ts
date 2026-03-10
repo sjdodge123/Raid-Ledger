@@ -90,8 +90,12 @@ export class SteamService {
 
     let discovered = 0;
     for (const game of unmatched) {
-      const result = await discoverGameViaItad(game.appid, deps);
-      if (result) discovered++;
+      try {
+        const result = await discoverGameViaItad(game.appid, deps);
+        if (result) discovered++;
+      } catch (err) {
+        this.logger.warn(`ITAD discovery failed for appid ${game.appid}: ${err}`);
+      }
     }
 
     if (discovered > 0) {
