@@ -1,10 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  GuildScheduledEventEntityType,
-  GuildScheduledEventPrivacyLevel,
-} from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -12,8 +8,9 @@ import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import {
-  timedDiscordCall,
   buildDescriptionText,
+  formatApiError,
+  getCreateSkipReason,
   type ScheduledEventData,
 } from './scheduled-event.helpers';
 import {
@@ -33,6 +30,8 @@ import {
   tryCompleteEvent,
   tryEditEndTime,
   tryEditDescription,
+  tryCreateNewEvent,
+  tryEditFullEvent,
   resolveVoiceForEdit,
 } from './scheduled-event.discord-ops';
 
@@ -77,7 +76,8 @@ export class ScheduledEventService {
     for (const c of candidates) {
       const result = await tryStartEvent(guild, c);
       if (result.cleared) await clearScheduledEventId(this.db, c.id);
-      else if (result.error) this.logApiError('start', c.id, result.error);
+      else if (result.error)
+        this.logger.error(formatApiError('start', c.id, result.error));
     }
   }
 
@@ -113,12 +113,26 @@ export class ScheduledEventService {
     voiceChannelOverride?: string | null,
   ): Promise<void> {
     try {
-      if (isAdHoc || !this.clientService.isConnected()) return;
-      if (new Date(eventData.startTime).getTime() <= Date.now()) return;
-
+      const skip = getCreateSkipReason(
+        eventId,
+        eventData.startTime,
+        isAdHoc,
+        this.clientService.isConnected(),
+      );
+      if (skip) {
+        this.logger.warn(skip);
+        return;
+      }
+      const existing = await getScheduledEventId(this.db, eventId);
+      if (existing) {
+        this.logger.warn(`Skip SE ${eventId}: already exists`);
+        return;
+      }
       const guild = this.clientService.getGuild();
-      if (!guild) return;
-
+      if (!guild) {
+        this.logger.warn(`Skip SE ${eventId}: no guild`);
+        return;
+      }
       await this.doCreate(
         guild,
         eventId,
@@ -127,7 +141,7 @@ export class ScheduledEventService {
         voiceChannelOverride,
       );
     } catch (error) {
-      this.logApiError('create', eventId, error);
+      this.logger.error(formatApiError('create', eventId, error));
     }
   }
 
@@ -156,7 +170,7 @@ export class ScheduledEventService {
       }
       await this.tryEdit(guild, eventId, event, eventData, gameId);
     } catch (error) {
-      this.logApiError('update', eventId, error);
+      this.logger.error(formatApiError('update', eventId, error));
     }
   }
 
@@ -173,7 +187,7 @@ export class ScheduledEventService {
       await tryDeleteEvent(guild, eventId, seId);
       await clearScheduledEventId(this.db, eventId);
     } catch (error) {
-      this.logApiError('delete', eventId, error);
+      this.logger.error(formatApiError('delete', eventId, error));
     }
   }
 
@@ -190,7 +204,7 @@ export class ScheduledEventService {
       await tryCompleteEvent(guild, eventId, seId);
       await clearScheduledEventId(this.db, eventId);
     } catch (error) {
-      this.logApiError('complete', eventId, error);
+      this.logger.error(formatApiError('complete', eventId, error));
     }
   }
 
@@ -207,7 +221,7 @@ export class ScheduledEventService {
       const cleared = await tryEditEndTime(guild, eventId, seId, newEndTime);
       if (cleared) await clearScheduledEventId(this.db, eventId);
     } catch (error) {
-      this.logApiError('updateEndTime', eventId, error);
+      this.logger.error(formatApiError('updateEndTime', eventId, error));
     }
   }
 
@@ -233,7 +247,7 @@ export class ScheduledEventService {
       );
       if (cleared) await clearScheduledEventId(this.db, eventId);
     } catch (error) {
-      this.logApiError('updateDescription', eventId, error);
+      this.logger.error(formatApiError('updateDescription', eventId, error));
     }
   }
 
@@ -246,30 +260,20 @@ export class ScheduledEventService {
     gameId?: number | null,
     voiceChannelOverride?: string | null,
   ): Promise<void> {
-    const voiceChannelId = await this.resolveVoiceChannel(
+    const vc = await this.resolveVoiceChannel(
       eventId,
       gameId,
       voiceChannelOverride,
     );
-    if (!voiceChannelId) return;
-
-    const description = await this.buildDescription(eventId, eventData);
-    const scheduledEvent = await timedDiscordCall(
-      'scheduledEvents.create',
-      () =>
-        guild.scheduledEvents.create({
-          name: eventData.title,
-          scheduledStartTime: new Date(eventData.startTime),
-          scheduledEndTime: new Date(eventData.endTime),
-          privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
-          entityType: GuildScheduledEventEntityType.Voice,
-          channel: voiceChannelId,
-          description,
-        }),
-      { eventId },
-    );
-
-    await saveScheduledEventId(this.db, eventId, scheduledEvent.id);
+    if (!vc) {
+      this.logger.warn(
+        `Skipping scheduled event for event ${eventId}: no voice channel`,
+      );
+      return;
+    }
+    const desc = await this.buildDescription(eventId, eventData);
+    const se = await tryCreateNewEvent(guild, eventId, eventData, vc, desc);
+    await saveScheduledEventId(this.db, eventId, se.id);
   }
 
   private async tryEdit(
@@ -279,28 +283,24 @@ export class ScheduledEventService {
     eventData: ScheduledEventData,
     gameId?: number | null,
   ): Promise<void> {
-    const description = await this.buildDescription(eventId, eventData);
-    const voiceChannelId = await resolveVoiceForEdit(
+    const desc = await this.buildDescription(eventId, eventData);
+    const vc = await resolveVoiceForEdit(
       guild,
       event,
       gameId,
       this.channelResolver,
     );
     try {
-      await timedDiscordCall(
-        'scheduledEvents.edit',
-        () =>
-          guild.scheduledEvents.edit(event.discordScheduledEventId!, {
-            name: eventData.title,
-            scheduledStartTime: new Date(eventData.startTime),
-            scheduledEndTime: new Date(eventData.endTime),
-            description,
-            ...(voiceChannelId ? { channel: voiceChannelId } : {}),
-          }),
-        { eventId, op: 'update' },
+      await tryEditFullEvent(
+        guild,
+        eventId,
+        event.discordScheduledEventId!,
+        eventData,
+        desc,
+        vc,
       );
-    } catch (editError) {
-      if (!isUnknownEventError(editError)) throw editError;
+    } catch (err) {
+      if (!isUnknownEventError(err)) throw err;
       await clearScheduledEventId(this.db, eventId);
       await this.createScheduledEvent(
         eventId,
@@ -313,16 +313,16 @@ export class ScheduledEventService {
   }
 
   private async resolveVoiceChannel(
-    eventId: number,
+    id: number,
     gameId?: number | null,
     override?: string | null,
   ): Promise<string | null> {
-    const recurrenceGroupId = await getRecurrenceGroupId(this.db, eventId);
+    const rgId = await getRecurrenceGroupId(this.db, id);
     return (
       override ??
       (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         gameId,
-        recurrenceGroupId,
+        rgId,
       )) ??
       null
     );
@@ -332,14 +332,10 @@ export class ScheduledEventService {
     eventId: number,
     eventData: ScheduledEventData,
   ): Promise<string> {
-    const clientUrl = await this.settingsService.getClientUrl();
-    return buildDescriptionText(eventId, eventData, clientUrl);
-  }
-
-  private logApiError(op: string, eventId: number, error: unknown): void {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    this.logger.error(
-      `Failed to ${op} scheduled event for event ${eventId}: ${msg}`,
+    return buildDescriptionText(
+      eventId,
+      eventData,
+      await this.settingsService.getClientUrl(),
     );
   }
 }

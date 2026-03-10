@@ -109,3 +109,46 @@ export async function getRecurrenceGroupId(
     .limit(1);
   return row?.recurrenceGroupId;
 }
+
+/** Reconciliation candidate shape (ROK-755). */
+export interface ReconciliationCandidate {
+  id: number;
+  title: string;
+  description: string | null;
+  startTime: string;
+  endTime: string;
+  gameId: number | null;
+  isAdHoc: boolean;
+  notificationChannelOverride: string | null;
+  signupCount: number;
+  maxAttendees: number | null;
+}
+
+/** Find future non-cancelled, non-ad-hoc events missing a Discord scheduled event (ROK-755). */
+export async function findReconciliationCandidates(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<ReconciliationCandidate[]> {
+  const now = new Date();
+  return db
+    .select({
+      id: schema.events.id,
+      title: schema.events.title,
+      description: schema.events.description,
+      startTime: sql<string>`lower(${schema.events.duration})::text`,
+      endTime: sql<string>`upper(${schema.events.duration})::text`,
+      gameId: schema.events.gameId,
+      isAdHoc: schema.events.isAdHoc,
+      notificationChannelOverride: schema.events.notificationChannelOverride,
+      signupCount: sql<number>`0`,
+      maxAttendees: schema.events.maxAttendees,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        isNull(schema.events.discordScheduledEventId),
+        isNull(schema.events.cancelledAt),
+        sql`${schema.events.isAdHoc} = false`,
+        sql`lower(${schema.events.duration}) > ${now.toISOString()}::timestamptz`,
+      ),
+    );
+}
