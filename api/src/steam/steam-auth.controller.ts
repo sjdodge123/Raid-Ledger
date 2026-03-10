@@ -108,7 +108,14 @@ export class SteamAuthController {
     );
   }
 
-  private getOriginUrl(req: Request): string {
+  /**
+   * Get the externally-reachable API base URL.
+   * Behind a reverse proxy (nginx), the API is at `${CLIENT_URL}/api`.
+   * In local dev (direct access), the API is at the request origin.
+   */
+  private getApiBaseUrl(req: Request): string {
+    const clientUrl = this.configService.get<string>('CLIENT_URL');
+    if (clientUrl) return `${clientUrl}/api`;
     const proto =
       (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ||
       req.protocol ||
@@ -150,7 +157,7 @@ export class SteamAuthController {
       action: 'steam_link',
       timestamp: Date.now(),
     });
-    const returnUrl = `${this.getOriginUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
+    const returnUrl = `${this.getApiBaseUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
     res.redirect(buildSteamOpenIdUrl(returnUrl));
   }
 
