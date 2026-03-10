@@ -98,19 +98,37 @@
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    color: #71717a;
+    color: #e4e4e7;
     font-size: 0.875rem;
     font-weight: 500;
-    background: none;
-    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.5rem;
     cursor: pointer;
-    padding: 0.5rem 0;
+    padding: 0.5rem 0.75rem;
     min-height: 44px;
-    transition: color 0.15s ease;
+    min-width: 44px;
+    transition: color 0.15s ease, background 0.15s ease;
 }
 
 .event-detail-back:hover {
-    color: #a1a1aa;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+@media (min-width: 640px) {
+    .event-detail-back {
+        color: #71717a;
+        background: none;
+        border: none;
+        border-radius: 0;
+        padding: 0.5rem 0;
+    }
+
+    .event-detail-back:hover {
+        color: #a1a1aa;
+        background: none;
+    }
 }
 
 /* Error state */
@@ -436,11 +454,27 @@
    ============================================ */
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .event-detail-back {
-    color: #64748b;
+    color: #1e293b;
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(203, 213, 225, 0.5);
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .event-detail-back:hover {
-    color: #475569;
+    color: #0f172a;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+@media (min-width: 640px) {
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .event-detail-back {
+        color: #64748b;
+        background: none;
+        border-color: transparent;
+    }
+
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .event-detail-back:hover {
+        color: #475569;
+        background: none;
+    }
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .event-detail-error p {

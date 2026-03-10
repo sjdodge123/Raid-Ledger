@@ -74,7 +74,8 @@ export class DiscordNotificationProcessor extends WorkerHost {
       },
       communityName,
     );
-    await this.clientService.sendEmbedDM(discordId, embed, row, rows);
+    const content = buildPlaintextContent(data.title, data.message);
+    await this.clientService.sendEmbedDM(discordId, embed, row, rows, content);
   }
 
   /** Log and track failures on final attempt. */
@@ -90,4 +91,15 @@ export class DiscordNotificationProcessor extends WorkerHost {
       this.discordNotificationService.recordFailure(userId).catch(() => {});
     }
   }
+}
+
+/**
+ * Build a plaintext content string for Discord push notification previews (ROK-756).
+ * Discord mobile push notifications show the message `content` field as-is,
+ * without rendering Discord-specific tokens (timestamps, channel mentions, markdown).
+ * By providing a clean plaintext `content`, the push notification is human-readable
+ * while the rich embed still renders normally in the Discord client.
+ */
+export function buildPlaintextContent(title: string, message: string): string {
+  return `${title}\n${message}`;
 }

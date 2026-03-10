@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { DiscordNotificationProcessor } from './discord-notification.processor';
+import {
+  DiscordNotificationProcessor,
+  buildPlaintextContent,
+} from './discord-notification.processor';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { DiscordNotificationService } from './discord-notification.service';
@@ -99,6 +102,7 @@ describe('DiscordNotificationProcessor', () => {
         expect.anything(),
         expect.anything(),
         undefined,
+        expect.any(String),
       );
     });
 
@@ -244,6 +248,7 @@ describe('DiscordNotificationProcessor', () => {
         expect.anything(),
         expect.anything(),
         mockRows,
+        expect.any(String),
       );
     });
 
@@ -258,6 +263,7 @@ describe('DiscordNotificationProcessor', () => {
         expect.anything(),
         expect.anything(),
         undefined,
+        expect.any(String),
       );
     });
 
@@ -278,9 +284,102 @@ describe('DiscordNotificationProcessor', () => {
         unknown,
         unknown,
         unknown,
+        string,
       ];
       // 4th argument should be mockRows
       expect(sendEmbedDMCall[3]).toBe(mockRows);
     });
+  });
+
+  describe('Regression: ROK-756 — plaintext content for push notifications', () => {
+    it('should pass plaintext content as 5th argument to sendEmbedDM', async () => {
+      const job = buildJob({
+        title: 'Event Starting in 15 Minutes!',
+        message: 'Raid Night starts in 15 minutes at 8:00 PM EST.',
+      });
+
+      await processor.process(job);
+
+      const sendCall = mockClientService.sendEmbedDM.mock.calls[0] as [
+        string,
+        unknown,
+        unknown,
+        unknown,
+        string,
+      ];
+      expect(sendCall[4]).toBe(
+        'Event Starting in 15 Minutes!\nRaid Night starts in 15 minutes at 8:00 PM EST.',
+      );
+    });
+
+    it('should produce content with no Discord tokens (timestamps, channel mentions)', async () => {
+      // The title and message fields are already plaintext (no Discord tokens),
+      // so the content should also be token-free.
+      const job = buildJob({
+        title: 'New WoW Event',
+        message: 'New event for World of Warcraft: Raid Night on Sat Mar 15',
+      });
+
+      await processor.process(job);
+
+      const sendCall = mockClientService.sendEmbedDM.mock.calls[0] as [
+        string,
+        unknown,
+        unknown,
+        unknown,
+        string,
+      ];
+      const content = sendCall[4];
+      expect(content).not.toMatch(/<t:\d+:[a-zA-Z]>/);
+      expect(content).not.toMatch(/<#\d+>/);
+      expect(content).not.toContain('**');
+      expect(content).toContain('New WoW Event');
+      expect(content).toContain('Raid Night on Sat Mar 15');
+    });
+
+    it('should include content for all notification types', async () => {
+      const types = [
+        'event_reminder',
+        'new_event',
+        'subscribed_game',
+        'event_rescheduled',
+        'bench_promoted',
+      ];
+      for (const type of types) {
+        jest.clearAllMocks();
+        mockEmbedService.buildNotificationEmbed.mockResolvedValue({
+          embed: { toJSON: () => ({}) },
+          row: { toJSON: () => ({}) },
+        });
+        const job = buildJob({ type, title: `Title: ${type}`, message: `Msg` });
+        await processor.process(job);
+        const sendCall = mockClientService.sendEmbedDM.mock.calls[0] as [
+          string,
+          unknown,
+          unknown,
+          unknown,
+          string,
+        ];
+        expect(sendCall[4]).toBe(`Title: ${type}\nMsg`);
+      }
+    });
+  });
+});
+
+describe('buildPlaintextContent', () => {
+  it('combines title and message with newline', () => {
+    expect(buildPlaintextContent('Hello', 'World')).toBe('Hello\nWorld');
+  });
+
+  it('produces clean output for typical notification data', () => {
+    const result = buildPlaintextContent(
+      'Event Starting in 15 Minutes!',
+      'Raid Night starts in 15 minutes at 8:00 PM EST.',
+    );
+    expect(result).toBe(
+      'Event Starting in 15 Minutes!\nRaid Night starts in 15 minutes at 8:00 PM EST.',
+    );
+    expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
+    expect(result).not.toMatch(/<#\d+>/);
   });
 });

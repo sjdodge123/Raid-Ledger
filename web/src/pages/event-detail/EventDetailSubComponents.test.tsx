@@ -101,3 +101,32 @@ describe('EventDetailTopbar — series event behavior', () => {
         expect(onSeriesAction).not.toHaveBeenCalled();
     });
 });
+
+describe('Regression: ROK-761 — back button mobile touch target', () => {
+    it('renders a back button with accessible label', () => {
+        renderTopbar();
+        const backBtn = screen.getByRole('button', { name: 'Go back' });
+        expect(backBtn).toBeInTheDocument();
+    });
+
+    it('back button is tappable', async () => {
+        const user = userEvent.setup();
+        renderTopbar();
+        const backBtn = screen.getByRole('button', { name: 'Go back' });
+        await user.click(backBtn);
+        // Should not throw — button is interactive
+        expect(backBtn).toBeEnabled();
+    });
+
+    it('shows "Back to Calendar" text when navigated from calendar', () => {
+        renderTopbar({ fromCalendar: true, navState: { calendarDate: '2026-03-10' } });
+        const backBtn = screen.getByRole('button', { name: 'Go back' });
+        expect(backBtn).toHaveTextContent('\u2190 Back to Calendar');
+    });
+
+    it('shows "Back" text when not from calendar', () => {
+        renderTopbar({ fromCalendar: false });
+        const backBtn = screen.getByRole('button', { name: 'Go back' });
+        expect(backBtn).toHaveTextContent('\u2190 Back');
+    });
+});
