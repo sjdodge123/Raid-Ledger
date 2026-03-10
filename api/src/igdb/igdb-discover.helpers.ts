@@ -128,12 +128,14 @@ export async function fetchCommunityRow(
   db: PostgresJsDatabase<typeof schema>,
   cat: DiscoverCategory,
 ) {
+  const heartSources = ['manual', 'discord', 'steam'];
   const interestGames = await db
     .select({
       gameId: schema.gameInterests.gameId,
       count: sql<number>`count(*)::int`.as('count'),
     })
     .from(schema.gameInterests)
+    .where(inArray(schema.gameInterests.source, heartSources))
     .groupBy(schema.gameInterests.gameId)
     .orderBy(sql`count(*) desc`)
     .limit(20);
