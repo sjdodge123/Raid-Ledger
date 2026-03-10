@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { eq, ilike, sql } from 'drizzle-orm';
+import { and, eq, ilike, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { ActivityType, type GuildMember } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -11,6 +11,14 @@ const MANUAL_OVERRIDE_TTL_MS = 30 * 60 * 1000;
 
 /** TTL for game name resolution cache entries (10 minutes). */
 const GAME_CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Minimum trigram similarity score for fuzzy game matching.
+ * Raised from 0.3 to 0.5 to prevent false positives (ROK-753).
+ * Example: "World of Warcraft Classic" was incorrectly matching
+ * "NBA 2K18: Early Tip-Off Edition" at the 0.3 threshold.
+ */
+const TRIGRAM_SIMILARITY_THRESHOLD = 0.5;
 
 /** Result of game detection for a set of members. */
 export interface DetectedGameGroup {
@@ -256,31 +264,43 @@ export class PresenceGameDetectorService implements OnModuleInit {
       : null;
   }
 
-  /** Step 2: Exact match against games.name. */
+  /** Step 2: Exact match against games.name (excludes hidden/banned). */
   private async resolveViaExactMatch(
     activityName: string,
   ): Promise<{ gameId: number; gameName: string } | null> {
     const [match] = await this.db
       .select({ id: schema.games.id, name: schema.games.name })
       .from(schema.games)
-      .where(eq(schema.games.name, activityName))
+      .where(
+        and(
+          eq(schema.games.name, activityName),
+          eq(schema.games.hidden, false),
+          eq(schema.games.banned, false),
+        ),
+      )
       .limit(1);
     return match ? { gameId: match.id, gameName: match.name } : null;
   }
 
-  /** Step 3: Case-insensitive match (ILIKE). */
+  /** Step 3: Case-insensitive match (ILIKE, excludes hidden/banned). */
   private async resolveViaIlike(
     activityName: string,
   ): Promise<{ gameId: number; gameName: string } | null> {
     const [match] = await this.db
       .select({ id: schema.games.id, name: schema.games.name })
       .from(schema.games)
-      .where(ilike(schema.games.name, activityName))
+      .where(
+        and(
+          ilike(schema.games.name, activityName),
+          eq(schema.games.hidden, false),
+          eq(schema.games.banned, false),
+        ),
+      )
       .limit(1);
     return match ? { gameId: match.id, gameName: match.name } : null;
   }
 
-  /** Step 4: Trigram similarity search (pg_trgm). */
+  /** Step 4: Trigram similarity search (pg_trgm, excludes hidden/banned). */
   private async resolveViaTrigram(
     activityName: string,
   ): Promise<{ gameId: number; gameName: string } | null> {
@@ -288,7 +308,13 @@ export class PresenceGameDetectorService implements OnModuleInit {
       const [match] = await this.db
         .select({ id: schema.games.id, name: schema.games.name })
         .from(schema.games)
-        .where(sql`similarity(${schema.games.name}, ${activityName}) > 0.3`)
+        .where(
+          and(
+            sql`similarity(${schema.games.name}, ${activityName}) > ${TRIGRAM_SIMILARITY_THRESHOLD}`,
+            eq(schema.games.hidden, false),
+            eq(schema.games.banned, false),
+          ),
+        )
         .orderBy(sql`similarity(${schema.games.name}, ${activityName}) DESC`)
         .limit(1);
       if (match) {
