@@ -3,6 +3,8 @@ import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { GameStreamsResponseDto } from '@raid-ledger/contract';
+import { IGDB_CONFIG } from './igdb.constants';
+import { delay } from './igdb-api.helpers';
 
 const logger = new Logger('IgdbStreamsHelpers');
 
@@ -37,14 +39,17 @@ function mapStreamsToDto(data: TwitchStreamsData): GameStreamsResponseDto {
   };
 }
 
-/** Fetch streams from Twitch API with timeout. */
-async function callTwitchApi(
+/** Execute a single Twitch API fetch with timeout. */
+async function executeTwitchFetch(
   twitchGameId: string,
   clientId: string,
   token: string,
 ): Promise<GameStreamsResponseDto> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    IGDB_CONFIG.TWITCH_API_TIMEOUT_MS,
+  );
 
   const response = await fetch(
     `https://api.twitch.tv/helix/streams?game_id=${encodeURIComponent(twitchGameId)}&first=10`,
@@ -64,6 +69,42 @@ async function callTwitchApi(
   }
 
   return mapStreamsToDto((await response.json()) as TwitchStreamsData);
+}
+
+/**
+ * Fetch streams from Twitch API with timeout and retry.
+ * Retries up to MAX_TWITCH_RETRIES with exponential backoff on abort/timeout.
+ */
+async function callTwitchApi(
+  twitchGameId: string,
+  clientId: string,
+  token: string,
+): Promise<GameStreamsResponseDto> {
+  const maxAttempts = IGDB_CONFIG.MAX_TWITCH_RETRIES;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await executeTwitchFetch(twitchGameId, clientId, token);
+    } catch (error: unknown) {
+      const isAbort =
+        error instanceof DOMException && error.name === 'AbortError';
+
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        `Twitch streams fetch attempt ${attempt}/${maxAttempts} failed: ${errorMsg}`,
+      );
+
+      if (!isAbort || attempt >= maxAttempts) {
+        throw error;
+      }
+
+      const backoffMs = Math.pow(2, attempt - 1) * IGDB_CONFIG.BASE_RETRY_DELAY;
+      await delay(backoffMs);
+    }
+  }
+
+  /* istanbul ignore next -- unreachable after loop throws */
+  return EMPTY_STREAMS;
 }
 
 /**
