@@ -22,7 +22,7 @@ export const DrizzleAsyncProvider = 'drizzleProvider';
         }
         const client = postgres(connectionString, {
           max: configService.get<number>('DB_POOL_MAX', 10),
-          idle_timeout: configService.get<number>('DB_IDLE_TIMEOUT', 30),
+          idle_timeout: configService.get<number>('DB_IDLE_TIMEOUT', 0),
         });
         const db = drizzle(client, {
           schema,
