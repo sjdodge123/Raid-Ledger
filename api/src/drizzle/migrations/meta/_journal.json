@@ -617,6 +617,13 @@
       "when": 1773100000000,
       "tag": "0087_add_bump_message_id",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1773200000000,
+      "tag": "0088_fix_wow_classic_igdb_id",
+      "breakpoints": true
     }
   ]
 }

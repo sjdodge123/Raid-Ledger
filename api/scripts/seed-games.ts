@@ -63,7 +63,7 @@ const GAMES_SEED = [
         ],
     },
     {
-        igdbId: 25588,
+        igdbId: 75379,
         slug: 'world-of-warcraft-classic',
         name: 'World of Warcraft Classic',
         shortName: 'WoW Classic',
