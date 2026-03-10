@@ -8,6 +8,9 @@ export interface GameInfo {
     coverUrl: string | null;
 }
 
+/** Tracks whether the last selection change was user-initiated or loaded from preferences. */
+export type ChangeSource = 'user' | 'loaded';
+
 interface GameFilterState {
     /** Accumulator of all games ever seen (only grows). */
     allKnownGames: GameInfo[];
@@ -21,6 +24,8 @@ interface GameFilterState {
     hasSavedFilter: boolean;
     /** Saved filter slugs (loaded before games may be known). */
     savedFilterSlugs: string[] | null;
+    /** Whether the last selection change was user-initiated or loaded from prefs. */
+    lastChangeSource: ChangeSource;
 
     /** Merge incoming games and auto-select truly new ones. */
     reportGames: (games: GameInfo[]) => void;
@@ -66,20 +71,28 @@ function applyGameSelection(
     newSlugs: string[],
 ): void {
     if (!state.hasInitialized && games.length > 0) {
-        const selected = state.savedFilterSlugs
-            ? new Set(state.savedFilterSlugs)
-            : new Set(games.map((g) => g.slug));
+        const selected = resolveInitialSelection(state.savedFilterSlugs, games);
         set({
             allKnownGames: nextAllKnown,
             selectedGames: selected,
             seenSlugs: nextSeen,
             hasInitialized: true,
+            lastChangeSource: 'loaded',
         });
     } else if (newSlugs.length > 0) {
         set({ allKnownGames: nextAllKnown, seenSlugs: nextSeen });
     } else if (nextAllKnown.length !== state.allKnownGames.length) {
         set({ allKnownGames: nextAllKnown });
     }
+}
+
+/** Resolve initial selection, falling back to all games when saved filter is empty or fully stale. */
+function resolveInitialSelection(savedSlugs: string[] | null, games: GameInfo[]): Set<string> {
+    if (!savedSlugs) return new Set(games.map((g) => g.slug));
+    const knownSlugs = new Set(games.map((g) => g.slug));
+    const hasAnyValid = savedSlugs.some((s) => knownSlugs.has(s));
+    if (savedSlugs.length === 0 || !hasAnyValid) return new Set(games.map((g) => g.slug));
+    return new Set(savedSlugs);
 }
 
 function toggleSlug(selectedGames: Set<string>, slug: string): Set<string> {
@@ -97,17 +110,26 @@ function syncFilterToServer(slugs: string[]): void {
     }
 }
 
-/** Apply a saved filter from preferences. */
+/** Apply a saved filter from preferences, falling back to all if intersection is empty. */
 function applyLoadedFilter(
     set: (partial: Partial<GameFilterState>) => void,
     state: GameFilterState,
     slugs: string[],
 ): void {
     if (state.hasInitialized) {
-        set({ selectedGames: new Set(slugs), hasSavedFilter: true, savedFilterSlugs: slugs });
+        const selected = resolveLoadedSelection(slugs, state.allKnownGames);
+        set({ selectedGames: selected, hasSavedFilter: true, savedFilterSlugs: slugs, lastChangeSource: 'loaded' });
     } else {
-        set({ hasSavedFilter: true, savedFilterSlugs: slugs });
+        set({ hasSavedFilter: true, savedFilterSlugs: slugs, lastChangeSource: 'loaded' });
     }
+}
+
+/** Resolve loaded selection, falling back to all games when slugs are empty or fully stale. */
+function resolveLoadedSelection(slugs: string[], allKnownGames: GameInfo[]): Set<string> {
+    const knownSlugs = new Set(allKnownGames.map((g) => g.slug));
+    const hasAnyValid = slugs.some((s) => knownSlugs.has(s));
+    if (slugs.length === 0 || !hasAnyValid) return new Set(allKnownGames.map((g) => g.slug));
+    return new Set(slugs);
 }
 
 const INITIAL_STATE = {
@@ -117,6 +139,7 @@ const INITIAL_STATE = {
     seenSlugs: new Set<string>(),
     hasSavedFilter: false,
     savedFilterSlugs: null as string[] | null,
+    lastChangeSource: 'loaded' as ChangeSource,
 };
 
 export const useGameFilterStore = create<GameFilterState>((set, get) => ({
@@ -127,9 +150,9 @@ export const useGameFilterStore = create<GameFilterState>((set, get) => ({
         const { nextSeen, newSlugs } = discoverNewSlugs(state.seenSlugs, games);
         applyGameSelection(set, state, games, nextAllKnown, nextSeen, newSlugs);
     },
-    toggleGame(slug: string) { set({ selectedGames: toggleSlug(get().selectedGames, slug) }); },
-    selectAll() { set({ selectedGames: new Set(get().allKnownGames.map((g) => g.slug)) }); },
-    deselectAll() { set({ selectedGames: new Set<string>() }); },
+    toggleGame(slug: string) { set({ selectedGames: toggleSlug(get().selectedGames, slug), lastChangeSource: 'user' }); },
+    selectAll() { set({ selectedGames: new Set(get().allKnownGames.map((g) => g.slug)), lastChangeSource: 'user' }); },
+    deselectAll() { set({ selectedGames: new Set<string>(), lastChangeSource: 'user' }); },
     loadSavedFilter(slugs: string[]) { applyLoadedFilter(set, get(), slugs); },
     saveFilter() { syncFilterToServer([...get().selectedGames]); },
     _reset() { set({ ...INITIAL_STATE }); },

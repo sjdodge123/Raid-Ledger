@@ -96,3 +96,84 @@ describe('useGameFilterStore — reportGames with saved filter', () => {
         expect(selected.has('ffxiv')).toBe(false);
     });
 });
+
+describe('useGameFilterStore — change source tracking', () => {
+    beforeEach(() => {
+        useGameFilterStore.getState()._reset();
+    });
+
+    it('sets lastChangeSource to "loaded" after loadSavedFilter', () => {
+        useGameFilterStore.getState().reportGames(GAMES);
+        useGameFilterStore.getState().loadSavedFilter(['wow']);
+
+        expect(useGameFilterStore.getState().lastChangeSource).toBe('loaded');
+    });
+
+    it('sets lastChangeSource to "loaded" when reportGames applies saved filter', () => {
+        useGameFilterStore.getState().loadSavedFilter(['wow']);
+        useGameFilterStore.getState().reportGames(GAMES);
+
+        expect(useGameFilterStore.getState().lastChangeSource).toBe('loaded');
+    });
+
+    it('sets lastChangeSource to "user" after toggleGame', () => {
+        useGameFilterStore.getState().reportGames(GAMES);
+        useGameFilterStore.getState().toggleGame('wow');
+
+        expect(useGameFilterStore.getState().lastChangeSource).toBe('user');
+    });
+
+    it('sets lastChangeSource to "user" after selectAll', () => {
+        useGameFilterStore.getState().reportGames(GAMES);
+        useGameFilterStore.getState().loadSavedFilter(['wow']);
+        useGameFilterStore.getState().selectAll();
+
+        expect(useGameFilterStore.getState().lastChangeSource).toBe('user');
+    });
+
+    it('sets lastChangeSource to "user" after deselectAll', () => {
+        useGameFilterStore.getState().reportGames(GAMES);
+        useGameFilterStore.getState().deselectAll();
+
+        expect(useGameFilterStore.getState().lastChangeSource).toBe('user');
+    });
+});
+
+describe('useGameFilterStore — empty saved filter fallback', () => {
+    beforeEach(() => {
+        useGameFilterStore.getState()._reset();
+    });
+
+    it('falls back to select all when saved filter is empty array', () => {
+        useGameFilterStore.getState().loadSavedFilter([]);
+        useGameFilterStore.getState().reportGames(GAMES);
+
+        const selected = useGameFilterStore.getState().selectedGames;
+        expect(selected.size).toBe(3);
+    });
+
+    it('falls back to select all when all saved slugs are stale', () => {
+        useGameFilterStore.getState().loadSavedFilter(['deleted-game', 'also-gone']);
+        useGameFilterStore.getState().reportGames(GAMES);
+
+        const selected = useGameFilterStore.getState().selectedGames;
+        expect(selected.size).toBe(3);
+    });
+
+    it('falls back to select all when loadSavedFilter applied post-init with all stale slugs', () => {
+        useGameFilterStore.getState().reportGames(GAMES);
+        useGameFilterStore.getState().loadSavedFilter(['deleted-game', 'also-gone']);
+
+        const selected = useGameFilterStore.getState().selectedGames;
+        expect(selected.size).toBe(3);
+    });
+
+    it('does not fall back when saved filter has at least one valid slug', () => {
+        useGameFilterStore.getState().loadSavedFilter(['wow', 'deleted-game']);
+        useGameFilterStore.getState().reportGames(GAMES);
+
+        const selected = useGameFilterStore.getState().selectedGames;
+        expect(selected.has('wow')).toBe(true);
+        expect(selected.size).toBe(2); // wow + deleted-game (stale but not all stale)
+    });
+});
