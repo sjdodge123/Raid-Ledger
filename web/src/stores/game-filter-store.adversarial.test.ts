@@ -22,23 +22,22 @@ describe('useGameFilterStore — saved filter edge cases', () => {
         vi.clearAllMocks();
     });
 
-    it('loadSavedFilter with stale slugs that do not match any known game', () => {
+    it('loadSavedFilter with stale slugs falls back to select all', () => {
         useGameFilterStore.getState().reportGames(GAMES);
         useGameFilterStore.getState().loadSavedFilter(['deleted-game', 'also-gone']);
 
         const selected = useGameFilterStore.getState().selectedGames;
-        // The store applies the slugs regardless — they just won't match any UI games
-        expect(selected.size).toBe(2);
-        expect(selected.has('deleted-game')).toBe(true);
+        // Falls back to all known games when no saved slugs match
+        expect(selected.size).toBe(3);
     });
 
-    it('loadSavedFilter with empty array clears all selections', () => {
+    it('loadSavedFilter with empty array falls back to select all', () => {
         useGameFilterStore.getState().reportGames(GAMES);
         expect(useGameFilterStore.getState().selectedGames.size).toBe(3);
 
         useGameFilterStore.getState().loadSavedFilter([]);
 
-        expect(useGameFilterStore.getState().selectedGames.size).toBe(0);
+        expect(useGameFilterStore.getState().selectedGames.size).toBe(3);
         expect(useGameFilterStore.getState().hasSavedFilter).toBe(true);
     });
 
