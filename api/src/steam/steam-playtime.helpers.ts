@@ -9,36 +9,9 @@ export interface PlaytimeUpdateEntry {
   playtime2weeks: number | null;
 }
 
-/** Build SQL CASE expressions for batch playtime update. */
-function buildPlaytimeCases(toUpdate: PlaytimeUpdateEntry[]) {
-  const foreverCases = toUpdate
-    .map((u) => `WHEN game_id = ${u.gameId} THEN ${u.playtimeForever}`)
-    .join(' ');
-  const weeksCases = toUpdate
-    .map(
-      (u) =>
-        `WHEN game_id = ${u.gameId} THEN ${u.playtime2weeks === null ? 'NULL' : u.playtime2weeks}`,
-    )
-    .join(' ');
-  return { foreverCases, weeksCases };
-}
-
-/** Build the SET clause for batch playtime updates. */
-function buildPlaytimeSetClause(toUpdate: PlaytimeUpdateEntry[]) {
-  const { foreverCases, weeksCases } = buildPlaytimeCases(toUpdate);
-  return {
-    playtimeForever: sql.raw(`CASE ${foreverCases} ELSE playtime_forever END`),
-    playtime2weeks: sql.raw(`CASE ${weeksCases} ELSE playtime_2weeks END`),
-    lastSyncedAt: new Date(),
-  };
-}
-
 /**
  * Batch-update playtime for existing Steam game interests.
- * @param db - Database connection
- * @param userId - User ID to update interests for
- * @param toUpdate - Array of playtime update entries
- * @returns Number of rows updated
+ * Uses individual updates to avoid sql.raw() injection risks.
  */
 export async function updateExistingPlaytime(
   db: PostgresJsDatabase<typeof schema>,
@@ -46,19 +19,24 @@ export async function updateExistingPlaytime(
   toUpdate: PlaytimeUpdateEntry[],
 ): Promise<number> {
   if (toUpdate.length === 0) return 0;
-  const result = await db
-    .update(schema.gameInterests)
-    .set(buildPlaytimeSetClause(toUpdate))
-    .where(
-      and(
-        eq(schema.gameInterests.userId, userId),
-        inArray(
-          schema.gameInterests.gameId,
-          toUpdate.map((u) => u.gameId),
+  let updated = 0;
+  for (const entry of toUpdate) {
+    const result = await db
+      .update(schema.gameInterests)
+      .set({
+        playtimeForever: entry.playtimeForever,
+        playtime2weeks: entry.playtime2weeks,
+        lastSyncedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.gameInterests.userId, userId),
+          eq(schema.gameInterests.gameId, entry.gameId),
+          eq(schema.gameInterests.source, 'steam_library'),
         ),
-        eq(schema.gameInterests.source, 'steam_library'),
-      ),
-    )
-    .returning({ id: schema.gameInterests.id });
-  return result.length;
+      )
+      .returning({ id: schema.gameInterests.id });
+    updated += result.length;
+  }
+  return updated;
 }

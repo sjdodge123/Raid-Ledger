@@ -222,10 +222,7 @@ export async function getSteamOwnerCount(
  * @param gameId - Game ID
  * @returns Player preview list
  */
-export async function getSteamOwners(
-  db: Db,
-  gameId: number,
-) {
+export async function getSteamOwners(db: Db, gameId: number) {
   const rows = await db
     .select({
       id: schema.users.id,

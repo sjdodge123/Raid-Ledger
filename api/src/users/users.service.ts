@@ -210,7 +210,13 @@ export class UsersService {
   }
 
   /** Paginated list of all users with optional search and gameId filter. */
-  async findAll(page: number, limit: number, search?: string, gameId?: number, source?: string) {
+  async findAll(
+    page: number,
+    limit: number,
+    search?: string,
+    gameId?: number,
+    source?: string,
+  ) {
     return gameId
       ? findAllByGame(this.db, page, limit, search, gameId, source)
       : findAllUsers(this.db, page, limit, search);
