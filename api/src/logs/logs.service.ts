@@ -121,11 +121,18 @@ export class LogsService {
       crlfDelay: Infinity,
     });
     const scrubber = this.createScrubTransform();
+    let drainPending = false;
 
     rl.on('line', (line) => {
       if (!scrubber.write(this.scrubContent(line) + '\n')) {
         rl.pause();
-        scrubber.once('drain', () => rl.resume());
+        if (!drainPending) {
+          drainPending = true;
+          scrubber.once('drain', () => {
+            drainPending = false;
+            rl.resume();
+          });
+        }
       }
     });
     rl.on('close', () => scrubber.end());
