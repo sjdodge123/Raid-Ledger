@@ -20,6 +20,8 @@ export function SteamWishlistModal({
   const [search, setSearch] = useState("");
   const modal = useUserSteamWishlistModal(userId, isOpen);
 
+  // Client-side search only — filters already-fetched pages. Works for MVP but
+  // consider server-side search if wishlists grow large (ROK-763).
   const filteredItems = search
     ? modal.items.filter((e) =>
         e.gameName.toLowerCase().includes(search.toLowerCase()),

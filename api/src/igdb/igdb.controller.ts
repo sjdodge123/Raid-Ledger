@@ -45,15 +45,9 @@ import {
 } from './igdb-discover.helpers';
 import {
   batchCheckInterests,
-  getInterestedPlayers,
-  getUserInterestSource,
-  getInterestCount,
   addInterest,
   removeInterest,
-  getSteamOwners,
-  getSteamOwnerCount,
-  getSteamWishlistCount,
-  isWishlistedByUser,
+  fetchGameInterestData,
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
 
@@ -253,33 +247,22 @@ export class IgdbController {
     @Param('id', ParseIntPipe) id: number,
     @Req() req: AuthRequest,
   ): Promise<GameInterestResponseDto> {
-    const db = this.igdbService.database;
-    const [
-      count,
-      source,
-      players,
-      ownerCount,
-      owners,
-      wishlistedCount,
-      wishlistedByMe,
-    ] = await Promise.all([
-      getInterestCount(db, id),
-      getUserInterestSource(db, id, req.user.id),
-      getInterestedPlayers(db, id),
-      getSteamOwnerCount(db, id),
-      getSteamOwners(db, id),
-      getSteamWishlistCount(db, id),
-      isWishlistedByUser(db, id, req.user.id),
-    ]);
+    const data = await fetchGameInterestData(
+      this.igdbService.database,
+      id,
+      req.user.id,
+    );
     return {
-      wantToPlay: source !== null,
-      count,
-      players,
-      source: source ? (source as 'manual' | 'steam' | 'discord') : undefined,
-      ownerCount,
-      owners,
-      wishlistedCount,
-      wishlistedByMe,
+      wantToPlay: data.source !== null,
+      count: data.count,
+      players: data.players,
+      source: data.source
+        ? (data.source as 'manual' | 'steam' | 'discord')
+        : undefined,
+      ownerCount: data.ownerCount,
+      owners: data.owners,
+      wishlistedCount: data.wishlistedCount,
+      wishlistedByMe: data.wishlistedByMe,
     };
   }
 

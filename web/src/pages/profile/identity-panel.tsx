@@ -162,8 +162,8 @@ export function IdentityPanel(): JSX.Element | null {
     );
 }
 
-/** Inner content with modal state */
-function IdentityPanelContent({ user, currentAvatarUrl, showDiscord, hasDiscordLinked, onLinkDiscord, showSteam, steamStatus, linkSteam, unlinkSteam, syncLibrary, syncWishlist, autoHeart, avatarOptions, handleAvatarSelect, avatarActions }: {
+/** Props shared by IdentityPanelContent and its sub-components */
+interface IdentityPanelContentProps {
     user: NonNullable<ReturnType<typeof useAuth>['user']>; currentAvatarUrl: string;
     showDiscord: boolean; hasDiscordLinked: boolean; onLinkDiscord: () => void;
     showSteam: boolean; steamStatus: ReturnType<typeof useSteamLink>['steamStatus']; linkSteam: () => void;
@@ -171,7 +171,26 @@ function IdentityPanelContent({ user, currentAvatarUrl, showDiscord, hasDiscordL
     syncWishlist: ReturnType<typeof useSteamLink>['syncWishlist'];
     autoHeart: ReturnType<typeof useAutoHeart>; avatarOptions: ReturnType<typeof buildAvatarOptions>;
     handleAvatarSelect: (url: string) => void; avatarActions: ReturnType<typeof useAvatarActions>;
+}
+
+/** Renders avatar modal with upload/remove actions */
+function IdentityAvatarModal({ user, currentAvatarUrl, avatarOptions, handleAvatarSelect, avatarActions, isOpen, onClose }: {
+    user: IdentityPanelContentProps['user']; currentAvatarUrl: string;
+    avatarOptions: IdentityPanelContentProps['avatarOptions']; handleAvatarSelect: (url: string) => void;
+    avatarActions: IdentityPanelContentProps['avatarActions']; isOpen: boolean; onClose: () => void;
 }): JSX.Element {
+    return (
+        <AvatarSelectorModal isOpen={isOpen} onClose={onClose}
+            currentAvatarUrl={currentAvatarUrl} avatarOptions={avatarOptions} onSelect={handleAvatarSelect}
+            customAvatarDisplayUrl={user.customAvatarUrl ? `${API_BASE_URL}${user.customAvatarUrl}` : null}
+            onUpload={avatarActions.handleUpload} onRemoveCustom={avatarActions.handleRemoveCustom}
+            isUploading={avatarActions.isUploading} uploadProgress={avatarActions.uploadProgress} />
+    );
+}
+
+/** Inner content with modal state */
+function IdentityPanelContent(props: IdentityPanelContentProps): JSX.Element {
+    const { user, currentAvatarUrl, avatarOptions, handleAvatarSelect, avatarActions } = props;
     const [showAvatarModal, setShowAvatarModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [confirmName, setConfirmName] = useState('');
@@ -179,16 +198,14 @@ function IdentityPanelContent({ user, currentAvatarUrl, showDiscord, hasDiscordL
 
     return (
         <div className="space-y-6">
-            <IdentitySection user={user} currentAvatarUrl={currentAvatarUrl} showDiscord={showDiscord}
-                hasDiscordLinked={hasDiscordLinked} onLinkDiscord={onLinkDiscord}
-                showSteam={showSteam} steamStatus={steamStatus} linkSteam={linkSteam} unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} syncWishlist={syncWishlist}
-                autoHeart={autoHeart} onOpenAvatar={() => setShowAvatarModal(true)} />
+            <IdentitySection user={user} currentAvatarUrl={currentAvatarUrl} showDiscord={props.showDiscord}
+                hasDiscordLinked={props.hasDiscordLinked} onLinkDiscord={props.onLinkDiscord}
+                showSteam={props.showSteam} steamStatus={props.steamStatus} linkSteam={props.linkSteam} unlinkSteam={props.unlinkSteam} syncLibrary={props.syncLibrary} syncWishlist={props.syncWishlist}
+                autoHeart={props.autoHeart} onOpenAvatar={() => setShowAvatarModal(true)} />
             {!isImpersonating() && <DangerZone onOpenDeleteModal={() => setShowDeleteModal(true)} />}
-            <AvatarSelectorModal isOpen={showAvatarModal} onClose={() => setShowAvatarModal(false)}
-                currentAvatarUrl={currentAvatarUrl} avatarOptions={avatarOptions} onSelect={handleAvatarSelect}
-                customAvatarDisplayUrl={user.customAvatarUrl ? `${API_BASE_URL}${user.customAvatarUrl}` : null}
-                onUpload={avatarActions.handleUpload} onRemoveCustom={avatarActions.handleRemoveCustom}
-                isUploading={avatarActions.isUploading} uploadProgress={avatarActions.uploadProgress} />
+            <IdentityAvatarModal user={user} currentAvatarUrl={currentAvatarUrl} avatarOptions={avatarOptions}
+                handleAvatarSelect={handleAvatarSelect} avatarActions={avatarActions}
+                isOpen={showAvatarModal} onClose={() => setShowAvatarModal(false)} />
             <DeleteAccountModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setConfirmName(''); }}
                 expectedName={user.displayName || user.username || ''} confirmName={confirmName} onConfirmNameChange={setConfirmName}
                 isConfirmValid={confirmName === (user.displayName || user.username || '')} onDelete={() => deleteMutation.mutate()} isPending={deleteMutation.isPending} />

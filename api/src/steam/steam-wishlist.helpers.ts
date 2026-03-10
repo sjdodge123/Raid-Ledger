@@ -37,7 +37,10 @@ export function computeWishlistDiff(
   input: WishlistDiffInput,
 ): WishlistDiffResult {
   const { steamItems, matchedGames, existingGameIds, userId } = input;
-  const gameByAppId = new Map(matchedGames.map((g) => [g.steamAppId!, g]));
+  const gamesWithAppId = matchedGames.filter(
+    (g): g is typeof g & { steamAppId: number } => g.steamAppId !== null,
+  );
+  const gameByAppId = new Map(gamesWithAppId.map((g) => [g.steamAppId, g]));
   const now = new Date();
   const toInsert: WishlistInsertRow[] = [];
   const currentGameIds = new Set<number>();

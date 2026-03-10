@@ -264,6 +264,48 @@ export async function getSteamOwnerCount(
   return result?.count ?? 0;
 }
 
+/** Build the parallel query array for game interest data. */
+function interestQueries(db: Db, gameId: number, userId: number) {
+  return [
+    getInterestCount(db, gameId),
+    getUserInterestSource(db, gameId, userId),
+    getInterestedPlayers(db, gameId),
+    getSteamOwnerCount(db, gameId),
+    getSteamOwners(db, gameId),
+    getSteamWishlistCount(db, gameId),
+    isWishlistedByUser(db, gameId, userId),
+  ] as const;
+}
+
+/**
+ * Fetch all interest-related data for a game in parallel.
+ * Used by getGameInterest controller method.
+ */
+export async function fetchGameInterestData(
+  db: Db,
+  gameId: number,
+  userId: number,
+) {
+  const [
+    count,
+    source,
+    players,
+    ownerCount,
+    owners,
+    wishlistedCount,
+    wishlistedByMe,
+  ] = await Promise.all(interestQueries(db, gameId, userId));
+  return {
+    count,
+    source,
+    players,
+    ownerCount,
+    owners,
+    wishlistedCount,
+    wishlistedByMe,
+  };
+}
+
 /**
  * Fetch first 8 Steam owners for avatar display (ROK-745).
  * @param db - Database connection
