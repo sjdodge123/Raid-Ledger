@@ -1,6 +1,6 @@
 /**
  * ROK-365: Unit tests for SettingsService cache behavior.
- * Verifies the in-memory Map cache with 5-minute TTL, write-through on set(),
+ * Verifies the in-memory Map cache with 30-minute TTL, write-through on set(),
  * cache clear on delete(), concurrent load coalescing, and TTL expiry.
  */
 import { Test, TestingModule } from '@nestjs/testing';
@@ -264,10 +264,10 @@ function describeSettingsServiceROK365CacheBehavior() {
     describeCacheInvalidationOnDelete());
 
   // ============================================================
-  // TTL expiry — cache reloads from DB after 5 minutes
+  // TTL expiry — cache reloads from DB after 30 minutes
   // ============================================================
   function describeTTLExpiry() {
-    it('does NOT reload DB while cache is within 5-minute TTL', async () => {
+    it('does NOT reload DB while cache is within 30-minute TTL', async () => {
       jest.useFakeTimers();
 
       mockDb._selectChain.from.mockResolvedValue([
@@ -278,13 +278,13 @@ function describeSettingsServiceROK365CacheBehavior() {
       expect(mockDb.select).toHaveBeenCalledTimes(1);
 
       // Advance 4 minutes 59 seconds — still within TTL
-      jest.advanceTimersByTime(4 * 60_000 + 59_000);
+      jest.advanceTimersByTime(29 * 60_000 + 59_000);
 
       await service.get(SETTING_KEYS.DEMO_MODE);
       expect(mockDb.select).toHaveBeenCalledTimes(1);
     });
 
-    it('reloads from DB after TTL (5 min) expires', async () => {
+    it('reloads from DB after TTL (30 min) expires', async () => {
       jest.useFakeTimers();
 
       mockDb._selectChain.from.mockResolvedValue([
@@ -294,8 +294,8 @@ function describeSettingsServiceROK365CacheBehavior() {
       await service.get(SETTING_KEYS.DEMO_MODE);
       expect(mockDb.select).toHaveBeenCalledTimes(1);
 
-      // Advance past 5-minute TTL
-      jest.advanceTimersByTime(5 * 60_000 + 1_000);
+      // Advance past 30-minute TTL
+      jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.DEMO_MODE, 'true'),
@@ -317,7 +317,7 @@ function describeSettingsServiceROK365CacheBehavior() {
       const first = await service.get(SETTING_KEYS.COMMUNITY_NAME);
       expect(first).toBe('OldName');
 
-      jest.advanceTimersByTime(5 * 60_000 + 5_000);
+      jest.advanceTimersByTime(30 * 60_000 + 5_000);
 
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.COMMUNITY_NAME, 'NewName'),
@@ -379,8 +379,8 @@ function describeSettingsServiceROK365CacheBehavior() {
       await service.get(SETTING_KEYS.DEMO_MODE);
       expect(mockDb.select).toHaveBeenCalledTimes(1);
 
-      // Expire 5-minute TTL, triggering a second load
-      jest.advanceTimersByTime(5 * 60_000 + 1_000);
+      // Expire 30-minute TTL, triggering a second load
+      jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.DEMO_MODE, 'true'),

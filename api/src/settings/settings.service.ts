@@ -40,7 +40,7 @@ import type {
   DiscordBotConfig,
 } from './settings.types';
 
-const CACHE_TTL_MS = 5 * 60_000;
+const CACHE_TTL_MS = 30 * 60_000;
 
 @Injectable()
 export class SettingsService implements OnModuleInit {
