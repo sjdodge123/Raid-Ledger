@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { FunnelIcon } from '@heroicons/react/24/outline';
@@ -76,15 +76,19 @@ function useSyncGameRegistry() {
     }, [registryGames]);
 }
 
-/** Save filter to preferences after any change. */
+/** Save filter to preferences after user-initiated changes (debounced 500ms). */
 function useSaveOnFilterChange(): void {
     const saveFilter = useGameFilterStore((s) => s.saveFilter);
     const selectedGames = useGameFilterStore((s) => s.selectedGames);
     const hasInitialized = useGameFilterStore((s) => s.hasInitialized);
+    const lastChangeSource = useGameFilterStore((s) => s.lastChangeSource);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        if (!hasInitialized) return;
-        saveFilter();
+        if (!hasInitialized || lastChangeSource !== 'user') return;
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => { saveFilter(); }, 500);
+        return () => { if (timerRef.current) clearTimeout(timerRef.current); };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: only save when selection changes
     }, [selectedGames]);
 }

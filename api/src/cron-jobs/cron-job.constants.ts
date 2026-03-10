@@ -100,6 +100,11 @@ export const CORE_JOB_METADATA: Record<
       'Classifies attendance for completed voice events every 60 seconds',
     category: 'Events',
   },
+  VoiceAttendanceService_snapshotOnEventStart: {
+    description:
+      'Snapshots voice channel occupants for recently started events every 60 seconds',
+    category: 'Events',
+  },
   LiveNoShowService_checkNoShows: {
     description:
       'Detects no-show attendees during live events and sends reminder DMs (5 min) and creator escalation (15 min) every 60 seconds',

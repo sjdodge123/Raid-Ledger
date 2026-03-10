@@ -88,6 +88,10 @@ export const IGDB_CONFIG = {
   DISCOVER_CACHE_TTL: 3600,
   /** Redis cache TTL for streams (5 minutes) */
   STREAMS_CACHE_TTL: 300,
+  /** Timeout for Twitch streams API calls (ms) */
+  TWITCH_API_TIMEOUT_MS: 8000,
+  /** Maximum retry attempts for Twitch streams fetch */
+  MAX_TWITCH_RETRIES: 3,
   /** Maximum retry attempts for 429 errors */
   MAX_RETRIES: 3,
   /** Base delay for exponential backoff (ms) */
