@@ -81,11 +81,9 @@ function useSaveOnFilterChange(): void {
     const saveFilter = useGameFilterStore((s) => s.saveFilter);
     const selectedGames = useGameFilterStore((s) => s.selectedGames);
     const hasInitialized = useGameFilterStore((s) => s.hasInitialized);
-    const hasSavedFilter = useGameFilterStore((s) => s.hasSavedFilter);
 
     useEffect(() => {
         if (!hasInitialized) return;
-        if (!hasSavedFilter && selectedGames.size > 0) return;
         saveFilter();
         // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: only save when selection changes
     }, [selectedGames]);
