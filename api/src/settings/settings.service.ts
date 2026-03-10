@@ -369,17 +369,12 @@ export class SettingsService implements OnModuleInit {
 
   // ─── Steam ────────────────────────────────────────────────────
 
-  async getSteamApiKey(): Promise<string | null> {
-    return this.get(SETTING_KEYS.STEAM_API_KEY);
-  }
+  getSteamApiKey = () => this.get(SETTING_KEYS.STEAM_API_KEY);
+  isSteamConfigured = () => this.exists(SETTING_KEYS.STEAM_API_KEY);
 
   async setSteamApiKey(apiKey: string): Promise<void> {
     await this.set(SETTING_KEYS.STEAM_API_KEY, apiKey);
     this.eventEmitter.emit(SETTINGS_EVENTS.STEAM_UPDATED, { configured: true });
-  }
-
-  async isSteamConfigured(): Promise<boolean> {
-    return this.exists(SETTING_KEYS.STEAM_API_KEY);
   }
 
   async clearSteamConfig(): Promise<void> {
@@ -389,19 +384,8 @@ export class SettingsService implements OnModuleInit {
 
   // ─── ITAD ────────────────────────────────────────────────────
 
-  async getItadApiKey(): Promise<string | null> {
-    return this.get(SETTING_KEYS.ITAD_API_KEY);
-  }
-
-  async setItadApiKey(apiKey: string): Promise<void> {
-    await this.set(SETTING_KEYS.ITAD_API_KEY, apiKey);
-  }
-
-  async isItadConfigured(): Promise<boolean> {
-    return this.exists(SETTING_KEYS.ITAD_API_KEY);
-  }
-
-  async clearItadConfig(): Promise<void> {
-    await this.delete(SETTING_KEYS.ITAD_API_KEY);
-  }
+  getItadApiKey = () => this.get(SETTING_KEYS.ITAD_API_KEY);
+  setItadApiKey = (key: string) => this.set(SETTING_KEYS.ITAD_API_KEY, key);
+  isItadConfigured = () => this.exists(SETTING_KEYS.ITAD_API_KEY);
+  clearItadConfig = () => this.delete(SETTING_KEYS.ITAD_API_KEY);
 }
