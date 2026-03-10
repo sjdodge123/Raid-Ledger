@@ -81,6 +81,32 @@ export function buildDescriptionText(
   return truncateDescription(header, eventDesc, link);
 }
 
+/** Format an API error message for logging. */
+export function formatApiError(
+  op: string,
+  eventId: number,
+  error: unknown,
+): string {
+  const msg = error instanceof Error ? error.message : 'Unknown error';
+  return `Failed to ${op} scheduled event for event ${eventId}: ${msg}`;
+}
+
+/** Check if scheduled event creation should be skipped (ROK-755). Returns reason or null. */
+export function getCreateSkipReason(
+  eventId: number,
+  startTime: string,
+  isAdHoc?: boolean,
+  isConnected?: boolean,
+): string | null {
+  if (isAdHoc)
+    return `Skipping scheduled event for event ${eventId}: ad-hoc event`;
+  if (!isConnected)
+    return `Skipping scheduled event for event ${eventId}: bot not connected`;
+  if (new Date(startTime).getTime() <= Date.now())
+    return `Skipping scheduled event for event ${eventId}: start time in the past`;
+  return null;
+}
+
 /** Truncate event description to fit within the limit. */
 function truncateDescription(
   header: string,

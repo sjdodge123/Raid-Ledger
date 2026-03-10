@@ -419,6 +419,29 @@ describe('DiscordNotificationEmbedService — core', () => {
       expect(json.timestamp.getTime()).toBe(newStart.getTime());
     });
 
+    it('should use newStartTime (not startTime) for event_rescheduled when both are present (ROK-760)', async () => {
+      const oldStart = new Date('2026-03-10T00:00:00Z');
+      const newStart = new Date('2026-03-11T04:00:00Z');
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-ts-5',
+          type: 'event_rescheduled',
+          title: 'Rescheduled',
+          message: 'Event moved',
+          payload: {
+            eventId: 42,
+            oldStartTime: oldStart.toISOString(),
+            newStartTime: newStart.toISOString(),
+            startTime: oldStart.toISOString(),
+          },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as unknown as { timestamp: Date };
+      expect(json.timestamp.getTime()).toBe(newStart.getTime());
+    });
+
     it('should not add fields when payload is not provided', async () => {
       const { embed } = await service.buildNotificationEmbed(
         {

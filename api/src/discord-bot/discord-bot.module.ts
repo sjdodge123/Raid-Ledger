@@ -62,6 +62,7 @@ import { DiscordEmojiService } from './services/discord-emoji.service';
 import { EmbedPosterService } from './services/embed-poster.service';
 import { EmbedSchedulerService } from './services/embed-scheduler.service';
 import { ScheduledEventService } from './services/scheduled-event.service';
+import { ScheduledEventReconciliationService } from './services/scheduled-event.reconciliation';
 import { PresenceGameDetectorService } from './services/presence-game-detector.service';
 import { VoiceAttendanceService } from './services/voice-attendance.service';
 import { EventAutoExtendService } from './services/event-auto-extend.service';
@@ -123,6 +124,7 @@ import { PlayingCommand } from './commands/playing.command';
     EmbedPosterService,
     EmbedSchedulerService,
     ScheduledEventService,
+    ScheduledEventReconciliationService,
     RegisterCommandsService,
     EventCreateCommand,
     EventsListCommand,

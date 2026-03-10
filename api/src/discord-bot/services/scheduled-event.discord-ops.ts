@@ -1,7 +1,13 @@
-import { GuildScheduledEventStatus, DiscordAPIError } from 'discord.js';
+import {
+  GuildScheduledEventStatus,
+  GuildScheduledEventEntityType,
+  GuildScheduledEventPrivacyLevel,
+  DiscordAPIError,
+} from 'discord.js';
 import {
   UNKNOWN_SCHEDULED_EVENT,
   timedDiscordCall,
+  type ScheduledEventData,
 } from './scheduled-event.helpers';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { ScheduledEventRecord } from './scheduled-event.db-helpers';
@@ -180,5 +186,52 @@ export async function resolveVoiceForEdit(
   return channelResolver.resolveVoiceChannelForScheduledEvent(
     gameId,
     event.recurrenceGroupId,
+  );
+}
+
+/** Create a new Discord Scheduled Event via the API (ROK-755 extraction). */
+export async function tryCreateNewEvent(
+  guild: Guild,
+  eventId: number,
+  eventData: ScheduledEventData,
+  voiceChannelId: string,
+  description: string,
+): Promise<{ id: string }> {
+  return timedDiscordCall(
+    'scheduledEvents.create',
+    () =>
+      guild.scheduledEvents.create({
+        name: eventData.title,
+        scheduledStartTime: new Date(eventData.startTime),
+        scheduledEndTime: new Date(eventData.endTime),
+        privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
+        entityType: GuildScheduledEventEntityType.Voice,
+        channel: voiceChannelId,
+        description,
+      }),
+    { eventId },
+  );
+}
+
+/** Edit all fields of an existing Discord Scheduled Event (ROK-755 extraction). */
+export async function tryEditFullEvent(
+  guild: Guild,
+  eventId: number,
+  seId: string,
+  eventData: ScheduledEventData,
+  description: string,
+  voiceChannelId: string | null,
+): Promise<void> {
+  await timedDiscordCall(
+    'scheduledEvents.edit',
+    () =>
+      guild.scheduledEvents.edit(seId, {
+        name: eventData.title,
+        scheduledStartTime: new Date(eventData.startTime),
+        scheduledEndTime: new Date(eventData.endTime),
+        description,
+        ...(voiceChannelId ? { channel: voiceChannelId } : {}),
+      }),
+    { eventId, op: 'update' },
   );
 }

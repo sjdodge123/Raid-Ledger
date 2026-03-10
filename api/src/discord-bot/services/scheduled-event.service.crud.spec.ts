@@ -201,6 +201,10 @@ describe('updateScheduledEvent', () => {
     const selectChain = mocks.createSelectChain([
       { discordScheduledEventId: 'deleted-se-id' },
     ]);
+    selectChain.limit
+      .mockResolvedValueOnce([{ discordScheduledEventId: 'deleted-se-id' }])
+      .mockResolvedValueOnce([{ discordScheduledEventId: null }])
+      .mockResolvedValue([]);
     mocks.mockDb.select.mockReturnValue(selectChain);
     const updateChain = mocks.createUpdateChain();
     mocks.mockDb.update.mockReturnValue(updateChain);

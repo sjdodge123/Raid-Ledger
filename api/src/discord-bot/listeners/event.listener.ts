@@ -85,8 +85,9 @@ export class DiscordEventListener {
     );
     if (payload.isAdHoc) return;
     if (!this.clientService.isConnected()) return;
+    this.fireScheduledEventCreate(payload);
     if (!this.isWithinLeadTime(payload)) return;
-    const posted = await this.postEmbedAndScheduledEvent(payload);
+    const posted = await this.postEmbed(payload);
     await this.sendGameAffinityNotifications(payload, posted);
   }
 
@@ -189,16 +190,17 @@ export class DiscordEventListener {
     return true;
   }
 
-  private async postEmbedAndScheduledEvent(
-    payload: EventPayload,
-  ): Promise<boolean> {
-    const posted = await this.embedPoster.postEmbed(
+  private async postEmbed(payload: EventPayload): Promise<boolean> {
+    return this.embedPoster.postEmbed(
       payload.eventId,
       payload.event,
       payload.gameId,
       payload.recurrenceGroupId,
       payload.notificationChannelOverride,
     );
+  }
+
+  private fireScheduledEventCreate(payload: EventPayload): void {
     this.scheduledEventService
       .createScheduledEvent(
         payload.eventId,
@@ -212,7 +214,6 @@ export class DiscordEventListener {
           `Failed to create scheduled event for ${payload.eventId}: ${String(err)}`,
         );
       });
-    return posted;
   }
 
   private async sendGameAffinityNotifications(
