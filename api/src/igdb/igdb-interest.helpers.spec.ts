@@ -155,17 +155,13 @@ describe('getSteamWishlistCount', () => {
 // ─── isWishlistedByUser (ROK-418) ──────────────────────────────────────────
 
 describe('isWishlistedByUser', () => {
-  function buildWishlistCheckDb(
-    hasRow: boolean,
-  ): Record<string, jest.Mock> {
+  function buildWishlistCheckDb(hasRow: boolean): Record<string, jest.Mock> {
     const db: Record<string, jest.Mock> = {};
     for (const m of ['select', 'from', 'orderBy']) {
       db[m] = jest.fn().mockReturnThis();
     }
     db.where = jest.fn().mockReturnThis();
-    db.limit = jest
-      .fn()
-      .mockResolvedValue(hasRow ? [{ id: 1 }] : []);
+    db.limit = jest.fn().mockResolvedValue(hasRow ? [{ id: 1 }] : []);
     return db;
   }
 

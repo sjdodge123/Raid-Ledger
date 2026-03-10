@@ -182,7 +182,11 @@ describe('SteamWishlistService', () => {
       (steamHttp.getWishlist as jest.Mock).mockResolvedValue([]);
 
       // fetchExistingWishlistIds returns multiple existing entries
-      mockDb.where.mockResolvedValueOnce([{ gameId: 1 }, { gameId: 2 }, { gameId: 3 }]);
+      mockDb.where.mockResolvedValueOnce([
+        { gameId: 1 },
+        { gameId: 2 },
+        { gameId: 3 },
+      ]);
 
       // removeWishlistEntries: delete().where().returning()
       mockDb.returning.mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }]);

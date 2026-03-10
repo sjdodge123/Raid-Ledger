@@ -183,9 +183,7 @@ describe('computeWishlistDiff', () => {
 
     expect(result.toInsert).toHaveLength(0);
     expect(result.toRemoveGameIds).toHaveLength(3);
-    expect(result.toRemoveGameIds).toEqual(
-      expect.arrayContaining([1, 2, 3]),
-    );
+    expect(result.toRemoveGameIds).toEqual(expect.arrayContaining([1, 2, 3]));
   });
 
   it('handles duplicate appids in steamItems gracefully', () => {

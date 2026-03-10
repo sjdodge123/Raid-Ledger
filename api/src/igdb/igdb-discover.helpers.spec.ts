@@ -2,31 +2,28 @@
  * Unit tests for igdb-discover.helpers — buildDiscoverCategories
  * and fetchMostWishlistedRow (ROK-418).
  */
-import { buildDiscoverCategories, fetchMostWishlistedRow } from './igdb-discover.helpers';
+import {
+  buildDiscoverCategories,
+  fetchMostWishlistedRow,
+} from './igdb-discover.helpers';
 
 describe('buildDiscoverCategories', () => {
   it('includes "Most Wishlisted" category', () => {
     const categories = buildDiscoverCategories();
-    const wishlisted = categories.find(
-      (c) => c.slug === 'most-wishlisted',
-    );
+    const wishlisted = categories.find((c) => c.slug === 'most-wishlisted');
     expect(wishlisted).toBeDefined();
     expect(wishlisted!.category).toBe('Most Wishlisted');
   });
 
   it('"Most Wishlisted" is not cached (uses custom fetch)', () => {
     const categories = buildDiscoverCategories();
-    const wishlisted = categories.find(
-      (c) => c.slug === 'most-wishlisted',
-    );
+    const wishlisted = categories.find((c) => c.slug === 'most-wishlisted');
     expect(wishlisted!.cached).toBe(false);
   });
 
   it('"Most Wishlisted" has no filter or orderBy', () => {
     const categories = buildDiscoverCategories();
-    const wishlisted = categories.find(
-      (c) => c.slug === 'most-wishlisted',
-    );
+    const wishlisted = categories.find((c) => c.slug === 'most-wishlisted');
     expect(wishlisted!.filter).toBeUndefined();
     expect(wishlisted!.orderBy).toBeUndefined();
   });
@@ -52,13 +49,7 @@ describe('fetchMostWishlistedRow', () => {
     games: { id: number; name: string }[],
   ): Record<string, jest.Mock> {
     const db: Record<string, jest.Mock> = {};
-    const chainMethods = [
-      'select',
-      'from',
-      'innerJoin',
-      'orderBy',
-      'groupBy',
-    ];
+    const chainMethods = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy'];
     for (const m of chainMethods) {
       db[m] = jest.fn().mockReturnThis();
     }

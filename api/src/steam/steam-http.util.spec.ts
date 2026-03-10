@@ -94,8 +94,7 @@ describe('getPlayerSummary', () => {
   it('returns null when players array is empty', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () =>
-        Promise.resolve({ response: { players: [] } }),
+      json: () => Promise.resolve({ response: { players: [] } }),
     });
 
     const result = await getPlayerSummary('key', '12345');
@@ -115,8 +114,7 @@ describe('getPlayerSummary', () => {
     };
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () =>
-        Promise.resolve({ response: { players: [player] } }),
+      json: () => Promise.resolve({ response: { players: [player] } }),
     });
 
     const result = await getPlayerSummary('key', '12345');
