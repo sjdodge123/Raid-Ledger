@@ -16,6 +16,7 @@ export {
   GuestProfile,
   SteamLibrarySection,
 } from "./user-profile-extra-sections";
+export { SteamWishlistSection } from "./steam-wishlist-section";
 
 /** Clickable game card for the hearted games section (ROK-282) */
 export function HeartedGameCard({

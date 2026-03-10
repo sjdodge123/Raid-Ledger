@@ -17,6 +17,7 @@ import {
   ActivitySection,
   GuestProfile,
   SteamLibrarySection,
+  SteamWishlistSection,
 } from "./user-profile/user-profile-components";
 import { HeartedGamesModal } from "./user-profile/hearted-games-modal";
 import { isGuestRouteState } from "./user-profile/user-profile-helpers";
@@ -126,6 +127,7 @@ function ProfileContent({
         )}
         {numericId && <HeartedGamesSection userId={numericId} />}
         {numericId && <SteamLibrarySection userId={numericId} />}
+        {numericId && <SteamWishlistSection userId={numericId} />}
       </div>
     </div>
   );

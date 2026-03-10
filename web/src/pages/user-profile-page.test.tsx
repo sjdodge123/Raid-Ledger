@@ -114,6 +114,12 @@ function setupDefaultProfileMocks() {
     refetch: async () => {},
   } as unknown as ReturnType<typeof useUserProfileHook.useUserSteamLibraryModal>);
 
+  vi.spyOn(useUserProfileHook, "useUserSteamWishlist").mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  } as unknown as ReturnType<typeof useUserProfileHook.useUserSteamWishlist>);
+
   vi.spyOn(useUserProfileHook, "useUserEventSignups").mockReturnValue({
     data: { data: [], total: 0 },
     isLoading: false,

@@ -77,9 +77,10 @@ export function DiscordLinkCta({ onLink }: { onLink: () => void }): JSX.Element 
 }
 
 /** Steam linked info panel with sync/unlink buttons */
-function SteamLinkedPanel({ personaName, isPublic, syncLibrary, unlinkSteam }: {
+function SteamLinkedPanel({ personaName, isPublic, syncLibrary, syncWishlist, unlinkSteam }: {
     personaName: string | null | undefined; isPublic: boolean | undefined;
     syncLibrary: { mutate: () => void; isPending: boolean };
+    syncWishlist: { mutate: () => void; isPending: boolean };
     unlinkSteam: { mutate: () => void; isPending: boolean };
 }): JSX.Element {
     return (
@@ -89,6 +90,10 @@ function SteamLinkedPanel({ personaName, isPublic, syncLibrary, unlinkSteam }: {
                 <div className="flex items-center gap-2 flex-shrink-0">
                     <button onClick={() => syncLibrary.mutate()} disabled={syncLibrary.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
                         {syncLibrary.isPending ? 'Syncing...' : 'Sync Library'}
+                    </button>
+                    <span className="text-muted">|</span>
+                    <button onClick={() => syncWishlist.mutate()} disabled={syncWishlist.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
+                        {syncWishlist.isPending ? 'Syncing...' : 'Sync Wishlist'}
                     </button>
                     <span className="text-muted">|</span>
                     <button onClick={() => unlinkSteam.mutate()} disabled={unlinkSteam.isPending} className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50">
@@ -132,14 +137,15 @@ function SteamLinkedInfo({ personaName, isPublic }: {
 }
 
 /** Steam account section — linked or link CTA */
-export function SteamSection({ steamStatus, linkSteam, unlinkSteam, syncLibrary }: {
+export function SteamSection({ steamStatus, linkSteam, unlinkSteam, syncLibrary, syncWishlist }: {
     steamStatus: { data?: { linked: boolean; personaName?: string | null; isPublic?: boolean } | undefined };
     linkSteam: () => void;
     unlinkSteam: { mutate: () => void; isPending: boolean };
     syncLibrary: { mutate: () => void; isPending: boolean };
+    syncWishlist: { mutate: () => void; isPending: boolean };
 }): JSX.Element {
     if (steamStatus.data?.linked) {
-        return <SteamLinkedPanel personaName={steamStatus.data.personaName} isPublic={steamStatus.data.isPublic} syncLibrary={syncLibrary} unlinkSteam={unlinkSteam} />;
+        return <SteamLinkedPanel personaName={steamStatus.data.personaName} isPublic={steamStatus.data.isPublic} syncLibrary={syncLibrary} syncWishlist={syncWishlist} unlinkSteam={unlinkSteam} />;
     }
     return (
         <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">

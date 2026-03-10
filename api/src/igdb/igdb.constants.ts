@@ -57,7 +57,11 @@ export interface IgdbApiGame {
     splitscreen?: boolean;
     platform?: number;
   }[];
-  external_games?: { category?: number; external_game_source?: number; uid: string }[];
+  external_games?: {
+    category?: number;
+    external_game_source?: number;
+    uid: string;
+  }[];
 }
 
 /** Search result with source tracking */

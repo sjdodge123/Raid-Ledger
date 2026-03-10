@@ -45,7 +45,17 @@ function useSteamMutations() {
         onError: (err: Error) => toast.error(err.message),
     });
 
-    return { unlinkSteam, syncLibrary };
+    const syncWishlist = useMutation({
+        mutationFn: () => steamFetch<{ success: boolean; message: string }>('/auth/steam/sync-wishlist', 'POST', 'Wishlist sync failed'),
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
+            queryClient.invalidateQueries({ queryKey: ['userSteamWishlist'] });
+            toast.success(data.message);
+        },
+        onError: (err: Error) => toast.error(err.message),
+    });
+
+    return { unlinkSteam, syncLibrary, syncWishlist };
 }
 
 export function useSteamLink() {
@@ -62,5 +72,6 @@ export function useSteamLink() {
         staleTime: 30_000,
     });
 
-    return { linkSteam, steamStatus, ...useSteamMutations() };
+    const mutations = useSteamMutations();
+    return { linkSteam, steamStatus, ...mutations };
 }

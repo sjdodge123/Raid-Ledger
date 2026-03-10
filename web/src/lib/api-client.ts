@@ -77,6 +77,7 @@ export {
     getUserProfile,
     getUserHeartedGames,
     getUserSteamLibrary,
+    getUserSteamWishlist,
     getUserEventSignups,
     getUserActivity,
     getUsersForManagement,

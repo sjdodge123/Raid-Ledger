@@ -1,21 +1,28 @@
 /**
- * Unit tests for igdb-interest.helpers — getSteamOwners (ROK-745).
- *
- * Tests the getSteamOwners helper that queries game_interests
- * WHERE source = 'steam_library' to find users who own a game on Steam.
+ * Unit tests for igdb-interest.helpers — getSteamOwners (ROK-745)
+ * and getSteamWishlistCount / isWishlistedByUser (ROK-418).
  */
-import { getSteamOwners, getSteamOwnerCount } from './igdb-interest.helpers';
+import {
+  getSteamOwners,
+  getSteamOwnerCount,
+  getSteamWishlistCount,
+  isWishlistedByUser,
+} from './igdb-interest.helpers';
 
 // ─── Shared mock builder ────────────────────────────────────────────────────
 
 function buildOwnerDb(
-  rows: { id: number; username: string; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[],
+  rows: {
+    id: number;
+    username: string;
+    avatar: string | null;
+    customAvatarUrl: string | null;
+    discordId: string | null;
+  }[],
   count: number,
 ): Record<string, jest.Mock> {
   const db: Record<string, jest.Mock> = {};
-  const chainMethods = [
-    'select', 'from', 'innerJoin', 'orderBy', 'groupBy',
-  ];
+  const chainMethods = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy'];
   for (const m of chainMethods) {
     db[m] = jest.fn().mockReturnThis();
   }
@@ -43,8 +50,20 @@ function buildOwnerDb(
 describe('getSteamOwners', () => {
   it('returns player previews for Steam owners', async () => {
     const mockPlayers = [
-      { id: 1, username: 'Player1', avatar: null, customAvatarUrl: null, discordId: '111' },
-      { id: 2, username: 'Player2', avatar: 'hash', customAvatarUrl: null, discordId: '222' },
+      {
+        id: 1,
+        username: 'Player1',
+        avatar: null,
+        customAvatarUrl: null,
+        discordId: '111',
+      },
+      {
+        id: 2,
+        username: 'Player2',
+        avatar: 'hash',
+        customAvatarUrl: null,
+        discordId: '222',
+      },
     ];
     const db = buildOwnerDb(mockPlayers, 2);
 
@@ -95,5 +114,72 @@ describe('getSteamOwnerCount', () => {
 
     const result = await getSteamOwnerCount(db as never, 42);
     expect(result).toBe(0);
+  });
+});
+
+// ─── getSteamWishlistCount (ROK-418) ───────────────────────────────────────
+
+describe('getSteamWishlistCount', () => {
+  function buildCountDb(count: number): Record<string, jest.Mock> {
+    const db: Record<string, jest.Mock> = {};
+    for (const m of ['select', 'from']) {
+      db[m] = jest.fn().mockReturnThis();
+    }
+    db.where = jest.fn().mockResolvedValue([{ count }]);
+    return db;
+  }
+
+  it('returns wishlist count for a game', async () => {
+    const db = buildCountDb(7);
+    const result = await getSteamWishlistCount(db as never, 42);
+    expect(result).toBe(7);
+  });
+
+  it('returns 0 when no users wishlisted the game', async () => {
+    const db = buildCountDb(0);
+    const result = await getSteamWishlistCount(db as never, 99);
+    expect(result).toBe(0);
+  });
+
+  it('returns 0 when query returns undefined result', async () => {
+    const db: Record<string, jest.Mock> = {};
+    for (const m of ['select', 'from']) {
+      db[m] = jest.fn().mockReturnThis();
+    }
+    db.where = jest.fn().mockResolvedValue([undefined]);
+    const result = await getSteamWishlistCount(db as never, 1);
+    expect(result).toBe(0);
+  });
+});
+
+// ─── isWishlistedByUser (ROK-418) ──────────────────────────────────────────
+
+describe('isWishlistedByUser', () => {
+  function buildWishlistCheckDb(hasRow: boolean): Record<string, jest.Mock> {
+    const db: Record<string, jest.Mock> = {};
+    for (const m of ['select', 'from', 'orderBy']) {
+      db[m] = jest.fn().mockReturnThis();
+    }
+    db.where = jest.fn().mockReturnThis();
+    db.limit = jest.fn().mockResolvedValue(hasRow ? [{ id: 1 }] : []);
+    return db;
+  }
+
+  it('returns true when user has wishlisted the game', async () => {
+    const db = buildWishlistCheckDb(true);
+    const result = await isWishlistedByUser(db as never, 42, 1);
+    expect(result).toBe(true);
+  });
+
+  it('returns false when user has not wishlisted the game', async () => {
+    const db = buildWishlistCheckDb(false);
+    const result = await isWishlistedByUser(db as never, 42, 1);
+    expect(result).toBe(false);
+  });
+
+  it('returns false for empty array result', async () => {
+    const db = buildWishlistCheckDb(false);
+    const result = await isWishlistedByUser(db as never, 99, 99);
+    expect(result).toBe(false);
   });
 });

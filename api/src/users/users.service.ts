@@ -17,6 +17,7 @@ import {
   deleteUserTransaction,
 } from './users-query.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
+import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 
 /** Number of days to look back for "recently joined" users. */
@@ -316,6 +317,11 @@ export class UsersService {
   /** Fetch a user's Steam library with pagination (ROK-754). */
   async getSteamLibrary(userId: number, page: number, limit: number) {
     return fetchSteamLibrary(this.db, userId, page, limit);
+  }
+
+  /** Fetch a user's Steam wishlist with pagination (ROK-418). */
+  async getSteamWishlist(userId: number, page: number, limit: number) {
+    return fetchSteamWishlist(this.db, userId, page, limit, schema);
   }
 
   /** Delete a user and cascade all related data (ROK-405). */

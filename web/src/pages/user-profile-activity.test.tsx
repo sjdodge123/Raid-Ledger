@@ -102,6 +102,12 @@ function setupDefaultMocks(
     refetch: async () => {},
   } as never);
 
+  vi.spyOn(useUserProfileHook, "useUserSteamWishlist").mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  } as never);
+
   vi.spyOn(useUserProfileHook, "useUserEventSignups").mockReturnValue({
     data: { data: [], total: 0 },
     isLoading: false,

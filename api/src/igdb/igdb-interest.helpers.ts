@@ -195,6 +195,54 @@ export async function removeInterest(
 }
 
 /**
+ * Count users who wishlisted a game via Steam (source = 'steam_wishlist').
+ * @param db - Database connection
+ * @param gameId - Game ID
+ * @returns Wishlist count
+ */
+export async function getSteamWishlistCount(
+  db: Db,
+  gameId: number,
+): Promise<number> {
+  const [result] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, gameId),
+        eq(schema.gameInterests.source, 'steam_wishlist'),
+      ),
+    );
+  return result?.count ?? 0;
+}
+
+/**
+ * Check if a user has wishlisted a game via Steam.
+ * @param db - Database connection
+ * @param gameId - Game ID
+ * @param userId - User ID
+ * @returns true if user has wishlisted
+ */
+export async function isWishlistedByUser(
+  db: Db,
+  gameId: number,
+  userId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.gameInterests.id })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, gameId),
+        eq(schema.gameInterests.userId, userId),
+        eq(schema.gameInterests.source, 'steam_wishlist'),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
+/**
  * Count users who own a game via Steam (source = 'steam_library').
  * @param db - Database connection
  * @param gameId - Game ID

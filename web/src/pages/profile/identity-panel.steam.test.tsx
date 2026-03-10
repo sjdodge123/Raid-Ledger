@@ -79,6 +79,7 @@ const mockRefetch = vi.fn();
 const mockLinkSteam = vi.fn();
 const mockUnlinkSteam = { mutate: vi.fn(), isPending: false };
 const mockSyncLibrary = { mutate: vi.fn(), isPending: false };
+const mockSyncWishlist = { mutate: vi.fn(), isPending: false };
 
 function createWrapper() {
     const queryClient = new QueryClient({
@@ -128,6 +129,7 @@ function setupDefaultMocks(overrides?: {
         steamStatus: { data: undefined, isLoading: false },
         unlinkSteam: mockUnlinkSteam,
         syncLibrary: mockSyncLibrary,
+        syncWishlist: mockSyncWishlist,
     } as unknown as ReturnType<typeof useSteamLinkHook.useSteamLink>);
 }
 
@@ -170,6 +172,7 @@ describe('IdentityPanel — Steam config gating (ROK-745)', () => {
             },
             unlinkSteam: mockUnlinkSteam,
             syncLibrary: mockSyncLibrary,
+            syncWishlist: mockSyncWishlist,
         } as unknown as ReturnType<typeof useSteamLinkHook.useSteamLink>);
 
         render(<IdentityPanel />, { wrapper: createWrapper() });
@@ -187,6 +190,7 @@ describe('IdentityPanel — Steam config gating (ROK-745)', () => {
             },
             unlinkSteam: mockUnlinkSteam,
             syncLibrary: mockSyncLibrary,
+            syncWishlist: mockSyncWishlist,
         } as unknown as ReturnType<typeof useSteamLinkHook.useSteamLink>);
 
         render(<IdentityPanel />, { wrapper: createWrapper() });
@@ -204,6 +208,7 @@ describe('IdentityPanel — Steam config gating (ROK-745)', () => {
             },
             unlinkSteam: mockUnlinkSteam,
             syncLibrary: mockSyncLibrary,
+            syncWishlist: mockSyncWishlist,
         } as unknown as ReturnType<typeof useSteamLinkHook.useSteamLink>);
 
         render(<IdentityPanel />, { wrapper: createWrapper() });
@@ -220,6 +225,7 @@ describe('IdentityPanel — Steam config gating (ROK-745)', () => {
             },
             unlinkSteam: mockUnlinkSteam,
             syncLibrary: mockSyncLibrary,
+            syncWishlist: mockSyncWishlist,
         } as unknown as ReturnType<typeof useSteamLinkHook.useSteamLink>);
 
         render(<IdentityPanel />, { wrapper: createWrapper() });

@@ -59,9 +59,7 @@ describe('autoHeartCheck', () => {
 
     await autoHeartCheck(db as any, logger as any);
     expect(db.insert).toHaveBeenCalled();
-    expect(logger.log).toHaveBeenCalledWith(
-      'Auto-hearted 1 game(s) for users',
-    );
+    expect(logger.log).toHaveBeenCalledWith('Auto-hearted 1 game(s) for users');
   });
 
   it('inserts Discord candidates', async () => {
@@ -71,9 +69,7 @@ describe('autoHeartCheck', () => {
 
     await autoHeartCheck(db as any, logger as any);
     expect(db.insert).toHaveBeenCalled();
-    expect(logger.log).toHaveBeenCalledWith(
-      'Auto-hearted 1 game(s) for users',
-    );
+    expect(logger.log).toHaveBeenCalledWith('Auto-hearted 1 game(s) for users');
   });
 
   it('deduplicates Discord and Steam candidates', async () => {
@@ -89,13 +85,7 @@ describe('autoHeartCheck', () => {
 
   it('skips opted-out users', async () => {
     db.having.mockResolvedValueOnce([{ userId: 1, gameId: 10 }]);
-    buildWhereMock(
-      db,
-      [{ userId: 1, gameId: 20 }],
-      [{ userId: 1 }],
-      [],
-      [],
-    );
+    buildWhereMock(db, [{ userId: 1, gameId: 20 }], [{ userId: 1 }], [], []);
 
     await autoHeartCheck(db as any, logger as any);
     expect(db.insert).not.toHaveBeenCalled();
@@ -117,13 +107,7 @@ describe('autoHeartCheck', () => {
 
   it('skips already-hearted games', async () => {
     db.having.mockResolvedValueOnce([{ userId: 1, gameId: 10 }]);
-    buildWhereMock(
-      db,
-      [],
-      [],
-      [{ userId: 1, gameId: 10 }],
-      [],
-    );
+    buildWhereMock(db, [], [], [{ userId: 1, gameId: 10 }], []);
 
     await autoHeartCheck(db as any, logger as any);
     expect(db.insert).not.toHaveBeenCalled();

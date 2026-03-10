@@ -58,6 +58,15 @@ export async function getUserSteamLibrary(
   return fetchApi(`/users/${userId}/steam-library?page=${page}&limit=${limit}`);
 }
 
+/** Fetch a user's Steam wishlist, paginated (ROK-418) */
+export async function getUserSteamWishlist(
+  userId: number,
+  page = 1,
+  limit = 20,
+): Promise<import("@raid-ledger/contract").SteamWishlistResponseDto> {
+  return fetchApi(`/users/${userId}/steam-wishlist?page=${page}&limit=${limit}`);
+}
+
 /** Fetch upcoming events a user has signed up for (ROK-299) */
 export async function getUserEventSignups(
   userId: number,
