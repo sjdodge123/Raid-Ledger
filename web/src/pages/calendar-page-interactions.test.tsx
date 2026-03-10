@@ -10,6 +10,7 @@ import { makeGame, makeRegistryGame, renderPage, deliverGames } from './calendar
 
 vi.mock('../hooks/use-auth', () => ({
     useAuth: () => ({ isAuthenticated: false, user: null }),
+    getAuthToken: () => null,
 }));
 
 vi.mock('../hooks/use-game-time', () => ({

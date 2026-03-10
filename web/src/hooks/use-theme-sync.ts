@@ -5,6 +5,7 @@ import { useThemeStore } from '../stores/theme-store';
 import type { ThemeModePreference } from '../stores/theme-store';
 import { useTimezoneStore } from '../stores/timezone-store';
 import { useCalendarViewStore } from '../stores/calendar-view-store';
+import { useGameFilterStore } from '../stores/game-filter-store';
 
 const VALID_MODES: ThemeModePreference[] = ['light', 'dark', 'auto'];
 
@@ -23,6 +24,7 @@ interface PreferenceSetters {
     setThemeLegacy: (id: string) => void;
     setTimezone: (tz: string) => void;
     setViewPref: (v: 'week' | 'month' | 'day') => void;
+    loadSavedFilter: (slugs: string[]) => void;
 }
 
 function applyServerPreferences(prefs: Record<string, unknown>, setters: PreferenceSetters) {
@@ -39,6 +41,10 @@ function applyServerPreferences(prefs: Record<string, unknown>, setters: Prefere
         const v = prefs.calendarView;
         if (v === 'week' || v === 'month' || v === 'day') setters.setViewPref(v);
     }
+    if (Array.isArray(prefs.calendarGameFilter)) {
+        const slugs = prefs.calendarGameFilter.filter((s): s is string => typeof s === 'string');
+        if (slugs.length > 0) setters.loadSavedFilter(slugs);
+    }
 }
 
 export function useThemeSync() {
@@ -50,6 +56,7 @@ export function useThemeSync() {
         setThemeLegacy: useThemeStore((s) => s.setTheme),
         setTimezone: useTimezoneStore((s) => s.setTimezone),
         setViewPref: useCalendarViewStore((s) => s.setViewPref),
+        loadSavedFilter: useGameFilterStore((s) => s.loadSavedFilter),
     };
 
     useQuery({
