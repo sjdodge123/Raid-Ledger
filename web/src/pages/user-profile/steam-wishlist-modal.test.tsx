@@ -88,4 +88,56 @@ describe('SteamWishlistModal — search filter', () => {
         expect(screen.getByText('Hollow Knight')).toBeInTheDocument();
         expect(screen.getByText('Hades')).toBeInTheDocument();
     });
+
+    it('renders modal title with total count', () => {
+        renderWithProviders(<SteamWishlistModal {...defaultProps} />);
+
+        expect(screen.getByText('Steam Wishlist (3)')).toBeInTheDocument();
+    });
+
+    it('filters are case-insensitive with uppercase input', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<SteamWishlistModal {...defaultProps} />);
+
+        await user.type(
+            screen.getByPlaceholderText('Search wishlist...'),
+            'HADES',
+        );
+
+        expect(screen.getByText('Hades')).toBeInTheDocument();
+        expect(screen.queryByText('Elden Ring')).not.toBeInTheDocument();
+    });
+
+    it('renders game entries as links to game pages', () => {
+        renderWithProviders(<SteamWishlistModal {...defaultProps} />);
+
+        const links = screen.getAllByRole('link');
+        expect(links.length).toBeGreaterThanOrEqual(3);
+        expect(links[0]).toHaveAttribute('href', '/games/1');
+    });
+
+    it('does not render when modal is closed', () => {
+        renderWithProviders(
+            <SteamWishlistModal {...defaultProps} isOpen={false} />,
+        );
+
+        expect(screen.queryByText('Elden Ring')).not.toBeInTheDocument();
+        expect(
+            screen.queryByPlaceholderText('Search wishlist...'),
+        ).not.toBeInTheDocument();
+    });
+
+    it('shows partial match when search matches substring', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<SteamWishlistModal {...defaultProps} />);
+
+        await user.type(
+            screen.getByPlaceholderText('Search wishlist...'),
+            'hollow',
+        );
+
+        expect(screen.getByText('Hollow Knight')).toBeInTheDocument();
+        expect(screen.queryByText('Elden Ring')).not.toBeInTheDocument();
+        expect(screen.queryByText('Hades')).not.toBeInTheDocument();
+    });
 });
