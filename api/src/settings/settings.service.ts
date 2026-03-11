@@ -60,19 +60,16 @@ export class SettingsService implements OnModuleInit {
   }
 
   /**
-   * Ensures the settings cache is available. On cold start (cache never loaded),
-   * blocks until the cache is populated. On warm cache with expired TTL,
-   * serves stale data and triggers a non-blocking background refresh.
+   * Ensures the settings cache is available and fresh.
+   * Always awaits the reload when TTL has expired so callers never read
+   * stale/empty data during the reload window.
    */
   private async ensureCache(): Promise<void> {
     if (Date.now() - this.cacheLoadedAt < CACHE_TTL_MS) return;
-    const isColdCache = this.cacheLoadedAt === 0;
     if (!this.cacheLoadPromise) {
       this.cacheLoadPromise = this.loadCache();
     }
-    if (isColdCache) {
-      await this.cacheLoadPromise;
-    }
+    await this.cacheLoadPromise;
   }
 
   /** Loads all settings from DB, decrypts, and replaces the cache. */
