@@ -638,6 +638,13 @@
       "when": 1773200200000,
       "tag": "0090_keen_next_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1773300000000,
+      "tag": "0092_remap_wow_classic_to_tbc_anniversary",
+      "breakpoints": true
     }
   ]
 }
