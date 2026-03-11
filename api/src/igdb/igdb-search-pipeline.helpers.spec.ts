@@ -1,0 +1,185 @@
+/**
+ * Tests for search pipeline wiring (ROK-773).
+ * Verifies ITAD-primary with IGDB fallback logic and error handling.
+ */
+import {
+  runSearchPipeline,
+  type SearchPipelineParams,
+} from './igdb-search-pipeline.helpers';
+
+// Mock the ITAD deps builder
+jest.mock('./igdb-itad-deps.helpers', () => ({
+  buildItadSearchDeps: jest.fn().mockReturnValue({}),
+}));
+
+// Mock the ITAD search executor
+jest.mock('./igdb-itad-search.helpers', () => ({
+  executeItadSearch: jest.fn(),
+}));
+
+// Mock the IGDB search executor
+jest.mock('./igdb-search-executor.helpers', () => ({
+  executeSearch: jest.fn(),
+  doSearchRefresh: jest.fn(),
+}));
+
+// Mock the IGDB API helpers
+jest.mock('./igdb-api.helpers', () => ({
+  fetchFromIgdb: jest.fn(),
+  fetchWithRetry: jest.fn(),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { executeItadSearch } = require('./igdb-itad-search.helpers') as {
+  executeItadSearch: jest.Mock;
+};
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { executeSearch } = require('./igdb-search-executor.helpers') as {
+  executeSearch: jest.Mock;
+};
+
+function makeParams(
+  overrides: Partial<SearchPipelineParams> = {},
+): SearchPipelineParams {
+  return {
+    db: {} as SearchPipelineParams['db'],
+    redis: {} as SearchPipelineParams['redis'],
+    itadService: {} as SearchPipelineParams['itadService'],
+    resolveCredentials: jest
+      .fn()
+      .mockResolvedValue({ clientId: 'id', clientSecret: 'secret' }),
+    getAccessToken: jest.fn().mockResolvedValue('token'),
+    clearToken: jest.fn(),
+    getAdultFilter: jest.fn().mockResolvedValue(false),
+    upsertGames: jest.fn().mockResolvedValue([]),
+    normalizeQuery: jest.fn((q: string) => q.toLowerCase()),
+    getCacheKey: jest.fn((q: string) => `search:${q}`),
+    queryIgdb: jest.fn().mockResolvedValue([]),
+    ...overrides,
+  };
+}
+
+describe('runSearchPipeline', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns ITAD results when ITAD search succeeds with results', async () => {
+    const itadResult = {
+      games: [{ id: 0, name: 'Game A', slug: 'game-a' }],
+      cached: false,
+      source: 'itad' as const,
+    };
+    executeItadSearch.mockResolvedValue(itadResult);
+
+    const params = makeParams();
+    const triggerRefresh = jest.fn();
+
+    const result = await runSearchPipeline(
+      params,
+      'game a',
+      'game a',
+      triggerRefresh,
+    );
+
+    expect(result).toBe(itadResult);
+    expect(executeSearch).not.toHaveBeenCalled();
+  });
+
+  it('falls back to IGDB when ITAD returns empty results', async () => {
+    const itadResult = {
+      games: [],
+      cached: false,
+      source: 'itad' as const,
+    };
+    const igdbResult = {
+      games: [{ id: 1, name: 'IGDB Game' }],
+      cached: false,
+      source: 'igdb' as const,
+    };
+    executeItadSearch.mockResolvedValue(itadResult);
+    executeSearch.mockResolvedValue(igdbResult);
+
+    const params = makeParams();
+    const triggerRefresh = jest.fn();
+
+    const result = await runSearchPipeline(
+      params,
+      'game',
+      'game',
+      triggerRefresh,
+    );
+
+    expect(result).toBe(igdbResult);
+    expect(executeSearch).toHaveBeenCalled();
+  });
+
+  it('falls back to IGDB when ITAD search throws an error', async () => {
+    executeItadSearch.mockRejectedValue(new Error('ITAD API down'));
+    const igdbResult = {
+      games: [{ id: 2, name: 'Fallback Game' }],
+      cached: false,
+      source: 'igdb' as const,
+    };
+    executeSearch.mockResolvedValue(igdbResult);
+
+    const params = makeParams();
+    const triggerRefresh = jest.fn();
+
+    const result = await runSearchPipeline(
+      params,
+      'test',
+      'test',
+      triggerRefresh,
+    );
+
+    expect(result).toBe(igdbResult);
+  });
+
+  it('falls back to IGDB when ITAD throws non-Error', async () => {
+    executeItadSearch.mockRejectedValue('string error');
+    const igdbResult = {
+      games: [],
+      cached: false,
+      source: 'igdb' as const,
+    };
+    executeSearch.mockResolvedValue(igdbResult);
+
+    const params = makeParams();
+    const triggerRefresh = jest.fn();
+
+    const result = await runSearchPipeline(
+      params,
+      'test',
+      'test',
+      triggerRefresh,
+    );
+
+    expect(result).toBe(igdbResult);
+  });
+
+  it('passes triggerRefresh callback to IGDB executeSearch', async () => {
+    executeItadSearch.mockResolvedValue({
+      games: [],
+      cached: false,
+      source: 'itad' as const,
+    });
+    executeSearch.mockResolvedValue({
+      games: [],
+      cached: false,
+      source: 'igdb' as const,
+    });
+
+    const params = makeParams();
+    const triggerRefresh = jest.fn();
+
+    await runSearchPipeline(params, 'test', 'test', triggerRefresh);
+
+    expect(executeSearch).toHaveBeenCalledWith(
+      expect.any(Object),
+      'test',
+      'test',
+      triggerRefresh,
+    );
+  });
+});

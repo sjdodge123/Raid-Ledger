@@ -17,6 +17,7 @@ import { SETTINGS_EVENTS } from '../settings/settings.types';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.constants';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { ItadService } from '../itad/itad.service';
 import {
   IGDB_CONFIG,
   type IgdbApiGame,
@@ -29,8 +30,6 @@ import {
   lookupGameById,
   lookupGameDetailById,
   fetchTwitchToken,
-  fetchFromIgdb,
-  fetchWithRetry,
   upsertGamesFromApi,
   upsertSingleGameRow,
   backfillMissingCovers,
@@ -47,10 +46,12 @@ import {
   clearDiscoveryCache,
   buildAdultThemeFilter,
   executeIgdbQuery,
-  executeSearch,
-  doSearchRefresh,
-  type SearchDeps,
 } from './igdb-helpers.barrel';
+import {
+  runSearchPipeline,
+  startSearchRefresh,
+  type SearchPipelineParams,
+} from './igdb-search-pipeline.helpers';
 
 export type { SearchResult } from './igdb.constants';
 
@@ -73,6 +74,7 @@ export class IgdbService {
     private readonly settingsService: SettingsService,
     @InjectQueue(IGDB_SYNC_QUEUE) private readonly syncQueue: Queue,
     private readonly cronJobService: CronJobService,
+    private readonly itadService: ItadService,
   ) {}
 
   @OnEvent(SETTINGS_EVENTS.IGDB_UPDATED)
@@ -159,7 +161,13 @@ export class IgdbService {
     if (this.accessToken && this.tokenExpiry && new Date() < this.tokenExpiry)
       return this.accessToken;
     if (this.tokenFetchPromise) return this.tokenFetchPromise;
-    this.tokenFetchPromise = this._fetchNewToken();
+    this.tokenFetchPromise = (async () => {
+      const { clientId, clientSecret } = await this.resolveCredentials();
+      const { token, expiry } = await fetchTwitchToken(clientId, clientSecret);
+      this.accessToken = token;
+      this.tokenExpiry = expiry;
+      return token;
+    })();
     try {
       return await this.tokenFetchPromise;
     } finally {
@@ -167,36 +175,22 @@ export class IgdbService {
     }
   }
 
-  private async _fetchNewToken(): Promise<string> {
-    const { clientId, clientSecret } = await this.resolveCredentials();
-    const { token, expiry } = await fetchTwitchToken(clientId, clientSecret);
-    this.accessToken = token;
-    this.tokenExpiry = expiry;
-    return token;
-  }
-
-  private buildSearchDeps(): SearchDeps {
-    const clearToken = () => {
-      this.accessToken = null;
-      this.tokenExpiry = null;
-    };
+  private buildPipelineParams(): SearchPipelineParams {
     return {
       db: this.db,
       redis: this.redis,
-      getAdultFilter: () => this.isAdultFilterEnabled(),
-      fetchWithRetry: async (q, af) => {
-        const fetcher = async () =>
-          fetchFromIgdb(
-            q,
-            af,
-            (await this.resolveCredentials()).clientId,
-            await this.getAccessToken(),
-          );
-        return fetchWithRetry(fetcher, clearToken);
+      itadService: this.itadService,
+      resolveCredentials: () => this.resolveCredentials(),
+      getAccessToken: () => this.getAccessToken(),
+      clearToken: () => {
+        this.accessToken = null;
+        this.tokenExpiry = null;
       },
+      getAdultFilter: () => this.isAdultFilterEnabled(),
       upsertGames: (g) => this.upsertGamesFromApi(g),
       normalizeQuery: (q) => this.normalizeQuery(q),
       getCacheKey: (q) => this.getCacheKey(q),
+      queryIgdb: (body) => this.queryIgdb(body),
     };
   }
 
@@ -204,8 +198,8 @@ export class IgdbService {
     const normalized = this.normalizeQuery(query);
     const existing = this.inFlightSearches.get(normalized);
     if (existing) return existing;
-    const deps = this.buildSearchDeps();
-    const promise = executeSearch(deps, query, normalized, (q, n, k) =>
+    const params = this.buildPipelineParams();
+    const promise = runSearchPipeline(params, query, normalized, (q, n, k) =>
       this._triggerSearchRefresh(q, n, k),
     ).finally(() => this.inFlightSearches.delete(normalized));
     this.inFlightSearches.set(normalized, promise);
@@ -218,21 +212,22 @@ export class IgdbService {
     cacheKey: string,
   ): void {
     if (this.inFlightRefreshes.has(cacheKey)) return;
-    const deps = this.buildSearchDeps();
-    const promise = doSearchRefresh(deps, query, normalized, cacheKey).finally(
-      () => this.inFlightRefreshes.delete(cacheKey),
-    );
+    const params = this.buildPipelineParams();
+    const promise = startSearchRefresh(
+      params,
+      query,
+      normalized,
+      cacheKey,
+    ).finally(() => this.inFlightRefreshes.delete(cacheKey));
     this.inFlightRefreshes.set(cacheKey, promise);
   }
 
   async searchLocalGames(query: string): Promise<SearchResult> {
     return searchLocalGames(this.db, query, await this.isAdultFilterEnabled());
   }
-
   async getGameById(id: number): Promise<IgdbGameDto | null> {
     return lookupGameById(this.db, id);
   }
-
   async getGameDetailById(id: number): Promise<GameDetailDto | null> {
     return lookupGameDetailById(this.db, id);
   }
@@ -255,7 +250,6 @@ export class IgdbService {
   async upsertGamesFromApi(apiGames: IgdbApiGame[]) {
     return upsertGamesFromApi(this.db, apiGames);
   }
-
   async getSyncStatus() {
     return querySyncStatus(this.db, this._syncInProgress);
   }
@@ -272,7 +266,6 @@ export class IgdbService {
   async getGameActivity(gameId: number, period: ActivityPeriod) {
     return queryGameActivity(this.db, gameId, period);
   }
-
   async getGameNowPlaying(gameId: number) {
     return queryNowPlaying(this.db, gameId);
   }
@@ -302,24 +295,22 @@ export class IgdbService {
   async banGame(id: number) {
     return banGameHelper(this.db, id);
   }
+  async hideAdultGames() {
+    return hideAdultGamesHelper(this.db);
+  }
 
   async unbanGame(id: number) {
     const result = await unbanGameHelper(this.db, id);
-    if (result.success && result.igdbId) {
-      try {
-        const games = await this.queryIgdb(
-          `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = ${result.igdbId}; limit 1;`,
-        );
-        if (games.length > 0)
-          await upsertSingleGameRow(this.db, mapApiGameToDbRow(games[0]));
-      } catch (err) {
-        this.logger.warn(`Failed to refresh after unban: ${err}`);
-      }
+    if (!result.success || !result.igdbId) return result;
+    try {
+      const games = await this.queryIgdb(
+        `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = ${result.igdbId}; limit 1;`,
+      );
+      if (games.length > 0)
+        await upsertSingleGameRow(this.db, mapApiGameToDbRow(games[0]));
+    } catch (err) {
+      this.logger.warn(`Failed to refresh after unban: ${err}`);
     }
     return result;
-  }
-
-  async hideAdultGames() {
-    return hideAdultGamesHelper(this.db);
   }
 }

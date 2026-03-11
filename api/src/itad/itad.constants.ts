@@ -54,6 +54,15 @@ export interface ItadReview {
   url: string;
 }
 
+/** Steam shop ID for ITAD shop lookups */
+export const ITAD_STEAM_SHOP_ID = 61;
+
+/**
+ * Response from POST /lookup/shop/{shopId}/id/v1.
+ * Maps ITAD slug paths to shop-specific IDs (e.g., Steam appids).
+ */
+export type ItadShopLookupResponse = Record<string, string | null>;
+
 export interface ItadGameInfo {
   id: string;
   slug: string;

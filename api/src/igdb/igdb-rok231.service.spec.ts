@@ -10,6 +10,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { ItadService } from '../itad/itad.service';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -129,6 +130,14 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
             executeWithTracking: jest.fn(
               (_name: string, fn: () => Promise<void>) => fn(),
             ),
+          },
+        },
+        {
+          provide: ItadService,
+          useValue: {
+            searchGames: jest.fn().mockResolvedValue([]),
+            lookupSteamAppIds: jest.fn().mockResolvedValue(new Map()),
+            getGameInfo: jest.fn().mockResolvedValue(null),
           },
         },
       ],
