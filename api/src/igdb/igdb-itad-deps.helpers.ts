@@ -2,7 +2,7 @@
  * ITAD search dependency builder for IgdbService (ROK-773).
  * Constructs the ItadSearchDeps interface used by executeItadSearch.
  */
-import { eq, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { ItadService } from '../itad/itad.service';
@@ -98,12 +98,6 @@ async function checkBannedOrHidden(
   slug: string,
 ): Promise<boolean> {
   const rows = await db
-    .select({ id: schema.games.id })
-    .from(schema.games)
-    .where(or(eq(schema.games.slug, slug)))
-    .limit(1);
-  if (rows.length === 0) return false;
-  const fullRows = await db
     .select({
       hidden: schema.games.hidden,
       banned: schema.games.banned,
@@ -111,5 +105,5 @@ async function checkBannedOrHidden(
     .from(schema.games)
     .where(eq(schema.games.slug, slug))
     .limit(1);
-  return fullRows.length > 0 && (fullRows[0].hidden || fullRows[0].banned);
+  return rows.length > 0 && (rows[0].hidden || rows[0].banned);
 }
