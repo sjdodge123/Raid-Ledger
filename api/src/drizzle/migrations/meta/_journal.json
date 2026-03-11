@@ -645,6 +645,13 @@
       "when": 1773250198038,
       "tag": "0091_add_api_namespace_prefix",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1773300000000,
+      "tag": "0092_remap_wow_classic_to_tbc_anniversary",
+      "breakpoints": true
     }
   ]
 }
