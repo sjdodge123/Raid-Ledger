@@ -14,6 +14,7 @@ import {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
 } from './igdb-itad-enrich.helpers';
+import { upsertItadGame } from './igdb-itad-upsert.helpers';
 
 /** Parameters for building ITAD search deps. */
 export interface ItadDepsBuildParams {
@@ -37,6 +38,7 @@ export function buildItadSearchDeps(
     enrichFromIgdb: (appId) => enrichViaExternalGames(params.queryIgdb, appId),
     getAdultFilter: params.getAdultFilter,
     isBannedOrHidden: (slug) => checkBannedOrHidden(params.db, slug),
+    upsertGame: (game) => upsertItadGame(params.db, game),
   };
 }
 

@@ -11,15 +11,14 @@ import {
 } from './igdb-itad-search.helpers';
 import type { ItadSearchGame } from './igdb-itad-merge.helpers';
 
-function makeMockDeps(
-  overrides: Partial<ItadSearchDeps> = {},
-): ItadSearchDeps {
+function makeMockDeps(overrides: Partial<ItadSearchDeps> = {}): ItadSearchDeps {
   return {
     searchItad: jest.fn().mockResolvedValue([]),
     lookupSteamAppIds: jest.fn().mockResolvedValue(new Map()),
     enrichFromIgdb: jest.fn().mockResolvedValue(null),
     getAdultFilter: jest.fn().mockResolvedValue(false),
     isBannedOrHidden: jest.fn().mockResolvedValue(false),
+    upsertGame: jest.fn().mockImplementation((g) => Promise.resolve({ ...g, id: 1 })),
     ...overrides,
   };
 }
@@ -64,9 +63,7 @@ describe('filterDlc — edge cases', () => {
   });
 
   it('is case-sensitive (type "DLC" is NOT filtered)', () => {
-    const games: ItadSearchGame[] = [
-      makeGame({ id: 'upper', type: 'DLC' }),
-    ];
+    const games: ItadSearchGame[] = [makeGame({ id: 'upper', type: 'DLC' })];
     expect(filterDlc(games)).toHaveLength(1);
   });
 });
@@ -263,9 +260,7 @@ describe('executeItadSearch — combined filters', () => {
       getAdultFilter: jest.fn().mockResolvedValue(true),
       lookupSteamAppIds: jest
         .fn()
-        .mockResolvedValue(
-          new Map([['igdb-adult', 200]]),
-        ),
+        .mockResolvedValue(new Map([['igdb-adult', 200]])),
       enrichFromIgdb: jest.fn().mockImplementation((appId: number) => {
         if (appId === 200) return Promise.resolve(igdbAdultData);
         return Promise.resolve(null);
@@ -363,9 +358,7 @@ describe('executeItadSearch — enrichment paths', () => {
     const result = await executeItadSearch(deps, 'test');
 
     expect(result.games[0].igdbId).toBeNull();
-    expect(result.games[0].coverUrl).toBe(
-      'https://itad.example.com/box.jpg',
-    );
+    expect(result.games[0].coverUrl).toBe('https://itad.example.com/box.jpg');
   });
 
   it('enriches multiple games independently', async () => {
@@ -391,9 +384,7 @@ describe('executeItadSearch — enrichment paths', () => {
 
     const deps = makeMockDeps({
       searchItad: jest.fn().mockResolvedValue([gameA, gameB]),
-      lookupSteamAppIds: jest
-        .fn()
-        .mockResolvedValue(new Map([['a', 100]])),
+      lookupSteamAppIds: jest.fn().mockResolvedValue(new Map([['a', 100]])),
       enrichFromIgdb: jest.fn().mockImplementation((appId: number) => {
         if (appId === 100) return Promise.resolve(igdbA);
         return Promise.resolve(null);

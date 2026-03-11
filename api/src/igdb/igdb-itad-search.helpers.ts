@@ -25,6 +25,7 @@ export interface ItadSearchDeps {
   enrichFromIgdb: (steamAppId: number) => Promise<IgdbEnrichedData | null>;
   getAdultFilter: () => Promise<boolean>;
   isBannedOrHidden: (slug: string) => Promise<boolean>;
+  upsertGame: (game: GameDetailDto) => Promise<GameDetailDto>;
 }
 
 /**
@@ -80,12 +81,13 @@ export async function executeItadSearch(
   const enriched = await enrichAll(deps, preFiltered, steamMap);
   const postFiltered = applyPostFilters(enriched, adultFilter);
   const visible = await removeHidden(deps, postFiltered);
+  const persisted = await upsertAll(deps, visible);
 
   logger.debug(
-    `ITAD search "${query}": ${raw.length} raw, ${visible.length} final`,
+    `ITAD search "${query}": ${raw.length} raw, ${persisted.length} final`,
   );
 
-  return { games: visible, cached: false, source: 'itad' };
+  return { games: persisted, cached: false, source: 'itad' };
 }
 
 /** Enrich all games with IGDB data where Steam app ID is available. */
@@ -132,6 +134,23 @@ async function removeHidden(
   const results: GameDetailDto[] = [];
   for (const game of games) {
     if (!(await deps.isBannedOrHidden(game.slug))) {
+      results.push(game);
+    }
+  }
+  return results;
+}
+
+/** Upsert all games to DB to get real IDs. */
+async function upsertAll(
+  deps: ItadSearchDeps,
+  games: GameDetailDto[],
+): Promise<GameDetailDto[]> {
+  const results: GameDetailDto[] = [];
+  for (const game of games) {
+    try {
+      results.push(await deps.upsertGame(game));
+    } catch {
+      logger.warn(`Failed to upsert game "${game.slug}", using in-memory`);
       results.push(game);
     }
   }
