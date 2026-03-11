@@ -181,6 +181,20 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
 };
 
 /**
+ * Map legacy WowGameVariant enum to the game's apiNamespacePrefix value.
+ * Used by BlizzardController to bridge the old query param to the new column.
+ */
+export function variantToNamespacePrefix(variant: string): string | null {
+  const map: Record<string, string | null> = {
+    retail: null,
+    classic_era: 'classic1x',
+    classic: 'classic',
+    classic_anniversary: 'classicann',
+  };
+  return map[variant] ?? null;
+}
+
+/**
  * Build Blizzard API namespace prefixes from a game's stored prefix.
  * Null means retail (no prefix). Non-null is appended with a hyphen.
  * @param apiNamespacePrefix - The game's stored namespace prefix (e.g., 'classic1x', 'classicann', null for retail)

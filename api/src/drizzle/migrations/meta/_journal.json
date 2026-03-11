@@ -652,6 +652,13 @@
       "when": 1773300000000,
       "tag": "0092_remap_wow_classic_to_tbc_anniversary",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1773350000000,
+      "tag": "0093_add_tbc_anniversary_event_types",
+      "breakpoints": true
     }
   ]
 }

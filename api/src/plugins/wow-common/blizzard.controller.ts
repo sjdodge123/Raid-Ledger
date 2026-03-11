@@ -17,6 +17,7 @@ import {
   RequirePlugin,
   PluginActiveGuard,
 } from '../plugin-host/plugin-active.guard';
+import { variantToNamespacePrefix } from './blizzard.constants';
 
 /**
  * Controller for Blizzard API endpoints (ROK-234 UX refinements).
@@ -49,9 +50,10 @@ export class BlizzardController {
     }
 
     const variant = this.parseGameVariant(gameVariant);
+    const namespacePrefix = variantToNamespacePrefix(variant);
     const realms = await this.blizzardService.fetchRealmList(
       parsed.data,
-      variant,
+      namespacePrefix,
     );
     return { data: realms };
   }
@@ -83,11 +85,12 @@ export class BlizzardController {
     }
 
     const variant = this.parseGameVariant(gameVariant);
+    const namespacePrefix = variantToNamespacePrefix(variant);
     return this.blizzardService.fetchCharacterProfile(
       name.trim(),
       realm.trim(),
       parsedRegion.data,
-      variant,
+      namespacePrefix,
     );
   }
 
