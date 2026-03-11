@@ -15,7 +15,6 @@ const logger = new Logger('ItadHttp');
 const USER_AGENT =
   'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)';
 
-
 /** Strip API key from URL for safe logging. */
 function redactUrl(url: string): string {
   return url.replace(/key=[^&]+/, 'key=***');
