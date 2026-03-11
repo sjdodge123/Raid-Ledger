@@ -49,7 +49,7 @@ describe('filterDlc — edge cases', () => {
     expect(filterDlc(games)).toEqual([]);
   });
 
-  it('preserves games with type "game", "bundle", or other non-DLC types', () => {
+  it('preserves games with type "game" or "package" only', () => {
     const games: ItadSearchGame[] = [
       makeGame({ id: 'g1', type: 'game' }),
       makeGame({ id: 'g2', type: 'bundle' }),
@@ -58,13 +58,19 @@ describe('filterDlc — edge cases', () => {
     ];
     const result = filterDlc(games);
 
-    expect(result).toHaveLength(3);
-    expect(result.map((g) => g.id)).toEqual(['g1', 'g2', 'g3']);
+    expect(result).toHaveLength(2);
+    expect(result.map((g) => g.id)).toEqual(['g1', 'g3']);
   });
 
-  it('is case-sensitive (type "DLC" is NOT filtered)', () => {
-    const games: ItadSearchGame[] = [makeGame({ id: 'upper', type: 'DLC' })];
-    expect(filterDlc(games)).toHaveLength(1);
+  it('excludes unknown types including null-like types', () => {
+    const games: ItadSearchGame[] = [
+      makeGame({ id: 'g1', type: 'DLC' }),
+      makeGame({ id: 'g2', type: '' }),
+      makeGame({ id: 'g3', type: 'game' }),
+    ];
+    const result = filterDlc(games);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('g3');
   });
 });
 

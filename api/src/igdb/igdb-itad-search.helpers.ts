@@ -31,10 +31,11 @@ export interface ItadSearchDeps {
 /**
  * Filter DLC games from ITAD results.
  * @param games - ITAD search results
- * @returns Non-DLC games only
+ * @returns Non-DLC games only (keeps 'game' and 'package' types)
  */
 export function filterDlc(games: ItadSearchGame[]): ItadSearchGame[] {
-  return games.filter((g) => g.type !== 'dlc');
+  const ALLOWED_TYPES = new Set(['game', 'package']);
+  return games.filter((g) => ALLOWED_TYPES.has(g.type));
 }
 
 /**
