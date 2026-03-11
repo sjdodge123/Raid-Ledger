@@ -85,9 +85,9 @@ function SteamLinkedPanel({ personaName, isPublic, syncLibrary, syncWishlist, un
 }): JSX.Element {
     return (
         <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <SteamLinkedInfo personaName={personaName} isPublic={isPublic} />
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex flex-wrap items-center gap-2" data-testid="steam-action-buttons">
                     <button onClick={() => syncLibrary.mutate()} disabled={syncLibrary.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
                         {syncLibrary.isPending ? 'Syncing...' : 'Sync Library'}
                     </button>
