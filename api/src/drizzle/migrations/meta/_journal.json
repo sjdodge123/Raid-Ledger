@@ -659,6 +659,13 @@
       "when": 1773350000000,
       "tag": "0093_add_tbc_anniversary_event_types",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1773400000000,
+      "tag": "0094_set_twitch_id_wow_variants",
+      "breakpoints": true
     }
   ]
 }
