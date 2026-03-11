@@ -1,7 +1,8 @@
 /**
- * ROK-698: Unit tests for background cache refresh behavior.
- * Verifies that expired TTL triggers a non-blocking background refresh
- * so cron jobs and HTTP requests are never stalled by decryption.
+ * ROK-698: Unit tests for cache refresh behavior after TTL expiry.
+ * Verifies that expired TTL triggers a reload that is always awaited
+ * so callers never read stale/empty data during the reload window.
+ * (Updated by ROK-781 — ensureCache now always awaits the reload.)
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -75,10 +76,10 @@ function describeSettingsServiceROK698BackgroundRefresh() {
   });
 
   // ============================================================
-  // Background refresh: stale cache served while reloading
+  // Cache refresh: awaited reload after TTL expiry (ROK-781 fix)
   // ============================================================
-  describe('background refresh after TTL expiry', () => {
-    it('returns stale cached value immediately when TTL has expired', async () => {
+  describe('awaited refresh after TTL expiry', () => {
+    it('awaits reload and returns fresh data when TTL has expired', async () => {
       jest.useFakeTimers();
 
       // Initial cache load with a known value
@@ -91,31 +92,18 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       // Expire TTL
       jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
-      // Set up a slow DB response for the background refresh
-      let resolveRefresh!: (value: unknown[]) => void;
-      mockDb._selectChain.from.mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            resolveRefresh = resolve;
-          }),
-      );
+      // DB returns updated data on reload
+      mockDb._selectChain.from.mockResolvedValue([
+        makeRow(SETTING_KEYS.DEMO_MODE, 'refreshed-value'),
+      ]);
 
-      // This get() should return the stale value immediately,
-      // not block on the background refresh
+      // get() should await the reload and return fresh data
       const result = await service.get(SETTING_KEYS.DEMO_MODE);
-      expect(result).toBe('initial-value');
-
-      // The background DB query was started
+      expect(result).toBe('refreshed-value');
       expect(mockDb.select).toHaveBeenCalledTimes(2);
-
-      // Resolve the background refresh
-      resolveRefresh([makeRow(SETTING_KEYS.DEMO_MODE, 'refreshed-value')]);
-
-      // Allow microtasks to settle
-      await jest.advanceTimersByTimeAsync(0);
     });
 
-    it('serves refreshed data after background reload completes', async () => {
+    it('returns fresh data immediately after awaited reload', async () => {
       jest.useFakeTimers();
 
       // Initial load
@@ -127,23 +115,22 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       // Expire TTL
       jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
-      // Background refresh returns new value
+      // Reload returns new value
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.DEMO_MODE, 'new-value'),
       ]);
 
-      // Trigger background refresh (returns stale value)
-      await service.get(SETTING_KEYS.DEMO_MODE);
-
-      // Allow background refresh to complete
-      await jest.advanceTimersByTimeAsync(0);
-
-      // Now should serve the refreshed value
+      // First get() after expiry awaits reload and returns fresh data
       const result = await service.get(SETTING_KEYS.DEMO_MODE);
       expect(result).toBe('new-value');
+
+      // Subsequent get() is served from fresh cache — no extra DB call
+      const result2 = await service.get(SETTING_KEYS.DEMO_MODE);
+      expect(result2).toBe('new-value');
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
     });
 
-    it('does not trigger multiple background reloads for concurrent reads', async () => {
+    it('does not trigger multiple reloads for concurrent reads', async () => {
       jest.useFakeTimers();
 
       // Initial load
@@ -156,14 +143,10 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       // Expire TTL
       jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
-      // Slow background refresh
-      let resolveRefresh!: (value: unknown[]) => void;
-      mockDb._selectChain.from.mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            resolveRefresh = resolve;
-          }),
-      );
+      // Reload returns fresh data
+      mockDb._selectChain.from.mockResolvedValue([
+        makeRow(SETTING_KEYS.DEMO_MODE, 'refreshed'),
+      ]);
 
       // Multiple concurrent get() calls after TTL expiry
       const results = await Promise.all([
@@ -172,15 +155,11 @@ function describeSettingsServiceROK698BackgroundRefresh() {
         service.get(SETTING_KEYS.DEMO_MODE),
       ]);
 
-      // All should return stale value immediately
-      expect(results).toEqual(['cached', 'cached', 'cached']);
+      // All should return fresh value (reload was awaited)
+      expect(results).toEqual(['refreshed', 'refreshed', 'refreshed']);
 
-      // Only one background DB query should have been triggered
+      // Only one DB reload triggered despite 3 concurrent calls
       expect(mockDb.select).toHaveBeenCalledTimes(2);
-
-      // Cleanup
-      resolveRefresh([makeRow(SETTING_KEYS.DEMO_MODE, 'refreshed')]);
-      await jest.advanceTimersByTimeAsync(0);
     });
   });
 
@@ -251,8 +230,8 @@ function describeSettingsServiceROK698BackgroundRefresh() {
   // ============================================================
   // Background refresh error resilience
   // ============================================================
-  describe('background refresh error handling', () => {
-    it('continues serving stale cache when background refresh fails', async () => {
+  describe('refresh error handling', () => {
+    it('continues serving stale cache when reload fails', async () => {
       jest.useFakeTimers();
 
       // Initial load succeeds
@@ -264,7 +243,7 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       // Expire TTL
       jest.advanceTimersByTime(30 * 60_000 + 1_000);
 
-      // Background refresh fails
+      // Reload fails (loadCache catches internally, does not rethrow)
       mockDb._selectChain.from.mockRejectedValue(
         new Error('DB connection lost'),
       );
@@ -272,12 +251,9 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       // Should still return the stale cached value
       const result = await service.get(SETTING_KEYS.DEMO_MODE);
       expect(result).toBe('stable-value');
-
-      // Allow error to propagate in background
-      await jest.advanceTimersByTimeAsync(0);
     });
 
-    it('retries background refresh on next TTL cycle after a failure', async () => {
+    it('retries reload on next access after a failure', async () => {
       jest.useFakeTimers();
 
       // Initial load
@@ -287,24 +263,18 @@ function describeSettingsServiceROK698BackgroundRefresh() {
       await service.get(SETTING_KEYS.DEMO_MODE);
       expect(mockDb.select).toHaveBeenCalledTimes(1);
 
-      // First TTL expiry - background refresh fails
+      // TTL expiry - reload fails
       jest.advanceTimersByTime(30 * 60_000 + 1_000);
       mockDb._selectChain.from.mockRejectedValue(new Error('DB down'));
       await service.get(SETTING_KEYS.DEMO_MODE);
-      await jest.advanceTimersByTimeAsync(0);
       expect(mockDb.select).toHaveBeenCalledTimes(2);
 
-      // Second TTL expiry - should attempt refresh again
-      jest.advanceTimersByTime(30 * 60_000 + 1_000);
+      // cacheLoadedAt was NOT updated on failure, so next get() retries
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.DEMO_MODE, 'recovered'),
       ]);
-      await service.get(SETTING_KEYS.DEMO_MODE);
-      await jest.advanceTimersByTimeAsync(0);
-      expect(mockDb.select).toHaveBeenCalledTimes(3);
-
-      // Now should serve the recovered value
       const result = await service.get(SETTING_KEYS.DEMO_MODE);
+      expect(mockDb.select).toHaveBeenCalledTimes(3);
       expect(result).toBe('recovered');
     });
   });
