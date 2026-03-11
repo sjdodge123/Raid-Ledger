@@ -16,6 +16,14 @@ import { checkAdultContent } from './steam-content-filter.helpers';
 
 const logger = new Logger('SteamItadDiscovery');
 
+/** ITAD game types that represent full games (not DLC/expansions). */
+const ALLOWED_GAME_TYPES = new Set(['game', 'package']);
+
+/** Check whether an ITAD game is a full game (not DLC/expansion). */
+export function isFullGame(itadGame: ItadGame): boolean {
+  return ALLOWED_GAME_TYPES.has(itadGame.type);
+}
+
 /** Type for a games table insert row. */
 type GameInsertRow = typeof schema.games.$inferInsert;
 
@@ -164,6 +172,8 @@ export async function discoverGameViaItad(
 ): Promise<DiscoveryResult | null> {
   const itadGame = await deps.lookupBySteamAppId(steamAppId);
   if (!itadGame) return null;
+
+  if (!isFullGame(itadGame)) return null; // Skip DLC/expansion items
 
   // Check if game is already banned by slug
   const banned = await isBannedBySlug(deps.db, itadGame.slug);
