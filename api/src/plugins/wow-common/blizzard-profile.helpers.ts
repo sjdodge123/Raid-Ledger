@@ -3,7 +3,6 @@
  * Extracted from blizzard.service.ts for file size compliance (ROK-719).
  */
 import { NotFoundException } from '@nestjs/common';
-import type { WowGameVariant } from '@raid-ledger/contract';
 import type { BlizzardCharacterProfile } from './blizzard.constants';
 import {
   buildCharacterParams,
@@ -44,14 +43,14 @@ export function throwProfileError(
   throw new Error(`Blizzard API error (${status}). Please try again later.`);
 }
 
-/** Build the Blizzard profile URL (retail only). */
+/** Build the Blizzard profile URL (retail only — null prefix means retail). */
 function buildProfileUrl(
-  gameVariant: WowGameVariant,
+  apiNamespacePrefix: string | null,
   region: string,
   realmSlug: string,
   charName: string,
 ): string | null {
-  return gameVariant === 'retail'
+  return apiNamespacePrefix === null
     ? `https://worldofwarcraft.blizzard.com/en-${region}/character/${realmSlug}/${charName}`
     : null;
 }
@@ -77,7 +76,7 @@ export function buildProfileResult(
   avatarUrl: string | null,
   renderUrl: string | null,
   itemLevel: number | null,
-  gameVariant: WowGameVariant,
+  apiNamespacePrefix: string | null,
   region: string,
   realmSlug: string,
   charName: string,
@@ -87,7 +86,12 @@ export function buildProfileResult(
     itemLevel,
     avatarUrl,
     renderUrl,
-    profileUrl: buildProfileUrl(gameVariant, region, realmSlug, charName),
+    profileUrl: buildProfileUrl(
+      apiNamespacePrefix,
+      region,
+      realmSlug,
+      charName,
+    ),
   };
 }
 
@@ -146,11 +150,11 @@ export async function fetchProfileData(
   name: string,
   realm: string,
   region: string,
-  gameVariant: WowGameVariant,
+  apiNamespacePrefix: string | null,
   token: string,
   logger: Logger,
 ) {
-  const params = buildCharacterParams(name, realm, region, gameVariant);
+  const params = buildCharacterParams(name, realm, region, apiNamespacePrefix);
   const profileUrl = `${params.baseUrl}/profile/wow/character/${params.realmSlug}/${params.charName}`;
   const profile = await fetchRawProfile(
     profileUrl,

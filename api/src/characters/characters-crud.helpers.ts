@@ -229,6 +229,16 @@ async function syncSingleCharacter(
   }
 }
 
+/** Look up apiNamespacePrefix from the game row. */
+async function resolveNsPrefix(db: Db, gameId: number): Promise<string | null> {
+  const [game] = await db
+    .select({ apiNamespacePrefix: schema.games.apiNamespacePrefix })
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
+  return game?.apiNamespacePrefix ?? null;
+}
+
 /** Perform sync for a single character. */
 async function performCharacterSync(
   db: Db,
@@ -236,20 +246,20 @@ async function performCharacterSync(
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
   logger: Logger,
 ): Promise<'synced' | 'skipped'> {
-  const variant = char.gameVariant as string;
-  const adapter = findAdapter(variant);
+  const adapter = findAdapter(char.gameVariant as string);
   if (!adapter) {
     logger.debug(
-      `No adapter for character ${char.id} (variant: ${variant}), skipping`,
+      `No adapter for character ${char.id} (gameId: ${char.gameId}), skipping`,
     );
     return 'skipped';
   }
+  const nsPrefix = await resolveNsPrefix(db, char.gameId);
   const { profile, talents, equipment } = await fetchFullProfile(
     adapter,
     char.name,
     char.realm!,
     char.region!,
-    variant,
+    nsPrefix,
   );
   await db
     .update(schema.characters)

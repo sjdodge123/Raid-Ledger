@@ -2,7 +2,6 @@
  * Blizzard API constants, types, and static lookup data.
  * Extracted from blizzard.service.ts for file size compliance (ROK-711).
  */
-import type { WowGameVariant } from '@raid-ledger/contract';
 import type { MemoryCacheEntry } from '../../common/swr-cache';
 
 // ── Exported Interfaces ──────────────────────────────────────────────────────
@@ -182,33 +181,21 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
 };
 
 /**
- * Map game variant -> Blizzard API namespace prefix.
+ * Build Blizzard API namespace prefixes from a game's stored prefix.
+ * Null means retail (no prefix). Non-null is appended with a hyphen.
+ * @param apiNamespacePrefix - The game's stored namespace prefix (e.g., 'classic1x', 'classicann', null for retail)
  */
-export function getNamespacePrefixes(variant: WowGameVariant): {
+export function getNamespacePrefixes(apiNamespacePrefix: string | null): {
   static: string;
   dynamic: string;
   profile: string;
 } {
-  switch (variant) {
-    case 'classic_era':
-      return {
-        static: 'static-classic1x',
-        dynamic: 'dynamic-classic1x',
-        profile: 'profile-classic1x',
-      };
-    case 'classic':
-      return {
-        static: 'static-classic',
-        dynamic: 'dynamic-classic',
-        profile: 'profile-classic',
-      };
-    case 'classic_anniversary':
-      return {
-        static: 'static-classicann',
-        dynamic: 'dynamic-classicann',
-        profile: 'profile-classicann',
-      };
-    default:
-      return { static: 'static', dynamic: 'dynamic', profile: 'profile' };
+  if (!apiNamespacePrefix) {
+    return { static: 'static', dynamic: 'dynamic', profile: 'profile' };
   }
+  return {
+    static: `static-${apiNamespacePrefix}`,
+    dynamic: `dynamic-${apiNamespacePrefix}`,
+    profile: `profile-${apiNamespacePrefix}`,
+  };
 }

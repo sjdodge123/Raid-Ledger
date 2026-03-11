@@ -7,10 +7,17 @@ import type {
   ExternalContentInstanceDetail,
 } from '../plugin-host/extension-types';
 import type { WowGameVariant } from '@raid-ledger/contract';
+import { ALL_WOW_GAME_SLUGS } from './manifest';
 
+/**
+ * Content provider bridging ContentProvider interface to BlizzardService.
+ * The `gameVariant` parameter is passed through from the caller.
+ * For realm fetching, it carries apiNamespacePrefix (null for retail).
+ * For instance fetching, it still carries WowGameVariant for content filtering.
+ */
 @Injectable()
 export class BlizzardContentProvider implements ContentProvider {
-  readonly gameSlugs = ['world-of-warcraft', 'world-of-warcraft-classic'];
+  readonly gameSlugs = ALL_WOW_GAME_SLUGS;
 
   constructor(private readonly blizzardService: BlizzardService) {}
 
@@ -18,10 +25,7 @@ export class BlizzardContentProvider implements ContentProvider {
     region: string,
     gameVariant?: string,
   ): Promise<ExternalRealm[]> {
-    return this.blizzardService.fetchRealmList(
-      region,
-      (gameVariant as WowGameVariant) ?? 'retail',
-    );
+    return this.blizzardService.fetchRealmList(region, gameVariant ?? null);
   }
 
   async fetchInstances(

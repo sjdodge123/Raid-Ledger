@@ -4,6 +4,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { SETTINGS_EVENTS } from '../../settings/settings.types';
 import { memorySwr } from '../../common/swr-cache';
 import type { WowGameVariant } from '@raid-ledger/contract';
+
 import {
   type BlizzardCharacterEquipment,
   type BlizzardCharacterProfile,
@@ -65,18 +66,21 @@ export class BlizzardService {
     return SPEC_ROLE_MAP[spec] ?? null;
   }
 
+  /** Fetch a character profile from the Blizzard API.
+   * @param apiNamespacePrefix - From the game row (null for retail)
+   */
   async fetchCharacterProfile(
     name: string,
     realm: string,
     region: string,
-    gameVariant: WowGameVariant = 'retail',
+    apiNamespacePrefix: string | null = null,
   ): Promise<BlizzardCharacterProfile> {
     const token = await this.getAccessToken(region);
     const data = await profileH.fetchProfileData(
       name,
       realm,
       region,
-      gameVariant,
+      apiNamespacePrefix,
       token,
       this.logger,
     );
@@ -85,36 +89,42 @@ export class BlizzardService {
       data.avatarUrl,
       data.renderUrl,
       data.itemLevel,
-      gameVariant,
+      apiNamespacePrefix,
       region,
       data.realmSlug,
       data.charName,
     );
   }
 
+  /** Fetch character equipment from the Blizzard API.
+   * @param apiNamespacePrefix - From the game row (null for retail)
+   */
   async fetchCharacterEquipment(
     name: string,
     realm: string,
     region: string,
-    gameVariant: WowGameVariant = 'retail',
+    apiNamespacePrefix: string | null = null,
   ): Promise<BlizzardCharacterEquipment | null> {
     const token = await this.getAccessToken(region);
     return equipH.fetchCharacterEquipment(
       name,
       realm,
       region,
-      gameVariant,
+      apiNamespacePrefix,
       token,
       this.logger,
     );
   }
 
+  /** Fetch character specializations from the Blizzard API.
+   * @param apiNamespacePrefix - From the game row (null for retail)
+   */
   async fetchCharacterSpecializations(
     name: string,
     realm: string,
     region: string,
     characterClass: string,
-    gameVariant: WowGameVariant = 'retail',
+    apiNamespacePrefix: string | null = null,
   ): Promise<InferredSpecialization> {
     try {
       const token = await this.getAccessToken(region);
@@ -122,7 +132,7 @@ export class BlizzardService {
         name,
         realm,
         region,
-        gameVariant,
+        apiNamespacePrefix,
       );
       const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/specializations?namespace=${namespace}&locale=en_US`;
       const res = await fetch(url, {
@@ -137,19 +147,23 @@ export class BlizzardService {
     }
   }
 
+  /** Fetch the realm list for a given region and namespace.
+   * @param apiNamespacePrefix - From the game row (null for retail)
+   */
   async fetchRealmList(
     region: string,
-    gameVariant: WowGameVariant = 'retail',
+    apiNamespacePrefix: string | null = null,
   ): Promise<WowRealm[]> {
+    const cacheKey = `${region}:${apiNamespacePrefix ?? 'retail'}`;
     return memorySwr({
       cache: this.realmCache,
-      key: `${region}:${gameVariant}`,
+      key: cacheKey,
       ttlMs: REALM_CACHE_TTL,
       fetcher: async () => {
         const token = await this.getAccessToken(region);
         return instH.fetchRealmListFromApi(
           region,
-          gameVariant,
+          apiNamespacePrefix,
           token,
           this.logger,
         );

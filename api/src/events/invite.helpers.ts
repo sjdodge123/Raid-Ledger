@@ -90,16 +90,14 @@ export async function resolveGameInfo(
   };
 }
 
+/** Resolve Blizzard-specific hints for an invite from the game row. */
 async function resolveBlizzardHints(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
   createdBy: number,
 ) {
   const [inviterChar] = await db
-    .select({
-      realm: schema.characters.realm,
-      gameVariant: schema.characters.gameVariant,
-    })
+    .select({ realm: schema.characters.realm })
     .from(schema.characters)
     .where(
       and(
@@ -108,9 +106,14 @@ async function resolveBlizzardHints(
       ),
     )
     .limit(1);
+  const [gameRow] = await db
+    .select({ apiNamespacePrefix: schema.games.apiNamespacePrefix })
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
   return {
     inviterRealm: inviterChar?.realm ?? null,
-    gameVariant: inviterChar?.gameVariant ?? null,
+    gameVariant: gameRow?.apiNamespacePrefix ?? null,
   };
 }
 
