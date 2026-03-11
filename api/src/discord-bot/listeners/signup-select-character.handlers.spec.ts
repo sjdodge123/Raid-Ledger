@@ -7,22 +7,7 @@
 import { handleCharacterSelectMenu } from './signup-select-character.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import type { StringSelectMenuInteraction } from 'discord.js';
-
-function createMockDeps(): SignupInteractionDeps {
-  return {
-    db: { select: jest.fn() } as unknown as SignupInteractionDeps['db'],
-    logger: { error: jest.fn() } as unknown as SignupInteractionDeps['logger'],
-    signupsService: {
-      signup: jest.fn().mockResolvedValue({ id: 1, assignedSlot: 'dps' }),
-      confirmSignup: jest.fn().mockResolvedValue(undefined),
-      updateStatus: jest.fn().mockResolvedValue(undefined),
-    } as unknown as SignupInteractionDeps['signupsService'],
-    charactersService: {
-      findOne: jest.fn(),
-    } as unknown as SignupInteractionDeps['charactersService'],
-    updateEmbedSignupCount: jest.fn().mockResolvedValue(undefined),
-  } as unknown as SignupInteractionDeps;
-}
+import { createMockDeps } from './signup-handlers.spec-helpers';
 
 describe('handleCharacterSelectMenu — non-MMO (ROK-775)', () => {
   it('passes preferredRoles derived from character', async () => {

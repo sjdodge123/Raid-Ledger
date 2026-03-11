@@ -1,31 +1,9 @@
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
-import type { ButtonInteraction } from 'discord.js';
-
-/**
- * Creates minimal mock deps for testing signup-game handlers.
- * Only stubs the methods used by the single-character signup path.
- */
-function createMockDeps(): SignupInteractionDeps {
-  return {
-    db: { select: jest.fn() } as unknown as SignupInteractionDeps['db'],
-    logger: { error: jest.fn() } as unknown as SignupInteractionDeps['logger'],
-    signupsService: {
-      signup: jest.fn().mockResolvedValue({ id: 1, assignedSlot: 'dps' }),
-      confirmSignup: jest.fn().mockResolvedValue(undefined),
-    } as unknown as SignupInteractionDeps['signupsService'],
-    charactersService: {
-      findAllForUser: jest.fn(),
-    } as unknown as SignupInteractionDeps['charactersService'],
-    updateEmbedSignupCount: jest.fn().mockResolvedValue(undefined),
-  } as unknown as SignupInteractionDeps;
-}
-
-function createMockInteraction(): ButtonInteraction {
-  return {
-    editReply: jest.fn().mockResolvedValue(undefined),
-  } as unknown as ButtonInteraction;
-}
+import {
+  createMockDeps,
+  createMockButtonInteraction,
+} from './signup-handlers.spec-helpers';
 
 const MOCK_EVENT = {
   id: 10,
@@ -41,7 +19,7 @@ const MOCK_USER = {
 describe('tryGameSignupFlow — single character path (ROK-775)', () => {
   it('passes preferredRoles from character role to signup', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const char = {
       id: 'char-uuid-1',
       name: 'TestChar',
@@ -77,7 +55,7 @@ describe('tryGameSignupFlow — single character path (ROK-775)', () => {
 
   it('passes roleOverride over role when set', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const char = {
       id: 'char-uuid-2',
       name: 'TankChar',
@@ -111,7 +89,7 @@ describe('tryGameSignupFlow — single character path (ROK-775)', () => {
 
   it('omits preferredRoles when character has no role', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const char = {
       id: 'char-uuid-3',
       name: 'NoRoleChar',
@@ -162,7 +140,7 @@ describe('tryGameSignupFlow — adversarial edge cases (ROK-775)', () => {
 
   it('uses roleOverride when role is null', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const char = {
       id: 'edge-1',
       name: 'NullRoleChar',
@@ -186,7 +164,7 @@ describe('tryGameSignupFlow — adversarial edge cases (ROK-775)', () => {
 
   it('confirms signup with character id after signup', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const char = {
       id: 'edge-2',
       name: 'ConfirmChar',
@@ -210,7 +188,7 @@ describe('tryGameSignupFlow — adversarial edge cases (ROK-775)', () => {
 
   it('does not pass preferredRoles for no-character signup', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
 
     (deps.db.select as jest.Mock).mockReturnValue({
       from: jest.fn().mockReturnValue({
@@ -236,7 +214,7 @@ describe('tryGameSignupFlow — adversarial edge cases (ROK-775)', () => {
 
   it('returns false when game is not found', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
 
     (deps.db.select as jest.Mock).mockReturnValue({
       from: jest.fn().mockReturnValue({
@@ -260,7 +238,7 @@ describe('tryGameSignupFlow — adversarial edge cases (ROK-775)', () => {
 
   it('updates embed signup count after single char signup', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const char = {
       id: 'edge-3',
       name: 'CountChar',
