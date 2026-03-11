@@ -6,29 +6,10 @@
  */
 import { handleLinkedTentative } from './signup-status-tentative.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
-import type { ButtonInteraction } from 'discord.js';
-
-function createMockDeps(): SignupInteractionDeps {
-  return {
-    db: { select: jest.fn() } as unknown as SignupInteractionDeps['db'],
-    logger: { error: jest.fn() } as unknown as SignupInteractionDeps['logger'],
-    signupsService: {
-      signup: jest.fn().mockResolvedValue({ id: 1, assignedSlot: 'dps' }),
-      confirmSignup: jest.fn().mockResolvedValue(undefined),
-      updateStatus: jest.fn().mockResolvedValue(undefined),
-    } as unknown as SignupInteractionDeps['signupsService'],
-    charactersService: {
-      findAllForUser: jest.fn(),
-    } as unknown as SignupInteractionDeps['charactersService'],
-    updateEmbedSignupCount: jest.fn().mockResolvedValue(undefined),
-  } as unknown as SignupInteractionDeps;
-}
-
-function createMockInteraction(): ButtonInteraction {
-  return {
-    editReply: jest.fn().mockResolvedValue(undefined),
-  } as unknown as ButtonInteraction;
-}
+import {
+  createMockDeps,
+  createMockButtonInteraction,
+} from './signup-handlers.spec-helpers';
 
 const MOCK_USER = {
   id: 42,
@@ -37,7 +18,7 @@ const MOCK_USER = {
 describe('handleLinkedTentative — single char path (ROK-775)', () => {
   it('passes preferredRoles from character to signup', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
 
     // First select: fetchEvent
     const event = {
@@ -85,7 +66,7 @@ describe('handleLinkedTentative — single char path (ROK-775)', () => {
 
   it('uses roleOverride when set on the character', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const event = {
       id: 10,
       title: 'Raid',
@@ -153,7 +134,7 @@ describe('handleLinkedTentative — adversarial edge cases (ROK-775)', () => {
 
   it('omits preferredRoles when character has null role', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const event = {
       id: 10,
       title: 'Raid',
@@ -179,7 +160,7 @@ describe('handleLinkedTentative — adversarial edge cases (ROK-775)', () => {
 
   it('sets tentative status after signup with preferredRoles', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const event = {
       id: 10,
       title: 'Raid',
@@ -209,7 +190,7 @@ describe('handleLinkedTentative — adversarial edge cases (ROK-775)', () => {
 
   it('replies "Event not found" when event does not exist', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
 
     (deps.db.select as jest.Mock).mockReturnValueOnce({
       from: jest.fn().mockReturnValue({
@@ -229,7 +210,7 @@ describe('handleLinkedTentative — adversarial edge cases (ROK-775)', () => {
 
   it('uses roleOverride when role is null on single char', async () => {
     const deps = createMockDeps();
-    const interaction = createMockInteraction();
+    const interaction = createMockButtonInteraction();
     const event = {
       id: 10,
       title: 'Raid',

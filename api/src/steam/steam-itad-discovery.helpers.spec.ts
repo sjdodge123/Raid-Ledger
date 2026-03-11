@@ -1,5 +1,6 @@
 import {
   discoverGameViaItad,
+  isFullGame,
   type DiscoveryDeps,
 } from './steam-itad-discovery.helpers';
 import type { ItadGame } from '../itad/itad.constants';
@@ -109,6 +110,109 @@ describe('discoverGameViaItad', () => {
 
       expect(result).toBeNull();
     });
+  });
+
+  describe('DLC filtering (ROK-780)', () => {
+    it('returns null for DLC-type ITAD results', async () => {
+      const dlcGame: ItadGame = {
+        ...FAKE_ITAD_GAME,
+        type: 'dlc',
+        title: 'Elden Ring - Shadow of the Erdtree',
+        slug: 'elden-ring-shadow-of-the-erdtree',
+      };
+      const deps = buildDeps({
+        lookupBySteamAppId: jest.fn().mockResolvedValue(dlcGame),
+      });
+
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for expansion-type ITAD results', async () => {
+      const expansionGame: ItadGame = {
+        ...FAKE_ITAD_GAME,
+        type: 'expansion',
+        title: 'COD: BO2 Nuketown',
+        slug: 'cod-bo2-nuketown',
+      };
+      const deps = buildDeps({
+        lookupBySteamAppId: jest.fn().mockResolvedValue(expansionGame),
+      });
+
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(result).toBeNull();
+    });
+
+    it('allows game-type ITAD results through', async () => {
+      const mockDb = buildMockDb();
+      mockDb.query.games.findFirst
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(undefined);
+      mockDb.insertReturning.mockResolvedValue([{ id: 42 }]);
+
+      const deps = buildDeps({
+        db: mockDb.asDeps,
+        lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
+      });
+
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(result).not.toBeNull();
+      expect(result?.gameId).toBe(42);
+    });
+
+    it('allows package-type ITAD results through', async () => {
+      const mockDb = buildMockDb();
+      mockDb.query.games.findFirst
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(undefined);
+      mockDb.insertReturning.mockResolvedValue([{ id: 43 }]);
+
+      const packageGame: ItadGame = {
+        ...FAKE_ITAD_GAME,
+        type: 'package',
+        title: 'Elden Ring GOTY Edition',
+        slug: 'elden-ring-goty',
+      };
+      const deps = buildDeps({
+        db: mockDb.asDeps,
+        lookupBySteamAppId: jest.fn().mockResolvedValue(packageGame),
+      });
+
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(result).not.toBeNull();
+      expect(result?.gameId).toBe(43);
+    });
+
+    it('does not query DB when DLC is filtered out', async () => {
+      const mockDb = buildMockDb();
+      const dlcGame: ItadGame = { ...FAKE_ITAD_GAME, type: 'dlc' };
+      const deps = buildDeps({
+        db: mockDb.asDeps,
+        lookupBySteamAppId: jest.fn().mockResolvedValue(dlcGame),
+      });
+
+      await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(mockDb.query.games.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isFullGame helper', () => {
+    it.each(['game', 'package'])('returns true for type=%s', (type) => {
+      expect(isFullGame({ ...FAKE_ITAD_GAME, type })).toBe(true);
+    });
+
+    it.each(['dlc', 'expansion', 'bundle', 'demo', ''])(
+      'returns false for type=%s',
+      (type) => {
+        expect(isFullGame({ ...FAKE_ITAD_GAME, type })).toBe(false);
+      },
+    );
   });
 
   describe('ITAD-only creation', () => {
