@@ -15,6 +15,12 @@ const logger = new Logger('ItadHttp');
 const USER_AGENT =
   'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)';
 
+
+/** Strip API key from URL for safe logging. */
+function redactUrl(url: string): string {
+  return url.replace(/key=[^&]+/, 'key=***');
+}
+
 /** Timestamp of the last ITAD API call for rate limiting */
 let lastCallAt = 0;
 
@@ -110,12 +116,12 @@ async function attemptPost<T>(
       return { data: null, retry: true };
     }
     if (!response.ok) {
-      logger.warn(`ITAD POST HTTP ${response.status}: ${url}`);
+      logger.warn(`ITAD POST HTTP ${response.status}: ${redactUrl(url)}`);
       return { data: null, retry: false };
     }
     return { data: (await response.json()) as T, retry: false };
   } catch (error) {
-    logger.error(`ITAD POST fetch error: ${url}`, error);
+    logger.error(`ITAD POST fetch error: ${redactUrl(url)}`, error);
     return { data: null, retry: false };
   }
 }
@@ -139,13 +145,13 @@ async function attemptFetch<T>(
     }
 
     if (!response.ok) {
-      logger.warn(`ITAD HTTP ${response.status}: ${url}`);
+      logger.warn(`ITAD HTTP ${response.status}: ${redactUrl(url)}`);
       return { data: null, retry: false };
     }
 
     return { data: (await response.json()) as T, retry: false };
   } catch (error) {
-    logger.error(`ITAD fetch error: ${url}`, error);
+    logger.error(`ITAD fetch error: ${redactUrl(url)}`, error);
     return { data: null, retry: false };
   }
 }
