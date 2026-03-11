@@ -169,6 +169,15 @@ function useQuestPrepState(eventId: number | undefined) {
     return { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded };
 }
 
+function useUsableQuests(quests: EnrichedDungeonQuestDto[] | undefined, character: ReturnType<typeof useCharacterDetail>['data']) {
+    return useMemo(() => {
+        if (!quests || quests.length === 0) return [];
+        const charClass = character?.class ?? null;
+        const charRace = character?.race ?? null;
+        return deduplicateByName(quests.filter((q) => isQuestUsable(q, charClass, charRace)), charClass, charRace);
+    }, [quests, character]);
+}
+
 /** Quest Prep Panel main component */
 export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterId }: QuestPrepPanelProps) {
     const { user } = useAuth();
@@ -180,23 +189,16 @@ export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterI
     const wowheadVariant = character?.gameVariant ?? variant;
     const equippedBySlot = useEquippedSlotMap(character);
     const coverageMap = useCoverageMap(coverage);
+    const usableQuests = useUsableQuests(quests, character);
     const { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded } = useQuestPrepState(eventId);
     useWowheadTooltips(quests ? [quests, character] : []);
 
     if (!contentInstances.length || instanceIds.length === 0) return null;
     if (isLoading) return <div className="quest-prep-panel"><div className="quest-prep-loading"><span>Loading quest data…</span></div></div>;
     if (!quests || quests.length === 0) return null;
-
-    const charClass = character?.class ?? null;
-    const charRace = character?.race ?? null;
-    const usableQuests = deduplicateByName(
-        quests.filter((q) => isQuestUsable(q, charClass, charRace)),
-        charClass,
-        charRace,
-    );
     if (usableQuests.length === 0 && quests.length > 0) return <QuestPrepEmpty />;
 
-    const sharedProps = { coverageMap, currentUserId: user?.id, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, charClass, characterId, onToggleExpanded: toggleExpanded, onTogglePickedUp: handleTogglePickedUp };
+    const sharedProps = { coverageMap, currentUserId: user?.id, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, charClass: character?.class ?? null, characterId, onToggleExpanded: toggleExpanded, onTogglePickedUp: handleTogglePickedUp };
     return (
         <div className="quest-prep-panel">
             <QuestPrepHeader count={usableQuests.length} />

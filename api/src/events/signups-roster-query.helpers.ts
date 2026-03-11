@@ -145,7 +145,12 @@ export async function getSlotConfigFromGenre(
     .limit(1);
   const genres = (game?.genres as number[]) ?? [];
   return genres.includes(MMO_GENRE_ID)
-    ? { tank: MMO_SLOT_DEFAULTS.tank, healer: MMO_SLOT_DEFAULTS.healer, dps: MMO_SLOT_DEFAULTS.dps, bench: MMO_SLOT_DEFAULTS.bench }
+    ? {
+        tank: MMO_SLOT_DEFAULTS.tank,
+        healer: MMO_SLOT_DEFAULTS.healer,
+        dps: MMO_SLOT_DEFAULTS.dps,
+        bench: MMO_SLOT_DEFAULTS.bench,
+      }
     : { player: 10, bench: 5 };
 }
 
