@@ -3,7 +3,7 @@
  * Extracted from users.service.ts for file size compliance (ROK-711).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, sql, asc, and, gte, desc, ne } from 'drizzle-orm';
+import { eq, sql, asc, and, gte, desc, inArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type {
   ActivityPeriod,
@@ -14,6 +14,7 @@ import {
   mergeActivityWithSteam,
   querySteamPlaytime,
 } from './users-steam-query.helpers';
+import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
 
 /** Basic user columns selected for list endpoints. */
 const USER_LIST_COLUMNS = {
@@ -143,7 +144,7 @@ const HEARTED_GAME_COLUMNS = {
   coverUrl: schema.games.coverUrl,
 } as const;
 
-/** Fetch hearted games excluding Steam library entries (ROK-754). */
+/** Fetch hearted games — only manual/discord/steam sources (ROK-754, ROK-779). */
 export async function fetchHeartedGames(
   db: PostgresJsDatabase<typeof schema>,
   userId: number,
@@ -153,7 +154,7 @@ export async function fetchHeartedGames(
   const offset = (page - 1) * limit;
   const whereClause = and(
     eq(schema.gameInterests.userId, userId),
-    ne(schema.gameInterests.source, 'steam_library'),
+    inArray(schema.gameInterests.source, HEART_SOURCES),
   );
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
