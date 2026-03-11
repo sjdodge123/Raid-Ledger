@@ -793,14 +793,14 @@
   {
     "bossName": "Professor Putricide",
     "expansion": "wotlk",
-    "itemId": 50231,
+    "itemId": 50067,
     "itemName": "Astrylian's Sutured Cinch",
     "slot": "Waist",
     "quality": "Epic",
     "itemLevel": 264,
     "dropRate": 0.1,
     "classRestrictions": null,
-    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_belt_49c.jpg",
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_belt_61.jpg",
     "itemSubclass": "Leather"
   },
   {
@@ -955,74 +955,66 @@
   {
     "bossName": "Aku'mai (SoD)",
     "expansion": "sod",
-    "itemId": 211505,
+    "itemId": 209694,
     "itemName": "Blackfathom Ritual Dagger",
     "slot": "Main Hand",
     "quality": "Rare",
     "itemLevel": 26,
     "dropRate": 0.15,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_shortblade_12.jpg",
     "itemSubclass": "Dagger"
   },
   {
     "bossName": "Aku'mai (SoD)",
     "expansion": "sod",
-    "itemId": 211507,
+    "itemId": 209559,
     "itemName": "Twilight Sage's Walking Stick",
     "slot": "Two-Hand",
     "quality": "Rare",
     "itemLevel": 26,
     "dropRate": 0.15,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_26.jpg",
     "itemSubclass": "Staff"
   },
   {
     "bossName": "Twilight Lord Kelris (SoD)",
     "expansion": "sod",
-    "itemId": 211508,
-    "itemName": "Kelris's Scepter",
-    "slot": "Main Hand",
-    "quality": "Rare",
-    "itemLevel": 25,
+    "itemId": 209561,
+    "itemName": "Rod of the Ancient Sleepwalker",
+    "slot": "Two-Hand",
+    "quality": "Epic",
+    "itemLevel": 30,
     "dropRate": 0.15,
     "classRestrictions": null,
-    "iconUrl": null,
-    "itemSubclass": "Mace"
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_06.jpg",
+    "itemSubclass": "Staff"
   },
   {
     "bossName": "Mekgineer Thermaplugg (SoD)",
     "expansion": "sod",
-    "itemId": 213320,
-    "itemName": "Thermaplugg's Rocket Launcher",
-    "slot": "Ranged",
-    "quality": "Rare",
-    "itemLevel": 40,
+    "itemId": 213416,
+    "itemName": "Thermaplugg's Rocket Cleaver",
+    "slot": "Two-Hand",
+    "quality": "Epic",
+    "itemLevel": 45,
     "dropRate": 0.12,
-    "classRestrictions": [
-      "Warrior",
-      "Hunter",
-      "Rogue"
-    ],
-    "iconUrl": null,
-    "itemSubclass": "Gun"
+    "classRestrictions": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_axe_03.jpg",
+    "itemSubclass": "Axe"
   },
   {
     "bossName": "Shade of Eranikus (SoD)",
     "expansion": "sod",
-    "itemId": 220608,
-    "itemName": "Eranikus's Scale",
+    "itemId": 10835,
+    "itemName": "Crest of Supremacy",
     "slot": "Shield",
-    "quality": "Epic",
-    "itemLevel": 50,
-    "dropRate": 0.1,
-    "classRestrictions": [
-      "Warrior",
-      "Paladin",
-      "Shaman"
-    ],
-    "iconUrl": null,
+    "quality": "Rare",
+    "itemLevel": 56,
+    "dropRate": 0.15,
+    "classRestrictions": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shield_04.jpg",
     "itemSubclass": "Shield"
   },
   {
@@ -3177,14 +3169,14 @@
   {
     "bossName": "Lady Deathwhisper",
     "expansion": "wotlk",
-    "itemId": 50194,
+    "itemId": 49982,
     "itemName": "Heartpierce",
     "slot": "One-Hand",
     "quality": "Epic",
     "itemLevel": 264,
     "dropRate": 0.08,
     "classRestrictions": null,
-    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_shortblade_99.jpg",
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_shortblade_103.jpg",
     "itemSubclass": "Dagger"
   },
   {
@@ -3229,40 +3221,40 @@
   {
     "bossName": "Festergut",
     "expansion": "wotlk",
-    "itemId": 50230,
+    "itemId": 50040,
     "itemName": "Distant Land",
     "slot": "Two-Hand",
     "quality": "Epic",
     "itemLevel": 264,
     "dropRate": 0.08,
     "classRestrictions": null,
-    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_96.jpg",
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_107.jpg",
     "itemSubclass": "Staff"
   },
   {
     "bossName": "Rotface",
     "expansion": "wotlk",
-    "itemId": 50234,
+    "itemId": 50231,
     "itemName": "Rotface's Acidic Blood",
     "slot": "Quest",
     "quality": "Epic",
     "itemLevel": 264,
     "dropRate": 0.1,
     "classRestrictions": null,
-    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_slime_01.jpg",
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/spell_shadow_bloodboil.jpg",
     "itemSubclass": "Miscellaneous"
   },
   {
     "bossName": "Rotface",
     "expansion": "wotlk",
-    "itemId": 50233,
+    "itemId": 51877,
     "itemName": "Taldron's Short-Sighted Helm",
     "slot": "Head",
     "quality": "Epic",
     "itemLevel": 264,
     "dropRate": 0.1,
     "classRestrictions": null,
-    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_helmet_155.jpg",
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_helmet_158.jpg",
     "itemSubclass": "Mail"
   },
   {
@@ -3665,7 +3657,7 @@
     "itemLevel": 24,
     "dropRate": 0.25,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shirt_06.jpg",
     "itemSubclass": "Mail"
   },
   {
@@ -3678,20 +3670,20 @@
     "itemLevel": 22,
     "dropRate": 0.3,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_belt_24.jpg",
     "itemSubclass": "Leather"
   },
   {
     "bossName": "Lady Sarevess (SoD)",
     "expansion": "sod",
-    "itemId": 6910,
+    "itemId": 888,
     "itemName": "Naga Battle Gloves",
     "slot": "Hands",
     "quality": "Rare",
     "itemLevel": 24,
     "dropRate": 0.25,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_gauntlets_13.jpg",
     "itemSubclass": "Leather"
   },
   {
@@ -3704,7 +3696,7 @@
     "itemLevel": 24,
     "dropRate": 0.25,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_42.jpg",
     "itemSubclass": "Staff"
   },
   {
@@ -3717,7 +3709,7 @@
     "itemLevel": 29,
     "dropRate": 0.3,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_gauntlets_17.jpg",
     "itemSubclass": "Leather"
   },
   {
@@ -3730,7 +3722,7 @@
     "itemLevel": 30,
     "dropRate": 0.3,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_15.jpg",
     "itemSubclass": "Staff"
   },
   {
@@ -3743,20 +3735,20 @@
     "itemLevel": 30,
     "dropRate": 0.25,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_shortblade_02.jpg",
     "itemSubclass": "Dagger"
   },
   {
     "bossName": "Avatar of Hakkar (SoD)",
     "expansion": "sod",
-    "itemId": 10837,
+    "itemId": 12462,
     "itemName": "Embrace of the Wind Serpent",
     "slot": "Chest",
     "quality": "Rare",
     "itemLevel": 52,
     "dropRate": 0.2,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_chest_cloth_42.jpg",
     "itemSubclass": "Cloth"
   },
   {
@@ -3769,7 +3761,7 @@
     "itemLevel": 52,
     "dropRate": 0.2,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_mace_11.jpg",
     "itemSubclass": "Mace"
   },
   {
@@ -35463,7 +35455,7 @@
     "itemLevel": 35,
     "dropRate": null,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_pants_plate_26.jpg",
     "itemSubclass": "Plate"
   },
   {
@@ -35762,7 +35754,7 @@
     "itemLevel": 35,
     "dropRate": null,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_boots_cloth_22.jpg",
     "itemSubclass": "Cloth"
   },
   {
@@ -38037,7 +38029,7 @@
     "itemLevel": 35,
     "dropRate": null,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_pants_leather_25.jpg",
     "itemSubclass": "Leather"
   },
   {
@@ -38154,7 +38146,7 @@
     "itemLevel": 35,
     "dropRate": null,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_gauntlets_17.jpg",
     "itemSubclass": "Cloth"
   },
   {
@@ -78012,7 +78004,7 @@
     "itemLevel": 35,
     "dropRate": null,
     "classRestrictions": null,
-    "iconUrl": null,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_pants_plate_26.jpg",
     "itemSubclass": "Plate"
   },
   {
