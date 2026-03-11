@@ -91,7 +91,27 @@ export async function executeItadSearch(
   return { games: persisted, cached: false, source: 'itad' };
 }
 
-/** Enrich all games with IGDB data where Steam app ID is available. */
+/** Concurrency limit for parallel IGDB enrichment calls. */
+const ENRICH_BATCH_SIZE = 5;
+
+/** Enrich a single game with IGDB data if Steam app ID is available. */
+function enrichSingleGame(
+  deps: ItadSearchDeps,
+  game: ItadSearchGame,
+  steamAppId: number | undefined,
+): Promise<GameDetailDto> {
+  const enrichedGame = { ...game, steamAppId };
+  if (!steamAppId) return Promise.resolve(buildItadOnlyDetail(enrichedGame));
+  return deps
+    .enrichFromIgdb(steamAppId)
+    .then((igdb) =>
+      igdb
+        ? mergeItadWithIgdb(enrichedGame, igdb)
+        : buildItadOnlyDetail(enrichedGame),
+    );
+}
+
+/** Enrich all games with IGDB data, batched for concurrency. */
 async function enrichAll(
   deps: ItadSearchDeps,
   games: ItadSearchGame[],
@@ -99,18 +119,16 @@ async function enrichAll(
 ): Promise<GameDetailDto[]> {
   const results: GameDetailDto[] = [];
 
-  for (const game of games) {
-    const steamAppId = steamMap.get(game.id);
-    const enrichedGame = { ...game, steamAppId };
-
-    if (steamAppId) {
-      const igdb = await deps.enrichFromIgdb(steamAppId);
-      if (igdb) {
-        results.push(mergeItadWithIgdb(enrichedGame, igdb));
-        continue;
+  for (let i = 0; i < games.length; i += ENRICH_BATCH_SIZE) {
+    const batch = games.slice(i, i + ENRICH_BATCH_SIZE);
+    const settled = await Promise.allSettled(
+      batch.map((g) => enrichSingleGame(deps, g, steamMap.get(g.id))),
+    );
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        results.push(result.value);
       }
     }
-    results.push(buildItadOnlyDetail(enrichedGame));
   }
 
   return results;
