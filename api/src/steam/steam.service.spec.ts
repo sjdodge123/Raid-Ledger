@@ -63,45 +63,29 @@ describe('SteamService', () => {
       });
     });
 
-    it('discovers unmatched games via ITAD', async () => {
+    it('fires ITAD discovery in the background for unmatched games', async () => {
       const ownedGames = [
         { appid: 100, playtime_forever: 500 },
         { appid: 200, playtime_forever: 300 },
       ];
       (steamHttp.getOwnedGames as jest.Mock).mockResolvedValue(ownedGames);
 
-      // First findMatchingGames: only appid 100 matched
+      // findMatchingGames: only appid 100 matched
       mockDb.where.mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
-
-      // ITAD finds game for appid 200
-      mockItadService.lookupBySteamAppId.mockResolvedValue({
-        id: 'itad-uuid-200',
-        slug: 'test-game',
-        title: 'Test Game',
-        type: 'game',
-        mature: false,
-        assets: { boxart: 'https://example.com/boxart.jpg' },
-      });
-
-      // Insert game row returns
-      mockDb.returning.mockResolvedValueOnce([{ id: 2 }]);
-
-      // Second findMatchingGames: both matched
-      mockDb.where
-        .mockResolvedValueOnce([
-          { id: 1, steamAppId: 100 },
-          { id: 2, steamAppId: 200 },
-        ])
-        // fetchExistingSteamInterests
-        .mockResolvedValueOnce([]);
-
+      // fetchExistingSteamInterests
+      mockDb.where.mockResolvedValueOnce([]);
       // insert interests returns
-      mockDb.returning.mockResolvedValueOnce([{ id: 10 }, { id: 11 }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
 
       const result = await service.syncLibrary(1);
 
-      expect(mockItadService.lookupBySteamAppId).toHaveBeenCalledWith(200);
-      expect(result.imported).toBe(1);
+      // Response reflects only Phase 1 matches (no ITAD discovery in result)
+      expect(result).toMatchObject({
+        totalOwned: 2,
+        matched: 1,
+        newInterests: 1,
+      });
+      expect(result.imported).toBeUndefined();
     });
 
     it('skips ITAD discovery when all games already matched', async () => {
@@ -121,7 +105,48 @@ describe('SteamService', () => {
       expect(result.imported).toBeUndefined();
     });
 
-    it('continues sync when ITAD returns null for a game', async () => {
+    it('returns sync result without waiting for ITAD (ROK-782)', async () => {
+      // Simulate ITAD discovery that takes a very long time
+      let itadResolve: () => void;
+      const slowItadPromise = new Promise<null>((resolve) => {
+        itadResolve = () => resolve(null);
+      });
+      mockItadService.lookupBySteamAppId.mockReturnValue(slowItadPromise);
+
+      const ownedGames = [
+        { appid: 100, playtime_forever: 500 },
+        { appid: 200, playtime_forever: 300 },
+      ];
+      (steamHttp.getOwnedGames as jest.Mock).mockResolvedValue(ownedGames);
+
+      // Only appid 100 matched — appid 200 triggers ITAD discovery
+      mockDb.where.mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
+      // fetchExistingSteamInterests
+      mockDb.where.mockResolvedValueOnce([]);
+      // insert interests returns
+      mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
+
+      // syncLibrary should return immediately without waiting for ITAD
+      const result = await service.syncLibrary(1);
+
+      expect(result).toMatchObject({
+        totalOwned: 2,
+        matched: 1,
+        newInterests: 1,
+      });
+
+      // ITAD was called but hasn't resolved yet — proving fire-and-forget
+      expect(mockItadService.lookupBySteamAppId).toHaveBeenCalledWith(200);
+
+      // Clean up: resolve the pending promise to avoid unhandled rejection
+      itadResolve!();
+    });
+
+    it('logs errors from background ITAD discovery without crashing', async () => {
+      mockItadService.lookupBySteamAppId.mockRejectedValue(
+        new Error('ITAD API down'),
+      );
+
       const ownedGames = [
         { appid: 100, playtime_forever: 500 },
         { appid: 200, playtime_forever: 300 },
@@ -130,25 +155,22 @@ describe('SteamService', () => {
 
       // Only appid 100 matched
       mockDb.where.mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
-
-      // ITAD returns null (demo/playtest)
-      mockItadService.lookupBySteamAppId.mockResolvedValue(null);
-
-      // Second findMatchingGames: still only appid 100
-      mockDb.where
-        .mockResolvedValueOnce([{ id: 1, steamAppId: 100 }])
-        // fetchExistingSteamInterests
-        .mockResolvedValueOnce([]);
-
-      // insert returns
+      // fetchExistingSteamInterests
+      mockDb.where.mockResolvedValueOnce([]);
+      // insert interests returns
       mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
 
+      // Should not throw even though ITAD errors
       const result = await service.syncLibrary(1);
 
       expect(result).toMatchObject({
         totalOwned: 2,
         matched: 1,
+        newInterests: 1,
       });
+
+      // Let microtask queue flush so the .catch() handler runs
+      await new Promise((r) => setImmediate(r));
     });
   });
 });
