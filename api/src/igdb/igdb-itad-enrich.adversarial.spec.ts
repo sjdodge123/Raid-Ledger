@@ -63,10 +63,7 @@ describe('parseIgdbEnrichment — edge cases', () => {
   it('builds screenshot URLs correctly', () => {
     const result = parseIgdbEnrichment({
       id: 2,
-      screenshots: [
-        { image_id: 'ss_001' },
-        { image_id: 'ss_002' },
-      ],
+      screenshots: [{ image_id: 'ss_001' }, { image_id: 'ss_002' }],
     });
 
     expect(result.screenshots).toHaveLength(2);
@@ -156,9 +153,7 @@ describe('parseIgdbEnrichment — edge cases', () => {
     it('extracts twitchGameId via category field', () => {
       const result = parseIgdbEnrichment({
         id: 10,
-        external_games: [
-          { category: 14, uid: 'twitch-123' },
-        ],
+        external_games: [{ category: 14, uid: 'twitch-123' }],
       });
 
       expect(result.twitchGameId).toBe('twitch-123');
@@ -167,9 +162,7 @@ describe('parseIgdbEnrichment — edge cases', () => {
     it('extracts twitchGameId via external_game_source field', () => {
       const result = parseIgdbEnrichment({
         id: 11,
-        external_games: [
-          { external_game_source: 14, uid: 'twitch-456' },
-        ],
+        external_games: [{ external_game_source: 14, uid: 'twitch-456' }],
       });
 
       expect(result.twitchGameId).toBe('twitch-456');

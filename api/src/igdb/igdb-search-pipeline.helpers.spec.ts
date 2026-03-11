@@ -2,7 +2,10 @@
  * Tests for search pipeline wiring (ROK-773).
  * Verifies ITAD-primary with IGDB fallback logic and error handling.
  */
-import { runSearchPipeline, type SearchPipelineParams } from './igdb-search-pipeline.helpers';
+import {
+  runSearchPipeline,
+  type SearchPipelineParams,
+} from './igdb-search-pipeline.helpers';
 
 // Mock the ITAD deps builder
 jest.mock('./igdb-itad-deps.helpers', () => ({

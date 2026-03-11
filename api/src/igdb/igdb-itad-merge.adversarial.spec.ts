@@ -10,9 +10,7 @@ import {
   type IgdbEnrichedData,
 } from './igdb-itad-merge.helpers';
 
-function makeItad(
-  overrides: Partial<ItadSearchGame> = {},
-): ItadSearchGame {
+function makeItad(overrides: Partial<ItadSearchGame> = {}): ItadSearchGame {
   return {
     id: 'uuid-test',
     slug: 'test-game',
@@ -23,9 +21,7 @@ function makeItad(
   };
 }
 
-function makeIgdb(
-  overrides: Partial<IgdbEnrichedData> = {},
-): IgdbEnrichedData {
+function makeIgdb(overrides: Partial<IgdbEnrichedData> = {}): IgdbEnrichedData {
   return {
     igdbId: 999,
     coverUrl: 'https://igdb.com/cover.jpg',
@@ -188,25 +184,19 @@ describe('buildItadOnlyDetail — edge cases', () => {
 
 describe('release date parsing', () => {
   it('parses a valid ISO date string', () => {
-    const result = buildItadOnlyDetail(
-      makeItad({ releaseDate: '2024-01-15' }),
-    );
+    const result = buildItadOnlyDetail(makeItad({ releaseDate: '2024-01-15' }));
 
     expect(result.firstReleaseDate).toBe('2024-01-15T00:00:00.000Z');
   });
 
   it('returns null for undefined release date', () => {
-    const result = buildItadOnlyDetail(
-      makeItad({ releaseDate: undefined }),
-    );
+    const result = buildItadOnlyDetail(makeItad({ releaseDate: undefined }));
 
     expect(result.firstReleaseDate).toBeNull();
   });
 
   it('returns null for invalid date string', () => {
-    const result = buildItadOnlyDetail(
-      makeItad({ releaseDate: 'not-a-date' }),
-    );
+    const result = buildItadOnlyDetail(makeItad({ releaseDate: 'not-a-date' }));
 
     expect(result.firstReleaseDate).toBeNull();
   });
