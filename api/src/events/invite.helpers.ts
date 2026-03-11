@@ -66,7 +66,13 @@ async function findGameRow(
   return row ?? null;
 }
 
-const BLIZZARD_SLUGS = ['world-of-warcraft', 'world-of-warcraft-classic'];
+const BLIZZARD_SLUGS = [
+  'world-of-warcraft',
+  'world-of-warcraft-classic',
+  'world-of-warcraft-burning-crusade-classic-anniversary-edition',
+  'world-of-warcraft-burning-crusade-classic',
+  'world-of-warcraft-wrath-of-the-lich-king',
+];
 
 export async function resolveGameInfo(
   db: PostgresJsDatabase<typeof schema>,

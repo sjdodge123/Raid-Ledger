@@ -7,13 +7,20 @@
  * - character-detail-sections.tsx (equipment links + tooltips)
  */
 
-/** Resolve a WoW game variant to the correct Wowhead domain segments. */
+/**
+ * Resolve a WoW game variant OR apiNamespacePrefix to the correct
+ * Wowhead domain segments. Accepts both old variant strings
+ * (classic_anniversary, classic_era, classic) and new apiNamespacePrefix
+ * values (classicann, classic1x, classic) for backward compatibility.
+ */
 function getWowheadDomain(variant: string | null | undefined): { urlBase: string; tooltipDomain: string } {
     switch (variant) {
         case 'classic_anniversary':
+        case 'classicann':
             return { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' };
         case 'classic':
         case 'classic_era':
+        case 'classic1x':
             return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
         default:
             return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };

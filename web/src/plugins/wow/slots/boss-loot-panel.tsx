@@ -16,20 +16,25 @@ import './quest-prep-panel.css';
 
 /**
  * Map game slug to WoW variant for the boss/loot API.
+ * Handles both short legacy slugs and full ITAD-style variant slugs.
  * Falls back to classic_era for unknown slugs.
  */
 function slugToVariant(gameSlug?: string): string {
     switch (gameSlug) {
         case 'wow-classic-anniversary':
+        case 'world-of-warcraft-burning-crusade-classic-anniversary-edition':
             return 'classic_anniversary';
         case 'world-of-warcraft-classic':
-            return 'classic';
+        case 'wow-classic-era':
+            return 'classic_era';
         case 'wow-classic':
         case 'wow-cata':
+        case 'world-of-warcraft-burning-crusade-classic':
+        case 'world-of-warcraft-wrath-of-the-lich-king':
             return 'classic';
         case 'wow-retail':
+        case 'world-of-warcraft':
             return 'retail';
-        case 'wow-classic-era':
         default:
             return 'classic_era';
     }
