@@ -47,7 +47,10 @@ function buildItadInsertValues(game: GameDetailDto) {
     themes: game.themes,
     platforms: game.platforms,
     screenshots: game.screenshots,
-    videos: game.videos.map((v) => ({ name: v.name ?? '', videoId: v.videoId })),
+    videos: game.videos.map((v) => ({
+      name: v.name ?? '',
+      videoId: v.videoId,
+    })),
     firstReleaseDate: game.firstReleaseDate
       ? new Date(game.firstReleaseDate)
       : null,
@@ -73,13 +76,15 @@ function buildItadUpdateSet(game: GameDetailDto) {
     themes: game.themes,
     platforms: game.platforms,
     screenshots: game.screenshots,
-    videos: game.videos.map((v) => ({ name: v.name ?? '', videoId: v.videoId })),
+    videos: game.videos.map((v) => ({
+      name: v.name ?? '',
+      videoId: v.videoId,
+    })),
     firstReleaseDate: game.firstReleaseDate
       ? new Date(game.firstReleaseDate)
       : null,
     playerCount: game.playerCount,
-    twitchGameId:
-      game.twitchGameId ?? sql`${schema.games.twitchGameId}`,
+    twitchGameId: game.twitchGameId ?? sql`${schema.games.twitchGameId}`,
     crossplay: game.crossplay,
     igdbId: game.igdbId ?? sql`${schema.games.igdbId}`,
     itadGameId: game.itadGameId,
