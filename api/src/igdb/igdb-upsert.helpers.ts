@@ -3,11 +3,7 @@ import { and, eq, inArray, isNull, not, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { GameDetailDto } from '@raid-ledger/contract';
-import {
-  IGDB_CONFIG,
-  WOW_CLASSIC_VARIANT_SLUGS,
-  type IgdbApiGame,
-} from './igdb.constants';
+import { IGDB_CONFIG, type IgdbApiGame } from './igdb.constants';
 import { mapApiGameToDbRow, mapDbRowToDetail } from './igdb.mappers';
 
 const logger = new Logger('IgdbUpsertHelpers');
@@ -42,7 +38,7 @@ function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
 }
 
 /**
- * Upsert a single game row and auto-hide WoW Classic variants.
+ * Upsert a single game row into the database.
  * @param db - Database connection
  * @param row - Mapped database row
  */
@@ -57,16 +53,6 @@ export async function upsertSingleGameRow(
       target: schema.games.igdbId,
       set: buildUpsertSet(row),
     });
-
-  if (WOW_CLASSIC_VARIANT_SLUGS.has(row.slug)) {
-    await db
-      .update(schema.games)
-      .set({ hidden: true })
-      .where(eq(schema.games.igdbId, row.igdbId));
-    logger.log(
-      `Auto-hidden WoW Classic variant "${row.name}" (slug=${row.slug})`,
-    );
-  }
 }
 
 /** Filter out banned games from API results. */

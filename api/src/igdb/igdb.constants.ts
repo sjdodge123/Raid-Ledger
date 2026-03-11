@@ -121,16 +121,3 @@ export const IGDB_CONFIG = {
     'external_games.*',
   ].join(', '),
 } as const;
-
-/**
- * ROK-587: IGDB slugs that are variant-specific WoW Classic entries.
- * These should be auto-hidden during IGDB sync to prevent duplicate
- * game entries -- all WoW Classic variants use the single
- * "world-of-warcraft-classic" game entry and the gameVariant field
- * on characters to distinguish between Classic Era, TBC Anniversary, etc.
- */
-export const WOW_CLASSIC_VARIANT_SLUGS = new Set([
-  'world-of-warcraft-classic-the-burning-crusade',
-  'world-of-warcraft-classic-anniversary',
-  'world-of-warcraft-classic-burning-crusade-classic',
-]);
