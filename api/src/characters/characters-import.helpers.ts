@@ -3,7 +3,7 @@
  * Extracted from characters.service.ts for file size compliance (ROK-719).
  */
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { eq, and, ne, ilike, inArray } from 'drizzle-orm';
+import { eq, and, ne, ilike, inArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type {
@@ -11,6 +11,7 @@ import type {
   ImportWowCharacterDto,
 } from '@raid-ledger/contract';
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
+import { variantToNamespacePrefix } from '../plugins/wow-common/blizzard.constants';
 import {
   fetchFullProfile,
   buildSyncUpdateFields,
@@ -68,17 +69,22 @@ export async function validateUserExists(
     );
 }
 
-/** Resolve game by slug candidates from adapter. */
+/** Resolve game by slug candidates + namespace prefix from adapter. */
 export async function resolveGameByVariant(
   db: Db,
   adapter: CharacterSyncAdapter,
   gameVariant: string,
 ): Promise<typeof schema.games.$inferSelect> {
   const slugCandidates = adapter.resolveGameSlugs(gameVariant);
+  const nsPrefix = variantToNamespacePrefix(gameVariant);
+  const nsFilter =
+    nsPrefix === null
+      ? isNull(schema.games.apiNamespacePrefix)
+      : eq(schema.games.apiNamespacePrefix, nsPrefix);
   const [game] = await db
     .select()
     .from(schema.games)
-    .where(inArray(schema.games.slug, slugCandidates))
+    .where(and(inArray(schema.games.slug, slugCandidates), nsFilter))
     .limit(1);
   if (!game) throw new NotFoundException('Game not found in the games catalog');
   return game;
