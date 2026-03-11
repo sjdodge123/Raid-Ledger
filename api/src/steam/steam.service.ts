@@ -53,7 +53,8 @@ export class SteamService {
 
   /**
    * Sync a user's Steam library to game_interests.
-   * Pipeline: fetch owned → match DB → discover via ITAD → enrich IGDB → insert interests.
+   * Pipeline: fetch owned → match DB → persist interests.
+   * ITAD discovery runs fire-and-forget in the background (ROK-782).
    */
   async syncLibrary(userId: number): Promise<SteamSyncResultDto> {
     const { apiKey, steamId } = await this.validateSyncPrereqs(userId);
@@ -66,18 +67,25 @@ export class SteamService {
 
     // Phase 1: Match existing DB games
     const dbMatches = await this.findMatchingGames(ownedGames);
+    if (dbMatches.length === 0) return this.emptySyncResult(ownedGames.length);
+
+    // Fire-and-forget: discover unmatched games via ITAD in background
     const matchedAppIds = new Set(dbMatches.map((g) => g.steamAppId));
-
-    // Phase 2: Discover unmatched games via ITAD
     const unmatched = ownedGames.filter((g) => !matchedAppIds.has(g.appid));
-    const discovered = await this.discoverUnmatchedGames(unmatched);
+    this.fireAndForgetDiscovery(unmatched);
 
-    // Phase 3: Re-query all matches after discovery
-    const allMatches = await this.findMatchingGames(ownedGames);
-    if (allMatches.length === 0) return this.emptySyncResult(ownedGames.length);
+    // Phase 2: Partition into insert/update and persist (using current matches only)
+    return this.persistInterests(userId, ownedGames, dbMatches);
+  }
 
-    // Phase 4: Partition into insert/update and persist
-    return this.persistInterests(userId, ownedGames, allMatches, discovered);
+  /** Launch ITAD discovery in the background without blocking the caller. */
+  private fireAndForgetDiscovery(unmatched: SteamOwnedGame[]): void {
+    if (unmatched.length === 0 || !this.itadService) return;
+    void this.discoverUnmatchedGames(unmatched).catch((err: unknown) => {
+      this.logger.error(
+        `Background ITAD discovery failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   /** Discover unmatched Steam games via ITAD, returns count of discovered games. */
@@ -129,7 +137,6 @@ export class SteamService {
     userId: number,
     ownedGames: SteamOwnedGame[],
     allMatches: { id: number; steamAppId: number | null }[],
-    discovered: number,
   ): Promise<SteamSyncResultDto> {
     const { toInsert, toUpdate } = await this.partitionGames(
       userId,
@@ -147,7 +154,6 @@ export class SteamService {
       allMatches.length,
       newInterests,
       updatedPlaytime,
-      discovered > 0 ? discovered : undefined,
     );
   }
 
