@@ -54,7 +54,7 @@ function getInitialFormState(): FormState {
         title: '', description: '', game: null, eventTypeId: null,
         durationMinutes: 120, customDuration: false,
         slotType: 'generic', slotTank: MMO_DEFAULTS.tank!, slotHealer: MMO_DEFAULTS.healer!,
-        slotDps: MMO_DEFAULTS.dps!, slotFlex: MMO_DEFAULTS.flex!, slotPlayer: GENERIC_DEFAULTS.player!,
+        slotDps: MMO_DEFAULTS.dps!, slotFlex: 0, slotPlayer: GENERIC_DEFAULTS.player!,
         maxAttendees: '', autoUnbench: true,
         pollDurationHours: 24, pollMode: 'standard',
         selectedTimeSlots: [], customDate: '', customTime: '',
@@ -245,14 +245,13 @@ function PlanRosterSection({ form, updateField }: {
         <FormSection title="Roster">
             <RosterSection
                 slotType={form.slotType} slotTank={form.slotTank} slotHealer={form.slotHealer}
-                slotDps={form.slotDps} slotFlex={form.slotFlex} slotPlayer={form.slotPlayer}
+                slotDps={form.slotDps} slotPlayer={form.slotPlayer}
                 maxAttendees={form.maxAttendees} autoUnbench={form.autoUnbench}
                 maxAttendeesId="planMaxAttendees"
                 onSlotTypeChange={(v) => updateField('slotType', v)}
                 onSlotTankChange={(v) => updateField('slotTank', v)}
                 onSlotHealerChange={(v) => updateField('slotHealer', v)}
                 onSlotDpsChange={(v) => updateField('slotDps', v)}
-                onSlotFlexChange={(v) => updateField('slotFlex', v)}
                 onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
                 onMaxAttendeesChange={(v) => updateField('maxAttendees', v)}
                 onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}

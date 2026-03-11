@@ -64,7 +64,7 @@ function loadTemplateIntoForm(config: TemplateConfigDto, setForm: React.Dispatch
         durationMinutes: config.durationMinutes ?? prev.durationMinutes,
         slotType: config.slotConfig?.type ?? prev.slotType,
         slotTank: config.slotConfig?.tank ?? prev.slotTank, slotHealer: config.slotConfig?.healer ?? prev.slotHealer,
-        slotDps: config.slotConfig?.dps ?? prev.slotDps, slotFlex: config.slotConfig?.flex ?? prev.slotFlex,
+        slotDps: config.slotConfig?.dps ?? prev.slotDps, slotFlex: 0,
         slotPlayer: config.slotConfig?.player ?? prev.slotPlayer,
         maxAttendees: config.maxAttendees ? String(config.maxAttendees) : prev.maxAttendees,
         autoUnbench: config.autoUnbench ?? prev.autoUnbench,
@@ -209,12 +209,12 @@ function RosterFormSection({ form, errors, updateField, setErrors }: {
         <FormSection title="Roster">
             <RosterSection
                 slotType={form.slotType} slotTank={form.slotTank} slotHealer={form.slotHealer}
-                slotDps={form.slotDps} slotFlex={form.slotFlex} slotPlayer={form.slotPlayer}
+                slotDps={form.slotDps} slotPlayer={form.slotPlayer}
                 maxAttendees={form.maxAttendees} autoUnbench={form.autoUnbench}
                 maxAttendeesError={errors.maxAttendees} maxAttendeesId="maxAttendees"
                 onSlotTypeChange={(v) => updateField('slotType', v)} onSlotTankChange={(v) => updateField('slotTank', v)}
                 onSlotHealerChange={(v) => updateField('slotHealer', v)} onSlotDpsChange={(v) => updateField('slotDps', v)}
-                onSlotFlexChange={(v) => updateField('slotFlex', v)} onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
+                onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
                 onMaxAttendeesChange={(v) => { updateField('maxAttendees', v); setErrors((prev) => ({ ...prev, maxAttendees: undefined })); }}
                 onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}
             />

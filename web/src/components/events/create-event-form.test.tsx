@@ -154,25 +154,25 @@ it('decrements slot value when - button is clicked', () => {
 function createeventformSlotStepperBehaviorGroup2() {
 it('decrement button is disabled when value is at minimum (0)', () => {
         renderForm();
-        // Find the Flex row's decrement button (Flex defaults to 5 for MMO)
+        // Find the Tank row's decrement button (Tank defaults to 2 for MMO)
         fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
-        const flexLabel = screen.getByText('Flex');
-        const flexRow = flexLabel.closest('.flex.items-center.justify-between');
-        expect(flexRow).not.toBeNull();
-        const buttons = flexRow!.querySelectorAll('button[type="button"]');
+        const tankLabel = screen.getByText('Tank');
+        const tankRow = tankLabel.closest('.flex.items-center.justify-between');
+        expect(tankRow).not.toBeNull();
+        const buttons = tankRow!.querySelectorAll('button[type="button"]');
         // First button in the row is decrement (-), last is increment (+)
-        const flexDecrement = buttons[0] as HTMLButtonElement;
-        const flexInput = flexRow!.querySelector('input[type="number"]') as HTMLInputElement;
-        expect(flexDecrement).not.toBeUndefined();
+        const tankDecrement = buttons[0] as HTMLButtonElement;
+        const tankInput = tankRow!.querySelector('input[type="number"]') as HTMLInputElement;
+        expect(tankDecrement).not.toBeUndefined();
 
         // Click decrement until we reach 0
-        const initialVal = parseInt(flexInput.value);
+        const initialVal = parseInt(tankInput.value);
         for (let i = 0; i < initialVal; i++) {
-            fireEvent.click(flexDecrement);
+            fireEvent.click(tankDecrement);
         }
 
-        expect(parseInt(flexInput.value)).toBe(0);
-        expect(flexDecrement).toBeDisabled();
+        expect(parseInt(tankInput.value)).toBe(0);
+        expect(tankDecrement).toBeDisabled();
     });
 
 }
@@ -213,14 +213,13 @@ describe('CreateEventForm — desktop layout unchanged', () => {
 });
 
 describe('CreateEventForm — MMO vs generic slot toggle', () => {
-    it('shows MMO role steppers (Tank, Healer, DPS, Flex) when MMO Roles selected', () => {
+    it('shows MMO role steppers (Tank, Healer, DPS) when MMO Roles selected', () => {
         renderForm();
         fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
 
         expect(screen.getByText('Tank')).toBeInTheDocument();
         expect(screen.getByText('Healer')).toBeInTheDocument();
         expect(screen.getByText('DPS')).toBeInTheDocument();
-        expect(screen.getByText('Flex')).toBeInTheDocument();
     });
 
     it('shows Players stepper when Generic Slots selected', () => {
