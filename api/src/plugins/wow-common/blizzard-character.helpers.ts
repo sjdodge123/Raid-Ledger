@@ -3,7 +3,6 @@
  * Extracted from BlizzardService for file size compliance (ROK-711).
  */
 import { Logger } from '@nestjs/common';
-import type { WowGameVariant } from '@raid-ledger/contract';
 import {
   type BlizzardEquipmentItem,
   type BlizzardCharacterEquipment,
@@ -19,12 +18,14 @@ export function specToRole(spec: string): 'tank' | 'healer' | 'dps' | null {
   return SPEC_ROLE_MAP[spec] ?? null;
 }
 
-/** Build API base params for character endpoints. */
+/** Build API base params for character endpoints.
+ * @param apiNamespacePrefix - From the game row (null for retail, e.g. 'classic1x')
+ */
 export function buildCharacterParams(
   name: string,
   realm: string,
   region: string,
-  gameVariant: WowGameVariant,
+  apiNamespacePrefix: string | null,
 ): { realmSlug: string; charName: string; namespace: string; baseUrl: string } {
   const realmSlug = realm
     .toLowerCase()
@@ -32,7 +33,7 @@ export function buildCharacterParams(
     .replace(/\s+/g, '-')
     .trim();
   const charName = name.toLowerCase();
-  const { profile: profilePrefix } = getNamespacePrefixes(gameVariant);
+  const { profile: profilePrefix } = getNamespacePrefixes(apiNamespacePrefix);
   const namespace = `${profilePrefix}-${region}`;
   const baseUrl = `https://${region}.api.blizzard.com`;
   return { realmSlug, charName, namespace, baseUrl };

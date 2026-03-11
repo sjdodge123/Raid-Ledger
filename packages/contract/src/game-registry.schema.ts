@@ -21,6 +21,8 @@ export const GameRegistrySchema = z.object({
     maxCharactersPerUser: z.number().int().positive(),
     /** IGDB genre IDs for filtering (ROK-706) */
     genres: z.array(z.number()).default([]),
+    /** ROK-788: Blizzard API namespace prefix for WoW Classic variants */
+    apiNamespacePrefix: z.string().nullable().optional(),
 });
 
 export type GameRegistryDto = z.infer<typeof GameRegistrySchema>;

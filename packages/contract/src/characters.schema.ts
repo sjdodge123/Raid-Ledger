@@ -214,12 +214,12 @@ export type WowRegion = z.infer<typeof WowRegionSchema>;
 
 /**
  * WoW game variant — determines which Blizzard API namespace to use.
- * - retail: live game (dynamic-{region} / profile-{region})
- * - classic_era: Classic Era/SoD (dynamic-classic1x-{region} / profile-classic1x-{region})
- * - classic: Classic progression / Cata (dynamic-classic-{region} / profile-classic-{region})
- * - classic_anniversary: TBC Anniversary realms (dynamic-classicann-{region} / profile-classicann-{region})
+ * @deprecated ROK-790: Namespace resolution now uses games.apiNamespacePrefix.
+ * This schema is kept for backward compatibility with the frontend import/refresh DTOs.
+ * ROK-791 (frontend) will clean up usage; ROK-789 will drop the character.gameVariant column.
  */
 export const WowGameVariantSchema = z.enum(['retail', 'classic_era', 'classic', 'classic_anniversary']);
+/** @deprecated Use games.apiNamespacePrefix instead (ROK-790). */
 export type WowGameVariant = z.infer<typeof WowGameVariantSchema>;
 
 /**

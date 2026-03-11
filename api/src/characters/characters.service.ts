@@ -173,18 +173,18 @@ export class CharactersService {
       throw new NotFoundException(
         'No character sync adapter found for this game variant',
       );
-    const fetched = await fetchFullProfile(
-      adapter,
-      dto.name,
-      dto.realm,
-      dto.region,
-      dto.gameVariant,
-    );
     await importH.validateUserExists(this.db, userId);
     const game = await importH.resolveGameByVariant(
       this.db,
       adapter,
       dto.gameVariant,
+    );
+    const fetched = await fetchFullProfile(
+      adapter,
+      dto.name,
+      dto.realm,
+      dto.region,
+      game.apiNamespacePrefix ?? null,
     );
     return importH.insertOrMergeImport(
       this.db,
@@ -208,12 +208,13 @@ export class CharactersService {
       dto,
       (v) => this.findCharacterSyncAdapter(v),
     );
+    const nsPrefix = await this.resolveNamespacePrefix(character.gameId);
     const { profile, talents, equipment } = await fetchFullProfile(
       adapter,
       character.name,
       character.realm ?? '',
       region,
-      gameVariant,
+      nsPrefix,
     );
     const fields = buildSyncUpdateFields(profile, equipment, talents, {
       region,
@@ -228,6 +229,16 @@ export class CharactersService {
     );
     this.enqueueEnrichmentsBackground(characterId, character.gameId);
     return result;
+  }
+
+  /** Look up the game's API namespace prefix by game ID. */
+  private async resolveNamespacePrefix(gameId: number): Promise<string | null> {
+    const [game] = await this.db
+      .select({ apiNamespacePrefix: schema.games.apiNamespacePrefix })
+      .from(schema.games)
+      .where(eq(schema.games.id, gameId))
+      .limit(1);
+    return game?.apiNamespacePrefix ?? null;
   }
 
   private enqueueEnrichmentsBackground(

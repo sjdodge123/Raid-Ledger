@@ -7,7 +7,6 @@ export interface RosterSectionProps {
     slotTank: number;
     slotHealer: number;
     slotDps: number;
-    slotFlex: number;
     slotPlayer: number;
     maxAttendees: string;
     autoUnbench: boolean;
@@ -17,7 +16,6 @@ export interface RosterSectionProps {
     onSlotTankChange: (v: number) => void;
     onSlotHealerChange: (v: number) => void;
     onSlotDpsChange: (v: number) => void;
-    onSlotFlexChange: (v: number) => void;
     onSlotPlayerChange: (v: number) => void;
     onMaxAttendeesChange: (v: string) => void;
     onAutoUnbenchChange: (v: boolean) => void;
@@ -45,7 +43,6 @@ function SlotSteppers(props: RosterSectionProps) {
                     <SlotStepper label="Tank" value={props.slotTank} onChange={props.onSlotTankChange} color="bg-blue-500" />
                     <SlotStepper label="Healer" value={props.slotHealer} onChange={props.onSlotHealerChange} color="bg-green-500" />
                     <SlotStepper label="DPS" value={props.slotDps} onChange={props.onSlotDpsChange} color="bg-red-500" />
-                    <SlotStepper label="Flex" value={props.slotFlex} onChange={props.onSlotFlexChange} color="bg-purple-500" />
                 </>
             ) : (
                 <SlotStepper label="Players" value={props.slotPlayer} onChange={props.onSlotPlayerChange} color="bg-indigo-500" />
@@ -93,9 +90,9 @@ export function RosterSection(props: RosterSectionProps) {
     const { maxAttendeesId = 'maxAttendees' } = props;
     const totalSlots = useMemo(() => {
         return props.slotType === 'mmo'
-            ? props.slotTank + props.slotHealer + props.slotDps + props.slotFlex
+            ? props.slotTank + props.slotHealer + props.slotDps
             : props.slotPlayer;
-    }, [props.slotType, props.slotTank, props.slotHealer, props.slotDps, props.slotFlex, props.slotPlayer]);
+    }, [props.slotType, props.slotTank, props.slotHealer, props.slotDps, props.slotPlayer]);
 
     return (
         <>

@@ -105,11 +105,6 @@ export function buildOccupiedPositions(
   return occupied;
 }
 
-export function sortByRolePriority(roles: string[]): string[] {
-  const priority: Record<string, number> = { tank: 0, healer: 1, dps: 2 };
-  return [...roles].sort((a, b) => (priority[a] ?? 99) - (priority[b] ?? 99));
-}
-
 export function findFirstAvailableInSet(
   occupied: Set<number> | undefined,
 ): number {

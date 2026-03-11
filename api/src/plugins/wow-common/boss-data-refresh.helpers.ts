@@ -12,6 +12,17 @@ export const REGION = 'us';
 export const NAMESPACE = `static-${REGION}`;
 export const BASE_URL = `https://${REGION}.api.blizzard.com`;
 
+/** Map loot expansion key to the correct Blizzard API static namespace. */
+export function getItemNamespace(expansion: string): string {
+  const map: Record<string, string> = {
+    classic: `static-classic1x-${REGION}`,
+    tbc: `static-classicann-${REGION}`,
+    wotlk: `static-classic-${REGION}`,
+    cata: `static-classic-${REGION}`,
+  };
+  return map[expansion] ?? NAMESPACE;
+}
+
 /** Blizzard quality type to display name. */
 export const QUALITY_MAP: Record<string, string> = {
   POOR: 'Poor',
@@ -162,14 +173,15 @@ export async function processLootItem(
   item: { id: number; name?: string },
   expansion: string,
 ): Promise<boolean> {
+  const ns = getItemNamespace(expansion);
   const itemDetail = await blizzardService.fetchBlizzardApi<ItemDetail>(
-    `${BASE_URL}/data/wow/item/${item.id}?namespace=${NAMESPACE}&locale=en_US`,
+    `${BASE_URL}/data/wow/item/${item.id}?namespace=${ns}&locale=en_US`,
   );
   if (!itemDetail) return false;
   const quality = QUALITY_MAP[itemDetail.quality?.type || ''] || 'Common';
   if (quality === 'Poor' || quality === 'Common') return false;
   const media = await blizzardService.fetchBlizzardApi<ItemMedia>(
-    `${BASE_URL}/data/wow/media/item/${item.id}?namespace=${NAMESPACE}&locale=en_US`,
+    `${BASE_URL}/data/wow/media/item/${item.id}?namespace=${ns}&locale=en_US`,
   );
   await upsertLootItem(
     db,

@@ -13,7 +13,6 @@ import {
   extractRoleCapacity,
   countFilledPerRole,
   buildOccupiedPositions,
-  sortByRolePriority,
   findFirstAvailableInSet,
   findOldestTentativeOccupant,
   bfsRearrangementChain,
@@ -208,7 +207,7 @@ export async function runAutoAllocation(
   const newSignup = ctx.allSignups.find((s) => s.id === newSignupId);
   if (!newSignup?.preferredRoles || newSignup.preferredRoles.length === 0)
     return;
-  const newPrefs = sortByRolePriority(newSignup.preferredRoles);
+  const newPrefs = newSignup.preferredRoles;
   const placed = await runAllocationStrategies(
     tx,
     eventId,

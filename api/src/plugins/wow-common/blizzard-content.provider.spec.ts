@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BlizzardContentProvider } from './blizzard-content.provider';
 import { BlizzardService } from './blizzard.service';
+import { ALL_WOW_GAME_SLUGS } from './manifest';
 
 let provider: BlizzardContentProvider;
 let mockBlizzardService: {
@@ -70,10 +71,9 @@ describe('BlizzardContentProvider — slugs and realms', () => {
   beforeEach(() => setupEach());
 
   it('should include all WoW game slugs', () => {
-    expect(provider.gameSlugs).toEqual([
-      'world-of-warcraft',
-      'world-of-warcraft-classic',
-    ]);
+    expect(provider.gameSlugs).toEqual(ALL_WOW_GAME_SLUGS);
+    expect(provider.gameSlugs).toContain('world-of-warcraft');
+    expect(provider.gameSlugs).toContain('world-of-warcraft-classic');
   });
 
   describe('fetchRealms()', () => {
@@ -83,20 +83,20 @@ describe('BlizzardContentProvider — slugs and realms', () => {
         { name: 'Stormrage', slug: 'stormrage', id: 2 },
       ];
       mockBlizzardService.fetchRealmList.mockResolvedValue(mockRealms);
-      const result = await provider.fetchRealms('us', 'retail');
+      const result = await provider.fetchRealms('us', 'classic1x');
       expect(result).toBe(mockRealms);
       expect(mockBlizzardService.fetchRealmList).toHaveBeenCalledWith(
         'us',
-        'retail',
+        'classic1x',
       );
     });
 
-    it('should default to retail when no gameVariant specified', async () => {
+    it('should pass null when no gameVariant specified (retail)', async () => {
       mockBlizzardService.fetchRealmList.mockResolvedValue([]);
       await provider.fetchRealms('eu');
       expect(mockBlizzardService.fetchRealmList).toHaveBeenCalledWith(
         'eu',
-        'retail',
+        null,
       );
     });
   });

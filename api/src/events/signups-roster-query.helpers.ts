@@ -121,7 +121,7 @@ export function slotConfigFromEvent(
       tank: (config.tank as number) ?? MMO_SLOT_DEFAULTS.tank,
       healer: (config.healer as number) ?? MMO_SLOT_DEFAULTS.healer,
       dps: (config.dps as number) ?? MMO_SLOT_DEFAULTS.dps,
-      flex: (config.flex as number) ?? MMO_SLOT_DEFAULTS.flex,
+      ...(config.flex != null ? { flex: config.flex as number } : {}),
       bench: (config.bench as number) ?? MMO_SLOT_DEFAULTS.bench,
     };
   }
@@ -145,7 +145,12 @@ export async function getSlotConfigFromGenre(
     .limit(1);
   const genres = (game?.genres as number[]) ?? [];
   return genres.includes(MMO_GENRE_ID)
-    ? { ...MMO_SLOT_DEFAULTS }
+    ? {
+        tank: MMO_SLOT_DEFAULTS.tank,
+        healer: MMO_SLOT_DEFAULTS.healer,
+        dps: MMO_SLOT_DEFAULTS.dps,
+        bench: MMO_SLOT_DEFAULTS.bench,
+      }
     : { player: 10, bench: 5 };
 }
 

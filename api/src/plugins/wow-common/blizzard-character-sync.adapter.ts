@@ -6,26 +6,23 @@ import type {
   ExternalInferredSpecialization,
   ExternalCharacterEquipment,
 } from '../plugin-host/extension-types';
-import type { WowGameVariant } from '@raid-ledger/contract';
+import { ALL_WOW_GAME_SLUGS } from './manifest';
 
+/**
+ * Adapter bridging CharacterSyncAdapter interface to BlizzardService.
+ * The `gameVariant` parameter now carries the game's apiNamespacePrefix
+ * (null for retail, e.g. 'classic1x', 'classicann').
+ */
 @Injectable()
 export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
-  readonly gameSlugs = ['world-of-warcraft', 'world-of-warcraft-classic'];
+  readonly gameSlugs = ALL_WOW_GAME_SLUGS;
 
   constructor(private readonly blizzardService: BlizzardService) {}
 
+  /** @deprecated Game ID is now the lookup key; kept for interface compat. */
   resolveGameSlugs(gameVariant?: string): string[] {
-    if (
-      gameVariant === 'classic_era' ||
-      gameVariant === 'classic' ||
-      gameVariant === 'classic_anniversary'
-    ) {
-      return ['world-of-warcraft-classic'];
-    }
-    if (!gameVariant || gameVariant === 'retail') {
-      return ['world-of-warcraft'];
-    }
-    return [];
+    if (!gameVariant) return ALL_WOW_GAME_SLUGS;
+    return ALL_WOW_GAME_SLUGS;
   }
 
   async fetchProfile(
@@ -38,7 +35,7 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
       name,
       realm,
       region,
-      (gameVariant as WowGameVariant) ?? 'retail',
+      gameVariant ?? null,
     );
   }
 
@@ -54,7 +51,7 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
       realm,
       region,
       characterClass,
-      (gameVariant as WowGameVariant) ?? 'retail',
+      gameVariant ?? null,
     );
   }
 
@@ -68,7 +65,7 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
       name,
       realm,
       region,
-      (gameVariant as WowGameVariant) ?? 'retail',
+      gameVariant ?? null,
     );
     return (
       result ?? {

@@ -209,7 +209,7 @@
   },
   "6723": {
     "name": "Medal of Courage",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "NECK",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_amulet_03.jpg",
@@ -241,7 +241,7 @@
   },
   "6748": {
     "name": "Monkey Ring",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "FINGER",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_14.jpg",
@@ -249,7 +249,7 @@
   },
   "6749": {
     "name": "Tiger Band",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "FINGER",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_13.jpg",
@@ -257,7 +257,7 @@
   },
   "6750": {
     "name": "Snake Hoop",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "FINGER",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_06.jpg",
@@ -265,7 +265,7 @@
   },
   "6751": {
     "name": "Mourning Shawl",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "BACK",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_11.jpg",
@@ -273,7 +273,7 @@
   },
   "6752": {
     "name": "Lancer Boots",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "FEET",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_03.jpg",
@@ -457,7 +457,7 @@
   },
   "9173": {
     "name": "Goblin Transponder",
-    "quality": "Poor",
+    "quality": "Common",
     "slot": null,
     "itemLevel": 1,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_battery_01.jpg",
@@ -481,7 +481,7 @@
   },
   "9527": {
     "name": "Spellshifter Rod",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "TWO_HAND",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_wand_11.jpg",
@@ -489,7 +489,7 @@
   },
   "9531": {
     "name": "Gemshale Pauldrons",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "SHOULDER",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_23.jpg",
@@ -585,7 +585,7 @@
   },
   "9626": {
     "name": "Dwarven Charge",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "TWO_HAND",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_axe_09.jpg",
@@ -593,7 +593,7 @@
   },
   "9627": {
     "name": "Explorers' League Lodestar",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "HELD_IN_OFF_HAND",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_lantern_01.jpg",
@@ -601,7 +601,7 @@
   },
   "10455": {
     "name": "Chained Essence of Eranikus",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "TRINKET",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_stone_03.jpg",
@@ -721,7 +721,7 @@
   },
   "11865": {
     "name": "Rancor Boots",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "FEET",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_02.jpg",
@@ -753,7 +753,7 @@
   },
   "11963": {
     "name": "Penance Spaulders",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "SHOULDER",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_25.jpg",
@@ -761,7 +761,7 @@
   },
   "11964": {
     "name": "Swiftstrike Cudgel",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "ONE_HAND",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_mace_08.jpg",
@@ -769,7 +769,7 @@
   },
   "12000": {
     "name": "Limb Cleaver",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "TWO_HAND",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_axe_02.jpg",
@@ -785,7 +785,7 @@
   },
   "12018": {
     "name": "Conservator Helm",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "HEAD",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_01.jpg",
@@ -793,7 +793,7 @@
   },
   "12021": {
     "name": "Shieldplate Sabatons",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "FEET",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_plate_01.jpg",
@@ -801,7 +801,7 @@
   },
   "12038": {
     "name": "Lagrave's Seal",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "FINGER",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_03.jpg",
@@ -809,7 +809,7 @@
   },
   "12041": {
     "name": "Windshear Leggings",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "LEGS",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_13.jpg",
@@ -817,7 +817,7 @@
   },
   "12049": {
     "name": "Splintsteel Armor",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "CHEST",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_16.jpg",
@@ -833,7 +833,7 @@
   },
   "12061": {
     "name": "Blade of Reckoning",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "ONE_HAND",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_26.jpg",
@@ -841,7 +841,7 @@
   },
   "12062": {
     "name": "Skilled Fighting Blade",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "ONE_HAND",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_21.jpg",
@@ -849,7 +849,7 @@
   },
   "12065": {
     "name": "Ward of the Elements",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "TRINKET",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_02.jpg",
@@ -857,7 +857,7 @@
   },
   "12066": {
     "name": "Shaleskin Cape",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "BACK",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_02.jpg",
@@ -889,7 +889,7 @@
   },
   "12109": {
     "name": "Azure Moon Amice",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "SHOULDER",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_02.jpg",
@@ -897,7 +897,7 @@
   },
   "12110": {
     "name": "Raincaster Drape",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "BACK",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_16.jpg",
@@ -905,7 +905,7 @@
   },
   "12111": {
     "name": "Lavaplate Gauntlets",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "HANDS",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_26.jpg",
@@ -913,7 +913,7 @@
   },
   "12112": {
     "name": "Crypt Demon Bracers",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "WRIST",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_17.jpg",
@@ -921,7 +921,7 @@
   },
   "12113": {
     "name": "Sunborne Cape",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "BACK",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_08.jpg",
@@ -929,7 +929,7 @@
   },
   "12114": {
     "name": "Nightfall Gloves",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "HANDS",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_17.jpg",
@@ -937,7 +937,7 @@
   },
   "12115": {
     "name": "Stalwart Clutch",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "WAIST",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_34.jpg",
@@ -945,7 +945,7 @@
   },
   "12264": {
     "name": "Worg Carrier",
-    "quality": "Uncommon",
+    "quality": "Common",
     "slot": null,
     "itemLevel": 1,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_box_petcarrier_01.jpg",
@@ -961,7 +961,7 @@
   },
   "12529": {
     "name": "Smolderweb Carrier",
-    "quality": "Uncommon",
+    "quality": "Common",
     "slot": null,
     "itemLevel": 1,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_box_birdcage_01.jpg",
@@ -1289,7 +1289,7 @@
   },
   "15858": {
     "name": "Freewind Gloves",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "HANDS",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_16.jpg",
@@ -1297,7 +1297,7 @@
   },
   "15859": {
     "name": "Seapost Girdle",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "WAIST",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_23.jpg",
@@ -1305,7 +1305,7 @@
   },
   "15867": {
     "name": "Prismcharm",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "TRINKET",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_variety_02.jpg",
@@ -1345,7 +1345,7 @@
   },
   "17039": {
     "name": "Skullbreaker",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "ONE_HAND",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_bone_dwarfskull_01.jpg",
@@ -1353,7 +1353,7 @@
   },
   "17042": {
     "name": "Nail Spitter",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "RANGED",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_weapon_rifle_01.jpg",
@@ -1361,7 +1361,7 @@
   },
   "17043": {
     "name": "Zealot's Robe",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "CHEST",
     "itemLevel": 13,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_06.jpg",
@@ -1441,7 +1441,7 @@
   },
   "17768": {
     "name": "Woodseed Hoop",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "FINGER",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_18.jpg",
@@ -1449,7 +1449,7 @@
   },
   "17770": {
     "name": "Branchclaw Gauntlets",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "HANDS",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_30.jpg",
@@ -1457,7 +1457,7 @@
   },
   "17772": {
     "name": "Zealous Shadowshard Pendant",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "NECK",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_06.jpg",
@@ -1465,7 +1465,7 @@
   },
   "17773": {
     "name": "Prodigious Shadowshard Pendant",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "NECK",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_06.jpg",
@@ -1473,7 +1473,7 @@
   },
   "17774": {
     "name": "Mark of the Chosen",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "TRINKET",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_08.jpg",
@@ -1481,7 +1481,7 @@
   },
   "17775": {
     "name": "Acumen Robes",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "CHEST",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_49.jpg",
@@ -1489,7 +1489,7 @@
   },
   "17776": {
     "name": "Sprightring Helm",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "HEAD",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_35.jpg",
@@ -1497,7 +1497,7 @@
   },
   "17777": {
     "name": "Relentless Chain",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "CHEST",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_07.jpg",
@@ -1505,7 +1505,7 @@
   },
   "17778": {
     "name": "Sagebrush Girdle",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "WAIST",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_25.jpg",
@@ -1513,7 +1513,7 @@
   },
   "17779": {
     "name": "Hulkstone Pauldrons",
-    "quality": "Rare",
+    "quality": "Uncommon",
     "slot": "SHOULDER",
     "itemLevel": 12,
     "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_23.jpg",

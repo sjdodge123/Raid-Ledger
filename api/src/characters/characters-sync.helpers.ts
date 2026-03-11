@@ -27,15 +27,17 @@ export interface EnrichedProfile {
 /**
  * Fetch profile, specialization, and equipment from an adapter.
  * Shared across importExternal, refreshExternal, and syncAllCharacters.
+ * @param apiNamespacePrefix - The game's namespace prefix (null for retail)
  */
 export async function fetchFullProfile(
   adapter: CharacterSyncAdapter,
   name: string,
   realm: string,
   region: string,
-  gameVariant: string,
+  apiNamespacePrefix: string | null,
 ): Promise<EnrichedProfile> {
-  const profile = await adapter.fetchProfile(name, realm, region, gameVariant);
+  const nsArg = apiNamespacePrefix ?? undefined;
+  const profile = await adapter.fetchProfile(name, realm, region, nsArg);
 
   let talents: unknown = null;
   if (profile.class) {
@@ -44,19 +46,14 @@ export async function fetchFullProfile(
       realm,
       region,
       profile.class,
-      gameVariant,
+      nsArg,
     );
     if (!profile.spec && inferred.spec) profile.spec = inferred.spec;
     if (!profile.role && inferred.role) profile.role = inferred.role;
     talents = inferred.talents ?? null;
   }
 
-  const equipment = await adapter.fetchEquipment(
-    name,
-    realm,
-    region,
-    gameVariant,
-  );
+  const equipment = await adapter.fetchEquipment(name, realm, region, nsArg);
   return { profile, talents, equipment };
 }
 

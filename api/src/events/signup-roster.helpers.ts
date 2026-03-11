@@ -202,7 +202,7 @@ export function slotConfigFromEvent(
       tank: (config.tank as number) ?? 2,
       healer: (config.healer as number) ?? 4,
       dps: (config.dps as number) ?? 14,
-      flex: (config.flex as number) ?? 5,
+      ...(config.flex != null ? { flex: config.flex as number } : {}),
       bench: (config.bench as number) ?? 0,
     };
   }
@@ -227,7 +227,7 @@ export async function getSlotConfigFromGenre(
 
   const genres = (game?.genres as number[]) ?? [];
   return genres.includes(MMO_GENRE_ID)
-    ? { tank: 2, healer: 4, dps: 14, flex: 5 }
+    ? { tank: 2, healer: 4, dps: 14 }
     : { player: 10, bench: 5 };
 }
 

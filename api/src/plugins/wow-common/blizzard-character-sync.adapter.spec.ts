@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardService } from './blizzard.service';
+import { ALL_WOW_GAME_SLUGS } from './manifest';
 
 let adapter: BlizzardCharacterSyncAdapter;
 let mockBlizzardService: {
@@ -15,165 +16,133 @@ async function setupEach() {
     fetchCharacterSpecializations: jest.fn(),
     fetchCharacterEquipment: jest.fn(),
   };
-
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       BlizzardCharacterSyncAdapter,
       { provide: BlizzardService, useValue: mockBlizzardService },
     ],
   }).compile();
-
-  adapter = module.get<BlizzardCharacterSyncAdapter>(
-    BlizzardCharacterSyncAdapter,
-  );
-}
-
-async function testFetchProfileDelegation() {
-  const mockProfile = {
-    name: 'Thrall',
-    realm: 'area-52',
-    class: 'Shaman',
-    spec: 'Enhancement',
-    role: 'dps' as const,
-    level: 80,
-    race: 'Orc',
-    faction: 'horde',
-    itemLevel: 480,
-    avatarUrl: null,
-    renderUrl: null,
-    profileUrl: null,
-  };
-  mockBlizzardService.fetchCharacterProfile.mockResolvedValue(mockProfile);
-
-  const result = await adapter.fetchProfile(
-    'Thrall',
-    'area-52',
-    'us',
-    'retail',
-  );
-
-  expect(result).toBe(mockProfile);
-  expect(mockBlizzardService.fetchCharacterProfile).toHaveBeenCalledWith(
-    'Thrall',
-    'area-52',
-    'us',
-    'retail',
-  );
+  adapter = module.get(BlizzardCharacterSyncAdapter);
 }
 
 describe('BlizzardCharacterSyncAdapter — slugs', () => {
   beforeEach(() => setupEach());
 
-  describe('gameSlugs', () => {
-    it('should include all WoW game slugs', () => {
-      expect(adapter.gameSlugs).toEqual([
-        'world-of-warcraft',
-        'world-of-warcraft-classic',
-      ]);
-    });
+  it('should include all WoW game slugs (retail + classic variants)', () => {
+    expect(adapter.gameSlugs).toEqual(ALL_WOW_GAME_SLUGS);
+    expect(adapter.gameSlugs).toContain('world-of-warcraft');
+    expect(adapter.gameSlugs).toContain('world-of-warcraft-classic');
   });
 
-  describe('resolveGameSlugs()', () => {
-    it('should return retail slugs for retail variant', () => {
-      expect(adapter.resolveGameSlugs('retail')).toEqual(['world-of-warcraft']);
-    });
+  it('should return all WoW slugs regardless of variant', () => {
+    expect(adapter.resolveGameSlugs('retail')).toEqual(ALL_WOW_GAME_SLUGS);
+    expect(adapter.resolveGameSlugs('classic_era')).toEqual(ALL_WOW_GAME_SLUGS);
+    expect(adapter.resolveGameSlugs('classic1x')).toEqual(ALL_WOW_GAME_SLUGS);
+  });
 
-    it('should return retail slugs when no variant specified', () => {
-      expect(adapter.resolveGameSlugs()).toEqual(['world-of-warcraft']);
-    });
-
-    it('should return classic slugs for classic_era variant', () => {
-      expect(adapter.resolveGameSlugs('classic_era')).toEqual([
-        'world-of-warcraft-classic',
-      ]);
-    });
-
-    it('should return classic slugs for classic variant', () => {
-      expect(adapter.resolveGameSlugs('classic')).toEqual([
-        'world-of-warcraft-classic',
-      ]);
-    });
-
-    it('should return classic slugs for classic_anniversary variant', () => {
-      expect(adapter.resolveGameSlugs('classic_anniversary')).toEqual([
-        'world-of-warcraft-classic',
-      ]);
-    });
-
-    it('should return empty array for unknown variant', () => {
-      expect(adapter.resolveGameSlugs('final-fantasy-xiv-online')).toEqual([]);
-    });
+  it('should return all WoW slugs when no variant specified', () => {
+    expect(adapter.resolveGameSlugs()).toEqual(ALL_WOW_GAME_SLUGS);
   });
 });
 
-describe('BlizzardCharacterSyncAdapter — data fetching', () => {
+describe('BlizzardCharacterSyncAdapter — fetchProfile', () => {
   beforeEach(() => setupEach());
 
-  describe('fetchProfile()', () => {
-    it('should delegate to BlizzardService.fetchCharacterProfile', () =>
-      testFetchProfileDelegation());
-
-    it('should default to retail when no gameVariant specified', async () => {
-      mockBlizzardService.fetchCharacterProfile.mockResolvedValue({});
-      await adapter.fetchProfile('Thrall', 'area-52', 'us');
-      expect(mockBlizzardService.fetchCharacterProfile).toHaveBeenCalledWith(
-        'Thrall',
-        'area-52',
-        'us',
-        'retail',
-      );
-    });
+  it('should delegate to BlizzardService with apiNamespacePrefix', async () => {
+    const mockProfile = {
+      name: 'Thrall',
+      realm: 'area-52',
+      class: 'Shaman',
+      spec: 'Enhancement',
+      role: 'dps' as const,
+      level: 80,
+      race: 'Orc',
+      faction: 'horde',
+      itemLevel: 480,
+      avatarUrl: null,
+      renderUrl: null,
+      profileUrl: null,
+    };
+    mockBlizzardService.fetchCharacterProfile.mockResolvedValue(mockProfile);
+    const result = await adapter.fetchProfile(
+      'Thrall',
+      'area-52',
+      'us',
+      'classic1x',
+    );
+    expect(result).toBe(mockProfile);
+    expect(mockBlizzardService.fetchCharacterProfile).toHaveBeenCalledWith(
+      'Thrall',
+      'area-52',
+      'us',
+      'classic1x',
+    );
   });
 
-  describe('fetchSpecialization()', () => {
-    it('should delegate to BlizzardService.fetchCharacterSpecializations', async () => {
-      const mockSpec = { spec: 'Enhancement', role: 'dps' as const };
-      mockBlizzardService.fetchCharacterSpecializations.mockResolvedValue(
-        mockSpec,
-      );
-      const result = await adapter.fetchSpecialization(
-        'Thrall',
-        'area-52',
-        'us',
-        'Shaman',
-        'retail',
-      );
-      expect(result).toBe(mockSpec);
-      expect(
-        mockBlizzardService.fetchCharacterSpecializations,
-      ).toHaveBeenCalledWith('Thrall', 'area-52', 'us', 'Shaman', 'retail');
-    });
+  it('should pass null when no gameVariant specified (retail)', async () => {
+    mockBlizzardService.fetchCharacterProfile.mockResolvedValue({});
+    await adapter.fetchProfile('Thrall', 'area-52', 'us');
+    expect(mockBlizzardService.fetchCharacterProfile).toHaveBeenCalledWith(
+      'Thrall',
+      'area-52',
+      'us',
+      null,
+    );
+  });
+});
+
+describe('BlizzardCharacterSyncAdapter — fetchSpecialization', () => {
+  beforeEach(() => setupEach());
+
+  it('should delegate to BlizzardService with apiNamespacePrefix', async () => {
+    const mockSpec = { spec: 'Enhancement', role: 'dps' as const };
+    mockBlizzardService.fetchCharacterSpecializations.mockResolvedValue(
+      mockSpec,
+    );
+    const result = await adapter.fetchSpecialization(
+      'Thrall',
+      'area-52',
+      'us',
+      'Shaman',
+      'classic1x',
+    );
+    expect(result).toBe(mockSpec);
+    expect(
+      mockBlizzardService.fetchCharacterSpecializations,
+    ).toHaveBeenCalledWith('Thrall', 'area-52', 'us', 'Shaman', 'classic1x');
+  });
+});
+
+describe('BlizzardCharacterSyncAdapter — fetchEquipment', () => {
+  beforeEach(() => setupEach());
+
+  it('should delegate to BlizzardService with apiNamespacePrefix', async () => {
+    const mockEquipment = {
+      equippedItemLevel: 480,
+      items: [],
+      syncedAt: '2025-01-01T00:00:00.000Z',
+    };
+    mockBlizzardService.fetchCharacterEquipment.mockResolvedValue(
+      mockEquipment,
+    );
+    const result = await adapter.fetchEquipment(
+      'Thrall',
+      'area-52',
+      'us',
+      'classic1x',
+    );
+    expect(result).toBe(mockEquipment);
   });
 
-  describe('fetchEquipment()', () => {
-    it('should delegate to BlizzardService.fetchCharacterEquipment', async () => {
-      const mockEquipment = {
-        equippedItemLevel: 480,
-        items: [],
-        syncedAt: '2025-01-01T00:00:00.000Z',
-      };
-      mockBlizzardService.fetchCharacterEquipment.mockResolvedValue(
-        mockEquipment,
-      );
-      const result = await adapter.fetchEquipment(
-        'Thrall',
-        'area-52',
-        'us',
-        'retail',
-      );
-      expect(result).toBe(mockEquipment);
-    });
-
-    it('should return empty equipment when BlizzardService returns null', async () => {
-      mockBlizzardService.fetchCharacterEquipment.mockResolvedValue(null);
-      const result = await adapter.fetchEquipment(
-        'Thrall',
-        'area-52',
-        'us',
-        'retail',
-      );
-      expect(result.equippedItemLevel).toBeNull();
-      expect(result.items).toEqual([]);
-    });
+  it('should return empty equipment when BlizzardService returns null', async () => {
+    mockBlizzardService.fetchCharacterEquipment.mockResolvedValue(null);
+    const result = await adapter.fetchEquipment(
+      'Thrall',
+      'area-52',
+      'us',
+      'classic1x',
+    );
+    expect(result.equippedItemLevel).toBeNull();
+    expect(result.items).toEqual([]);
   });
 });

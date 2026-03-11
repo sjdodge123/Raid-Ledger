@@ -2,7 +2,6 @@
  * Equipment fetching helpers for BlizzardService.
  * Extracted from blizzard.service.ts for file size compliance (ROK-719).
  */
-import type { WowGameVariant } from '@raid-ledger/contract';
 import type { BlizzardCharacterEquipment } from './blizzard.constants';
 import {
   buildCharacterParams,
@@ -95,7 +94,7 @@ async function fetchRawEquipment(
   name: string,
   realm: string,
   region: string,
-  gameVariant: WowGameVariant,
+  apiNamespacePrefix: string | null,
   token: string,
   logger: Logger,
 ) {
@@ -103,7 +102,7 @@ async function fetchRawEquipment(
     name,
     realm,
     region,
-    gameVariant,
+    apiNamespacePrefix,
   );
   const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/equipment?namespace=${namespace}&locale=en_US`;
   const res = await fetch(url, {
@@ -127,7 +126,7 @@ export async function fetchCharacterEquipment(
   name: string,
   realm: string,
   region: string,
-  gameVariant: WowGameVariant,
+  apiNamespacePrefix: string | null,
   token: string,
   logger: Logger,
 ): Promise<BlizzardCharacterEquipment | null> {
@@ -136,7 +135,7 @@ export async function fetchCharacterEquipment(
       name,
       realm,
       region,
-      gameVariant,
+      apiNamespacePrefix,
       token,
       logger,
     );

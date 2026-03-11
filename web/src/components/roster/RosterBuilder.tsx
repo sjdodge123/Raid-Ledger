@@ -36,7 +36,6 @@ const MMO_ROLE_SLOTS: { role: RosterRole; count: number; label: string; color: s
     { role: 'tank', count: 2, label: 'Tank', color: 'bg-blue-600' },
     { role: 'healer', count: 4, label: 'Healer', color: 'bg-green-600' },
     { role: 'dps', count: 14, label: 'DPS', color: 'bg-red-600' },
-    { role: 'flex', count: 5, label: 'Flex', color: 'bg-purple-600' },
 ];
 
 const GENERIC_ROLE_SLOTS: { role: RosterRole; count: number; label: string; color: string }[] = [
@@ -48,7 +47,7 @@ const BENCH_SLOT = { role: 'bench' as RosterRole, count: 0, label: 'Bench', colo
 function useRosterSlots(slots: RosterBuilderProps['slots']) {
     const isGenericGame = React.useMemo(() => {
         if (!slots) return false;
-        return (slots.player ?? 0) > 0 && !((slots.tank ?? 0) > 0 || (slots.healer ?? 0) > 0 || (slots.dps ?? 0) > 0 || (slots.flex ?? 0) > 0);
+        return (slots.player ?? 0) > 0 && !((slots.tank ?? 0) > 0 || (slots.healer ?? 0) > 0 || (slots.dps ?? 0) > 0);
     }, [slots]);
 
     const roleSlots = React.useMemo(() => {

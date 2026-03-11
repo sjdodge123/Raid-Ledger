@@ -66,7 +66,13 @@ async function findGameRow(
   return row ?? null;
 }
 
-const BLIZZARD_SLUGS = ['world-of-warcraft', 'world-of-warcraft-classic'];
+const BLIZZARD_SLUGS = [
+  'world-of-warcraft',
+  'world-of-warcraft-classic',
+  'world-of-warcraft-burning-crusade-classic-anniversary-edition',
+  'world-of-warcraft-burning-crusade-classic',
+  'world-of-warcraft-wrath-of-the-lich-king',
+];
 
 export async function resolveGameInfo(
   db: PostgresJsDatabase<typeof schema>,
@@ -90,16 +96,14 @@ export async function resolveGameInfo(
   };
 }
 
+/** Resolve Blizzard-specific hints for an invite from the game row. */
 async function resolveBlizzardHints(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
   createdBy: number,
 ) {
   const [inviterChar] = await db
-    .select({
-      realm: schema.characters.realm,
-      gameVariant: schema.characters.gameVariant,
-    })
+    .select({ realm: schema.characters.realm })
     .from(schema.characters)
     .where(
       and(
@@ -108,9 +112,14 @@ async function resolveBlizzardHints(
       ),
     )
     .limit(1);
+  const [gameRow] = await db
+    .select({ apiNamespacePrefix: schema.games.apiNamespacePrefix })
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
   return {
     inviterRealm: inviterChar?.realm ?? null,
-    gameVariant: inviterChar?.gameVariant ?? null,
+    gameVariant: gameRow?.apiNamespacePrefix ?? null,
   };
 }
 

@@ -11,11 +11,24 @@ interface CharacterCreateInlineImportProps {
     eventId?: number;
 }
 
-const WOW_SLUGS = new Set(['world-of-warcraft', 'world-of-warcraft-classic']);
+const WOW_SLUGS = new Set([
+    'world-of-warcraft',
+    'world-of-warcraft-classic',
+    'world-of-warcraft-burning-crusade-classic-anniversary-edition',
+    'world-of-warcraft-burning-crusade-classic',
+    'world-of-warcraft-wrath-of-the-lich-king',
+]);
 
 function isWowSlug(slug: string): boolean {
     return WOW_SLUGS.has(slug);
 }
+
+/** Classic variant game slugs that have a fixed variant (no selector needed). */
+const FIXED_VARIANT_MAP: Record<string, string> = {
+    'world-of-warcraft-burning-crusade-classic-anniversary-edition': 'classic_anniversary',
+    'world-of-warcraft-burning-crusade-classic': 'classic',
+    'world-of-warcraft-wrath-of-the-lich-king': 'classic',
+};
 
 const CLASSIC_VARIANTS = [
     { value: 'classic_anniversary', label: 'Classic Anniversary (TBC)' },
@@ -57,10 +70,12 @@ export function CharacterCreateInlineImport({
     onSuccess, isMain, gameSlug, onModeChange, eventId,
 }: CharacterCreateInlineImportProps) {
     const [mode, setMode] = useState<'manual' | 'import'>('import');
-    const isClassic = gameSlug === 'world-of-warcraft-classic';
-    const { data: variantContext } = useEventVariantContext(eventId, isClassic && !!eventId);
+    const isClassic = !!gameSlug && gameSlug !== 'world-of-warcraft' && isWowSlug(gameSlug);
+    const fixedVariant = (gameSlug && FIXED_VARIANT_MAP[gameSlug]) ?? null;
+    const showSelector = isClassic && !fixedVariant;
+    const { data: variantContext } = useEventVariantContext(eventId, showSelector && !!eventId);
     const [userVariant, setUserVariant] = useState<string | null>(null);
-    const classicVariant = userVariant ?? variantContext?.gameVariant ?? 'classic_anniversary';
+    const classicVariant = fixedVariant ?? userVariant ?? variantContext?.gameVariant ?? 'classic_anniversary';
 
     useEffect(() => { if (gameSlug && isWowSlug(gameSlug)) onModeChange?.('import'); }, [gameSlug, onModeChange]);
     if (!gameSlug || !isWowSlug(gameSlug)) return null;
@@ -71,7 +86,7 @@ export function CharacterCreateInlineImport({
     return (
         <>
             <InlineModeToggle mode={mode} onModeChange={handleModeChange} />
-            {mode === 'import' && isClassic && <InlineClassicSelector classicVariant={classicVariant} onVariantChange={setUserVariant} />}
+            {mode === 'import' && showSelector && <InlineClassicSelector classicVariant={classicVariant} onVariantChange={setUserVariant} />}
             {mode === 'import' && (
                 <WowArmoryImportForm isMain={isMain} gameVariant={gameVariant}
                     defaultRegion={variantContext?.region as import('@raid-ledger/contract').WowRegion | undefined}

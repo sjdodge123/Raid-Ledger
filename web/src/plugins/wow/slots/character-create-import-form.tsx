@@ -4,7 +4,13 @@ import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 import { useEventVariantContext } from '../../../hooks/use-events';
 
-const WOW_SLUGS = new Set(['world-of-warcraft', 'world-of-warcraft-classic']);
+const WOW_SLUGS = new Set([
+    'world-of-warcraft',
+    'world-of-warcraft-classic',
+    'world-of-warcraft-burning-crusade-classic-anniversary-edition',
+    'world-of-warcraft-burning-crusade-classic',
+    'world-of-warcraft-wrath-of-the-lich-king',
+]);
 
 function isWowSlug(slug: string): boolean {
     return WOW_SLUGS.has(slug);
@@ -21,13 +27,27 @@ interface CharacterCreateImportFormProps {
     eventId?: number;
 }
 
+/** Classic variant game slugs that have a fixed variant (no selector needed). */
+const FIXED_CLASSIC_VARIANTS: Record<string, string> = {
+    'world-of-warcraft-burning-crusade-classic-anniversary-edition': 'classic_anniversary',
+    'world-of-warcraft-burning-crusade-classic': 'classic',
+    'world-of-warcraft-wrath-of-the-lich-king': 'classic',
+};
+
+/** Check if the slug is for any WoW Classic variant (including world-of-warcraft-classic). */
+function isClassicSlug(slug: string): boolean {
+    return slug === 'world-of-warcraft-classic' || slug in FIXED_CLASSIC_VARIANTS;
+}
+
 function useImportFormVariant(gameSlug: string, eventId: number | undefined, existingCharacters: CharacterDto[]) {
-    const isClassic = gameSlug === 'world-of-warcraft-classic';
-    const { data: variantContext } = useEventVariantContext(eventId, isClassic && !!eventId);
+    const isClassic = isClassicSlug(gameSlug);
+    const fixedVariant = FIXED_CLASSIC_VARIANTS[gameSlug] ?? null;
+    const { data: variantContext } = useEventVariantContext(eventId, isClassic && !fixedVariant && !!eventId);
     const [userVariant, setUserVariant] = useState<string | null>(null);
-    const wowVariant = isClassic ? (userVariant ?? variantContext?.gameVariant ?? 'classic_anniversary') : 'retail';
+    const wowVariant = !isClassic ? 'retail'
+        : fixedVariant ?? userVariant ?? variantContext?.gameVariant ?? 'classic_anniversary';
     const variantIsMain = useMemo(() => !existingCharacters.some((c) => c.isMain && c.gameVariant === wowVariant), [existingCharacters, wowVariant]);
-    return { isClassic, wowVariant, setUserVariant, variantIsMain };
+    return { isClassic, showVariantSelector: isClassic && !fixedVariant, wowVariant, setUserVariant, variantIsMain };
 }
 
 function TabToggle({ activeTab, onTabChange }: { activeTab: 'manual' | 'import'; onTabChange: (tab: 'manual' | 'import') => void }) {
@@ -72,7 +92,7 @@ export function CharacterCreateImportForm({
 }: CharacterCreateImportFormProps) {
     const systemStatus = useSystemStatus();
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
-    const { wowVariant, setUserVariant, variantIsMain } = useImportFormVariant(gameSlug, eventId, existingCharacters);
+    const { showVariantSelector, wowVariant, setUserVariant, variantIsMain } = useImportFormVariant(gameSlug, eventId, existingCharacters);
 
     useEffect(() => { if (blizzardConfigured) onTabChange('import'); }, [blizzardConfigured, onTabChange]);
     if (!isWowSlug(gameSlug)) return null;
@@ -80,7 +100,7 @@ export function CharacterCreateImportForm({
     return (
         <>
             <TabToggle activeTab={activeTab} onTabChange={onTabChange} />
-            {activeTab === 'import' && blizzardConfigured && <VariantSelector wowVariant={wowVariant} gameSlug={gameSlug} onVariantChange={setUserVariant} />}
+            {activeTab === 'import' && blizzardConfigured && showVariantSelector && <VariantSelector wowVariant={wowVariant} gameSlug={gameSlug} onVariantChange={setUserVariant} />}
             {activeTab === 'import' && (blizzardConfigured
                 ? <WowArmoryImportForm onSuccess={onClose} gameVariant={wowVariant} isMain={variantIsMain} onRegisterValidator={onRegisterValidator} />
                 : <BlizzardNotConfigured />)}

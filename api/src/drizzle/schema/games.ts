@@ -76,6 +76,8 @@ export const games = pgTable('games', {
   maxCharactersPerUser: integer('max_characters_per_user')
     .default(10)
     .notNull(),
+  /** ROK-788: Blizzard API namespace prefix (e.g., 'classic1x', 'classic', 'classicann') */
+  apiNamespacePrefix: text('api_namespace_prefix'),
 });
 
 /**

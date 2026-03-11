@@ -10,7 +10,7 @@ export const DURATION_PRESETS = [
 ] as const;
 
 /** Default slot counts for MMO mode */
-export const MMO_DEFAULTS: SlotConfigDto = { type: 'mmo', tank: 2, healer: 4, dps: 14, flex: 5 };
+export const MMO_DEFAULTS: SlotConfigDto = { type: 'mmo', tank: 2, healer: 4, dps: 14, flex: 0 };
 
 /** Default slot counts for generic mode */
 export const GENERIC_DEFAULTS: SlotConfigDto = { type: 'generic', player: 10 };
@@ -36,12 +36,12 @@ export function getCompositionForCap(cap: number): Pick<SlotState, 'slotTank' | 
     const known: Record<number, Pick<SlotState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex'>> = {
         5:  { slotTank: 1, slotHealer: 1, slotDps: 3, slotFlex: 0 },
         8:  { slotTank: 1, slotHealer: 2, slotDps: 5, slotFlex: 0 },
-        10: { slotTank: 2, slotHealer: 2, slotDps: 5, slotFlex: 1 },
-        20: { slotTank: 2, slotHealer: 4, slotDps: 12, slotFlex: 2 },
-        24: { slotTank: 2, slotHealer: 5, slotDps: 15, slotFlex: 2 },
-        25: { slotTank: 2, slotHealer: 5, slotDps: 15, slotFlex: 3 },
-        30: { slotTank: 2, slotHealer: 6, slotDps: 18, slotFlex: 4 },
-        40: { slotTank: 4, slotHealer: 10, slotDps: 22, slotFlex: 4 },
+        10: { slotTank: 2, slotHealer: 2, slotDps: 6, slotFlex: 0 },
+        20: { slotTank: 2, slotHealer: 4, slotDps: 14, slotFlex: 0 },
+        24: { slotTank: 2, slotHealer: 5, slotDps: 17, slotFlex: 0 },
+        25: { slotTank: 2, slotHealer: 5, slotDps: 18, slotFlex: 0 },
+        30: { slotTank: 2, slotHealer: 6, slotDps: 22, slotFlex: 0 },
+        40: { slotTank: 4, slotHealer: 10, slotDps: 26, slotFlex: 0 },
     };
     if (known[cap]) return known[cap];
     return computeProportionalSlots(cap);
@@ -50,9 +50,8 @@ export function getCompositionForCap(cap: number): Pick<SlotState, 'slotTank' | 
 function computeProportionalSlots(cap: number): Pick<SlotState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex'> {
     const tank = Math.max(1, Math.round(cap * 0.1));
     const healer = Math.max(1, Math.round(cap * 0.2));
-    const flex = Math.round(cap * 0.15);
-    const dps = cap - tank - healer - flex;
-    return { slotTank: tank, slotHealer: healer, slotDps: Math.max(1, dps), slotFlex: flex };
+    const dps = cap - tank - healer;
+    return { slotTank: tank, slotHealer: healer, slotDps: Math.max(1, dps), slotFlex: 0 };
 }
 
 /** Event type definition shape (subset used by applyEventTypeDefaults) */
@@ -85,7 +84,7 @@ function getResetDefaults(): Partial<SlotState> {
     return {
         durationMinutes: 120, customDuration: false, slotType: 'generic',
         slotTank: MMO_DEFAULTS.tank!, slotHealer: MMO_DEFAULTS.healer!,
-        slotDps: MMO_DEFAULTS.dps!, slotFlex: MMO_DEFAULTS.flex!,
+        slotDps: MMO_DEFAULTS.dps!, slotFlex: 0,
         slotPlayer: GENERIC_DEFAULTS.player!, maxAttendees: '',
     };
 }

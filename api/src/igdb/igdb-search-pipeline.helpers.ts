@@ -17,6 +17,7 @@ import {
   type SearchDeps,
 } from './igdb-search-executor.helpers';
 import { fetchFromIgdb, fetchWithRetry } from './igdb-api.helpers';
+import { searchLocalGames } from './igdb-search.helpers';
 
 const logger = new Logger('IgdbSearchPipeline');
 
@@ -57,12 +58,32 @@ export async function runSearchPipeline(
       getAdultFilter: params.getAdultFilter,
     });
     const result = await executeItadSearch(itadDeps, normalized);
-    if (result.games.length > 0) return result;
+    if (result.games.length > 0)
+      return mergeLocalGames(params, result, normalized);
   } catch (err) {
     logger.debug(`ITAD search failed, trying IGDB: ${err}`);
   }
   const deps = buildIgdbSearchDeps(params);
   return executeSearch(deps, query, normalized, triggerRefresh);
+}
+
+/** Merge local DB matches into external results so registered games always appear. */
+async function mergeLocalGames(
+  params: SearchPipelineParams,
+  result: SearchResult,
+  normalized: string,
+): Promise<SearchResult> {
+  try {
+    const adultFilter = await params.getAdultFilter();
+    const local = await searchLocalGames(params.db, normalized, adultFilter);
+    if (local.games.length === 0) return result;
+    const existingSlugs = new Set(result.games.map((g) => g.slug));
+    const missing = local.games.filter((g) => !existingSlugs.has(g.slug));
+    if (missing.length === 0) return result;
+    return { ...result, games: [...result.games, ...missing] };
+  } catch {
+    return result;
+  }
 }
 
 /** Build IGDB-only search dependencies. */

@@ -5,6 +5,7 @@
 import type { WowGameVariant } from '@raid-ledger/contract';
 import type { WowInstance, WowInstanceDetail } from './blizzard.constants';
 import { getNamespacePrefixes } from './blizzard.constants';
+
 import {
   CLASSIC_SUB_INSTANCES,
   CLASSIC_INSTANCE_LEVELS,
@@ -28,14 +29,16 @@ export function enrichInstance(
   };
 }
 
-/** Fetch the realm list from the Blizzard API. */
+/** Fetch the realm list from the Blizzard API.
+ * @param apiNamespacePrefix - From the game row (null for retail, e.g. 'classic1x')
+ */
 export async function fetchRealmListFromApi(
   region: string,
-  gameVariant: WowGameVariant,
+  apiNamespacePrefix: string | null,
   token: string,
   logger: Logger,
 ) {
-  const { dynamic: dynamicPrefix } = getNamespacePrefixes(gameVariant);
+  const { dynamic: dynamicPrefix } = getNamespacePrefixes(apiNamespacePrefix);
   const response = await fetch(
     `https://${region}.api.blizzard.com/data/wow/realm/index?namespace=${dynamicPrefix}-${region}&locale=en_US`,
     { headers: { Authorization: `Bearer ${token}` } },
