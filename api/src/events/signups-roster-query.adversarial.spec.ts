@@ -95,7 +95,6 @@ describe('slotConfigFromEvent', () => {
       tank: 2,
       healer: 4,
       dps: 14,
-      flex: 5,
       bench: 0,
     });
   });
