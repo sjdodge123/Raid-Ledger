@@ -47,7 +47,7 @@ import {
   buildAdultThemeFilter,
   executeIgdbQuery,
 } from './igdb-helpers.barrel';
-import { sortByInterestCount } from './igdb-search-sort.helpers';
+import { sortByRelevance } from './igdb-search-sort.helpers';
 import {
   runSearchPipeline,
   startSearchRefresh,
@@ -203,7 +203,7 @@ export class IgdbService {
     const promise = runSearchPipeline(params, query, normalized, (q, n, k) =>
       this._triggerSearchRefresh(q, n, k),
     )
-      .then((r) => sortByInterestCount(this.db, r))
+      .then((r) => sortByRelevance(this.db, r, normalized))
       .finally(() => this.inFlightSearches.delete(normalized));
     this.inFlightSearches.set(normalized, promise);
     return promise;
