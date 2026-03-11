@@ -36,8 +36,7 @@ async function updatePlaytimeBatch(
   userId: number,
   batch: PlaytimeUpdateEntry[],
 ): Promise<number> {
-  const gameIds = batch.map((e) => e.gameId);
-  const now = new Date();
+  const now = new Date().toISOString();
 
   // Build a parameterized VALUES list: (game_id, playtime_forever, playtime_2weeks)
   const valueFragments = batch.map(
@@ -51,12 +50,11 @@ async function updatePlaytimeBatch(
     SET
       playtime_forever = v.playtime_forever,
       playtime_2weeks = v.playtime_2weeks,
-      last_synced_at = ${now}
+      last_synced_at = ${now}::timestamptz
     FROM (VALUES ${valuesList}) AS v(game_id, playtime_forever, playtime_2weeks)
     WHERE gi.user_id = ${userId}
       AND gi.game_id = v.game_id
       AND gi.source = 'steam_library'
-      AND gi.game_id = ANY(${gameIds}::int[])
     RETURNING gi.id
   `);
 
