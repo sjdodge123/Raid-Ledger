@@ -6,30 +6,31 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
-import type { ItadGamePricingDto } from '@raid-ledger/contract';
-
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
 function buildMockDb(
-  batchResult: Record<string, ItadGamePricingDto | null>,
+  batchResult: Record<string, unknown>,
 ): Record<string, jest.Mock> {
   const db: Record<string, jest.Mock> = {};
   db.select = jest.fn().mockReturnThis();
   db.from = jest.fn().mockReturnThis();
-  db.where = jest.fn().mockResolvedValue(Object.keys(batchResult).map((k) => ({
-    id: Number(k),
-    itadGameId: `itad-${k}`,
-  })));
+  db.where = jest.fn().mockResolvedValue(
+    Object.keys(batchResult).map((k) => ({
+      id: Number(k),
+      itadGameId: `itad-${k}`,
+    })),
+  );
   return db;
 }
 
-function buildMockService(
-  db: Record<string, jest.Mock>,
-): Partial<IgdbService> {
+function buildMockService(db: Record<string, jest.Mock>): Partial<IgdbService> {
   return {
     searchGames: jest.fn(),
     database: db as never,
-    redisClient: { get: jest.fn().mockResolvedValue(null), setex: jest.fn() } as never,
+    redisClient: {
+      get: jest.fn().mockResolvedValue(null),
+      setex: jest.fn(),
+    } as never,
     config: {} as never,
     getGameDetailById: jest.fn() as never,
     enqueueSync: jest.fn() as never,
@@ -49,21 +50,6 @@ async function createController(
   }).compile();
   return module.get<IgdbController>(IgdbController);
 }
-
-const SAMPLE_PRICING: ItadGamePricingDto = {
-  currentBest: {
-    shop: 'Steam',
-    url: 'https://steam.com/app/1',
-    price: 29.99,
-    regularPrice: 59.99,
-    discount: 50,
-  },
-  stores: [],
-  historyLow: null,
-  dealQuality: 'modest',
-  currency: 'USD',
-  itadUrl: null,
-};
 
 // ─── batchPricing — empty / short-circuit paths ──────────────────────────────
 
