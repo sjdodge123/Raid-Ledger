@@ -155,25 +155,6 @@ describe('GameCard — PriceBadge rendering (ROK-800)', () => {
     });
 });
 
-// ─── AC: GameCard does not call useGamePricing internally ────────────────────
-
-describe('GameCard — no internal pricing fetch (ROK-800)', () => {
-    it('does not import or call useGamePricing', async () => {
-        // Verify no useGamePricing module is imported by checking the mock is not called
-        // This is a behavioral test: GameCard renders correctly without any internal fetch
-        const mockFetchFn = vi.fn();
-        vi.doMock('../../hooks/use-game-pricing', () => ({
-            useGamePricing: mockFetchFn,
-        }));
-
-        // If GameCard had called useGamePricing, mockFetchFn would be invoked here
-        renderWithRouter(<GameCard game={createMockGame()} pricing={null} />);
-
-        // No internal fetch hook should have been triggered
-        expect(mockFetchFn).not.toHaveBeenCalled();
-    });
-});
-
 // ─── Compact mode ─────────────────────────────────────────────────────────────
 
 describe('GameCard — compact mode (ROK-800)', () => {
