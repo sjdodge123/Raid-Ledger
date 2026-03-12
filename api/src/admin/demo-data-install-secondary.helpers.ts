@@ -271,7 +271,7 @@ export async function reassignEventCreators(
   await reassignGenEventsRandomly(db, allUsers, genEvents);
 }
 
-/** Reassign first 2 original events to the raid leader. */
+/** Reassign first 2 original events to the raid leader (single query). */
 async function reassignOrigEventsToRaidLeader(
   db: Db,
   userByName: Map<string, typeof schema.users.$inferSelect>,
@@ -279,12 +279,11 @@ async function reassignOrigEventsToRaidLeader(
 ): Promise<void> {
   const raidLeader = userByName.get(ROLE_ACCOUNTS[0].username);
   if (!raidLeader || origEvents.length < 2) return;
-  for (const event of origEvents.slice(0, 2)) {
-    await db
-      .update(schema.events)
-      .set({ creatorId: raidLeader.id })
-      .where(eq(schema.events.id, event.id));
-  }
+  const eventIds = origEvents.slice(0, 2).map((e) => e.id);
+  await db
+    .update(schema.events)
+    .set({ creatorId: raidLeader.id })
+    .where(inArray(schema.events.id, eventIds));
 }
 
 /** Randomly reassign ~30% of generated events to non-admin creators. */
