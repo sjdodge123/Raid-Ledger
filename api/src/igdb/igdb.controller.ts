@@ -32,10 +32,16 @@ import {
   GameActivityResponseDto,
   GameNowPlayingResponseDto,
 } from '@raid-ledger/contract';
-import type { ItadGamePricingDto } from '@raid-ledger/contract';
+import type {
+  ItadGamePricingDto,
+  ItadBatchPricingResponseDto,
+} from '@raid-ledger/contract';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { redisSwr } from '../common/swr-cache';
-import { handleSearchError } from './igdb-controller.helpers';
+import {
+  handleSearchError,
+  fetchGameEventTypes,
+} from './igdb-controller.helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { UserRole } from '@raid-ledger/contract';
@@ -52,7 +58,11 @@ import {
   fetchGameInterestData,
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
-import { fetchGamePricing } from './igdb-pricing.helpers';
+import {
+  fetchGamePricing,
+  fetchBatchGamePricing,
+} from './igdb-pricing.helpers';
+import { parseBatchIds } from './igdb-batch.util';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -137,29 +147,7 @@ export class IgdbController {
   async getGameEventTypes(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<EventTypesResponseDto> {
-    const db = this.igdbService.database;
-    const gameRows = await db
-      .select({ id: schema.games.id, name: schema.games.name })
-      .from(schema.games)
-      .where(eq(schema.games.id, id))
-      .limit(1);
-    if (gameRows.length === 0) throw new NotFoundException('Game not found');
-
-    const game = gameRows[0];
-    const types = await db
-      .select()
-      .from(schema.eventTypes)
-      .where(eq(schema.eventTypes.gameId, id))
-      .orderBy(schema.eventTypes.name);
-    return {
-      data: types.map((t) => ({
-        ...t,
-        defaultPlayerCap: t.defaultPlayerCap ?? null,
-        defaultDurationMinutes: t.defaultDurationMinutes ?? null,
-        createdAt: t.createdAt.toISOString(),
-      })),
-      meta: { total: types.length, gameId: game.id, gameName: game.name },
-    };
+    return fetchGameEventTypes(this.igdbService.database, id);
   }
 
   /** GET /games/interest/batch?ids=1,2,3 -- Batch interest check. */
@@ -169,20 +157,30 @@ export class IgdbController {
     @Query('ids') idsParam: string,
     @Req() req: AuthRequest,
   ): Promise<{ data: Record<string, { wantToPlay: boolean; count: number }> }> {
-    if (!idsParam) return { data: {} };
-    const gameIds = idsParam
-      .split(',')
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((n) => !isNaN(n) && n > 0)
-      .slice(0, 100);
+    const gameIds = parseBatchIds(idsParam);
     if (gameIds.length === 0) return { data: {} };
-    return {
-      data: await batchCheckInterests(
-        this.igdbService.database,
-        gameIds,
-        req.user.id,
-      ),
-    };
+    const data = await batchCheckInterests(
+      this.igdbService.database,
+      gameIds,
+      req.user.id,
+    );
+    return { data };
+  }
+
+  /** GET /games/pricing/batch?ids=1,2,3 -- Batch pricing (ROK-800). */
+  @RateLimit('search')
+  @Get('pricing/batch')
+  async batchPricing(
+    @Query('ids') idsParam: string,
+  ): Promise<ItadBatchPricingResponseDto> {
+    const gameIds = parseBatchIds(idsParam);
+    if (gameIds.length === 0) return { data: {} };
+    const data = await fetchBatchGamePricing(
+      this.igdbService.database,
+      this.itadPriceService,
+      gameIds,
+    );
+    return { data };
   }
 
   /** GET /games/:id/activity -- Community activity for a game. */

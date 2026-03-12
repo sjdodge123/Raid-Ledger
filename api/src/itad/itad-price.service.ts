@@ -51,6 +51,59 @@ export class ItadPriceService {
     return entry;
   }
 
+  /**
+   * Fetch pricing overviews for multiple ITAD games in one request.
+   * Checks per-ID cache first, batch-fetches misses, caches results.
+   * Returns entries only for IDs that have data.
+   */
+  async getOverviewBatch(
+    itadGameIds: string[],
+  ): Promise<ItadOverviewGameEntry[]> {
+    if (itadGameIds.length === 0) return [];
+    const apiKey = await this.getApiKey();
+    if (!apiKey) return [];
+
+    const { cached, missingIds } = await this.checkBatchCache(itadGameIds);
+    if (missingIds.length === 0) return cached;
+
+    const fetched = await this.fetchBatchFromItad(apiKey, missingIds);
+    return [...cached, ...fetched];
+  }
+
+  /** Check cache for each ID, return cached entries and uncached IDs. */
+  private async checkBatchCache(ids: string[]): Promise<{
+    cached: ItadOverviewGameEntry[];
+    missingIds: string[];
+  }> {
+    const cached: ItadOverviewGameEntry[] = [];
+    const missingIds: string[] = [];
+    const results = await Promise.all(
+      ids.map((id) => getCachedPrice<ItadOverviewGameEntry>(this.redis, id)),
+    );
+    for (let i = 0; i < ids.length; i++) {
+      if (results[i]) cached.push(results[i]!);
+      else missingIds.push(ids[i]);
+    }
+    return { cached, missingIds };
+  }
+
+  /** Fetch missing IDs from ITAD API and cache each result. */
+  private async fetchBatchFromItad(
+    apiKey: string,
+    ids: string[],
+  ): Promise<ItadOverviewGameEntry[]> {
+    const response = await itadPost<ItadOverviewResponse>(
+      '/games/overview/v2',
+      { key: apiKey },
+      ids,
+    );
+    if (!response?.prices?.length) return [];
+    await Promise.all(
+      response.prices.map((e) => setCachedPrice(this.redis, e.id, e)),
+    );
+    return response.prices;
+  }
+
   /** Read API key from settings. Returns null if not configured. */
   private async getApiKey(): Promise<string | null> {
     const key = await this.settingsService.getItadApiKey();

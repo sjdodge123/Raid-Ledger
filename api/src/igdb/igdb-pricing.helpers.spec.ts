@@ -412,7 +412,10 @@ describe('fetchGamePricing — itadUrl', () => {
   });
 
   it('returns null itadUrl when urls is missing', async () => {
-    const noUrls = { ...BASE_ENTRY, urls: undefined } as unknown as ItadOverviewGameEntry;
+    const noUrls = {
+      ...BASE_ENTRY,
+      urls: undefined,
+    } as unknown as ItadOverviewGameEntry;
     const db = buildDbWithItadId('uuid-game-1');
     const svc = buildPriceService(noUrls);
 

@@ -1,10 +1,12 @@
 import { useRef, useState, useEffect } from 'react';
-import type { GameDetailDto } from '@raid-ledger/contract';
+import type { GameDetailDto, ItadGamePricingDto } from '@raid-ledger/contract';
 import { GameCard } from './GameCard';
 
 interface GameCarouselProps {
     category: string;
     games: GameDetailDto[];
+    /** Batch pricing map from parent. */
+    pricingMap?: Map<number, ItadGamePricingDto | null>;
 }
 
 const ARROW_CLS = 'absolute top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-surface/90 border border-edge rounded-full flex items-center justify-center text-foreground shadow-lg opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:bg-panel';
@@ -47,7 +49,7 @@ function useCarouselScroll(games: GameDetailDto[]) {
     return { scrollRef, canScrollLeft, canScrollRight, scroll };
 }
 
-export function GameCarousel({ category, games }: GameCarouselProps) {
+export function GameCarousel({ category, games, pricingMap }: GameCarouselProps) {
     const { scrollRef, canScrollLeft, canScrollRight, scroll } = useCarouselScroll(games);
     if (games.length === 0) return null;
 
@@ -57,7 +59,7 @@ export function GameCarousel({ category, games }: GameCarouselProps) {
             <div className="relative">
                 {canScrollLeft && <ScrollArrow direction="left" onClick={() => scroll('left')} />}
                 <div ref={scrollRef} className="flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                    {games.map((game) => <div key={game.id} className="snap-start"><GameCard game={game} compact /></div>)}
+                    {games.map((game) => <div key={game.id} className="snap-start"><GameCard game={game} compact pricing={pricingMap?.get(game.id) ?? null} /></div>)}
                 </div>
                 {canScrollRight && <ScrollArrow direction="right" onClick={() => scroll('right')} />}
             </div>

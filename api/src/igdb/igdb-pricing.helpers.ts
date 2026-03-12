@@ -2,7 +2,7 @@
  * ITAD pricing helpers for the IGDB controller (ROK-419).
  * Maps ITAD overview data to the ItadGamePricing contract schema.
  */
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadPriceService } from '../itad/itad-price.service';
@@ -44,8 +44,57 @@ async function lookupItadGameId(
   return rows[0]?.itadGameId ?? null;
 }
 
+/**
+ * Fetch and map pricing data for multiple games in one batch.
+ * Returns a Record of gameId -> pricing or null.
+ */
+export async function fetchBatchGamePricing(
+  db: PostgresJsDatabase<typeof schema>,
+  itadPriceService: ItadPriceService,
+  gameIds: number[],
+): Promise<Record<string, ItadGamePricingDto | null>> {
+  if (gameIds.length === 0) return {};
+
+  const idMap = await lookupBatchItadIds(db, gameIds);
+  const itadIds = Object.values(idMap).filter(Boolean) as string[];
+  const entries =
+    itadIds.length > 0 ? await itadPriceService.getOverviewBatch(itadIds) : [];
+  return buildBatchResult(gameIds, idMap, entries);
+}
+
+/** Look up ITAD game IDs for multiple games in a single query. */
+async function lookupBatchItadIds(
+  db: PostgresJsDatabase<typeof schema>,
+  gameIds: number[],
+): Promise<Record<number, string | null>> {
+  const rows = await db
+    .select({ id: schema.games.id, itadGameId: schema.games.itadGameId })
+    .from(schema.games)
+    .where(inArray(schema.games.id, gameIds));
+
+  const map: Record<number, string | null> = {};
+  for (const row of rows) map[row.id] = row.itadGameId;
+  return map;
+}
+
+/** Build the batch result mapping game IDs to pricing data. */
+function buildBatchResult(
+  gameIds: number[],
+  idMap: Record<number, string | null>,
+  entries: ItadOverviewGameEntry[],
+): Record<string, ItadGamePricingDto | null> {
+  const entryMap = new Map(entries.map((e) => [e.id, e]));
+  const result: Record<string, ItadGamePricingDto | null> = {};
+  for (const gid of gameIds) {
+    const itadId = idMap[gid];
+    const entry = itadId ? entryMap.get(itadId) : null;
+    result[String(gid)] = entry ? mapOverviewToPricing(entry) : null;
+  }
+  return result;
+}
+
 /** Map an ITAD overview game entry to the contract pricing shape. */
-function mapOverviewToPricing(
+export function mapOverviewToPricing(
   entry: ItadOverviewGameEntry,
 ): ItadGamePricingDto {
   const currentBest = mapCurrentBest(entry);

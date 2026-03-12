@@ -7,6 +7,7 @@ import { useDebouncedValue } from "../hooks/use-debounced-value";
 import { useAuth, isOperatorOrAdmin } from "../hooks/use-auth";
 import { useScrollDirection } from "../hooks/use-scroll-direction";
 import { WantToPlayProvider } from "../hooks/use-want-to-play-batch";
+import { useGamesPricingBatch } from "../hooks/use-games-pricing-batch";
 import { GameCarousel } from "../components/games/GameCarousel";
 import { GameCard } from "../components/games/GameCard";
 import { MobileGameCard } from "../components/games/mobile-game-card";
@@ -16,7 +17,7 @@ import { BottomSheet } from "../components/ui/bottom-sheet";
 import { FAB } from "../components/ui/fab";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
-import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
+import type { GameDetailDto, GameDiscoverRowDto, ItadGamePricingDto } from "@raid-ledger/contract";
 
 type GamesTab = "discover" | "manage";
 
@@ -96,14 +97,15 @@ function ManageTab({ canManage, activeTab, showHidden, setShowHidden }: { canMan
 }
 
 function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData> }) {
+  const pricingMap = useGamesPricingBatch(data.allGameIds);
   return (
     <WantToPlayProvider gameIds={data.allGameIds}>
       <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
       {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
       {data.isSearching ? (
-        <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} debouncedSearch={state.debouncedSearch} />
+        <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} debouncedSearch={state.debouncedSearch} pricingMap={pricingMap} />
       ) : (
-        <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} />
+        <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap} />
       )}
     </WantToPlayProvider>
   );
@@ -196,8 +198,10 @@ function LocalSearchWarning() {
   );
 }
 
-function SearchResults({ searchLoading, searchResults, searchSource, debouncedSearch }: {
-  searchLoading: boolean; searchResults: GameDetailDto[] | undefined; searchSource: string | undefined; debouncedSearch: string;
+type PricingMap = Map<number, ItadGamePricingDto | null>;
+
+function SearchResults({ searchLoading, searchResults, searchSource, debouncedSearch, pricingMap }: {
+  searchLoading: boolean; searchResults: GameDetailDto[] | undefined; searchSource: string | undefined; debouncedSearch: string; pricingMap: PricingMap;
 }): JSX.Element {
   if (searchLoading) return <SearchLoadingSkeleton />;
   if (searchResults && searchResults.length > 0) {
@@ -205,7 +209,7 @@ function SearchResults({ searchLoading, searchResults, searchSource, debouncedSe
       <>
         {searchSource === 'local' && <LocalSearchWarning />}
         <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {searchResults.map((game) => (<GameCard key={game.id} game={game} />))}
+          {searchResults.map((game) => (<GameCard key={game.id} game={game} pricing={pricingMap.get(game.id) ?? null} />))}
         </div>
         <div className="md:hidden grid grid-cols-2 gap-3">
           {searchResults.map((game) => (<MobileGameCard key={game.id} game={game} />))}
@@ -233,11 +237,11 @@ function DiscoverLoadingSkeleton() {
   );
 }
 
-function DiscoverRows({ filteredRows }: { filteredRows: GameDiscoverRowDto[] }) {
+function DiscoverRows({ filteredRows, pricingMap }: { filteredRows: GameDiscoverRowDto[]; pricingMap: PricingMap }) {
   return (
     <div className="space-y-8">
       <div className="hidden md:block space-y-8">
-        {filteredRows.map((row) => (<GameCarousel key={row.slug} category={row.category} games={row.games} />))}
+        {filteredRows.map((row) => (<GameCarousel key={row.slug} category={row.category} games={row.games} pricingMap={pricingMap} />))}
       </div>
       <div className="md:hidden space-y-6">
         {filteredRows.map((row) => (
@@ -253,11 +257,11 @@ function DiscoverRows({ filteredRows }: { filteredRows: GameDiscoverRowDto[] }) 
   );
 }
 
-function DiscoverContent({ discoverLoading, filteredRows, selectedGenres }: {
-  discoverLoading: boolean; filteredRows: GameDiscoverRowDto[] | undefined; selectedGenres: Set<string>;
+function DiscoverContent({ discoverLoading, filteredRows, selectedGenres, pricingMap }: {
+  discoverLoading: boolean; filteredRows: GameDiscoverRowDto[] | undefined; selectedGenres: Set<string>; pricingMap: PricingMap;
 }): JSX.Element {
   if (discoverLoading) return <DiscoverLoadingSkeleton />;
-  if (filteredRows && filteredRows.length > 0) return <DiscoverRows filteredRows={filteredRows} />;
+  if (filteredRows && filteredRows.length > 0) return <DiscoverRows filteredRows={filteredRows} pricingMap={pricingMap} />;
   return (
     <div className="text-center py-16">
       <p className="text-muted text-lg">No games in the library yet</p>

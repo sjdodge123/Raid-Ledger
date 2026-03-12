@@ -49,6 +49,7 @@ export {
     getGameActivity,
     getGameNowPlaying,
     getGamePricing,
+    getGamePricingBatch,
 } from './api/games-api';
 
 // Characters

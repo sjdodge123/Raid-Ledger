@@ -6,6 +6,7 @@ import type {
     GameActivityResponseDto,
     GameNowPlayingResponseDto,
     ItadGamePricingDto,
+    ItadBatchPricingResponseDto,
 } from '@raid-ledger/contract';
 import { GameSearchResponseSchema } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
@@ -58,4 +59,11 @@ export async function getGamePricing(
     gameId: number,
 ): Promise<{ data: ItadGamePricingDto | null }> {
     return fetchApi(`/games/${gameId}/pricing`);
+}
+
+/** Fetch ITAD pricing data for multiple games in one request (ROK-800) */
+export async function getGamePricingBatch(
+    gameIds: number[],
+): Promise<ItadBatchPricingResponseDto> {
+    return fetchApi(`/games/pricing/batch?ids=${gameIds.join(',')}`);
 }
