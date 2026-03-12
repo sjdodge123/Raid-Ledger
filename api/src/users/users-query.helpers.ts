@@ -164,6 +164,15 @@ function playtimeSubquery(userId: number) {
   )`;
 }
 
+/** Base columns for hearted game queries (static, no userId dependency). */
+const HEARTED_GAME_BASE_COLUMNS = {
+  id: schema.games.id,
+  igdbId: schema.games.igdbId,
+  name: schema.games.name,
+  slug: schema.games.slug,
+  coverUrl: schema.games.coverUrl,
+} as const;
+
 /** Fetch hearted games — only manual/discord/steam sources (ROK-754, ROK-779, ROK-805). */
 export async function fetchHeartedGames(
   db: PostgresJsDatabase<typeof schema>,
@@ -182,11 +191,7 @@ export async function fetchHeartedGames(
     .where(whereClause);
   const rows = await db
     .select({
-      id: schema.games.id,
-      igdbId: schema.games.igdbId,
-      name: schema.games.name,
-      slug: schema.games.slug,
-      coverUrl: schema.games.coverUrl,
+      ...HEARTED_GAME_BASE_COLUMNS,
       playtimeSeconds: playtimeSubquery(userId),
     })
     .from(schema.gameInterests)
