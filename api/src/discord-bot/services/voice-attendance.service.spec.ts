@@ -300,6 +300,156 @@ describe('VoiceAttendanceService', () => {
       );
       expect(result).toEqual([{ eventId: 30, gameId: null }]);
     });
+
+    it('uses first matching binding when channel has both game-voice-monitor and general-lobby (ROK-785)', async () => {
+      // Channel has two bindings — game-voice-monitor listed first.
+      // The fix uses Array.find(), so the first match wins.
+      // This test guards that find() returns one binding, not both.
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-dual',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 7,
+        },
+        {
+          channelId: 'voice-ch-dual',
+          bindingPurpose: 'general-lobby',
+          gameId: null,
+        },
+      ]);
+      mockQueryActiveEvents.mockResolvedValue([{ eventId: 50, gameId: 7 }]);
+
+      const result = await service.findActiveScheduledEvents('voice-ch-dual');
+
+      // Only one call to queryActiveEvents — the first matching binding wins.
+      expect(mockQueryActiveEvents).toHaveBeenCalledTimes(1);
+      // game-voice-monitor is first, so gameId=7 filter is applied.
+      expect(mockQueryActiveEvents).toHaveBeenCalledWith(
+        mockDb,
+        7,
+        expect.any(Date),
+      );
+      expect(result).toEqual([{ eventId: 50, gameId: 7 }]);
+    });
+
+    it('general-lobby with non-null gameId still queries with null filter (ROK-785)', async () => {
+      // Unusual edge: general-lobby has a gameId set (shouldn't happen in normal
+      // config, but the fix must still pass null to queryActiveEvents for
+      // general-lobby regardless of what gameId is stored).
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-lobby-game',
+          bindingPurpose: 'general-lobby',
+          gameId: 99,
+        },
+      ]);
+      mockQueryActiveEvents.mockResolvedValue([
+        { eventId: 60, gameId: null },
+        { eventId: 61, gameId: 99 },
+      ]);
+
+      const result = await service.findActiveScheduledEvents(
+        'voice-ch-lobby-game',
+      );
+
+      // general-lobby always passes null — never gameId — even if gameId is set.
+      expect(mockQueryActiveEvents).toHaveBeenCalledWith(
+        mockDb,
+        null,
+        expect.any(Date),
+      );
+      expect(result).toHaveLength(2);
+    });
+
+    it('binding with unknown purpose is ignored even if channelId matches (ROK-785 regression guard)', async () => {
+      // A binding exists for the channel but has a purpose that is not in
+      // VOICE_BINDING_PURPOSES. It must be treated as no binding found.
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-wrong-purpose',
+          bindingPurpose: 'text-announce',
+          gameId: null,
+        },
+      ]);
+      mockGetDefaultVoice.mockResolvedValue(null);
+
+      const result = await service.findActiveScheduledEvents(
+        'voice-ch-wrong-purpose',
+      );
+
+      expect(result).toEqual([]);
+      expect(mockQueryActiveEvents).not.toHaveBeenCalled();
+    });
+
+    it('general-lobby returns multiple active events for different games (ROK-785)', async () => {
+      // Verifies the general-lobby path surfaces all active events regardless
+      // of their gameId, supporting cross-game lobby channels.
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-multilobby',
+          bindingPurpose: 'general-lobby',
+          gameId: null,
+        },
+      ]);
+      mockQueryActiveEvents.mockResolvedValue([
+        { eventId: 70, gameId: 1 },
+        { eventId: 71, gameId: 2 },
+        { eventId: 72, gameId: null },
+      ]);
+
+      const result = await service.findActiveScheduledEvents(
+        'voice-ch-multilobby',
+      );
+
+      expect(result).toHaveLength(3);
+      expect(result).toEqual(
+        expect.arrayContaining([
+          { eventId: 70, gameId: 1 },
+          { eventId: 71, gameId: 2 },
+          { eventId: 72, gameId: null },
+        ]),
+      );
+    });
+
+    it('game-voice-monitor path still filters by gameId (regression guard, ROK-785)', async () => {
+      // Ensure the ROK-785 fix did not break the pre-existing game-voice-monitor
+      // behaviour: it must still pass the gameId to narrow results.
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-wow',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 3,
+        },
+      ]);
+      mockQueryActiveEvents.mockResolvedValue([{ eventId: 80, gameId: 3 }]);
+
+      await service.findActiveScheduledEvents('voice-ch-wow');
+
+      expect(mockQueryActiveEvents).toHaveBeenCalledWith(
+        mockDb,
+        3,
+        expect.any(Date),
+      );
+    });
+
+    it('default voice channel is not consulted when a matching binding exists', async () => {
+      // Even if a default voice channel is configured, a binding match should
+      // short-circuit before ever calling getDiscordBotDefaultVoiceChannel.
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-bound',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 5,
+        },
+      ]);
+      mockGetDefaultVoice.mockResolvedValue('voice-ch-bound');
+      mockQueryActiveEvents.mockResolvedValue([{ eventId: 90, gameId: 5 }]);
+
+      await service.findActiveScheduledEvents('voice-ch-bound');
+
+      // getDiscordBotDefaultVoiceChannel must not be called — binding matched first.
+      expect(mockGetDefaultVoice).not.toHaveBeenCalled();
+    });
   });
 });
 
