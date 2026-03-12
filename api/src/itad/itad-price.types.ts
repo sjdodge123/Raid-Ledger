@@ -42,8 +42,8 @@ export interface ItadHistoricalLow {
 /** A single game entry in the overview response */
 export interface ItadOverviewGameEntry {
   id: string;
-  current: ItadCurrentDeal;
-  lowest: ItadHistoricalLow;
+  current: ItadCurrentDeal | null;
+  lowest: ItadHistoricalLow | null;
   bundled: number;
   urls: { game: string };
 }

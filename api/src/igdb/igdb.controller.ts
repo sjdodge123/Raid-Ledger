@@ -215,6 +215,7 @@ export class IgdbController {
   }
 
   /** GET /games/:id/pricing -- ITAD price overview for a game (ROK-419). */
+  @RateLimit('search')
   @Get(':id/pricing')
   async getGamePricing(
     @Param('id', ParseIntPipe) id: number,

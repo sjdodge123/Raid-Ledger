@@ -1,20 +1,10 @@
 import type { ItadGamePricingDto } from '@raid-ledger/contract';
+import { getPriceBadgeType } from './price-badge.helpers';
 
-type BadgeType = 'best-price' | 'on-sale' | null;
-
-/** Determine badge type from pricing data. */
-export function getPriceBadgeType(pricing: ItadGamePricingDto | null): BadgeType {
-    if (!pricing?.currentBest || pricing.currentBest.discount <= 0) return null;
-    if (pricing.historyLow && pricing.currentBest.price <= pricing.historyLow.price) {
-        return 'best-price';
-    }
-    return 'on-sale';
-}
-
-const BADGE_CONFIG: Record<NonNullable<BadgeType>, { label: string; className: string }> = {
+const BADGE_CONFIG = {
     'best-price': { label: 'Best Price', className: 'bg-emerald-500/90 text-white' },
     'on-sale': { label: 'On Sale', className: 'bg-amber-500/90 text-white' },
-};
+} as const;
 
 /** Small pill badge indicating sale status. Used on game cards and detail pages. */
 export function PriceBadge({ pricing, className = '' }: {

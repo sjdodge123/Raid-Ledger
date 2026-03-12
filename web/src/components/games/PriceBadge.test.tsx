@@ -3,7 +3,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { PriceBadge, getPriceBadgeType } from './PriceBadge';
+import { PriceBadge } from './PriceBadge';
+import { getPriceBadgeType } from './price-badge.helpers';
 import type { ItadGamePricingDto } from '@raid-ledger/contract';
 
 function buildPricing(overrides: Partial<ItadGamePricingDto> = {}): ItadGamePricingDto {

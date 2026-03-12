@@ -26,9 +26,7 @@ export class ItadPriceService {
    * Returns null if API key is not configured or if the request fails.
    * Results are cached in Redis with a 3-hour TTL.
    */
-  async getOverview(
-    itadGameId: string,
-  ): Promise<ItadOverviewGameEntry | null> {
+  async getOverview(itadGameId: string): Promise<ItadOverviewGameEntry | null> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return null;
 

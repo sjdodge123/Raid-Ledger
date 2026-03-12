@@ -98,8 +98,7 @@ function computeDealQuality(
   if (!currentBest || currentBest.discount <= 0) return null;
   if (!historyLow || historyLow.price <= 0) return 'modest';
 
-  const ratio =
-    (currentBest.price - historyLow.price) / historyLow.price;
+  const ratio = (currentBest.price - historyLow.price) / historyLow.price;
   if (ratio <= GREAT_DEAL_THRESHOLD) return 'great';
   if (ratio <= GOOD_DEAL_THRESHOLD) return 'good';
   return 'modest';

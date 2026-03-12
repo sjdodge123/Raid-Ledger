@@ -211,7 +211,7 @@ describe('ItadPriceService', () => {
 
       expect(result).toEqual(FAKE_ENTRY);
       expect(result!.id).toBe('uuid-game-123');
-      expect(result!.current.shop.name).toBe('Steam');
+      expect(result!.current!.shop.name).toBe('Steam');
     });
   });
 });

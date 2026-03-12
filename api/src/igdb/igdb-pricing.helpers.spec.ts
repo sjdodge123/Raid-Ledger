@@ -115,7 +115,7 @@ describe('fetchGamePricing — currentBest mapping', () => {
     const noCurrentEntry = {
       ...BASE_ENTRY,
       current: null,
-    } as unknown as ItadOverviewGameEntry;
+    } as ItadOverviewGameEntry;
     const db = buildDbWithItadId('uuid-game-1');
     const svc = buildPriceService(noCurrentEntry);
 
@@ -178,7 +178,7 @@ describe('fetchGamePricing — stores', () => {
     const noCurrentEntry = {
       ...BASE_ENTRY,
       current: null,
-    } as unknown as ItadOverviewGameEntry;
+    } as ItadOverviewGameEntry;
     const db = buildDbWithItadId('uuid-game-1');
     const svc = buildPriceService(noCurrentEntry);
 
@@ -235,7 +235,7 @@ describe('fetchGamePricing — historyLow', () => {
     const noLowest = {
       ...BASE_ENTRY,
       lowest: null,
-    } as unknown as ItadOverviewGameEntry;
+    } as ItadOverviewGameEntry;
     const db = buildDbWithItadId('uuid-game-1');
     const svc = buildPriceService(noLowest);
 
@@ -261,7 +261,7 @@ describe('fetchGamePricing — currency', () => {
     const noCurrentEntry = {
       ...BASE_ENTRY,
       current: null,
-    } as unknown as ItadOverviewGameEntry;
+    } as ItadOverviewGameEntry;
     const db = buildDbWithItadId('uuid-game-1');
     const svc = buildPriceService(noCurrentEntry);
 
@@ -274,7 +274,7 @@ describe('fetchGamePricing — currency', () => {
     const eurEntry: ItadOverviewGameEntry = {
       ...BASE_ENTRY,
       current: {
-        ...BASE_ENTRY.current,
+        ...BASE_ENTRY.current!,
         price: { amount: 27.99, amountInt: 2799, currency: 'EUR' },
         regular: { amount: 55.99, amountInt: 5599, currency: 'EUR' },
       },
@@ -295,7 +295,7 @@ describe('fetchGamePricing — dealQuality', () => {
     const fullPriceEntry: ItadOverviewGameEntry = {
       ...BASE_ENTRY,
       current: {
-        ...BASE_ENTRY.current,
+        ...BASE_ENTRY.current!,
         price: { amount: 59.99, amountInt: 5999, currency: 'USD' },
         cut: 0,
       },
@@ -313,7 +313,7 @@ describe('fetchGamePricing — dealQuality', () => {
     const greatEntry: ItadOverviewGameEntry = {
       ...BASE_ENTRY,
       current: {
-        ...BASE_ENTRY.current,
+        ...BASE_ENTRY.current!,
         price: { amount: 15.99, amountInt: 1599, currency: 'USD' },
         cut: 75,
       },
@@ -331,7 +331,7 @@ describe('fetchGamePricing — dealQuality', () => {
     const goodEntry: ItadOverviewGameEntry = {
       ...BASE_ENTRY,
       current: {
-        ...BASE_ENTRY.current,
+        ...BASE_ENTRY.current!,
         price: { amount: 17.99, amountInt: 1799, currency: 'USD' },
         cut: 70,
       },
@@ -358,7 +358,7 @@ describe('fetchGamePricing — dealQuality', () => {
     const noLowest = {
       ...BASE_ENTRY,
       lowest: null,
-    } as unknown as ItadOverviewGameEntry;
+    } as ItadOverviewGameEntry;
     const db = buildDbWithItadId('uuid-game-1');
     const svc = buildPriceService(noLowest);
 
@@ -371,7 +371,7 @@ describe('fetchGamePricing — dealQuality', () => {
     const noCurrent = {
       ...BASE_ENTRY,
       current: null,
-    } as unknown as ItadOverviewGameEntry;
+    } as ItadOverviewGameEntry;
     const db = buildDbWithItadId('uuid-game-1');
     const svc = buildPriceService(noCurrent);
 
@@ -385,7 +385,7 @@ describe('fetchGamePricing — dealQuality', () => {
     const atLowEntry: ItadOverviewGameEntry = {
       ...BASE_ENTRY,
       current: {
-        ...BASE_ENTRY.current,
+        ...BASE_ENTRY.current!,
         price: { amount: 14.99, amountInt: 1499, currency: 'USD' },
         cut: 75,
       },
