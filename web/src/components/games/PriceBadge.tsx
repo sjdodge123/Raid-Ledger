@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { getPriceBadgeType } from './price-badge.helpers';
 
