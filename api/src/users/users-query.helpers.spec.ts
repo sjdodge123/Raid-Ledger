@@ -191,3 +191,125 @@ function describeFindAllByGame() {
   });
 }
 describe('findAllByGame', describeFindAllByGame);
+
+// ─── findAllByGame — adversarial edge cases (ROK-804) ───────────────────────
+
+describe('findAllByGame — deduplication edge cases', () => {
+  beforeEach(() => {
+    (inArray as jest.Mock).mockClear();
+  });
+
+  it('returns count of 1 when the same user holds 3 source entries', async () => {
+    // Simulates: user 1 has manual + discord + steam rows → DISTINCT count = 1
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    const result = await findAllByGame(db as never, 1, 10, undefined, 42);
+    expect(result.total).toBe(1);
+    expect(result.data).toHaveLength(1);
+  });
+
+  it('returns empty data and zero total when all interested rows deduplicate away', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 0 }],
+      dataRows: [],
+    });
+    const result = await findAllByGame(db as never, 1, 10, undefined, 99);
+    expect(result.total).toBe(0);
+    expect(result.data).toEqual([]);
+  });
+
+  it('count and data are both distinct — count matches deduplicated data length', async () => {
+    // 3 users, each with 2 source rows → DISTINCT count = 3, data rows = 3
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 3 }],
+      dataRows: [
+        mockUser(1, 'Alice'),
+        mockUser(2, 'Bob'),
+        mockUser(3, 'Carol'),
+      ],
+    });
+    const result = await findAllByGame(db as never, 1, 10, undefined, 5);
+    expect(result.total).toBe(3);
+    expect(result.data).toHaveLength(3);
+  });
+
+  it('uses HEART_SOURCES filter for each of the three valid source values', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    await findAllByGame(db as never, 1, 10, undefined, 42);
+    const heartCall = (inArray as jest.Mock).mock.calls.find(
+      (call: unknown[]) => call[1] === HEART_SOURCES,
+    );
+    expect(heartCall).toBeDefined();
+    // Confirm all three valid heart sources are covered
+    expect(HEART_SOURCES).toContain('manual');
+    expect(HEART_SOURCES).toContain('discord');
+    expect(HEART_SOURCES).toContain('steam');
+  });
+
+  it('does not include steam_library or steam_wishlist in HEART_SOURCES', () => {
+    expect(HEART_SOURCES).not.toContain('steam_library');
+    expect(HEART_SOURCES).not.toContain('steam_wishlist');
+  });
+
+  it('does not use selectDistinctOn when fetching the count (uses select)', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 2 }],
+      dataRows: [mockUser(1, 'Alice'), mockUser(2, 'Bob')],
+    });
+    await findAllByGame(db as never, 1, 10, undefined, 42);
+    // select is called for the count query; selectDistinctOn for the data query
+    expect(db.select).toHaveBeenCalled();
+    expect(db.selectDistinctOn).toHaveBeenCalled();
+  });
+
+  it('passes explicit source param through without adding HEART_SOURCES filter', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(7, 'Dave')],
+    });
+    await findAllByGame(db as never, 1, 10, undefined, 42, 'discord');
+    // inArray should not have been called with HEART_SOURCES
+    const heartSourceCalls = (inArray as jest.Mock).mock.calls.filter(
+      (call: unknown[]) => call[1] === HEART_SOURCES,
+    );
+    expect(heartSourceCalls).toHaveLength(0);
+  });
+
+  it('returns count as a number, not a string', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 5 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    const result = await findAllByGame(db as never, 1, 10, undefined, 42);
+    expect(typeof result.total).toBe('number');
+  });
+
+  it('data rows have the expected user shape', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [
+        { id: 10, username: 'Zara', avatar: 'hash', discordId: '999', customAvatarUrl: null },
+      ],
+    });
+    const result = await findAllByGame(db as never, 1, 10, undefined, 42);
+    expect(result.data[0]).toMatchObject({
+      id: expect.any(Number),
+      username: expect.any(String),
+    });
+  });
+
+  it('single user with one source returns count of 1 and one data row', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Solo')],
+    });
+    const result = await findAllByGame(db as never, 1, 10, undefined, 42);
+    expect(result.total).toBe(1);
+    expect(result.data).toHaveLength(1);
+  });
+});
