@@ -1,7 +1,8 @@
 import type { JSX } from "react";
 import { useState } from "react";
-import type { SteamLibraryEntryDto } from "@raid-ledger/contract";
+import type { SteamLibraryEntryDto, ItadGamePricingDto } from "@raid-ledger/contract";
 import { useUserSteamLibraryModal } from "../../hooks/use-user-profile";
+import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { formatPlaytime } from "../../lib/activity-utils";
 import { Modal } from "../../components/ui/modal";
 import { InfiniteScrollSentinel } from "../../components/ui/infinite-scroll-sentinel";
@@ -10,8 +11,10 @@ import { GameRowPill } from "../../components/games/game-row-pill";
 /** Single Steam library entry in the modal (ROK-805). */
 function SteamLibraryModalItem({
   entry,
+  pricing,
 }: {
   entry: SteamLibraryEntryDto;
+  pricing?: ItadGamePricingDto | null;
 }): JSX.Element {
   return (
     <GameRowPill
@@ -20,6 +23,7 @@ function SteamLibraryModalItem({
       coverUrl={entry.coverUrl}
       href={`/games/${entry.gameId}`}
       subtitle={formatPlaytime(entry.playtimeSeconds)}
+      pricing={pricing}
     />
   );
 }
@@ -38,6 +42,8 @@ export function SteamLibraryModal({
 }): JSX.Element {
   const [search, setSearch] = useState("");
   const modal = useUserSteamLibraryModal(userId, isOpen);
+  const gameIds = modal.items.map((e) => e.gameId);
+  const pricingMap = useGamesPricingBatch(gameIds);
 
   const filteredItems = search
     ? modal.items.filter((e) =>
@@ -67,7 +73,7 @@ export function SteamLibraryModal({
       />
       <div className="flex flex-col gap-2">
         {filteredItems.map((entry) => (
-          <SteamLibraryModalItem key={entry.gameId} entry={entry} />
+          <SteamLibraryModalItem key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />
         ))}
       </div>
       {filteredItems.length === 0 && (

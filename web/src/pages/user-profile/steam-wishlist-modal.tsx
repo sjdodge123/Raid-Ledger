@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { useUserSteamWishlistModal } from "../../hooks/use-user-profile";
+import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { Modal } from "../../components/ui/modal";
 import { InfiniteScrollSentinel } from "../../components/ui/infinite-scroll-sentinel";
 import { WishlistCard } from "./steam-wishlist-cards";
@@ -19,6 +20,8 @@ export function SteamWishlistModal({
 }): JSX.Element {
   const [search, setSearch] = useState("");
   const modal = useUserSteamWishlistModal(userId, isOpen);
+  const gameIds = modal.items.map((e) => e.gameId);
+  const pricingMap = useGamesPricingBatch(gameIds);
 
   // Client-side search only — filters already-fetched pages. Works for MVP but
   // consider server-side search if wishlists grow large (ROK-763).
@@ -50,7 +53,7 @@ export function SteamWishlistModal({
       />
       <div className="flex flex-col gap-2">
         {filteredItems.map((entry) => (
-          <WishlistCard key={entry.gameId} entry={entry} />
+          <WishlistCard key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />
         ))}
       </div>
       {filteredItems.length === 0 && (

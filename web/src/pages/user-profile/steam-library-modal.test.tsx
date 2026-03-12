@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { SteamLibraryModal } from './steam-library-modal';
-import type { SteamLibraryEntryDto } from '@raid-ledger/contract';
+import type { SteamLibraryEntryDto, ItadGamePricingDto } from '@raid-ledger/contract';
 
 /** Create a mock Steam library entry for testing */
 function createMockSteamEntry(overrides: Partial<SteamLibraryEntryDto> = {}): SteamLibraryEntryDto {
@@ -11,10 +11,22 @@ function createMockSteamEntry(overrides: Partial<SteamLibraryEntryDto> = {}): St
         gameId: 1,
         gameName: 'Test Game',
         coverUrl: null,
+        slug: 'test-game',
         playtimeSeconds: 3600,
-        lastPlayedAt: '2026-01-01T00:00:00Z',
         playtime2weeksSeconds: null,
         ...overrides,
+    };
+}
+
+/** Build a mock pricing DTO with an active discount */
+function buildOnSalePricing(): ItadGamePricingDto {
+    return {
+        currentBest: { shop: 'Steam', url: 'https://steam.com', price: 29.99, regularPrice: 59.99, discount: 50 },
+        stores: [],
+        historyLow: null,
+        dealQuality: 'modest',
+        currency: 'USD',
+        itadUrl: null,
     };
 }
 
@@ -36,12 +48,18 @@ const mockModal = {
     refetch: vi.fn(),
 };
 
+const mockPricingMap = new Map<number, ItadGamePricingDto | null>();
+
 vi.mock('../../hooks/use-user-profile', () => ({
     useUserSteamLibraryModal: () => mockModal,
 }));
 
 vi.mock('../../lib/activity-utils', () => ({
     formatPlaytime: (seconds: number) => `${Math.round(seconds / 3600)}h`,
+}));
+
+vi.mock('../../hooks/use-games-pricing-batch', () => ({
+    useGamesPricingBatch: () => mockPricingMap,
 }));
 
 describe('SteamLibraryModal — search filter', () => {
@@ -97,5 +115,24 @@ describe('SteamLibraryModal — search filter', () => {
         expect(screen.getByText('Dota 2')).toBeInTheDocument();
         expect(screen.getByText('Team Fortress 2')).toBeInTheDocument();
         expect(screen.getByText('Portal 2')).toBeInTheDocument();
+    });
+
+    it('renders pricing badges when pricing data is available', () => {
+        mockPricingMap.set(1, buildOnSalePricing());
+
+        renderWithProviders(<SteamLibraryModal {...defaultProps} />);
+
+        expect(screen.getByText('On Sale')).toBeInTheDocument();
+
+        mockPricingMap.clear();
+    });
+
+    it('renders no pricing badges when pricing map is empty', () => {
+        mockPricingMap.clear();
+
+        renderWithProviders(<SteamLibraryModal {...defaultProps} />);
+
+        expect(screen.queryByText('On Sale')).not.toBeInTheDocument();
+        expect(screen.queryByText('Best Price')).not.toBeInTheDocument();
     });
 });
