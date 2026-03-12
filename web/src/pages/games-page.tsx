@@ -9,8 +9,7 @@ import { useScrollDirection } from "../hooks/use-scroll-direction";
 import { WantToPlayProvider } from "../hooks/use-want-to-play-batch";
 import { useGamesPricingBatch } from "../hooks/use-games-pricing-batch";
 import { GameCarousel } from "../components/games/GameCarousel";
-import { GameCard } from "../components/games/GameCard";
-import { MobileGameCard } from "../components/games/mobile-game-card";
+import { UnifiedGameCard } from "../components/games/unified-game-card";
 import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import { BottomSheet } from "../components/ui/bottom-sheet";
@@ -209,10 +208,10 @@ function SearchResults({ searchLoading, searchResults, searchSource, debouncedSe
       <>
         {searchSource === 'local' && <LocalSearchWarning />}
         <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {searchResults.map((game) => (<GameCard key={game.id} game={game} pricing={pricingMap.get(game.id) ?? null} />))}
+          {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating showInfoBar pricing={pricingMap.get(game.id) ?? null} />))}
         </div>
         <div className="md:hidden grid grid-cols-2 gap-3">
-          {searchResults.map((game) => (<MobileGameCard key={game.id} game={game} />))}
+          {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating pricing={pricingMap.get(game.id) ?? null} />))}
         </div>
       </>
     );
@@ -248,7 +247,7 @@ function DiscoverRows({ filteredRows, pricingMap }: { filteredRows: GameDiscover
           <div key={row.slug}>
             <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
             <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none' }}>
-              {row.games.map((game) => (<div key={game.id} className="w-[140px] flex-shrink-0 snap-start"><MobileGameCard game={game} /></div>))}
+              {row.games.map((game) => (<div key={game.id} className="w-[140px] flex-shrink-0 snap-start"><UnifiedGameCard variant="link" game={game} compact showRating pricing={pricingMap.get(game.id) ?? null} /></div>))}
             </div>
           </div>
         ))}

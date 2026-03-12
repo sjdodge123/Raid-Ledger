@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import type { GameDetailDto, ItadGamePricingDto } from '@raid-ledger/contract';
-import { GameCard } from './GameCard';
+import { UnifiedGameCard } from './unified-game-card';
 
 interface GameCarouselProps {
     category: string;
@@ -59,7 +59,7 @@ export function GameCarousel({ category, games, pricingMap }: GameCarouselProps)
             <div className="relative">
                 {canScrollLeft && <ScrollArrow direction="left" onClick={() => scroll('left')} />}
                 <div ref={scrollRef} className="flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                    {games.map((game) => <div key={game.id} className="snap-start"><GameCard game={game} compact pricing={pricingMap?.get(game.id) ?? null} /></div>)}
+                    {games.map((game) => <div key={game.id} className="snap-start"><UnifiedGameCard variant="link" game={game} compact showRating showInfoBar pricing={pricingMap?.get(game.id) ?? null} /></div>)}
                 </div>
                 {canScrollRight && <ScrollArrow direction="right" onClick={() => scroll('right')} />}
             </div>

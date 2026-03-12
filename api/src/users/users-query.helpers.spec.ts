@@ -23,6 +23,7 @@ interface HeartedDbOptions {
     name: string;
     slug: string;
     coverUrl: string | null;
+    playtimeSeconds?: number | null;
   }[];
 }
 
@@ -132,6 +133,46 @@ describe('fetchHeartedGames', () => {
 
   it('HEART_SOURCES only contains manual, discord, steam', () => {
     expect(HEART_SOURCES).toEqual(['manual', 'discord', 'steam']);
+  });
+
+  it('includes playtimeSeconds in result shape (ROK-805)', async () => {
+    const db = buildHeartedDb({
+      countRows: [{ count: 1 }],
+      dataRows: [
+        {
+          id: 1,
+          igdbId: 100,
+          name: 'Game A',
+          slug: 'game-a',
+          coverUrl: null,
+          playtimeSeconds: 7200,
+        },
+      ],
+    });
+
+    const result = await fetchHeartedGames(db as never, 1, 1, 10);
+
+    expect(result.data[0]).toHaveProperty('playtimeSeconds');
+  });
+
+  it('playtimeSeconds can be null when no steam data (ROK-805)', async () => {
+    const db = buildHeartedDb({
+      countRows: [{ count: 1 }],
+      dataRows: [
+        {
+          id: 2,
+          igdbId: 200,
+          name: 'Game B',
+          slug: 'game-b',
+          coverUrl: null,
+          playtimeSeconds: null,
+        },
+      ],
+    });
+
+    const result = await fetchHeartedGames(db as never, 1, 1, 10);
+
+    expect(result.data[0].playtimeSeconds).toBeNull();
   });
 });
 

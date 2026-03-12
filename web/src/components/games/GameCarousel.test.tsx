@@ -13,7 +13,7 @@ vi.mock('../../hooks/use-auth', () => ({
     useAuth: () => ({ isAuthenticated: false, user: null }),
 }));
 
-// Mock want-to-play hook
+// Mock want-to-play hook (used by UnifiedGameCard)
 vi.mock('../../hooks/use-want-to-play', () => ({
     useWantToPlay: () => ({
         wantToPlay: false,

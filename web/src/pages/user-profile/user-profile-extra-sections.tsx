@@ -1,60 +1,29 @@
 import type { JSX } from "react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { SteamLibraryEntryDto } from "@raid-ledger/contract";
 import { useUserSteamLibrary } from "../../hooks/use-user-profile";
 import { formatPlaytime } from "../../lib/activity-utils";
 import { SteamIcon } from "../../components/icons/SteamIcon";
 import { buildDiscordAvatarUrl } from "../../lib/avatar";
 import { useBranding } from "../../hooks/use-branding";
+import { GameRowPill } from "../../components/games/game-row-pill";
 import { SteamLibraryModal } from "./steam-library-modal";
 
-/** Cover image or placeholder for game cards */
-function GameCover({
-  url,
-  alt,
-}: {
-  url: string | null;
-  alt: string;
-}): JSX.Element {
-  if (url) {
-    return (
-      <img
-        src={url}
-        alt={alt}
-        className="w-10 h-14 rounded object-cover flex-shrink-0"
-        loading="lazy"
-      />
-    );
-  }
-  return (
-    <div className="w-10 h-14 rounded bg-overlay flex items-center justify-center text-muted flex-shrink-0 text-xs">
-      ?
-    </div>
-  );
-}
-
-/** Single Steam library entry card (ROK-754) */
-function SteamLibraryCard({
+/** Single Steam library entry using shared GameRowPill (ROK-805). */
+function SteamLibraryItem({
   entry,
 }: {
   entry: SteamLibraryEntryDto;
 }): JSX.Element {
   return (
-    <Link
-      to={`/games/${entry.gameId}`}
-      className="bg-panel border border-edge rounded-lg p-3 flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
-    >
-      <GameCover url={entry.coverUrl} alt={entry.gameName} />
-      <div className="flex-1 min-w-0">
-        <span className="font-medium text-foreground truncate block">
-          {entry.gameName}
-        </span>
-        <span className="text-sm text-muted">
-          {formatPlaytime(entry.playtimeSeconds)}
-        </span>
-      </div>
-    </Link>
+    <GameRowPill
+      gameId={entry.gameId}
+      name={entry.gameName}
+      coverUrl={entry.coverUrl}
+      href={`/games/${entry.gameId}`}
+      subtitle={formatPlaytime(entry.playtimeSeconds)}
+    />
   );
 }
 
@@ -81,7 +50,7 @@ export function SteamLibrarySection({
       </div>
       <div className="flex flex-col gap-2">
         {items.map((entry) => (
-          <SteamLibraryCard key={entry.gameId} entry={entry} />
+          <SteamLibraryItem key={entry.gameId} entry={entry} />
         ))}
       </div>
       {total > 10 && (

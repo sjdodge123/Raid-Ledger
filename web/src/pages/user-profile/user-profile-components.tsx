@@ -1,12 +1,12 @@
 import type { JSX } from "react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   CharacterDto,
   UserHeartedGameDto,
   ActivityPeriod,
 } from "@raid-ledger/contract";
+import { GameRowPill } from "../../components/games/game-row-pill";
 import { PERIOD_LABELS } from "../../lib/activity-utils";
 import { useUserActivity } from "../../hooks/use-user-profile";
 import { getMyPreferences, updatePreference } from "../../lib/api-client";
@@ -18,31 +18,19 @@ export {
 } from "./user-profile-extra-sections";
 export { SteamWishlistSection } from "./steam-wishlist-section";
 
-/** Clickable game card for the hearted games section (ROK-282) */
+/** Clickable game card for the hearted games section (ROK-282, ROK-805) */
 export function HeartedGameCard({
   game,
 }: {
   game: UserHeartedGameDto;
 }): JSX.Element {
   return (
-    <Link
-      to={`/games/${game.id}`}
-      className="bg-panel border border-edge rounded-lg p-3 flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
-    >
-      {game.coverUrl ? (
-        <img
-          src={game.coverUrl}
-          alt={game.name}
-          className="w-10 h-14 rounded object-cover flex-shrink-0"
-          loading="lazy"
-        />
-      ) : (
-        <div className="w-10 h-14 rounded bg-overlay flex items-center justify-center text-muted flex-shrink-0 text-xs">
-          ?
-        </div>
-      )}
-      <span className="font-medium text-foreground truncate">{game.name}</span>
-    </Link>
+    <GameRowPill
+      gameId={game.id}
+      name={game.name}
+      coverUrl={game.coverUrl}
+      href={`/games/${game.id}`}
+    />
   );
 }
 
