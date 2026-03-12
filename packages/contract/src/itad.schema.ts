@@ -48,6 +48,7 @@ export const ItadGamePricingSchema = z.object({
   historyLow: ItadHistoryLowSchema.nullable(),
   dealQuality: DealQualitySchema,
   currency: z.string(),
+  itadUrl: z.string().nullable(),
 });
 
 export type ItadGamePricingDto = z.infer<typeof ItadGamePricingSchema>;

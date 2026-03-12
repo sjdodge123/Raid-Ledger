@@ -399,6 +399,29 @@ describe('fetchGamePricing — dealQuality', () => {
   });
 });
 
+// ─── fetchGamePricing — itadUrl ──────────────────────────────────────────────
+
+describe('fetchGamePricing — itadUrl', () => {
+  it('includes ITAD game page URL from entry.urls.game', async () => {
+    const db = buildDbWithItadId('uuid-game-1');
+    const svc = buildPriceService(BASE_ENTRY);
+
+    const result = await fetchGamePricing(db as never, svc as never, 1);
+
+    expect(result!.itadUrl).toBe('https://isthereanydeal.com/game/test/');
+  });
+
+  it('returns null itadUrl when urls is missing', async () => {
+    const noUrls = { ...BASE_ENTRY, urls: undefined } as unknown as ItadOverviewGameEntry;
+    const db = buildDbWithItadId('uuid-game-1');
+    const svc = buildPriceService(noUrls);
+
+    const result = await fetchGamePricing(db as never, svc as never, 1);
+
+    expect(result!.itadUrl).toBeNull();
+  });
+});
+
 // ─── fetchGamePricing — full output shape ────────────────────────────────────
 
 describe('fetchGamePricing — full output shape', () => {
@@ -424,6 +447,7 @@ describe('fetchGamePricing — full output shape', () => {
       }),
       dealQuality: expect.stringMatching(/great|good|modest/),
       currency: expect.any(String),
+      itadUrl: expect.any(String),
     });
   });
 });

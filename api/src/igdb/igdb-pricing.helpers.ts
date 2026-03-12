@@ -53,8 +53,9 @@ function mapOverviewToPricing(
   const historyLow = mapHistoryLow(entry);
   const currency = entry.current?.price?.currency ?? 'USD';
   const dealQuality = computeDealQuality(currentBest, historyLow);
+  const itadUrl = entry.urls?.game ?? null;
 
-  return { currentBest, stores, historyLow, dealQuality, currency };
+  return { currentBest, stores, historyLow, dealQuality, currency, itadUrl };
 }
 
 /** Map the current best deal from the overview entry. */

@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import type { GameDetailDto } from "@raid-ledger/contract";
 import { useWantToPlay } from "../../hooks/use-want-to-play";
+import { useGamePricing } from "../../hooks/use-games-discover";
 import { useAuth } from "../../hooks/use-auth";
 import { GENRE_MAP } from "../../lib/game-utils";
+import { PriceBadge } from "./PriceBadge";
 
 /** IGDB game mode ID → display name */
 const MODE_MAP: Record<number, string> = {
@@ -76,6 +78,8 @@ function InfoBar({ rating, primaryMode }: { rating: number | null | undefined; p
 export function GameCard({ game, compact = false }: GameCardProps) {
   const { isAuthenticated } = useAuth();
   const { wantToPlay, count, toggle, isToggling } = useWantToPlay(isAuthenticated ? game.id : undefined);
+  const { data: pricingResponse } = useGamePricing(game.id, !!game.itadGameId);
+  const pricing = pricingResponse?.data ?? null;
   const primaryGenre = game.genres[0] ? GENRE_MAP[game.genres[0]] : null;
   const primaryMode = game.gameModes[0] ? MODE_MAP[game.gameModes[0]] : null;
   const rating = game.aggregatedRating ?? game.rating;
@@ -94,7 +98,10 @@ export function GameCard({ game, compact = false }: GameCardProps) {
         <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/80 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-3">
           <h3 className="text-sm font-semibold text-white line-clamp-2 leading-tight">{game.name}</h3>
-          {primaryGenre && <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] bg-white/20 text-white/90 rounded">{primaryGenre}</span>}
+          <div className="flex items-center gap-1.5 mt-1">
+            {primaryGenre && <span className="inline-block px-1.5 py-0.5 text-[10px] bg-white/20 text-white/90 rounded">{primaryGenre}</span>}
+            <PriceBadge pricing={pricing} />
+          </div>
         </div>
         {isAuthenticated && <HeartButton wantToPlay={wantToPlay} count={count} onClick={handleWantToPlay} />}
       </div>

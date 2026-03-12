@@ -13,8 +13,10 @@ import { GENRE_MAP } from '../lib/game-utils';
 import { PLATFORM_MAP, MODE_MAP } from './game-detail/game-detail-constants';
 import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
-import { WhereToBuySection } from './game-detail/WhereToBuySection';
-import type { EventResponseDto } from '@raid-ledger/contract';
+import { GamePricingSummary } from './game-detail/GamePricingSummary';
+import { PriceBadge } from '../components/games/PriceBadge';
+import { useGamePricing } from '../hooks/use-games-discover';
+import type { EventResponseDto, ItadGamePricingDto } from '@raid-ledger/contract';
 
 /** Game detail page — shows full game info, activity, events, screenshots, streams */
 export function GameDetailPage(): JSX.Element {
@@ -74,11 +76,13 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
     const genres = game.genres.map((id) => GENRE_MAP[id]).filter(Boolean);
     const platforms = game.platforms.map((id) => PLATFORM_MAP[id]).filter(Boolean);
     const modes = game.gameModes.map((id) => MODE_MAP[id]).filter(Boolean);
+    const { data: pricingResponse } = useGamePricing(gameId, !!game.itadGameId);
+    const pricing = pricingResponse?.data ?? null;
 
     return (
         <div className="max-w-5xl mx-auto px-4 py-8">
             <BackButton navigate={navigate} />
-            <GameBanner game={game} rating={rating} genres={genres} platforms={platforms} modes={modes} />
+            <GameBanner game={game} rating={rating} genres={genres} platforms={platforms} modes={modes} pricing={pricing} />
             {isAuthenticated && (
                 <>
                     <WantToPlaySection wantToPlay={wtp.wantToPlay} count={wtp.count} source={wtp.source} players={wtp.players} toggle={wtp.toggle} isToggling={wtp.isToggling} gameId={gameId} />
@@ -86,7 +90,6 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
                     <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
                 </>
             )}
-            {gameId && <WhereToBuySection gameId={gameId} hasItadId={!!game.itadGameId} />}
             {gameId && <CommunityActivitySection gameId={gameId} />}
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
             <GameMediaSections game={game} streamsData={streamsData} />
@@ -128,9 +131,9 @@ function BackButton({ navigate }: { navigate: NavigateFunction }): JSX.Element {
 }
 
 /** Game banner with cover, info, and details grid. ROK-773: IGDB cover > ITAD boxart > none */
-function GameBanner({ game, rating, genres, platforms, modes }: {
+function GameBanner({ game, rating, genres, platforms, modes, pricing }: {
     game: { name: string; coverUrl: string | null; itadBoxartUrl?: string | null; summary: string | null; playerCount: { min: number; max: number } | null; crossplay: boolean | null; firstReleaseDate: string | null };
-    rating: number | null; genres: string[]; platforms: string[]; modes: string[];
+    rating: number | null; genres: string[]; platforms: string[]; modes: string[]; pricing: ItadGamePricingDto | null;
 }): JSX.Element {
     const displayCover = game.coverUrl ?? game.itadBoxartUrl ?? null;
     return (
@@ -143,17 +146,18 @@ function GameBanner({ game, rating, genres, platforms, modes }: {
                 {displayCover && <img src={displayCover} alt={game.name} className="w-40 sm:w-48 aspect-[3/4] object-cover rounded-xl shadow-2xl flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
                     <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">{game.name}</h1>
-                    <MetaRow rating={rating} genres={genres} />
+                    <MetaRow rating={rating} genres={genres} pricing={pricing} />
                     {game.summary && <p className="text-secondary text-sm leading-relaxed mb-4 line-clamp-4">{game.summary}</p>}
                     <DetailsGrid modes={modes} playerCount={game.playerCount} platforms={platforms} crossplay={game.crossplay} releaseDate={game.firstReleaseDate} />
+                    {pricing && <GamePricingSummary pricing={pricing} />}
                 </div>
             </div>
         </div>
     );
 }
 
-/** Rating and genre badges */
-function MetaRow({ rating, genres }: { rating: number | null; genres: string[] }): JSX.Element {
+/** Rating, genre, and price badges */
+function MetaRow({ rating, genres, pricing }: { rating: number | null; genres: string[]; pricing: ItadGamePricingDto | null }): JSX.Element {
     return (
         <div className="flex flex-wrap items-center gap-3 mb-4">
             {rating && rating > 0 && (
@@ -162,6 +166,7 @@ function MetaRow({ rating, genres }: { rating: number | null; genres: string[] }
                 </span>
             )}
             {genres.map((g) => (<span key={g} className="px-2 py-0.5 bg-panel rounded text-xs text-secondary">{g}</span>))}
+            <PriceBadge pricing={pricing} className="px-2.5 py-1 text-xs" />
         </div>
     );
 }
