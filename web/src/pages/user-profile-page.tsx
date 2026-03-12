@@ -1,9 +1,12 @@
 import type { JSX } from "react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import {
   useUserProfile,
   useUserHeartedGames,
+  useUserSteamLibrary,
+  useUserSteamWishlist,
+  useUserActivity,
 } from "../hooks/use-user-profile";
 import { useGamesPricingBatch } from "../hooks/use-games-pricing-batch";
 import { useGameRegistry } from "../hooks/use-game-registry";
@@ -11,7 +14,7 @@ import { useAuth } from "../hooks/use-auth";
 import { formatDistanceToNow } from "date-fns";
 import { resolveAvatar, toAvatarUser } from "../lib/avatar";
 import { UserEventSignups } from "../components/profile/UserEventSignups";
-import type { UserProfileDto } from "@raid-ledger/contract";
+import type { UserProfileDto, ItadGamePricingDto } from "@raid-ledger/contract";
 import {
   HeartedGameCard,
   GroupedCharacters,
@@ -55,18 +58,20 @@ function UserNotFound(): JSX.Element {
   );
 }
 
+export type PricingMap = Map<number, ItadGamePricingDto | null>;
+
 /** Hearted games list section with show-10 + modal (ROK-745) */
 function HeartedGamesSection({
   userId,
+  pricingMap,
 }: {
   userId: number;
+  pricingMap: PricingMap;
 }): JSX.Element | null {
   const { data, isLoading } = useUserHeartedGames(userId);
   const [showModal, setShowModal] = useState(false);
   const items = data?.data ?? [];
   const total = data?.meta?.total ?? 0;
-  const gameIds = items.map((g) => g.id);
-  const pricingMap = useGamesPricingBatch(gameIds);
 
   if (items.length === 0 && !isLoading) return null;
   return (
@@ -92,9 +97,27 @@ function HeartedGamesSection({
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         total={total}
+        pricingMap={pricingMap}
       />
     </div>
   );
+}
+
+/** Collect game IDs from all profile sections for one batch pricing call. */
+function useProfilePricing(userId: number | undefined): PricingMap {
+  const { data: hearted } = useUserHeartedGames(userId);
+  const { data: steamLib } = useUserSteamLibrary(userId);
+  const { data: steamWish } = useUserSteamWishlist(userId);
+  const { data: activity } = useUserActivity(userId, "week");
+  const allIds = useMemo(() => {
+    const ids: number[] = [];
+    if (hearted?.data) for (const g of hearted.data) ids.push(g.id);
+    if (steamLib?.data) for (const e of steamLib.data) ids.push(e.gameId);
+    if (steamWish?.data) for (const e of steamWish.data) ids.push(e.gameId);
+    if (activity?.data) for (const e of activity.data) ids.push(e.gameId);
+    return ids;
+  }, [hearted, steamLib, steamWish, activity]);
+  return useGamesPricingBatch(allIds);
 }
 
 /** Loaded profile content */
@@ -113,6 +136,7 @@ function ProfileContent({
     addSuffix: true,
   });
   const profileAvatar = resolveAvatar(toAvatarUser(profile));
+  const pricingMap = useProfilePricing(numericId);
   return (
     <div className="user-profile-page">
       <div className="user-profile-card">
@@ -122,15 +146,15 @@ function ProfileContent({
           memberSince={memberSince}
         />
         {numericId && (
-          <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} />
+          <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} pricingMap={pricingMap} />
         )}
         {numericId && <UserEventSignups userId={numericId} />}
         {profile.characters.length > 0 && (
           <GroupedCharacters characters={profile.characters} games={games} />
         )}
-        {numericId && <HeartedGamesSection userId={numericId} />}
-        {numericId && <SteamLibrarySection userId={numericId} />}
-        {numericId && <SteamWishlistSection userId={numericId} />}
+        {numericId && <HeartedGamesSection userId={numericId} pricingMap={pricingMap} />}
+        {numericId && <SteamLibrarySection userId={numericId} pricingMap={pricingMap} />}
+        {numericId && <SteamWishlistSection userId={numericId} pricingMap={pricingMap} />}
       </div>
     </div>
   );

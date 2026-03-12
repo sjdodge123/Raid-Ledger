@@ -2,11 +2,11 @@ import type { JSX } from "react";
 import { useState } from "react";
 import type { SteamLibraryEntryDto, ItadGamePricingDto } from "@raid-ledger/contract";
 import { useUserSteamLibraryModal } from "../../hooks/use-user-profile";
-import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { formatPlaytime } from "../../lib/activity-utils";
 import { Modal } from "../../components/ui/modal";
 import { InfiniteScrollSentinel } from "../../components/ui/infinite-scroll-sentinel";
 import { GameRowPill } from "../../components/games/game-row-pill";
+import type { PricingMap } from "../user-profile-page";
 
 /** Single Steam library entry in the modal (ROK-805). */
 function SteamLibraryModalItem({
@@ -34,16 +34,16 @@ export function SteamLibraryModal({
   isOpen,
   onClose,
   total,
+  pricingMap,
 }: {
   userId: number;
   isOpen: boolean;
   onClose: () => void;
   total: number;
+  pricingMap: PricingMap;
 }): JSX.Element {
   const [search, setSearch] = useState("");
   const modal = useUserSteamLibraryModal(userId, isOpen);
-  const gameIds = modal.items.map((e) => e.gameId);
-  const pricingMap = useGamesPricingBatch(gameIds);
 
   const filteredItems = search
     ? modal.items.filter((e) =>

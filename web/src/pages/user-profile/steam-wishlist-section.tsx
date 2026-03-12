@@ -1,23 +1,23 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { useUserSteamWishlist } from "../../hooks/use-user-profile";
-import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { SteamIcon } from "../../components/icons/SteamIcon";
 import { WishlistCard } from "./steam-wishlist-cards";
 import { SteamWishlistModal } from "./steam-wishlist-modal";
+import type { PricingMap } from "../user-profile-page";
 
 /** ROK-418: Steam Wishlist section with show-10 + modal */
 export function SteamWishlistSection({
   userId,
+  pricingMap,
 }: {
   userId: number;
+  pricingMap: PricingMap;
 }): JSX.Element | null {
   const { data, isLoading } = useUserSteamWishlist(userId);
   const [showModal, setShowModal] = useState(false);
   const items = data?.data ?? [];
   const total = data?.meta?.total ?? 0;
-  const gameIds = items.map((e) => e.gameId);
-  const pricingMap = useGamesPricingBatch(gameIds);
 
   if (items.length === 0 && !isLoading) return null;
   return (
@@ -47,6 +47,7 @@ export function SteamWishlistSection({
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         total={total}
+        pricingMap={pricingMap}
       />
     </div>
   );

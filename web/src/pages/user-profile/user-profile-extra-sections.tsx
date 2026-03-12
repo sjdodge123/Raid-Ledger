@@ -3,8 +3,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { SteamLibraryEntryDto, ItadGamePricingDto } from "@raid-ledger/contract";
 import { useUserSteamLibrary } from "../../hooks/use-user-profile";
-import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { formatPlaytime } from "../../lib/activity-utils";
+import type { PricingMap } from "../user-profile-page";
 import { SteamIcon } from "../../components/icons/SteamIcon";
 import { buildDiscordAvatarUrl } from "../../lib/avatar";
 import { useBranding } from "../../hooks/use-branding";
@@ -34,15 +34,15 @@ function SteamLibraryItem({
 /** ROK-745: Steam Library section with show-10 + modal */
 export function SteamLibrarySection({
   userId,
+  pricingMap,
 }: {
   userId: number;
+  pricingMap: PricingMap;
 }): JSX.Element | null {
   const { data, isLoading } = useUserSteamLibrary(userId);
   const [showModal, setShowModal] = useState(false);
   const items = data?.data ?? [];
   const total = data?.meta?.total ?? 0;
-  const gameIds = items.map((e) => e.gameId);
-  const pricingMap = useGamesPricingBatch(gameIds);
 
   if (items.length === 0 && !isLoading) return null;
   return (
@@ -72,6 +72,7 @@ export function SteamLibrarySection({
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         total={total}
+        pricingMap={pricingMap}
       />
     </div>
   );

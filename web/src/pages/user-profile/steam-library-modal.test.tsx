@@ -58,16 +58,13 @@ vi.mock('../../lib/activity-utils', () => ({
     formatPlaytime: (seconds: number) => `${Math.round(seconds / 3600)}h`,
 }));
 
-vi.mock('../../hooks/use-games-pricing-batch', () => ({
-    useGamesPricingBatch: () => mockPricingMap,
-}));
-
 describe('SteamLibraryModal — search filter', () => {
     const defaultProps = {
         userId: 1,
         isOpen: true,
         onClose: vi.fn(),
         total: 4,
+        pricingMap: mockPricingMap,
     };
 
     it('renders search input when modal is open', () => {

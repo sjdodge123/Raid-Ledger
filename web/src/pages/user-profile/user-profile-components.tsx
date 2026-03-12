@@ -7,6 +7,7 @@ import type {
   ActivityPeriod,
   ItadGamePricingDto,
 } from "@raid-ledger/contract";
+import type { PricingMap } from "../user-profile-page";
 import { GameRowPill } from "../../components/games/game-row-pill";
 import { formatPlaytime } from "../../lib/activity-utils";
 import { PERIOD_LABELS } from "../../lib/activity-utils";
@@ -177,9 +178,11 @@ function useActivityPrivacy(isOwnProfile: boolean): {
 export function ActivitySection({
   userId,
   isOwnProfile,
+  pricingMap,
 }: {
   userId: number;
   isOwnProfile: boolean;
+  pricingMap: PricingMap;
 }): JSX.Element {
   const [period, setPeriod] = useState<ActivityPeriod>("week");
   const { data, isLoading } = useUserActivity(userId, period);
@@ -192,7 +195,7 @@ export function ActivitySection({
         <h2 className="user-profile-section-title mb-0">Game Activity</h2>
         <PeriodSelector period={period} setPeriod={setPeriod} />
       </div>
-      <ActivityContent entries={entries} isLoading={isLoading} />
+      <ActivityContent entries={entries} isLoading={isLoading} pricingMap={pricingMap} />
       {isOwnProfile && (
         <ActivityPrivacyToggle
           showActivity={privacy.showActivity}

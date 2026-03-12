@@ -54,16 +54,13 @@ vi.mock('../../hooks/use-user-profile', () => ({
     useUserSteamWishlistModal: () => mockModal,
 }));
 
-vi.mock('../../hooks/use-games-pricing-batch', () => ({
-    useGamesPricingBatch: () => mockPricingMap,
-}));
-
 describe('SteamWishlistModal — search filter', () => {
     const defaultProps = {
         userId: 1,
         isOpen: true,
         onClose: vi.fn(),
         total: 3,
+        pricingMap: mockPricingMap,
     };
 
     it('renders search input when modal is open', () => {

@@ -53,16 +53,13 @@ vi.mock('../../hooks/use-user-profile', () => ({
     useUserHeartedGamesModal: () => mockModal,
 }));
 
-vi.mock('../../hooks/use-games-pricing-batch', () => ({
-    useGamesPricingBatch: () => mockPricingMap,
-}));
-
 describe('HeartedGamesModal — search filter', () => {
     const defaultProps = {
         userId: 1,
         isOpen: true,
         onClose: vi.fn(),
         total: 4,
+        pricingMap: mockPricingMap,
     };
 
     it('renders search input when modal is open', () => {

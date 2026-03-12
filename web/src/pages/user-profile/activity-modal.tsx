@@ -2,9 +2,9 @@ import type { JSX } from "react";
 import { useState, useMemo } from "react";
 import type { GameActivityEntryDto, ItadGamePricingDto } from "@raid-ledger/contract";
 import { formatPlaytime } from "../../lib/activity-utils";
-import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { GameRowPill } from "../../components/games/game-row-pill";
 import { Modal } from "../../components/ui/modal";
+import type { PricingMap } from "../user-profile-page";
 
 const MOST_PLAYED_BADGE = (
   <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 rounded flex-shrink-0">
@@ -40,14 +40,14 @@ const ACTIVITY_INLINE_LIMIT = 10;
 export function ActivityContent({
   entries,
   isLoading,
+  pricingMap,
 }: {
   entries: GameActivityEntryDto[];
   isLoading: boolean;
+  pricingMap: PricingMap;
 }): JSX.Element {
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const gameIds = useMemo(() => entries.map((e) => e.gameId), [entries]);
-  const pricingMap = useGamesPricingBatch(gameIds);
 
   if (isLoading) {
     return (
@@ -92,8 +92,6 @@ export function ActivityContent({
     </>
   );
 }
-
-type PricingMap = Map<number, ItadGamePricingDto | null>;
 
 /** Modal for viewing all game activity with search */
 function ActivityModal({ entries, isOpen, onClose, search, setSearch, pricingMap }: {

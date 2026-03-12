@@ -1,10 +1,10 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { useUserHeartedGamesModal } from "../../hooks/use-user-profile";
-import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { Modal } from "../../components/ui/modal";
 import { InfiniteScrollSentinel } from "../../components/ui/infinite-scroll-sentinel";
 import { HeartedGameCard } from "./user-profile-components";
+import type { PricingMap } from "../user-profile-page";
 
 /** Hearted games modal with search filter and infinite scroll */
 export function HeartedGamesModal({
@@ -12,16 +12,16 @@ export function HeartedGamesModal({
   isOpen,
   onClose,
   total,
+  pricingMap,
 }: {
   userId: number;
   isOpen: boolean;
   onClose: () => void;
   total: number;
+  pricingMap: PricingMap;
 }): JSX.Element {
   const [search, setSearch] = useState("");
   const modal = useUserHeartedGamesModal(userId, isOpen);
-  const gameIds = modal.items.map((g) => g.id);
-  const pricingMap = useGamesPricingBatch(gameIds);
 
   const filteredItems = search
     ? modal.items.filter((g) =>
