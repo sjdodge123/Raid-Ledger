@@ -52,3 +52,14 @@ export const ItadGamePricingSchema = z.object({
 });
 
 export type ItadGamePricingDto = z.infer<typeof ItadGamePricingSchema>;
+
+// ==========================================
+// Batch Pricing (ROK-800)
+// ==========================================
+
+/** Response shape for batch pricing: map of game ID to pricing or null */
+export const ItadBatchPricingResponseSchema = z.object({
+  data: z.record(z.string(), ItadGamePricingSchema.nullable()),
+});
+
+export type ItadBatchPricingResponseDto = z.infer<typeof ItadBatchPricingResponseSchema>;

@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
-import type { GameDetailDto } from "@raid-ledger/contract";
+import type { GameDetailDto, ItadGamePricingDto } from "@raid-ledger/contract";
 import { useWantToPlay } from "../../hooks/use-want-to-play";
-import { useGamePricing } from "../../hooks/use-games-discover";
 import { useAuth } from "../../hooks/use-auth";
 import { GENRE_MAP } from "../../lib/game-utils";
 import { PriceBadge } from "./PriceBadge";
@@ -18,6 +17,8 @@ const MODE_MAP: Record<number, string> = {
 interface GameCardProps {
   game: GameDetailDto;
   compact?: boolean;
+  /** Pre-fetched pricing data from batch hook. Omit to skip pricing display. */
+  pricing?: ItadGamePricingDto | null;
 }
 
 const HEART_PATH = "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z";
@@ -75,11 +76,9 @@ function InfoBar({ rating, primaryMode }: { rating: number | null | undefined; p
   );
 }
 
-export function GameCard({ game, compact = false }: GameCardProps) {
+export function GameCard({ game, compact = false, pricing = null }: GameCardProps) {
   const { isAuthenticated } = useAuth();
   const { wantToPlay, count, toggle, isToggling } = useWantToPlay(isAuthenticated ? game.id : undefined);
-  const { data: pricingResponse } = useGamePricing(game.id, !!game.itadGameId);
-  const pricing = pricingResponse?.data ?? null;
   const primaryGenre = game.genres[0] ? GENRE_MAP[game.genres[0]] : null;
   const primaryMode = game.gameModes[0] ? MODE_MAP[game.gameModes[0]] : null;
   const rating = game.aggregatedRating ?? game.rating;
