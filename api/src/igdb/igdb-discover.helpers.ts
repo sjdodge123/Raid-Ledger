@@ -7,7 +7,7 @@ import { mapDbRowToDetail } from './igdb.mappers';
 import { HEART_SOURCES } from './igdb-interest.helpers';
 
 /** Category definition for game discovery. */
-interface DiscoverCategory {
+export interface DiscoverCategory {
   category: string;
   slug: string;
   cached?: boolean;
@@ -24,6 +24,9 @@ export function buildDiscoverCategories(): DiscoverCategory[] {
   return [
     buildCommunityCategory(),
     buildMostWishlistedCategory(),
+    buildDealCategory('Community Wishlisted On Sale', 'wishlisted-on-sale'),
+    buildDealCategory('Most Played Games On Sale', 'most-played-on-sale'),
+    buildDealCategory('Best Price', 'best-price'),
     buildGenreCategory('Popular MMOs', 'popular-mmos', 5, 'popularity'),
     buildGenreCategory('Top Co-op Games', 'top-coop', 3, 'rating'),
     buildGenreCategory(
@@ -35,6 +38,11 @@ export function buildDiscoverCategories(): DiscoverCategory[] {
     buildReleaseDateCategory(),
     buildRatingCategory(),
   ];
+}
+
+/** Deal-aware category (no DB filter — uses custom fetch with ITAD). */
+function buildDealCategory(category: string, slug: string): DiscoverCategory {
+  return { category, slug, cached: false };
 }
 
 /** Most wishlisted category (ROK-418, no DB filter — uses custom fetch). */

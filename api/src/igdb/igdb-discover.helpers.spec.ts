@@ -41,6 +41,28 @@ describe('buildDiscoverCategories', () => {
     const categories = buildDiscoverCategories();
     expect(categories.length).toBeGreaterThanOrEqual(5);
   });
+
+  it('includes deal-aware category slugs (ROK-803)', () => {
+    const categories = buildDiscoverCategories();
+    const slugs = categories.map((c) => c.slug);
+    expect(slugs).toContain('wishlisted-on-sale');
+    expect(slugs).toContain('most-played-on-sale');
+    expect(slugs).toContain('best-price');
+  });
+
+  it('deal-aware categories are marked as not cached', () => {
+    const categories = buildDiscoverCategories();
+    const dealSlugs = [
+      'wishlisted-on-sale',
+      'most-played-on-sale',
+      'best-price',
+    ];
+    for (const slug of dealSlugs) {
+      const cat = categories.find((c) => c.slug === slug);
+      expect(cat).toBeDefined();
+      expect(cat!.cached).toBe(false);
+    }
+  });
 });
 
 describe('fetchMostWishlistedRow', () => {
