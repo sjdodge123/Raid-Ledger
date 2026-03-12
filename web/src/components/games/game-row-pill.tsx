@@ -15,6 +15,8 @@ interface GameRowPillProps {
     href?: string;
     subtitle?: string;
     pricing?: ItadGamePricingDto | null;
+    /** Optional custom badge rendered next to the name (before PriceBadge). */
+    badge?: React.ReactNode;
 }
 
 /** Small cover thumbnail or placeholder. */
@@ -42,15 +44,17 @@ function PillCover({
     );
 }
 
-/** Text content: name, optional subtitle, and optional pricing badge. */
+/** Text content: name, badges, optional subtitle. */
 function PillContent({
     name,
     subtitle,
     pricing,
+    badge,
 }: {
     name: string;
     subtitle?: string;
     pricing?: ItadGamePricingDto | null;
+    badge?: React.ReactNode;
 }): JSX.Element {
     return (
         <div className="flex-1 min-w-0">
@@ -58,6 +62,7 @@ function PillContent({
                 <span className="font-medium text-foreground truncate">
                     {name}
                 </span>
+                {badge}
                 <PriceBadge pricing={pricing ?? null} />
             </div>
             {subtitle && (
@@ -80,11 +85,17 @@ export function GameRowPill({
     href,
     subtitle,
     pricing,
+    badge,
 }: GameRowPillProps): JSX.Element {
     const inner = (
         <>
             <PillCover url={coverUrl} alt={name} />
-            <PillContent name={name} subtitle={subtitle} pricing={pricing} />
+            <PillContent
+                name={name}
+                subtitle={subtitle}
+                pricing={pricing}
+                badge={badge}
+            />
         </>
     );
 
