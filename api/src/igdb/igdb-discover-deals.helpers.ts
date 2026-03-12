@@ -2,7 +2,7 @@
  * Deal-aware discover category helpers (ROK-803).
  * Fetches game rows that combine community interest data with ITAD sale status.
  */
-import { and, eq, sql, isNotNull } from 'drizzle-orm';
+import { and, eq, sql, isNotNull, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type Redis from 'ioredis';
 import * as schema from '../drizzle/schema';
@@ -235,7 +235,7 @@ async function fetchAndFilterOnSale(
   const gameRows = await db
     .select()
     .from(schema.games)
-    .where(and(sql`${schema.games.id} = ANY(${gameIds})`, VISIBILITY_FILTER()));
+    .where(and(inArray(schema.games.id, gameIds), VISIBILITY_FILTER()));
 
   const itadIds = gameRows.map((g) => g.itadGameId).filter(Boolean) as string[];
   if (itadIds.length === 0) return [];
