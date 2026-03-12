@@ -8,6 +8,7 @@ import type {
   ItadGamePricingDto,
 } from "@raid-ledger/contract";
 import { GameRowPill } from "../../components/games/game-row-pill";
+import { formatPlaytime } from "../../lib/activity-utils";
 import { PERIOD_LABELS } from "../../lib/activity-utils";
 import { useUserActivity } from "../../hooks/use-user-profile";
 import { getMyPreferences, updatePreference } from "../../lib/api-client";
@@ -34,6 +35,7 @@ export function HeartedGameCard({
       coverUrl={game.coverUrl}
       href={`/games/${game.id}`}
       pricing={pricing}
+      subtitle={game.playtimeSeconds != null && game.playtimeSeconds > 0 ? formatPlaytime(game.playtimeSeconds) : undefined}
     />
   );
 }
