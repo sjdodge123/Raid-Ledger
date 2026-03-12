@@ -71,7 +71,7 @@ function resolveRating(game: GameProps): number | null {
 function buildCardClasses(props: UnifiedGameCardProps): string {
     const { compact, variant, dimWhenInactive } = props;
     const base =
-        'group relative rounded-xl overflow-hidden bg-panel transition-all';
+        'group block relative rounded-xl overflow-hidden bg-panel transition-all';
     const sizing = compact ? 'w-[180px] flex-shrink-0' : '';
     const hover = 'hover:shadow-lg hover:shadow-emerald-900/20';
     if (variant === 'toggle') {
