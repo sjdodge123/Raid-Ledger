@@ -197,7 +197,11 @@ describe('isDealSlug — adversarial', () => {
   });
 
   it('returns true for all three exact deal slugs', () => {
-    const dealSlugs = ['wishlisted-on-sale', 'most-played-on-sale', 'best-price'];
+    const dealSlugs = [
+      'wishlisted-on-sale',
+      'most-played-on-sale',
+      'best-price',
+    ];
     for (const slug of dealSlugs) {
       expect(isDealSlug(slug)).toBe(true);
     }

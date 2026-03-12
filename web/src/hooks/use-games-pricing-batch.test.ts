@@ -97,4 +97,26 @@ describe('useGamesPricingBatch', () => {
             expect(mockGetBatch).toHaveBeenCalledWith([5]);
         });
     });
+
+    it('chunks IDs into batches of 100', async () => {
+        const ids = Array.from({ length: 150 }, (_, i) => i + 1);
+        const chunk1 = ids.slice(0, 100);
+        const chunk2 = ids.slice(100);
+
+        mockGetBatch
+            .mockResolvedValueOnce({ data: Object.fromEntries(chunk1.map(id => [String(id), null])) })
+            .mockResolvedValueOnce({ data: Object.fromEntries(chunk2.map(id => [String(id), null])) });
+
+        const { result } = renderHook(() => useGamesPricingBatch(ids), {
+            wrapper: createWrapper(),
+        });
+
+        await waitFor(() => {
+            expect(result.current.size).toBe(150);
+        });
+
+        expect(mockGetBatch).toHaveBeenCalledTimes(2);
+        expect(mockGetBatch).toHaveBeenCalledWith(chunk1);
+        expect(mockGetBatch).toHaveBeenCalledWith(chunk2);
+    });
 });
