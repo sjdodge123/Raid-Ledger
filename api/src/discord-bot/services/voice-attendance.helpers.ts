@@ -262,6 +262,12 @@ export function createSession(
   });
 }
 
+/** Parse grace minutes from a settings string, defaulting to 5. */
+export function parseGraceMinutes(value: string | null): number {
+  const parsed = value ? parseInt(value, 10) : NaN;
+  return isNaN(parsed) ? 5 : parsed;
+}
+
 /** Mark a session as left. */
 export function leaveSession(session: InMemorySession): void {
   if (!session.isActive) return;

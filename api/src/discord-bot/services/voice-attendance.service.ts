@@ -9,7 +9,6 @@ import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import { SETTING_KEYS } from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { ChannelBindingsService } from './channel-bindings.service';
@@ -29,6 +28,7 @@ import {
   rejoinSession,
   createSession,
   leaveSession,
+  parseGraceMinutes,
 } from './voice-attendance.helpers';
 import * as classifyH from './voice-attendance-classify.helpers';
 import * as recoveryH from './voice-attendance-recovery.helpers';
@@ -36,11 +36,11 @@ import * as flushH from './voice-attendance-flush.helpers';
 import * as snapshotH from './voice-attendance-snapshot.helpers';
 import { ChannelResolverService } from './channel-resolver.service';
 
-const FLUSH_INTERVAL_MS = 30 * 1000;
-/** Window for detecting recently started events (2 minutes). */
-const SNAPSHOT_WINDOW_MS = 2 * 60 * 1000;
+const FLUSH_INTERVAL_MS = 30_000;
+const SNAPSHOT_WINDOW_MS = 120_000;
+const CLASSIFY_LOOKBACK_MS = 86_400_000;
+const VOICE_BINDING_PURPOSES = ['game-voice-monitor', 'general-lobby'];
 
-// Re-export for backward compatibility
 export { classifyVoiceSession };
 
 @Injectable()
@@ -118,12 +118,17 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     if (!guildId) return [];
     const now = new Date();
     const bindings = await this.channelBindingsService.getBindings(guildId);
-    const voiceBinding = bindings.find(
+    const vb = bindings.find(
       (b) =>
-        b.channelId === channelId && b.bindingPurpose === 'game-voice-monitor',
+        b.channelId === channelId &&
+        VOICE_BINDING_PURPOSES.includes(b.bindingPurpose),
     );
-    if (voiceBinding && voiceBinding.gameId !== null) {
-      return flushH.queryActiveEvents(this.db, voiceBinding.gameId, now);
+    if (vb) {
+      const gameFilter =
+        vb.bindingPurpose === 'game-voice-monitor' && vb.gameId !== null
+          ? vb.gameId
+          : null;
+      return flushH.queryActiveEvents(this.db, gameFilter, now);
     }
     const defaultVoice =
       await this.settingsService.getDiscordBotDefaultVoiceChannel();
@@ -134,15 +139,13 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   async flushToDb(): Promise<void> {
-    const dirtyEntries: InMemorySession[] = [];
-    for (const s of this.sessions.values()) {
-      if (s.dirty || s.isActive) dirtyEntries.push(s);
-    }
-    if (dirtyEntries.length === 0) return;
-    for (const s of dirtyEntries) {
+    const dirty = [...this.sessions.values()].filter(
+      (s) => s.dirty || s.isActive,
+    );
+    if (dirty.length === 0) return;
+    for (const s of dirty)
       await flushH.flushSingleSession(this.db, s, this.logger);
-    }
-    this.logger.debug(`Flushed ${dirtyEntries.length} voice session(s) to DB`);
+    this.logger.debug(`Flushed ${dirty.length} voice session(s) to DB`);
   }
 
   async classifyEvent(
@@ -166,23 +169,18 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   async recoverActiveSessions(): Promise<void> {
     const client = this.clientService.getClient();
-    if (!client) return;
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-    const guild = client.guilds.cache.get(guildId);
+    const guildId = client ? this.clientService.getGuildId() : null;
+    const guild = guildId ? client!.guilds.cache.get(guildId) : undefined;
     if (!guild) return;
-    const recovered = await recoveryH.recoverFromVoiceChannels(
+    const n = await recoveryH.recoverFromVoiceChannels(
       guild,
       this.db,
       this.sessions,
       (chId) => this.findActiveScheduledEvents(chId),
       (eId, mId, name, avatar) => this.handleJoin(eId, mId, name, null, avatar),
     );
-    if (recovered > 0) {
-      this.logger.log(
-        `Recovered ${recovered} voice attendance session(s) from live channels`,
-      );
-    }
+    if (n > 0)
+      this.logger.log(`Recovered ${n} voice session(s) from live channels`);
   }
 
   /** Cron: snapshot voice occupants for recently started events (ROK-735). */
@@ -256,7 +254,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const endedEvents = await flushH.fetchEndedEvents(
       this.db,
       now,
-      24 * 60 * 60 * 1000,
+      CLASSIFY_LOOKBACK_MS,
     );
     if (endedEvents.length === 0) return false;
     const graceMs = (await this.getGraceMinutes()) * 60 * 1000;
@@ -308,11 +306,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   getActiveCount(eventId: number): number {
-    let count = 0;
-    for (const s of this.sessions.values()) {
-      if (s.eventId === eventId && s.isActive) count++;
-    }
-    return count;
+    return [...this.sessions.values()].filter(
+      (s) => s.eventId === eventId && s.isActive,
+    ).length;
   }
 
   isUserActive(eventId: number, discordUserId: string): boolean {
@@ -320,10 +316,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async getGraceMinutes(): Promise<number> {
-    const value = await this.settingsService.get(
-      SETTING_KEYS.VOICE_ATTENDANCE_GRACE_MINUTES,
+    const val = await this.settingsService.get(
+      schema.SETTING_KEYS.VOICE_ATTENDANCE_GRACE_MINUTES,
     );
-    const parsed = value ? parseInt(value, 10) : NaN;
-    return isNaN(parsed) ? 5 : parsed;
+    return parseGraceMinutes(val);
   }
 }

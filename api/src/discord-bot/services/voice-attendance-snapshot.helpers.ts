@@ -102,7 +102,6 @@ async function snapshotSingleEvent(
     event.recurrenceGroupId,
   );
   if (!voiceChannelId) {
-    snapshotted.add(event.id);
     return;
   }
   const count = await deps.snapshotEvent(event.id, voiceChannelId);
