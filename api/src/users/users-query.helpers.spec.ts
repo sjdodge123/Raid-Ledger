@@ -293,7 +293,13 @@ describe('findAllByGame — deduplication edge cases', () => {
     const db = buildFindAllByGameDb({
       countRows: [{ count: 1 }],
       dataRows: [
-        { id: 10, username: 'Zara', avatar: 'hash', discordId: '999', customAvatarUrl: null },
+        {
+          id: 10,
+          username: 'Zara',
+          avatar: 'hash',
+          discordId: '999',
+          customAvatarUrl: null,
+        },
       ],
     });
     const result = await findAllByGame(db as never, 1, 10, undefined, 42);
