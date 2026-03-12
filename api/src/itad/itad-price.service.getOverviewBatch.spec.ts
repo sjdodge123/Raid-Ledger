@@ -216,8 +216,8 @@ describe('ItadPriceService.getOverviewBatch', () => {
     it('only passes cache-miss IDs to itadPost', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-key');
       cacheUtil.getCachedPrice
-        .mockResolvedValueOnce(ENTRY_A)  // itad-a cached
-        .mockResolvedValueOnce(null);     // itad-b not cached
+        .mockResolvedValueOnce(ENTRY_A) // itad-a cached
+        .mockResolvedValueOnce(null); // itad-b not cached
       itadPost.mockResolvedValue({ prices: [ENTRY_B], bundles: [] });
 
       await service.getOverviewBatch(['itad-a', 'itad-b']);
