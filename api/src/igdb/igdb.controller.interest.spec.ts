@@ -213,6 +213,7 @@ function describeIgdbControllerGetGameInterestSourceField() {
     const db: Record<string, jest.Mock> = {};
     const chainMethods = [
       'select',
+      'selectDistinctOn',
       'from',
       'insert',
       'values',
@@ -322,6 +323,7 @@ function describeIgdbControllerAddWantToPlaySourceManual() {
     const db: Record<string, jest.Mock> = {};
     const chainMethods = [
       'select',
+      'selectDistinctOn',
       'from',
       'innerJoin',
       'leftJoin',
@@ -431,6 +433,7 @@ function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
     const db: Record<string, jest.Mock> = {};
     const chainMethods = [
       'select',
+      'selectDistinctOn',
       'from',
       'innerJoin',
       'leftJoin',

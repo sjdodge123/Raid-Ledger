@@ -15,18 +15,23 @@ type Db = PostgresJsDatabase<typeof schema>;
 /** Sources that count as "interested" (hearts). Library/wishlist are separate. */
 export const HEART_SOURCES = ['manual', 'discord', 'steam'];
 
+/** SQL expression for distinct user count (ROK-804). */
+const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
+
 /**
  * Get interest count for a game (hearts only, excludes library/wishlist).
+ * Uses COUNT(DISTINCT user_id) to avoid double-counting users with
+ * multiple interest sources (ROK-804).
  * @param db - Database connection
  * @param gameId - Game ID
- * @returns Interest count
+ * @returns Unique interested user count
  */
 export async function getInterestCount(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
 ): Promise<number> {
   const [result] = await db
-    .select({ count: sql<number>`count(*)::int` })
+    .select({ count: DISTINCT_USER_COUNT })
     .from(schema.gameInterests)
     .where(
       and(
@@ -65,16 +70,17 @@ export async function getUserInterestSource(
 
 /**
  * Fetch first 8 interested players for avatar display (ROK-282).
+ * Uses DISTINCT ON to deduplicate users with multiple sources (ROK-804).
  * @param db - Database connection
  * @param gameId - Game ID
- * @returns Player preview list
+ * @returns Player preview list (unique users)
  */
 export async function getInterestedPlayers(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
 ) {
   const rows = await db
-    .select({
+    .selectDistinctOn([schema.users.id], {
       id: schema.users.id,
       username: schema.users.username,
       avatar: schema.users.avatar,
@@ -89,7 +95,7 @@ export async function getInterestedPlayers(
         inArray(schema.gameInterests.source, HEART_SOURCES),
       ),
     )
-    .orderBy(schema.gameInterests.createdAt)
+    .orderBy(schema.users.id, schema.gameInterests.createdAt)
     .limit(8);
 
   return rows.map((p) => ({
@@ -101,34 +107,31 @@ export async function getInterestedPlayers(
   }));
 }
 
-/** Fetch batch counts and user interests in parallel (hearts only). */
+/** Fetch batch counts and user interests in parallel (hearts only, ROK-804). */
 async function fetchBatchData(
   db: PostgresJsDatabase<typeof schema>,
   gameIds: number[],
   userId: number,
 ) {
+  const gameIdFilter = inArray(schema.gameInterests.gameId, gameIds);
+  const sourceFilter = inArray(schema.gameInterests.source, HEART_SOURCES);
   return Promise.all([
     db
       .select({
         gameId: schema.gameInterests.gameId,
-        count: sql<number>`count(*)::int`.as('count'),
+        count: DISTINCT_USER_COUNT.as('count'),
       })
       .from(schema.gameInterests)
-      .where(
-        and(
-          inArray(schema.gameInterests.gameId, gameIds),
-          inArray(schema.gameInterests.source, HEART_SOURCES),
-        ),
-      )
+      .where(and(gameIdFilter, sourceFilter))
       .groupBy(schema.gameInterests.gameId),
     db
       .select({ gameId: schema.gameInterests.gameId })
       .from(schema.gameInterests)
       .where(
         and(
-          inArray(schema.gameInterests.gameId, gameIds),
+          gameIdFilter,
           eq(schema.gameInterests.userId, userId),
-          inArray(schema.gameInterests.source, HEART_SOURCES),
+          sourceFilter,
         ),
       ),
   ]);

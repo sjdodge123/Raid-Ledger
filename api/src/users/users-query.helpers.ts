@@ -45,7 +45,27 @@ type UserListResult = {
   total: number;
 };
 
-/** Find all users filtered by gameId (users who hearted the game). */
+/** SQL expression for distinct user count in game interest queries. */
+const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})`;
+
+/** Build WHERE conditions for game interest queries. */
+function buildGameInterestConditions(
+  gameId: number,
+  search: string | undefined,
+  source?: string,
+) {
+  const conditions = [eq(schema.gameInterests.gameId, gameId)];
+  if (source) {
+    conditions.push(eq(schema.gameInterests.source, source));
+  } else {
+    conditions.push(inArray(schema.gameInterests.source, HEART_SOURCES));
+  }
+  const searchCondition = buildSearchCondition(search);
+  if (searchCondition) conditions.push(searchCondition);
+  return and(...conditions);
+}
+
+/** Find all users filtered by gameId (users interested in the game). */
 export async function findAllByGame(
   db: PostgresJsDatabase<typeof schema>,
   page: number,
@@ -55,22 +75,19 @@ export async function findAllByGame(
   source?: string,
 ): Promise<UserListResult> {
   const offset = (page - 1) * limit;
-  const searchCondition = buildSearchCondition(search);
-  const conditions = [eq(schema.gameInterests.gameId, gameId)];
-  if (source) conditions.push(eq(schema.gameInterests.source, source));
-  if (searchCondition) conditions.push(searchCondition);
-  const whereClause = and(...conditions);
+  const whereClause = buildGameInterestConditions(gameId, search, source);
+  const joinCond = eq(schema.gameInterests.userId, schema.users.id);
   const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
+    .select({ count: DISTINCT_USER_COUNT })
     .from(schema.gameInterests)
-    .innerJoin(schema.users, eq(schema.gameInterests.userId, schema.users.id))
+    .innerJoin(schema.users, joinCond)
     .where(whereClause);
   const rows = await db
-    .select(USER_LIST_COLUMNS)
+    .selectDistinctOn([schema.users.id], USER_LIST_COLUMNS)
     .from(schema.gameInterests)
-    .innerJoin(schema.users, eq(schema.gameInterests.userId, schema.users.id))
+    .innerJoin(schema.users, joinCond)
     .where(whereClause)
-    .orderBy(asc(schema.users.username))
+    .orderBy(schema.users.id, asc(schema.users.username))
     .limit(limit)
     .offset(offset);
   return { data: rows, total: Number(countResult.count) };
