@@ -8,7 +8,7 @@ import { SettingsService } from '../settings/settings.service';
 import { itadPost } from './itad-http.util';
 import type {
   ItadOverviewResponse,
-  ItadOverviewEntry,
+  ItadOverviewGameEntry,
 } from './itad-price.types';
 import { getCachedPrice, setCachedPrice } from './itad-cache.util';
 
@@ -26,11 +26,13 @@ export class ItadPriceService {
    * Returns null if API key is not configured or if the request fails.
    * Results are cached in Redis with a 3-hour TTL.
    */
-  async getOverview(itadGameId: string): Promise<ItadOverviewEntry | null> {
+  async getOverview(
+    itadGameId: string,
+  ): Promise<ItadOverviewGameEntry | null> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return null;
 
-    const cached = await getCachedPrice<ItadOverviewEntry>(
+    const cached = await getCachedPrice<ItadOverviewGameEntry>(
       this.redis,
       itadGameId,
     );
@@ -42,9 +44,9 @@ export class ItadPriceService {
       [itadGameId],
     );
 
-    if (!response) return null;
+    if (!response?.prices?.length) return null;
 
-    const entry = response[itadGameId] ?? null;
+    const entry = response.prices.find((p) => p.id === itadGameId) ?? null;
     if (entry) {
       await setCachedPrice(this.redis, itadGameId, entry);
     }

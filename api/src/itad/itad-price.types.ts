@@ -1,42 +1,55 @@
 /**
  * ITAD API price-related response shapes (ROK-419).
- * These mirror the IsThereAnyDeal v2 API response format.
+ * These mirror the IsThereAnyDeal v2 API response format
+ * for POST /games/overview/v2.
  */
 
-/** A single price entry from the ITAD overview endpoint */
-export interface ItadOverviewPrice {
-  /** ITAD numeric shop ID */
-  shop: { id: number; name: string };
-  /** Current price value */
-  price: { amount: number; amountInt: number; currency: string };
-  /** Regular (non-sale) price */
-  regular: { amount: number; amountInt: number; currency: string };
-  /** Discount percentage (0-100) */
+/** Price amount fields returned by ITAD */
+export interface ItadPriceAmount {
+  amount: number;
+  amountInt: number;
+  currency: string;
+}
+
+/** Shop reference from ITAD */
+export interface ItadShopRef {
+  id: number;
+  name: string;
+}
+
+/** Current best deal from POST /games/overview/v2 */
+export interface ItadCurrentDeal {
+  shop: ItadShopRef;
+  price: ItadPriceAmount;
+  regular: ItadPriceAmount;
   cut: number;
-  /** Direct buy URL */
   url: string;
+  voucher?: string | null;
+  flag?: string | null;
+  timestamp?: string;
+  expiry?: string | null;
 }
 
-/** Historical low from the ITAD overview endpoint */
-export interface ItadOverviewHistoryLow {
-  /** The lowest recorded price */
-  price: { amount: number; amountInt: number; currency: string };
-  /** Shop that had the lowest price */
-  shop: { id: number; name: string };
-  /** ISO date string of when the historical low occurred */
-  recorded: string;
+/** Historical lowest price from POST /games/overview/v2 */
+export interface ItadHistoricalLow {
+  shop: ItadShopRef;
+  price: ItadPriceAmount;
+  regular: ItadPriceAmount;
+  cut: number;
+  timestamp: string;
 }
 
-/** Single game overview response from POST /games/overview/v2 */
-export interface ItadOverviewEntry {
-  /** Current prices across stores */
-  prices: ItadOverviewPrice[];
-  /** All-time historical lowest price */
-  lowest: ItadOverviewHistoryLow | null;
+/** A single game entry in the overview response */
+export interface ItadOverviewGameEntry {
+  id: string;
+  current: ItadCurrentDeal;
+  lowest: ItadHistoricalLow;
+  bundled: number;
+  urls: { game: string };
 }
 
-/**
- * Full response from POST /games/overview/v2.
- * Maps ITAD game ID -> overview entry.
- */
-export type ItadOverviewResponse = Record<string, ItadOverviewEntry>;
+/** Full response from POST /games/overview/v2 */
+export interface ItadOverviewResponse {
+  prices: ItadOverviewGameEntry[];
+  bundles: unknown[];
+}

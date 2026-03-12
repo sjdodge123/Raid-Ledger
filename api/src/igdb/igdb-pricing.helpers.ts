@@ -7,10 +7,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadPriceService } from '../itad/itad-price.service';
 import type { ItadGamePricingDto, DealQuality } from '@raid-ledger/contract';
-import type {
-  ItadOverviewEntry,
-  ItadOverviewPrice,
-} from '../itad/itad-price.types';
+import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
 
 /** Thresholds for deal quality classification */
 const GREAT_DEAL_THRESHOLD = 0.1;
@@ -47,53 +44,43 @@ async function lookupItadGameId(
   return rows[0]?.itadGameId ?? null;
 }
 
-/** Map an ITAD overview entry to the contract pricing shape. */
-function mapOverviewToPricing(overview: ItadOverviewEntry): ItadGamePricingDto {
-  const stores = overview.prices.map(mapStorePrice);
-  const currentBest = findBestPrice(stores);
-  const historyLow = mapHistoryLow(overview);
-  const currency = extractCurrency(overview);
+/** Map an ITAD overview game entry to the contract pricing shape. */
+function mapOverviewToPricing(
+  entry: ItadOverviewGameEntry,
+): ItadGamePricingDto {
+  const currentBest = mapCurrentBest(entry);
+  const stores = currentBest ? [currentBest] : [];
+  const historyLow = mapHistoryLow(entry);
+  const currency = entry.current?.price?.currency ?? 'USD';
   const dealQuality = computeDealQuality(currentBest, historyLow);
 
   return { currentBest, stores, historyLow, dealQuality, currency };
 }
 
-/** Map a single ITAD price entry to the contract store price shape. */
-function mapStorePrice(
-  p: ItadOverviewPrice,
-): ItadGamePricingDto['stores'][number] {
-  return {
-    shop: p.shop.name,
-    url: p.url,
-    price: p.price.amount,
-    regularPrice: p.regular.amount,
-    discount: p.cut,
-  };
-}
-
-/** Find the lowest-priced store entry, or null if no stores. */
-function findBestPrice(
-  stores: ItadGamePricingDto['stores'],
+/** Map the current best deal from the overview entry. */
+function mapCurrentBest(
+  entry: ItadOverviewGameEntry,
 ): ItadGamePricingDto['currentBest'] {
-  if (stores.length === 0) return null;
-  return stores.reduce((best, s) => (s.price < best.price ? s : best));
-}
-
-/** Map the historical low from the overview, or null. */
-function mapHistoryLow(
-  overview: ItadOverviewEntry,
-): ItadGamePricingDto['historyLow'] {
-  if (!overview.lowest) return null;
+  if (!entry.current) return null;
   return {
-    price: overview.lowest.price.amount,
-    shop: overview.lowest.shop.name,
-    date: overview.lowest.recorded,
+    shop: entry.current.shop.name,
+    url: entry.current.url,
+    price: entry.current.price.amount,
+    regularPrice: entry.current.regular.amount,
+    discount: entry.current.cut,
   };
 }
 
-/** Extract currency from the first price entry, defaulting to 'USD'. */
-function extractCurrency(overview: ItadOverviewEntry): string {
-  return overview.prices[0]?.price.currency ?? 'USD';
+/** Map the historical low from the overview entry, or null. */
+function mapHistoryLow(
+  entry: ItadOverviewGameEntry,
+): ItadGamePricingDto['historyLow'] {
+  if (!entry.lowest) return null;
+  return {
+    price: entry.lowest.price.amount,
+    shop: entry.lowest.shop.name,
+    date: entry.lowest.timestamp,
+  };
 }
 
 /**
@@ -110,7 +97,8 @@ function computeDealQuality(
   if (!currentBest || currentBest.discount <= 0) return null;
   if (!historyLow || historyLow.price <= 0) return 'modest';
 
-  const ratio = (currentBest.price - historyLow.price) / historyLow.price;
+  const ratio =
+    (currentBest.price - historyLow.price) / historyLow.price;
   if (ratio <= GREAT_DEAL_THRESHOLD) return 'great';
   if (ratio <= GOOD_DEAL_THRESHOLD) return 'good';
   return 'modest';

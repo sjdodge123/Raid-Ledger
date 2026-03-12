@@ -6,9 +6,12 @@ import { Test } from '@nestjs/testing';
 import { ItadPriceService } from './itad-price.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
-import type { ItadOverviewEntry } from './itad-price.types';
+import type {
+  ItadOverviewGameEntry,
+  ItadOverviewResponse,
+} from './itad-price.types';
 
-// Mock the HTTP util — all ITAD calls go through itadPost
+// Mock the HTTP util — overview uses itadPost (POST)
 jest.mock('./itad-http.util', () => ({
   itadPost: jest.fn(),
 }));
@@ -33,21 +36,29 @@ const cacheUtil = require('./itad-cache.util') as {
   setCachedPrice: jest.Mock;
 };
 
-const FAKE_OVERVIEW: ItadOverviewEntry = {
-  prices: [
-    {
-      shop: { id: 61, name: 'Steam' },
-      price: { amount: 29.99, amountInt: 2999, currency: 'USD' },
-      regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-      cut: 50,
-      url: 'https://store.steampowered.com/app/12345',
-    },
-  ],
-  lowest: {
-    price: { amount: 14.99, amountInt: 1499, currency: 'USD' },
+const FAKE_ENTRY: ItadOverviewGameEntry = {
+  id: 'uuid-game-123',
+  current: {
     shop: { id: 61, name: 'Steam' },
-    recorded: '2024-11-25T00:00:00Z',
+    price: { amount: 29.99, amountInt: 2999, currency: 'USD' },
+    regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
+    cut: 50,
+    url: 'https://store.steampowered.com/app/12345',
   },
+  lowest: {
+    shop: { id: 61, name: 'Steam' },
+    price: { amount: 14.99, amountInt: 1499, currency: 'USD' },
+    regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
+    cut: 75,
+    timestamp: '2024-11-25T00:00:00Z',
+  },
+  bundled: 0,
+  urls: { game: 'https://isthereanydeal.com/game/test/' },
+};
+
+const FAKE_RESPONSE: ItadOverviewResponse = {
+  prices: [FAKE_ENTRY],
+  bundles: [],
 };
 
 describe('ItadPriceService', () => {
@@ -81,7 +92,7 @@ describe('ItadPriceService', () => {
       expect(itadPost).not.toHaveBeenCalled();
     });
 
-    it('returns null when ITAD POST returns null', async () => {
+    it('returns null when itadPost returns null', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
       cacheUtil.getCachedPrice.mockResolvedValue(null);
       itadPost.mockResolvedValue(null);
@@ -91,10 +102,21 @@ describe('ItadPriceService', () => {
       expect(result).toBeNull();
     });
 
-    it('returns null when game ID is not found in ITAD response', async () => {
+    it('returns null when response has empty prices array', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
       cacheUtil.getCachedPrice.mockResolvedValue(null);
-      itadPost.mockResolvedValue({ 'different-game-uuid': FAKE_OVERVIEW });
+      itadPost.mockResolvedValue({ prices: [], bundles: [] });
+
+      const result = await service.getOverview('uuid-game-123');
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when no entry matches the game ID', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
+      cacheUtil.getCachedPrice.mockResolvedValue(null);
+      const otherEntry = { ...FAKE_ENTRY, id: 'other-game' };
+      itadPost.mockResolvedValue({ prices: [otherEntry], bundles: [] });
 
       const result = await service.getOverview('uuid-game-123');
 
@@ -105,40 +127,30 @@ describe('ItadPriceService', () => {
   describe('getOverview — cache behavior', () => {
     it('returns cached entry on cache hit without calling ITAD', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
-      cacheUtil.getCachedPrice.mockResolvedValue(FAKE_OVERVIEW);
+      cacheUtil.getCachedPrice.mockResolvedValue(FAKE_ENTRY);
 
       const result = await service.getOverview('uuid-game-123');
 
-      expect(result).toEqual(FAKE_OVERVIEW);
+      expect(result).toEqual(FAKE_ENTRY);
       expect(itadPost).not.toHaveBeenCalled();
     });
 
-    it('calls ITAD API and caches result on cache miss', async () => {
+    it('calls ITAD API and caches entry on cache miss', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
       cacheUtil.getCachedPrice.mockResolvedValue(null);
-      itadPost.mockResolvedValue({ 'uuid-game-123': FAKE_OVERVIEW });
+      itadPost.mockResolvedValue(FAKE_RESPONSE);
 
       const result = await service.getOverview('uuid-game-123');
 
-      expect(result).toEqual(FAKE_OVERVIEW);
+      expect(result).toEqual(FAKE_ENTRY);
       expect(cacheUtil.setCachedPrice).toHaveBeenCalledWith(
         mockRedis,
         'uuid-game-123',
-        FAKE_OVERVIEW,
+        FAKE_ENTRY,
       );
     });
 
-    it('does not cache result when game not found in response', async () => {
-      mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
-      cacheUtil.getCachedPrice.mockResolvedValue(null);
-      itadPost.mockResolvedValue({});
-
-      await service.getOverview('uuid-game-123');
-
-      expect(cacheUtil.setCachedPrice).not.toHaveBeenCalled();
-    });
-
-    it('does not cache result when itadPost returns null', async () => {
+    it('does not cache when itadPost returns null', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
       cacheUtil.getCachedPrice.mockResolvedValue(null);
       itadPost.mockResolvedValue(null);
@@ -147,13 +159,24 @@ describe('ItadPriceService', () => {
 
       expect(cacheUtil.setCachedPrice).not.toHaveBeenCalled();
     });
+
+    it('does not cache when no entry matches game ID', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
+      cacheUtil.getCachedPrice.mockResolvedValue(null);
+      const otherEntry = { ...FAKE_ENTRY, id: 'other-game' };
+      itadPost.mockResolvedValue({ prices: [otherEntry], bundles: [] });
+
+      await service.getOverview('uuid-game-123');
+
+      expect(cacheUtil.setCachedPrice).not.toHaveBeenCalled();
+    });
   });
 
-  describe('getOverview — ITAD API call shape', () => {
-    it('posts to /games/overview/v2 with API key and game ID array', async () => {
+  describe('getOverview — API call shape', () => {
+    it('calls itadPost with correct path, key, and game ID array', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('my-api-key');
       cacheUtil.getCachedPrice.mockResolvedValue(null);
-      itadPost.mockResolvedValue({ 'uuid-game-abc': FAKE_OVERVIEW });
+      itadPost.mockResolvedValue(FAKE_RESPONSE);
 
       await service.getOverview('uuid-game-abc');
 
@@ -167,7 +190,7 @@ describe('ItadPriceService', () => {
     it('uses the game ID as the cache key', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
       cacheUtil.getCachedPrice.mockResolvedValue(null);
-      itadPost.mockResolvedValue({ 'specific-uuid': FAKE_OVERVIEW });
+      itadPost.mockResolvedValue(FAKE_RESPONSE);
 
       await service.getOverview('specific-uuid');
 
@@ -178,50 +201,17 @@ describe('ItadPriceService', () => {
     });
   });
 
-  describe('getOverview — response data integrity', () => {
-    it('returns the overview entry with prices and historical low', async () => {
+  describe('getOverview — response data', () => {
+    it('extracts the matching entry from the prices array', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
       cacheUtil.getCachedPrice.mockResolvedValue(null);
-      itadPost.mockResolvedValue({ 'uuid-game-123': FAKE_OVERVIEW });
+      itadPost.mockResolvedValue(FAKE_RESPONSE);
 
       const result = await service.getOverview('uuid-game-123');
 
-      expect(result).toMatchObject({
-        prices: expect.arrayContaining([
-          expect.objectContaining({
-            shop: expect.objectContaining({ name: expect.any(String) }),
-            price: expect.objectContaining({ amount: expect.any(Number) }),
-          }),
-        ]),
-        lowest: expect.objectContaining({
-          price: expect.objectContaining({ amount: expect.any(Number) }),
-          recorded: expect.any(String),
-        }),
-      });
-    });
-
-    it('handles overview entry with null lowest (no historical low)', async () => {
-      const overviewNoLow: ItadOverviewEntry = { ...FAKE_OVERVIEW, lowest: null };
-      mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
-      cacheUtil.getCachedPrice.mockResolvedValue(null);
-      itadPost.mockResolvedValue({ 'uuid-game-123': overviewNoLow });
-
-      const result = await service.getOverview('uuid-game-123');
-
-      expect(result).not.toBeNull();
-      expect(result!.lowest).toBeNull();
-    });
-
-    it('handles overview entry with empty prices array', async () => {
-      const overviewNoPrices: ItadOverviewEntry = { prices: [], lowest: null };
-      mockSettings.getItadApiKey.mockResolvedValue('test-api-key');
-      cacheUtil.getCachedPrice.mockResolvedValue(null);
-      itadPost.mockResolvedValue({ 'uuid-game-123': overviewNoPrices });
-
-      const result = await service.getOverview('uuid-game-123');
-
-      expect(result).not.toBeNull();
-      expect(result!.prices).toHaveLength(0);
+      expect(result).toEqual(FAKE_ENTRY);
+      expect(result!.id).toBe('uuid-game-123');
+      expect(result!.current.shop.name).toBe('Steam');
     });
   });
 });
