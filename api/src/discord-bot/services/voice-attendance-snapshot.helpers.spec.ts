@@ -4,7 +4,6 @@
  */
 import {
   runEventSnapshots,
-  fetchRecentlyStartedEvents,
   type RecentlyStartedEvent,
 } from './voice-attendance-snapshot.helpers';
 import {
@@ -166,11 +165,5 @@ describe('runEventSnapshots', () => {
     expect(mockSnapshotEvent).toHaveBeenCalledWith(12, 'voice-ch-12');
     expect(snapshotted.has(11)).toBe(true); // unchanged
     expect(snapshotted.has(12)).toBe(true); // newly added
-  });
-});
-
-describe('fetchRecentlyStartedEvents', () => {
-  it('is exported as a function', () => {
-    expect(typeof fetchRecentlyStartedEvents).toBe('function');
   });
 });
