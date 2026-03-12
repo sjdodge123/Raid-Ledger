@@ -5,6 +5,7 @@ import {
   useUserProfile,
   useUserHeartedGames,
 } from "../hooks/use-user-profile";
+import { useGamesPricingBatch } from "../hooks/use-games-pricing-batch";
 import { useGameRegistry } from "../hooks/use-game-registry";
 import { useAuth } from "../hooks/use-auth";
 import { formatDistanceToNow } from "date-fns";
@@ -64,6 +65,8 @@ function HeartedGamesSection({
   const [showModal, setShowModal] = useState(false);
   const items = data?.data ?? [];
   const total = data?.meta?.total ?? 0;
+  const gameIds = items.map((g) => g.id);
+  const pricingMap = useGamesPricingBatch(gameIds);
 
   if (items.length === 0 && !isLoading) return null;
   return (
@@ -73,7 +76,7 @@ function HeartedGamesSection({
       </h2>
       <div className="flex flex-col gap-2">
         {items.map((game) => (
-          <HeartedGameCard key={game.id} game={game} />
+          <HeartedGameCard key={game.id} game={game} pricing={pricingMap.get(game.id)} />
         ))}
       </div>
       {total > 10 && (

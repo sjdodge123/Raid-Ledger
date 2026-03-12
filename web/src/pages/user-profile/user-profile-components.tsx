@@ -5,6 +5,7 @@ import type {
   CharacterDto,
   UserHeartedGameDto,
   ActivityPeriod,
+  ItadGamePricingDto,
 } from "@raid-ledger/contract";
 import { GameRowPill } from "../../components/games/game-row-pill";
 import { PERIOD_LABELS } from "../../lib/activity-utils";
@@ -21,8 +22,10 @@ export { SteamWishlistSection } from "./steam-wishlist-section";
 /** Clickable game card for the hearted games section (ROK-282, ROK-805) */
 export function HeartedGameCard({
   game,
+  pricing,
 }: {
   game: UserHeartedGameDto;
+  pricing?: ItadGamePricingDto | null;
 }): JSX.Element {
   return (
     <GameRowPill
@@ -30,6 +33,7 @@ export function HeartedGameCard({
       name={game.name}
       coverUrl={game.coverUrl}
       href={`/games/${game.id}`}
+      pricing={pricing}
     />
   );
 }

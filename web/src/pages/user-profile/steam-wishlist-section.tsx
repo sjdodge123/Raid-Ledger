@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { useUserSteamWishlist } from "../../hooks/use-user-profile";
+import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { SteamIcon } from "../../components/icons/SteamIcon";
 import { WishlistCard } from "./steam-wishlist-cards";
 import { SteamWishlistModal } from "./steam-wishlist-modal";
@@ -15,6 +16,8 @@ export function SteamWishlistSection({
   const [showModal, setShowModal] = useState(false);
   const items = data?.data ?? [];
   const total = data?.meta?.total ?? 0;
+  const gameIds = items.map((e) => e.gameId);
+  const pricingMap = useGamesPricingBatch(gameIds);
 
   if (items.length === 0 && !isLoading) return null;
   return (
@@ -28,7 +31,7 @@ export function SteamWishlistSection({
       </div>
       <div className="flex flex-col gap-2">
         {items.map((entry) => (
-          <WishlistCard key={entry.gameId} entry={entry} />
+          <WishlistCard key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />
         ))}
       </div>
       {total > 10 && (

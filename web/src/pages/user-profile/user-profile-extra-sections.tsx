@@ -1,8 +1,9 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { SteamLibraryEntryDto } from "@raid-ledger/contract";
+import type { SteamLibraryEntryDto, ItadGamePricingDto } from "@raid-ledger/contract";
 import { useUserSteamLibrary } from "../../hooks/use-user-profile";
+import { useGamesPricingBatch } from "../../hooks/use-games-pricing-batch";
 import { formatPlaytime } from "../../lib/activity-utils";
 import { SteamIcon } from "../../components/icons/SteamIcon";
 import { buildDiscordAvatarUrl } from "../../lib/avatar";
@@ -13,8 +14,10 @@ import { SteamLibraryModal } from "./steam-library-modal";
 /** Single Steam library entry using shared GameRowPill (ROK-805). */
 function SteamLibraryItem({
   entry,
+  pricing,
 }: {
   entry: SteamLibraryEntryDto;
+  pricing?: ItadGamePricingDto | null;
 }): JSX.Element {
   return (
     <GameRowPill
@@ -23,6 +26,7 @@ function SteamLibraryItem({
       coverUrl={entry.coverUrl}
       href={`/games/${entry.gameId}`}
       subtitle={formatPlaytime(entry.playtimeSeconds)}
+      pricing={pricing}
     />
   );
 }
@@ -37,6 +41,8 @@ export function SteamLibrarySection({
   const [showModal, setShowModal] = useState(false);
   const items = data?.data ?? [];
   const total = data?.meta?.total ?? 0;
+  const gameIds = items.map((e) => e.gameId);
+  const pricingMap = useGamesPricingBatch(gameIds);
 
   if (items.length === 0 && !isLoading) return null;
   return (
@@ -50,7 +56,7 @@ export function SteamLibrarySection({
       </div>
       <div className="flex flex-col gap-2">
         {items.map((entry) => (
-          <SteamLibraryItem key={entry.gameId} entry={entry} />
+          <SteamLibraryItem key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />
         ))}
       </div>
       {total > 10 && (

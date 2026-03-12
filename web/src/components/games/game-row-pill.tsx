@@ -5,6 +5,8 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
+import type { ItadGamePricingDto } from '@raid-ledger/contract';
+import { PriceBadge } from './PriceBadge';
 
 interface GameRowPillProps {
     gameId: number;
@@ -12,6 +14,7 @@ interface GameRowPillProps {
     coverUrl: string | null;
     href?: string;
     subtitle?: string;
+    pricing?: ItadGamePricingDto | null;
 }
 
 /** Small cover thumbnail or placeholder. */
@@ -39,26 +42,28 @@ function PillCover({
     );
 }
 
-/** Text content: name and optional subtitle. */
+/** Text content: name, optional subtitle, and optional pricing badge. */
 function PillContent({
     name,
     subtitle,
+    pricing,
 }: {
     name: string;
     subtitle?: string;
+    pricing?: ItadGamePricingDto | null;
 }): JSX.Element {
-    if (subtitle) {
-        return (
-            <div className="flex-1 min-w-0">
-                <span className="font-medium text-foreground truncate block">
+    return (
+        <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+                <span className="font-medium text-foreground truncate">
                     {name}
                 </span>
-                <span className="text-sm text-muted">{subtitle}</span>
+                <PriceBadge pricing={pricing ?? null} />
             </div>
-        );
-    }
-    return (
-        <span className="font-medium text-foreground truncate">{name}</span>
+            {subtitle && (
+                <span className="text-sm text-muted">{subtitle}</span>
+            )}
+        </div>
     );
 }
 
@@ -74,11 +79,12 @@ export function GameRowPill({
     coverUrl,
     href,
     subtitle,
+    pricing,
 }: GameRowPillProps): JSX.Element {
     const inner = (
         <>
             <PillCover url={coverUrl} alt={name} />
-            <PillContent name={name} subtitle={subtitle} />
+            <PillContent name={name} subtitle={subtitle} pricing={pricing} />
         </>
     );
 
