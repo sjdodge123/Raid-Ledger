@@ -4,6 +4,7 @@ import { useUserHeartedGamesModal } from "../../hooks/use-user-profile";
 import { Modal } from "../../components/ui/modal";
 import { InfiniteScrollSentinel } from "../../components/ui/infinite-scroll-sentinel";
 import { HeartedGameCard } from "./user-profile-components";
+import type { PricingMap } from "../user-profile-page";
 
 /** Hearted games modal with search filter and infinite scroll */
 export function HeartedGamesModal({
@@ -11,11 +12,13 @@ export function HeartedGamesModal({
   isOpen,
   onClose,
   total,
+  pricingMap,
 }: {
   userId: number;
   isOpen: boolean;
   onClose: () => void;
   total: number;
+  pricingMap: PricingMap;
 }): JSX.Element {
   const [search, setSearch] = useState("");
   const modal = useUserHeartedGamesModal(userId, isOpen);
@@ -48,7 +51,7 @@ export function HeartedGamesModal({
       />
       <div className="flex flex-col gap-2">
         {filteredItems.map((game) => (
-          <HeartedGameCard key={game.id} game={game} />
+          <HeartedGameCard key={game.id} game={game} pricing={pricingMap.get(game.id)} />
         ))}
       </div>
       {filteredItems.length === 0 && (

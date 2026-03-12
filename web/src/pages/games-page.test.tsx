@@ -28,12 +28,8 @@ vi.mock('../components/games/GameCarousel', () => ({
     GameCarousel: ({ category }: { category: string }) => <div data-testid="game-carousel">{category}</div>,
 }));
 
-vi.mock('../components/games/GameCard', () => ({
-    GameCard: ({ game }: { game: { name: string } }) => <div data-testid="game-card">{game.name}</div>,
-}));
-
-vi.mock('../components/games/mobile-game-card', () => ({
-    MobileGameCard: ({ game }: { game: { name: string } }) => <div data-testid="mobile-game-card">{game.name}</div>,
+vi.mock('../components/games/unified-game-card', () => ({
+    UnifiedGameCard: ({ game }: { game: { name: string } }) => <div data-testid="game-card">{game.name}</div>,
 }));
 
 vi.mock('../components/admin/GameLibraryTable', () => ({

@@ -152,8 +152,20 @@ export async function findAllWithRolesQuery(
   return { data: rows, total: Number(countResult.count) };
 }
 
-/** Select columns for hearted game queries. */
-const HEARTED_GAME_COLUMNS = {
+/** Correlated subquery: Steam playtime in seconds for a game (ROK-805). */
+function playtimeSubquery(userId: number) {
+  return sql<number | null>`(
+    SELECT ${schema.gameInterests.playtimeForever} * 60
+    FROM ${schema.gameInterests}
+    WHERE ${schema.gameInterests.userId} = ${userId}
+      AND ${schema.gameInterests.gameId} = ${schema.games.id}
+      AND ${schema.gameInterests.source} = 'steam_library'
+    LIMIT 1
+  )`;
+}
+
+/** Base columns for hearted game queries (static, no userId dependency). */
+const HEARTED_GAME_BASE_COLUMNS = {
   id: schema.games.id,
   igdbId: schema.games.igdbId,
   name: schema.games.name,
@@ -161,7 +173,7 @@ const HEARTED_GAME_COLUMNS = {
   coverUrl: schema.games.coverUrl,
 } as const;
 
-/** Fetch hearted games — only manual/discord/steam sources (ROK-754, ROK-779). */
+/** Fetch hearted games — only manual/discord/steam sources (ROK-754, ROK-779, ROK-805). */
 export async function fetchHeartedGames(
   db: PostgresJsDatabase<typeof schema>,
   userId: number,
@@ -178,7 +190,10 @@ export async function fetchHeartedGames(
     .from(schema.gameInterests)
     .where(whereClause);
   const rows = await db
-    .select(HEARTED_GAME_COLUMNS)
+    .select({
+      ...HEARTED_GAME_BASE_COLUMNS,
+      playtimeSeconds: playtimeSubquery(userId),
+    })
     .from(schema.gameInterests)
     .innerJoin(schema.games, eq(schema.gameInterests.gameId, schema.games.id))
     .where(whereClause)

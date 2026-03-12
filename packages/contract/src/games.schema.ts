@@ -220,6 +220,8 @@ export const UserHeartedGameSchema = z.object({
     name: z.string(),
     slug: z.string(),
     coverUrl: z.string().nullable(),
+    /** ROK-805: Steam playtime in seconds, if available */
+    playtimeSeconds: z.number().nullable().optional(),
 });
 
 export type UserHeartedGameDto = z.infer<typeof UserHeartedGameSchema>;

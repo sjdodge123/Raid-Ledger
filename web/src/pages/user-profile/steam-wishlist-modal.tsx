@@ -4,6 +4,7 @@ import { useUserSteamWishlistModal } from "../../hooks/use-user-profile";
 import { Modal } from "../../components/ui/modal";
 import { InfiniteScrollSentinel } from "../../components/ui/infinite-scroll-sentinel";
 import { WishlistCard } from "./steam-wishlist-cards";
+import type { PricingMap } from "../user-profile-page";
 
 /** Steam wishlist modal with search filter and infinite scroll */
 export function SteamWishlistModal({
@@ -11,11 +12,13 @@ export function SteamWishlistModal({
   isOpen,
   onClose,
   total,
+  pricingMap,
 }: {
   userId: number;
   isOpen: boolean;
   onClose: () => void;
   total: number;
+  pricingMap: PricingMap;
 }): JSX.Element {
   const [search, setSearch] = useState("");
   const modal = useUserSteamWishlistModal(userId, isOpen);
@@ -50,7 +53,7 @@ export function SteamWishlistModal({
       />
       <div className="flex flex-col gap-2">
         {filteredItems.map((entry) => (
-          <WishlistCard key={entry.gameId} entry={entry} />
+          <WishlistCard key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />
         ))}
       </div>
       {filteredItems.length === 0 && (

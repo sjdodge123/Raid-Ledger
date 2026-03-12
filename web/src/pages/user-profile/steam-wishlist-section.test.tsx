@@ -43,7 +43,7 @@ describe('SteamWishlistSection', () => {
         });
 
         const { container } = renderWithProviders(
-            <SteamWishlistSection userId={1} />,
+            <SteamWishlistSection userId={1} pricingMap={new Map()} />,
         );
 
         expect(container.innerHTML).toBe('');
@@ -56,7 +56,7 @@ describe('SteamWishlistSection', () => {
             isLoading: false,
         });
 
-        renderWithProviders(<SteamWishlistSection userId={1} />);
+        renderWithProviders(<SteamWishlistSection userId={1} pricingMap={new Map()} />);
 
         expect(screen.getByText(/Steam Wishlist/)).toBeInTheDocument();
         expect(screen.getByText(/\(5\)/)).toBeInTheDocument();
@@ -72,7 +72,7 @@ describe('SteamWishlistSection', () => {
             isLoading: false,
         });
 
-        renderWithProviders(<SteamWishlistSection userId={1} />);
+        renderWithProviders(<SteamWishlistSection userId={1} pricingMap={new Map()} />);
 
         expect(screen.getByText('Elden Ring')).toBeInTheDocument();
         expect(screen.getByText('Hollow Knight')).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('SteamWishlistSection', () => {
             isLoading: false,
         });
 
-        renderWithProviders(<SteamWishlistSection userId={1} />);
+        renderWithProviders(<SteamWishlistSection userId={1} pricingMap={new Map()} />);
 
         expect(
             screen.queryByRole('button', { name: /show all/i }),
@@ -101,7 +101,7 @@ describe('SteamWishlistSection', () => {
             isLoading: false,
         });
 
-        renderWithProviders(<SteamWishlistSection userId={1} />);
+        renderWithProviders(<SteamWishlistSection userId={1} pricingMap={new Map()} />);
 
         expect(screen.getByText(/Show All \(25\)/)).toBeInTheDocument();
     });
@@ -116,7 +116,7 @@ describe('SteamWishlistSection', () => {
             isLoading: false,
         });
 
-        renderWithProviders(<SteamWishlistSection userId={1} />);
+        renderWithProviders(<SteamWishlistSection userId={1} pricingMap={new Map()} />);
 
         await user.click(screen.getByText(/Show All \(25\)/));
 
@@ -130,7 +130,7 @@ describe('SteamWishlistSection', () => {
             isLoading: false,
         });
 
-        renderWithProviders(<SteamWishlistSection userId={1} />);
+        renderWithProviders(<SteamWishlistSection userId={1} pricingMap={new Map()} />);
 
         const heading = screen.getByText(/Steam Wishlist/);
         expect(heading.textContent).toBe('Steam Wishlist');
@@ -143,7 +143,7 @@ describe('SteamWishlistSection', () => {
             isLoading: false,
         });
 
-        renderWithProviders(<SteamWishlistSection userId={1} />);
+        renderWithProviders(<SteamWishlistSection userId={1} pricingMap={new Map()} />);
 
         expect(screen.getByText('?')).toBeInTheDocument();
     });
@@ -160,7 +160,7 @@ describe('SteamWishlistSection', () => {
             isLoading: false,
         });
 
-        renderWithProviders(<SteamWishlistSection userId={1} />);
+        renderWithProviders(<SteamWishlistSection userId={1} pricingMap={new Map()} />);
 
         const img = screen.getByAltText('With Cover');
         expect(img).toBeInTheDocument();

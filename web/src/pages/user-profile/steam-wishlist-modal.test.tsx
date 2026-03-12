@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { SteamWishlistModal } from './steam-wishlist-modal';
-import type { SteamWishlistEntryDto } from '@raid-ledger/contract';
+import type { SteamWishlistEntryDto, ItadGamePricingDto } from '@raid-ledger/contract';
 
 /** Create a mock Steam wishlist entry for testing */
 function createMockWishlistEntry(
@@ -16,6 +16,18 @@ function createMockWishlistEntry(
         slug: 'test-game',
         dateAdded: 1700000000,
         ...overrides,
+    };
+}
+
+/** Build a mock pricing DTO with an active discount */
+function buildOnSalePricing(): ItadGamePricingDto {
+    return {
+        currentBest: { shop: 'Steam', url: 'https://steam.com', price: 29.99, regularPrice: 59.99, discount: 50 },
+        stores: [],
+        historyLow: null,
+        dealQuality: 'modest',
+        currency: 'USD',
+        itadUrl: null,
     };
 }
 
@@ -36,6 +48,8 @@ const mockModal = {
     refetch: vi.fn(),
 };
 
+const mockPricingMap = new Map<number, ItadGamePricingDto | null>();
+
 vi.mock('../../hooks/use-user-profile', () => ({
     useUserSteamWishlistModal: () => mockModal,
 }));
@@ -46,6 +60,7 @@ describe('SteamWishlistModal — search filter', () => {
         isOpen: true,
         onClose: vi.fn(),
         total: 3,
+        pricingMap: mockPricingMap,
     };
 
     it('renders search input when modal is open', () => {
@@ -139,5 +154,24 @@ describe('SteamWishlistModal — search filter', () => {
         expect(screen.getByText('Hollow Knight')).toBeInTheDocument();
         expect(screen.queryByText('Elden Ring')).not.toBeInTheDocument();
         expect(screen.queryByText('Hades')).not.toBeInTheDocument();
+    });
+
+    it('renders pricing badges when pricing data is available', () => {
+        mockPricingMap.set(1, buildOnSalePricing());
+
+        renderWithProviders(<SteamWishlistModal {...defaultProps} />);
+
+        expect(screen.getByText('On Sale')).toBeInTheDocument();
+
+        mockPricingMap.clear();
+    });
+
+    it('renders no pricing badges when pricing map is empty', () => {
+        mockPricingMap.clear();
+
+        renderWithProviders(<SteamWishlistModal {...defaultProps} />);
+
+        expect(screen.queryByText('On Sale')).not.toBeInTheDocument();
+        expect(screen.queryByText('Best Price')).not.toBeInTheDocument();
     });
 });
