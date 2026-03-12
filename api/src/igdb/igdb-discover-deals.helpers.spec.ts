@@ -56,27 +56,38 @@ function buildWishlistDb(
   return db;
 }
 
-/** Build a DB mock that returns playtime games and game rows. */
+/** Build a DB mock that returns playtime games, game rows, and heart counts. */
 function buildPlaytimeDb(
   playtimeGames: { gameId: number; totalPlaytime: number }[],
   gameRows: { id: number; name: string; itadGameId: string | null }[],
+  heartCounts: { gameId: number; count: number }[] = [],
 ) {
   const db: Record<string, jest.Mock> = {};
-  const chain = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy'];
+  const chain = ['select', 'from', 'innerJoin', 'orderBy'];
   for (const m of chain) db[m] = jest.fn().mockReturnThis();
 
   let whereCallCount = 0;
   db.where = jest.fn().mockImplementation(() => {
     whereCallCount++;
-    if (whereCallCount === 1) return db;
-    return Promise.resolve(
-      gameRows.map((g) => ({
-        ...g,
-        slug: g.name.toLowerCase().replace(/\s+/g, '-'),
-        hidden: false,
-        banned: false,
-      })),
-    );
+    if (whereCallCount === 1) return db; // playtime query
+    if (whereCallCount === 2) {
+      // game rows from fetchAndFilterOnSale
+      return Promise.resolve(
+        gameRows.map((g) => ({
+          ...g,
+          slug: g.name.toLowerCase().replace(/\s+/g, '-'),
+          hidden: false,
+          banned: false,
+        })),
+      );
+    }
+    return db; // heart count query chain
+  });
+  let groupByCallCount = 0;
+  db.groupBy = jest.fn().mockImplementation(() => {
+    groupByCallCount++;
+    if (groupByCallCount === 1) return db; // playtime query chain
+    return Promise.resolve(heartCounts); // heart count terminal
   });
   db.limit = jest.fn().mockResolvedValue(playtimeGames);
   return db;
@@ -85,18 +96,28 @@ function buildPlaytimeDb(
 /** Build a DB mock that returns games with ITAD IDs for best price. */
 function buildBestPriceDb(
   gameRows: { id: number; name: string; itadGameId: string }[],
+  heartCounts: { gameId: number; count: number }[] = [],
 ) {
   const db: Record<string, jest.Mock> = {};
   db.select = jest.fn().mockReturnThis();
   db.from = jest.fn().mockReturnThis();
-  db.where = jest.fn().mockResolvedValue(
-    gameRows.map((g) => ({
-      ...g,
-      slug: g.name.toLowerCase().replace(/\s+/g, '-'),
-      hidden: false,
-      banned: false,
-    })),
-  );
+  db.orderBy = jest.fn().mockReturnThis();
+  let whereCallCount = 0;
+  db.where = jest.fn().mockImplementation(() => {
+    whereCallCount++;
+    if (whereCallCount === 1) {
+      return Promise.resolve(
+        gameRows.map((g) => ({
+          ...g,
+          slug: g.name.toLowerCase().replace(/\s+/g, '-'),
+          hidden: false,
+          banned: false,
+        })),
+      );
+    }
+    return db; // heart count query chain
+  });
+  db.groupBy = jest.fn().mockResolvedValue(heartCounts);
   return db;
 }
 
@@ -343,14 +364,20 @@ describe('fetchBestPriceRow', () => {
     expect(result.games).toEqual([]);
   });
 
-  it('sorts by discount descending', async () => {
-    const db = buildBestPriceDb([
-      { id: 3, name: 'Game C', itadGameId: 'itad-3' },
-      { id: 4, name: 'Game D', itadGameId: 'itad-4' },
-    ]);
+  it('only includes games at or below historical low, sorted by hearts', async () => {
+    const db = buildBestPriceDb(
+      [
+        { id: 3, name: 'Game C', itadGameId: 'itad-3' },
+        { id: 4, name: 'Game D', itadGameId: 'itad-4' },
+      ],
+      [
+        { gameId: 3, count: 10 },
+        { gameId: 4, count: 5 },
+      ],
+    );
     const svc = buildPriceService([
-      makeItadEntry('itad-3', 30),
-      makeItadEntry('itad-4', 80),
+      makeItadEntry('itad-3', 75, 14.99), // at historical low (14.99) → best price
+      makeItadEntry('itad-4', 50, 29.99), // above historical low → excluded
     ]);
     const redis = buildRedisMock();
 
@@ -361,7 +388,8 @@ describe('fetchBestPriceRow', () => {
       CACHE_TTL,
     );
 
-    expect(result.games.length).toBe(2);
+    expect(result.games.length).toBe(1);
+    expect(result.games[0].id).toBe(3);
     expect(result.category).toBe('Best Price');
   });
 
@@ -385,7 +413,7 @@ describe('fetchBestPriceRow', () => {
     const db = buildBestPriceDb([
       { id: 3, name: 'Game C', itadGameId: 'itad-3' },
     ]);
-    const svc = buildPriceService([makeItadEntry('itad-3', 50)]);
+    const svc = buildPriceService([makeItadEntry('itad-3', 75, 14.99)]);
     const redis = buildRedisMock();
 
     await fetchBestPriceRow(

@@ -66,23 +66,33 @@ function buildWishlistDb(
 function buildPlaytimeDb(
   playtimeGames: { gameId: number; totalPlaytime: number }[],
   gameRows: { id: number; name: string; itadGameId: string | null }[],
+  heartCounts: { gameId: number; count: number }[] = [],
 ) {
   const db: Record<string, jest.Mock> = {};
-  const chain = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy'];
+  const chain = ['select', 'from', 'innerJoin', 'orderBy'];
   for (const m of chain) db[m] = jest.fn().mockReturnThis();
 
   let whereCallCount = 0;
   db.where = jest.fn().mockImplementation(() => {
     whereCallCount++;
     if (whereCallCount === 1) return db;
-    return Promise.resolve(
-      gameRows.map((g) => ({
-        ...g,
-        slug: g.name.toLowerCase().replace(/\s+/g, '-'),
-        hidden: false,
-        banned: false,
-      })),
-    );
+    if (whereCallCount === 2) {
+      return Promise.resolve(
+        gameRows.map((g) => ({
+          ...g,
+          slug: g.name.toLowerCase().replace(/\s+/g, '-'),
+          hidden: false,
+          banned: false,
+        })),
+      );
+    }
+    return db; // heart count query chain
+  });
+  let groupByCallCount = 0;
+  db.groupBy = jest.fn().mockImplementation(() => {
+    groupByCallCount++;
+    if (groupByCallCount === 1) return db; // playtime query
+    return Promise.resolve(heartCounts); // heart count terminal
   });
   db.limit = jest.fn().mockResolvedValue(playtimeGames);
   return db;
@@ -90,18 +100,28 @@ function buildPlaytimeDb(
 
 function buildBestPriceDb(
   gameRows: { id: number; name: string; itadGameId: string | null }[],
+  heartCounts: { gameId: number; count: number }[] = [],
 ) {
   const db: Record<string, jest.Mock> = {};
   db.select = jest.fn().mockReturnThis();
   db.from = jest.fn().mockReturnThis();
-  db.where = jest.fn().mockResolvedValue(
-    gameRows.map((g) => ({
-      ...g,
-      slug: g.name.toLowerCase().replace(/\s+/g, '-'),
-      hidden: false,
-      banned: false,
-    })),
-  );
+  db.orderBy = jest.fn().mockReturnThis();
+  let whereCallCount = 0;
+  db.where = jest.fn().mockImplementation(() => {
+    whereCallCount++;
+    if (whereCallCount === 1) {
+      return Promise.resolve(
+        gameRows.map((g) => ({
+          ...g,
+          slug: g.name.toLowerCase().replace(/\s+/g, '-'),
+          hidden: false,
+          banned: false,
+        })),
+      );
+    }
+    return db; // heart count query chain
+  });
+  db.groupBy = jest.fn().mockResolvedValue(heartCounts);
   return db;
 }
 
@@ -124,6 +144,33 @@ function makeItadEntry(
       url: `https://store.steampowered.com/app/${id}`,
     },
     lowest: null,
+    bundled: 0,
+    urls: { game: `https://isthereanydeal.com/game/${id}/` },
+  };
+}
+
+/** ITAD entry at or below historical low (qualifies for "Best Price" badge). */
+function makeItadEntryBestPrice(
+  id: string,
+  discount: number,
+  price = 14.99,
+): ItadOverviewGameEntry {
+  return {
+    id,
+    current: {
+      shop: { id: 61, name: 'Steam' },
+      price: { amount: price, amountInt: Math.round(price * 100), currency: 'USD' },
+      regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
+      cut: discount,
+      url: `https://store.steampowered.com/app/${id}`,
+    },
+    lowest: {
+      shop: { id: 61, name: 'Steam' },
+      price: { amount: 14.99, amountInt: 1499, currency: 'USD' },
+      regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
+      cut: 75,
+      timestamp: '2024-11-25T00:00:00Z',
+    },
     bundled: 0,
     urls: { game: `https://isthereanydeal.com/game/${id}/` },
   };
@@ -371,7 +418,7 @@ describe('fetchBestPriceRow — adversarial', () => {
       { id: 30, name: 'Has ITAD', itadGameId: 'itad-30' },
       { id: 31, name: 'No ITAD', itadGameId: null },
     ]);
-    const svc = buildPriceService([makeItadEntry('itad-30', 55)]);
+    const svc = buildPriceService([makeItadEntryBestPrice('itad-30', 75)]);
     const redis = buildRedisMiss();
 
     const result = await fetchBestPriceRow(
@@ -383,7 +430,7 @@ describe('fetchBestPriceRow — adversarial', () => {
 
     // ITAD was called with only the non-null ID
     expect(svc.getOverviewBatch).toHaveBeenCalledWith(['itad-30']);
-    // Only the game with a deal should appear
+    // Only the game at best price should appear
     expect(result.games).toHaveLength(1);
     expect(result.games[0].name).toBe('Has ITAD');
   });
@@ -407,7 +454,7 @@ describe('fetchBestPriceRow — adversarial', () => {
     expect(svc.getOverviewBatch).not.toHaveBeenCalled();
   });
 
-  it('caps results at 20 games even when more are on sale', async () => {
+  it('caps results at 20 games even when more qualify', async () => {
     const gameRows = Array.from({ length: 25 }, (_, i) => ({
       id: i + 100,
       name: `Game ${i + 100}`,
@@ -415,7 +462,7 @@ describe('fetchBestPriceRow — adversarial', () => {
     }));
     const db = buildBestPriceDb(gameRows);
     const entries = gameRows.map((g) =>
-      makeItadEntry(g.itadGameId!, 10 + (g.id % 70)),
+      makeItadEntryBestPrice(g.itadGameId, 75),
     );
     const svc = buildPriceService(entries);
     const redis = buildRedisMiss();
@@ -430,16 +477,23 @@ describe('fetchBestPriceRow — adversarial', () => {
     expect(result.games.length).toBeLessThanOrEqual(20);
   });
 
-  it('sorts by discount descending — highest discount comes first', async () => {
-    const db = buildBestPriceDb([
-      { id: 40, name: 'Game Low Discount', itadGameId: 'itad-40' },
-      { id: 41, name: 'Game High Discount', itadGameId: 'itad-41' },
-      { id: 42, name: 'Game Mid Discount', itadGameId: 'itad-42' },
-    ]);
+  it('sorts by heart count descending — most hearted comes first', async () => {
+    const db = buildBestPriceDb(
+      [
+        { id: 40, name: 'Few Hearts', itadGameId: 'itad-40' },
+        { id: 41, name: 'Many Hearts', itadGameId: 'itad-41' },
+        { id: 42, name: 'Some Hearts', itadGameId: 'itad-42' },
+      ],
+      [
+        { gameId: 40, count: 2 },
+        { gameId: 41, count: 15 },
+        { gameId: 42, count: 7 },
+      ],
+    );
     const svc = buildPriceService([
-      makeItadEntry('itad-40', 10),
-      makeItadEntry('itad-41', 90),
-      makeItadEntry('itad-42', 50),
+      makeItadEntryBestPrice('itad-40', 75),
+      makeItadEntryBestPrice('itad-41', 75),
+      makeItadEntryBestPrice('itad-42', 75),
     ]);
     const redis = buildRedisMiss();
 
@@ -450,9 +504,9 @@ describe('fetchBestPriceRow — adversarial', () => {
       CACHE_TTL,
     );
 
-    expect(result.games[0].name).toBe('Game High Discount');
-    expect(result.games[1].name).toBe('Game Mid Discount');
-    expect(result.games[2].name).toBe('Game Low Discount');
+    expect(result.games[0].name).toBe('Many Hearts');
+    expect(result.games[1].name).toBe('Some Hearts');
+    expect(result.games[2].name).toBe('Few Hearts');
   });
 
   it('returns empty when all games have 0% discount (boundary)', async () => {
@@ -511,7 +565,7 @@ describe('fetchBestPriceRow — adversarial', () => {
     const db = buildBestPriceDb([
       { id: 60, name: 'Redis Down Game', itadGameId: 'itad-60' },
     ]);
-    const svc = buildPriceService([makeItadEntry('itad-60', 45)]);
+    const svc = buildPriceService([makeItadEntryBestPrice('itad-60', 75)]);
     const redis = buildRedisError();
 
     const result = await fetchBestPriceRow(

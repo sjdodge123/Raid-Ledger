@@ -9,6 +9,7 @@ import * as schema from '../drizzle/schema';
 import type { GameDetailDto } from '@raid-ledger/contract';
 import type { ItadPriceService } from '../itad/itad-price.service';
 import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
+import { HEART_SOURCES } from './igdb-interest.helpers';
 import { mapDbRowToDetail } from './igdb.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -66,6 +67,20 @@ function buildDiscountMap(
     }
   }
   return map;
+}
+
+/** Build a set of itadGameIds at or below historical low ("Best Price" badge). */
+function buildBestPriceSet(
+  entries: ItadOverviewGameEntry[],
+): Set<string> {
+  const set = new Set<string>();
+  for (const e of entries) {
+    if (!e.current || e.current.cut <= 0 || !e.lowest) continue;
+    if (e.current.price.amount <= e.lowest.price.amount) {
+      set.add(e.id);
+    }
+  }
+  return set;
 }
 
 /** Filter games to only those with active deals and map to DTOs. */
@@ -135,11 +150,12 @@ export async function fetchMostPlayedOnSaleRow(
   const playtimeGames = await queryPlaytimeGames(db);
   if (playtimeGames.length === 0) return { category, slug, games: [] };
 
-  const games = await fetchAndFilterOnSale(
+  const onSale = await fetchAndFilterOnSale(
     db,
     itadPriceService,
     playtimeGames.map((p) => p.gameId),
   );
+  const games = await sortByHearts(db, onSale);
   await writeCache(redis, slug, cacheTtl, games);
   return { category, slug, games };
 }
@@ -169,16 +185,13 @@ export async function fetchBestPriceRow(
 
   const itadIds = gameRows.map((g) => g.itadGameId).filter(Boolean) as string[];
   const entries = await itadPriceService.getOverviewBatch(itadIds);
-  const discountMap = buildDiscountMap(entries);
+  const bestPriceIds = buildBestPriceSet(entries);
 
-  const games = filterOnSale(gameRows, discountMap)
-    .sort((a, b) => {
-      const dA = discountMap.get(a.itadGameId ?? '') ?? 0;
-      const dB = discountMap.get(b.itadGameId ?? '') ?? 0;
-      return dB - dA;
-    })
-    .slice(0, 20);
+  const filtered = gameRows
+    .filter((g) => g.itadGameId && bestPriceIds.has(g.itadGameId))
+    .map((g) => mapDbRowToDetail(g));
 
+  const games = await sortByHearts(db, filtered);
   await writeCache(redis, slug, cacheTtl, games);
   return { category, slug, games };
 }
@@ -224,6 +237,40 @@ async function queryGamesWithItadId(db: Db) {
     .select()
     .from(schema.games)
     .where(and(isNotNull(schema.games.itadGameId), VISIBILITY_FILTER()));
+}
+
+/** Query heart counts for a list of game IDs. */
+async function queryHeartCounts(
+  db: Db,
+  gameIds: number[],
+): Promise<Map<number, number>> {
+  if (gameIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      gameId: schema.gameInterests.gameId,
+      count: sql<number>`count(*)::int`.as('count'),
+    })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        inArray(schema.gameInterests.gameId, gameIds),
+        inArray(schema.gameInterests.source, HEART_SOURCES),
+      ),
+    )
+    .groupBy(schema.gameInterests.gameId);
+  return new Map(rows.map((r) => [r.gameId, r.count]));
+}
+
+/** Sort games by heart count descending, take top 20. */
+async function sortByHearts(
+  db: Db,
+  games: GameDetailDto[],
+): Promise<GameDetailDto[]> {
+  if (games.length === 0) return [];
+  const hearts = await queryHeartCounts(db, games.map((g) => g.id));
+  return games
+    .sort((a, b) => (hearts.get(b.id) ?? 0) - (hearts.get(a.id) ?? 0))
+    .slice(0, 20);
 }
 
 /** Fetch game rows and ITAD pricing, return only on-sale games. */
