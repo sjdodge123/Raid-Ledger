@@ -410,15 +410,9 @@ describe('batchCheckInterests — deduplication and HEART_SOURCES filter', () =>
     //   1. count query: select({gameId, count}).from().where().groupBy() → terminal at groupBy
     //   2. user interest query: select({gameId}).from().where() → terminal at where
     // We track select calls to distinguish them.
-    let selectCallCount = 0;
-    db.select = jest.fn().mockImplementation(() => {
-      selectCallCount++;
-      return db;
-    });
+    db.select = jest.fn().mockReturnThis();
 
-    let groupByCallCount = 0;
     db.groupBy = jest.fn().mockImplementation(() => {
-      groupByCallCount++;
       // count query terminates here
       return Promise.resolve(countRows);
     });
@@ -440,19 +434,13 @@ describe('batchCheckInterests — deduplication and HEART_SOURCES filter', () =>
 
   it('returns count of 1 when user has 3 source rows for the same game', async () => {
     // DISTINCT_USER_COUNT already collapses at DB — DB returns count=1
-    const db = buildBatchDb(
-      [{ gameId: 10, count: 1 }],
-      [{ gameId: 10 }],
-    );
+    const db = buildBatchDb([{ gameId: 10, count: 1 }], [{ gameId: 10 }]);
     const result = await batchCheckInterests(db as never, [10], 7);
     expect(result['10'].count).toBe(1);
   });
 
   it('returns wantToPlay: true when user has an interest row for the game', async () => {
-    const db = buildBatchDb(
-      [{ gameId: 5, count: 3 }],
-      [{ gameId: 5 }],
-    );
+    const db = buildBatchDb([{ gameId: 5, count: 3 }], [{ gameId: 5 }]);
     const result = await batchCheckInterests(db as never, [5], 42);
     expect(result['5'].wantToPlay).toBe(true);
   });
