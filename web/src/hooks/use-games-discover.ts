@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import type { GameDiscoverResponseDto, GameDetailDto, GameStreamsResponseDto, ActivityPeriod, GameActivityResponseDto, GameNowPlayingResponseDto } from '@raid-ledger/contract';
+import type { GameDiscoverResponseDto, GameDetailDto, GameStreamsResponseDto, ActivityPeriod, GameActivityResponseDto, GameNowPlayingResponseDto, ItadGamePricingDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
-import { getGameActivity, getGameNowPlaying } from '../lib/api-client';
+import { getGameActivity, getGameNowPlaying, getGamePricing } from '../lib/api-client';
 
 const getHeaders = () => {
     const headers: Record<string, string> = {
@@ -97,5 +97,21 @@ export function useGameNowPlaying(gameId: number | undefined) {
         enabled: !!gameId,
         staleTime: 1000 * 60,
         refetchInterval: 60_000,
+    });
+}
+
+/**
+ * ROK-419: Hook for fetching ITAD pricing data for a game.
+ * Only enabled when the game has an ITAD game ID.
+ */
+export function useGamePricing(gameId: number | undefined, hasItadId: boolean) {
+    return useQuery<{ data: ItadGamePricingDto | null }>({
+        queryKey: ['games', 'pricing', gameId],
+        queryFn: async () => {
+            if (!gameId) throw new Error('Game ID required');
+            return getGamePricing(gameId);
+        },
+        enabled: !!gameId && hasItadId,
+        staleTime: 1000 * 60 * 30, // 30 minutes (data is cached server-side)
     });
 }

@@ -50,6 +50,7 @@ vi.mock('../hooks/use-games-discover', () => ({
     useGameStreams: vi.fn(() => ({ data: null })),
     useGameActivity: vi.fn(() => ({ data: null, isLoading: false })),
     useGameNowPlaying: vi.fn(() => ({ data: null })),
+    useGamePricing: vi.fn(() => ({ data: null, isLoading: false })),
 }));
 
 vi.mock('../hooks/use-events', () => ({

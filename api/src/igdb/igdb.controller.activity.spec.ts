@@ -6,6 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
+import { ItadPriceService } from '../itad/itad-price.service';
 import {
   GameActivityResponseSchema,
   GameNowPlayingResponseSchema,
@@ -55,7 +56,10 @@ function describeIgdbControllerActivityEndpoints() {
 
       const module: TestingModule = await Test.createTestingModule({
         controllers: [IgdbController],
-        providers: [{ provide: IgdbService, useValue: mockService }],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+        ],
       }).compile();
 
       const ctrl = module.get<IgdbController>(IgdbController);
@@ -89,7 +93,10 @@ function describeIgdbControllerActivityEndpoints() {
 
       const module: TestingModule = await Test.createTestingModule({
         controllers: [IgdbController],
-        providers: [{ provide: IgdbService, useValue: mockService }],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+        ],
       }).compile();
 
       const ctrl = module.get<IgdbController>(IgdbController);
@@ -111,7 +118,10 @@ function describeIgdbControllerActivityEndpoints() {
 
       const module: TestingModule = await Test.createTestingModule({
         controllers: [IgdbController],
-        providers: [{ provide: IgdbService, useValue: mockService }],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+        ],
       }).compile();
 
       const ctrl = module.get<IgdbController>(IgdbController);
@@ -132,7 +142,10 @@ function describeIgdbControllerActivityEndpoints() {
 
       const module: TestingModule = await Test.createTestingModule({
         controllers: [IgdbController],
-        providers: [{ provide: IgdbService, useValue: mockService }],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+        ],
       }).compile();
 
       const ctrl = module.get<IgdbController>(IgdbController);
@@ -160,7 +173,10 @@ function describeIgdbControllerActivityEndpoints() {
 
       const module: TestingModule = await Test.createTestingModule({
         controllers: [IgdbController],
-        providers: [{ provide: IgdbService, useValue: mockService }],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+        ],
       }).compile();
 
       const ctrl = module.get<IgdbController>(IgdbController);
@@ -192,7 +208,10 @@ function describeIgdbControllerActivityEndpoints() {
 
       const module: TestingModule = await Test.createTestingModule({
         controllers: [IgdbController],
-        providers: [{ provide: IgdbService, useValue: mockService }],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+        ],
       }).compile();
 
       const ctrl = module.get<IgdbController>(IgdbController);
@@ -257,7 +276,10 @@ function describeIgdbControllerActivityEndpoints() {
 
       const module: TestingModule = await Test.createTestingModule({
         controllers: [IgdbController],
-        providers: [{ provide: IgdbService, useValue: mockService }],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+        ],
       }).compile();
 
       const ctrl = module.get<IgdbController>(IgdbController);
@@ -287,7 +309,10 @@ function describeIgdbControllerActivityEndpoints() {
 
       const module: TestingModule = await Test.createTestingModule({
         controllers: [IgdbController],
-        providers: [{ provide: IgdbService, useValue: mockService }],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+        ],
       }).compile();
 
       const ctrl = module.get<IgdbController>(IgdbController);

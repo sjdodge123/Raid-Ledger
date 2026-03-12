@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
+import { ItadPriceService } from '../itad/itad-price.service';
 
 function describeIgdbController() {
   let controller: IgdbController;
@@ -29,7 +30,10 @@ function describeIgdbController() {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [IgdbController],
-      providers: [{ provide: IgdbService, useValue: mockIgdbService }],
+      providers: [
+        { provide: IgdbService, useValue: mockIgdbService },
+        { provide: ItadPriceService, useValue: {} },
+      ],
     }).compile();
 
     controller = module.get<IgdbController>(IgdbController);

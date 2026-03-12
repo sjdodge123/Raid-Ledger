@@ -30,6 +30,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
+import { ItadPriceService } from '../itad/itad-price.service';
 import { GameInterestResponseSchema } from '@raid-ledger/contract';
 
 // ─── Shared helper ───────────────────────────────────────────────────────────
@@ -54,7 +55,10 @@ async function createController(
 ): Promise<IgdbController> {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [IgdbController],
-    providers: [{ provide: IgdbService, useValue: mockService }],
+    providers: [
+      { provide: IgdbService, useValue: mockService },
+      { provide: ItadPriceService, useValue: {} },
+    ],
   }).compile();
   return module.get<IgdbController>(IgdbController);
 }

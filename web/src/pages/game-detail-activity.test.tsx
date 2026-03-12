@@ -138,6 +138,11 @@ function setupDefaultMocks(
         isLoading: false,
         error: null,
     } as never);
+
+    vi.spyOn(useGamesDiscoverHook, 'useGamePricing').mockReturnValue({
+        data: null,
+        isLoading: false,
+    } as never);
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
