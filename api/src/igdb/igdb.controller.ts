@@ -18,6 +18,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { IgdbService } from './igdb.service';
+import { ItadPriceService } from '../itad/itad-price.service';
 import {
   GameSearchQuerySchema,
   GameSearchResponseDto,
@@ -31,6 +32,7 @@ import {
   GameActivityResponseDto,
   GameNowPlayingResponseDto,
 } from '@raid-ledger/contract';
+import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { redisSwr } from '../common/swr-cache';
 import { handleSearchError } from './igdb-controller.helpers';
@@ -50,6 +52,7 @@ import {
   fetchGameInterestData,
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
+import { fetchGamePricing } from './igdb-pricing.helpers';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -59,7 +62,10 @@ interface AuthRequest extends Request {
 @Controller('games')
 export class IgdbController {
   private readonly logger = new Logger(IgdbController.name);
-  constructor(private readonly igdbService: IgdbService) {}
+  constructor(
+    private readonly igdbService: IgdbService,
+    private readonly itadPriceService: ItadPriceService,
+  ) {}
 
   /** GET /games/search -- Search for games by name. */
   @RateLimit('search')
@@ -206,6 +212,19 @@ export class IgdbController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GameNowPlayingResponseDto> {
     return this.igdbService.getGameNowPlaying(id);
+  }
+
+  /** GET /games/:id/pricing -- ITAD price overview for a game (ROK-419). */
+  @Get(':id/pricing')
+  async getGamePricing(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{ data: ItadGamePricingDto | null }> {
+    const data = await fetchGamePricing(
+      this.igdbService.database,
+      this.itadPriceService,
+      id,
+    );
+    return { data };
   }
 
   /** GET /games/:id -- Full game detail. */

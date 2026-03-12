@@ -125,4 +125,7 @@ function describeBatchPlaytimeUpdate() {
   });
 }
 
-describe('Steam Playtime Batch Update (integration)', describeBatchPlaytimeUpdate);
+describe(
+  'Steam Playtime Batch Update (integration)',
+  describeBatchPlaytimeUpdate,
+);

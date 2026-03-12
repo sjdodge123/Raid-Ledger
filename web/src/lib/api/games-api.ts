@@ -5,6 +5,7 @@ import type {
     ActivityPeriod,
     GameActivityResponseDto,
     GameNowPlayingResponseDto,
+    ItadGamePricingDto,
 } from '@raid-ledger/contract';
 import { GameSearchResponseSchema } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
@@ -50,4 +51,11 @@ export async function getGameNowPlaying(
     gameId: number,
 ): Promise<GameNowPlayingResponseDto> {
     return fetchApi(`/games/${gameId}/now-playing`);
+}
+
+/** Fetch ITAD pricing data for a game (ROK-419) */
+export async function getGamePricing(
+    gameId: number,
+): Promise<{ data: ItadGamePricingDto | null }> {
+    return fetchApi(`/games/${gameId}/pricing`);
 }

@@ -13,6 +13,7 @@ import { GENRE_MAP } from '../lib/game-utils';
 import { PLATFORM_MAP, MODE_MAP } from './game-detail/game-detail-constants';
 import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
+import { WhereToBuySection } from './game-detail/WhereToBuySection';
 import type { EventResponseDto } from '@raid-ledger/contract';
 
 /** Game detail page — shows full game info, activity, events, screenshots, streams */
@@ -85,6 +86,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
                     <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
                 </>
             )}
+            {gameId && <WhereToBuySection gameId={gameId} hasItadId={!!game.itadGameId} />}
             {gameId && <CommunityActivitySection gameId={gameId} />}
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
             <GameMediaSections game={game} streamsData={streamsData} />

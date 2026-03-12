@@ -48,6 +48,7 @@ export {
     getGameEventTypes,
     getGameActivity,
     getGameNowPlaying,
+    getGamePricing,
 } from './api/games-api';
 
 // Characters

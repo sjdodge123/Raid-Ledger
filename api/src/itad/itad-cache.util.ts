@@ -8,9 +8,11 @@ import {
   ITAD_LOOKUP_PREFIX,
   ITAD_SEARCH_PREFIX,
   ITAD_INFO_PREFIX,
+  ITAD_PRICE_PREFIX,
   ITAD_LOOKUP_CACHE_TTL,
   ITAD_SEARCH_CACHE_TTL,
   ITAD_INFO_CACHE_TTL,
+  ITAD_PRICE_CACHE_TTL,
 } from './itad.constants';
 
 const logger = new Logger('ItadCache');
@@ -108,4 +110,25 @@ export async function setCachedInfo(
   data: unknown,
 ): Promise<void> {
   await setCached(redis, getInfoCacheKey(itadId), data, ITAD_INFO_CACHE_TTL);
+}
+
+// ─── Price cache ─────────────────────────────────────────────
+
+export function getPriceCacheKey(itadId: string): string {
+  return `${ITAD_PRICE_PREFIX}${itadId}`;
+}
+
+export async function getCachedPrice<T>(
+  redis: Redis,
+  itadId: string,
+): Promise<T | null> {
+  return getCached<T>(redis, getPriceCacheKey(itadId));
+}
+
+export async function setCachedPrice(
+  redis: Redis,
+  itadId: string,
+  data: unknown,
+): Promise<void> {
+  await setCached(redis, getPriceCacheKey(itadId), data, ITAD_PRICE_CACHE_TTL);
 }

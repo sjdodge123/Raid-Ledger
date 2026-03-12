@@ -17,11 +17,15 @@ export const ITAD_MAX_RETRIES = 3;
 /** Initial backoff delay on 429 (ms) — doubles each retry */
 export const ITAD_BACKOFF_INITIAL_MS = 500;
 
+/** Redis cache TTL for price/overview results (3h) */
+export const ITAD_PRICE_CACHE_TTL = 10_800;
+
 // ─── Redis key prefixes ──────────────────────────────────────
 export const ITAD_CACHE_PREFIX = 'itad:';
 export const ITAD_LOOKUP_PREFIX = `${ITAD_CACHE_PREFIX}lookup:`;
 export const ITAD_SEARCH_PREFIX = `${ITAD_CACHE_PREFIX}search:`;
 export const ITAD_INFO_PREFIX = `${ITAD_CACHE_PREFIX}info:`;
+export const ITAD_PRICE_PREFIX = `${ITAD_CACHE_PREFIX}price:`;
 
 // ─── API response types ──────────────────────────────────────
 
