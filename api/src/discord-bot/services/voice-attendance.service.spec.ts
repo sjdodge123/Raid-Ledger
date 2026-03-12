@@ -13,13 +13,25 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import * as flushH from './voice-attendance-flush.helpers';
+
+jest.mock('./voice-attendance-flush.helpers', () => ({
+  ...jest.requireActual('./voice-attendance-flush.helpers'),
+  queryActiveEvents: jest.fn().mockResolvedValue([]),
+}));
 
 describe('VoiceAttendanceService', () => {
   let service: VoiceAttendanceService;
   let mockDb: MockDb;
+  let mockGetBindings: jest.Mock;
+  let mockGetGuildId: jest.Mock;
+  let mockGetDefaultVoice: jest.Mock;
 
   beforeEach(async () => {
     mockDb = createDrizzleMock();
+    mockGetBindings = jest.fn().mockResolvedValue([]);
+    mockGetGuildId = jest.fn().mockReturnValue('guild-1');
+    mockGetDefaultVoice = jest.fn().mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -27,7 +39,10 @@ describe('VoiceAttendanceService', () => {
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         {
           provide: SettingsService,
-          useValue: { get: jest.fn().mockResolvedValue('5') },
+          useValue: {
+            get: jest.fn().mockResolvedValue('5'),
+            getDiscordBotDefaultVoiceChannel: mockGetDefaultVoice,
+          },
         },
         {
           provide: CronJobService,
@@ -40,11 +55,11 @@ describe('VoiceAttendanceService', () => {
         },
         {
           provide: ChannelBindingsService,
-          useValue: { getBindings: jest.fn().mockResolvedValue([]) },
+          useValue: { getBindings: mockGetBindings },
         },
         {
           provide: DiscordBotClientService,
-          useValue: { getClient: jest.fn(), getGuildId: jest.fn() },
+          useValue: { getClient: jest.fn(), getGuildId: mockGetGuildId },
         },
         {
           provide: ChannelResolverService,
@@ -175,6 +190,115 @@ describe('VoiceAttendanceService', () => {
 
     it('returns summary with correct counts', async () => {
       await testReturnssummarywithcorrectcounts();
+    });
+  });
+
+  describe('findActiveScheduledEvents', () => {
+    const mockQueryActiveEvents = flushH.queryActiveEvents as jest.Mock;
+
+    beforeEach(() => {
+      mockQueryActiveEvents.mockReset();
+    });
+
+    it('returns empty when guildId is null', async () => {
+      mockGetGuildId.mockReturnValue(null);
+
+      const result = await service.findActiveScheduledEvents('voice-ch-1');
+
+      expect(result).toEqual([]);
+      expect(mockQueryActiveEvents).not.toHaveBeenCalled();
+    });
+
+    it('queries with gameId for game-voice-monitor binding', async () => {
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-1',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 42,
+        },
+      ]);
+      mockQueryActiveEvents.mockResolvedValue([{ eventId: 1, gameId: 42 }]);
+
+      const result = await service.findActiveScheduledEvents('voice-ch-1');
+
+      expect(mockQueryActiveEvents).toHaveBeenCalledWith(
+        mockDb,
+        42,
+        expect.any(Date),
+      );
+      expect(result).toEqual([{ eventId: 1, gameId: 42 }]);
+    });
+
+    it('queries all events for general-lobby binding (ROK-785)', async () => {
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-lobby',
+          bindingPurpose: 'general-lobby',
+          gameId: null,
+        },
+      ]);
+      mockQueryActiveEvents.mockResolvedValue([
+        { eventId: 10, gameId: null },
+        { eventId: 11, gameId: 5 },
+      ]);
+
+      const result = await service.findActiveScheduledEvents('voice-ch-lobby');
+
+      expect(mockQueryActiveEvents).toHaveBeenCalledWith(
+        mockDb,
+        null,
+        expect.any(Date),
+      );
+      expect(result).toEqual([
+        { eventId: 10, gameId: null },
+        { eventId: 11, gameId: 5 },
+      ]);
+    });
+
+    it('falls back to default voice channel', async () => {
+      mockGetBindings.mockResolvedValue([]);
+      mockGetDefaultVoice.mockResolvedValue('default-voice');
+      mockQueryActiveEvents.mockResolvedValue([{ eventId: 20, gameId: null }]);
+
+      const result = await service.findActiveScheduledEvents('default-voice');
+
+      expect(mockQueryActiveEvents).toHaveBeenCalledWith(
+        mockDb,
+        null,
+        expect.any(Date),
+      );
+      expect(result).toEqual([{ eventId: 20, gameId: null }]);
+    });
+
+    it('returns empty for unrecognized channel', async () => {
+      mockGetBindings.mockResolvedValue([]);
+      mockGetDefaultVoice.mockResolvedValue('default-voice');
+
+      const result = await service.findActiveScheduledEvents('unknown-channel');
+
+      expect(result).toEqual([]);
+      expect(mockQueryActiveEvents).not.toHaveBeenCalled();
+    });
+
+    it('queries all events for game-voice-monitor with null gameId', async () => {
+      mockGetBindings.mockResolvedValue([
+        {
+          channelId: 'voice-ch-no-game',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: null,
+        },
+      ]);
+      mockQueryActiveEvents.mockResolvedValue([{ eventId: 30, gameId: null }]);
+
+      const result =
+        await service.findActiveScheduledEvents('voice-ch-no-game');
+
+      expect(mockQueryActiveEvents).toHaveBeenCalledWith(
+        mockDb,
+        null,
+        expect.any(Date),
+      );
+      expect(result).toEqual([{ eventId: 30, gameId: null }]);
     });
   });
 });
