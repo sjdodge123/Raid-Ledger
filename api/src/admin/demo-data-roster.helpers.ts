@@ -2,7 +2,7 @@
  * Helper functions for demo data roster assignments and event reassignment.
  * Extracted from DemoDataService to keep file size within ESLint limits.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { createRng } from './demo-data-generator';
@@ -131,18 +131,17 @@ function assignEventRoster(
   }
 }
 
-/** Reassign original events to a raid leader user. */
+/** Reassign original events to a raid leader user (single query). */
 async function reassignOriginalEvents(
   db: Db,
   origEvents: (typeof schema.events.$inferSelect)[],
   raidLeader: { id: number },
 ): Promise<void> {
-  for (const event of origEvents.slice(0, 2)) {
-    await db
-      .update(schema.events)
-      .set({ creatorId: raidLeader.id })
-      .where(eq(schema.events.id, event.id));
-  }
+  const eventIds = origEvents.slice(0, 2).map((e) => e.id);
+  await db
+    .update(schema.events)
+    .set({ creatorId: raidLeader.id })
+    .where(inArray(schema.events.id, eventIds));
 }
 
 /** Reassign ~30% of generated events to random non-admin users. */
