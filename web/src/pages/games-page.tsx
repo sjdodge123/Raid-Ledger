@@ -210,7 +210,7 @@ function SearchResults({ searchLoading, searchResults, searchSource, debouncedSe
         <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating showInfoBar pricing={pricingMap.get(game.id) ?? null} />))}
         </div>
-        <div className="md:hidden grid grid-cols-2 gap-3">
+        <div className="md:hidden grid grid-cols-2 gap-4">
           {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating pricing={pricingMap.get(game.id) ?? null} />))}
         </div>
       </>
@@ -246,7 +246,7 @@ function DiscoverRows({ filteredRows, pricingMap }: { filteredRows: GameDiscover
         {filteredRows.map((row) => (
           <div key={row.slug}>
             <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
-            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none' }}>
               {row.games.map((game) => (<div key={game.id} className="w-[140px] flex-shrink-0 snap-start"><UnifiedGameCard variant="link" game={game} compact showRating pricing={pricingMap.get(game.id) ?? null} /></div>))}
             </div>
           </div>

@@ -435,6 +435,33 @@ test.describe('Players page', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Regression: ROK-811 — games page mobile cards cramped together
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-811 — games page mobile card spacing', () => {
+    test('game cards in carousel sections are visible at mobile viewport', async ({ browser }) => {
+        const context = await browser.newContext({
+            viewport: { width: 375, height: 812 },
+            storageState: 'playwright/.auth/user.json',
+        });
+        const page = await context.newPage();
+
+        await page.goto('/games');
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // Look for carousel row headings on mobile (h2 elements inside the discover view)
+        const carouselHeadings = page.locator('h2');
+        if (await carouselHeadings.first().isVisible({ timeout: 5_000 }).catch(() => false)) {
+            // Game cards within the first carousel row should be visible
+            const gameCards = page.locator('a[href*="/games/"]');
+            await expect(gameCards.first()).toBeVisible({ timeout: 5_000 });
+        }
+
+        await context.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Regression: ROK-813 — games page search container styling on mobile
 // ---------------------------------------------------------------------------
 
