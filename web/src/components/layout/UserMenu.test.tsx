@@ -187,7 +187,6 @@ describe('UserMenu dropdown (ROK-548)', () => {
     });
 
     it('username initial is shown as fallback when no avatar URL', async () => {
-        const user = userEvent.setup();
         renderUserMenu();
         // The AvatarButton renders initials when no avatarUrl
         const button = screen.getByRole('button', { name: /testuser/i });

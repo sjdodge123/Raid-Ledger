@@ -83,10 +83,6 @@ describe('AccountPanel (ROK-548)', () => {
         const user = userEvent.setup();
         renderAccountPanel();
         await user.click(screen.getByRole('button', { name: /delete my account/i }));
-        // Find confirm button in modal (there are two "Delete My Account" texts now)
-        const confirmBtn = screen.getAllByRole('button', { name: /delete my account/i }).find(
-            (btn) => btn.closest('[role="dialog"]') !== null || btn.closest('.space-y-4') !== null,
-        );
         // The confirm button should be disabled since no text entered
         const allDeleteBtns = screen.getAllByRole('button', { name: /delete my account/i });
         const modalConfirmBtn = allDeleteBtns[allDeleteBtns.length - 1];
