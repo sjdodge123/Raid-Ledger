@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, getCurrentUserAvatarData, setCurrentUserAvatarData } from '../../lib/avatar';
 import type { AvatarType } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
 import { updatePreference } from '../../lib/api-client';
@@ -53,6 +53,10 @@ function useAvatarHandlers(refetch: () => void) {
         setOptimisticUrl(url);
         toast.success('Avatar updated!');
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
+        // Eagerly update the global avatar cache so the header and all other
+        // consumers of toAvatarUser() see the new preference immediately.
+        const cached = getCurrentUserAvatarData();
+        if (cached) setCurrentUserAvatarData({ ...cached, avatarPreference: pref });
         updatePreference('avatarPreference', pref)
             .then(() => refetch())
             .then(() => setOptimisticUrl(null))
