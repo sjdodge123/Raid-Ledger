@@ -52,7 +52,7 @@ function useAvatarHandlers(refetch: () => void) {
         if (!option) return;
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
         updatePreference('avatarPreference', pref)
-            .then(() => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }))
+            .then(() => { queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }); toast.success('Avatar updated!'); })
             .catch(() => toast.error('Failed to save avatar preference'));
     }, [queryClient]);
 

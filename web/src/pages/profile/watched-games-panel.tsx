@@ -13,7 +13,7 @@ export function WatchedGamesPanel() {
     const autoHeart = useAutoHeart(isAuthenticated, hasDiscord);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-8">
             <MyWatchedGamesSection />
             {hasDiscord && (
                 <AutoHeartToggle
