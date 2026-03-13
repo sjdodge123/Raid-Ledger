@@ -7,6 +7,9 @@ import { z } from 'zod';
 export const CharacterRoleSchema = z.enum(['tank', 'healer', 'dps']);
 export type CharacterRole = z.infer<typeof CharacterRoleSchema>;
 
+/** The canonical list of MMO roles (tank, healer, dps). */
+export const CHARACTER_ROLES: readonly CharacterRole[] = CharacterRoleSchema.options;
+
 // ==========================================
 // Equipment Types (Character Detail Page)
 // ==========================================

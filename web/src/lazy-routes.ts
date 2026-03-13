@@ -91,9 +91,6 @@ export const OnboardingWizardPage = lazyWithRetry(() =>
 export const ProfileLayout = lazyWithRetry(() =>
     import('./components/profile/profile-layout').then((m) => ({ default: m.ProfileLayout })),
 );
-export const IdentityPanel = lazyWithRetry(() =>
-    import('./pages/profile/identity-panel').then((m) => ({ default: m.IdentityPanel })),
-);
 export const PreferencesPanel = lazyWithRetry(() =>
     import('./pages/profile/preferences-panel').then((m) => ({ default: m.PreferencesPanel })),
 );

@@ -9,6 +9,7 @@ import * as schema from '../drizzle/schema';
 import { BenchPromotionService } from './bench-promotion.service';
 import { autoAllocateSignup } from './signup-allocation.helpers';
 import { resolveGenericSlotRole } from './signup-promote.helpers';
+import { CHARACTER_ROLES } from '@raid-ledger/contract';
 import type { CreateSignupDto } from '@raid-ledger/contract';
 
 const logger = new Logger('SignupSlot');
@@ -160,8 +161,8 @@ export async function assignDiscordSignupSlot(
 ): Promise<void> {
   const { slotConfig, isMMO } = getSlotContext(event);
   const hasPreferredRoles = preferredRoles && preferredRoles.length > 0;
-  const mmoRoles = ['tank', 'healer', 'dps'];
-  const validSingleRole = !hasPreferredRoles && role && mmoRoles.includes(role);
+  const validSingleRole =
+    !hasPreferredRoles && role && CHARACTER_ROLES.includes(role as never);
   if (isMMO && (hasPreferredRoles || validSingleRole)) {
     if (validSingleRole) {
       await tx

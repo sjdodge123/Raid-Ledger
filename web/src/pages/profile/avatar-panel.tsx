@@ -56,7 +56,7 @@ function useUploadHandler(queryClient: ReturnType<typeof useQueryClient>, upload
             toast.success('Avatar uploaded successfully!');
             setOptimisticUrl(`${API_BASE_URL}${result.customAvatarUrl}`);
             applyAvatarOptimistic(queryClient, { type: 'custom' }, { customAvatarUrl: result.customAvatarUrl });
-            updatePreference('avatarPreference', { type: 'custom' }).catch(() => {});
+            updatePreference('avatarPreference', { type: 'custom' }).catch(() => toast.error('Failed to save avatar preference'));
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Upload failed');
         }

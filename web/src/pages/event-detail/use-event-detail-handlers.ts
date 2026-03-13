@@ -6,6 +6,7 @@ import { useUpdateRoster, useSelfUnassign, useAdminRemoveUser, buildRosterUpdate
 import { useUpdateAutoUnbench } from '../../hooks/use-auto-unbench';
 import { useCreatePug, useDeletePug, usePugs, useRegeneratePugInviteCode } from '../../hooks/use-pugs';
 import { useDeleteEvent, useDeleteSeries, useCancelSeries } from '../../hooks/use-events';
+import { CHARACTER_ROLES } from '@raid-ledger/contract';
 import type { RosterAssignmentResponse, RosterRole, PugRole, CharacterRole, SeriesScope } from '@raid-ledger/contract';
 import { getSignupToast } from './signup-toast.helpers';
 
@@ -125,12 +126,10 @@ function useSlotClickHandler(options: { isAuthenticated: boolean; shouldShowChar
         if (!options.isAuthenticated || signupHandlers.signup.isPending) return;
         if (role === 'bench') { signupHandlers.doSignup({ slotRole: 'bench', slotPosition: position }); return; }
         if (options.shouldShowCharacterModal) {
-            const mmoRoles: string[] = ['tank', 'healer', 'dps'];
-            signupHandlers.setPreSelectedRole(mmoRoles.includes(role) ? (role as CharacterRole) : undefined);
+            signupHandlers.setPreSelectedRole(CHARACTER_ROLES.includes(role as CharacterRole) ? (role as CharacterRole) : undefined);
             signupHandlers.setPendingSlot({ role, position }); signupHandlers.setShowConfirmModal(true); return;
         }
-        const mmoRoles: string[] = ['tank', 'healer', 'dps'];
-        const preferredRoles = mmoRoles.includes(role) ? [role] : undefined;
+        const preferredRoles = CHARACTER_ROLES.includes(role as CharacterRole) ? [role] : undefined;
         signupHandlers.doSignup({ slotRole: role, slotPosition: position, preferredRoles });
     }, [options.isAuthenticated, options.shouldShowCharacterModal, signupHandlers]);
 }

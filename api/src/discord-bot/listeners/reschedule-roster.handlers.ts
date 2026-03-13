@@ -4,6 +4,7 @@ import type {
   StringSelectMenuInteraction,
 } from 'discord.js';
 import * as schema from '../../drizzle/schema';
+import { CHARACTER_ROLES } from '@raid-ledger/contract';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 import { showRoleSelect } from '../utils/signup-dropdown-builders';
 import type {
@@ -119,18 +120,22 @@ async function validateSelectCtx(
   return { linkedUser, event };
 }
 
-export function buildUpdateSet(options?: ReconfirmOptions): Record<string, unknown> {
+export function buildUpdateSet(
+  options?: ReconfirmOptions,
+): Record<string, unknown> {
   const set: Record<string, unknown> = {
     status: options?.signupStatus === 'tentative' ? 'tentative' : 'signed_up',
     roachedOutAt: null,
     confirmationStatus: 'confirmed',
   };
-  const mmoRoles = ['tank', 'healer', 'dps'];
   if (options?.preferredRoles) {
     set.preferredRoles = options.preferredRoles.filter((r: string) =>
-      mmoRoles.includes(r),
+      CHARACTER_ROLES.includes(r as never),
     );
-  } else if (options?.slotRole && mmoRoles.includes(options.slotRole)) {
+  } else if (
+    options?.slotRole &&
+    CHARACTER_ROLES.includes(options.slotRole as never)
+  ) {
     set.preferredRoles = [options.slotRole];
   }
   return set;

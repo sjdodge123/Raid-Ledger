@@ -41,56 +41,44 @@ const AccountIcon = (
     </svg>
 );
 
-/**
- * Build profile sidebar navigation sections for the given user.
- * Returns sections with user-specific links (e.g., My Profile -> /users/{userId}).
- * Restructured from static SECTIONS array (ROK-548).
- */
+function identitySection(userId: number): NavSection {
+    return {
+        id: 'identity', label: 'Identity', icon: IdentityIcon,
+        children: [
+            { to: `/users/${userId}`, label: 'My Profile' },
+            { to: '/profile/avatar', label: 'My Avatar' },
+        ],
+    };
+}
+
+const INTEGRATIONS_SECTION: NavSection = {
+    id: 'integrations', label: 'Integrations', icon: IntegrationsIcon,
+    children: [{ to: '/profile/integrations', label: 'My Integrations' }],
+};
+
+const PREFERENCES_SECTION: NavSection = {
+    id: 'preferences', label: 'Preferences', icon: PreferencesIcon,
+    children: [
+        { to: '/profile/preferences', label: 'Preferences' },
+        { to: '/profile/notifications', label: 'Notifications' },
+    ],
+};
+
+const GAMING_SECTION: NavSection = {
+    id: 'gaming', label: 'Gaming', icon: GamingIcon,
+    children: [
+        { to: '/profile/gaming/game-time', label: 'Game Time' },
+        { to: '/profile/gaming/characters', label: 'Characters' },
+        { to: '/profile/gaming/watched-games', label: 'Watched Games' },
+    ],
+};
+
+const ACCOUNT_SECTION: NavSection = {
+    id: 'account', label: 'Account', icon: AccountIcon,
+    children: [{ to: '/profile/account', label: 'Delete Account' }],
+};
+
+/** Build profile sidebar navigation sections for the given user (ROK-548). */
 export function getSections(userId: number): NavSection[] {
-    return [
-        {
-            id: 'identity',
-            label: 'Identity',
-            icon: IdentityIcon,
-            children: [
-                { to: `/users/${userId}`, label: 'My Profile' },
-                { to: '/profile/avatar', label: 'My Avatar' },
-            ],
-        },
-        {
-            id: 'integrations',
-            label: 'Integrations',
-            icon: IntegrationsIcon,
-            children: [
-                { to: '/profile/integrations', label: 'My Integrations' },
-            ],
-        },
-        {
-            id: 'preferences',
-            label: 'Preferences',
-            icon: PreferencesIcon,
-            children: [
-                { to: '/profile/preferences', label: 'Preferences' },
-                { to: '/profile/notifications', label: 'Notifications' },
-            ],
-        },
-        {
-            id: 'gaming',
-            label: 'Gaming',
-            icon: GamingIcon,
-            children: [
-                { to: '/profile/gaming/game-time', label: 'Game Time' },
-                { to: '/profile/gaming/characters', label: 'Characters' },
-                { to: '/profile/gaming/watched-games', label: 'Watched Games' },
-            ],
-        },
-        {
-            id: 'account',
-            label: 'Account',
-            icon: AccountIcon,
-            children: [
-                { to: '/profile/account', label: 'Delete Account' },
-            ],
-        },
-    ];
+    return [identitySection(userId), INTEGRATIONS_SECTION, PREFERENCES_SECTION, GAMING_SECTION, ACCOUNT_SECTION];
 }
