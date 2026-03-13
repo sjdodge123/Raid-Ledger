@@ -5,6 +5,7 @@
 import type { JSX } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
+import { useGameRegistry } from '../../hooks/use-game-registry';
 
 /** Source filter options for the dropdown. */
 const SOURCE_OPTIONS = [
@@ -23,21 +24,53 @@ export function PlayerFilterBar(): JSX.Element {
     const source = searchParams.get('source') ?? '';
     const gameId = searchParams.get('gameId') ?? '';
     const hasFilters = source !== '' || gameId !== '';
+    const gameName = useGameName(gameId);
 
     return (
         <div className="flex flex-wrap items-center gap-3 bg-panel border border-edge rounded-lg px-4 py-3">
-            <GameIdInput gameId={gameId} onGameIdChange={(v) => updateParam(searchParams, setSearchParams, 'gameId', v)} />
+            <GameIdInput gameId={gameId} gameName={gameName} onGameIdChange={(v) => updateParam(searchParams, setSearchParams, 'gameId', v)} />
             <SourceSelect source={source} onSourceChange={(v) => updateParam(searchParams, setSearchParams, 'source', v)} />
             {hasFilters && <ClearButton onClick={() => clearFilters(setSearchParams)} />}
         </div>
     );
 }
 
-/** Game ID text input with label. */
-function GameIdInput({ gameId, onGameIdChange }: {
+/** Resolve a gameId string to a game name from the registry, or null. */
+function useGameName(gameId: string): string | null {
+    const { games } = useGameRegistry();
+    if (!gameId) return null;
+    const id = parseInt(gameId, 10);
+    if (Number.isNaN(id)) return null;
+    return games.find((g) => g.id === id)?.name ?? null;
+}
+
+/** Resolved game name badge with dismiss button. */
+function GameNameBadge({ gameName, onClear }: {
+    gameName: string;
+    onClear: () => void;
+}): JSX.Element {
+    return (
+        <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted">Game</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded text-emerald-400 text-sm">
+                {gameName}
+                <button type="button" onClick={onClear} aria-label="Remove game filter" className="hover:text-emerald-300 transition-colors">
+                    <XMarkIcon className="w-3.5 h-3.5" />
+                </button>
+            </span>
+        </div>
+    );
+}
+
+/** Game filter display: shows game name badge when resolved, raw input otherwise. */
+function GameIdInput({ gameId, gameName, onGameIdChange }: {
     gameId: string;
+    gameName: string | null;
     onGameIdChange: (value: string) => void;
 }): JSX.Element {
+    if (gameId && gameName) {
+        return <GameNameBadge gameName={gameName} onClear={() => onGameIdChange('')} />;
+    }
     return (
         <label className="flex items-center gap-2 text-sm">
             <span className="text-muted">Game</span>

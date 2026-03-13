@@ -11,12 +11,9 @@ import type { ItadPriceService } from '../itad/itad-price.service';
 import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
 import { HEART_SOURCES } from './igdb-interest.helpers';
 import { mapDbRowToDetail } from './igdb.mappers';
+import { VISIBILITY_FILTER } from './igdb-visibility.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
-
-/** Visibility filter for game queries (excludes hidden/banned). */
-const VISIBILITY_FILTER = () =>
-  and(eq(schema.games.hidden, false), eq(schema.games.banned, false));
 
 // ─── Cache helpers ───────────────────────────────────────────────────────────
 

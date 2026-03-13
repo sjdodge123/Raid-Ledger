@@ -5,6 +5,7 @@ import * as schema from '../drizzle/schema';
 import { GameDetailDto } from '@raid-ledger/contract';
 import { mapDbRowToDetail } from './igdb.mappers';
 import { HEART_SOURCES } from './igdb-interest.helpers';
+import { VISIBILITY_FILTER } from './igdb-visibility.helpers';
 
 /** Category definition for game discovery. */
 export interface DiscoverCategory {
@@ -14,10 +15,6 @@ export interface DiscoverCategory {
   filter?: ReturnType<typeof sql>;
   orderBy?: ReturnType<typeof sql>;
 }
-
-/** Standard visibility filter for game queries. */
-const VISIBILITY_FILTER = () =>
-  and(eq(schema.games.hidden, false), eq(schema.games.banned, false));
 
 /** Build the list of discovery categories with SQL filters. */
 export function buildDiscoverCategories(): DiscoverCategory[] {
