@@ -159,7 +159,11 @@ function makeItadEntryBestPrice(
     id,
     current: {
       shop: { id: 61, name: 'Steam' },
-      price: { amount: price, amountInt: Math.round(price * 100), currency: 'USD' },
+      price: {
+        amount: price,
+        amountInt: Math.round(price * 100),
+        currency: 'USD',
+      },
       regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
       cut: discount,
       url: `https://store.steampowered.com/app/${id}`,

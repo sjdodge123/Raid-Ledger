@@ -6,19 +6,13 @@ import { and, eq, sql, isNotNull, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type Redis from 'ioredis';
 import * as schema from '../drizzle/schema';
-import type { GameDetailDto } from '@raid-ledger/contract';
+import type { GameDetailDto, GameDiscoverRowDto } from '@raid-ledger/contract';
 import type { ItadPriceService } from '../itad/itad-price.service';
 import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
 import { HEART_SOURCES } from './igdb-interest.helpers';
 import { mapDbRowToDetail } from './igdb.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
-
-interface DealDiscoverRow {
-  category: string;
-  slug: string;
-  games: GameDetailDto[];
-}
 
 /** Visibility filter for game queries (excludes hidden/banned). */
 const VISIBILITY_FILTER = () =>
@@ -70,9 +64,7 @@ function buildDiscountMap(
 }
 
 /** Build a set of itadGameIds at or below historical low ("Best Price" badge). */
-function buildBestPriceSet(
-  entries: ItadOverviewGameEntry[],
-): Set<string> {
+function buildBestPriceSet(entries: ItadOverviewGameEntry[]): Set<string> {
   const set = new Set<string>();
   for (const e of entries) {
     if (!e.current || e.current.cut <= 0 || !e.lowest) continue;
@@ -109,7 +101,7 @@ export async function fetchWishlistedOnSaleRow(
   itadPriceService: ItadPriceService,
   redis: Redis,
   cacheTtl: number,
-): Promise<DealDiscoverRow> {
+): Promise<GameDiscoverRowDto> {
   const slug = 'wishlisted-on-sale';
   const category = 'Community Wishlisted On Sale';
   const cached = await tryCache(redis, slug);
@@ -141,7 +133,7 @@ export async function fetchMostPlayedOnSaleRow(
   itadPriceService: ItadPriceService,
   redis: Redis,
   cacheTtl: number,
-): Promise<DealDiscoverRow> {
+): Promise<GameDiscoverRowDto> {
   const slug = 'most-played-on-sale';
   const category = 'Most Played Games On Sale';
   const cached = await tryCache(redis, slug);
@@ -174,7 +166,7 @@ export async function fetchBestPriceRow(
   itadPriceService: ItadPriceService,
   redis: Redis,
   cacheTtl: number,
-): Promise<DealDiscoverRow> {
+): Promise<GameDiscoverRowDto> {
   const slug = 'best-price';
   const category = 'Best Price';
   const cached = await tryCache(redis, slug);
@@ -267,7 +259,10 @@ async function sortByHearts(
   games: GameDetailDto[],
 ): Promise<GameDetailDto[]> {
   if (games.length === 0) return [];
-  const hearts = await queryHeartCounts(db, games.map((g) => g.id));
+  const hearts = await queryHeartCounts(
+    db,
+    games.map((g) => g.id),
+  );
   return games
     .sort((a, b) => (hearts.get(b.id) ?? 0) - (hearts.get(a.id) ?? 0))
     .slice(0, 20);

@@ -6,7 +6,7 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type Redis from 'ioredis';
 import type * as schema from '../drizzle/schema';
-import type { GameDetailDto } from '@raid-ledger/contract';
+import type { GameDiscoverRowDto } from '@raid-ledger/contract';
 import type { ItadPriceService } from '../itad/itad-price.service';
 import {
   fetchCommunityRow,
@@ -21,12 +21,6 @@ import {
 } from './igdb-discover-deals.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
-
-interface DiscoverRow {
-  category: string;
-  slug: string;
-  games: GameDetailDto[];
-}
 
 /** Deal-aware slug set for fast lookup. */
 const DEAL_SLUGS = new Set([
@@ -50,7 +44,7 @@ export async function dispatchDiscoverRow(
   redis: Redis,
   cacheTtl: number,
   itadPriceService: ItadPriceService,
-): Promise<DiscoverRow> {
+): Promise<GameDiscoverRowDto> {
   if (cat.slug === 'community-wants-to-play') {
     return fetchCommunityRow(db, cat);
   }
