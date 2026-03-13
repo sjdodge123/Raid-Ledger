@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
@@ -28,7 +28,6 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
 }
 
 function useAvatarHandlers(refetch: () => void) {
-    const queryClient = useQueryClient();
     const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
     const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
 
@@ -55,9 +54,10 @@ function useAvatarHandlers(refetch: () => void) {
         toast.success('Avatar updated!');
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
         updatePreference('avatarPreference', pref)
-            .then(async () => { await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }); setOptimisticUrl(null); })
+            .then(() => refetch())
+            .then(() => setOptimisticUrl(null))
             .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
-    }, [queryClient]);
+    }, [refetch]);
 
     return { handleUpload, handleRemoveCustom, handleSelect, isUploading, uploadProgress, optimisticUrl };
 }
@@ -82,7 +82,7 @@ function AvatarOptionsGrid({ options, currentUrl, onSelect }: { options: ReturnT
             <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
                 {options.map((opt) => (
                     <button key={opt.url} onClick={() => onSelect(opt.url)}
-                        className={`relative group rounded-full transition-shadow ${currentUrl === opt.url ? 'ring-2 ring-emerald-500 sm:ring-offset-2 sm:ring-offset-surface' : 'hover:ring-2 hover:ring-edge-strong sm:hover:ring-offset-2 sm:hover:ring-offset-surface'}`}>
+                        className={`relative group rounded-full transition-shadow ${currentUrl === opt.url ? 'ring-2 ring-emerald-500' : 'hover:ring-2 hover:ring-edge-strong'}`}>
                         <img src={opt.url} alt={opt.label} className="w-14 h-14 rounded-full object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
                         <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-muted whitespace-nowrap">{opt.label}</span>
                     </button>
