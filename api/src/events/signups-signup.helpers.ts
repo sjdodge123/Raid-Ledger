@@ -153,14 +153,22 @@ export async function updatePreferredRolesIfNeeded(
   tx: Tx,
   existing: SignupRow,
   dto?: CreateSignupDto,
-) {
-  if (isCancelledStatus(existing.status)) return;
-  if (!dto?.preferredRoles || dto.preferredRoles.length === 0) return;
+): Promise<boolean> {
+  if (isCancelledStatus(existing.status)) return false;
+  if (!dto?.preferredRoles || dto.preferredRoles.length === 0) return false;
+  const oldRoles = existing.preferredRoles ?? [];
+  const sorted = [...dto.preferredRoles].sort();
+  const oldSorted = [...oldRoles].sort();
+  const same =
+    sorted.length === oldSorted.length &&
+    sorted.every((r, i) => r === oldSorted[i]);
+  if (same) return false;
   await tx
     .update(schema.eventSignups)
     .set({ preferredRoles: dto.preferredRoles })
     .where(eq(schema.eventSignups.id, existing.id));
   existing.preferredRoles = dto.preferredRoles;
+  return true;
 }
 
 export function shouldUseAutoAllocation(

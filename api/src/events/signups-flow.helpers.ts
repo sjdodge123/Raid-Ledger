@@ -70,7 +70,12 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
   const { tx, eventRow, eventId, userId, dto, user } = p;
   const existing = await signupH.fetchExistingSignup(tx, eventId, userId);
   await signupH.reactivateIfCancelled(tx, existing, dto, p.hasCharacter);
-  await signupH.updatePreferredRolesIfNeeded(tx, existing, dto);
+  const rolesChanged = await signupH.updatePreferredRolesIfNeeded(
+    tx,
+    existing,
+    dto,
+  );
+  if (rolesChanged) await clearExistingAssignment(tx, existing.id);
   await ensureAssignment(
     deps,
     tx,
@@ -87,6 +92,12 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
     isDuplicate: true as const,
     response: buildSignupResponseDto(existing, user, character),
   };
+}
+
+async function clearExistingAssignment(tx: Tx, signupId: number) {
+  await tx
+    .delete(schema.rosterAssignments)
+    .where(eq(schema.rosterAssignments.signupId, signupId));
 }
 
 async function ensureAssignment(
