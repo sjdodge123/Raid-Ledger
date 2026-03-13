@@ -3,6 +3,7 @@
  * Verifies caching behavior, graceful degradation, and API call patterns.
  */
 import { Test } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { ItadPriceService } from './itad-price.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
@@ -90,6 +91,18 @@ describe('ItadPriceService', () => {
 
       expect(result).toBeNull();
       expect(itadPost).not.toHaveBeenCalled();
+    });
+
+    it('logs a warning when API key is not configured', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue(null);
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn');
+
+      await service.getOverview('uuid-game-123');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('ITAD API key not configured'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('returns null when itadPost returns null', async () => {

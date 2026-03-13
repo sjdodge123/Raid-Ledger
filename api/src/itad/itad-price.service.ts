@@ -108,7 +108,9 @@ export class ItadPriceService {
   private async getApiKey(): Promise<string | null> {
     const key = await this.settingsService.getItadApiKey();
     if (!key) {
-      this.logger.debug('ITAD API key not configured');
+      this.logger.warn(
+        'ITAD API key not configured — Best Price and deal sections will be empty',
+      );
     }
     return key;
   }
