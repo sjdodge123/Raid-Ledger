@@ -208,7 +208,7 @@ export class CharactersService {
       dto,
       (v) => this.findCharacterSyncAdapter(v),
     );
-    const nsPrefix = await this.resolveNamespacePrefix(character.gameId);
+    const nsPrefix = await crudH.resolveNsPrefix(this.db, character.gameId);
     const { profile, talents, equipment } = await fetchFullProfile(
       adapter,
       character.name,
@@ -229,16 +229,6 @@ export class CharactersService {
     );
     this.enqueueEnrichmentsBackground(characterId, character.gameId);
     return result;
-  }
-
-  /** Look up the game's API namespace prefix by game ID. */
-  private async resolveNamespacePrefix(gameId: number): Promise<string | null> {
-    const [game] = await this.db
-      .select({ apiNamespacePrefix: schema.games.apiNamespacePrefix })
-      .from(schema.games)
-      .where(eq(schema.games.id, gameId))
-      .limit(1);
-    return game?.apiNamespacePrefix ?? null;
   }
 
   private enqueueEnrichmentsBackground(

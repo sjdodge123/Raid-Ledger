@@ -230,7 +230,10 @@ async function syncSingleCharacter(
 }
 
 /** Look up apiNamespacePrefix from the game row. */
-async function resolveNsPrefix(db: Db, gameId: number): Promise<string | null> {
+export async function resolveNsPrefix(
+  db: Db,
+  gameId: number,
+): Promise<string | null> {
   const [game] = await db
     .select({ apiNamespacePrefix: schema.games.apiNamespacePrefix })
     .from(schema.games)
