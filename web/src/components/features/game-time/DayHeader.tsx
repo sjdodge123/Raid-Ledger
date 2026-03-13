@@ -12,12 +12,14 @@ interface DayHeaderProps {
     isHeaderHidden: boolean;
     /** Click handler for whole-day toggle (undefined = non-interactive) */
     onClick?: () => void;
+    /** Whether all 24 hours are active for this day (drives aria-pressed) */
+    isAllActive?: boolean;
 }
 
 /** Single day column header for the game-time grid */
 export function DayHeader({
     dayIndex, fullDayNames, todayIndex, hasRolling,
-    dateLabel, nextDateLabel, noStickyOffset, isHeaderHidden, onClick,
+    dateLabel, nextDateLabel, noStickyOffset, isHeaderHidden, onClick, isAllActive,
 }: DayHeaderProps): JSX.Element {
     const displayDay = fullDayNames ? FULL_DAYS[dayIndex] : DAYS[dayIndex];
     const isToday = todayIndex === dayIndex;
@@ -34,6 +36,7 @@ export function DayHeader({
             data-testid={`day-header-${dayIndex}`}
             onClick={onClick}
             role={onClick ? 'button' : undefined}
+            aria-pressed={onClick ? isAllActive : undefined}
             tabIndex={onClick ? 0 : undefined}
             onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
         >

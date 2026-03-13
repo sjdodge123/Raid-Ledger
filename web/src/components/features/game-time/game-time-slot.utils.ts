@@ -1,9 +1,9 @@
 import type { GameTimeSlot } from '@raid-ledger/contract';
 
-const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
+export const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 /** Returns true if a slot counts as "available" (explicit or implicit) */
-function isSlotActive(s: GameTimeSlot): boolean {
+export function isSlotActive(s: GameTimeSlot): boolean {
     return s.status === 'available' || !s.status;
 }
 

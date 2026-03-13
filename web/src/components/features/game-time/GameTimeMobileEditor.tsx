@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { DaySection } from './DaySection';
 import type { Preset } from './DaySection';
-import { toggleAllDaySlots } from './game-time-slot.utils';
+import { toggleAllDaySlots, isSlotActive } from './game-time-slot.utils';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
@@ -18,10 +18,6 @@ interface GameTimeMobileEditorProps {
     onChange: (slots: GameTimeSlot[]) => void;
     readOnly?: boolean;
     tzLabel?: string;
-}
-
-function isSlotActive(s: GameTimeSlot) {
-    return s.status === 'available' || !s.status;
 }
 
 function togglePresetSlots(slots: GameTimeSlot[], dayIndex: number, preset: Preset): GameTimeSlot[] {

@@ -272,19 +272,19 @@ it('only counts available slots (not blocked/committed)', () => {
             expect(screen.queryByRole('button', { name: /All Day/i })).not.toBeInTheDocument();
         });
 
-        it('shows active style when all 24 hours selected', () => {
+        it('shows active state when all 24 hours selected', () => {
             const slots: GameTimeSlot[] = Array.from({ length: 24 }, (_, i) => ({
                 dayOfWeek: 0, hour: i, status: 'available' as const,
             }));
             render(<DaySection {...allDayProps} slots={slots} expanded={true} />);
             const btn = screen.getByRole('button', { name: /All Day/i });
-            expect(btn.className).toContain('bg-emerald-600');
+            expect(btn).toHaveAttribute('aria-pressed', 'true');
         });
 
-        it('shows inactive style when not all hours selected', () => {
+        it('shows inactive state when not all hours selected', () => {
             render(<DaySection {...allDayProps} expanded={true} />);
             const btn = screen.getByRole('button', { name: /All Day/i });
-            expect(btn.className).toContain('bg-panel');
+            expect(btn).toHaveAttribute('aria-pressed', 'false');
         });
     });
 });

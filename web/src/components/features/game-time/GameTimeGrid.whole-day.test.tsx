@@ -81,16 +81,16 @@ describe('GameTimeGrid — whole-day edge cases (ROK-619)', () => {
         expect(result.find((s) => s.hour === 23)?.status).toBe('blocked');
     });
 
-    it('shows cursor-pointer style on day header when interactive', () => {
+    it('day header has button role when interactive', () => {
         const onChange = vi.fn();
         render(<GameTimeGrid slots={[]} onChange={onChange} />);
         const header = screen.getByTestId('day-header-0');
-        expect(header.className).toContain('cursor-pointer');
+        expect(header).toHaveAttribute('role', 'button');
     });
 
-    it('does not show cursor-pointer in readOnly mode', () => {
+    it('day header has no button role in readOnly mode', () => {
         render(<GameTimeGrid slots={[]} readOnly />);
         const header = screen.getByTestId('day-header-0');
-        expect(header.className).not.toContain('cursor-pointer');
+        expect(header).not.toHaveAttribute('role', 'button');
     });
 });

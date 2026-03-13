@@ -37,7 +37,7 @@ describe('DaySection — All Day button active-state edge cases (ROK-619)', () =
 
     it('All Day button shows inactive when 24 slots exist but some are committed (not truly all-day active)', () => {
         // activeSet only counts available/no-status — committed does not count.
-        // 23 available + 1 committed → activeSet.size === 23, not 24 → inactive style.
+        // 23 available + 1 committed → activeSet.size === 23, not 24 → inactive state.
         const slots: GameTimeSlot[] = [
             ...Array.from({ length: 23 }, (_, i) => ({
                 dayOfWeek: 0, hour: i, status: 'available' as const,
@@ -46,7 +46,7 @@ describe('DaySection — All Day button active-state edge cases (ROK-619)', () =
         ];
         render(<DaySection {...base} dayIndex={0} slots={slots} />);
         const btn = screen.getByRole('button', { name: /All Day/i });
-        expect(btn.className).not.toContain('bg-emerald-600');
+        expect(btn).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('All Day button shows inactive when 24 slots exist but one is blocked', () => {
@@ -58,7 +58,7 @@ describe('DaySection — All Day button active-state edge cases (ROK-619)', () =
         ];
         render(<DaySection {...base} dayIndex={0} slots={slots} />);
         const btn = screen.getByRole('button', { name: /All Day/i });
-        expect(btn.className).not.toContain('bg-emerald-600');
+        expect(btn).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('All Day button shows active when all 24 slots are available (no status)', () => {
@@ -67,7 +67,7 @@ describe('DaySection — All Day button active-state edge cases (ROK-619)', () =
         })) as GameTimeSlot[];
         render(<DaySection {...base} dayIndex={0} slots={slots} />);
         const btn = screen.getByRole('button', { name: /All Day/i });
-        expect(btn.className).toContain('bg-emerald-600');
+        expect(btn).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('All Day button fires exactly once per click', () => {
@@ -113,7 +113,7 @@ describe('DaySection — All Day button active-state edge cases (ROK-619)', () =
         ];
         render(<DaySection {...base} dayIndex={0} slots={slots} />);
         const btn = screen.getByRole('button', { name: /All Day/i });
-        expect(btn.className).not.toContain('bg-emerald-600');
+        expect(btn).toHaveAttribute('aria-pressed', 'false');
     });
 });
 
