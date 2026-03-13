@@ -5,12 +5,13 @@ import { useMyCharacters } from '../../hooks/use-characters';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { API_BASE_URL } from '../../lib/config';
 import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, getCurrentUserAvatarData, setCurrentUserAvatarData } from '../../lib/avatar';
-import type { AvatarType } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
 import { updatePreference } from '../../lib/api-client';
 
+type SelectableAvatarType = 'custom' | 'discord' | 'character';
+
 function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?: string | null; avatar?: string | null }, characters: { avatarUrl?: string | null; name: string }[]) {
-    const options: { url: string; label: string; type: AvatarType; characterName?: string }[] = [];
+    const options: { url: string; label: string; type: SelectableAvatarType; characterName?: string }[] = [];
     if (user.customAvatarUrl) {
         options.push({ url: `${API_BASE_URL}${user.customAvatarUrl}`, label: 'Custom', type: 'custom' });
     }
@@ -30,7 +31,7 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
 /** Eagerly push avatar preference into React Query cache + module-level overlay. */
 function applyAvatarOptimistic(
     queryClient: ReturnType<typeof useQueryClient>,
-    pref: { type: AvatarType; characterName?: string },
+    pref: { type: SelectableAvatarType; characterName?: string },
     opts?: { resolvedAvatarUrl?: string; customAvatarUrl?: string },
 ) {
     queryClient.setQueryData<User | null>(['auth', 'me'], (old) => {
