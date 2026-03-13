@@ -31,11 +31,20 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
 function applyAvatarOptimistic(
     queryClient: ReturnType<typeof useQueryClient>,
     pref: { type: AvatarType; characterName?: string },
-    patch?: Partial<User>,
+    opts?: { resolvedAvatarUrl?: string; customAvatarUrl?: string },
 ) {
-    queryClient.setQueryData<User | null>(['auth', 'me'], (old) => old ? { ...old, ...patch, avatarPreference: pref } : old);
+    queryClient.setQueryData<User | null>(['auth', 'me'], (old) => {
+        if (!old) return old;
+        const update: Partial<User> = { avatarPreference: pref };
+        if (opts?.customAvatarUrl !== undefined) update.customAvatarUrl = opts.customAvatarUrl;
+        return { ...old, ...update };
+    });
     const cached = getCurrentUserAvatarData();
-    if (cached) setCurrentUserAvatarData({ ...cached, ...patch, avatarPreference: pref });
+    if (cached) setCurrentUserAvatarData({
+        ...cached, avatarPreference: pref,
+        resolvedAvatarUrl: opts?.resolvedAvatarUrl ?? cached.resolvedAvatarUrl,
+        customAvatarUrl: opts?.customAvatarUrl ?? cached.customAvatarUrl,
+    });
 }
 
 function useUploadHandler(queryClient: ReturnType<typeof useQueryClient>, uploadAsync: (file: File) => Promise<{ customAvatarUrl: string }>, setOptimisticUrl: (url: string | null) => void) {
@@ -73,7 +82,8 @@ function useAvatarHandlers(refetch: () => void) {
         setOptimisticUrl(url);
         toast.success('Avatar updated!');
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
-        applyAvatarOptimistic(queryClient, pref);
+        const resolvedAvatarUrl = option.type === 'character' ? url : undefined;
+        applyAvatarOptimistic(queryClient, pref, { resolvedAvatarUrl });
         updatePreference('avatarPreference', pref)
             .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
     }, [queryClient]);

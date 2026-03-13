@@ -110,7 +110,7 @@ async function bootstrap() {
     rawBody: false,
   });
   app.useBodyParser('json', { limit: '8mb' });
-  app.use(helmet());
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(compression({ threshold: 1024 }));
   const isProduction = process.env.NODE_ENV === 'production';
   const corsOrigin = process.env.CORS_ORIGIN;
