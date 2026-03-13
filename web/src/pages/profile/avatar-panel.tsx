@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
@@ -30,6 +30,7 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
 function useAvatarHandlers(refetch: () => void) {
     const queryClient = useQueryClient();
     const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
+    const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
 
     const handleUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -42,7 +43,7 @@ function useAvatarHandlers(refetch: () => void) {
 
     const handleRemoveCustom = useCallback(() => {
         deleteAvatar(undefined, {
-            onSuccess: () => { toast.success('Custom avatar removed'); refetch(); },
+            onSuccess: () => { toast.success('Custom avatar removed'); refetch(); setOptimisticUrl(null); },
             onError: (err) => { toast.error(err instanceof Error ? err.message : 'Failed to remove avatar'); },
         });
     }, [deleteAvatar, refetch]);
@@ -50,13 +51,15 @@ function useAvatarHandlers(refetch: () => void) {
     const handleSelect = useCallback((url: string, options: ReturnType<typeof buildAvatarOptions>) => {
         const option = options.find(o => o.url === url);
         if (!option) return;
+        setOptimisticUrl(url);
+        toast.success('Avatar updated!');
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
         updatePreference('avatarPreference', pref)
-            .then(() => { queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }); toast.success('Avatar updated!'); })
-            .catch(() => toast.error('Failed to save avatar preference'));
+            .then(() => { queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }); setOptimisticUrl(null); })
+            .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
     }, [queryClient]);
 
-    return { handleUpload, handleRemoveCustom, handleSelect, isUploading, uploadProgress };
+    return { handleUpload, handleRemoveCustom, handleSelect, isUploading, uploadProgress, optimisticUrl };
 }
 
 function AvatarPreview({ currentUrl, username, currentLabel }: { currentUrl: string; username: string; currentLabel: string }) {
@@ -115,16 +118,17 @@ export function AvatarPanel() {
 
     const characters = charactersData?.data ?? [];
     const options = buildAvatarOptions(user, characters);
-    const currentUrl = resolveAvatar(toAvatarUser({ ...user, characters })).url ?? '/default-avatar.svg';
-    const currentLabel = options.find(o => o.url === currentUrl)?.label ?? 'Default';
+    const resolvedUrl = resolveAvatar(toAvatarUser({ ...user, characters })).url ?? '/default-avatar.svg';
+    const displayUrl = handlers.optimisticUrl ?? resolvedUrl;
+    const displayLabel = options.find(o => o.url === displayUrl)?.label ?? 'Default';
 
     return (
         <div className="space-y-6">
             <div className="bg-surface border border-edge-subtle rounded-xl p-6">
                 <h2 className="text-xl font-semibold text-foreground mb-1">Avatar</h2>
                 <p className="text-sm text-muted mb-5">Choose or upload your profile picture</p>
-                <AvatarPreview currentUrl={currentUrl} username={user.username} currentLabel={currentLabel} />
-                <AvatarOptionsGrid options={options} currentUrl={currentUrl} onSelect={(url) => handlers.handleSelect(url, options)} />
+                <AvatarPreview currentUrl={displayUrl} username={user.username} currentLabel={displayLabel} />
+                <AvatarOptionsGrid options={options} currentUrl={displayUrl} onSelect={(url) => handlers.handleSelect(url, options)} />
                 <AvatarUploadBar isUploading={handlers.isUploading} uploadProgress={handlers.uploadProgress} onUpload={handlers.handleUpload} onRemove={handlers.handleRemoveCustom} hasCustom={!!user.customAvatarUrl} />
             </div>
         </div>
