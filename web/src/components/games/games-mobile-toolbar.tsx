@@ -23,7 +23,7 @@ export function GamesMobileToolbar({ activeTab, onTabChange, showManageTab = fal
 
     return (
         <MobilePageToolbar aria-label="Games navigation">
-            <div className="flex rounded-lg bg-panel/50 border border-edge p-1 w-fit">
+            <div className="flex rounded-lg bg-overlay/30 p-1 w-fit">
                 {tabs.map((tab) => (
                     <button
                         key={tab}
