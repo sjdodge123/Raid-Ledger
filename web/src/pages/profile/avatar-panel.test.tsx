@@ -41,6 +41,8 @@ vi.mock('../../lib/avatar', () => ({
         characters: user.characters,
         avatarPreference: user.avatarPreference,
     }),
+    getCurrentUserAvatarData: vi.fn(() => null),
+    setCurrentUserAvatarData: vi.fn(),
 }));
 
 vi.mock('../../lib/api-client', () => ({
