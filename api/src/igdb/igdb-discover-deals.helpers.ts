@@ -123,7 +123,7 @@ export async function fetchWishlistedOnSaleRow(
     itadPriceService,
     wishlistGames.map((w) => w.gameId),
   );
-  await writeCache(redis, slug, cacheTtl, games);
+  if (games.length > 0) await writeCache(redis, slug, cacheTtl, games);
   return { category, slug, games };
 }
 
@@ -156,7 +156,7 @@ export async function fetchMostPlayedOnSaleRow(
     playtimeGames.map((p) => p.gameId),
   );
   const games = await sortByHearts(db, onSale);
-  await writeCache(redis, slug, cacheTtl, games);
+  if (games.length > 0) await writeCache(redis, slug, cacheTtl, games);
   return { category, slug, games };
 }
 
@@ -192,7 +192,7 @@ export async function fetchBestPriceRow(
     .map((g) => mapDbRowToDetail(g));
 
   const games = await sortByHearts(db, filtered);
-  await writeCache(redis, slug, cacheTtl, games);
+  if (games.length > 0) await writeCache(redis, slug, cacheTtl, games);
   return { category, slug, games };
 }
 
