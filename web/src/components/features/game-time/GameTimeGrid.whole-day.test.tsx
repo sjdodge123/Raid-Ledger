@@ -60,7 +60,9 @@ describe('GameTimeGrid — whole-day edge cases (ROK-619)', () => {
 
     it('day header is not clickable when no onChange provided', () => {
         render(<GameTimeGrid slots={[]} />);
-        fireEvent.click(screen.getByTestId('day-header-0'));
+        const header = screen.getByTestId('day-header-0');
+        expect(header).not.toHaveAttribute('role', 'button');
+        fireEvent.click(header); // should not throw
     });
 
     it('does not toggle committed or blocked slots', () => {
