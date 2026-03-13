@@ -34,7 +34,10 @@ export async function handleTentative(
 
   if (existingSignup) {
     await markExistingTentative(eventId, existingSignup, deps);
-    await interaction.editReply({ content: "You're marked as **tentative**." });
+    await interaction.editReply({
+      content: "You're marked as **tentative**.",
+      embeds: [],
+    });
     await deps.updateEmbedSignupCount(eventId);
     return;
   }
@@ -105,7 +108,10 @@ export async function handleDecline(
     await createDeclinedSignup(interaction, eventId, deps);
   }
 
-  await interaction.editReply({ content: "You've **declined** this event." });
+  await interaction.editReply({
+    content: "You've **declined** this event.",
+    embeds: [],
+  });
   await deps.updateEmbedSignupCount(eventId);
 }
 
@@ -197,6 +203,7 @@ async function quickSignupAnonymous(
     : '';
   await interaction.editReply({
     content: `You're signed up as **${interaction.user.username}**!${benchSuffix(result.assignedSlot)}${accountLink}`,
+    embeds: [],
   });
   await deps.updateEmbedSignupCount(eventId);
 }

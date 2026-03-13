@@ -116,6 +116,7 @@ async function confirmCharRoleSignup(
   const character = await deps.charactersService.findOne(userId, characterId);
   await interaction.editReply({
     content: `${formatRoleConfirmation(signupStatus, character.name, rolesLabel)}${benchSuffix(assignedSlot)}`,
+    embeds: [],
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);
@@ -194,6 +195,7 @@ async function signupAnonymousWithRoles(
       roleCtx.rolesLabel,
       signupStatus,
     )}${benchSuffix(result.assignedSlot)}`,
+    embeds: [],
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);
@@ -263,6 +265,7 @@ async function confirmNoCharSignup(
   const eventTitle = await fetchEventTitle(eventId, deps);
   await interaction.editReply({
     content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel)}${benchSuffix(assignedSlot)}`,
+    embeds: [],
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);

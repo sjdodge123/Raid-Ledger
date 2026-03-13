@@ -155,6 +155,7 @@ async function signupWithCharacterDirect(
       signupStatus === 'tentative'
         ? `You're marked as **tentative** with **${character.name}**.`
         : `Signed up as **${character.name}**!${bench}`,
+    embeds: [],
     components: [],
   });
   await deps.updateEmbedSignupCount(eventId);

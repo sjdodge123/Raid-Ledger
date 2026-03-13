@@ -27,7 +27,10 @@ export async function buildReplyEmbed(
     };
     const { embed } = deps.embedFactory.buildEventEmbed(eventData, context);
     return embed;
-  } catch {
+  } catch (error) {
+    deps.logger.warn(
+      `Failed to build reply embed for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown'}`,
+    );
     return undefined;
   }
 }

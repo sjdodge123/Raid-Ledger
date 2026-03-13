@@ -51,6 +51,7 @@ export async function handleLinkedTentative(
   const assignedSlot = await signupAsTentative(eventId, linkedUser.id, deps);
   await interaction.editReply({
     content: `You're marked as **tentative**.${benchSuffix(assignedSlot)}`,
+    embeds: [],
   });
 }
 
@@ -208,6 +209,7 @@ async function tentativeSingleCharacter(
   );
   await interaction.editReply({
     content: `You're marked as **tentative** with **${char.name}**.${benchSuffix(result.assignedSlot)}`,
+    embeds: [],
   });
   await deps.updateEmbedSignupCount(eventId);
   return true;

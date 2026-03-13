@@ -58,6 +58,7 @@ async function replyReactivationResult(
     content: wasReactivated
       ? 'Your status has been changed to **signed up**!'
       : alreadySignedUpMessage(),
+    embeds: [],
   });
 }
 
@@ -252,6 +253,7 @@ export async function handleNewLinkedSignup(
   const result = await deps.signupsService.signup(eventId, linkedUser.id);
   await interaction.editReply({
     content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}`,
+    embeds: [],
   });
   await deps.updateEmbedSignupCount(eventId);
 }
