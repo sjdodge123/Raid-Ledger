@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { SECTIONS as PROFILE_SECTIONS } from '../profile/profile-nav-data';
+import { getSections, type NavSection } from '../profile/profile-nav-data';
+import { useAuth } from '../../hooks/use-auth';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
@@ -14,7 +15,7 @@ import { SidebarNavItem } from '../admin/admin-sidebar';
 import { usePluginStore } from '../../stores/plugin-store';
 
 function ProfileNavSection({ section, pathname, onClose }: {
-    section: typeof PROFILE_SECTIONS[number]; pathname: string; onClose: () => void;
+    section: NavSection; pathname: string; onClose: () => void;
 }) {
     return (
         <div key={section.id}>
@@ -58,7 +59,9 @@ function RerunWizardButton({ onRerun, isPending }: { onRerun: () => void; isPend
 /** Profile submenu -- renders profile nav sections inline in the MoreDrawer */
 export function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const resetOnboarding = useResetOnboarding();
+    const sections = getSections(user?.id ?? 0);
 
     const handleRerunWizard = () => {
         resetOnboarding.mutate(undefined, { onSuccess: () => { onClose(); navigate('/onboarding?rerun=1'); } });
@@ -66,7 +69,7 @@ export function ProfileSubmenuContent({ pathname, onClose }: { pathname: string;
 
     return (
         <div className="px-4 pb-3 space-y-3" data-testid="profile-submenu">
-            {PROFILE_SECTIONS.map((section) => (
+            {sections.map((section) => (
                 <ProfileNavSection key={section.id} section={section} pathname={pathname} onClose={onClose} />
             ))}
             <RerunWizardButton onRerun={handleRerunWizard} isPending={resetOnboarding.isPending} />

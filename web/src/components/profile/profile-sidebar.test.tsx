@@ -1,7 +1,6 @@
 /**
- * Unit tests for the ProfileSidebar (ROK-359).
- * Verifies consolidated nav renders the correct items and no old paths.
- * Account/danger zone is consolidated into the Identity panel.
+ * Unit tests for the ProfileSidebar (ROK-548).
+ * Verifies restructured nav with new sections and user-specific links.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -13,14 +12,14 @@ vi.mock('../../hooks/use-onboarding-fte', () => ({
 }));
 
 vi.mock('../../hooks/use-auth', () => ({
-    useAuth: () => ({ isAuthenticated: true }),
+    useAuth: () => ({ isAuthenticated: true, user: { id: 42 } }),
 }));
 
 vi.mock('../../hooks/use-game-time', () => ({
     useGameTime: () => ({ data: { slots: [] } }),
 }));
 
-function renderSidebar(initialPath = '/profile/identity') {
+function renderSidebar(initialPath = '/profile/avatar') {
     return render(
         <MemoryRouter initialEntries={[initialPath]}>
             <ProfileSidebar />
@@ -28,84 +27,73 @@ function renderSidebar(initialPath = '/profile/identity') {
     );
 }
 
-function profilesidebarROK359Group1() {
-it('renders the profile navigation landmark', () => {
+describe('ProfileSidebar (ROK-548)', () => {
+    it('renders the profile navigation landmark', () => {
         renderSidebar();
         expect(screen.getByRole('navigation', { name: /profile navigation/i })).toBeInTheDocument();
     });
 
-it('renders nav items including gaming sub-items', () => {
-        renderSidebar();
-        const links = screen.getAllByRole('link');
-        // My Profile, Preferences, Notifications, Game Time, Characters, Watched Games = 6
-        expect(links.length).toBeGreaterThanOrEqual(6);
-    });
-
-it('shows My Profile link pointing to /profile/identity', () => {
+    it('renders My Profile link pointing to /users/{userId}', () => {
         renderSidebar();
         const link = screen.getByRole('link', { name: /my profile/i });
-        expect(link).toBeInTheDocument();
-        expect(link).toHaveAttribute('href', '/profile/identity');
+        expect(link).toHaveAttribute('href', '/users/42');
     });
 
-it('shows Game Time link pointing to /profile/gaming/game-time', () => {
+    it('renders My Avatar link pointing to /profile/avatar', () => {
         renderSidebar();
-        const link = screen.getByRole('link', { name: /game time/i });
-        expect(link).toHaveAttribute('href', '/profile/gaming/game-time');
+        const link = screen.getByRole('link', { name: /my avatar/i });
+        expect(link).toHaveAttribute('href', '/profile/avatar');
     });
 
-}
-
-function profilesidebarROK359Group2() {
-it('shows Characters link pointing to /profile/gaming/characters', () => {
+    it('renders My Integrations link pointing to /profile/integrations', () => {
         renderSidebar();
-        const link = screen.getByRole('link', { name: /characters/i });
-        expect(link).toHaveAttribute('href', '/profile/gaming/characters');
+        const link = screen.getByRole('link', { name: /my integrations/i });
+        expect(link).toHaveAttribute('href', '/profile/integrations');
     });
 
-it('shows Watched Games link pointing to /profile/gaming/watched-games', () => {
+    it('renders Preferences link pointing to /profile/preferences', () => {
         renderSidebar();
-        const link = screen.getByRole('link', { name: /watched games/i });
-        expect(link).toHaveAttribute('href', '/profile/gaming/watched-games');
+        const link = screen.getByRole('link', { name: /preferences/i });
+        expect(link).toHaveAttribute('href', '/profile/preferences');
     });
 
-it('does not show separate Account link (consolidated into Identity)', () => {
+    it('renders Notifications link under Preferences section', () => {
+        renderSidebar();
+        const link = screen.getByRole('link', { name: /notifications/i });
+        expect(link).toHaveAttribute('href', '/profile/notifications');
+    });
+
+    it('renders gaming sub-items', () => {
+        renderSidebar();
+        expect(screen.getByRole('link', { name: /game time/i })).toHaveAttribute('href', '/profile/gaming/game-time');
+        expect(screen.getByRole('link', { name: /characters/i })).toHaveAttribute('href', '/profile/gaming/characters');
+        expect(screen.getByRole('link', { name: /watched games/i })).toHaveAttribute('href', '/profile/gaming/watched-games');
+    });
+
+    it('renders Delete Account link pointing to /profile/account', () => {
+        renderSidebar();
+        const link = screen.getByRole('link', { name: /delete account/i });
+        expect(link).toHaveAttribute('href', '/profile/account');
+    });
+
+    it('shows section labels including Integrations and Account', () => {
+        renderSidebar();
+        expect(screen.getAllByText('Identity').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Integrations').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Preferences').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Gaming').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Account').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not have links to old /profile/identity path', () => {
         renderSidebar();
         const links = screen.getAllByRole('link');
         const hrefs = links.map((l) => l.getAttribute('href'));
-        expect(hrefs).not.toContain('/profile/account');
+        expect(hrefs).not.toContain('/profile/identity');
     });
 
-}
-
-function profilesidebarROK359Group3() {
-it('does not have links to old sub-paths like /profile/identity/discord', () => {
-        renderSidebar();
-        const links = screen.getAllByRole('link');
-        const hrefs = links.map((l) => l.getAttribute('href'));
-        expect(hrefs).not.toContain('/profile/identity/discord');
-        expect(hrefs).not.toContain('/profile/identity/avatar');
-        expect(hrefs).not.toContain('/profile/preferences/appearance');
-        expect(hrefs).not.toContain('/profile/danger/delete-account');
-    });
-
-it('renders Re-run Setup Wizard button', () => {
+    it('renders Re-run Setup Wizard button', () => {
         renderSidebar();
         expect(screen.getByRole('button', { name: /re-run setup wizard/i })).toBeInTheDocument();
     });
-
-it('shows section labels: Identity, Preferences, Notifications, Gaming', () => {
-        renderSidebar();
-        expect(screen.getAllByText('Identity').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('Preferences').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('Notifications').length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('Gaming').length).toBeGreaterThanOrEqual(1);
-    });
-
-}
-
-describe('ProfileSidebar (ROK-359)', () => {
-    profilesidebarROK359Group1();
-    profilesidebarROK359Group2();
-    profilesidebarROK359Group3();
 });

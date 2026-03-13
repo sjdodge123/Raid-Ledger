@@ -109,6 +109,15 @@ export const CharactersPanel = lazyWithRetry(() =>
 export const WatchedGamesPanel = lazyWithRetry(() =>
     import('./pages/profile/watched-games-panel').then((m) => ({ default: m.WatchedGamesPanel })),
 );
+export const AvatarPanel = lazyWithRetry(() =>
+    import('./pages/profile/avatar-panel').then((m) => ({ default: m.AvatarPanel })),
+);
+export const IntegrationsPanel = lazyWithRetry(() =>
+    import('./pages/profile/integrations-panel').then((m) => ({ default: m.IntegrationsPanel })),
+);
+export const AccountPanel = lazyWithRetry(() =>
+    import('./pages/profile/account-panel').then((m) => ({ default: m.AccountPanel })),
+);
 
 // -- Lazy loaded admin panels --
 export const AdminSettingsLayout = lazyWithRetry(() =>
