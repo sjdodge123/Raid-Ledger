@@ -1,7 +1,8 @@
 import type { JSX } from 'react';
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useCallback } from 'react';
 import type { GameTimeGridProps } from './game-time-grid.types';
 import { formatTooltip } from './game-time-grid.utils';
+import { toggleAllDaySlots } from './game-time-slot.utils';
 import { GridBody } from './GridBody';
 import { GridOverlayLayer } from './GridOverlayLayer';
 import { useSlotMaps, useWeekDates, useDisplayEvents, useGridMeasurement, useDragPaint, useHoverGlow, useVisibleHours, useScrollDirection } from './use-game-time-grid';
@@ -34,6 +35,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
     const needsMeasure = (props.events?.length ?? 0) > 0 || (previewBlocks?.length ?? 0) > 0 || todayIndex !== undefined || isInteractive;
     const gridDims = useGridMeasurement(gridRef, wrapperRef, needsMeasure, vis.rangeStart, vis.rangeEnd);
     const drag = useDragPaint(slots, maps.slotMap, maps.nextWeekSlotMap, onChange, isInteractive, todayIndex, currentHour);
+    const handleDayClick = useCallback((dayIndex: number): void => { if (isInteractive && onChange) onChange(toggleAllDaySlots(slots, dayIndex)); }, [isInteractive, onChange, slots]);
     const onEnter = (day: number, hour: number): void => { setHoveredCell(`${day}:${hour}`); drag.handlePointerEnter(day, hour); };
     const [hoverDay, hoverHour] = useMemo(() => hoveredCell ? hoveredCell.split(':').map(Number) as [number, number] : [-1, -1], [hoveredCell]);
     const glowBg = useHoverGlow(hoverDay, hoverHour, gridDims, isInteractive, vis.rangeStart);
@@ -49,6 +51,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
                 getSlotStatus={drag.getSlotStatus} isCellLocked={drag.isCellLocked} isPastCell={drag.isPastCell}
                 eventCellSet={maps.eventCellSet} heatmapMap={maps.heatmapMap} hoveredCell={hoveredCell} hoverDay={hoverDay} hoverHour={hoverHour}
                 isInteractive={isInteractive} nextWeekSlotMap={maps.nextWeekSlotMap} onCellClick={onCellClick} onPointerDown={drag.handlePointerDown} onPointerEnter={onEnter}
+                onDayClick={isInteractive ? handleDayClick : undefined}
             />
             <GridOverlayLayer todayIndex={todayIndex} currentHour={currentHour} gridDims={gridDims} nextWeekSlots={nextWeekSlots} HOURS={vis.HOURS} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} onEventClick={onEventClick} previewBlocks={previewBlocks} />
         </div>

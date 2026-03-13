@@ -10,12 +10,14 @@ interface DayHeaderProps {
     nextDateLabel?: string;
     noStickyOffset?: boolean;
     isHeaderHidden: boolean;
+    /** Click handler for whole-day toggle (undefined = non-interactive) */
+    onClick?: () => void;
 }
 
 /** Single day column header for the game-time grid */
 export function DayHeader({
     dayIndex, fullDayNames, todayIndex, hasRolling,
-    dateLabel, nextDateLabel, noStickyOffset, isHeaderHidden,
+    dateLabel, nextDateLabel, noStickyOffset, isHeaderHidden, onClick,
 }: DayHeaderProps): JSX.Element {
     const displayDay = fullDayNames ? FULL_DAYS[dayIndex] : DAYS[dayIndex];
     const isToday = todayIndex === dayIndex;
@@ -23,12 +25,17 @@ export function DayHeader({
     const isRollingPast = todayIndex !== undefined && hasRolling && dayIndex < todayIndex;
     const colorClass = getDayColorClass(isTodaySplit, isToday, isRollingPast);
     const splitBg = isTodaySplit ? { background: 'linear-gradient(to right, var(--gt-split-bg) 50%, rgba(16, 185, 129, 0.15) 50%)' } : {};
+    const interactiveClass = onClick ? 'cursor-pointer hover:brightness-125' : '';
 
     return (
         <div
-            className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-xs font-medium py-1 ${colorClass}`}
+            className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-xs font-medium py-1 ${colorClass} ${interactiveClass}`}
             style={{ transition: 'top 300ms ease-in-out', ...splitBg }}
             data-testid={`day-header-${dayIndex}`}
+            onClick={onClick}
+            role={onClick ? 'button' : undefined}
+            tabIndex={onClick ? 0 : undefined}
+            onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
         >
             <DayLabel displayDay={displayDay} isRollingPast={isRollingPast} isTodaySplit={isTodaySplit} dateLabel={dateLabel} nextDateLabel={nextDateLabel} />
         </div>

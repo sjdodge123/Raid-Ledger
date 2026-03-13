@@ -41,6 +41,8 @@ interface DaySectionProps {
     onHourToggle: (dayIndex: number, hour: number) => void;
     onPreset: (dayIndex: number, preset: Preset) => void;
     readOnly?: boolean;
+    /** Callback for whole-day toggle (ROK-619) */
+    onAllDay?: (dayIndex: number) => void;
 }
 
 function DayHeader({ dayName, expanded, activeCount, onToggle }: {
@@ -80,6 +82,19 @@ function PresetButtons({ onPreset, isPresetFullyActive }: {
     );
 }
 
+/** Full-width "All Day" toggle button (ROK-619) */
+function AllDayButton({ isActive, onClick }: {
+    isActive: boolean; onClick: () => void;
+}) {
+    return (
+        <button type="button" onClick={onClick}
+            className={`w-full flex items-center justify-center py-2 rounded-lg text-xs font-medium transition-colors active:scale-95 ${isActive ? 'bg-emerald-600 text-white shadow-sm' : 'bg-panel text-muted hover:bg-overlay active:bg-overlay'}`}>
+            <span>All Day</span>
+            <span className={`text-[10px] ml-1.5 ${isActive ? 'text-white/70' : 'text-dim'}`}>12a-12a</span>
+        </button>
+    );
+}
+
 function HourGrid({ activeSet, readOnly, dayIndex, onHourToggle }: {
     activeSet: Set<number>; readOnly?: boolean; dayIndex: number; onHourToggle: (day: number, hour: number) => void;
 }) {
@@ -98,7 +113,7 @@ function HourGrid({ activeSet, readOnly, dayIndex, onHourToggle }: {
     );
 }
 
-export function DaySection({ dayIndex, slots, expanded, onToggle, onHourToggle, onPreset, readOnly }: DaySectionProps) {
+export function DaySection({ dayIndex, slots, expanded, onToggle, onHourToggle, onPreset, readOnly, onAllDay }: DaySectionProps) {
     const dayName = FULL_DAYS[dayIndex];
 
     const activeSet = useMemo(
@@ -107,6 +122,7 @@ export function DaySection({ dayIndex, slots, expanded, onToggle, onHourToggle, 
     );
 
     const handlePreset = useCallback((preset: Preset) => { onPreset(dayIndex, preset); }, [dayIndex, onPreset]);
+    const handleAllDay = useCallback(() => { onAllDay?.(dayIndex); }, [dayIndex, onAllDay]);
 
     const isPresetFullyActive = useCallback((preset: Preset) => {
         const [start, end] = PRESET_RANGES[preset];
@@ -114,11 +130,14 @@ export function DaySection({ dayIndex, slots, expanded, onToggle, onHourToggle, 
         return true;
     }, [activeSet]);
 
+    const isAllActive = activeSet.size === 24;
+
     return (
         <div className="border border-edge rounded-lg overflow-hidden">
             <DayHeader dayName={dayName} expanded={expanded} activeCount={activeSet.size} onToggle={onToggle} />
             {expanded && (
                 <div className="px-3 py-2.5 space-y-2.5 bg-surface/50">
+                    {!readOnly && onAllDay && <AllDayButton isActive={isAllActive} onClick={handleAllDay} />}
                     {!readOnly && <PresetButtons onPreset={handlePreset} isPresetFullyActive={isPresetFullyActive} />}
                     <HourGrid activeSet={activeSet} readOnly={readOnly} dayIndex={dayIndex} onHourToggle={onHourToggle} />
                 </div>

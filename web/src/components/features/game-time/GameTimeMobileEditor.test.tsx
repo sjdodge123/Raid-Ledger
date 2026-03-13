@@ -416,4 +416,59 @@ it('preserves slots from other days when toggling', () => {
         edgeCasesGroup3();
     });
 
+    describe('All Day Toggle (ROK-619)', () => {
+        it('renders All Day button when day is expanded', () => {
+            render(<GameTimeMobileEditor {...defaultProps} />);
+            const sundayHeader = screen.getByText('Sunday').closest('button')!;
+            fireEvent.click(sundayHeader);
+            expect(screen.getByRole('button', { name: /All Day/i })).toBeInTheDocument();
+        });
+
+        it('selects all 24 hours when All Day is clicked on empty day', () => {
+            render(<GameTimeMobileEditor {...defaultProps} />);
+            const sundayHeader = screen.getByText('Sunday').closest('button')!;
+            fireEvent.click(sundayHeader);
+            fireEvent.click(screen.getByRole('button', { name: /All Day/i }));
+
+            expect(mockOnChange).toHaveBeenCalledTimes(1);
+            const result = mockOnChange.mock.calls[0][0] as GameTimeSlot[];
+            expect(result).toHaveLength(24);
+            const hours = result.map((s: GameTimeSlot) => s.hour).sort((a: number, b: number) => a - b);
+            expect(hours).toEqual(Array.from({ length: 24 }, (_, i) => i));
+        });
+
+        it('deselects all when All Day clicked and all 24 are active', () => {
+            const slots: GameTimeSlot[] = Array.from({ length: 24 }, (_, i) => ({
+                dayOfWeek: 0, hour: i, status: 'available' as const,
+            }));
+            render(<GameTimeMobileEditor {...defaultProps} slots={slots} />);
+            const sundayHeader = screen.getByText('Sunday').closest('button')!;
+            fireEvent.click(sundayHeader);
+            fireEvent.click(screen.getByRole('button', { name: /All Day/i }));
+
+            expect(mockOnChange).toHaveBeenCalledWith([]);
+        });
+
+        it('does not show All Day button in readOnly mode', () => {
+            render(<GameTimeMobileEditor {...defaultProps} readOnly />);
+            const sundayHeader = screen.getByText('Sunday').closest('button')!;
+            fireEvent.click(sundayHeader);
+            expect(screen.queryByRole('button', { name: /All Day/i })).not.toBeInTheDocument();
+        });
+
+        it('preserves other day slots when toggling All Day', () => {
+            const slots: GameTimeSlot[] = [
+                { dayOfWeek: 1, hour: 10, status: 'available' },
+            ];
+            render(<GameTimeMobileEditor {...defaultProps} slots={slots} />);
+            const sundayHeader = screen.getByText('Sunday').closest('button')!;
+            fireEvent.click(sundayHeader);
+            fireEvent.click(screen.getByRole('button', { name: /All Day/i }));
+
+            const result = mockOnChange.mock.calls[0][0] as GameTimeSlot[];
+            expect(result.filter((s: GameTimeSlot) => s.dayOfWeek === 1)).toHaveLength(1);
+            expect(result.filter((s: GameTimeSlot) => s.dayOfWeek === 0)).toHaveLength(24);
+        });
+    });
+
 });
