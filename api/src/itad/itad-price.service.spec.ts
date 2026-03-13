@@ -93,7 +93,7 @@ describe('ItadPriceService', () => {
       expect(itadPost).not.toHaveBeenCalled();
     });
 
-    it('logs a warning when API key is not configured', async () => {
+    it('Regression: ROK-812 — logs a warning when API key is not configured', async () => {
       mockSettings.getItadApiKey.mockResolvedValue(null);
       const warnSpy = jest.spyOn(Logger.prototype, 'warn');
 
