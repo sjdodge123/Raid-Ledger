@@ -84,4 +84,114 @@ describe('UserMenu dropdown (ROK-548)', () => {
         const linkEl = settingsLink.closest('a');
         expect(linkEl).toHaveAttribute('href', '/profile');
     });
+
+    it('View Profile link uses the correct numeric userId, not a placeholder', async () => {
+        // Different userId to ensure it's dynamic
+        mockUseAuth.mockReturnValue({
+            user: { id: 7, username: 'OtherUser', role: 'member', discordId: null, avatar: null, customAvatarUrl: null },
+            isAuthenticated: true,
+            isImpersonating: false,
+            logout: vi.fn(),
+            impersonate: vi.fn(),
+            exitImpersonation: vi.fn(),
+            refetch: vi.fn(),
+        });
+        const user = userEvent.setup();
+        renderUserMenu();
+        await user.click(screen.getByRole('button', { name: /otheruser/i }));
+        const linkEl = screen.getByText('View Profile').closest('a');
+        expect(linkEl).toHaveAttribute('href', '/users/7');
+    });
+
+    it('dropdown is hidden before the avatar button is clicked', () => {
+        renderUserMenu();
+        expect(screen.queryByText('View Profile')).not.toBeInTheDocument();
+        expect(screen.queryByText('My Settings')).not.toBeInTheDocument();
+    });
+
+    it('shows Logout button in dropdown', async () => {
+        const user = userEvent.setup();
+        renderUserMenu();
+        await user.click(screen.getByRole('button', { name: /testuser/i }));
+        expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
+    });
+
+    it('does NOT show Admin Settings link for member role', async () => {
+        const user = userEvent.setup();
+        renderUserMenu();
+        await user.click(screen.getByRole('button', { name: /testuser/i }));
+        expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument();
+    });
+
+    it('shows Admin Settings link for admin role', async () => {
+        mockUseAuth.mockReturnValue({
+            user: { id: 1, username: 'AdminUser', role: 'admin', discordId: null, avatar: null, customAvatarUrl: null },
+            isAuthenticated: true,
+            isImpersonating: false,
+            logout: vi.fn(),
+            impersonate: vi.fn(),
+            exitImpersonation: vi.fn(),
+            refetch: vi.fn(),
+        });
+        const user = userEvent.setup();
+        renderUserMenu();
+        await user.click(screen.getByRole('button', { name: /adminuser/i }));
+        expect(screen.getByText('Admin Settings')).toBeInTheDocument();
+        const adminLink = screen.getByText('Admin Settings').closest('a');
+        expect(adminLink).toHaveAttribute('href', '/admin/settings');
+    });
+
+    it('shows "Impersonating" status text when isImpersonating is true', async () => {
+        mockUseAuth.mockReturnValue({
+            user: { id: 42, username: 'TestUser', role: 'member', discordId: null, avatar: null, customAvatarUrl: null },
+            isAuthenticated: true,
+            isImpersonating: true,
+            logout: vi.fn(),
+            impersonate: vi.fn(),
+            exitImpersonation: vi.fn(),
+            refetch: vi.fn(),
+        });
+        const user = userEvent.setup();
+        renderUserMenu();
+        await user.click(screen.getByRole('button', { name: /testuser/i }));
+        expect(screen.getByText('Impersonating')).toBeInTheDocument();
+    });
+
+    it('shows "Exit Impersonation" button when impersonating', async () => {
+        mockUseAuth.mockReturnValue({
+            user: { id: 42, username: 'TestUser', role: 'member', discordId: null, avatar: null, customAvatarUrl: null },
+            isAuthenticated: true,
+            isImpersonating: true,
+            logout: vi.fn(),
+            impersonate: vi.fn(),
+            exitImpersonation: vi.fn(),
+            refetch: vi.fn(),
+        });
+        const user = userEvent.setup();
+        renderUserMenu();
+        await user.click(screen.getByRole('button', { name: /testuser/i }));
+        expect(screen.getByRole('button', { name: /exit impersonation/i })).toBeInTheDocument();
+    });
+
+    it('renders Discord login button when not authenticated and Discord is configured', () => {
+        mockUseAuth.mockReturnValue({
+            user: null,
+            isAuthenticated: false,
+            isImpersonating: false,
+            logout: vi.fn(),
+            impersonate: vi.fn(),
+            exitImpersonation: vi.fn(),
+        });
+        renderUserMenu();
+        expect(screen.getByRole('link', { name: /login with discord/i })).toBeInTheDocument();
+    });
+
+    it('username initial is shown as fallback when no avatar URL', async () => {
+        const user = userEvent.setup();
+        renderUserMenu();
+        // The AvatarButton renders initials when no avatarUrl
+        const button = screen.getByRole('button', { name: /testuser/i });
+        // The initial 'T' should be present in the button
+        expect(button.textContent).toContain('T');
+    });
 });

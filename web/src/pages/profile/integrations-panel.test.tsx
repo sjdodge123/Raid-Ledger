@@ -80,4 +80,15 @@ describe('IntegrationsPanel (ROK-548)', () => {
         renderIntegrationsPanel();
         expect(screen.getByRole('button', { name: /link steam account/i })).toBeInTheDocument();
     });
+
+    it('shows "Discord linked" status when user has Discord linked', () => {
+        renderIntegrationsPanel();
+        expect(screen.getByText(/discord linked/i)).toBeInTheDocument();
+    });
+
+    it('renders descriptive subtitle for integrations management', () => {
+        renderIntegrationsPanel();
+        expect(screen.getByText(/manage your linked accounts/i)).toBeInTheDocument();
+    });
 });
+

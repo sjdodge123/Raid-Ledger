@@ -145,3 +145,72 @@ describe('ROK-548: sidebar mobile hide', () => {
         expect(aside!.className).toContain('md:block');
     });
 });
+
+describe('ROK-548: ProfileLayout auth states', () => {
+    it('shows loading skeleton when authLoading is true', () => {
+        mockUseAuth.mockReturnValue({
+            user: null,
+            isAuthenticated: false,
+            isLoading: true,
+            refetch: vi.fn(),
+        });
+        render(
+            <QueryClientProvider client={makeQueryClient()}>
+                <MemoryRouter initialEntries={['/profile/avatar']}>
+                    <Routes>
+                        <Route path="/profile" element={<ProfileLayout />}>
+                            <Route path="avatar" element={<div>Avatar</div>} />
+                        </Route>
+                    </Routes>
+                </MemoryRouter>
+            </QueryClientProvider>,
+        );
+        // Skeleton renders an animate-pulse div, not the sidebar
+        expect(screen.queryByRole('navigation', { name: /profile navigation/i })).not.toBeInTheDocument();
+    });
+
+    it('redirects to / when user is not authenticated', () => {
+        mockUseAuth.mockReturnValue({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+            refetch: vi.fn(),
+        });
+        const { container } = render(
+            <QueryClientProvider client={makeQueryClient()}>
+                <MemoryRouter initialEntries={['/profile/avatar']}>
+                    <Routes>
+                        <Route path="/profile" element={<ProfileLayout />}>
+                            <Route path="avatar" element={<div data-testid="avatar-panel">Avatar</div>} />
+                        </Route>
+                        <Route path="/" element={<div data-testid="home-page">Home</div>} />
+                    </Routes>
+                </MemoryRouter>
+            </QueryClientProvider>,
+        );
+        // Should redirect to / — avatar panel should not be rendered
+        expect(screen.queryByTestId('avatar-panel')).not.toBeInTheDocument();
+        expect(screen.getByTestId('home-page')).toBeInTheDocument();
+        void container;
+    });
+
+    it('redirects /profile/preferences/appearance to /profile/preferences', () => {
+        renderProfileRoutes('/profile/preferences/appearance');
+        expect(screen.getByTestId('preferences-panel')).toBeInTheDocument();
+    });
+
+    it('redirects /profile/preferences/timezone to /profile/preferences', () => {
+        renderProfileRoutes('/profile/preferences/timezone');
+        expect(screen.getByTestId('preferences-panel')).toBeInTheDocument();
+    });
+
+    it('redirects /profile/preferences/notifications to /profile/notifications', () => {
+        renderProfileRoutes('/profile/preferences/notifications');
+        expect(screen.getByTestId('notifications-panel')).toBeInTheDocument();
+    });
+
+    it('redirects /profile/gaming to /profile/gaming/game-time', () => {
+        renderProfileRoutes('/profile/gaming');
+        expect(screen.getByTestId('game-time-panel')).toBeInTheDocument();
+    });
+});

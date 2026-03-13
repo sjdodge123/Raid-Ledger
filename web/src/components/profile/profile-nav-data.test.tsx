@@ -74,4 +74,42 @@ describe('getSections (ROK-548)', () => {
         const myProfile = identity.children.find(c => c.label === 'My Profile');
         expect(myProfile!.to).toBe('/users/99');
     });
+
+    it('each section has a label string', () => {
+        const sections = getSections(userId);
+        for (const section of sections) {
+            expect(typeof section.label).toBe('string');
+            expect(section.label.length).toBeGreaterThan(0);
+        }
+    });
+
+    it('each section has an icon (React node)', () => {
+        const sections = getSections(userId);
+        for (const section of sections) {
+            expect(section.icon).toBeTruthy();
+        }
+    });
+
+    it('every child nav item has a non-empty label and to path', () => {
+        const sections = getSections(userId);
+        for (const section of sections) {
+            for (const child of section.children) {
+                expect(typeof child.label).toBe('string');
+                expect(child.label.length).toBeGreaterThan(0);
+                expect(child.to.startsWith('/')).toBe(true);
+            }
+        }
+    });
+
+    it('returns 5 sections in total', () => {
+        expect(getSections(userId)).toHaveLength(5);
+    });
+
+    it('userId=0 does not crash and still returns sections', () => {
+        const sections = getSections(0);
+        expect(sections).toHaveLength(5);
+        const identity = sections.find(s => s.id === 'identity')!;
+        const myProfile = identity.children.find(c => c.label === 'My Profile');
+        expect(myProfile!.to).toBe('/users/0');
+    });
 });

@@ -2,7 +2,7 @@
  * Unit tests for the ProfileSidebar (ROK-548).
  * Verifies restructured nav with new sections and user-specific links.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ProfileSidebar } from './profile-sidebar';
@@ -12,12 +12,16 @@ vi.mock('../../hooks/use-onboarding-fte', () => ({
 }));
 
 vi.mock('../../hooks/use-auth', () => ({
-    useAuth: () => ({ isAuthenticated: true, user: { id: 42 } }),
+    useAuth: vi.fn(),
 }));
 
 vi.mock('../../hooks/use-game-time', () => ({
     useGameTime: () => ({ data: { slots: [] } }),
 }));
+
+import { useAuth } from '../../hooks/use-auth';
+
+const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
 
 function renderSidebar(initialPath = '/profile/avatar') {
     return render(
@@ -28,6 +32,11 @@ function renderSidebar(initialPath = '/profile/avatar') {
 }
 
 describe('ProfileSidebar (ROK-548)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { id: 42 } });
+    });
+
     it('renders the profile navigation landmark', () => {
         renderSidebar();
         expect(screen.getByRole('navigation', { name: /profile navigation/i })).toBeInTheDocument();
@@ -95,5 +104,25 @@ describe('ProfileSidebar (ROK-548)', () => {
     it('renders Re-run Setup Wizard button', () => {
         renderSidebar();
         expect(screen.getByRole('button', { name: /re-run setup wizard/i })).toBeInTheDocument();
+    });
+
+    it('renders without crashing when user is null (userId falls back to 0)', () => {
+        mockUseAuth.mockReturnValue({ isAuthenticated: false, user: null });
+        expect(() => renderSidebar()).not.toThrow();
+        // My Profile link still renders but points to /users/0
+        expect(screen.getByRole('link', { name: /my profile/i })).toHaveAttribute('href', '/users/0');
+    });
+
+    it('active link for current path has active styling', () => {
+        renderSidebar('/profile/avatar');
+        const avatarLink = screen.getByRole('link', { name: /my avatar/i });
+        expect(avatarLink.className).toContain('emerald');
+    });
+
+    it('inactive links do not have active emerald-background styling', () => {
+        renderSidebar('/profile/avatar');
+        const integrationsLink = screen.getByRole('link', { name: /my integrations/i });
+        // Inactive links use 'text-muted' not the active emerald combination
+        expect(integrationsLink.className).toContain('text-muted');
     });
 });

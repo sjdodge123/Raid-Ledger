@@ -80,3 +80,4 @@ describe('PreferencesPanel (ROK-548)', () => {
         expect(screen.getByRole('switch')).toBeInTheDocument();
     });
 });
+
