@@ -18,7 +18,11 @@ export async function handleCharacterSelectMenu(
   deps: SignupInteractionDeps,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  await interaction.deferUpdate();
+  try {
+    await interaction.deferUpdate();
+  } catch {
+    return;
+  }
 
   try {
     await processCharacterSelect(interaction, eventId, deps, signupStatus);
