@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useInfinitePlayers } from '../hooks/use-players';
-import { useGameDetail } from '../hooks/use-games-discover';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 import { NewMembersSection } from '../components/players/NewMembersSection';
 import { MobilePlayerCard } from '../components/players/mobile-player-card';
 import { PlayersMobileToolbar } from '../components/players/players-mobile-toolbar';
+import { PlayerFilterBar } from '../components/players/player-filter-bar';
 import { InfiniteScrollSentinel } from '../components/ui/infinite-scroll-sentinel';
 import { PullToRefresh } from '../components/ui/pull-to-refresh';
 import type { UserPreviewDto } from '@raid-ledger/contract';
@@ -26,16 +26,6 @@ function usePlayerSearch() {
     return { gameId, source, search, setSearch, debouncedSearch };
 }
 
-function GameFilterBanner({ gameId, gameData, source }: { gameId: number | undefined; gameData: { name: string } | undefined; source?: string }) {
-    if (!gameId || !gameData) return null;
-    const label = source === 'steam_library' ? 'who own' : source === 'steam_wishlist' ? 'who wishlisted' : 'interested in';
-    return (
-        <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-3">
-            <span className="text-sm text-emerald-400">Showing players {label} <strong>{gameData.name}</strong></span>
-            <Link to="/players" className="ml-auto text-sm text-muted hover:text-foreground transition-colors">Clear filter</Link>
-        </div>
-    );
-}
 
 function DesktopSearchInput({ search, setSearch }: { search: string; setSearch: (v: string) => void }) {
     return (
@@ -86,7 +76,6 @@ function PlayerGrid({ players, debouncedSearch }: { players: UserPreviewDto[]; d
 export function PlayersPage() {
     const { gameId, source, search, setSearch, debouncedSearch } = usePlayerSearch();
     const { items: players, total, isLoading, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, gameId, source);
-    const { data: gameData } = useGameDetail(gameId);
     const countLabel = source === 'steam_library' ? 'own' : source === 'steam_wishlist' ? 'wishlisted' : gameId ? 'interested' : 'registered';
 
     return (
@@ -98,7 +87,7 @@ export function PlayersPage() {
                         <h1 className="text-2xl font-bold text-foreground">Players</h1>
                         <span className="text-sm text-muted">{total} {countLabel}</span>
                     </div>
-                    <GameFilterBanner gameId={gameId} gameData={gameData} source={source} />
+                    <PlayerFilterBar />
                     {!debouncedSearch && !gameId && <NewMembersSection />}
                     <DesktopSearchInput search={search} setSearch={setSearch} />
                     {isLoading ? <PlayersLoadingSkeleton /> : <PlayerGrid players={players} debouncedSearch={debouncedSearch} />}

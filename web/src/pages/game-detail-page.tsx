@@ -84,11 +84,11 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
             <BackButton navigate={navigate} />
             <GameBanner game={game} rating={rating} genres={genres} platforms={platforms} modes={modes} pricing={pricing} />
             {isAuthenticated && (
-                <>
+                <div className="flex flex-wrap items-center gap-6 mb-8" data-testid="player-stats-row">
                     <WantToPlaySection wantToPlay={wtp.wantToPlay} count={wtp.count} source={wtp.source} players={wtp.players} toggle={wtp.toggle} isToggling={wtp.isToggling} gameId={gameId} />
                     <OwnedBySection owners={wtp.owners ?? []} ownerCount={wtp.ownerCount ?? 0} gameId={gameId} />
                     <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
-                </>
+                </div>
             )}
             {gameId && <CommunityActivitySection gameId={gameId} />}
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
@@ -194,7 +194,7 @@ function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggl
     toggle: (v: boolean) => void; isToggling: boolean; gameId: number | undefined;
 }): JSX.Element {
     return (
-        <div className="flex flex-wrap items-center gap-4 mb-8">
+        <div className="flex flex-wrap items-center gap-4">
             <button onClick={() => !isToggling && toggle(!wantToPlay)} disabled={isToggling}
                 title={source === 'discord' ? 'Auto-hearted based on your playtime' : undefined}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-colors ${wantToPlay
@@ -216,7 +216,7 @@ function OwnedBySection({ owners, ownerCount, gameId }: {
 }): JSX.Element | null {
     if (ownerCount === 0) return null;
     return (
-        <div className="flex flex-wrap items-center gap-4 mb-8">
+        <div className="flex flex-wrap items-center gap-4">
             <SteamIcon className="w-5 h-5 text-muted" />
             <InterestPlayerAvatars
                 players={owners} totalCount={ownerCount} maxVisible={6}
@@ -233,7 +233,7 @@ function WishlistedBySection({ wishlisters, wishlistedCount, gameId }: {
 }): JSX.Element | null {
     if (wishlistedCount === 0) return null;
     return (
-        <div className="flex flex-wrap items-center gap-4 mb-8">
+        <div className="flex flex-wrap items-center gap-4">
             <SteamIcon className="w-5 h-5 text-muted" />
             <InterestPlayerAvatars
                 players={wishlisters} totalCount={wishlistedCount} maxVisible={6}

@@ -45,12 +45,8 @@ import {
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { UserRole } from '@raid-ledger/contract';
-import {
-  buildDiscoverCategories,
-  fetchCommunityRow,
-  fetchMostWishlistedRow,
-  fetchCategoryRow,
-} from './igdb-discover.helpers';
+import { buildDiscoverCategories } from './igdb-discover.helpers';
+import { dispatchDiscoverRow } from './igdb-discover-dispatch.helpers';
 import {
   batchCheckInterests,
   addInterest,
@@ -102,17 +98,13 @@ export class IgdbController {
   async discoverGames(): Promise<GameDiscoverResponseDto> {
     const db = this.igdbService.database;
     const redis = this.igdbService.redisClient;
-    const config = this.igdbService.config;
+    const cacheTtl = this.igdbService.config.DISCOVER_CACHE_TTL;
     const categories = buildDiscoverCategories();
 
     const rows = await Promise.all(
-      categories.map((cat) => {
-        if (cat.slug === 'community-wants-to-play')
-          return fetchCommunityRow(db, cat);
-        if (cat.slug === 'most-wishlisted')
-          return fetchMostWishlistedRow(db, cat);
-        return fetchCategoryRow(db, redis, cat, config.DISCOVER_CACHE_TTL);
-      }),
+      categories.map((cat) =>
+        dispatchDiscoverRow(cat, db, redis, cacheTtl, this.itadPriceService),
+      ),
     );
     return { rows: rows.filter((r) => r.games.length > 0) };
   }
