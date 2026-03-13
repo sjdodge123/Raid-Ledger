@@ -2,14 +2,15 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { useAuth } from '../../hooks/use-auth';
 import { useGameTime } from '../../hooks/use-game-time';
-import { SECTIONS } from './profile-nav-data';
+import { getSections, type NavSection } from './profile-nav-data';
 
 interface ProfileSidebarProps {
     onNavigate?: () => void;
 }
 
+/** Renders a single sidebar section with its children links. */
 function SidebarSection({ section, onNavigate, gameTimeSet }: {
-    section: (typeof SECTIONS)[number]; onNavigate?: () => void; gameTimeSet: boolean;
+    section: NavSection; onNavigate?: () => void; gameTimeSet: boolean;
 }) {
     const location = useLocation();
     return (
@@ -33,6 +34,7 @@ function SidebarSection({ section, onNavigate, gameTimeSet }: {
     );
 }
 
+/** Re-run setup wizard button at the bottom of the sidebar. */
 function RerunWizardButton({ onNavigate }: { onNavigate?: () => void }) {
     const navigate = useNavigate();
     const resetOnboarding = useResetOnboarding();
@@ -50,15 +52,17 @@ function RerunWizardButton({ onNavigate }: { onNavigate?: () => void }) {
     );
 }
 
+/** Profile sidebar navigation with user-specific links (ROK-548). */
 export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const { data: gameTimeData } = useGameTime({ enabled: isAuthenticated });
     const gameTimeSet = gameTimeData?.slots?.some(s => s.fromTemplate) ?? false;
+    const sections = getSections(user?.id ?? 0);
 
     return (
         <nav className="w-full h-full overflow-y-auto py-4 px-2" aria-label="Profile navigation">
             <div className="space-y-4">
-                {SECTIONS.map((section) => (
+                {sections.map((section) => (
                     <SidebarSection key={section.id} section={section} onNavigate={onNavigate} gameTimeSet={gameTimeSet} />
                 ))}
                 <RerunWizardButton onNavigate={onNavigate} />

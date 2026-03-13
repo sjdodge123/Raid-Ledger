@@ -1,30 +1,38 @@
 /**
- * Unit tests for the consolidated PreferencesPanel (ROK-359).
- * Verifies it renders Appearance, Timezone, and Privacy sections.
+ * Unit tests for the PreferencesPanel (ROK-548).
+ * Verifies it renders Appearance, Timezone, and AutoHeartToggle.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PreferencesPanel } from './preferences-panel';
 
-// Mock AppearancePanel with a identifiable output
 vi.mock('./appearance-panel', () => ({
     AppearancePanel: () => <div data-testid="appearance-panel">Appearance Content</div>,
 }));
 
-// Mock TimezoneSection with a identifiable output
 vi.mock('../../components/profile/TimezoneSection', () => ({
     TimezoneSection: () => <div data-testid="timezone-section">Timezone Content</div>,
 }));
 
-// Mock auth + API client — PrivacySection (ROK-443) needs QueryClient and auth
 vi.mock('../../hooks/use-auth', () => ({
-    useAuth: () => ({ isAuthenticated: false }),
+    useAuth: () => ({
+        user: { id: 1, discordId: '123' },
+        isAuthenticated: true,
+    }),
+}));
+
+vi.mock('../../lib/avatar', () => ({
+    isDiscordLinked: () => true,
 }));
 
 vi.mock('../../lib/api-client', () => ({
-    getMyPreferences: vi.fn().mockResolvedValue({}),
+    getMyPreferences: vi.fn().mockResolvedValue({ autoHeartGames: true }),
     updatePreference: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../lib/toast', () => ({
+    toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 function renderWithQueryClient(ui: React.ReactElement) {
@@ -36,7 +44,7 @@ function renderWithQueryClient(ui: React.ReactElement) {
     );
 }
 
-describe('PreferencesPanel (ROK-359)', () => {
+describe('PreferencesPanel (ROK-548)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -57,9 +65,19 @@ describe('PreferencesPanel (ROK-359)', () => {
         const timezone = container.querySelector('[data-testid="timezone-section"]');
         expect(appearance).not.toBeNull();
         expect(timezone).not.toBeNull();
-        // Appearance should appear before Timezone in document order
         expect(
             appearance!.compareDocumentPosition(timezone!) & Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
     });
+
+    it('renders AutoHeartToggle with auto-heart label', () => {
+        renderWithQueryClient(<PreferencesPanel />);
+        expect(screen.getByText(/auto-heart games/i)).toBeInTheDocument();
+    });
+
+    it('renders auto-heart toggle switch', () => {
+        renderWithQueryClient(<PreferencesPanel />);
+        expect(screen.getByRole('switch')).toBeInTheDocument();
+    });
 });
+

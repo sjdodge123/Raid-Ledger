@@ -15,9 +15,10 @@ import {
   GamesPage, GameDetailPage, CharacterDetailPage,
   PlayersPage, MyEventsPage, EventMetricsPage,
   UserProfilePage, OnboardingWizardPage,
-  ProfileLayout, IdentityPanel, PreferencesPanel,
+  ProfileLayout, PreferencesPanel,
   NotificationsPanel, ProfileGameTimePanel,
   CharactersPanel, WatchedGamesPanel,
+  AvatarPanel, IntegrationsPanel, AccountPanel,
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
   IgdbPanel, SteamPanel, ItadPanel, PluginsPanel, PluginIntegrationPanel,
@@ -30,20 +31,23 @@ import {
 function ProfileRoutes() {
   return (
     <Route path="/profile" element={<ProfileLayout />}>
-      <Route path="identity" element={<IdentityPanel />} />
+      <Route path="avatar" element={<AvatarPanel />} />
+      <Route path="integrations" element={<IntegrationsPanel />} />
       <Route path="preferences" element={<PreferencesPanel />} />
       <Route path="notifications" element={<NotificationsPanel />} />
       <Route path="gaming/game-time" element={<ProfileGameTimePanel />} />
       <Route path="gaming/characters" element={<CharactersPanel />} />
       <Route path="gaming/watched-games" element={<WatchedGamesPanel />} />
-      <Route path="identity/discord" element={<Navigate to="/profile/identity" replace />} />
-      <Route path="identity/avatar" element={<Navigate to="/profile/identity" replace />} />
+      <Route path="account" element={<AccountPanel />} />
+      {/* backward-compat redirects (ROK-548) */}
+      <Route path="identity" element={<Navigate to="/profile/avatar" replace />} />
+      <Route path="identity/discord" element={<Navigate to="/profile/integrations" replace />} />
+      <Route path="identity/avatar" element={<Navigate to="/profile/avatar" replace />} />
       <Route path="preferences/appearance" element={<Navigate to="/profile/preferences" replace />} />
       <Route path="preferences/timezone" element={<Navigate to="/profile/preferences" replace />} />
       <Route path="preferences/notifications" element={<Navigate to="/profile/notifications" replace />} />
       <Route path="gaming" element={<Navigate to="/profile/gaming/game-time" replace />} />
-      <Route path="account" element={<Navigate to="/profile/identity" replace />} />
-      <Route path="danger/delete-account" element={<Navigate to="/profile/identity" replace />} />
+      <Route path="danger/delete-account" element={<Navigate to="/profile/account" replace />} />
     </Route>
   );
 }

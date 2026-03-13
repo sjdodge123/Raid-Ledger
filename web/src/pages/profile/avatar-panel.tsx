@@ -1,16 +1,17 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '../../hooks/use-auth';
+import { useAuth, type User } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, toAvatarUser } from '../../lib/avatar';
-import type { AvatarType } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, getCurrentUserAvatarData, setCurrentUserAvatarData } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
 import { updatePreference } from '../../lib/api-client';
 
+type SelectableAvatarType = 'custom' | 'discord' | 'character';
+
 function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?: string | null; avatar?: string | null }, characters: { avatarUrl?: string | null; name: string }[]) {
-    const options: { url: string; label: string; type: AvatarType; characterName?: string }[] = [];
+    const options: { url: string; label: string; type: SelectableAvatarType; characterName?: string }[] = [];
     if (user.customAvatarUrl) {
         options.push({ url: `${API_BASE_URL}${user.customAvatarUrl}`, label: 'Custom', type: 'custom' });
     }
@@ -27,22 +28,51 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
     return options;
 }
 
-function useAvatarHandlers(refetch: () => void) {
-    const queryClient = useQueryClient();
-    const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
+/** Eagerly push avatar preference into React Query cache + module-level overlay. */
+function applyAvatarOptimistic(
+    queryClient: ReturnType<typeof useQueryClient>,
+    pref: { type: SelectableAvatarType; characterName?: string },
+    opts?: { resolvedAvatarUrl?: string; customAvatarUrl?: string },
+) {
+    queryClient.setQueryData<User | null>(['auth', 'me'], (old) => {
+        if (!old) return old;
+        const update: Partial<User> = { avatarPreference: pref };
+        if (opts?.customAvatarUrl !== undefined) update.customAvatarUrl = opts.customAvatarUrl;
+        return { ...old, ...update };
+    });
+    const cached = getCurrentUserAvatarData();
+    if (cached) setCurrentUserAvatarData({
+        ...cached, avatarPreference: pref,
+        resolvedAvatarUrl: opts?.resolvedAvatarUrl ?? cached.resolvedAvatarUrl,
+        customAvatarUrl: opts?.customAvatarUrl ?? cached.customAvatarUrl,
+    });
+}
 
-    const handleUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+function useUploadHandler(queryClient: ReturnType<typeof useQueryClient>, uploadAsync: (file: File) => Promise<{ customAvatarUrl: string }>, setOptimisticUrl: (url: string | null) => void) {
+    return useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        uploadAvatarFile(file, {
-            onSuccess: () => { toast.success('Avatar uploaded successfully!'); refetch(); },
-            onError: (err) => { toast.error(err instanceof Error ? err.message : 'Upload failed'); },
-        });
-    }, [uploadAvatarFile, refetch]);
+        try {
+            const result = await uploadAsync(file);
+            toast.success('Avatar uploaded successfully!');
+            setOptimisticUrl(`${API_BASE_URL}${result.customAvatarUrl}`);
+            applyAvatarOptimistic(queryClient, { type: 'custom' }, { customAvatarUrl: result.customAvatarUrl });
+            updatePreference('avatarPreference', { type: 'custom' }).catch(() => toast.error('Failed to save avatar preference'));
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Upload failed');
+        }
+    }, [uploadAsync, queryClient, setOptimisticUrl]);
+}
+
+function useAvatarHandlers(refetch: () => void) {
+    const queryClient = useQueryClient();
+    const { uploadAsync, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
+    const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
+    const handleUpload = useUploadHandler(queryClient, uploadAsync, setOptimisticUrl);
 
     const handleRemoveCustom = useCallback(() => {
         deleteAvatar(undefined, {
-            onSuccess: () => { toast.success('Custom avatar removed'); refetch(); },
+            onSuccess: () => { toast.success('Custom avatar removed'); refetch(); setOptimisticUrl(null); },
             onError: (err) => { toast.error(err instanceof Error ? err.message : 'Failed to remove avatar'); },
         });
     }, [deleteAvatar, refetch]);
@@ -50,13 +80,16 @@ function useAvatarHandlers(refetch: () => void) {
     const handleSelect = useCallback((url: string, options: ReturnType<typeof buildAvatarOptions>) => {
         const option = options.find(o => o.url === url);
         if (!option) return;
+        setOptimisticUrl(url);
+        toast.success('Avatar updated!');
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
+        const resolvedAvatarUrl = option.type === 'character' ? url : undefined;
+        applyAvatarOptimistic(queryClient, pref, { resolvedAvatarUrl });
         updatePreference('avatarPreference', pref)
-            .then(() => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }))
-            .catch(() => toast.error('Failed to save avatar preference'));
+            .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
     }, [queryClient]);
 
-    return { handleUpload, handleRemoveCustom, handleSelect, isUploading, uploadProgress };
+    return { handleUpload, handleRemoveCustom, handleSelect, isUploading, uploadProgress, optimisticUrl };
 }
 
 function AvatarPreview({ currentUrl, username, currentLabel }: { currentUrl: string; username: string; currentLabel: string }) {
@@ -76,11 +109,11 @@ function AvatarOptionsGrid({ options, currentUrl, onSelect }: { options: ReturnT
     return (
         <div className="mb-6">
             <h3 className="text-sm font-medium text-secondary mb-3">Available Avatars</h3>
-            <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3">
                 {options.map((opt) => (
                     <button key={opt.url} onClick={() => onSelect(opt.url)}
-                        className={`relative group rounded-full ${currentUrl === opt.url ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-surface' : 'hover:ring-2 hover:ring-edge-strong hover:ring-offset-2 hover:ring-offset-surface'}`}>
-                        <img src={opt.url} alt={opt.label} className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
+                        className={`relative group w-14 h-14 rounded-full transition-shadow ${currentUrl === opt.url ? 'ring-2 ring-emerald-500' : 'hover:ring-2 hover:ring-edge-strong'}`}>
+                        <img src={opt.url} alt={opt.label} className="w-14 h-14 rounded-full object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
                         <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-muted whitespace-nowrap">{opt.label}</span>
                     </button>
                 ))}
@@ -115,16 +148,26 @@ export function AvatarPanel() {
 
     const characters = charactersData?.data ?? [];
     const options = buildAvatarOptions(user, characters);
-    const currentUrl = resolveAvatar(toAvatarUser({ ...user, characters })).url ?? '/default-avatar.svg';
-    const currentLabel = options.find(o => o.url === currentUrl)?.label ?? 'Default';
+    // Bypass toAvatarUser() which uses a global cache that lags one render cycle behind.
+    // Build AvatarUser directly from fresh auth user data so resolveAvatar sees the latest preference.
+    const discordUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
+    const avatarUser = {
+        avatar: discordUrl ?? (user.avatar?.startsWith('http') ? user.avatar : null),
+        customAvatarUrl: user.customAvatarUrl,
+        characters: characters.map(c => ({ gameId: '__resolved__' as const, name: c.name, avatarUrl: c.avatarUrl ?? null })),
+        avatarPreference: user.avatarPreference,
+    };
+    const resolvedUrl = resolveAvatar(avatarUser).url ?? '/default-avatar.svg';
+    const displayUrl = handlers.optimisticUrl ?? resolvedUrl;
+    const displayLabel = options.find(o => o.url === displayUrl)?.label ?? 'Default';
 
     return (
         <div className="space-y-6">
             <div className="bg-surface border border-edge-subtle rounded-xl p-6">
                 <h2 className="text-xl font-semibold text-foreground mb-1">Avatar</h2>
                 <p className="text-sm text-muted mb-5">Choose or upload your profile picture</p>
-                <AvatarPreview currentUrl={currentUrl} username={user.username} currentLabel={currentLabel} />
-                <AvatarOptionsGrid options={options} currentUrl={currentUrl} onSelect={(url) => handlers.handleSelect(url, options)} />
+                <AvatarPreview currentUrl={displayUrl} username={user.username} currentLabel={displayLabel} />
+                <AvatarOptionsGrid options={options} currentUrl={displayUrl} onSelect={(url) => handlers.handleSelect(url, options)} />
                 <AvatarUploadBar isUploading={handlers.isUploading} uploadProgress={handlers.uploadProgress} onUpload={handlers.handleUpload} onRemove={handlers.handleRemoveCustom} hasCustom={!!user.customAvatarUrl} />
             </div>
         </div>

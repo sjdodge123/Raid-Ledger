@@ -18,7 +18,7 @@ import { DiscordBotModule } from '../discord-bot/discord-bot.module';
     forwardRef(() => DiscordBotModule),
     MulterModule.register({ storage: multer.memoryStorage() }),
   ],
-  controllers: [UsersController, UsersMeController],
+  controllers: [UsersMeController, UsersController],
   providers: [UsersService, AvatarService, PreferencesService, GameTimeService],
   exports: [UsersService, AvatarService, PreferencesService, GameTimeService],
 })

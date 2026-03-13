@@ -43,7 +43,7 @@ function ProfileShell() {
     return (
         <div className="profile-page relative md:min-h-screen px-4">
             <div className="relative z-10 max-w-6xl mx-auto pt-6">
-                <h1 className="text-lg font-bold text-foreground mb-6 md:hidden">My Profile</h1>
+                <h1 className="text-lg font-bold text-foreground mb-6 md:hidden">My Settings</h1>
                 <div className="flex gap-6">
                     <aside className="hidden md:block w-56 flex-shrink-0">
                         <div className="sticky top-8"><ProfileSidebar /></div>
@@ -60,7 +60,7 @@ export function ProfileLayout() {
     const location = useLocation();
     useDiscordLinkCallback(refetch);
 
-    if (location.pathname === '/profile' || location.pathname === '/profile/') return <Navigate to="/profile/identity" replace />;
+    if (location.pathname === '/profile' || location.pathname === '/profile/') return <Navigate to="/profile/avatar" replace />;
     if (authLoading) return <ProfileLoadingSkeleton />;
     if (!isAuthenticated || !user) return <Navigate to="/" replace />;
     return <ProfileShell />;

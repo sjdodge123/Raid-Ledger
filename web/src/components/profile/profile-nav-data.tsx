@@ -22,12 +22,6 @@ const PreferencesIcon = (
     </svg>
 );
 
-const NotificationsIcon = (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-    </svg>
-);
-
 const GamingIcon = (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -35,45 +29,56 @@ const GamingIcon = (
     </svg>
 );
 
-/**
- * Consolidated profile navigation (ROK-359).
- * Flat structure: 4 items instead of 4 sections with 9+ items.
- * Each section has a single nav item pointing to the consolidated page.
- * Account/danger zone is folded into the Identity panel.
- */
-export const SECTIONS: NavSection[] = [
-    {
-        id: 'identity',
-        label: 'Identity',
-        icon: IdentityIcon,
+const IntegrationsIcon = (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+    </svg>
+);
+
+const AccountIcon = (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+);
+
+function identitySection(userId: number): NavSection {
+    return {
+        id: 'identity', label: 'Identity', icon: IdentityIcon,
         children: [
-            { to: '/profile/identity', label: 'My Profile' },
+            { to: `/users/${userId}`, label: 'My Profile' },
+            { to: '/profile/avatar', label: 'My Avatar' },
         ],
-    },
-    {
-        id: 'preferences',
-        label: 'Preferences',
-        icon: PreferencesIcon,
-        children: [
-            { to: '/profile/preferences', label: 'Preferences' },
-        ],
-    },
-    {
-        id: 'notifications',
-        label: 'Notifications',
-        icon: NotificationsIcon,
-        children: [
-            { to: '/profile/notifications', label: 'Notifications' },
-        ],
-    },
-    {
-        id: 'gaming',
-        label: 'Gaming',
-        icon: GamingIcon,
-        children: [
-            { to: '/profile/gaming/game-time', label: 'Game Time' },
-            { to: '/profile/gaming/characters', label: 'Characters' },
-            { to: '/profile/gaming/watched-games', label: 'Watched Games' },
-        ],
-    },
-];
+    };
+}
+
+const INTEGRATIONS_SECTION: NavSection = {
+    id: 'integrations', label: 'Integrations', icon: IntegrationsIcon,
+    children: [{ to: '/profile/integrations', label: 'My Integrations' }],
+};
+
+const PREFERENCES_SECTION: NavSection = {
+    id: 'preferences', label: 'Preferences', icon: PreferencesIcon,
+    children: [
+        { to: '/profile/preferences', label: 'Preferences' },
+        { to: '/profile/notifications', label: 'Notifications' },
+    ],
+};
+
+const GAMING_SECTION: NavSection = {
+    id: 'gaming', label: 'Gaming', icon: GamingIcon,
+    children: [
+        { to: '/profile/gaming/game-time', label: 'Game Time' },
+        { to: '/profile/gaming/characters', label: 'Characters' },
+        { to: '/profile/gaming/watched-games', label: 'Watched Games' },
+    ],
+};
+
+const ACCOUNT_SECTION: NavSection = {
+    id: 'account', label: 'Account', icon: AccountIcon,
+    children: [{ to: '/profile/account', label: 'Delete Account' }],
+};
+
+/** Build profile sidebar navigation sections for the given user (ROK-548). */
+export function getSections(userId: number): NavSection[] {
+    return [identitySection(userId), INTEGRATIONS_SECTION, PREFERENCES_SECTION, GAMING_SECTION, ACCOUNT_SECTION];
+}
