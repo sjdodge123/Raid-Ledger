@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar } from '../../lib/avatar';
 import type { AvatarType } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
 import { updatePreference } from '../../lib/api-client';
@@ -79,10 +79,10 @@ function AvatarOptionsGrid({ options, currentUrl, onSelect }: { options: ReturnT
     return (
         <div className="mb-6">
             <h3 className="text-sm font-medium text-secondary mb-3">Available Avatars</h3>
-            <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3">
                 {options.map((opt) => (
                     <button key={opt.url} onClick={() => onSelect(opt.url)}
-                        className={`relative group rounded-full transition-shadow ${currentUrl === opt.url ? 'ring-2 ring-emerald-500' : 'hover:ring-2 hover:ring-edge-strong'}`}>
+                        className={`relative group w-14 h-14 rounded-full transition-shadow ${currentUrl === opt.url ? 'ring-2 ring-emerald-500' : 'hover:ring-2 hover:ring-edge-strong'}`}>
                         <img src={opt.url} alt={opt.label} className="w-14 h-14 rounded-full object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
                         <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-muted whitespace-nowrap">{opt.label}</span>
                     </button>
@@ -118,7 +118,16 @@ export function AvatarPanel() {
 
     const characters = charactersData?.data ?? [];
     const options = buildAvatarOptions(user, characters);
-    const resolvedUrl = resolveAvatar(toAvatarUser({ ...user, characters })).url ?? '/default-avatar.svg';
+    // Bypass toAvatarUser() which uses a global cache that lags one render cycle behind.
+    // Build AvatarUser directly from fresh auth user data so resolveAvatar sees the latest preference.
+    const discordUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
+    const avatarUser = {
+        avatar: discordUrl ?? (user.avatar?.startsWith('http') ? user.avatar : null),
+        customAvatarUrl: user.customAvatarUrl,
+        characters: characters.map(c => ({ gameId: '__resolved__' as const, name: c.name, avatarUrl: c.avatarUrl ?? null })),
+        avatarPreference: user.avatarPreference,
+    };
+    const resolvedUrl = resolveAvatar(avatarUser).url ?? '/default-avatar.svg';
     const displayUrl = handlers.optimisticUrl ?? resolvedUrl;
     const displayLabel = options.find(o => o.url === displayUrl)?.label ?? 'Default';
 
