@@ -19,8 +19,9 @@ After any context compaction, execute this immediately:
 
 1. **Read `planning-artifacts/build-state.yaml`** — contains full pipeline state
 2. **Read `pipeline.next_action`** — tells you exactly what to do next
-3. **Check per-story `next_action` fields** — tells you what each story needs
-4. **Resume from `pipeline.current_step`** — read the corresponding step file if needed
+3. **Check per-story fields** — `requirements_gathered`, `next_action`, `status`
+4. **If any story has `requirements_gathered: false`** — resume requirements interview (Step 1e) for those stories only. Read existing specs from `planning-artifacts/specs/` for completed stories.
+5. **Resume from `pipeline.current_step`** — read the corresponding step file if needed
 
 No agents to respawn. No pings to send. The state file IS the recovery mechanism.
 
@@ -48,7 +49,8 @@ Apply this directly when assessing stories:
 ## Mandatory Pipeline Order
 
 ```
-Dev completes → Test Agent (if standard/full) → CI passes → Push branch
+Requirements Interview (plan mode, if spec incomplete) → Enriched spec on disk
+  → Dev completes → Test Agent (if standard/full) → CI passes → Push branch
   → Deploy locally → Linear "In Review" → Update state → FULL STOP
   → Wait for operator to test and update Linear
   → Commit operator changes (MANDATORY before review)
@@ -61,13 +63,14 @@ Dev completes → Test Agent (if standard/full) → CI passes → Push branch
   → Linear "Done"
 ```
 
-**Six gates before PR:**
-1. **Test Agent** — unit tests (skipped for light)
-2. **CI** — build + type check + lint + tests
-3. **Operator** — manual testing approval via Linear
-4. **Reviewer** — code review after operator approves
-5. **Architect final** — alignment check (only if `needs_architect`)
-6. **Smoke test** — Lead runs full suite (NEVER skipped)
+**Seven gates before PR:**
+1. **Requirements** — spec completeness interview in plan mode (skipped if spec already complete)
+2. **Test Agent** — unit tests (skipped for light)
+3. **CI** — build + type check + lint + tests
+4. **Operator** — manual testing approval via Linear
+5. **Reviewer** — code review after operator approves
+6. **Architect final** — alignment check (only if `needs_architect`)
+7. **Smoke test** — Lead runs full suite (NEVER skipped)
 
 ---
 
@@ -138,7 +141,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 
 | Step | File | Description |
 |------|------|-------------|
-| 1 | `steps/step-1-setup.md` | Cleanup, fetch stories, profile, present batch, init state |
+| 1 | `steps/step-1-setup.md` | Cleanup, fetch stories, profile, **requirements interview (plan mode)**, present batch, init state |
 | 2 | `steps/step-2-implement.md` | Create worktrees, optional planner/architect, spawn devs + test agents |
 | 3 | `steps/step-3-validate.md` | CI, push, deploy, Linear "In Review", FULL STOP for operator |
 | 4 | `steps/step-4-review.md` | Poll Linear, handle rework/approval, reviewer + architect + smoke |
