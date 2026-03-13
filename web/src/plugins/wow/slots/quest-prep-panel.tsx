@@ -10,6 +10,7 @@ import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { useEnrichedQuests, useQuestCoverage, useUpdateQuestProgress } from '../hooks/use-quest-prep';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { QuestCard } from './quest-card';
+import { isQuestUsable, deduplicateByName } from '../utils/quest-dedup';
 import './quest-prep-panel.css';
 
 /**
@@ -38,71 +39,6 @@ function slugToVariant(gameSlug?: string): string {
     }
 }
 
-/** Check if a quest is usable by a character's class/race */
-function isQuestUsable(
-    quest: EnrichedDungeonQuestDto,
-    charClass: string | null,
-    charRace: string | null,
-): boolean {
-    const classRestrictions = quest.classRestriction as string[] | null;
-    const raceRestrictions = quest.raceRestriction as string[] | null;
-
-    const classMatch = !classRestrictions || classRestrictions.length === 0
-        || !charClass
-        || classRestrictions.some(c => c.toLowerCase() === charClass.toLowerCase());
-    const raceMatch = !raceRestrictions || raceRestrictions.length === 0
-        || !charRace
-        || raceRestrictions.some(r => r.toLowerCase() === charRace.toLowerCase());
-    return classMatch && raceMatch;
-}
-
-/**
- * Deduplicate quests that share the same name within the same dungeon.
- * Faction/class variants (e.g. Horde vs Alliance versions) are merged to
- * show only the best-matching quest for the character.
- * Priority: exact race/class match > unrestricted > first encountered.
- */
-function deduplicateByName(
-    quests: EnrichedDungeonQuestDto[],
-    charClass: string | null,
-    charRace: string | null,
-): EnrichedDungeonQuestDto[] {
-    const groups = new Map<string, EnrichedDungeonQuestDto[]>();
-    for (const q of quests) {
-        const key = `${q.name}::${q.dungeonInstanceId}`;
-        const list = groups.get(key);
-        if (list) list.push(q);
-        else groups.set(key, [q]);
-    }
-    return [...groups.values()].map((variants) => {
-        if (variants.length === 1) return variants[0];
-        return pickBestVariant(variants, charClass, charRace);
-    });
-}
-
-function pickBestVariant(
-    variants: EnrichedDungeonQuestDto[],
-    charClass: string | null,
-    charRace: string | null,
-): EnrichedDungeonQuestDto {
-    // Prefer variant with matching restrictions
-    if (charRace || charClass) {
-        const exact = variants.find((q) => {
-            const rr = q.raceRestriction as string[] | null;
-            const cr = q.classRestriction as string[] | null;
-            const raceOk = rr?.length ? charRace && rr.some(r => r.toLowerCase() === charRace.toLowerCase()) : true;
-            const classOk = cr?.length ? charClass && cr.some(c => c.toLowerCase() === charClass.toLowerCase()) : true;
-            return raceOk && classOk;
-        });
-        if (exact) return exact;
-    }
-    // Fall back to unrestricted variant, then first
-    return variants.find((q) => {
-        const rr = q.raceRestriction as string[] | null;
-        const cr = q.classRestriction as string[] | null;
-        return (!rr || rr.length === 0) && (!cr || cr.length === 0);
-    }) ?? variants[0];
-}
 
 /** Sub-group quests by practical pickup type */
 function groupByType(list: EnrichedDungeonQuestDto[]) {
