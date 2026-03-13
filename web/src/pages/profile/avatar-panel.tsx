@@ -61,10 +61,8 @@ function useAvatarHandlers(refetch: () => void) {
         const cached = getCurrentUserAvatarData();
         if (cached) setCurrentUserAvatarData({ ...cached, avatarPreference: pref });
         updatePreference('avatarPreference', pref)
-            .then(() => refetch())
-            .then(() => setOptimisticUrl(null))
             .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
-    }, [refetch, queryClient]);
+    }, [queryClient]);
 
     return { handleUpload, handleRemoveCustom, handleSelect, isUploading, uploadProgress, optimisticUrl };
 }
