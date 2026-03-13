@@ -27,19 +27,38 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
     return options;
 }
 
-function useAvatarHandlers(refetch: () => void) {
-    const queryClient = useQueryClient();
-    const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
-    const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
+/** Eagerly push avatar preference into React Query cache + module-level overlay. */
+function applyAvatarOptimistic(
+    queryClient: ReturnType<typeof useQueryClient>,
+    pref: { type: AvatarType; characterName?: string },
+    patch?: Partial<User>,
+) {
+    queryClient.setQueryData<User | null>(['auth', 'me'], (old) => old ? { ...old, ...patch, avatarPreference: pref } : old);
+    const cached = getCurrentUserAvatarData();
+    if (cached) setCurrentUserAvatarData({ ...cached, ...patch, avatarPreference: pref });
+}
 
-    const handleUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+function useUploadHandler(queryClient: ReturnType<typeof useQueryClient>, uploadAsync: (file: File) => Promise<{ customAvatarUrl: string }>, setOptimisticUrl: (url: string | null) => void) {
+    return useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        uploadAvatarFile(file, {
-            onSuccess: () => { toast.success('Avatar uploaded successfully!'); refetch(); },
-            onError: (err) => { toast.error(err instanceof Error ? err.message : 'Upload failed'); },
-        });
-    }, [uploadAvatarFile, refetch]);
+        try {
+            const result = await uploadAsync(file);
+            toast.success('Avatar uploaded successfully!');
+            setOptimisticUrl(`${API_BASE_URL}${result.customAvatarUrl}`);
+            applyAvatarOptimistic(queryClient, { type: 'custom' }, { customAvatarUrl: result.customAvatarUrl });
+            updatePreference('avatarPreference', { type: 'custom' }).catch(() => {});
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Upload failed');
+        }
+    }, [uploadAsync, queryClient, setOptimisticUrl]);
+}
+
+function useAvatarHandlers(refetch: () => void) {
+    const queryClient = useQueryClient();
+    const { uploadAsync, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
+    const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
+    const handleUpload = useUploadHandler(queryClient, uploadAsync, setOptimisticUrl);
 
     const handleRemoveCustom = useCallback(() => {
         deleteAvatar(undefined, {
@@ -54,12 +73,7 @@ function useAvatarHandlers(refetch: () => void) {
         setOptimisticUrl(url);
         toast.success('Avatar updated!');
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
-        // Optimistically update the auth query cache so ALL useAuth() consumers
-        // (header, sidebar, etc.) re-render immediately with the new preference.
-        queryClient.setQueryData<User | null>(['auth', 'me'], (old) => old ? { ...old, avatarPreference: pref } : old);
-        // Also update the module-level avatar cache for toAvatarUser() callers.
-        const cached = getCurrentUserAvatarData();
-        if (cached) setCurrentUserAvatarData({ ...cached, avatarPreference: pref });
+        applyAvatarOptimistic(queryClient, pref);
         updatePreference('avatarPreference', pref)
             .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
     }, [queryClient]);
