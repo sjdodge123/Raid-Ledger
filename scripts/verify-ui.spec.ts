@@ -442,7 +442,6 @@ test.describe('Regression: ROK-811 — games page mobile card spacing', () => {
     test('game cards in carousel sections are visible at mobile viewport', async ({ browser }) => {
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },
-            storageState: 'playwright/.auth/user.json',
         });
         const page = await context.newPage();
 
@@ -469,7 +468,6 @@ test.describe('Regression: ROK-813 — games page mobile search styling', () => 
     test('search input and tab toggle are visible at mobile viewport', async ({ browser }) => {
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },
-            storageState: 'playwright/.auth/user.json',
         });
         const page = await context.newPage();
 
