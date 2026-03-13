@@ -55,7 +55,7 @@ function useAvatarHandlers(refetch: () => void) {
         toast.success('Avatar updated!');
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
         updatePreference('avatarPreference', pref)
-            .then(() => { queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }); setOptimisticUrl(null); })
+            .then(async () => { await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }); setOptimisticUrl(null); })
             .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
     }, [queryClient]);
 
@@ -82,8 +82,8 @@ function AvatarOptionsGrid({ options, currentUrl, onSelect }: { options: ReturnT
             <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
                 {options.map((opt) => (
                     <button key={opt.url} onClick={() => onSelect(opt.url)}
-                        className={`relative group rounded-full ${currentUrl === opt.url ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-surface' : 'hover:ring-2 hover:ring-edge-strong hover:ring-offset-2 hover:ring-offset-surface'}`}>
-                        <img src={opt.url} alt={opt.label} className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
+                        className={`relative group rounded-full transition-shadow ${currentUrl === opt.url ? 'ring-2 ring-emerald-500 sm:ring-offset-2 sm:ring-offset-surface' : 'hover:ring-2 hover:ring-edge-strong sm:hover:ring-offset-2 sm:hover:ring-offset-surface'}`}>
+                        <img src={opt.url} alt={opt.label} className="w-14 h-14 rounded-full object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
                         <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-muted whitespace-nowrap">{opt.label}</span>
                     </button>
                 ))}
