@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
+import { ALL_HOURS } from './game-time-slot.utils';
 
 const FULL_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
-const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function formatHour(hour: number): string {
     if (hour === 0 || hour === 24) return '12a';
@@ -87,7 +87,7 @@ function AllDayButton({ isActive, onClick }: {
     isActive: boolean; onClick: () => void;
 }) {
     return (
-        <button type="button" onClick={onClick}
+        <button type="button" onClick={onClick} aria-pressed={isActive}
             className={`w-full flex items-center justify-center py-2 rounded-lg text-xs font-medium transition-colors active:scale-95 ${isActive ? 'bg-emerald-600 text-white shadow-sm' : 'bg-panel text-muted hover:bg-overlay active:bg-overlay'}`}>
             <span>All Day</span>
             <span className={`text-[10px] ml-1.5 ${isActive ? 'text-white/70' : 'text-dim'}`}>12a-12a</span>

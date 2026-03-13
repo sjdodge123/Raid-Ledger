@@ -41,6 +41,8 @@ export interface GridBodyProps extends CellRenderProps {
     HOURS: number[];
     /** Callback when a day header is clicked (for whole-day toggle) */
     onDayClick?: (dayIndex: number) => void;
+    /** Returns whether all 24 hours are active for a given day (drives aria-pressed on DayHeader) */
+    isDayAllActive?: (dayIndex: number) => boolean;
 }
 
 /** Inner grid with day headers and cell rows */
@@ -48,7 +50,7 @@ export function GridBody({
     gridRef, gridLineBackground, handlePointerUp, setHoveredCell,
     tzLabel, noStickyOffset, isHeaderHidden,
     dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots,
-    HOURS, onDayClick, ...cellProps
+    HOURS, onDayClick, isDayAllActive, ...cellProps
 }: GridBodyProps): JSX.Element {
     return (
         <div
@@ -59,7 +61,7 @@ export function GridBody({
             data-testid="game-time-grid"
         >
             <TzCorner tzLabel={tzLabel} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} />
-            <DayHeaders dayDates={dayDates} nextWeekDayDates={nextWeekDayDates} fullDayNames={fullDayNames} todayIndex={todayIndex} nextWeekSlots={nextWeekSlots} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} onDayClick={onDayClick} />
+            <DayHeaders dayDates={dayDates} nextWeekDayDates={nextWeekDayDates} fullDayNames={fullDayNames} todayIndex={todayIndex} nextWeekSlots={nextWeekSlots} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} onDayClick={onDayClick} isDayAllActive={isDayAllActive} />
             {HOURS.map((hour) => <HourRow key={`row-${hour}`} hour={hour} {...cellProps} />)}
         </div>
     );
@@ -78,10 +80,11 @@ function TzCorner({ tzLabel, noStickyOffset, isHeaderHidden }: {
     );
 }
 
-function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots, noStickyOffset, isHeaderHidden, onDayClick }: {
+function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots, noStickyOffset, isHeaderHidden, onDayClick, isDayAllActive }: {
     dayDates: string[] | null; nextWeekDayDates: string[] | null;
     fullDayNames?: boolean; todayIndex?: number; nextWeekSlots?: GameTimeSlot[];
     noStickyOffset?: boolean; isHeaderHidden: boolean; onDayClick?: (dayIndex: number) => void;
+    isDayAllActive?: (dayIndex: number) => boolean;
 }): JSX.Element {
     return (
         <>
@@ -92,6 +95,7 @@ function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, next
                     dateLabel={dayDates?.[i]} nextDateLabel={nextWeekDayDates?.[i]}
                     noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden}
                     onClick={onDayClick ? () => onDayClick(i) : undefined}
+                    isAllActive={isDayAllActive?.(i)}
                 />
             ))}
         </>
