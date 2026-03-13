@@ -1,4 +1,4 @@
-import type { ButtonInteraction } from 'discord.js';
+import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
@@ -6,6 +6,7 @@ import { fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
+import { buildReplyEmbed } from './signup-reply-embed.helpers';
 
 /** Sign up as tentative. Returns assignedSlot for bench feedback. */
 export async function signupAsTentative(
@@ -96,13 +97,14 @@ type TentativeCharArgs = {
   event: typeof schema.events.$inferSelect;
   ctx: TentativeCtx;
   deps: SignupInteractionDeps;
+  embed?: EmbedBuilder;
 };
 
 /** Handle character-based tentative branch. Returns null if not applicable. */
 async function tryTentativeCharPath(
   args: TentativeCharArgs,
 ): Promise<boolean | null> {
-  const { interaction, eventId, event, ctx, deps } = args;
+  const { interaction, eventId, event, ctx, deps, embed } = args;
   if (shouldShowTentativeCharSelect(ctx.isMMO, ctx.characters.length)) {
     await showTentativeCharacterSelect(
       interaction,
@@ -110,6 +112,7 @@ async function tryTentativeCharPath(
       event.title,
       ctx.characters,
       deps,
+      embed,
     );
     return true;
   }
@@ -139,6 +142,7 @@ async function tryLinkedTentativeGameFlow(
   const { interaction, eventId, linkedUser, event, deps } = a;
   const ctx = await loadTentativeGameContext(linkedUser, event, deps);
   if (!ctx) return false;
+  const embed = await buildReplyEmbed(eventId, deps);
   const charResult = await tryTentativeCharPath({
     interaction,
     eventId,
@@ -146,20 +150,20 @@ async function tryLinkedTentativeGameFlow(
     event,
     ctx,
     deps,
+    embed,
   });
   if (charResult !== null) return charResult;
-  if (ctx.isMMO) {
-    await showRoleSelect(
-      interaction,
-      eventId,
-      deps,
-      undefined,
-      undefined,
-      'tentative',
-    );
-    return true;
-  }
-  return false;
+  if (!ctx.isMMO) return false;
+  await showRoleSelect(
+    interaction,
+    eventId,
+    deps,
+    undefined,
+    undefined,
+    'tentative',
+    embed,
+  );
+  return true;
 }
 
 async function showTentativeCharacterSelect(
@@ -168,6 +172,7 @@ async function showTentativeCharacterSelect(
   eventTitle: string,
   characters: import('@raid-ledger/contract').CharacterDto[],
   deps: SignupInteractionDeps,
+  embed?: EmbedBuilder,
 ): Promise<void> {
   await showCharacterSelect(
     interaction,
@@ -176,6 +181,7 @@ async function showTentativeCharacterSelect(
     characters,
     deps,
     'tentative',
+    embed,
   );
 }
 
@@ -217,6 +223,7 @@ export async function tryMmoTentativeRedirect(
   const slotConfig = event?.slotConfig as Record<string, unknown> | null;
   if (slotConfig?.type !== 'mmo') return false;
 
+  const embed = await buildReplyEmbed(eventId, deps);
   await showRoleSelect(
     interaction,
     eventId,
@@ -224,6 +231,7 @@ export async function tryMmoTentativeRedirect(
     undefined,
     undefined,
     'tentative',
+    embed,
   );
   return true;
 }

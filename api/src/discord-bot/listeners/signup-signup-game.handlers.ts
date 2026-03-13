@@ -1,10 +1,11 @@
-import type { ButtonInteraction } from 'discord.js';
+import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
+import { buildReplyEmbed } from './signup-reply-embed.helpers';
 
 type NewSignupCtx = {
   game: { hasRoles: boolean };
@@ -48,13 +49,14 @@ type CharSignupArgs = {
   event: typeof schema.events.$inferSelect;
   ctx: NewSignupCtx;
   deps: SignupInteractionDeps;
+  embed?: EmbedBuilder;
 };
 
 /** Handle character-based signup branch (multi-char select or single char). */
 async function tryCharacterSignupPath(
   args: CharSignupArgs,
 ): Promise<boolean | null> {
-  const { interaction, eventId, event, ctx, deps } = args;
+  const { interaction, eventId, event, ctx, deps, embed } = args;
   if (shouldShowCharacterSelect(ctx.isMMO, ctx.characters.length)) {
     await showCharacterSelect(
       interaction,
@@ -62,6 +64,8 @@ async function tryCharacterSignupPath(
       event.title,
       ctx.characters,
       deps,
+      undefined,
+      embed,
     );
     return true;
   }
@@ -91,6 +95,7 @@ export async function tryGameSignupFlow(
   const { interaction, eventId, linkedUser, event, deps } = a;
   const ctx = await loadGameSignupContext(linkedUser, event, deps);
   if (!ctx) return false;
+  const embed = await buildReplyEmbed(eventId, deps);
   const uid = linkedUser.id;
   const charResult = await tryCharacterSignupPath({
     interaction,
@@ -99,16 +104,37 @@ export async function tryGameSignupFlow(
     event,
     ctx,
     deps,
+    embed,
   });
   if (charResult !== null) return charResult;
+  return handleNonCharPath(interaction, eventId, uid, event, ctx, deps, embed);
+}
+
+async function handleNonCharPath(
+  interaction: ButtonInteraction,
+  eventId: number,
+  userId: number,
+  event: typeof schema.events.$inferSelect,
+  ctx: NewSignupCtx,
+  deps: SignupInteractionDeps,
+  embed?: EmbedBuilder,
+): Promise<boolean> {
   if (ctx.isMMO) {
-    await showRoleSelect(interaction, eventId, deps);
+    await showRoleSelect(
+      interaction,
+      eventId,
+      deps,
+      undefined,
+      undefined,
+      undefined,
+      embed,
+    );
     return true;
   }
   return signupWithoutCharacter({
     interaction,
     eventId,
-    userId: uid,
+    userId,
     event,
     game: ctx.game,
     deps,

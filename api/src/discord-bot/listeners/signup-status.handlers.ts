@@ -1,5 +1,6 @@
 import type { ButtonInteraction } from 'discord.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import { showRoleSelect } from './signup-signup.handlers';
@@ -9,6 +10,7 @@ import {
   tryMmoTentativeRedirect,
 } from './signup-status-tentative.handlers';
 import { benchSuffix } from './signup-bench-feedback.helpers';
+import { buildReplyEmbed } from './signup-reply-embed.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -147,19 +149,35 @@ export async function handleQuickSignup(
     await interaction.editReply({ content: "You're already signed up!" });
     return;
   }
-
   const event = await fetchEvent(eventId, deps);
   if (!event) {
     await interaction.editReply({ content: 'Event not found.' });
     return;
   }
-
-  if ((event.slotConfig as Record<string, unknown> | null)?.type === 'mmo') {
-    await showRoleSelect(interaction, eventId, deps);
+  if (await tryMmoQuickSignupRedirect(interaction, eventId, event, deps))
     return;
-  }
-
   await quickSignupAnonymous(interaction, eventId, deps);
+}
+
+async function tryMmoQuickSignupRedirect(
+  interaction: ButtonInteraction,
+  eventId: number,
+  event: typeof schema.events.$inferSelect,
+  deps: SignupInteractionDeps,
+): Promise<boolean> {
+  const slotConfig = event.slotConfig as Record<string, unknown> | null;
+  if (slotConfig?.type !== 'mmo') return false;
+  const embed = await buildReplyEmbed(eventId, deps);
+  await showRoleSelect(
+    interaction,
+    eventId,
+    deps,
+    undefined,
+    undefined,
+    undefined,
+    embed,
+  );
+  return true;
 }
 
 async function quickSignupAnonymous(

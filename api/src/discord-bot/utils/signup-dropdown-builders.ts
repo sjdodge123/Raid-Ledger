@@ -10,6 +10,7 @@ import {
   type ComponentEmojiResolvable,
   type ButtonInteraction,
   type StringSelectMenuInteraction,
+  type EmbedBuilder,
 } from 'discord.js';
 import type { CharacterDto } from '@raid-ledger/contract';
 import type { DiscordEmojiService } from '../services/discord-emoji.service';
@@ -23,6 +24,8 @@ export interface CharacterSelectOptions {
   emojiService: DiscordEmojiService;
   /** Optional suffix appended after eventId (e.g. 'tentative') */
   customIdSuffix?: string;
+  /** Optional event embed to show alongside the dropdown */
+  embed?: EmbedBuilder;
 }
 
 export interface RoleSelectOptions {
@@ -36,6 +39,8 @@ export interface RoleSelectOptions {
   customIdSuffix?: string;
   /** Content text prefix for the character line. Defaults to "Signing up as" */
   characterVerb?: string;
+  /** Optional event embed to show alongside the dropdown */
+  embed?: EmbedBuilder;
 }
 
 /** Build character dropdown option entries from character data. */
@@ -87,6 +92,7 @@ export async function showCharacterSelect(
   await interaction.editReply({
     content: `Pick a character for **${opts.eventTitle}**`,
     components: [row],
+    embeds: opts.embed ? [opts.embed] : [],
   });
 }
 
@@ -147,5 +153,6 @@ export async function showRoleSelect(
   await interaction.editReply({
     content: buildRoleSelectContent(opts),
     components: [row],
+    embeds: opts.embed ? [opts.embed] : [],
   });
 }

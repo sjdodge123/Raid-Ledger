@@ -7,6 +7,7 @@ import { replyNoLinkedAccount } from './signup-select-role.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
+import { buildReplyEmbed } from './signup-reply-embed.helpers';
 
 /**
  * Handle character selection for linked users.
@@ -82,23 +83,43 @@ async function tryMmoRoleRedirect(
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
     .limit(1);
-
   const slotConfig = event?.slotConfig as Record<string, unknown> | null;
   if (!slotConfig || slotConfig.type !== 'mmo') return false;
+  await showRoleSelectForCharacter(
+    interaction,
+    eventId,
+    deps,
+    userId,
+    characterId,
+    signupStatus,
+  );
+  return true;
+}
 
+/** Build character info and show role select with event embed. */
+async function showRoleSelectForCharacter(
+  interaction: StringSelectMenuInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+  userId: number,
+  characterId: string,
+  signupStatus?: 'tentative',
+): Promise<void> {
   const character = await deps.charactersService.findOne(userId, characterId);
+  const charInfo = {
+    name: character.name,
+    role: character.roleOverride ?? character.role ?? null,
+  };
+  const embed = await buildReplyEmbed(eventId, deps);
   await showRoleSelect(
     interaction,
     eventId,
     deps,
     characterId,
-    {
-      name: character.name,
-      role: character.roleOverride ?? character.role ?? null,
-    },
+    charInfo,
     signupStatus,
+    embed,
   );
-  return true;
 }
 
 /** Non-MMO character signup: sign up and confirm immediately. */
