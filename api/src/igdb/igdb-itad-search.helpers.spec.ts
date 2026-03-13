@@ -1,6 +1,7 @@
 /**
  * Tests for ITAD-primary search pipeline (ROK-773).
  */
+import { Logger } from '@nestjs/common';
 import {
   executeItadSearch,
   filterDlc,
@@ -220,6 +221,38 @@ describe('executeItadSearch', () => {
 
     expect(result.games).toHaveLength(0);
     expect(result.source).toBe('itad');
+  });
+
+  it('logs rejected enrichments at debug level and excludes them', async () => {
+    const debugSpy = jest.spyOn(Logger.prototype, 'debug').mockImplementation();
+
+    const deps = makeMockDeps({
+      searchItad: jest.fn().mockResolvedValue([GAME_A, GAME_B]),
+      lookupSteamAppIds: jest.fn().mockResolvedValue(
+        new Map([
+          ['uuid-a', 100],
+          ['uuid-b', 200],
+        ]),
+      ),
+      enrichFromIgdb: jest.fn().mockImplementation((steamAppId: number) => {
+        if (steamAppId === 200) {
+          return Promise.reject(new Error('IGDB timeout'));
+        }
+        return Promise.resolve(null);
+      }),
+    });
+
+    const result = await executeItadSearch(deps, 'game');
+
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0].name).toBe('Game A');
+
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('game-b'));
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('IGDB timeout'),
+    );
+
+    debugSpy.mockRestore();
   });
 
   it('also filters adult via IGDB themes when enriched', async () => {

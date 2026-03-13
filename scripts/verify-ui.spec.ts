@@ -435,6 +435,60 @@ test.describe('Players page', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Regression: ROK-811 — games page mobile cards cramped together
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-811 — games page mobile card spacing', () => {
+    test('game cards in carousel sections are visible at mobile viewport', async ({ browser }) => {
+        const context = await browser.newContext({
+            viewport: { width: 375, height: 812 },
+        });
+        const page = await context.newPage();
+
+        await page.goto('/games');
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // Look for carousel row headings on mobile (h2 elements inside the discover view)
+        const carouselHeadings = page.locator('h2');
+        if (await carouselHeadings.first().isVisible({ timeout: 5_000 }).catch(() => false)) {
+            // Game cards within the first carousel row should be visible
+            const gameCards = page.locator('a[href*="/games/"]');
+            await expect(gameCards.first()).toBeVisible({ timeout: 5_000 });
+        }
+
+        await context.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: ROK-813 — games page search container styling on mobile
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-813 — games page mobile search styling', () => {
+    test('search input and tab toggle are visible at mobile viewport', async ({ browser }) => {
+        const context = await browser.newContext({
+            viewport: { width: 375, height: 812 },
+        });
+        const page = await context.newPage();
+
+        await page.goto('/games');
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // Search input should be visible on mobile
+        const searchInput = page.getByPlaceholder('Search games...');
+        await expect(searchInput).toBeVisible({ timeout: 10_000 });
+
+        // Tab toggle is only rendered for admins — check if present and visible
+        const tabToggle = page.getByRole('button', { name: /discover/i });
+        if (await tabToggle.isVisible({ timeout: 3_000 }).catch(() => false)) {
+            await expect(tabToggle).toBeVisible();
+        }
+
+        await context.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Regression: ROK-784 — attendance dashboard light mode
 // ---------------------------------------------------------------------------
 

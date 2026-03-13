@@ -137,14 +137,14 @@ function AdminTabToggle({ canManage, activeTab, onTabChange }: { canManage: bool
 
 function SearchBar({ searchQuery, onSearchChange, isHeaderHidden }: { searchQuery: string; onSearchChange: (q: string) => void; isHeaderHidden: boolean }): JSX.Element {
   return (
-    <div className="sticky z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1 md:static md:z-auto md:bg-transparent md:backdrop-blur-none md:pb-0 md:mx-0 md:px-0 mb-6"
+    <div className="sticky z-10 bg-surface/95 backdrop-blur-sm pt-2 pb-4 -mx-1 px-1 md:static md:z-auto md:bg-transparent md:backdrop-blur-none md:pt-0 md:pb-0 md:mx-0 md:px-0 mb-6"
       style={{ top: isHeaderHidden ? 75 : 140, transition: 'top 300ms ease-in-out' }}>
       <div className="relative">
         <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search games..."
-          className="w-full pl-12 pr-4 py-3 bg-surface/50 border border-edge rounded-xl text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all" />
+          className="w-full pl-12 pr-4 py-3 bg-surface/50 border border-transparent md:border-edge rounded-xl text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all" />
         {searchQuery && (
           <button onClick={() => onSearchChange("")} className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-dim hover:text-foreground transition-colors" aria-label="Clear search">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -210,7 +210,7 @@ function SearchResults({ searchLoading, searchResults, searchSource, debouncedSe
         <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating showInfoBar pricing={pricingMap.get(game.id) ?? null} />))}
         </div>
-        <div className="md:hidden grid grid-cols-2 gap-3">
+        <div className="md:hidden grid grid-cols-2 gap-4">
           {searchResults.map((game) => (<UnifiedGameCard key={game.id} variant="link" game={game} showRating pricing={pricingMap.get(game.id) ?? null} />))}
         </div>
       </>
@@ -246,7 +246,7 @@ function DiscoverRows({ filteredRows, pricingMap }: { filteredRows: GameDiscover
         {filteredRows.map((row) => (
           <div key={row.slug}>
             <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
-            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none' }}>
               {row.games.map((game) => (<div key={game.id} className="w-[140px] flex-shrink-0 snap-start"><UnifiedGameCard variant="link" game={game} compact showRating pricing={pricingMap.get(game.id) ?? null} /></div>))}
             </div>
           </div>
