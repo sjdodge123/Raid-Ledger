@@ -124,11 +124,17 @@ async function enrichAll(
     const settled = await Promise.allSettled(
       batch.map((g) => enrichSingleGame(deps, g, steamMap.get(g.id))),
     );
-    for (const result of settled) {
+    settled.forEach((result, idx) => {
       if (result.status === 'fulfilled') {
         results.push(result.value);
+      } else {
+        const reason =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
+        logger.debug(`Enrichment failed for "${batch[idx].slug}": ${reason}`);
       }
-    }
+    });
   }
 
   return results;
