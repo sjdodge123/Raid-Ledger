@@ -17,10 +17,10 @@ import type {
   VoiceSessionsResponseDto,
   VoiceAttendanceSummaryDto,
   AdHocRosterResponseDto,
+  BindingPurpose,
 } from '@raid-ledger/contract';
 import {
   type InMemorySession,
-  classifyVoiceSession,
   toVoiceSessionDto,
   buildAttendanceSummary,
   buildActiveRoster,
@@ -39,9 +39,12 @@ import { ChannelResolverService } from './channel-resolver.service';
 const FLUSH_INTERVAL_MS = 30_000;
 const SNAPSHOT_WINDOW_MS = 120_000;
 const CLASSIFY_LOOKBACK_MS = 86_400_000;
-const VOICE_BINDING_PURPOSES = ['game-voice-monitor', 'general-lobby'];
+const VOICE_BINDING_PURPOSES: readonly string[] & BindingPurpose[] = [
+  'game-voice-monitor',
+  'general-lobby',
+];
 
-export { classifyVoiceSession };
+export { classifyVoiceSession } from './voice-attendance.helpers';
 
 @Injectable()
 export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
