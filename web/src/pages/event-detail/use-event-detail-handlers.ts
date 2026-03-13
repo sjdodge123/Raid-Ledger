@@ -129,7 +129,9 @@ function useSlotClickHandler(options: { isAuthenticated: boolean; shouldShowChar
             signupHandlers.setPreSelectedRole(mmoRoles.includes(role) ? (role as CharacterRole) : undefined);
             signupHandlers.setPendingSlot({ role, position }); signupHandlers.setShowConfirmModal(true); return;
         }
-        signupHandlers.doSignup({ slotRole: role, slotPosition: position, preferredRoles: [role] });
+        const mmoRoles: string[] = ['tank', 'healer', 'dps'];
+        const preferredRoles = mmoRoles.includes(role) ? [role] : undefined;
+        signupHandlers.doSignup({ slotRole: role, slotPosition: position, preferredRoles });
     }, [options.isAuthenticated, options.shouldShowCharacterModal, signupHandlers]);
 }
 

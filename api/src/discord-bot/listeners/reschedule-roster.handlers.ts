@@ -119,14 +119,20 @@ async function validateSelectCtx(
   return { linkedUser, event };
 }
 
-function buildUpdateSet(options?: ReconfirmOptions): Record<string, unknown> {
+export function buildUpdateSet(options?: ReconfirmOptions): Record<string, unknown> {
   const set: Record<string, unknown> = {
     status: options?.signupStatus === 'tentative' ? 'tentative' : 'signed_up',
     roachedOutAt: null,
     confirmationStatus: 'confirmed',
   };
-  if (options?.preferredRoles) set.preferredRoles = options.preferredRoles;
-  else if (options?.slotRole) set.preferredRoles = [options.slotRole];
+  const mmoRoles = ['tank', 'healer', 'dps'];
+  if (options?.preferredRoles) {
+    set.preferredRoles = options.preferredRoles.filter((r: string) =>
+      mmoRoles.includes(r),
+    );
+  } else if (options?.slotRole && mmoRoles.includes(options.slotRole)) {
+    set.preferredRoles = [options.slotRole];
+  }
   return set;
 }
 

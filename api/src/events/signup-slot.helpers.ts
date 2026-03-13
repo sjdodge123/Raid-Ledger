@@ -160,10 +160,10 @@ export async function assignDiscordSignupSlot(
 ): Promise<void> {
   const { slotConfig, isMMO } = getSlotContext(event);
   const hasPreferredRoles = preferredRoles && preferredRoles.length > 0;
-  const hasSingleRole = !hasPreferredRoles && role;
-
-  if (isMMO && (hasPreferredRoles || hasSingleRole)) {
-    if (hasSingleRole && role) {
+  const mmoRoles = ['tank', 'healer', 'dps'];
+  const validSingleRole = !hasPreferredRoles && role && mmoRoles.includes(role);
+  if (isMMO && (hasPreferredRoles || validSingleRole)) {
+    if (validSingleRole) {
       await tx
         .update(schema.eventSignups)
         .set({ preferredRoles: [role] })
@@ -173,7 +173,7 @@ export async function assignDiscordSignupSlot(
   }
 
   const assignRole =
-    !isMMO || (!hasPreferredRoles && !hasSingleRole)
+    !isMMO || (!hasPreferredRoles && !validSingleRole)
       ? (role ?? (await resolveGenericSlotRole(tx, event, eventId)))
       : null;
 
