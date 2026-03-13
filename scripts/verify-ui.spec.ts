@@ -433,3 +433,56 @@ test.describe('Players page', () => {
         await expect(page.getByText(/registered/i)).toBeVisible({ timeout: 10_000 });
     });
 });
+
+// ---------------------------------------------------------------------------
+// Regression: ROK-784 — attendance dashboard light mode
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
+    test('attendance tracker uses theme-aware backgrounds in light mode', async ({ page }) => {
+        // Navigate to Past events to find a completed event
+        await page.goto('/events');
+        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel');
+        await expect(desktopTabs).toBeVisible({ timeout: 10_000 });
+        await desktopTabs.getByRole('button', { name: 'Past' }).click();
+        await expect(page.getByRole('heading', { name: /Past Events/i })).toBeVisible({ timeout: 10_000 });
+
+        // Click the first past event card
+        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
+        if (!await firstEventCard.isVisible({ timeout: 5_000 }).catch(() => false)) {
+            test.skip(true, 'No past events in demo data — cannot test attendance tracker');
+            return;
+        }
+        await firstEventCard.click();
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+
+        // Switch to light mode by setting data-scheme on <html>
+        await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'light'));
+
+        // Look for the Attendance heading — it only renders for past events when the user is an organizer
+        const attendanceHeading = page.getByRole('heading', { name: 'Attendance' });
+        if (!await attendanceHeading.isVisible({ timeout: 5_000 }).catch(() => false)) {
+            test.skip(true, 'Attendance tracker not visible on this event — may not be past or user is not organizer');
+            return;
+        }
+
+        // The attendance container is the parent of the "Attendance" heading.
+        // Verify its computed background color is light (not the old hardcoded dark zinc-800).
+        const container = page.locator('h3:has-text("Attendance")').locator('..');
+        const bgColor = await container.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+        // In light mode, bg-panel resolves to #f1f5f9 (slate-100) with /50 alpha.
+        // The old bug used bg-zinc-800 (#27272a) which is very dark.
+        // Parse RGB values — a light background should have R, G, B all > 200.
+        const match = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        expect(match).not.toBeNull();
+        if (match) {
+            const [r, g, b] = [Number(match[1]), Number(match[2]), Number(match[3])];
+            // Light-mode backgrounds should have high channel values (> 180)
+            // Dark-mode zinc-800 (#27272a) has channels around 39, so this clearly distinguishes
+            expect(r).toBeGreaterThan(180);
+            expect(g).toBeGreaterThan(180);
+            expect(b).toBeGreaterThan(180);
+        }
+    });
+});
