@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-
-import { useAuth } from '../../hooks/use-auth';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth, type User } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { API_BASE_URL } from '../../lib/config';
@@ -28,6 +28,7 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
 }
 
 function useAvatarHandlers(refetch: () => void) {
+    const queryClient = useQueryClient();
     const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
     const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
 
@@ -53,15 +54,17 @@ function useAvatarHandlers(refetch: () => void) {
         setOptimisticUrl(url);
         toast.success('Avatar updated!');
         const pref = option.type === 'character' ? { type: option.type, characterName: option.characterName } : { type: option.type };
-        // Eagerly update the global avatar cache so the header and all other
-        // consumers of toAvatarUser() see the new preference immediately.
+        // Optimistically update the auth query cache so ALL useAuth() consumers
+        // (header, sidebar, etc.) re-render immediately with the new preference.
+        queryClient.setQueryData<User | null>(['auth', 'me'], (old) => old ? { ...old, avatarPreference: pref } : old);
+        // Also update the module-level avatar cache for toAvatarUser() callers.
         const cached = getCurrentUserAvatarData();
         if (cached) setCurrentUserAvatarData({ ...cached, avatarPreference: pref });
         updatePreference('avatarPreference', pref)
             .then(() => refetch())
             .then(() => setOptimisticUrl(null))
             .catch(() => { toast.error('Failed to save avatar preference'); setOptimisticUrl(null); });
-    }, [refetch]);
+    }, [refetch, queryClient]);
 
     return { handleUpload, handleRemoveCustom, handleSelect, isUploading, uploadProgress, optimisticUrl };
 }
