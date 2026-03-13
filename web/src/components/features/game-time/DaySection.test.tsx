@@ -241,4 +241,50 @@ it('only counts available slots (not blocked/committed)', () => {
         edgeCasesGroup1();
         edgeCasesGroup2();
     });
+
+    describe('All Day Button (ROK-619)', () => {
+        const mockOnAllDay = vi.fn();
+        const allDayProps = { ...defaultProps, onAllDay: mockOnAllDay };
+
+        it('renders All Day button when expanded and not readOnly', () => {
+            render(<DaySection {...allDayProps} expanded={true} />);
+            expect(screen.getByRole('button', { name: /All Day/i })).toBeInTheDocument();
+        });
+
+        it('calls onAllDay with dayIndex when clicked', () => {
+            render(<DaySection {...allDayProps} expanded={true} dayIndex={3} />);
+            fireEvent.click(screen.getByRole('button', { name: /All Day/i }));
+            expect(mockOnAllDay).toHaveBeenCalledWith(3);
+        });
+
+        it('hides All Day button in readOnly mode', () => {
+            render(<DaySection {...allDayProps} expanded={true} readOnly={true} />);
+            expect(screen.queryByRole('button', { name: /All Day/i })).not.toBeInTheDocument();
+        });
+
+        it('hides All Day button when collapsed', () => {
+            render(<DaySection {...allDayProps} expanded={false} />);
+            expect(screen.queryByRole('button', { name: /All Day/i })).not.toBeInTheDocument();
+        });
+
+        it('hides All Day button when onAllDay is not provided', () => {
+            render(<DaySection {...defaultProps} expanded={true} />);
+            expect(screen.queryByRole('button', { name: /All Day/i })).not.toBeInTheDocument();
+        });
+
+        it('shows active style when all 24 hours selected', () => {
+            const slots: GameTimeSlot[] = Array.from({ length: 24 }, (_, i) => ({
+                dayOfWeek: 0, hour: i, status: 'available' as const,
+            }));
+            render(<DaySection {...allDayProps} slots={slots} expanded={true} />);
+            const btn = screen.getByRole('button', { name: /All Day/i });
+            expect(btn.className).toContain('bg-emerald-600');
+        });
+
+        it('shows inactive style when not all hours selected', () => {
+            render(<DaySection {...allDayProps} expanded={true} />);
+            const btn = screen.getByRole('button', { name: /All Day/i });
+            expect(btn.className).toContain('bg-panel');
+        });
+    });
 });

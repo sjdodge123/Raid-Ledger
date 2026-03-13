@@ -21,8 +21,14 @@ vi.mock('../../hooks/use-game-time-editor', () => ({
     useGameTimeEditor: vi.fn(() => mockGameTimeEditor),
 }));
 
+/** Captures the most recent props passed to GameTimeGrid */
+let capturedGridProps: Record<string, unknown> = {};
+
 vi.mock('../features/game-time/GameTimeGrid', () => ({
-    GameTimeGrid: () => <div data-testid="game-time-grid">GameTimeGrid</div>,
+    GameTimeGrid: (props: Record<string, unknown>) => {
+        capturedGridProps = props;
+        return <div data-testid="game-time-grid">GameTimeGrid</div>;
+    },
 }));
 
 vi.mock('../features/game-time/GameTimeMobileEditor', () => ({
@@ -52,6 +58,7 @@ function renderWithProviders(ui: React.ReactElement) {
 describe('GameTimeStep — desktop rendering (≥768px)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        capturedGridProps = {};
         mockUseMediaQuery.mockReturnValue(false);
     });
 
@@ -69,6 +76,11 @@ describe('GameTimeStep — desktop rendering (≥768px)', () => {
     it('renders the "When Do You Play?" heading', () => {
         renderWithProviders(<GameTimeStep />);
         expect(screen.getByText(/when do you play\?/i)).toBeInTheDocument();
+    });
+
+    it('passes noStickyOffset to GameTimeGrid for FTE dialog without nav bar', () => {
+        renderWithProviders(<GameTimeStep />);
+        expect(capturedGridProps.noStickyOffset).toBe(true);
     });
 });
 

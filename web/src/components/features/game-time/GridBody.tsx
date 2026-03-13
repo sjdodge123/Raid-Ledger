@@ -39,6 +39,8 @@ export interface GridBodyProps extends CellRenderProps {
     todayIndex?: number;
     nextWeekSlots?: GameTimeSlot[];
     HOURS: number[];
+    /** Callback when a day header is clicked (for whole-day toggle) */
+    onDayClick?: (dayIndex: number) => void;
 }
 
 /** Inner grid with day headers and cell rows */
@@ -46,7 +48,7 @@ export function GridBody({
     gridRef, gridLineBackground, handlePointerUp, setHoveredCell,
     tzLabel, noStickyOffset, isHeaderHidden,
     dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots,
-    HOURS, ...cellProps
+    HOURS, onDayClick, ...cellProps
 }: GridBodyProps): JSX.Element {
     return (
         <div
@@ -57,7 +59,7 @@ export function GridBody({
             data-testid="game-time-grid"
         >
             <TzCorner tzLabel={tzLabel} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} />
-            <DayHeaders dayDates={dayDates} nextWeekDayDates={nextWeekDayDates} fullDayNames={fullDayNames} todayIndex={todayIndex} nextWeekSlots={nextWeekSlots} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} />
+            <DayHeaders dayDates={dayDates} nextWeekDayDates={nextWeekDayDates} fullDayNames={fullDayNames} todayIndex={todayIndex} nextWeekSlots={nextWeekSlots} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} onDayClick={onDayClick} />
             {HOURS.map((hour) => <HourRow key={`row-${hour}`} hour={hour} {...cellProps} />)}
         </div>
     );
@@ -76,10 +78,10 @@ function TzCorner({ tzLabel, noStickyOffset, isHeaderHidden }: {
     );
 }
 
-function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots, noStickyOffset, isHeaderHidden }: {
+function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots, noStickyOffset, isHeaderHidden, onDayClick }: {
     dayDates: string[] | null; nextWeekDayDates: string[] | null;
     fullDayNames?: boolean; todayIndex?: number; nextWeekSlots?: GameTimeSlot[];
-    noStickyOffset?: boolean; isHeaderHidden: boolean;
+    noStickyOffset?: boolean; isHeaderHidden: boolean; onDayClick?: (dayIndex: number) => void;
 }): JSX.Element {
     return (
         <>
@@ -89,6 +91,7 @@ function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, next
                     todayIndex={todayIndex} hasRolling={!!nextWeekSlots}
                     dateLabel={dayDates?.[i]} nextDateLabel={nextWeekDayDates?.[i]}
                     noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden}
+                    onClick={onDayClick ? () => onDayClick(i) : undefined}
                 />
             ))}
         </>

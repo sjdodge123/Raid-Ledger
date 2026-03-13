@@ -53,7 +53,7 @@ function GameTimeStepGrid({ isMobile, slots, handleChange, tzLabel }: {
     if (isMobile) {
         return <GameTimeMobileEditor slots={slots} onChange={handleChange} tzLabel={tzLabel} />;
     }
-    return <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[6, 24]} fullDayNames compact />;
+    return <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[6, 24]} fullDayNames compact noStickyOffset />;
 }
 
 export function GameTimeStep() {

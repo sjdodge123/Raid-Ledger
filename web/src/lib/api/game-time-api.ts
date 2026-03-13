@@ -21,6 +21,7 @@ export async function getMyGameTime(
     const query = sp.toString();
     const response = await fetchApi<{ data: GameTimeResponse }>(
         `/users/me/game-time?${query}`,
+        { cache: 'no-cache' },
     );
     return response.data;
 }
