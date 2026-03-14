@@ -142,6 +142,7 @@ export function CloudProviderCard({ provider }: CloudProviderCardProps) {
                 <h3 className="text-sm font-semibold text-foreground">{provider.displayName}</h3>
                 <ProviderBadge provider={provider} />
             </div>
+            <ProviderError error={provider.error} />
             <Instructions providerKey={provider.key} />
             <ApiKeyInput value={apiKey} onChange={setApiKey} show={showKey} onToggle={() => setShowKey((v) => !v)} />
             <CardActions
@@ -158,4 +159,9 @@ function ProviderBadge({ provider }: { provider: AiProviderInfoDto }) {
     if (provider.active && !provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Selected · Offline</span>;
     if (provider.configured) return <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">Configured</span>;
     return <span className="text-xs px-2 py-0.5 rounded-full bg-dim/20 text-muted">Not Configured</span>;
+}
+
+function ProviderError({ error }: { error?: string }) {
+    if (!error) return null;
+    return <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">{error}</p>;
 }

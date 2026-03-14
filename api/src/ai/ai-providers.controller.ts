@@ -170,15 +170,20 @@ export class AiProvidersController {
     activeKey: string,
   ): Promise<AiProviderInfoDto> {
     const configured = await this.isConfigured(provider);
-    const available = configured
-      ? await this.checkAvailableWithTimeout(provider)
-      : false;
+    let available = false;
+    let error: string | undefined;
+    if (configured) {
+      const result = await this.checkAvailableWithError(provider);
+      available = result.available;
+      error = result.error;
+    }
     const info = buildProviderInfo(
       provider as never,
       configured,
       available,
       provider.key === activeKey,
     );
+    if (error) info.error = error;
     if (provider.key === 'ollama') {
       info.setupInProgress = this.ollamaSetupRunning;
       if (this.ollamaSetupRunning) {
@@ -192,19 +197,29 @@ export class AiProvidersController {
     return info;
   }
 
-  /** Check availability with a 3s timeout to avoid blocking. */
-  private async checkAvailableWithTimeout(
-    provider: { isAvailable: () => Promise<boolean> },
-  ): Promise<boolean> {
+  /** Check availability with 3s timeout, capturing error details. */
+  private async checkAvailableWithError(
+    provider: { key: string; isAvailable: () => Promise<boolean> },
+  ): Promise<{ available: boolean; error?: string }> {
     try {
-      const result = await Promise.race([
+      const available = await Promise.race([
         provider.isAvailable(),
         new Promise<false>((r) => setTimeout(() => r(false), 3000)),
       ]);
-      return result;
-    } catch {
-      return false;
+      return { available };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const friendly = this.extractFriendlyError(msg);
+      return { available: false, error: friendly };
     }
+  }
+
+  private extractFriendlyError(msg: string): string {
+    if (msg.includes('credit balance')) return 'Account has insufficient credits';
+    if (msg.includes('authentication')) return 'Invalid API key';
+    if (msg.includes('401')) return 'Invalid API key';
+    if (msg.includes('403')) return 'API key lacks permissions';
+    return 'Provider unreachable';
   }
 
   /** Check if a provider is configured (has API key or is self-hosted). */
