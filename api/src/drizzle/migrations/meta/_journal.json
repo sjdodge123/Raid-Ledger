@@ -666,6 +666,13 @@
       "when": 1773400000000,
       "tag": "0094_set_twitch_id_wow_variants",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1773500000000,
+      "tag": "0095_add_games_name_trgm_index",
+      "breakpoints": true
     }
   ]
 }
