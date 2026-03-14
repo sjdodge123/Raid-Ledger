@@ -64,11 +64,10 @@ export class OllamaDockerService {
     return resolvePath(__dirname, '..', '..', '..', '..', 'docker-compose.yml');
   }
 
-  /** spawn with fully detached stdio — no buffering at all. */
+  /** Run a long docker command without blocking or crashing the API. */
   private spawnDetached(cmd: string, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
-      child.unref();
+      const child = spawn(cmd, args, { stdio: 'ignore' });
       child.on('close', (code) => {
         if (code === 0) resolve();
         else {
