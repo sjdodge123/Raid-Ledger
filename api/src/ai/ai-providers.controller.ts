@@ -216,9 +216,12 @@ export class AiProvidersController {
 
   private extractFriendlyError(msg: string): string {
     if (msg.includes('credit balance')) return 'Account has insufficient credits';
-    if (msg.includes('authentication')) return 'Invalid API key';
-    if (msg.includes('401')) return 'Invalid API key';
-    if (msg.includes('403')) return 'API key lacks permissions';
+    if (msg.includes('insufficient_quota')) return 'Account has insufficient quota';
+    if (msg.includes('billing')) return 'Billing issue — check your account';
+    if (msg.includes('API_KEY_INVALID') || msg.includes('invalid')) return 'Invalid API key';
+    if (msg.includes('authentication') || msg.includes('401')) return 'Invalid API key';
+    if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) return 'API key lacks permissions';
+    if (msg.includes('429')) return 'Rate limited — try again later';
     return 'Provider unreachable';
   }
 
