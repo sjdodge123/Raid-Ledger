@@ -57,6 +57,7 @@ services:
       # DISABLE_TELEMETRY: "true"
     volumes:
       - avatar_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "${API_PORT:-3000}:3000"
     healthcheck:

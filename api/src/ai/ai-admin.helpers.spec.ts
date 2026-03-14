@@ -147,8 +147,14 @@ describe('ai-admin.helpers (adversarial)', () => {
         ],
       });
       expect(result.byFeature).toHaveLength(2);
-      expect(result.byFeature[0]).toMatchObject({ feature: 'chat', avgLatencyMs: 111 });
-      expect(result.byFeature[1]).toMatchObject({ feature: 'categories', avgLatencyMs: 85 });
+      expect(result.byFeature[0]).toMatchObject({
+        feature: 'chat',
+        avgLatencyMs: 111,
+      });
+      expect(result.byFeature[1]).toMatchObject({
+        feature: 'categories',
+        avgLatencyMs: 85,
+      });
     });
 
     it('errorRate is rounded to 4 decimal places', () => {

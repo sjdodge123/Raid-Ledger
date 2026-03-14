@@ -200,7 +200,12 @@ describe('AiAdminController (adversarial)', () => {
 
     it('maps model capabilities[0] to family field', async () => {
       mockLlmService.listModels.mockResolvedValue([
-        { id: 'llama3.2:3b', name: 'llama3.2:3b', provider: 'ollama', capabilities: ['llama'] },
+        {
+          id: 'llama3.2:3b',
+          name: 'llama3.2:3b',
+          provider: 'ollama',
+          capabilities: ['llama'],
+        },
       ]);
       const result = await controller.getModels();
       expect(result[0].family).toBe('llama');

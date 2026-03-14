@@ -102,7 +102,10 @@ describe('LlmProviderRegistry (adversarial)', () => {
   describe('register — overwrite behavior', () => {
     it('overwrites an existing provider with the same key', () => {
       const firstProvider = createMockProvider('ollama');
-      const secondProvider = { ...createMockProvider('ollama'), displayName: 'Ollama v2' };
+      const secondProvider = {
+        ...createMockProvider('ollama'),
+        displayName: 'Ollama v2',
+      };
       registry.register(firstProvider);
       registry.register(secondProvider);
       expect(registry.resolve('ollama')?.displayName).toBe('Ollama v2');
