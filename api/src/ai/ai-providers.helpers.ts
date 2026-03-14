@@ -19,6 +19,7 @@ export interface AiProviderInfoDto {
   active: boolean;
   setupInProgress?: boolean;
   setupStep?: string;
+  error?: string;
 }
 
 /**
