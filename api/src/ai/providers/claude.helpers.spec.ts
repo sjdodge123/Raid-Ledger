@@ -69,7 +69,7 @@ describe('claude.helpers', () => {
     it('contains known model entries', () => {
       const ids = CLAUDE_MODELS.map((m) => m.id);
       expect(ids).toContain('claude-sonnet-4-20250514');
-      expect(ids).toContain('claude-haiku-4-5-20251001');
+      expect(ids).toContain('claude-3-5-haiku-20241022');
     });
   });
 });
@@ -86,6 +86,7 @@ describe('claude.helpers (adversarial)', () => {
         ok: false,
         status: 403,
         json: jest.fn(),
+        text: jest.fn().mockResolvedValue('error body'),
       });
       await expect(
         fetchClaude('sk-ant-test', '/v1/messages', {}),

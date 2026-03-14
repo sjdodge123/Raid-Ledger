@@ -1,3 +1,4 @@
+import type { AiProviderInfoDto } from '@raid-ledger/contract';
 import type { LlmProvider } from './llm-provider.interface';
 import { AI_SETTING_KEYS } from './llm.constants';
 
@@ -7,20 +8,6 @@ const PROVIDER_KEY_MAP: Record<string, string> = {
   claude: AI_SETTING_KEYS.CLAUDE_API_KEY,
   google: AI_SETTING_KEYS.GOOGLE_API_KEY,
 };
-
-/** DTO returned for each provider in the list endpoint. */
-export interface AiProviderInfoDto {
-  key: string;
-  displayName: string;
-  requiresApiKey: boolean;
-  selfHosted: boolean;
-  configured: boolean;
-  available: boolean;
-  active: boolean;
-  setupInProgress?: boolean;
-  setupStep?: string;
-  error?: string;
-}
 
 /**
  * Resolve the settings key used to store a provider's API key.

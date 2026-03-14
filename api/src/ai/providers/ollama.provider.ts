@@ -48,7 +48,9 @@ export class OllamaProvider implements LlmProvider {
     try {
       const baseUrl = await this.getBaseUrl();
       const data = await fetchOllama<{ models: OllamaRawModel[] }>(
-        baseUrl, '/api/tags', { timeoutMs: 5_000 },
+        baseUrl,
+        '/api/tags',
+        { timeoutMs: 5_000 },
       );
       return (data.models ?? []).length > 0;
     } catch {

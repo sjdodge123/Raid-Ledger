@@ -37,7 +37,10 @@ export class AiAdminController {
   @Get('status')
   async getStatus(): Promise<AiStatusDto> {
     const provider = await this.registry.resolveActive();
-    const isAvailable = await this.withTimeout(this.llmService.isAvailable(), false);
+    const isAvailable = await this.withTimeout(
+      this.llmService.isAvailable(),
+      false,
+    );
     const model = await this.settings.get(AI_SETTING_KEYS.MODEL as SettingKey);
     return buildStatusResponse(provider, model, isAvailable);
   }
@@ -57,7 +60,10 @@ export class AiAdminController {
   @Post('test-connection')
   async testConnection(): Promise<AiTestConnectionDto> {
     const start = Date.now();
-    const available = await this.withTimeout(this.llmService.isAvailable(), false);
+    const available = await this.withTimeout(
+      this.llmService.isAvailable(),
+      false,
+    );
     const latencyMs = Date.now() - start;
     return {
       success: available,
@@ -91,17 +97,30 @@ export class AiAdminController {
 
   /** POST /admin/ai/test-chat — send a test message to the active LLM. */
   @Post('test-chat')
-  async testChat(): Promise<{ success: boolean; response: string; latencyMs: number }> {
+  async testChat(): Promise<{
+    success: boolean;
+    response: string;
+    latencyMs: number;
+  }> {
     const isUp = await this.withTimeout(this.llmService.isAvailable(), false);
     if (!isUp) {
-      return { success: false, response: 'No AI provider is currently available. Start or configure a provider first.', latencyMs: 0 };
+      return {
+        success: false,
+        response:
+          'No AI provider is currently available. Start or configure a provider first.',
+        latencyMs: 0,
+      };
     }
     try {
       const result = await this.llmService.chat(
         { messages: [{ role: 'user', content: 'Say hello in one sentence.' }] },
         { feature: 'admin-test', maxResponseLength: 200 },
       );
-      return { success: true, response: result.content, latencyMs: result.latencyMs };
+      return {
+        success: true,
+        response: result.content,
+        latencyMs: result.latencyMs,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       return { success: false, response: msg, latencyMs: 0 };

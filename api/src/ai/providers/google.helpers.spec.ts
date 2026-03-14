@@ -110,6 +110,7 @@ describe('google.helpers (adversarial)', () => {
         ok: false,
         status: 400,
         json: jest.fn(),
+        text: jest.fn().mockResolvedValue('error body'),
       });
       await expect(fetchGemini('test-key', '/v1beta/models')).rejects.toThrow(
         'Gemini /v1beta/models: HTTP 400',

@@ -25,7 +25,8 @@ export const AI_MANIFEST: PluginManifest = {
     {
       key: 'ai',
       name: 'AI Features',
-      description: 'Multi-provider LLM inference — configure providers in the AI plugin panel.',
+      description:
+        'Multi-provider LLM inference — configure providers in the AI plugin panel.',
       credentialKeys: [AI_SETTING_KEYS.PROVIDER],
       credentialLabels: ['Active Provider'],
     },

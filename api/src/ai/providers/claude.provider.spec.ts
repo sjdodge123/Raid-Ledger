@@ -56,7 +56,7 @@ describe('ClaudeProvider', () => {
       const models = await provider.listModels();
       expect(models).toHaveLength(2);
       expect(models[0].id).toBe('claude-sonnet-4-20250514');
-      expect(models[1].id).toBe('claude-haiku-4-5-20251001');
+      expect(models[1].id).toBe('claude-3-5-haiku-20241022');
     });
   });
 

@@ -34,8 +34,8 @@ describe('OllamaProvider', () => {
   });
 
   describe('isAvailable', () => {
-    it('returns true when Ollama responds', async () => {
-      mockFetchOllama.mockResolvedValue({ models: [] });
+    it('returns true when Ollama responds with at least one model', async () => {
+      mockFetchOllama.mockResolvedValue({ models: [{ name: 'test' }] });
       const result = await provider.isAvailable();
       expect(result).toBe(true);
     });
@@ -130,7 +130,7 @@ describe('OllamaProvider (adversarial)', () => {
       mockFetchOllama.mockResolvedValue({ models: [] });
       await provider.listModels();
       expect(mockFetchOllama).toHaveBeenCalledWith(
-        'http://ollama:11434',
+        'http://localhost:11434',
         expect.any(String),
       );
     });

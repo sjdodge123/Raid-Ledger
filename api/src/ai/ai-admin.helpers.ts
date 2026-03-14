@@ -7,14 +7,16 @@ export function buildStatusResponse(
   provider: LlmProvider | undefined,
   currentModel: string | null,
   isAvailable: boolean,
+  dockerStatus?: 'running' | 'stopped' | 'unknown',
 ): AiStatusDto {
+  const resolvedDocker = dockerStatus ?? (isAvailable ? 'running' : 'unknown');
   return {
     provider: provider?.key ?? 'none',
     providerName: provider?.displayName ?? 'Not configured',
     available: isAvailable,
     currentModel,
     selfHosted: provider?.selfHosted ?? false,
-    dockerStatus: isAvailable ? 'running' : 'unknown',
+    dockerStatus: resolvedDocker,
   };
 }
 

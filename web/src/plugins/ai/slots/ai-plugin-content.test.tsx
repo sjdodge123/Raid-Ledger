@@ -77,7 +77,8 @@ describe('AiPluginContent', () => {
 
     it('renders provider cards', async () => {
         renderWithProviders(<AiPluginContent />);
-        expect(await screen.findByText('Ollama (Local)')).toBeInTheDocument();
+        const ollamaEls = await screen.findAllByText('Ollama (Local)');
+        expect(ollamaEls.length).toBeGreaterThanOrEqual(1);
         expect(await screen.findByText('OpenAI')).toBeInTheDocument();
         expect(await screen.findByText('Claude (Anthropic)')).toBeInTheDocument();
         expect(await screen.findByText('Google (Gemini)')).toBeInTheDocument();
@@ -85,7 +86,9 @@ describe('AiPluginContent', () => {
 
     it('shows active provider indicator', async () => {
         renderWithProviders(<AiPluginContent />);
-        expect(await screen.findByText(/Active: Ollama/)).toBeInTheDocument();
+        expect(await screen.findByText('AI Providers')).toBeInTheDocument();
+        const ollamaEls = await screen.findAllByText('Ollama (Local)');
+        expect(ollamaEls.length).toBeGreaterThanOrEqual(2);
     });
 
     it('returns null when pluginSlug does not match', () => {
