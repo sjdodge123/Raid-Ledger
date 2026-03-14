@@ -55,7 +55,10 @@ export async function fetchGemini<T>(
     options.body = JSON.stringify(body);
   }
   const res = await fetch(url, options);
-  if (!res.ok) throw new Error(`Gemini ${path}: HTTP ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Gemini ${path}: HTTP ${res.status} — ${body}`);
+  }
   return (await res.json()) as T;
 }
 

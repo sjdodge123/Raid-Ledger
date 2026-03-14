@@ -40,7 +40,10 @@ export async function fetchOpenAi<T>(
       ...options?.headers,
     },
   });
-  if (!res.ok) throw new Error(`OpenAI ${path}: HTTP ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`OpenAI ${path}: HTTP ${res.status} — ${body}`);
+  }
   return (await res.json()) as T;
 }
 
