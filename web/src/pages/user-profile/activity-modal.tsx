@@ -22,7 +22,6 @@ function ActivityEntryCard({
 }): JSX.Element {
   return (
     <GameRowPill
-      gameId={entry.gameId}
       name={entry.gameName}
       coverUrl={entry.coverUrl}
       href={`/games/${entry.gameId}`}

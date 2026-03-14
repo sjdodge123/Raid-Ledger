@@ -367,4 +367,121 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
       }
     });
   });
+
+  describe('signupTxBody — clearExistingAssignment on role change (ROK-814)', () => {
+    /** Set up a duplicate signup scenario with the given existing roles and dto roles. */
+    function setupDuplicateWithRoles(
+      existingRoles: string[],
+      dtoRoles: string[],
+    ) {
+      const mockTx = createMockTx();
+      const deps = createMockDeps();
+      const eventRow = createMmoEventRow();
+      const existingSignup = createSignupRow({
+        id: 30,
+        status: 'signed_up',
+        preferredRoles: existingRoles,
+      });
+
+      const dto = {
+        preferredRoles: dtoRoles as ('tank' | 'healer' | 'dps')[],
+        slotRole: dtoRoles[0] as 'tank' | 'healer' | 'dps',
+      };
+
+      // Insert returns empty (duplicate)
+      mockTx.insert.mockImplementationOnce(() => ({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      }));
+
+      mockTx.select
+        // checkAutoBench
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            innerJoin: jest.fn().mockReturnValue({
+              where: jest.fn().mockResolvedValue([{ count: 0 }]),
+            }),
+          }),
+        })
+        // fetchExistingSignup
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([existingSignup]),
+            }),
+          }),
+        })
+        // ensureAssignment: check existing roster assignment (none)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([]),
+            }),
+          }),
+        })
+        // checkHasAssignment (after autoAllocate)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+            }),
+          }),
+        })
+        // syncConfirmationStatus
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ confirmationStatus: 'confirmed' }]),
+            }),
+          }),
+        });
+
+      return { mockTx, deps, eventRow, dto };
+    }
+
+    it('deletes roster assignment when preferred roles change', async () => {
+      const { mockTx, deps, eventRow, dto } = setupDuplicateWithRoles(
+        ['tank'],
+        ['healer', 'dps'],
+      );
+
+      const params: SignupTxParams = {
+        tx: mockTx as unknown as SignupTxParams['tx'],
+        eventRow,
+        eventId: 1,
+        userId: 1,
+        dto,
+        user: undefined,
+      };
+
+      await signupTxBody(deps, params);
+
+      expect(mockTx.delete).toHaveBeenCalled();
+    });
+
+    it('does NOT delete roster assignment when preferred roles are identical', async () => {
+      const { mockTx, deps, eventRow, dto } = setupDuplicateWithRoles(
+        ['healer', 'dps'],
+        ['dps', 'healer'],
+      );
+
+      const params: SignupTxParams = {
+        tx: mockTx as unknown as SignupTxParams['tx'],
+        eventRow,
+        eventId: 1,
+        userId: 1,
+        dto,
+        user: undefined,
+      };
+
+      await signupTxBody(deps, params);
+
+      expect(mockTx.delete).not.toHaveBeenCalled();
+    });
+  });
 });

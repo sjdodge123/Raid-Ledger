@@ -114,15 +114,20 @@ function mockLobbyEventCreation(
   id: number,
   bindingId: string,
   gameName?: string,
+  gameId?: number | null,
 ) {
   mockDb.limit.mockResolvedValueOnce([]);
   if (gameName) {
+    // When gameId is provided, buildAdHocTitle calls resolveGameName (ROK-817)
+    if (gameId) {
+      mockDb.limit.mockResolvedValueOnce([{ name: gameName }]);
+    }
     mockDb.returning.mockResolvedValueOnce([{ id }]);
     mockDb.limit.mockResolvedValueOnce([
       {
         id,
         title: `${gameName} — Quick Play`,
-        gameId: null,
+        gameId: gameId ?? null,
         channelBindingId: bindingId,
       },
     ]);
@@ -188,7 +193,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
   describe('composite key — general-lobby', () => {
     it('uses composite key for general-lobby with a detected game', async () => {
       mockSettingsService.get.mockResolvedValue('true');
-      mockLobbyEventCreation(mockDb, 20, 'bind-lobby', 'WoW');
+      mockLobbyEventCreation(mockDb, 20, 'bind-lobby', 'WoW', 7);
       await service.handleVoiceJoin(
         'bind-lobby',
         baseMember,
@@ -220,7 +225,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
 
     it('supports multiple concurrent game events per general-lobby channel', async () => {
       mockSettingsService.get.mockResolvedValue('true');
-      mockLobbyEventCreation(mockDb, 40, 'bind-multi', 'WoW');
+      mockLobbyEventCreation(mockDb, 40, 'bind-multi', 'WoW', 1);
       await service.handleVoiceJoin(
         'bind-multi',
         baseMember,
@@ -228,7 +233,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
         1,
         'WoW',
       );
-      mockLobbyEventCreation(mockDb, 41, 'bind-multi', 'FFXIV');
+      mockLobbyEventCreation(mockDb, 41, 'bind-multi', 'FFXIV', 2);
       const member2 = { ...baseMember, discordUserId: 'discord-200' };
       await service.handleVoiceJoin(
         'bind-multi',
@@ -263,7 +268,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
 
     it('returns true for composite key (general-lobby binding)', async () => {
       mockSettingsService.get.mockResolvedValue('true');
-      mockLobbyEventCreation(mockDb, 60, 'bind-has-lobby', 'WoW');
+      mockLobbyEventCreation(mockDb, 60, 'bind-has-lobby', 'WoW', 5);
       await service.handleVoiceJoin(
         'bind-has-lobby',
         baseMember,
@@ -276,7 +281,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
 
     it('returns false after event is cleaned up', async () => {
       mockSettingsService.get.mockResolvedValue('true');
-      mockLobbyEventCreation(mockDb, 70, 'bind-cleanup-has', 'WoW');
+      mockLobbyEventCreation(mockDb, 70, 'bind-cleanup-has', 'WoW', 9);
       await service.handleVoiceJoin(
         'bind-cleanup-has',
         baseMember,
@@ -293,7 +298,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
   describe('handleVoiceLeave — with gameId', () => {
     it('finds the correct composite key event when gameId is provided', async () => {
       mockSettingsService.get.mockResolvedValue('true');
-      mockLobbyEventCreation(mockDb, 80, 'bind-leave-gl', 'WoW');
+      mockLobbyEventCreation(mockDb, 80, 'bind-leave-gl', 'WoW', 3);
       await service.handleVoiceJoin(
         'bind-leave-gl',
         baseMember,
@@ -320,7 +325,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
   describe('handleVoiceLeave — without gameId', () => {
     it('searches composite keys when gameId is not provided on leave', async () => {
       mockSettingsService.get.mockResolvedValue('true');
-      mockLobbyEventCreation(mockDb, 81, 'bind-scan', 'WoW');
+      mockLobbyEventCreation(mockDb, 81, 'bind-scan', 'WoW', 4);
       await service.handleVoiceJoin(
         'bind-scan',
         baseMember,
@@ -377,7 +382,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
   describe('backward compatibility — event titles', () => {
     it('creates event with resolved game title when resolvedGameName provided', async () => {
       mockSettingsService.get.mockResolvedValue('true');
-      mockLobbyEventCreation(mockDb, 300, 'bind-title', 'Path of Exile');
+      mockLobbyEventCreation(mockDb, 300, 'bind-title', 'Path of Exile', 11);
       await service.handleVoiceJoin(
         'bind-title',
         baseMember,

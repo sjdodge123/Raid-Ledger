@@ -194,6 +194,19 @@ export async function tryTentativeDisplacement(
   );
 }
 
+const ROLE_PRIORITY: Record<string, number> = { tank: 0, healer: 1, dps: 2 };
+
+/**
+ * Sorts preferred roles by priority (tank > healer > dps).
+ * Unknown roles are placed after known roles.
+ * Returns a new array — does not mutate the input.
+ */
+export function sortByRolePriority(roles: string[]): string[] {
+  return [...roles].sort(
+    (a, b) => (ROLE_PRIORITY[a] ?? 99) - (ROLE_PRIORITY[b] ?? 99),
+  );
+}
+
 export async function runAutoAllocation(
   tx: Tx,
   eventId: number,
@@ -207,7 +220,7 @@ export async function runAutoAllocation(
   const newSignup = ctx.allSignups.find((s) => s.id === newSignupId);
   if (!newSignup?.preferredRoles || newSignup.preferredRoles.length === 0)
     return;
-  const newPrefs = newSignup.preferredRoles;
+  const newPrefs = sortByRolePriority(newSignup.preferredRoles);
   const placed = await runAllocationStrategies(
     tx,
     eventId,

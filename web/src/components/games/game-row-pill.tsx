@@ -9,7 +9,6 @@ import type { ItadGamePricingDto } from '@raid-ledger/contract';
 import { PriceBadge } from './PriceBadge';
 
 interface GameRowPillProps {
-    gameId: number;
     name: string;
     coverUrl: string | null;
     href?: string;

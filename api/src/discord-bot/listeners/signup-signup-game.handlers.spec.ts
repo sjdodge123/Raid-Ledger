@@ -3,6 +3,7 @@ import type { SignupInteractionDeps } from './signup-interaction.types';
 import {
   createMockDeps,
   createMockButtonInteraction,
+  MOCK_EMBED,
 } from './signup-handlers.spec-helpers';
 
 const MOCK_EVENT = {
@@ -256,5 +257,68 @@ describe('tryGameSignupFlow — adversarial edge cases (ROK-775)', () => {
     });
 
     expect(deps.updateEmbedSignupCount).toHaveBeenCalledWith(10);
+  });
+});
+
+describe('tryGameSignupFlow — embed in reply (ROK-814)', () => {
+  const MMO_EVENT = {
+    id: 10,
+    title: 'MMO Raid',
+    gameId: 1,
+    slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14, flex: 0, bench: 0 },
+  } as Parameters<typeof tryGameSignupFlow>[0]['event'];
+
+  function setupGameLookup(deps: SignupInteractionDeps): void {
+    (deps.db.select as jest.Mock).mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([{ id: 1, hasRoles: true }]),
+        }),
+      }),
+    });
+  }
+
+  it('includes event embed in editReply for multi-character select', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockButtonInteraction();
+    const chars = [
+      { id: 'c1', name: 'Char1', role: 'tank', roleOverride: null },
+      { id: 'c2', name: 'Char2', role: 'healer', roleOverride: null },
+    ];
+    setupGameLookup(deps);
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: chars,
+    });
+
+    await tryGameSignupFlow({
+      interaction,
+      eventId: 10,
+      linkedUser: MOCK_USER,
+      event: MOCK_EVENT,
+      deps,
+    });
+
+    const editCall = (interaction.editReply as jest.Mock).mock.calls[0][0];
+    expect(editCall.embeds).toContain(MOCK_EMBED);
+  });
+
+  it('includes event embed in editReply for MMO role select (no chars)', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockButtonInteraction();
+    setupGameLookup(deps);
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: [],
+    });
+
+    await tryGameSignupFlow({
+      interaction,
+      eventId: 10,
+      linkedUser: MOCK_USER,
+      event: MMO_EVENT,
+      deps,
+    });
+
+    const editCall = (interaction.editReply as jest.Mock).mock.calls[0][0];
+    expect(editCall.embeds).toContain(MOCK_EMBED);
   });
 });

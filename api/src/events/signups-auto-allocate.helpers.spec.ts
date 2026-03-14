@@ -289,3 +289,144 @@ describe('tryDirectAllocation — ROK-718 tentative displacement priority', () =
   it('confirmed player takes open first-choice role directly', () =>
     testDirectAllocToOpenFirstChoice());
 });
+
+// ── Regression: ROK-823 — role priority sorting ─────────────────────────
+
+import { sortByRolePriority } from './signups-auto-allocate.helpers';
+
+describe('Regression: ROK-823 — preferredRoles priority sorting', () => {
+  it('sorts [dps, tank, healer] to [tank, healer, dps]', () => {
+    expect(sortByRolePriority(['dps', 'tank', 'healer'])).toEqual([
+      'tank',
+      'healer',
+      'dps',
+    ]);
+  });
+
+  it('sorts [dps, healer] to [healer, dps]', () => {
+    expect(sortByRolePriority(['dps', 'healer'])).toEqual(['healer', 'dps']);
+  });
+
+  it('returns single-element arrays unchanged', () => {
+    expect(sortByRolePriority(['dps'])).toEqual(['dps']);
+    expect(sortByRolePriority(['tank'])).toEqual(['tank']);
+  });
+
+  it('does not mutate the original array', () => {
+    const original = ['dps', 'tank', 'healer'];
+    sortByRolePriority(original);
+    expect(original).toEqual(['dps', 'tank', 'healer']);
+  });
+
+  it('places unknown roles after known roles', () => {
+    expect(sortByRolePriority(['dps', 'support', 'tank'])).toEqual([
+      'tank',
+      'dps',
+      'support',
+    ]);
+  });
+
+  it('assigns Tank when prefs [dps, tank, healer] are sorted before allocation', async () => {
+    const tx = mockTx();
+    const logger = { log: jest.fn() };
+    const ctx = buildCtx({
+      roleCapacity: { tank: 1, healer: 1, dps: 3 },
+      filledPerRole: { tank: 0, healer: 0, dps: 0 },
+      occupiedPositions: {
+        tank: new Set(),
+        healer: new Set(),
+        dps: new Set(),
+      },
+      allSignups: [
+        {
+          id: 30,
+          preferredRoles: ['dps', 'tank', 'healer'],
+          status: 'signed_up',
+          signedUpAt: new Date('2026-01-01'),
+        },
+      ],
+      currentAssignments: [],
+    });
+    const sorted = sortByRolePriority(['dps', 'tank', 'healer']);
+    await tryDirectAllocation(
+      tx,
+      1,
+      30,
+      sorted,
+      'signed_up',
+      ctx,
+      logger,
+      noopCancel,
+    );
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('tank'));
+  });
+
+  it('assigns Healer when prefs [dps, healer] are sorted before allocation', async () => {
+    const tx = mockTx();
+    const logger = { log: jest.fn() };
+    const ctx = buildCtx({
+      roleCapacity: { tank: 1, healer: 1, dps: 3 },
+      filledPerRole: { tank: 0, healer: 0, dps: 0 },
+      occupiedPositions: {
+        tank: new Set(),
+        healer: new Set(),
+        dps: new Set(),
+      },
+      allSignups: [
+        {
+          id: 31,
+          preferredRoles: ['dps', 'healer'],
+          status: 'signed_up',
+          signedUpAt: new Date('2026-01-01'),
+        },
+      ],
+      currentAssignments: [],
+    });
+    const sorted = sortByRolePriority(['dps', 'healer']);
+    await tryDirectAllocation(
+      tx,
+      1,
+      31,
+      sorted,
+      'signed_up',
+      ctx,
+      logger,
+      noopCancel,
+    );
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('healer'));
+  });
+
+  it('assigns DPS when player only prefers DPS', async () => {
+    const tx = mockTx();
+    const logger = { log: jest.fn() };
+    const ctx = buildCtx({
+      roleCapacity: { tank: 1, healer: 1, dps: 3 },
+      filledPerRole: { tank: 0, healer: 0, dps: 0 },
+      occupiedPositions: {
+        tank: new Set(),
+        healer: new Set(),
+        dps: new Set(),
+      },
+      allSignups: [
+        {
+          id: 32,
+          preferredRoles: ['dps'],
+          status: 'signed_up',
+          signedUpAt: new Date('2026-01-01'),
+        },
+      ],
+      currentAssignments: [],
+    });
+    await tryDirectAllocation(
+      tx,
+      1,
+      32,
+      ['dps'],
+      'signed_up',
+      ctx,
+      logger,
+      noopCancel,
+    );
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('dps'));
+  });
+});

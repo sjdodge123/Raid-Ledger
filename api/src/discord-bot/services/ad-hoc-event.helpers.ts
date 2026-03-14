@@ -215,10 +215,13 @@ async function buildAdHocTitle(
   gameId: number | null,
   resolvedGameName?: string,
 ): Promise<string> {
-  let gameName = resolvedGameName ?? 'Gaming';
-  if (!resolvedGameName && gameId) {
+  let gameName = 'Gaming';
+  if (gameId) {
     const name = await resolveGameName(db, gameId);
     if (name) gameName = name;
+  }
+  if (gameName === 'Gaming' && resolvedGameName) {
+    gameName = resolvedGameName;
   }
   return `${gameName} — Quick Play`;
 }

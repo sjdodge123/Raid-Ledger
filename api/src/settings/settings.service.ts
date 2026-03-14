@@ -381,7 +381,11 @@ export class SettingsService implements OnModuleInit {
 
   // ─── ITAD ────────────────────────────────────────────────────
 
-  getItadApiKey = () => this.get(SETTING_KEYS.ITAD_API_KEY);
+  async getItadApiKey(): Promise<string | null> {
+    const dbValue = await this.get(SETTING_KEYS.ITAD_API_KEY);
+    if (dbValue) return dbValue;
+    return process.env.ITAD_API_KEY ?? null;
+  }
   setItadApiKey = (key: string) => this.set(SETTING_KEYS.ITAD_API_KEY, key);
   isItadConfigured = () => this.exists(SETTING_KEYS.ITAD_API_KEY);
   clearItadConfig = () => this.delete(SETTING_KEYS.ITAD_API_KEY);

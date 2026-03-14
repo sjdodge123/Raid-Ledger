@@ -7,7 +7,7 @@
 import { handleCharacterSelectMenu } from './signup-select-character.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import type { StringSelectMenuInteraction } from 'discord.js';
-import { createMockDeps } from './signup-handlers.spec-helpers';
+import { createMockDeps, MOCK_EMBED } from './signup-handlers.spec-helpers';
 
 describe('handleCharacterSelectMenu — non-MMO (ROK-775)', () => {
   it('passes preferredRoles derived from character', async () => {
@@ -245,5 +245,51 @@ describe('handleCharacterSelectMenu — adversarial edge cases (ROK-775)', () =>
     await handleCharacterSelectMenu(interaction, 30, deps);
 
     expect(deps.updateEmbedSignupCount).toHaveBeenCalledWith(30);
+  });
+});
+
+describe('handleCharacterSelectMenu — embed in reply (ROK-814)', () => {
+  it('includes event embed in editReply for MMO role select', async () => {
+    const deps = createMockDeps();
+    const charId = 'mmo-char';
+    const interaction = {
+      deferUpdate: jest.fn().mockResolvedValue(undefined),
+      values: [charId],
+      user: { id: 'discord-mmo' },
+      editReply: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StringSelectMenuInteraction;
+
+    const linkedUser = { id: 80, discordId: 'discord-mmo' };
+    const mmoEvent = {
+      id: 50,
+      slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+    };
+    (deps.db.select as jest.Mock)
+      .mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([linkedUser]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mmoEvent]),
+          }),
+        }),
+      });
+
+    (deps.charactersService.findOne as jest.Mock).mockResolvedValue({
+      id: charId,
+      name: 'MMOChar',
+      role: 'tank' as const,
+      roleOverride: null,
+    });
+
+    await handleCharacterSelectMenu(interaction, 50, deps);
+
+    const editCall = (interaction.editReply as jest.Mock).mock.calls[0][0];
+    expect(editCall.embeds).toContain(MOCK_EMBED);
   });
 });
