@@ -158,6 +158,7 @@ describe('llm-pipeline.helpers (adversarial)', () => {
 
     it('wraps non-Error rejections in an Error', async () => {
       const err = await executeWithTimeout(
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         () => Promise.reject('plain string error'),
         1000,
       ).catch((e: unknown) => e);
