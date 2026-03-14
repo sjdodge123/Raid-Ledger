@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { spawn, execFile } from 'child_process';
-import { resolve as resolvePath } from 'path';
 
 /** Possible status values for the Ollama Docker container. */
 export type ContainerStatus = 'running' | 'stopped' | 'not-found';
@@ -47,21 +46,19 @@ export class OllamaDockerService {
     this.logger.log('Ollama container stopped');
   }
 
-  /** Run docker compose up with spawn (no buffer limit). */
-  private composeUp(): Promise<void> {
-    const file = this.findComposeFile();
-    this.logger.log(`Creating Ollama via compose: ${file}`);
-    return this.spawnDetached('docker', [
-      'compose', '-f', file, '--profile', 'ai', 'up', '-d', 'ollama',
+  /** Pull image then create and start Ollama container. */
+  private async composeUp(): Promise<void> {
+    this.logger.log('Pulling Ollama image...');
+    await this.spawnDetached('docker', ['pull', 'ollama/ollama:latest']);
+    this.logger.log('Creating Ollama container...');
+    await this.spawnDetached('docker', [
+      'run', '-d',
+      '--name', CONTAINER_NAME,
+      '--restart', 'unless-stopped',
+      '-p', '11434:11434',
+      '-v', 'ollama_data:/root/.ollama',
+      'ollama/ollama:latest',
     ]);
-  }
-
-  private findComposeFile(): string {
-    if (process.env['DOCKER_COMPOSE_FILE']) {
-      return process.env['DOCKER_COMPOSE_FILE'];
-    }
-    // __dirname is api/src/ai/providers — resolve up to repo root
-    return resolvePath(__dirname, '..', '..', '..', '..', 'docker-compose.yml');
   }
 
   /** Run a long docker command without blocking or crashing the API. */
