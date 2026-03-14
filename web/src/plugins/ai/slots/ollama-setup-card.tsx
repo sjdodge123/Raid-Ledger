@@ -83,6 +83,7 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
                 <OllamaBadge provider={provider} setting={setting} />
             </div>
             <p className="text-xs text-muted">Self-hosted LLM inference via Docker</p>
+            {!setting && !provider.available && <OllamaInstructions />}
             {setting && <SetupProgress step={provider.setupStep} />}
             {!setting && (
                 <OllamaActions
@@ -132,6 +133,31 @@ function OllamaActions({ provider, onSetup, onStop, onActivate, stopPending, act
                     className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors text-sm">
                     {activatePending ? 'Activating...' : 'Set as Active'}
                 </button>
+            )}
+        </div>
+    );
+}
+
+function OllamaInstructions() {
+    const [open, setOpen] = useState(false);
+    return (
+        <div className="border border-edge/50 rounded-lg overflow-hidden">
+            <button type="button" onClick={() => setOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs text-secondary hover:text-foreground transition-colors">
+                <span>Setup instructions</span>
+                <span className="text-muted">{open ? '▲' : '▼'}</span>
+            </button>
+            {open && (
+                <div className="px-3 pb-3 space-y-2">
+                    <p className="text-xs text-muted">Ollama runs a local LLM on your machine via Docker. No API key needed — everything stays on your server.</p>
+                    <ol className="list-decimal list-inside space-y-1 text-xs text-muted">
+                        <li>Ensure Docker is installed and running</li>
+                        <li>Click "Setup Ollama" above</li>
+                        <li>The Docker image (~3 GB) and default model (~2 GB) will be downloaded automatically</li>
+                        <li>First setup takes 5-10 minutes depending on your connection</li>
+                    </ol>
+                    <p className="text-xs text-amber-400/80">Requires ~4 GB RAM and ~5 GB disk space.</p>
+                </div>
             )}
         </div>
     );
