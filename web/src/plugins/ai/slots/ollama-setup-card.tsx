@@ -48,8 +48,7 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
 
     useEffect(() => {
         if (provider.setupInProgress && !setting) setSetting(true);
-        if (!provider.setupInProgress && setting && !provider.available) setSetting(false);
-    }, [provider.setupInProgress, setting, provider.available]);
+    }, [provider.setupInProgress, setting]);
 
     const handleSetup = async () => {
         setSetting(true);
