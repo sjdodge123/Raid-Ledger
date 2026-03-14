@@ -70,3 +70,116 @@ describe('AiRequestLogService', () => {
     });
   });
 });
+
+// — Adversarial tests —
+
+describe('AiRequestLogService (adversarial)', () => {
+  let service: AiRequestLogService;
+  let mockDb: ReturnType<typeof createDrizzleMock>;
+
+  beforeEach(async () => {
+    mockDb = createDrizzleMock();
+    const module = await Test.createTestingModule({
+      providers: [
+        AiRequestLogService,
+        { provide: DrizzleAsyncProvider, useValue: mockDb },
+      ],
+    }).compile();
+    service = module.get(AiRequestLogService);
+  });
+
+  describe('log — field mapping', () => {
+    it('inserts null for optional userId when not provided', async () => {
+      mockDb.values.mockReturnThis();
+      await service.log({
+        feature: 'categories',
+        provider: 'ollama',
+        model: 'llama3.2:3b',
+        latencyMs: 100,
+        success: true,
+      });
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: null }),
+      );
+    });
+
+    it('inserts null for promptTokens when not provided', async () => {
+      mockDb.values.mockReturnThis();
+      await service.log({
+        feature: 'test',
+        provider: 'ollama',
+        model: 'llama3.2:3b',
+        latencyMs: 50,
+        success: false,
+      });
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ promptTokens: null }),
+      );
+    });
+
+    it('inserts null for errorMessage when not provided', async () => {
+      mockDb.values.mockReturnThis();
+      await service.log({
+        feature: 'test',
+        provider: 'ollama',
+        model: 'llama3.2:3b',
+        latencyMs: 50,
+        success: true,
+      });
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ errorMessage: null }),
+      );
+    });
+
+    it('inserts provided errorMessage when failure', async () => {
+      mockDb.values.mockReturnThis();
+      await service.log({
+        feature: 'test',
+        provider: 'ollama',
+        model: 'llama3.2:3b',
+        latencyMs: 0,
+        success: false,
+        errorMessage: 'Connection refused',
+      });
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ errorMessage: 'Connection refused', success: false }),
+      );
+    });
+  });
+
+  describe('getUsageStats — empty/zero states', () => {
+    it('returns errorRate of 0 when totalRequests is 0', async () => {
+      mockDb.where.mockResolvedValueOnce([
+        { totalRequests: 0, avgLatencyMs: 0, errorCount: 0 },
+      ]);
+      mockDb.where.mockResolvedValueOnce([{ todayCount: 0 }]);
+      mockDb.groupBy.mockResolvedValueOnce([]);
+
+      const stats = await service.getUsageStats(new Date());
+      expect(stats.errorRate).toBe(0);
+    });
+
+    it('returns empty byFeature array when no feature rows', async () => {
+      mockDb.where.mockResolvedValueOnce([
+        { totalRequests: 5, avgLatencyMs: 100, errorCount: 0 },
+      ]);
+      mockDb.where.mockResolvedValueOnce([{ todayCount: 5 }]);
+      mockDb.groupBy.mockResolvedValueOnce([]);
+
+      const stats = await service.getUsageStats(new Date());
+      expect(stats.byFeature).toEqual([]);
+    });
+
+    it('returns zeros when DB returns empty arrays (no rows at all)', async () => {
+      mockDb.where.mockResolvedValueOnce([]);
+      mockDb.where.mockResolvedValueOnce([]);
+      mockDb.groupBy.mockResolvedValueOnce([]);
+
+      const stats = await service.getUsageStats(new Date());
+      expect(stats.totalRequests).toBe(0);
+      expect(stats.requestsToday).toBe(0);
+      expect(stats.avgLatencyMs).toBe(0);
+      expect(stats.errorRate).toBe(0);
+    });
+  });
+});
