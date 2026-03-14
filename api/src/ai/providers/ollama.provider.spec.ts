@@ -138,12 +138,16 @@ describe('OllamaProvider (adversarial)', () => {
 
   describe('isAvailable — error paths', () => {
     it('returns false on network timeout error', async () => {
-      mockFetchOllama.mockRejectedValue(new Error('AbortError: signal aborted'));
+      mockFetchOllama.mockRejectedValue(
+        new Error('AbortError: signal aborted'),
+      );
       expect(await provider.isAvailable()).toBe(false);
     });
 
     it('returns false on non-ok HTTP response (thrown by fetchOllama)', async () => {
-      mockFetchOllama.mockRejectedValue(new Error('Ollama /api/tags: HTTP 503'));
+      mockFetchOllama.mockRejectedValue(
+        new Error('Ollama /api/tags: HTTP 503'),
+      );
       expect(await provider.isAvailable()).toBe(false);
     });
   });
@@ -218,7 +222,9 @@ describe('OllamaProvider (adversarial)', () => {
     });
 
     it('propagates fetchOllama errors on chat', async () => {
-      mockFetchOllama.mockRejectedValue(new Error('Ollama /api/chat: HTTP 404'));
+      mockFetchOllama.mockRejectedValue(
+        new Error('Ollama /api/chat: HTTP 404'),
+      );
       await expect(
         provider.chat({ messages: [{ role: 'user', content: 'Hi' }] }),
       ).rejects.toThrow('HTTP 404');
@@ -242,7 +248,9 @@ describe('OllamaProvider (adversarial)', () => {
     });
 
     it('propagates fetchOllama errors on generate', async () => {
-      mockFetchOllama.mockRejectedValue(new Error('Ollama /api/generate: HTTP 500'));
+      mockFetchOllama.mockRejectedValue(
+        new Error('Ollama /api/generate: HTTP 500'),
+      );
       await expect(provider.generate({ prompt: 'test' })).rejects.toThrow(
         'HTTP 500',
       );

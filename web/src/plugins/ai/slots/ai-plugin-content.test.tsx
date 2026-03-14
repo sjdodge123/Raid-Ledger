@@ -25,11 +25,14 @@ function mockAiStatus(available: boolean) {
     );
 }
 
-function mockAiModels() {
+function mockAiProviders() {
     server.use(
-        http.get(`${API}/admin/ai/models`, () =>
+        http.get(`${API}/admin/ai/providers`, () =>
             HttpResponse.json([
-                { id: 'llama3.2:3b', name: 'llama3.2:3b' },
+                { key: 'ollama', displayName: 'Ollama (Local)', requiresApiKey: false, selfHosted: true, configured: true, available: true, active: true },
+                { key: 'openai', displayName: 'OpenAI', requiresApiKey: true, selfHosted: false, configured: false, available: false, active: false },
+                { key: 'claude', displayName: 'Claude (Anthropic)', requiresApiKey: true, selfHosted: false, configured: false, available: false, active: false },
+                { key: 'google', displayName: 'Google (Gemini)', requiresApiKey: true, selfHosted: false, configured: false, available: false, active: false },
             ]),
         ),
     );
@@ -52,7 +55,7 @@ function mockAiUsage() {
 describe('AiPluginContent', () => {
     beforeEach(() => {
         mockAiStatus(true);
-        mockAiModels();
+        mockAiProviders();
         mockAiUsage();
     });
 
@@ -72,18 +75,17 @@ describe('AiPluginContent', () => {
         expect(await screen.findByText('Offline')).toBeInTheDocument();
     });
 
-    it('renders hardware warning', async () => {
+    it('renders provider cards', async () => {
         renderWithProviders(<AiPluginContent />);
-        expect(
-            await screen.findByText('Self-Hosted Requirements:'),
-        ).toBeInTheDocument();
+        expect(await screen.findByText('Ollama (Local)')).toBeInTheDocument();
+        expect(await screen.findByText('OpenAI')).toBeInTheDocument();
+        expect(await screen.findByText('Claude (Anthropic)')).toBeInTheDocument();
+        expect(await screen.findByText('Google (Gemini)')).toBeInTheDocument();
     });
 
-    it('renders test connection button', async () => {
+    it('shows active provider indicator', async () => {
         renderWithProviders(<AiPluginContent />);
-        expect(
-            await screen.findByRole('button', { name: /test connection/i }),
-        ).toBeInTheDocument();
+        expect(await screen.findByText(/Active: Ollama/)).toBeInTheDocument();
     });
 
     it('returns null when pluginSlug does not match', () => {
@@ -94,12 +96,10 @@ describe('AiPluginContent', () => {
     });
 });
 
-// — Adversarial tests —
-
 describe('AiPluginContent (adversarial)', () => {
     beforeEach(() => {
         mockAiStatus(true);
-        mockAiModels();
+        mockAiProviders();
         mockAiUsage();
     });
 
@@ -120,51 +120,25 @@ describe('AiPluginContent (adversarial)', () => {
         expect(screen.queryByText('Online')).not.toBeInTheDocument();
     });
 
-    it('shows hardware requirements list items', async () => {
+    it('handles 500 from providers endpoint gracefully', async () => {
+        server.use(
+            http.get(`${API}/admin/ai/providers`, () =>
+                HttpResponse.json({ error: 'fail' }, { status: 500 }),
+            ),
+        );
         renderWithProviders(<AiPluginContent />);
-        expect(await screen.findByText(/Minimum 8GB RAM/i)).toBeInTheDocument();
-        expect(screen.getByText(/Docker with Ollama container/i)).toBeInTheDocument();
+        expect(await screen.findByText('AI Features')).toBeInTheDocument();
     });
 
-    it('renders the --ai flag code element', async () => {
-        renderWithProviders(<AiPluginContent />);
-        expect(await screen.findByText('--ai')).toBeInTheDocument();
-    });
-
-    it('test connection button is enabled when not pending', async () => {
-        renderWithProviders(<AiPluginContent />);
-        const btn = await screen.findByRole('button', { name: /test connection/i });
-        expect(btn).not.toBeDisabled();
-    });
-
-    it('does not render for unrecognized slugs like "blizzard"', () => {
+    it('does not render for unrecognized slugs', () => {
         const { container } = renderWithProviders(
             <AiPluginContent pluginSlug="blizzard" />,
         );
         expect(container.firstChild).toBeNull();
     });
 
-    it('does not render for empty string slug', () => {
-        // empty string is falsy — pluginSlug && pluginSlug !== 'ai' = false -> renders
-        // Actually '' && '' !== 'ai' = false (short-circuit), so it renders
+    it('does not render for empty string slug (falsy)', () => {
         renderWithProviders(<AiPluginContent pluginSlug="" />);
-        // Should render (empty string is falsy so guard is skipped)
-        // We just verify it doesn't crash
         expect(document.body).toBeTruthy();
-    });
-
-    it('shows status error gracefully when API returns 500', async () => {
-        server.use(
-            http.get('http://localhost:3000/admin/ai/status', () =>
-                HttpResponse.json({ error: 'Internal Server Error' }, { status: 500 }),
-            ),
-        );
-        renderWithProviders(<AiPluginContent />);
-        // Should render the shell without crashing even when status fails to load
-        // The component defaults available to false when data is undefined
-        await screen.findByText('AI Features');
-        // When status query fails, available defaults to false → Offline badge expected
-        // (component renders; no crash)
-        expect(screen.getByText('AI Features')).toBeInTheDocument();
     });
 });

@@ -142,7 +142,10 @@ describe('AiRequestLogService (adversarial)', () => {
         errorMessage: 'Connection refused',
       });
       expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({ errorMessage: 'Connection refused', success: false }),
+        expect.objectContaining({
+          errorMessage: 'Connection refused',
+          success: false,
+        }),
       );
     });
   });

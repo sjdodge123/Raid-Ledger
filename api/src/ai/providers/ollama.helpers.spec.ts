@@ -127,12 +127,12 @@ describe('ollama.helpers (adversarial)', () => {
 
     it('sends the AbortSignal to fetch so it can be aborted', async () => {
       let capturedSignal: AbortSignal | undefined;
-      global.fetch = jest.fn().mockImplementation(
-        (_url: string, opts: RequestInit) => {
+      global.fetch = jest
+        .fn()
+        .mockImplementation((_url: string, opts: RequestInit) => {
           capturedSignal = opts.signal as AbortSignal;
           return new Promise(() => {}); // never resolves
-        },
-      );
+        });
       // Start the call (don't await — it never resolves)
       void fetchOllama('http://ollama:11434', '/api/tags', { timeoutMs: 100 });
       // Give the event loop a tick for the call to begin

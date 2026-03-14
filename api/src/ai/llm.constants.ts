@@ -28,4 +28,14 @@ export const AI_SETTING_KEYS = {
   OLLAMA_URL: 'ai_ollama_url',
   CHAT_ENABLED: 'ai_chat_enabled',
   DYNAMIC_CATEGORIES_ENABLED: 'ai_dynamic_categories_enabled',
+  OPENAI_API_KEY: 'ai_openai_api_key',
+  CLAUDE_API_KEY: 'ai_claude_api_key',
+  GOOGLE_API_KEY: 'ai_google_api_key',
+} as const;
+
+/** Default models for cloud providers. */
+export const CLOUD_DEFAULTS = {
+  openai: 'gpt-4o-mini',
+  claude: 'claude-sonnet-4-20250514',
+  google: 'gemini-2.0-flash',
 } as const;

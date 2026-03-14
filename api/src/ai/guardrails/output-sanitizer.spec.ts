@@ -57,7 +57,9 @@ describe('output-sanitizer (adversarial)', () => {
     });
 
     it('strips discord.com/invite URL', () => {
-      const result = sanitizeOutput('Come join https://discord.com/invite/xyz789 us');
+      const result = sanitizeOutput(
+        'Come join https://discord.com/invite/xyz789 us',
+      );
       expect(result).not.toContain('discord.com/invite');
     });
 

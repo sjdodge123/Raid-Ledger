@@ -51,3 +51,41 @@ export const AiTestConnectionSchema = z.object({
 });
 
 export type AiTestConnectionDto = z.infer<typeof AiTestConnectionSchema>;
+
+/** Schema for a single AI provider's info (multi-provider management). */
+export const AiProviderInfoSchema = z.object({
+    key: z.string(),
+    displayName: z.string(),
+    requiresApiKey: z.boolean(),
+    selfHosted: z.boolean(),
+    configured: z.boolean(),
+    available: z.boolean(),
+    active: z.boolean(),
+});
+
+export type AiProviderInfoDto = z.infer<typeof AiProviderInfoSchema>;
+
+/** Schema for the Ollama Docker setup progress response. */
+export const AiOllamaSetupSchema = z.object({
+    step: z.enum([
+        'checking',
+        'pulling_image',
+        'starting',
+        'pulling_model',
+        'ready',
+        'error',
+    ]),
+    message: z.string(),
+    success: z.boolean(),
+});
+
+export type AiOllamaSetupDto = z.infer<typeof AiOllamaSetupSchema>;
+
+/** Schema for configuring a provider (API key, URL, model). */
+export const AiProviderConfigSchema = z.object({
+    apiKey: z.string().optional(),
+    url: z.string().optional(),
+    model: z.string().optional(),
+});
+
+export type AiProviderConfigDto = z.infer<typeof AiProviderConfigSchema>;
