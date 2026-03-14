@@ -46,7 +46,9 @@ export class ClaudeProvider implements LlmProvider {
         max_tokens: 1,
       });
       return true;
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[ClaudeProvider] isAvailable failed: ${msg}`);
       return false;
     }
   }
