@@ -114,12 +114,20 @@ function OllamaActions({ provider, onSetup, onStop, onActivate, stopPending, act
     onSetup: () => void; onStop: () => void; onActivate: () => void;
     stopPending: boolean; activatePending: boolean;
 }) {
+    const hasContainer = provider.setupStep === 'container_exists';
+    const needsSetup = !provider.available && !hasContainer;
     return (
         <div className="flex flex-wrap gap-2">
-            {!provider.available && (
+            {needsSetup && (
                 <button type="button" onClick={onSetup}
                     className="py-2 px-4 bg-purple-600 hover:bg-purple-500 text-foreground font-semibold rounded-lg transition-colors text-sm">
                     Setup Ollama
+                </button>
+            )}
+            {hasContainer && !provider.available && (
+                <button type="button" onClick={onSetup}
+                    className="py-2 px-4 bg-blue-600 hover:bg-blue-500 text-foreground font-semibold rounded-lg transition-colors text-sm">
+                    Start Ollama
                 </button>
             )}
             {provider.available && (

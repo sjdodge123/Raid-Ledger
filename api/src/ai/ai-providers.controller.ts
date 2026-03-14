@@ -184,6 +184,10 @@ export class AiProvidersController {
       if (this.ollamaSetupRunning) {
         info.setupStep = this.ollamaSetupStep;
       }
+      if (!info.available) {
+        const status = await this.docker.getContainerStatus();
+        info.setupStep = info.setupStep || (status !== 'not-found' ? 'container_exists' : undefined);
+      }
     }
     return info;
   }
