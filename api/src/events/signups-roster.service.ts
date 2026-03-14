@@ -164,32 +164,8 @@ export class SignupsRosterService {
       eventId: number,
     ) => Promise<RosterWithAssignments>,
   ): Promise<RosterWithAssignments> {
-    const event = await cancelH.verifyAdminPermission(
-      this.db,
-      eventId,
-      userId,
-      isAdmin,
-      'update roster',
-    );
-    const signupByUserId = await notifH.validateRosterAssignments(
-      this.db,
-      eventId,
-      dto.assignments,
-    );
-    const oldRoleBySignupId = await notifH.captureOldAssignments(
-      this.db,
-      eventId,
-    );
-    await notifH.replaceRosterAssignments(
-      this.db,
-      eventId,
-      dto.assignments,
-      signupByUserId,
-      this.benchPromotionService,
-    );
-    this.logger.log(
-      `Roster updated for event ${eventId}: ${dto.assignments.length} assignments`,
-    );
+    const { event, signupByUserId, oldRoleBySignupId } =
+      await this.executeRosterUpdate(eventId, userId, isAdmin, dto);
     this.emit(SIGNUP_EVENTS.UPDATED, { eventId, action: 'roster_updated' });
     rosterOpsH.fireRosterNotifications(
       this.notificationService,
@@ -202,6 +178,41 @@ export class SignupsRosterService {
       this.logger,
     );
     return getRosterWithAssignments(eventId);
+  }
+
+  /** Run roster replacement inside a transaction for atomicity (ROK-824). */
+  private async executeRosterUpdate(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: UpdateRosterDto,
+  ) {
+    const event = await cancelH.verifyAdminPermission(
+      this.db,
+      eventId,
+      userId,
+      isAdmin,
+      'update roster',
+    );
+    return this.db.transaction(async (tx) => {
+      const signupByUserId = await notifH.validateRosterAssignments(
+        tx,
+        eventId,
+        dto.assignments,
+      );
+      const oldRoleBySignupId = await notifH.captureOldAssignments(tx, eventId);
+      await notifH.replaceRosterAssignments(
+        tx,
+        eventId,
+        dto.assignments,
+        signupByUserId,
+        this.benchPromotionService,
+      );
+      this.logger.log(
+        `Roster updated for event ${eventId}: ${dto.assignments.length} assignments`,
+      );
+      return { event, signupByUserId, oldRoleBySignupId };
+    });
   }
 
   private async triggerBackfill(
