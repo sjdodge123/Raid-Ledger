@@ -55,7 +55,9 @@ describe('ConcurrencyLimiter (adversarial)', () => {
       fail('expected HttpException');
     } catch (err) {
       expect(err).toBeInstanceOf(HttpException);
-      expect((err as HttpException).getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect((err as HttpException).getStatus()).toBe(
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
   });
 
@@ -77,17 +79,19 @@ describe('ConcurrencyLimiter (adversarial)', () => {
     expect(() => limiter.acquire()).toThrow(HttpException);
   });
 
-  it('withLimit propagates non-Error rejection unchanged', async () => {
+  it('withLimit propagates Error rejection unchanged', async () => {
     const limiter = new ConcurrencyLimiter(2);
     await expect(
-      limiter.withLimit(() => Promise.reject('string error')),
-    ).rejects.toBe('string error');
+      limiter.withLimit(() => Promise.reject(new Error('string error'))),
+    ).rejects.toThrow('string error');
   });
 
   it('withLimit releases slot even when fn throws synchronously', async () => {
     const limiter = new ConcurrencyLimiter(1);
     await expect(
-      limiter.withLimit(() => { throw new Error('sync throw'); }),
+      limiter.withLimit(() => {
+        throw new Error('sync throw');
+      }),
     ).rejects.toThrow('sync throw');
     // Slot should be free
     expect(() => limiter.acquire()).not.toThrow();
@@ -98,13 +102,15 @@ describe('ConcurrencyLimiter (adversarial)', () => {
     let inFlight = 0;
     let maxObserved = 0;
     const tasks = Array.from({ length: 3 }, (_, i) =>
-      limiter.withLimit(async () => {
-        inFlight++;
-        maxObserved = Math.max(maxObserved, inFlight);
-        await Promise.resolve(); // yield
-        inFlight--;
-        return i;
-      }).catch(() => null),
+      limiter
+        .withLimit(async () => {
+          inFlight++;
+          maxObserved = Math.max(maxObserved, inFlight);
+          await Promise.resolve(); // yield
+          inFlight--;
+          return i;
+        })
+        .catch(() => null),
     );
     await Promise.all(tasks);
     // Because acquire throws on the 2nd and 3rd tasks (not queued), maxObserved is 1
