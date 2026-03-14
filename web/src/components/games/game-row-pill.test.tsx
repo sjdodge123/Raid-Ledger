@@ -15,7 +15,6 @@ describe('GameRowPill — basic rendering', () => {
     it('renders the game name', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Elden Ring"
                 coverUrl={null}
             />,
@@ -26,7 +25,6 @@ describe('GameRowPill — basic rendering', () => {
     it('renders cover image when coverUrl is provided', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Elden Ring"
                 coverUrl="https://example.com/cover.jpg"
             />,
@@ -41,7 +39,6 @@ describe('GameRowPill — basic rendering', () => {
     it('renders placeholder when coverUrl is null', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Elden Ring"
                 coverUrl={null}
             />,
@@ -55,7 +52,6 @@ describe('GameRowPill — link behavior', () => {
     it('renders as a Link when href is provided', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Elden Ring"
                 coverUrl={null}
                 href="/games/1"
@@ -68,7 +64,6 @@ describe('GameRowPill — link behavior', () => {
     it('renders as a div when href is not provided', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Elden Ring"
                 coverUrl={null}
             />,
@@ -81,7 +76,6 @@ describe('GameRowPill — subtitle', () => {
     it('renders subtitle when provided', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Elden Ring"
                 coverUrl={null}
                 subtitle="120h 30m"
@@ -93,7 +87,6 @@ describe('GameRowPill — subtitle', () => {
     it('does not render subtitle area when not provided', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Elden Ring"
                 coverUrl={null}
             />,

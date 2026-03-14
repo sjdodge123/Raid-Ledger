@@ -24,7 +24,7 @@ describe('GameRowPill — long game names', () => {
     it('renders a 100-character name without crashing', () => {
         const longName = 'A'.repeat(100);
         renderPill(
-            <GameRowPill gameId={1} name={longName} coverUrl={null} />,
+            <GameRowPill name={longName} coverUrl={null} />,
         );
         expect(screen.getByText(longName)).toBeInTheDocument();
     });
@@ -32,7 +32,7 @@ describe('GameRowPill — long game names', () => {
     it('renders a name with special HTML characters safely', () => {
         const specialName = 'Game & Beyond: <Test>';
         renderPill(
-            <GameRowPill gameId={2} name={specialName} coverUrl={null} />,
+            <GameRowPill name={specialName} coverUrl={null} />,
         );
         expect(screen.getByText(specialName)).toBeInTheDocument();
     });
@@ -45,7 +45,6 @@ describe('GameRowPill — subtitle edge cases', () => {
         // Empty string is truthy enough to trigger the subtitle branch
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Game"
                 coverUrl={null}
                 subtitle=""
@@ -58,7 +57,6 @@ describe('GameRowPill — subtitle edge cases', () => {
     it('renders subtitle with numeric-only content', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Game"
                 coverUrl={null}
                 subtitle="120"
@@ -70,7 +68,6 @@ describe('GameRowPill — subtitle edge cases', () => {
     it('renders subtitle with playtime-style format', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Game"
                 coverUrl={null}
                 subtitle="42h 30m"
@@ -86,7 +83,6 @@ describe('GameRowPill — cover image accessibility', () => {
     it('img alt text matches the game name', () => {
         renderPill(
             <GameRowPill
-                gameId={5}
                 name="Hollow Knight"
                 coverUrl="https://example.com/hk.jpg"
             />,
@@ -98,7 +94,6 @@ describe('GameRowPill — cover image accessibility', () => {
     it('img has loading=lazy attribute', () => {
         renderPill(
             <GameRowPill
-                gameId={5}
                 name="Hollow Knight"
                 coverUrl="https://example.com/hk.jpg"
             />,
@@ -116,7 +111,6 @@ describe('GameRowPill — link href', () => {
     it('renders as a link with game-detail href', () => {
         renderPill(
             <GameRowPill
-                gameId={10}
                 name="Deep Rock"
                 coverUrl={null}
                 href="/games/10"
@@ -129,7 +123,6 @@ describe('GameRowPill — link href', () => {
     it('contains the game name inside the link', () => {
         renderPill(
             <GameRowPill
-                gameId={10}
                 name="Deep Rock"
                 coverUrl={null}
                 href="/games/10"
@@ -141,7 +134,7 @@ describe('GameRowPill — link href', () => {
 
     it('renders as a div (no link role) when href is not provided', () => {
         renderPill(
-            <GameRowPill gameId={1} name="Solo Game" coverUrl={null} />,
+            <GameRowPill name="Solo Game" coverUrl={null} />,
         );
         expect(screen.queryByRole('link')).not.toBeInTheDocument();
     });
@@ -152,7 +145,7 @@ describe('GameRowPill — link href', () => {
 describe('GameRowPill — placeholder when no cover', () => {
     it('shows "?" placeholder when coverUrl is null', () => {
         renderPill(
-            <GameRowPill gameId={1} name="Elden Ring" coverUrl={null} />,
+            <GameRowPill name="Elden Ring" coverUrl={null} />,
         );
         expect(screen.getByText('?')).toBeInTheDocument();
     });
@@ -160,7 +153,6 @@ describe('GameRowPill — placeholder when no cover', () => {
     it('does not show "?" when coverUrl is provided', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Elden Ring"
                 coverUrl="https://example.com/cover.jpg"
             />,
@@ -175,7 +167,6 @@ describe('GameRowPill — cover + subtitle combination', () => {
     it('renders both cover image and subtitle when both provided', () => {
         renderPill(
             <GameRowPill
-                gameId={1}
                 name="Valheim"
                 coverUrl="https://example.com/valheim.jpg"
                 subtitle="200h played"

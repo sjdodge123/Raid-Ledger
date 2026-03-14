@@ -25,6 +25,50 @@ function WatchedGamesLoading() {
     );
 }
 
+/** SVG heart icon for the empty state. */
+function EmptyHeartIcon() {
+    return (
+        <svg
+            className="w-12 h-12 mx-auto mb-3 text-dim"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+        >
+            <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+            />
+        </svg>
+    );
+}
+
+/** Browse games CTA link. */
+function BrowseGamesLink() {
+    return (
+        <Link
+            to="/games"
+            className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+        >
+            Browse the game library
+            <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+            >
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                />
+            </svg>
+        </Link>
+    );
+}
+
 function WatchedGamesEmpty() {
     return (
         <div className="bg-surface border border-edge-subtle rounded-xl p-6">
@@ -32,43 +76,24 @@ function WatchedGamesEmpty() {
                 My Watched Games
             </h2>
             <div className="text-center py-8">
-                <svg
-                    className="w-12 h-12 mx-auto mb-3 text-dim"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                    />
-                </svg>
+                <EmptyHeartIcon />
                 <p className="text-muted mb-3">
                     You haven't hearted any games yet.
                 </p>
-                <Link
-                    to="/games"
-                    className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
-                >
-                    Browse the game library
-                    <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 5l7 7-7 7"
-                        />
-                    </svg>
-                </Link>
+                <BrowseGamesLink />
             </div>
         </div>
+    );
+}
+
+/** Save button label with optional spinner. */
+function SaveButtonLabel({ isSaving }: { isSaving: boolean }) {
+    if (!isSaving) return <>Save Changes</>;
+    return (
+        <>
+            <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+            Saving...
+        </>
     );
 }
 
@@ -97,14 +122,7 @@ function SaveBar({
                 disabled={isSaving}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-medium rounded-lg transition-colors text-sm"
             >
-                {isSaving ? (
-                    <>
-                        <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
-                        Saving...
-                    </>
-                ) : (
-                    'Save Changes'
-                )}
+                <SaveButtonLabel isSaving={isSaving} />
             </button>
         </div>
     );
@@ -141,20 +159,9 @@ function useWatchedGamesDirty(
     }, [localIds, serverIds]);
 }
 
-function useWatchedGamesState() {
-    const { user } = useAuth();
-    const { data: heartedData, isLoading } = useUserHeartedGames(user?.id);
-    const queryClient = useQueryClient();
-    const serverGames = useMemo(
-        () => heartedData?.data ?? [],
-        [heartedData],
-    );
-    const serverIds = useMemo(
-        () => new Set(serverGames.map((g) => g.id)),
-        [serverGames],
-    );
+/** Toggle state: local selection set, dirty detection, toggle handler. */
+function useWatchedToggleState(serverIds: Set<number>) {
     const [localIds, setLocalIds] = useState<Set<number> | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
     const effectiveIds = localIds ?? serverIds;
     const isDirty = useWatchedGamesDirty(localIds, serverIds);
     const handleToggle = useCallback(
@@ -168,6 +175,19 @@ function useWatchedGamesState() {
         },
         [serverIds],
     );
+    const handleReset = useCallback(() => setLocalIds(null), []);
+    return { localIds, effectiveIds, isDirty, handleToggle, handleReset, setLocalIds };
+}
+
+/** Save action: persist removed hearts and invalidate queries. */
+function useWatchedSaveAction(
+    serverIds: Set<number>,
+    effectiveIds: Set<number>,
+    isDirty: boolean,
+    resetLocal: () => void,
+) {
+    const queryClient = useQueryClient();
+    const [isSaving, setIsSaving] = useState(false);
     const handleSave = useCallback(async () => {
         if (!isDirty || isSaving) return;
         setIsSaving(true);
@@ -175,30 +195,34 @@ function useWatchedGamesState() {
             await removeUnheartedGames(
                 [...serverIds].filter((id) => !effectiveIds.has(id)),
             );
-            queryClient.invalidateQueries({
-                queryKey: ['userHeartedGames'],
-            });
-            queryClient.invalidateQueries({
-                queryKey: ['games', 'interest'],
-            });
-            queryClient.invalidateQueries({
-                queryKey: ['games', 'discover'],
-            });
-            setLocalIds(null);
+            queryClient.invalidateQueries({ queryKey: ['userHeartedGames'] });
+            queryClient.invalidateQueries({ queryKey: ['games', 'interest'] });
+            queryClient.invalidateQueries({ queryKey: ['games', 'discover'] });
+            resetLocal();
         } finally {
             setIsSaving(false);
         }
-    }, [isDirty, isSaving, serverIds, effectiveIds, queryClient]);
+    }, [isDirty, isSaving, serverIds, effectiveIds, queryClient, resetLocal]);
+    return { isSaving, handleSave };
+}
+
+function useWatchedGamesState() {
+    const { user } = useAuth();
+    const { data: heartedData, isLoading } = useUserHeartedGames(user?.id);
+    const serverGames = useMemo(() => heartedData?.data ?? [], [heartedData]);
+    const serverIds = useMemo(() => new Set(serverGames.map((g) => g.id)), [serverGames]);
+    const toggle = useWatchedToggleState(serverIds);
+    const save = useWatchedSaveAction(serverIds, toggle.effectiveIds, toggle.isDirty, () => toggle.setLocalIds(null));
 
     return {
         serverGames,
         isLoading,
-        effectiveIds,
-        isDirty,
-        isSaving,
-        handleToggle,
-        handleReset: useCallback(() => setLocalIds(null), []),
-        handleSave,
+        effectiveIds: toggle.effectiveIds,
+        isDirty: toggle.isDirty,
+        isSaving: save.isSaving,
+        handleToggle: toggle.handleToggle,
+        handleReset: toggle.handleReset,
+        handleSave: save.handleSave,
     };
 }
 
@@ -223,6 +247,23 @@ function WatchedGameItem({
     );
 }
 
+/** Header with title and save bar. */
+function WatchedGamesHeader({ state }: { state: ReturnType<typeof useWatchedGamesState> }) {
+    return (
+        <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-foreground">
+                My Watched Games
+            </h2>
+            <SaveBar
+                isDirty={state.isDirty}
+                isSaving={state.isSaving}
+                onReset={state.handleReset}
+                onSave={state.handleSave}
+            />
+        </div>
+    );
+}
+
 export function MyWatchedGamesSection() {
     const s = useWatchedGamesState();
 
@@ -231,17 +272,7 @@ export function MyWatchedGamesSection() {
 
     return (
         <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-foreground">
-                    My Watched Games
-                </h2>
-                <SaveBar
-                    isDirty={s.isDirty}
-                    isSaving={s.isSaving}
-                    onReset={s.handleReset}
-                    onSave={s.handleSave}
-                />
-            </div>
+            <WatchedGamesHeader state={s} />
             <p className="text-sm text-muted mb-5">
                 Click a game to toggle your interest. Changes are saved when you
                 click "Save Changes".

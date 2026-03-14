@@ -85,6 +85,28 @@ function buildCardClasses(props: UnifiedGameCardProps): string {
     return `${base} border border-edge/50 hover:border-emerald-500/50 ${hover} ${sizing}`.trim();
 }
 
+/** Genre + price badge row below the card title. */
+function CardBadgeRow({
+    primaryGenre,
+    pricing,
+}: {
+    primaryGenre: string | null;
+    pricing: ItadGamePricingDto | null | undefined;
+}): JSX.Element {
+    return (
+        <div className="flex items-center gap-1.5 mt-1">
+            {primaryGenre && <GenreBadge label={primaryGenre} />}
+            <PriceBadge pricing={pricing ?? null} />
+        </div>
+    );
+}
+
+/** Cover image or placeholder. */
+function CardCover({ game }: { game: GameProps }): JSX.Element {
+    if (game.coverUrl) return <CoverImage src={game.coverUrl} alt={game.name} />;
+    return <CoverPlaceholder />;
+}
+
 /** Inner content: cover image, overlays, badges. */
 function CardCoverContent({
     game,
@@ -105,45 +127,46 @@ function CardCoverContent({
 }): JSX.Element {
     return (
         <div className="relative aspect-[3/4] bg-panel">
-            {game.coverUrl ? (
-                <CoverImage src={game.coverUrl} alt={game.name} />
-            ) : (
-                <CoverPlaceholder />
-            )}
+            <CardCover game={game} />
             {showRating && rating != null && <RatingBadge rating={rating} />}
             <GradientOverlay />
             <div className="absolute bottom-0 left-0 right-0 p-3">
                 <CardTitle name={game.name} />
-                <div className="flex items-center gap-1.5 mt-1">
-                    {primaryGenre && <GenreBadge label={primaryGenre} />}
-                    <PriceBadge pricing={pricing ?? null} />
-                </div>
+                <CardBadgeRow primaryGenre={primaryGenre} pricing={pricing} />
             </div>
             {variant === 'toggle' && <HeartIcon selected={selected} />}
         </div>
     );
 }
 
-/** Link variant wrapper with heart toggle. */
-function LinkCard(props: LinkVariantProps): JSX.Element {
-    const { game, compact, pricing, showRating, showInfoBar } = props;
+/** Resolve the primary genre label from game data. */
+function resolvePrimaryGenre(game: GameProps): string | null {
+    return game.genres?.[0] ? GENRE_MAP[game.genres[0]] ?? null : null;
+}
+
+/** Heart toggle overlay for link-variant cards. */
+function HeartToggleSection({ gameId }: { gameId: number }): JSX.Element | null {
     const { isAuthenticated } = useAuth();
     const { wantToPlay, count, toggle, isToggling } = useWantToPlay(
-        isAuthenticated ? game.id : undefined,
+        isAuthenticated ? gameId : undefined,
     );
-    const rating = resolveRating(game);
-    const primaryGenre = game.genres?.[0]
-        ? GENRE_MAP[game.genres[0]] ?? null
-        : null;
-    const primaryMode = game.gameModes?.[0]
-        ? MODE_MAP[game.gameModes[0]] ?? null
-        : null;
-
+    if (!isAuthenticated) return null;
     const handleHeart = (e: React.MouseEvent): void => {
         e.preventDefault();
         e.stopPropagation();
-        if (!isToggling && isAuthenticated) toggle(!wantToPlay);
+        if (!isToggling) toggle(!wantToPlay);
     };
+    return <HeartButton wantToPlay={wantToPlay} count={count} onClick={handleHeart} />;
+}
+
+/** Link variant wrapper with heart toggle. */
+function LinkCard(props: LinkVariantProps): JSX.Element {
+    const { game, compact, pricing, showRating, showInfoBar } = props;
+    const rating = resolveRating(game);
+    const primaryGenre = resolvePrimaryGenre(game);
+    const primaryMode = game.gameModes?.[0]
+        ? MODE_MAP[game.gameModes[0]] ?? null
+        : null;
 
     return (
         <Link
@@ -159,13 +182,7 @@ function LinkCard(props: LinkVariantProps): JSX.Element {
                 variant="link"
                 selected={false}
             />
-            {isAuthenticated && (
-                <HeartButton
-                    wantToPlay={wantToPlay}
-                    count={count}
-                    onClick={handleHeart}
-                />
-            )}
+            <HeartToggleSection gameId={game.id} />
             {showInfoBar && !compact && (
                 <InfoBar rating={rating} primaryMode={primaryMode} />
             )}
@@ -177,9 +194,7 @@ function LinkCard(props: LinkVariantProps): JSX.Element {
 function ToggleCard(props: ToggleVariantProps): JSX.Element {
     const { game, pricing, showRating, selected, onToggle } = props;
     const rating = resolveRating(game);
-    const primaryGenre = game.genres?.[0]
-        ? GENRE_MAP[game.genres[0]] ?? null
-        : null;
+    const primaryGenre = resolvePrimaryGenre(game);
 
     const handleKeyDown = (e: React.KeyboardEvent): void => {
         if (e.key === 'Enter' || e.key === ' ') {

@@ -93,28 +93,36 @@ export function GenreBadge({
     );
 }
 
+/** Heart SVG shared by HeartIcon and HeartButton. */
+function HeartSvg({ active }: { active: boolean }): JSX.Element {
+    return (
+        <svg
+            className={`w-5 h-5 transition-colors ${active ? 'text-red-400 fill-red-400' : 'text-white/70'}`}
+            fill={active ? 'currentColor' : 'none'}
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+        >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={HEART_PATH} />
+        </svg>
+    );
+}
+
 /** Heart icon overlay (non-interactive, for toggle variant). */
-export function HeartIcon({
-    selected,
-}: {
-    selected: boolean;
-}): JSX.Element {
+export function HeartIcon({ selected }: { selected: boolean }): JSX.Element {
     return (
         <div className="absolute top-1 left-1 flex items-center justify-center w-11 h-11 rounded-full bg-black/50">
-            <svg
-                className={`w-5 h-5 transition-colors ${selected ? 'text-red-400 fill-red-400' : 'text-white/70'}`}
-                fill={selected ? 'currentColor' : 'none'}
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-            >
-                <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d={HEART_PATH}
-                />
-            </svg>
+            <HeartSvg active={selected} />
         </div>
+    );
+}
+
+/** Small count badge overlay for the heart button. */
+function CountBadge({ count }: { count: number }): JSX.Element | null {
+    if (count <= 0) return null;
+    return (
+        <span className="absolute -bottom-0.5 -right-0.5 text-[10px] font-bold text-white/90 bg-black/70 rounded-full px-1.5 py-0.5">
+            {count}
+        </span>
     );
 }
 
@@ -128,35 +136,32 @@ export function HeartButton({
     count: number;
     onClick: (e: React.MouseEvent) => void;
 }): JSX.Element {
+    const label = wantToPlay ? 'Remove from want to play' : 'Add to want to play';
     return (
         <button
             onClick={onClick}
             className="absolute top-1 left-1 flex items-center justify-center w-11 h-11 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
-            aria-label={
-                wantToPlay
-                    ? 'Remove from want to play'
-                    : 'Add to want to play'
-            }
+            aria-label={label}
         >
-            <svg
-                className={`w-5 h-5 transition-colors ${wantToPlay ? 'text-red-400 fill-red-400' : 'text-white/70'}`}
-                fill={wantToPlay ? 'currentColor' : 'none'}
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-            >
-                <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d={HEART_PATH}
-                />
-            </svg>
-            {count > 0 && (
-                <span className="absolute -bottom-0.5 -right-0.5 text-[10px] font-bold text-white/90 bg-black/70 rounded-full px-1.5 py-0.5">
-                    {count}
-                </span>
-            )}
+            <HeartSvg active={wantToPlay} />
+            <CountBadge count={count} />
         </button>
+    );
+}
+
+/** Star icon with numeric rating. */
+function StarRating({ rating }: { rating: number }): JSX.Element {
+    return (
+        <span className="flex items-center gap-0.5">
+            <svg
+                className="w-3 h-3 text-yellow-400"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+            >
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+            </svg>
+            {Math.round(rating)}
+        </span>
     );
 }
 
@@ -171,18 +176,7 @@ export function InfoBar({
     return (
         <div className="p-2.5 space-y-1">
             <div className="flex items-center gap-2 text-xs text-muted">
-                {rating != null && rating > 0 && (
-                    <span className="flex items-center gap-0.5">
-                        <svg
-                            className="w-3 h-3 text-yellow-400"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                        >
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                        {Math.round(rating)}
-                    </span>
-                )}
+                {rating != null && rating > 0 && <StarRating rating={rating} />}
                 {primaryMode && (
                     <>
                         <span className="text-dim">&middot;</span>

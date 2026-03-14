@@ -31,7 +31,6 @@ export function HeartedGameCard({
 }): JSX.Element {
   return (
     <GameRowPill
-      gameId={game.id}
       name={game.name}
       coverUrl={game.coverUrl}
       href={`/games/${game.id}`}
