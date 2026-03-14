@@ -43,12 +43,14 @@ export class OllamaProvider implements LlmProvider {
     return url || AI_DEFAULTS.ollamaUrl;
   }
 
-  /** Check if the Ollama server is reachable. */
+  /** Check if Ollama is reachable AND has at least one model. */
   async isAvailable(): Promise<boolean> {
     try {
       const baseUrl = await this.getBaseUrl();
-      await fetchOllama(baseUrl, '/api/tags', { timeoutMs: 5_000 });
-      return true;
+      const data = await fetchOllama<{ models: OllamaRawModel[] }>(
+        baseUrl, '/api/tags', { timeoutMs: 5_000 },
+      );
+      return (data.models ?? []).length > 0;
     } catch {
       return false;
     }
