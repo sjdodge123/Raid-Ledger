@@ -57,17 +57,29 @@ export class OllamaDockerService {
   }
 
   private findComposeFile(): string {
-    return process.env['DOCKER_COMPOSE_FILE']
-      ?? resolvePath(process.cwd(), 'docker-compose.yml');
+    if (process.env['DOCKER_COMPOSE_FILE']) {
+      return process.env['DOCKER_COMPOSE_FILE'];
+    }
+    // __dirname is api/src/ai/providers — resolve up to repo root
+    return resolvePath(__dirname, '..', '..', '..', '..', 'docker-compose.yml');
   }
 
-  /** spawn-based exec — streams stdout/stderr, no buffer limit. */
+  /** spawn-based exec — ignores stdout, captures stderr for errors. */
   private spawnDetached(cmd: string, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args, { stdio: 'ignore' });
+      const child = spawn(cmd, args, {
+        stdio: ['ignore', 'ignore', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr?.on('data', (d: Buffer) => {
+        stderr += d.toString().slice(0, 2000);
+      });
       child.on('close', (code) => {
         if (code === 0) resolve();
-        else reject(new Error(`${cmd} exited with code ${code}`));
+        else {
+          this.logger.error(`Docker failed (code ${code}): ${stderr}`);
+          reject(new Error(stderr || `${cmd} exited with code ${code}`));
+        }
       });
       child.on('error', reject);
     });

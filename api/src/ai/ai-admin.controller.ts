@@ -76,4 +76,19 @@ export class AiAdminController {
     const stats = await this.logService.getUsageStats(thirtyDaysAgo);
     return buildUsageResponse(stats);
   }
+
+  /** POST /admin/ai/test-chat — send a test message to the active LLM. */
+  @Post('test-chat')
+  async testChat(): Promise<{ success: boolean; response: string; latencyMs: number }> {
+    try {
+      const result = await this.llmService.chat(
+        { messages: [{ role: 'user', content: 'Say hello in one sentence.' }] },
+        { feature: 'admin-test', maxResponseLength: 200 },
+      );
+      return { success: true, response: result.content, latencyMs: result.latencyMs };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      return { success: false, response: msg, latencyMs: 0 };
+    }
+  }
 }

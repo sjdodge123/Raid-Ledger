@@ -107,3 +107,13 @@ export function useOllamaStop() {
         onSuccess: () => { void qc.invalidateQueries({ queryKey: [...PROVIDERS_KEY] }); },
     });
 }
+
+/** Mutation to test chat with the active LLM. */
+export function useTestChat() {
+    return useMutation<{ success: boolean; response: string; latencyMs: number }, Error>({
+        mutationFn: () =>
+            adminFetch('/admin/ai/test-chat', {
+                method: 'POST',
+            }, 'Failed to test LLM'),
+    });
+}
