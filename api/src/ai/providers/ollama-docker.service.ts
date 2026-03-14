@@ -64,24 +64,22 @@ export class OllamaDockerService {
     return resolvePath(__dirname, '..', '..', '..', '..', 'docker-compose.yml');
   }
 
-  /** spawn-based exec — ignores stdout, captures stderr for errors. */
+  /** spawn with fully detached stdio — no buffering at all. */
   private spawnDetached(cmd: string, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args, {
-        stdio: ['ignore', 'ignore', 'pipe'],
-      });
-      let stderr = '';
-      child.stderr?.on('data', (d: Buffer) => {
-        stderr += d.toString().slice(0, 2000);
-      });
+      const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
+      child.unref();
       child.on('close', (code) => {
         if (code === 0) resolve();
         else {
-          this.logger.error(`Docker failed (code ${code}): ${stderr}`);
-          reject(new Error(stderr || `${cmd} exited with code ${code}`));
+          this.logger.error(`Docker compose exited with code ${code}`);
+          reject(new Error(`${cmd} exited with code ${code}`));
         }
       });
-      child.on('error', reject);
+      child.on('error', (err) => {
+        this.logger.error(`Docker compose error: ${err.message}`);
+        reject(err);
+      });
     });
   }
 
