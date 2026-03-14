@@ -6,7 +6,7 @@ import { resolve as resolvePath } from 'path';
 export type ContainerStatus = 'running' | 'stopped' | 'not-found';
 
 const CONTAINER_NAME = 'raid-ledger-ollama';
-const EXEC_TIMEOUT_MS = 60_000;
+const EXEC_TIMEOUT_MS = 300_000; // 5 min — image pulls can be slow
 
 @Injectable()
 export class OllamaDockerService {

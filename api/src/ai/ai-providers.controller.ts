@@ -6,6 +6,7 @@ import {
   Body,
   UseGuards,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
@@ -93,37 +94,48 @@ export class AiProvidersController {
     return { success: true };
   }
 
-  /** POST /admin/ai/providers/ollama/setup — Docker setup + model pull. */
+  /** POST /admin/ai/providers/ollama/setup — Start async Docker setup. */
   @Post('ollama/setup')
   async setupOllama(): Promise<OllamaSetupResult> {
-    const available = await this.docker.isDockerAvailable();
-    if (!available) {
+    const dockerOk = await this.docker.isDockerAvailable();
+    if (!dockerOk) {
       return { step: 'error', message: 'Docker is not available', success: false };
     }
+    if (this.ollamaSetupRunning) {
+      return { step: 'starting', message: 'Setup already in progress', success: true };
+    }
+    this.ollamaSetupRunning = true;
+    this.runOllamaSetup().finally(() => { this.ollamaSetupRunning = false; });
+    return { step: 'starting', message: 'Setup started — poll providers for status', success: true };
+  }
+
+  private ollamaSetupRunning = false;
+
+  private async runOllamaSetup(): Promise<void> {
     const status = await this.docker.getContainerStatus();
     if (status !== 'running') {
       await this.docker.startContainer();
       await this.waitForOllamaHealth();
     }
-    await this.ollamaModel.pullModel(AI_DEFAULTS.model);
-    return { step: 'ready', message: 'Ollama is ready', success: true };
-  }
-
-  /** Wait for the Ollama API to become healthy after container start. */
-  private async waitForOllamaHealth(): Promise<void> {
-    const maxAttempts = 15;
-    const delayMs = 2000;
-    for (let i = 0; i < maxAttempts; i++) {
-      const provider = this.registry.resolve('ollama');
-      if (provider) {
-        try {
-          const ok = await provider.isAvailable();
-          if (ok) return;
-        } catch { /* not ready yet */ }
-      }
-      await new Promise((r) => setTimeout(r, delayMs));
+    try {
+      await this.ollamaModel.pullModel(AI_DEFAULTS.model);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Ollama model pull failed: ${msg}`);
     }
   }
+
+  private async waitForOllamaHealth(): Promise<void> {
+    for (let i = 0; i < 30; i++) {
+      const provider = this.registry.resolve('ollama');
+      try {
+        if (provider && (await provider.isAvailable())) return;
+      } catch { /* not ready yet */ }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+
+  private readonly logger = new Logger(AiProvidersController.name);
 
   /** POST /admin/ai/providers/ollama/stop — Stop Ollama container. */
   @Post('ollama/stop')
