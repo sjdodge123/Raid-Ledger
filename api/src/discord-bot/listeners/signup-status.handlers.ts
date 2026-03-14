@@ -84,6 +84,7 @@ async function handleUnlinkedTentative(
   });
   await interaction.editReply({
     content: `You're marked as **tentative**.${benchSuffix(result.assignedSlot)}`,
+    embeds: [],
   });
   await deps.updateEmbedSignupCount(eventId);
 }
