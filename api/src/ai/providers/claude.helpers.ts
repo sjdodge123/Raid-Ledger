@@ -48,7 +48,10 @@ export async function fetchClaude<T>(
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Anthropic ${path}: HTTP ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Anthropic ${path}: HTTP ${res.status} — ${body}`);
+  }
   return (await res.json()) as T;
 }
 
