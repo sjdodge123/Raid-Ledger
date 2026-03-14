@@ -64,8 +64,43 @@ async function queryActiveSignups(
       role: r.role ?? null,
       preferredRoles: r.preferredRoles,
       status: r.status ?? null,
-      className: r.className ?? null,
+      className: resolveCharacterClass(r),
     }));
+}
+
+/** Resolve character class: direct character first, then main character fallback. */
+export function resolveCharacterClass(row: {
+  characterClass: string | null;
+  userId: number | null;
+  mainCharacterClass: string | null;
+}): string | null {
+  if (row.characterClass) return row.characterClass;
+  if (row.userId && row.mainCharacterClass) return row.mainCharacterClass;
+  return null;
+}
+
+/** Subquery: resolve main character class for a user (ROK-824 fallback). */
+const mainCharClassSubquery = sql<string | null>`(
+  SELECT c2.class FROM characters c2
+  WHERE c2.user_id = ${schema.eventSignups.userId}
+    AND c2.is_main = true
+  LIMIT 1
+)`;
+
+/** Build the column selection for signup row queries. */
+function signupRowColumns() {
+  return {
+    discordId: sql<
+      string | null
+    >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+    username: schema.users.username,
+    userId: schema.eventSignups.userId,
+    role: schema.rosterAssignments.role,
+    status: schema.eventSignups.status,
+    preferredRoles: schema.eventSignups.preferredRoles,
+    characterClass: schema.characters.class,
+    mainCharacterClass: mainCharClassSubquery,
+  };
 }
 
 /** Raw query for signup rows with joined roster/character data. */
@@ -74,16 +109,7 @@ async function querySignupRows(
   eventId: number,
 ) {
   return db
-    .select({
-      discordId: sql<
-        string | null
-      >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
-      username: schema.users.username,
-      role: schema.rosterAssignments.role,
-      status: schema.eventSignups.status,
-      preferredRoles: schema.eventSignups.preferredRoles,
-      className: schema.characters.class,
-    })
+    .select(signupRowColumns())
     .from(schema.eventSignups)
     .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
     .leftJoin(
