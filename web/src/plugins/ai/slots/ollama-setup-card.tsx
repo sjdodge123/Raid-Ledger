@@ -53,7 +53,6 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
 
     const handleSetup = async () => {
         setSetting(true);
-        setStepIdx(0);
         try {
             await setup.mutateAsync();
         } catch {
@@ -66,6 +65,7 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
         try {
             await stop.mutateAsync();
             toast.success('Ollama stopped');
+            void qc.invalidateQueries({ queryKey: ['admin', 'ai'] });
         } catch { toast.error('Failed to stop Ollama'); }
     };
 
