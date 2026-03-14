@@ -37,6 +37,7 @@ import { EnrichmentsModule } from './enrichments/enrichments.module';
 import { SteamModule } from './steam/steam.module';
 import { ItadModule } from './itad/itad.module';
 import { LogsModule } from './logs/logs.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { LogsModule } from './logs/logs.module';
     SteamModule,
     ItadModule,
     LogsModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [
