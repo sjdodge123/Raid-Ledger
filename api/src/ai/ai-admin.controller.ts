@@ -92,6 +92,10 @@ export class AiAdminController {
   /** POST /admin/ai/test-chat — send a test message to the active LLM. */
   @Post('test-chat')
   async testChat(): Promise<{ success: boolean; response: string; latencyMs: number }> {
+    const isUp = await this.withTimeout(this.llmService.isAvailable(), false);
+    if (!isUp) {
+      return { success: false, response: 'No AI provider is currently available. Start or configure a provider first.', latencyMs: 0 };
+    }
     try {
       const result = await this.llmService.chat(
         { messages: [{ role: 'user', content: 'Say hello in one sentence.' }] },

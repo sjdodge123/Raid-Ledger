@@ -154,7 +154,8 @@ export function CloudProviderCard({ provider }: CloudProviderCardProps) {
 }
 
 function ProviderBadge({ provider }: { provider: AiProviderInfoDto }) {
-    if (provider.active) return <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Active</span>;
+    if (provider.active && provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Active</span>;
+    if (provider.active && !provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Selected · Offline</span>;
     if (provider.configured) return <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">Configured</span>;
     return <span className="text-xs px-2 py-0.5 rounded-full bg-dim/20 text-muted">Not Configured</span>;
 }
