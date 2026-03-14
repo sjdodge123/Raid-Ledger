@@ -55,7 +55,7 @@ export function useAiProviders() {
         queryKey: [...PROVIDERS_KEY],
         queryFn: () => adminFetch('/admin/ai/providers'),
         enabled: !!getAuthToken(),
-        staleTime: 30_000,
+        staleTime: 10_000,
     });
 }
 
