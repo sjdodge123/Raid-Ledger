@@ -23,32 +23,11 @@ export const AI_MANIFEST: PluginManifest = {
   ],
   integrations: [
     {
-      key: 'ollama',
-      name: 'Ollama (Local)',
-      description: 'Self-hosted LLM inference via Ollama.',
-      credentialKeys: [AI_SETTING_KEYS.OLLAMA_URL],
-      credentialLabels: ['Ollama URL'],
-    },
-    {
-      key: 'openai',
-      name: 'OpenAI',
-      description: 'Cloud-hosted LLM inference via OpenAI.',
-      credentialKeys: [AI_SETTING_KEYS.OPENAI_API_KEY],
-      credentialLabels: ['API Key'],
-    },
-    {
-      key: 'claude',
-      name: 'Claude (Anthropic)',
-      description: 'Cloud-hosted LLM inference via Anthropic.',
-      credentialKeys: [AI_SETTING_KEYS.CLAUDE_API_KEY],
-      credentialLabels: ['API Key'],
-    },
-    {
-      key: 'google',
-      name: 'Google (Gemini)',
-      description: 'Cloud-hosted LLM inference via Google Gemini.',
-      credentialKeys: [AI_SETTING_KEYS.GOOGLE_API_KEY],
-      credentialLabels: ['API Key'],
+      key: 'ai',
+      name: 'AI Features',
+      description: 'Multi-provider LLM inference — configure providers in the AI plugin panel.',
+      credentialKeys: [AI_SETTING_KEYS.PROVIDER],
+      credentialLabels: ['Active Provider'],
     },
   ],
 };
