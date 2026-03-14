@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { getPluginBadge } from '../../plugin-registry';
 import { IntegrationCard } from '../../../components/admin/IntegrationCard';
-import { useAiProviders, useAiStatus } from '../../../hooks/admin/use-ai-settings';
+import { useAiProviders, useAiStatus, useTestChat } from '../../../hooks/admin/use-ai-settings';
 import { OllamaSetupCard } from './ollama-setup-card';
 import { CloudProviderCard } from './cloud-provider-card';
 import { AiFeatureToggles } from './ai-feature-toggles';
@@ -67,9 +68,52 @@ export function AiPluginContent({ pluginSlug }: { pluginSlug?: string }) {
                         <ProviderGrid providers={providers} />
                     </>
                 )}
+                {available && <TestChatSection />}
                 <AiFeatureToggles disabled={!available} />
                 <AiUsageStats />
             </div>
         </IntegrationCard>
+    );
+}
+
+/** Test chat section — sends a test message to the active LLM. */
+function TestChatSection() {
+    const testChat = useTestChat();
+    const [result, setResult] = useState<{ success: boolean; response: string; latencyMs: number } | null>(null);
+
+    const handleTest = async () => {
+        setResult(null);
+        try {
+            const res = await testChat.mutateAsync();
+            setResult(res);
+        } catch {
+            setResult({ success: false, response: 'Request failed', latencyMs: 0 });
+        }
+    };
+
+    return (
+        <div className="space-y-2">
+            <h3 className="text-sm font-medium text-secondary">Test LLM</h3>
+            <div className="flex items-center gap-3">
+                <button type="button" onClick={handleTest} disabled={testChat.isPending}
+                    className="py-2 px-4 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 text-foreground font-semibold rounded-lg transition-colors text-sm">
+                    {testChat.isPending ? 'Testing...' : 'Send Test Message'}
+                </button>
+                {result && (
+                    <span className={`text-xs ${result.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {result.latencyMs > 0 ? `${result.latencyMs}ms` : ''}
+                    </span>
+                )}
+            </div>
+            {result && (
+                <div className={`text-sm p-3 rounded-lg border ${
+                    result.success
+                        ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300'
+                        : 'bg-red-500/5 border-red-500/20 text-red-300'
+                }`}>
+                    {result.response}
+                </div>
+            )}
+        </div>
     );
 }
