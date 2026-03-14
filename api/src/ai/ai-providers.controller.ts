@@ -98,18 +98,31 @@ export class AiProvidersController {
   async setupOllama(): Promise<OllamaSetupResult> {
     const available = await this.docker.isDockerAvailable();
     if (!available) {
-      return {
-        step: 'error',
-        message: 'Docker is not available',
-        success: false,
-      };
+      return { step: 'error', message: 'Docker is not available', success: false };
     }
     const status = await this.docker.getContainerStatus();
     if (status !== 'running') {
       await this.docker.startContainer();
+      await this.waitForOllamaHealth();
     }
     await this.ollamaModel.pullModel(AI_DEFAULTS.model);
     return { step: 'ready', message: 'Ollama is ready', success: true };
+  }
+
+  /** Wait for the Ollama API to become healthy after container start. */
+  private async waitForOllamaHealth(): Promise<void> {
+    const maxAttempts = 15;
+    const delayMs = 2000;
+    for (let i = 0; i < maxAttempts; i++) {
+      const provider = this.registry.resolve('ollama');
+      if (provider) {
+        try {
+          const ok = await provider.isAvailable();
+          if (ok) return;
+        } catch { /* not ready yet */ }
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
   }
 
   /** POST /admin/ai/providers/ollama/stop — Stop Ollama container. */
