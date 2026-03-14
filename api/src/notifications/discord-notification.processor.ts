@@ -93,13 +93,41 @@ export class DiscordNotificationProcessor extends WorkerHost {
   }
 }
 
+/** Maximum length for mobile push notification content. */
+const MAX_CONTENT_LENGTH = 150;
+
 /**
- * Build a plaintext content string for Discord push notification previews (ROK-756).
+ * Build a plaintext content string for Discord push notification previews (ROK-756, ROK-822).
  * Discord mobile push notifications show the message `content` field as-is,
  * without rendering Discord-specific tokens (timestamps, channel mentions, markdown).
  * By providing a clean plaintext `content`, the push notification is human-readable
  * while the rich embed still renders normally in the Discord client.
  */
 export function buildPlaintextContent(title: string, message: string): string {
-  return `${title}\n${message}`;
+  const safeTitle = sanitizeValue(title);
+  const safeMessage = sanitizeValue(message);
+  const cleaned = stripDiscordMarkup(`${safeTitle}\n${safeMessage}`).trim();
+  if (cleaned.length <= MAX_CONTENT_LENGTH) return cleaned;
+  return cleaned.slice(0, MAX_CONTENT_LENGTH - 3) + '...';
+}
+
+/** Safely convert a value to a string, guarding against null/undefined/objects. */
+function sanitizeValue(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return `${value}`;
+  return '';
+}
+
+/** Strip Discord markup, markdown formatting, and collapse whitespace. */
+function stripDiscordMarkup(text: string): string {
+  return text
+    .replace(/<t:\d+(?::[a-zA-Z])?>/g, '')
+    .replace(/<#\d+>/g, '#channel')
+    .replace(/<@&\d+>/g, '@role')
+    .replace(/<@!?\d+>/g, '@user')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/ {2,}/g, ' ');
 }
