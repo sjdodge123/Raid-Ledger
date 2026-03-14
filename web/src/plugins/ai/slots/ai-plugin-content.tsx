@@ -19,8 +19,9 @@ function AiIcon() {
 /** Active provider indicator shown in the header. */
 function ActiveIndicator({ providers }: { providers: AiProviderInfoDto[] }) {
     const active = providers.find((p) => p.active);
-    if (!active) return <span className="text-xs text-muted">No active provider</span>;
-    return <span className="text-xs text-emerald-400">Active: {active.displayName}</span>;
+    if (!active) return <span className="text-xs text-muted">No provider selected</span>;
+    if (!active.available) return <span className="text-xs text-amber-400">{active.displayName} (Offline)</span>;
+    return <span className="text-xs text-emerald-400">{active.displayName}</span>;
 }
 
 /** Grid of provider cards — Ollama first, then cloud providers. */
