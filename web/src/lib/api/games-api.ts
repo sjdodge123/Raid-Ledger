@@ -65,5 +65,6 @@ export async function getGamePricing(
 export async function getGamePricingBatch(
     gameIds: number[],
 ): Promise<ItadBatchPricingResponseDto> {
-    return fetchApi(`/games/pricing/batch?ids=${gameIds.join(',')}`);
+    const params = new URLSearchParams({ ids: gameIds.join(',') });
+    return fetchApi(`/games/pricing/batch?${params}`);
 }

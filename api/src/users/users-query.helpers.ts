@@ -45,8 +45,8 @@ type UserListResult = {
   total: number;
 };
 
-/** SQL expression for distinct user count in game interest queries. */
-const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})`;
+/** SQL expression for distinct user count in game interest queries (::int for consistent typing with igdb-interest.helpers). */
+const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
 
 /** Build WHERE conditions for game interest queries. */
 function buildGameInterestConditions(

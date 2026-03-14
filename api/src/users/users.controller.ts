@@ -42,7 +42,8 @@ import type { UserRole } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
 import { OperatorGuard } from '../auth/operator.guard';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
-import { parsePagination } from './users-controller.helpers';
+import { parsePagination, validateSource } from './users-controller.helpers';
+import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
 
 interface AuthenticatedRequest {
   user: { id: number; role: UserRole; impersonatedBy?: number | null };
@@ -69,6 +70,7 @@ export class UsersController {
   ): Promise<PlayersListResponseDto> {
     const { page, limit } = parsePagination(pageStr, limitStr);
     const gameId = gameIdStr ? parseInt(gameIdStr, 10) || undefined : undefined;
+    validateSource(source, HEART_SOURCES);
     const result = await this.usersService.findAll(
       page,
       limit,

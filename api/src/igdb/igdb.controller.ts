@@ -38,10 +38,8 @@ import type {
 } from '@raid-ledger/contract';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { redisSwr } from '../common/swr-cache';
-import {
-  handleSearchError,
-  fetchGameEventTypes,
-} from './igdb-controller.helpers';
+import { handleSearchError } from './igdb-controller.helpers';
+import { fetchGameEventTypes } from './igdb-event-types.helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { UserRole } from '@raid-ledger/contract';
@@ -159,7 +157,12 @@ export class IgdbController {
     return { data };
   }
 
-  /** GET /games/pricing/batch?ids=1,2,3 -- Batch pricing (ROK-800). */
+  /**
+   * GET /games/pricing/batch?ids=1,2,3 -- Batch pricing (ROK-800).
+   * Rate-limit review (ROK-807): 'search' tier (30 req/min) is adequate here.
+   * parseBatchIds caps at 100 IDs, and each ID resolves via Redis-cached ITAD
+   * lookups (SWR). Combined with the per-IP throttle, abuse potential is low.
+   */
   @RateLimit('search')
   @Get('pricing/batch')
   async batchPricing(

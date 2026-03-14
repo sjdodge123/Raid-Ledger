@@ -23,6 +23,18 @@ export function parseOrBadRequest<T>(schema: ZodSchema<T>, body: unknown): T {
   }
 }
 
+/** Validate the optional `source` query param against HEART_SOURCES. */
+export function validateSource(
+  source: string | undefined,
+  allowedSources: string[],
+): void {
+  if (source && !allowedSources.includes(source)) {
+    throw new BadRequestException(
+      `Invalid source. Must be one of: ${allowedSources.join(', ')}`,
+    );
+  }
+}
+
 /** Parse pagination query params with safe defaults. */
 export function parsePagination(
   pageStr?: string,
