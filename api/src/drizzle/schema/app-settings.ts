@@ -82,6 +82,16 @@ export const SETTING_KEYS = {
   STEAM_API_KEY: 'steam_api_key',
   /** ROK-772: IsThereAnyDeal API key for deal/price tracking */
   ITAD_API_KEY: 'itad_api_key',
+  /** ROK-542: AI provider key (e.g. 'ollama') */
+  AI_PROVIDER: 'ai_provider',
+  /** ROK-542: AI model identifier */
+  AI_MODEL: 'ai_model',
+  /** ROK-542: Ollama instance URL */
+  AI_OLLAMA_URL: 'ai_ollama_url',
+  /** ROK-542: Whether AI chat feature is enabled */
+  AI_CHAT_ENABLED: 'ai_chat_enabled',
+  /** ROK-542: Whether AI dynamic categories feature is enabled */
+  AI_DYNAMIC_CATEGORIES_ENABLED: 'ai_dynamic_categories_enabled',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

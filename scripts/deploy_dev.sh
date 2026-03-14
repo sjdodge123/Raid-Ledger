@@ -611,6 +611,7 @@ ARG_REBUILD=false
 ARG_FRESH=false
 ARG_BRANCH=""
 ARG_ACTION=""
+ARG_AI=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -652,6 +653,10 @@ while [ $# -gt 0 ]; do
             ARG_ACTION="reset-password"
             shift
             ;;
+        --ai)
+            ARG_AI=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -661,6 +666,7 @@ while [ $# -gt 0 ]; do
             echo "  --branch <name>   Switch to branch, rebuild, then start"
             echo "  --fresh           Reset DB, new admin password, restart"
             echo "  --reset-password  Reset admin password without losing data"
+            echo "  --ai              Start Ollama container (--profile ai)"
             echo "  --ci              Non-interactive mode (skip prompts, for agents)"
             echo "  --down            Stop native processes + DB/Redis containers"
             echo "  --status          Show process/container status"
@@ -707,5 +713,10 @@ case "$ARG_ACTION" in
             switch_branch "$ARG_BRANCH"
         fi
         start_dev "$ARG_REBUILD" "$ARG_FRESH"
+        if [ "$ARG_AI" = true ]; then
+            print_header "Starting Ollama (AI profile)"
+            docker compose -f "$COMPOSE_FILE" --profile ai up -d ollama
+            print_success "Ollama container started"
+        fi
         ;;
 esac

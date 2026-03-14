@@ -88,8 +88,24 @@ services:
     profiles:
       - test
 
+  # =============================================================================
+  # Ollama (self-hosted LLM inference)
+  # Profile: ai - Only started with --profile ai
+  # =============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: raid-ledger-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    profiles:
+      - ai
+
 volumes:
   db_data:
   avatar_data:
+  ollama_data:
 
 

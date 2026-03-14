@@ -35,3 +35,4 @@ export * from './schema/ad-hoc-participants';
 export * from './schema/game-interest-suppressions';
 export * from './schema/event-voice-sessions';
 export * from './schema/enrichments';
+export * from './schema/ai-request-logs';

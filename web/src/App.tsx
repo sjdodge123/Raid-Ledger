@@ -35,6 +35,7 @@ export { CHUNK_RELOAD_KEY };
 
 import './plugins/wow/register';
 import './plugins/discord/register';
+import './plugins/ai/register';
 import './App.css';
 
 /** Strip ?token= from URL after magic link consumption (ROK-657) */
