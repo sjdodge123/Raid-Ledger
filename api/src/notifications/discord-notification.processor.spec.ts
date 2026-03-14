@@ -382,4 +382,148 @@ describe('buildPlaintextContent', () => {
     expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
     expect(result).not.toMatch(/<#\d+>/);
   });
+
+  describe('ROK-822 — Discord markup stripping', () => {
+    it('strips bold markdown from message', () => {
+      const result = buildPlaintextContent(
+        'Event Reminder',
+        'Your event **Raid Night** started 5 minutes ago',
+      );
+      expect(result).toBe(
+        'Event Reminder\nYour event Raid Night started 5 minutes ago',
+      );
+    });
+
+    it('strips italic markdown from message', () => {
+      const result = buildPlaintextContent(
+        'Update',
+        'Check *your profile* for details',
+      );
+      expect(result).not.toContain('*');
+    });
+
+    it('strips channel mention markup <#channelId>', () => {
+      const result = buildPlaintextContent(
+        'Join Now',
+        'Head to <#123456789012345678> for the event',
+      );
+      expect(result).not.toMatch(/<#\d+>/);
+      expect(result).toBe('Join Now\nHead to #channel for the event');
+    });
+
+    it('strips user mention markup <@userId>', () => {
+      const result = buildPlaintextContent(
+        'Roster Update',
+        '<@987654321012345678> left the roster',
+      );
+      expect(result).not.toMatch(/<@!?\d+>/);
+      expect(result).toBe('Roster Update\n@user left the roster');
+    });
+
+    it('strips role mention markup <@&roleId>', () => {
+      const result = buildPlaintextContent(
+        'Alert',
+        'Attention <@&111222333444555666> members',
+      );
+      expect(result).not.toMatch(/<@&\d+>/);
+      expect(result).toBe('Alert\nAttention @role members');
+    });
+
+    it('strips timestamp markup <t:timestamp:format>', () => {
+      const result = buildPlaintextContent(
+        'Reminder',
+        'Event starts <t:1700000000:R> at <t:1700000000:F>',
+      );
+      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
+    });
+
+    it('strips bare timestamp markup <t:timestamp>', () => {
+      const result = buildPlaintextContent(
+        'Reminder',
+        'Event starts <t:1700000000>',
+      );
+      expect(result).not.toMatch(/<t:\d+>/);
+    });
+  });
+
+  describe('ROK-822 — null/undefined/object safety', () => {
+    it('replaces undefined title with empty string', () => {
+      const result = buildPlaintextContent(
+        undefined as unknown as string,
+        'Some message',
+      );
+      expect(result).not.toContain('undefined');
+      expect(result).toContain('Some message');
+    });
+
+    it('replaces null title with empty string', () => {
+      const result = buildPlaintextContent(
+        null as unknown as string,
+        'Some message',
+      );
+      expect(result).not.toContain('null');
+      expect(result).toContain('Some message');
+    });
+
+    it('replaces undefined message with empty string', () => {
+      const result = buildPlaintextContent(
+        'Title',
+        undefined as unknown as string,
+      );
+      expect(result).not.toContain('undefined');
+      expect(result).toContain('Title');
+    });
+
+    it('handles object values without showing [object Object]', () => {
+      const result = buildPlaintextContent('Title', {
+        key: 'val',
+      } as unknown as string);
+      expect(result).not.toContain('[object Object]');
+    });
+
+    it('handles numeric values gracefully', () => {
+      const result = buildPlaintextContent('Title', 42 as unknown as string);
+      expect(result).not.toContain('[object');
+      expect(result).toContain('Title');
+    });
+  });
+
+  describe('ROK-822 — length constraint', () => {
+    it('truncates content exceeding 150 characters', () => {
+      const longTitle = 'A'.repeat(80);
+      const longMessage = 'B'.repeat(100);
+      const result = buildPlaintextContent(longTitle, longMessage);
+      expect(result.length).toBeLessThanOrEqual(150);
+    });
+
+    it('appends ellipsis when truncated', () => {
+      const longTitle = 'A'.repeat(80);
+      const longMessage = 'B'.repeat(100);
+      const result = buildPlaintextContent(longTitle, longMessage);
+      expect(result).toMatch(/\.\.\.$/);
+    });
+
+    it('does not truncate short content', () => {
+      const result = buildPlaintextContent('Short', 'Message');
+      expect(result).toBe('Short\nMessage');
+      expect(result).not.toMatch(/\.\.\.$/);
+    });
+  });
+
+  describe('ROK-822 — multiple markup patterns combined', () => {
+    it('strips all markup types from a single message', () => {
+      const result = buildPlaintextContent(
+        'Event Update',
+        '**Raid Night** moved to <#123456789> starting <t:1700000000:R>',
+      );
+      expect(result).not.toContain('**');
+      expect(result).not.toMatch(/<#\d+>/);
+      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
+    });
+
+    it('collapses multiple spaces after stripping', () => {
+      const result = buildPlaintextContent('Title', 'Go to  <#123>  now');
+      expect(result).not.toContain('  ');
+    });
+  });
 });
