@@ -61,6 +61,7 @@ export const AiProviderInfoSchema = z.object({
     configured: z.boolean(),
     available: z.boolean(),
     active: z.boolean(),
+    setupInProgress: z.boolean().optional(),
 });
 
 export type AiProviderInfoDto = z.infer<typeof AiProviderInfoSchema>;
