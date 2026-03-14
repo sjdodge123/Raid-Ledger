@@ -1,4 +1,4 @@
-import type { ButtonInteraction } from 'discord.js';
+import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
@@ -11,6 +11,7 @@ import { tryGameSignupFlow } from './signup-signup-game.handlers';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { loadGameContext } from './signup-signup-context.helpers';
 import type { GameContext } from './signup-signup-context.helpers';
+import { buildReplyEmbed } from './signup-reply-embed.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -57,6 +58,7 @@ async function replyReactivationResult(
     content: wasReactivated
       ? 'Your status has been changed to **signed up**!'
       : alreadySignedUpMessage(),
+    embeds: [],
   });
 }
 
@@ -118,30 +120,57 @@ async function offerSelectionUI(
   existingSignup: ExistingSignup,
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
-  if (ctx.characters.length >= 1) {
-    if (needsCharacterOrRole(existingSignup, ctx.isMMO))
-      return offerCharacterOrRole(
-        interaction,
-        eventId,
-        ctx,
-        existingSignup,
-        deps,
-      );
-
-    await showCharacterSelect(
+  const embed = await buildReplyEmbed(eventId, deps);
+  if (ctx.characters.length >= 1)
+    return offerCharacterSelection(
       interaction,
       eventId,
-      ctx.eventTitle,
-      ctx.characters,
+      ctx,
+      existingSignup,
       deps,
+      embed,
     );
-    return true;
-  }
-  if (ctx.isMMO) {
-    await showRoleSelect(interaction, eventId, deps);
-    return true;
-  }
-  return false;
+  if (!ctx.isMMO) return false;
+  await showRoleSelect(
+    interaction,
+    eventId,
+    deps,
+    undefined,
+    undefined,
+    undefined,
+    embed,
+  );
+  return true;
+}
+
+async function offerCharacterSelection(
+  interaction: ButtonInteraction,
+  eventId: number,
+  ctx: GameContext,
+  existingSignup: ExistingSignup,
+  deps: SignupInteractionDeps,
+  embed?: EmbedBuilder,
+): Promise<boolean> {
+  if (needsCharacterOrRole(existingSignup, ctx.isMMO))
+    return offerCharacterOrRole({
+      interaction,
+      eventId,
+      ctx,
+      existingSignup,
+      deps,
+      embed,
+    });
+
+  await showCharacterSelect(
+    interaction,
+    eventId,
+    ctx.eventTitle,
+    ctx.characters,
+    deps,
+    undefined,
+    embed,
+  );
+  return true;
 }
 
 function resolveCharacterInfo(
@@ -156,13 +185,17 @@ function resolveCharacterInfo(
   };
 }
 
-async function offerCharacterOrRole(
-  interaction: ButtonInteraction,
-  eventId: number,
-  ctx: GameContext,
-  existingSignup: ExistingSignup,
-  deps: SignupInteractionDeps,
-): Promise<boolean> {
+type CharOrRoleArgs = {
+  interaction: ButtonInteraction;
+  eventId: number;
+  ctx: GameContext;
+  existingSignup: ExistingSignup;
+  deps: SignupInteractionDeps;
+  embed?: EmbedBuilder;
+};
+
+async function offerCharacterOrRole(a: CharOrRoleArgs): Promise<boolean> {
+  const { interaction, eventId, ctx, existingSignup, deps, embed } = a;
   if (!existingSignup.characterId) {
     await showCharacterSelect(
       interaction,
@@ -170,6 +203,8 @@ async function offerCharacterOrRole(
       ctx.eventTitle,
       ctx.characters,
       deps,
+      undefined,
+      embed,
     );
     return true;
   }
@@ -183,6 +218,8 @@ async function offerCharacterOrRole(
     deps,
     existingSignup.characterId,
     charInfo,
+    undefined,
+    embed,
   );
   return true;
 }
@@ -216,6 +253,7 @@ export async function handleNewLinkedSignup(
   const result = await deps.signupsService.signup(eventId, linkedUser.id);
   await interaction.editReply({
     content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}`,
+    embeds: [],
   });
   await deps.updateEmbedSignupCount(eventId);
 }
@@ -228,6 +266,7 @@ export async function showCharacterSelect(
   characters: import('@raid-ledger/contract').CharacterDto[],
   deps: Pick<SignupInteractionDeps, 'emojiService'>,
   signupStatus?: 'tentative',
+  embed?: EmbedBuilder,
 ): Promise<void> {
   await sharedShowCharacterSelect(interaction, {
     customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
@@ -236,6 +275,7 @@ export async function showCharacterSelect(
     characters,
     emojiService: deps.emojiService,
     customIdSuffix: signupStatus,
+    embed,
   });
 }
 
@@ -249,6 +289,7 @@ export async function showRoleSelect(
   characterId?: string,
   characterInfo?: { name: string; role: string | null },
   signupStatus?: 'tentative',
+  embed?: EmbedBuilder,
 ): Promise<void> {
   await sharedShowRoleSelect(interaction, {
     customIdPrefix: SIGNUP_BUTTON_IDS.ROLE_SELECT,
@@ -257,5 +298,6 @@ export async function showRoleSelect(
     characterId,
     characterInfo,
     customIdSuffix: signupStatus,
+    embed,
   });
 }

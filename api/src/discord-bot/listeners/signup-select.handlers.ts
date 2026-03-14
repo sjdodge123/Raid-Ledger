@@ -73,7 +73,12 @@ async function handleRoleSelectMenu(
   characterId?: string,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  await interaction.deferUpdate();
+  try {
+    await interaction.deferUpdate();
+  } catch {
+    // Interaction expired — user took too long, skip silently
+    return;
+  }
   const roleCtx = parseRoleValues(interaction);
 
   try {

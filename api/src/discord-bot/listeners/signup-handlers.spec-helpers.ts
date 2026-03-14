@@ -18,7 +18,7 @@ import type { ButtonInteraction } from 'discord.js';
 export function createMockDeps(): SignupInteractionDeps {
   return {
     db: { select: jest.fn() },
-    logger: { error: jest.fn() },
+    logger: { error: jest.fn(), warn: jest.fn() },
     signupsService: {
       signup: jest.fn().mockResolvedValue({ id: 1, assignedSlot: 'dps' }),
       confirmSignup: jest.fn().mockResolvedValue(undefined),
