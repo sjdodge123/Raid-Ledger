@@ -2,7 +2,7 @@
 export const AI_DEFAULTS = {
   provider: 'ollama',
   model: 'llama3.2:3b',
-  ollamaUrl: 'http://ollama:11434',
+  ollamaUrl: 'http://localhost:11434',
   maxTokens: 1024,
   timeoutMs: 10_000,
   maxTimeoutMs: 30_000,

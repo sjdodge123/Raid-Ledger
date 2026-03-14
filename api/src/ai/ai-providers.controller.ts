@@ -164,18 +164,30 @@ export class AiProvidersController {
     activeKey: string,
   ): Promise<AiProviderInfoDto> {
     const configured = await this.isConfigured(provider);
-    let available = false;
-    try {
-      available = await provider.isAvailable();
-    } catch {
-      /* provider unavailable */
-    }
+    const available = configured
+      ? await this.checkAvailableWithTimeout(provider)
+      : false;
     return buildProviderInfo(
       provider as never,
       configured,
       available,
       provider.key === activeKey,
     );
+  }
+
+  /** Check availability with a 3s timeout to avoid blocking. */
+  private async checkAvailableWithTimeout(
+    provider: { isAvailable: () => Promise<boolean> },
+  ): Promise<boolean> {
+    try {
+      const result = await Promise.race([
+        provider.isAvailable(),
+        new Promise<false>((r) => setTimeout(() => r(false), 3000)),
+      ]);
+      return result;
+    } catch {
+      return false;
+    }
   }
 
   /** Check if a provider is configured (has API key or is self-hosted). */
