@@ -1,12 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { execFile } from 'child_process';
+import { spawn, execFile } from 'child_process';
 import { resolve as resolvePath } from 'path';
 
 /** Possible status values for the Ollama Docker container. */
 export type ContainerStatus = 'running' | 'stopped' | 'not-found';
 
 const CONTAINER_NAME = 'raid-ledger-ollama';
-const EXEC_TIMEOUT_MS = 300_000; // 5 min — image pulls can be slow
 
 @Injectable()
 export class OllamaDockerService {
@@ -14,7 +13,7 @@ export class OllamaDockerService {
 
   async isDockerAvailable(): Promise<boolean> {
     try {
-      await this.execDocker(['info']);
+      await this.execQuick(['info']);
       return true;
     } catch {
       return false;
@@ -23,12 +22,11 @@ export class OllamaDockerService {
 
   async getContainerStatus(): Promise<ContainerStatus> {
     try {
-      const result = await this.execDocker([
+      const out = await this.execQuick([
         'inspect', CONTAINER_NAME,
         '--format', '{{.State.Status}}',
       ]);
-      const status = result.trim();
-      return status === 'running' ? 'running' : 'stopped';
+      return out.trim() === 'running' ? 'running' : 'stopped';
     } catch {
       return 'not-found';
     }
@@ -37,45 +35,50 @@ export class OllamaDockerService {
   async startContainer(): Promise<void> {
     const status = await this.getContainerStatus();
     if (status === 'not-found') {
-      await this.createAndStartWithCompose();
+      await this.composeUp();
     } else {
-      await this.execDocker(['start', CONTAINER_NAME]);
+      await this.execQuick(['start', CONTAINER_NAME]);
     }
     this.logger.log('Ollama container started');
   }
 
   async stopContainer(): Promise<void> {
-    await this.execDocker(['stop', CONTAINER_NAME]);
+    await this.execQuick(['stop', CONTAINER_NAME]);
     this.logger.log('Ollama container stopped');
   }
 
-  private async createAndStartWithCompose(): Promise<void> {
-    const composeFile = this.findComposeFile();
-    this.logger.log(`Creating Ollama container via compose: ${composeFile}`);
-    await this.execCommand('docker', [
-      'compose', '-f', composeFile,
-      '--profile', 'ai', 'up', '-d', 'ollama',
+  /** Run docker compose up with spawn (no buffer limit). */
+  private composeUp(): Promise<void> {
+    const file = this.findComposeFile();
+    this.logger.log(`Creating Ollama via compose: ${file}`);
+    return this.spawnDetached('docker', [
+      'compose', '-f', file, '--profile', 'ai', 'up', '-d', 'ollama',
     ]);
   }
 
   private findComposeFile(): string {
-    const envFile = process.env['DOCKER_COMPOSE_FILE'];
-    if (envFile) return envFile;
-    return resolvePath(process.cwd(), 'docker-compose.yml');
+    return process.env['DOCKER_COMPOSE_FILE']
+      ?? resolvePath(process.cwd(), 'docker-compose.yml');
   }
 
-  private execDocker(args: string[]): Promise<string> {
-    return this.execCommand('docker', args);
-  }
-
-  private execCommand(cmd: string, args: string[]): Promise<string> {
+  /** spawn-based exec — streams stdout/stderr, no buffer limit. */
+  private spawnDetached(cmd: string, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      execFile(cmd, args, { timeout: EXEC_TIMEOUT_MS }, (err, stdout) => {
-        if (err) {
-          reject(err instanceof Error ? err : new Error(String(err)));
-          return;
-        }
-        resolve(stdout);
+      const child = spawn(cmd, args, { stdio: 'ignore' });
+      child.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`${cmd} exited with code ${code}`));
+      });
+      child.on('error', reject);
+    });
+  }
+
+  /** execFile for quick commands (10s timeout). */
+  private execQuick(args: string[]): Promise<string> {
+    return new Promise((resolve, reject) => {
+      execFile('docker', args, { timeout: 10_000 }, (err, stdout) => {
+        if (err) reject(err instanceof Error ? err : new Error(String(err)));
+        else resolve(stdout);
       });
     });
   }
