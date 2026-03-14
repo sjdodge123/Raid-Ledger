@@ -173,7 +173,8 @@ function OllamaInstructions() {
 
 function OllamaBadge({ provider, setting }: { provider: AiProviderInfoDto; setting: boolean }) {
     if (setting) return <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 animate-pulse">Setting up...</span>;
-    if (provider.active) return <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Active</span>;
+    if (provider.active && provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Active</span>;
+    if (provider.active && !provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Selected · Offline</span>;
     if (provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">Running</span>;
     return <span className="text-xs px-2 py-0.5 rounded-full bg-dim/20 text-muted">Offline</span>;
 }
