@@ -17,6 +17,7 @@ export interface AiProviderInfoDto {
   configured: boolean;
   available: boolean;
   active: boolean;
+  setupInProgress?: boolean;
 }
 
 /**

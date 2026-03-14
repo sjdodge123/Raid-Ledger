@@ -29,8 +29,8 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
     const stop = useOllamaStop();
     const activate = useActivateProvider();
     const qc = useQueryClient();
-    const [setting, setSetting] = useState(false);
-    const [stepIdx, setStepIdx] = useState(0);
+    const [setting, setSetting] = useState(provider.setupInProgress ?? false);
+    const [stepIdx, setStepIdx] = useState(provider.setupInProgress ? 2 : 0);
 
     useEffect(() => {
         if (!setting) return;
@@ -50,6 +50,13 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
             toast.success('Ollama is ready');
         }
     }, [setting, provider.available]);
+
+    useEffect(() => {
+        if (provider.setupInProgress && !setting) {
+            setSetting(true);
+            setStepIdx(2);
+        }
+    }, [provider.setupInProgress, setting]);
 
     const handleSetup = async () => {
         setSetting(true);

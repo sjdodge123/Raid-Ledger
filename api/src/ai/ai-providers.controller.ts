@@ -167,12 +167,16 @@ export class AiProvidersController {
     const available = configured
       ? await this.checkAvailableWithTimeout(provider)
       : false;
-    return buildProviderInfo(
+    const info = buildProviderInfo(
       provider as never,
       configured,
       available,
       provider.key === activeKey,
     );
+    if (provider.key === 'ollama') {
+      info.setupInProgress = this.ollamaSetupRunning;
+    }
+    return info;
   }
 
   /** Check availability with a 3s timeout to avoid blocking. */
