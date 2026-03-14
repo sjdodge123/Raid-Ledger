@@ -19,6 +19,7 @@ import {
 export const games = pgTable('games', {
   id: serial('id').primaryKey(),
   igdbId: integer('igdb_id').unique(),
+  /** GIN trigram index on this column managed in migration 0095 (Drizzle cannot express gin_trgm_ops). */
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   coverUrl: text('cover_url'),
