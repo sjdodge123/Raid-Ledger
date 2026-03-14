@@ -37,7 +37,7 @@ export class AiAdminController {
   @Get('status')
   async getStatus(): Promise<AiStatusDto> {
     const provider = await this.registry.resolveActive();
-    const isAvailable = await this.llmService.isAvailable();
+    const isAvailable = await this.withTimeout(this.llmService.isAvailable(), false);
     const model = await this.settings.get(AI_SETTING_KEYS.MODEL as SettingKey);
     return buildStatusResponse(provider, model, isAvailable);
   }
@@ -45,7 +45,7 @@ export class AiAdminController {
   /** GET /admin/ai/models — list models from the active provider. */
   @Get('models')
   async getModels(): Promise<AiModelDto[]> {
-    const models = await this.llmService.listModels();
+    const models = await this.withTimeout(this.llmService.listModels(), []);
     return models.map((m) => ({
       id: m.id,
       name: m.name,
@@ -57,7 +57,7 @@ export class AiAdminController {
   @Post('test-connection')
   async testConnection(): Promise<AiTestConnectionDto> {
     const start = Date.now();
-    const available = await this.llmService.isAvailable();
+    const available = await this.withTimeout(this.llmService.isAvailable(), false);
     const latencyMs = Date.now() - start;
     return {
       success: available,
@@ -75,6 +75,18 @@ export class AiAdminController {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const stats = await this.logService.getUsageStats(thirtyDaysAgo);
     return buildUsageResponse(stats);
+  }
+
+  /** Race a promise against a 3s timeout, returning fallback on timeout/error. */
+  private async withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((r) => setTimeout(() => r(fallback), 3000)),
+      ]);
+    } catch {
+      return fallback;
+    }
   }
 
   /** POST /admin/ai/test-chat — send a test message to the active LLM. */
