@@ -69,6 +69,7 @@ describe('openai.helpers (adversarial)', () => {
         ok: false,
         status: 401,
         json: jest.fn(),
+        text: jest.fn().mockResolvedValue('error body'),
       });
       await expect(fetchOpenAi('sk-test', '/v1/models')).rejects.toThrow(
         'OpenAI /v1/models: HTTP 401',

@@ -12,8 +12,8 @@ export const CLAUDE_MODELS: LlmModelInfo[] = [
     provider: 'claude',
   },
   {
-    id: 'claude-haiku-4-5-20251001',
-    name: 'Claude Haiku 4.5',
+    id: 'claude-3-5-haiku-20241022',
+    name: 'Claude 3.5 Haiku',
     provider: 'claude',
   },
 ];

@@ -53,6 +53,7 @@ export class LlmService {
     const provider = await this.resolveOrThrow();
     this.applyPreChecks(context);
     const prepared = this.prepareChatOptions(options);
+    const model = options.model ?? AI_DEFAULTS.model;
 
     return this.concurrencyLimiter.withLimit(async () => {
       try {
@@ -62,11 +63,11 @@ export class LlmService {
         );
         this.circuitBreaker.recordSuccess();
         const sanitized = this.sanitizeChatResponse(response, context);
-        await this.logSuccess(context, provider.key, sanitized);
+        await this.logSuccess(context, provider.key, sanitized, model);
         return sanitized;
       } catch (err) {
         this.circuitBreaker.recordFailure();
-        await this.logFailure(context, provider.key, err);
+        await this.logFailure(context, provider.key, err, model);
         throw err;
       }
     });
@@ -80,6 +81,7 @@ export class LlmService {
     const provider = await this.resolveOrThrow();
     this.applyPreChecks(context);
     const sanitizedPrompt = sanitizeInput(options.prompt);
+    const model = options.model ?? AI_DEFAULTS.model;
 
     return this.concurrencyLimiter.withLimit(async () => {
       try {
@@ -92,11 +94,11 @@ export class LlmService {
           ...response,
           content: sanitizeOutput(response.content, context.maxResponseLength),
         };
-        await this.logSuccess(context, provider.key, sanitized);
+        await this.logSuccess(context, provider.key, sanitized, model);
         return sanitized;
       } catch (err) {
         this.circuitBreaker.recordFailure();
-        await this.logFailure(context, provider.key, err);
+        await this.logFailure(context, provider.key, err, model);
         throw err;
       }
     });
@@ -162,13 +164,14 @@ export class LlmService {
       usage?: { promptTokens: number; completionTokens: number };
       latencyMs: number;
     },
+    model: string,
   ): Promise<void> {
     await this.logService
       .log({
         feature: context.feature,
         userId: context.userId,
         provider: providerKey,
-        model: AI_DEFAULTS.model,
+        model,
         promptTokens: response.usage?.promptTokens,
         completionTokens: response.usage?.completionTokens,
         latencyMs: response.latencyMs,
@@ -183,6 +186,7 @@ export class LlmService {
     context: LlmRequestContext,
     providerKey: string,
     err: unknown,
+    model: string,
   ): Promise<void> {
     const message = err instanceof Error ? err.message : 'Unknown error';
     await this.logService
@@ -190,7 +194,7 @@ export class LlmService {
         feature: context.feature,
         userId: context.userId,
         provider: providerKey,
-        model: AI_DEFAULTS.model,
+        model,
         latencyMs: 0,
         success: false,
         errorMessage: message,

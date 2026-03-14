@@ -55,8 +55,8 @@ describe('CloudProviderCard', () => {
         expect(screen.getByText('Configured')).toBeInTheDocument();
     });
 
-    it('shows "Active" badge when active', () => {
-        renderWithProviders(<CloudProviderCard provider={createProvider({ active: true })} />);
+    it('shows "Active" badge when active and available', () => {
+        renderWithProviders(<CloudProviderCard provider={createProvider({ active: true, available: true })} />);
         expect(screen.getByText('Active')).toBeInTheDocument();
     });
 

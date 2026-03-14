@@ -19,23 +19,13 @@ import { SettingsService } from '../settings/settings.service';
 import { OllamaDockerService } from './providers/ollama-docker.service';
 import { OllamaModelService } from './providers/ollama-model.service';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
+import type {
+  AiProviderInfoDto,
+  AiOllamaSetupDto,
+  AiProviderConfigDto,
+} from '@raid-ledger/contract';
 import { getApiKeySettingKey, buildProviderInfo } from './ai-providers.helpers';
-import type { AiProviderInfoDto } from './ai-providers.helpers';
 import type { SettingKey } from '../drizzle/schema';
-
-/** Request body for configuring a provider. */
-interface ConfigureBody {
-  apiKey?: string;
-  url?: string;
-  model?: string;
-}
-
-/** Response from the Ollama setup endpoint. */
-interface OllamaSetupResult {
-  step: string;
-  message: string;
-  success: boolean;
-}
 
 /**
  * Admin endpoints for managing AI providers.
@@ -63,9 +53,14 @@ export class AiProvidersController {
   @Post(':key/configure')
   async configureProvider(
     @Param('key') key: string,
-    @Body() body: ConfigureBody,
+    @Body() body: AiProviderConfigDto,
   ): Promise<{ success: boolean }> {
     this.requireKnownProvider(key);
+    if (!body.apiKey && !body.url && !body.model) {
+      throw new BadRequestException(
+        'At least one of apiKey, url, or model is required',
+      );
+    }
     if (body.apiKey) {
       const settingKey = getApiKeySettingKey(key);
       if (settingKey) {
@@ -96,17 +91,31 @@ export class AiProvidersController {
 
   /** POST /admin/ai/providers/ollama/setup — Start async Docker setup. */
   @Post('ollama/setup')
-  async setupOllama(): Promise<OllamaSetupResult> {
+  async setupOllama(): Promise<AiOllamaSetupDto> {
     const dockerOk = await this.docker.isDockerAvailable();
     if (!dockerOk) {
-      return { step: 'error', message: 'Docker is not available', success: false };
+      return {
+        step: 'error',
+        message: 'Docker is not available',
+        success: false,
+      };
     }
     if (this.ollamaSetupRunning) {
-      return { step: 'starting', message: 'Setup already in progress', success: true };
+      return {
+        step: 'starting',
+        message: 'Setup already in progress',
+        success: true,
+      };
     }
     this.ollamaSetupRunning = true;
-    this.runOllamaSetup().finally(() => { this.ollamaSetupRunning = false; });
-    return { step: 'starting', message: 'Setup started — poll providers for status', success: true };
+    void this.runOllamaSetup().finally(() => {
+      this.ollamaSetupRunning = false;
+    });
+    return {
+      step: 'starting',
+      message: 'Setup started — poll providers for status',
+      success: true,
+    };
   }
 
   private ollamaSetupRunning = false;
@@ -136,9 +145,13 @@ export class AiProvidersController {
       const provider = this.registry.resolve('ollama');
       try {
         if (provider && (await provider.isAvailable())) return;
-      } catch { /* not ready yet */ }
+      } catch {
+        /* not ready yet */
+      }
       await new Promise((r) => setTimeout(r, 2000));
     }
+    this.ollamaSetupStep = 'error';
+    this.logger.error('Ollama health check exhausted all retries');
   }
 
   private readonly logger = new Logger(AiProvidersController.name);
@@ -191,16 +204,19 @@ export class AiProvidersController {
       }
       if (!info.available) {
         const status = await this.docker.getContainerStatus();
-        info.setupStep = info.setupStep || (status !== 'not-found' ? 'container_exists' : undefined);
+        info.setupStep =
+          info.setupStep ||
+          (status !== 'not-found' ? 'container_exists' : undefined);
       }
     }
     return info;
   }
 
   /** Check availability with 3s timeout, capturing error details. */
-  private async checkAvailableWithError(
-    provider: { key: string; isAvailable: () => Promise<boolean> },
-  ): Promise<{ available: boolean; error?: string }> {
+  private async checkAvailableWithError(provider: {
+    key: string;
+    isAvailable: () => Promise<boolean>;
+  }): Promise<{ available: boolean; error?: string }> {
     try {
       const available = await Promise.race([
         provider.isAvailable(),
@@ -215,12 +231,17 @@ export class AiProvidersController {
   }
 
   private extractFriendlyError(msg: string): string {
-    if (msg.includes('credit balance')) return 'Account has insufficient credits';
-    if (msg.includes('insufficient_quota')) return 'Account has insufficient quota';
+    if (msg.includes('credit balance'))
+      return 'Account has insufficient credits';
+    if (msg.includes('insufficient_quota'))
+      return 'Account has insufficient quota';
     if (msg.includes('billing')) return 'Billing issue — check your account';
-    if (msg.includes('API_KEY_INVALID') || msg.includes('invalid')) return 'Invalid API key';
-    if (msg.includes('authentication') || msg.includes('401')) return 'Invalid API key';
-    if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) return 'API key lacks permissions';
+    if (msg.includes('API_KEY_INVALID') || msg.includes('invalid'))
+      return 'Invalid API key';
+    if (msg.includes('authentication') || msg.includes('401'))
+      return 'Invalid API key';
+    if (msg.includes('403') || msg.includes('PERMISSION_DENIED'))
+      return 'API key lacks permissions';
     if (msg.includes('429')) return 'Rate limited — try again later';
     return 'Provider unreachable';
   }

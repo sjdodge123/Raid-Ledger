@@ -154,14 +154,12 @@ describe('AiProvidersController', () => {
       expect(result.step).toBe('error');
     });
 
-    it('starts container and pulls model on success', async () => {
+    it('starts async setup and returns starting step', async () => {
       mockDocker.isDockerAvailable.mockResolvedValue(true);
       mockDocker.getContainerStatus.mockResolvedValue('stopped');
       const result = await controller.setupOllama();
       expect(result.success).toBe(true);
-      expect(result.step).toBe('ready');
-      expect(mockDocker.startContainer).toHaveBeenCalled();
-      expect(mockOllamaModel.pullModel).toHaveBeenCalled();
+      expect(result.step).toBe('starting');
     });
 
     it('skips start if container is already running', async () => {

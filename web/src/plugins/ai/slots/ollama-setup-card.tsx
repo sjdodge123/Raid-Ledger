@@ -29,33 +29,29 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
     const stop = useOllamaStop();
     const activate = useActivateProvider();
     const qc = useQueryClient();
-    const [setting, setSetting] = useState(provider.setupInProgress ?? false);
+    const [localSetup, setLocalSetup] = useState(false);
+    const setting = localSetup || (provider.setupInProgress ?? false);
 
     useEffect(() => {
         if (!setting) return;
-        const pollTimer = setInterval(() => {
-            void qc.invalidateQueries({ queryKey: ['admin', 'ai', 'providers'] });
+        const pollTimer = setInterval(async () => {
+            await qc.invalidateQueries({ queryKey: ['admin', 'ai', 'providers'] });
+            const providers = qc.getQueryData<AiProviderInfoDto[]>(['admin', 'ai', 'providers']);
+            const ollama = providers?.find((p) => p.key === 'ollama');
+            if (ollama?.available) {
+                setLocalSetup(false);
+                toast.success('Ollama is ready');
+            }
         }, 5000);
         return () => { clearInterval(pollTimer); };
     }, [setting, qc]);
 
-    useEffect(() => {
-        if (setting && provider.available) {
-            setSetting(false);
-            toast.success('Ollama is ready');
-        }
-    }, [setting, provider.available]);
-
-    useEffect(() => {
-        if (provider.setupInProgress && !setting) setSetting(true);
-    }, [provider.setupInProgress, setting]);
-
     const handleSetup = async () => {
-        setSetting(true);
+        setLocalSetup(true);
         try {
             await setup.mutateAsync();
         } catch {
-            setSetting(false);
+            setLocalSetup(false);
             toast.error('Failed to start Ollama setup');
         }
     };

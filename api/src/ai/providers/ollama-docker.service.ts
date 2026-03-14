@@ -22,8 +22,10 @@ export class OllamaDockerService {
   async getContainerStatus(): Promise<ContainerStatus> {
     try {
       const out = await this.execQuick([
-        'inspect', CONTAINER_NAME,
-        '--format', '{{.State.Status}}',
+        'inspect',
+        CONTAINER_NAME,
+        '--format',
+        '{{.State.Status}}',
       ]);
       return out.trim() === 'running' ? 'running' : 'stopped';
     } catch {
@@ -52,11 +54,16 @@ export class OllamaDockerService {
     await this.spawnDetached('docker', ['pull', 'ollama/ollama:latest']);
     this.logger.log('Creating Ollama container...');
     await this.spawnDetached('docker', [
-      'run', '-d',
-      '--name', CONTAINER_NAME,
-      '--restart', 'unless-stopped',
-      '-p', '11434:11434',
-      '-v', 'ollama_data:/root/.ollama',
+      'run',
+      '-d',
+      '--name',
+      CONTAINER_NAME,
+      '--restart',
+      'unless-stopped',
+      '-p',
+      '11434:11434',
+      '-v',
+      'raid-ledger_ollama_data:/root/.ollama',
       'ollama/ollama:latest',
     ]);
   }
