@@ -6,6 +6,10 @@
  */
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import type { ButtonInteraction } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
+
+/** Reusable mock embed returned by the stubbed embedFactory. */
+export const MOCK_EMBED = new EmbedBuilder().setTitle('Test Event');
 
 /**
  * Creates a minimal SignupInteractionDeps mock with all stubs needed
@@ -27,6 +31,27 @@ export function createMockDeps(): SignupInteractionDeps {
     charactersService: {
       findAllForUser: jest.fn(),
       findOne: jest.fn(),
+    },
+    eventsService: {
+      buildEmbedEventData: jest
+        .fn()
+        .mockResolvedValue({ id: 1, title: 'Test Event' }),
+    },
+    embedFactory: {
+      buildEventEmbed: jest
+        .fn()
+        .mockReturnValue({ embed: MOCK_EMBED, row: {} }),
+    },
+    settingsService: {
+      getBranding: jest.fn().mockResolvedValue({
+        communityName: 'Test Guild',
+        communityLogoPath: null,
+      }),
+      getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+    },
+    emojiService: {
+      getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
+      getClassEmojiComponent: jest.fn().mockReturnValue(undefined),
     },
     updateEmbedSignupCount: jest.fn().mockResolvedValue(undefined),
   } as unknown as SignupInteractionDeps;
