@@ -110,18 +110,24 @@ export class AiProvidersController {
   }
 
   private ollamaSetupRunning = false;
+  private ollamaSetupStep = '';
 
   private async runOllamaSetup(): Promise<void> {
+    this.ollamaSetupStep = 'pulling_image';
     const status = await this.docker.getContainerStatus();
     if (status !== 'running') {
       await this.docker.startContainer();
+      this.ollamaSetupStep = 'starting';
       await this.waitForOllamaHealth();
     }
     try {
+      this.ollamaSetupStep = 'pulling_model';
       await this.ollamaModel.pullModel(AI_DEFAULTS.model);
+      this.ollamaSetupStep = 'ready';
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.error(`Ollama model pull failed: ${msg}`);
+      this.ollamaSetupStep = 'error';
     }
   }
 
@@ -175,6 +181,9 @@ export class AiProvidersController {
     );
     if (provider.key === 'ollama') {
       info.setupInProgress = this.ollamaSetupRunning;
+      if (this.ollamaSetupRunning) {
+        info.setupStep = this.ollamaSetupStep;
+      }
     }
     return info;
   }

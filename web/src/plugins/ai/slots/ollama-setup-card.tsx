@@ -12,13 +12,13 @@ interface OllamaSetupCardProps {
     provider: AiProviderInfoDto;
 }
 
-const SETUP_STEPS = [
-    'Checking Docker availability...',
-    'Pulling Ollama Docker image...',
-    'Starting container...',
-    'Pulling default model (llama3.2:3b)...',
-    'Almost ready...',
-];
+const STEP_LABELS: Record<string, { label: string; pct: number }> = {
+    pulling_image: { label: 'Pulling Ollama Docker image...', pct: 25 },
+    starting: { label: 'Starting container...', pct: 50 },
+    pulling_model: { label: 'Pulling default model (llama3.2:3b)...', pct: 75 },
+    ready: { label: 'Almost ready...', pct: 95 },
+};
+const DEFAULT_STEP = { label: 'Setting up...', pct: 10 };
 
 /**
  * Card for Ollama with Docker container management.
@@ -30,33 +30,26 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
     const activate = useActivateProvider();
     const qc = useQueryClient();
     const [setting, setSetting] = useState(provider.setupInProgress ?? false);
-    const [stepIdx, setStepIdx] = useState(provider.setupInProgress ? 2 : 0);
 
     useEffect(() => {
         if (!setting) return;
-        const stepTimer = setInterval(() => {
-            setStepIdx((i) => (i < SETUP_STEPS.length - 1 ? i + 1 : i));
-        }, 8000);
         const pollTimer = setInterval(() => {
             void qc.invalidateQueries({ queryKey: ['admin', 'ai', 'providers'] });
         }, 5000);
-        return () => { clearInterval(stepTimer); clearInterval(pollTimer); };
+        return () => { clearInterval(pollTimer); };
     }, [setting, qc]);
 
     useEffect(() => {
         if (setting && provider.available) {
             setSetting(false);
-            setStepIdx(0);
             toast.success('Ollama is ready');
         }
     }, [setting, provider.available]);
 
     useEffect(() => {
-        if (provider.setupInProgress && !setting) {
-            setSetting(true);
-            setStepIdx(2);
-        }
-    }, [provider.setupInProgress, setting]);
+        if (provider.setupInProgress && !setting) setSetting(true);
+        if (!provider.setupInProgress && setting && !provider.available) setSetting(false);
+    }, [provider.setupInProgress, setting, provider.available]);
 
     const handleSetup = async () => {
         setSetting(true);
@@ -90,7 +83,7 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
                 <OllamaBadge provider={provider} setting={setting} />
             </div>
             <p className="text-xs text-muted">Self-hosted LLM inference via Docker</p>
-            {setting && <SetupProgress step={stepIdx} />}
+            {setting && <SetupProgress step={provider.setupStep} />}
             {!setting && (
                 <OllamaActions
                     provider={provider}
@@ -102,15 +95,15 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
     );
 }
 
-function SetupProgress({ step }: { step: number }) {
-    const pct = Math.min(((step + 1) / SETUP_STEPS.length) * 100, 95);
+function SetupProgress({ step }: { step?: string }) {
+    const info = (step && STEP_LABELS[step]) || DEFAULT_STEP;
     return (
         <div className="space-y-2">
             <div className="h-2 bg-dim/30 rounded-full overflow-hidden">
                 <div className="h-full bg-purple-500 rounded-full transition-all duration-1000"
-                    style={{ width: `${pct}%` }} />
+                    style={{ width: `${info.pct}%` }} />
             </div>
-            <p className="text-xs text-purple-400 animate-pulse">{SETUP_STEPS[step]}</p>
+            <p className="text-xs text-purple-400 animate-pulse">{info.label}</p>
         </div>
     );
 }
