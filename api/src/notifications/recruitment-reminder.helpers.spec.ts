@@ -200,8 +200,7 @@ describe('isWithinGracePeriod', () => {
   it('should return true 1ms before grace period ends (24-48h tier, 6h grace)', () => {
     const createdAt = '2026-03-10T10:00:00Z';
     const startTime = '2026-03-11T16:00:00Z'; // 30h gap → 6h grace
-    const graceExpiryMs =
-      new Date(createdAt).getTime() + 6 * HOUR;
+    const graceExpiryMs = new Date(createdAt).getTime() + 6 * HOUR;
 
     jest.setSystemTime(new Date(graceExpiryMs - 1)); // 1ms before grace expires
 
@@ -213,8 +212,7 @@ describe('isWithinGracePeriod', () => {
   it('should return false exactly at grace expiry (24-48h tier, 6h grace)', () => {
     const createdAt = '2026-03-10T10:00:00Z';
     const startTime = '2026-03-11T16:00:00Z'; // 30h gap → 6h grace
-    const graceExpiryMs =
-      new Date(createdAt).getTime() + 6 * HOUR;
+    const graceExpiryMs = new Date(createdAt).getTime() + 6 * HOUR;
 
     jest.setSystemTime(new Date(graceExpiryMs)); // exactly at grace expiry
 

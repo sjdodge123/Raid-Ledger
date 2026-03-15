@@ -941,9 +941,7 @@ describe('RecruitmentReminderService', () => {
 
     it('should NOT apply grace period to event created exactly 72h before start', () => {
       const createdAt = new Date('2026-03-10T10:00:00Z');
-      const startTime = new Date(
-        createdAt.getTime() + 72 * 60 * 60 * 1000,
-      );
+      const startTime = new Date(createdAt.getTime() + 72 * 60 * 60 * 1000);
       // Grace = 0 at exactly 72h, so cron immediately after creation should process it
       const cronTime = new Date(createdAt.getTime() + 1000); // 1s after creation
 
@@ -956,9 +954,7 @@ describe('RecruitmentReminderService', () => {
         created_at: createdAt.toISOString(),
         start_time: startTime.toISOString(),
       });
-      mockDb.execute
-        .mockResolvedValueOnce([event])
-        .mockResolvedValueOnce([]); // findRecipients (>24h away, DMs deferred)
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]); // findRecipients (>24h away, DMs deferred)
 
       return service.checkAndSendReminders().then(() => {
         expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:88');
@@ -967,9 +963,7 @@ describe('RecruitmentReminderService', () => {
 
     it('should apply grace period to event created 1ms before 72h boundary (71h59m59.999s)', async () => {
       const createdAt = new Date('2026-03-10T10:00:00Z');
-      const startTime = new Date(
-        createdAt.getTime() + 72 * 60 * 60 * 1000 - 1,
-      ); // 1ms below 72h
+      const startTime = new Date(createdAt.getTime() + 72 * 60 * 60 * 1000 - 1); // 1ms below 72h
       // Grace = 12h; cron runs 1h after creation — within grace
       const cronTime = new Date(createdAt.getTime() + 60 * 60 * 1000);
 
