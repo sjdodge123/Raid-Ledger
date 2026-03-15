@@ -90,7 +90,7 @@ export class OllamaDockerService {
   private execQuick(args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
       execFile('docker', args, { timeout: 10_000 }, (err, stdout) => {
-        if (err) reject(err instanceof Error ? err : new Error(String(err)));
+        if (err) reject(new Error(err.message));
         else resolve(stdout);
       });
     });
