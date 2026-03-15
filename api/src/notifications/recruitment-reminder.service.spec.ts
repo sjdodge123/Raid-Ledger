@@ -850,5 +850,142 @@ describe('RecruitmentReminderService', () => {
 
       expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
     });
+
+    // Adversarial: Redis dedup key must NOT be set for grace-period events
+
+    it('should NOT set Redis bump key for events still within grace period', async () => {
+      const createdAt = new Date('2026-03-15T10:00:00Z');
+      const startTime = new Date('2026-03-16T16:00:00Z'); // 30h → 6h grace
+      const cronTime = new Date('2026-03-15T11:00:00Z'); // 1h after creation — within grace
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        id: 77,
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]);
+
+      await service.checkAndSendReminders();
+
+      expect(mockRedis.set).not.toHaveBeenCalledWith(
+        'recruitment-bump:event:77',
+        '1',
+        'EX',
+        expect.any(Number),
+      );
+      expect(mockRedis.get).not.toHaveBeenCalled();
+    });
+
+    // Adversarial: mixed batch — only non-grace events should be processed
+
+    it('should only process the non-grace event when batch contains both grace and non-grace events', async () => {
+      const now = new Date('2026-03-15T12:00:00Z');
+      jest.setSystemTime(now);
+
+      // Event in grace period: created 1h ago, starts in 30h → 6h grace active
+      const graceEvent = makeEventRow({
+        id: 10,
+        created_at: new Date(now.getTime() - 1 * 60 * 60 * 1000).toISOString(),
+        start_time: new Date(now.getTime() + 30 * 60 * 60 * 1000).toISOString(),
+      });
+      // Event past grace: created 10h ago, starts in 20h → 6h grace (10h elapsed)
+      const eligibleEvent = makeEventRow({
+        id: 20,
+        created_at: new Date(now.getTime() - 10 * 60 * 60 * 1000).toISOString(),
+        start_time: new Date(now.getTime() + 20 * 60 * 60 * 1000).toISOString(),
+      });
+
+      mockDb.execute
+        .mockResolvedValueOnce([graceEvent, eligibleEvent])
+        .mockResolvedValueOnce([{ id: 5 }]) // findRecipients for event 20 only
+        .mockResolvedValueOnce([]); // findAbsentUsers for event 20
+
+      await service.checkAndSendReminders();
+
+      // Only the eligible event (id=20) triggers Redis and processing
+      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:20');
+      expect(mockRedis.get).not.toHaveBeenCalledWith(
+        'recruitment-bump:event:10',
+      );
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return false when all events in batch are within grace period', async () => {
+      const now = new Date('2026-03-15T10:30:00Z');
+      jest.setSystemTime(now);
+
+      const grace1 = makeEventRow({
+        id: 1,
+        created_at: new Date(now.getTime() - 30 * 60 * 1000).toISOString(), // 30min ago
+        start_time: new Date(now.getTime() + 30 * 60 * 60 * 1000).toISOString(), // 30h later → 6h grace
+      });
+      const grace2 = makeEventRow({
+        id: 2,
+        created_at: new Date(now.getTime() - 15 * 60 * 1000).toISOString(), // 15min ago
+        start_time: new Date(now.getTime() + 20 * 60 * 60 * 1000).toISOString(), // 20h later → 6h grace
+      });
+
+      mockDb.execute.mockResolvedValueOnce([grace1, grace2]);
+
+      const result = await service.checkAndSendReminders();
+
+      expect(result).toBe(false);
+      expect(mockRedis.get).not.toHaveBeenCalled();
+      expect(mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    // Adversarial: grace period at the 72h boundary — events created exactly at 72h get no grace
+
+    it('should NOT apply grace period to event created exactly 72h before start', () => {
+      const createdAt = new Date('2026-03-10T10:00:00Z');
+      const startTime = new Date(
+        createdAt.getTime() + 72 * 60 * 60 * 1000,
+      );
+      // Grace = 0 at exactly 72h, so cron immediately after creation should process it
+      const cronTime = new Date(createdAt.getTime() + 1000); // 1s after creation
+
+      jest.setSystemTime(cronTime);
+      // Cannot directly test isWithinGracePeriod via service here without a DB call stub,
+      // but we verify the DB mock is hit (i.e., the event is processed through)
+      // by confirming Redis.get IS called (bump check fires = event processed)
+      const event = makeEventRow({
+        id: 88,
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]); // findRecipients (>24h away, DMs deferred)
+
+      return service.checkAndSendReminders().then(() => {
+        expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:88');
+      });
+    });
+
+    it('should apply grace period to event created 1ms before 72h boundary (71h59m59.999s)', async () => {
+      const createdAt = new Date('2026-03-10T10:00:00Z');
+      const startTime = new Date(
+        createdAt.getTime() + 72 * 60 * 60 * 1000 - 1,
+      ); // 1ms below 72h
+      // Grace = 12h; cron runs 1h after creation — within grace
+      const cronTime = new Date(createdAt.getTime() + 60 * 60 * 1000);
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        id: 89,
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]);
+
+      const result = await service.checkAndSendReminders();
+
+      expect(result).toBe(false);
+      expect(mockRedis.get).not.toHaveBeenCalled();
+    });
   });
 });
