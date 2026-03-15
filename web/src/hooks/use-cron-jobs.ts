@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CronJobDto, CronJobExecutionDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
+import { toast } from '../lib/toast';
 
 /**
  * Hook for cron job management API operations (ROK-310).
@@ -17,6 +18,20 @@ async function cronFetch<T>(path: string, method: string, errorMsg: string, body
     const response = await fetch(`${API_BASE_URL}${path}`, opts);
     if (!response.ok) throw new Error(errorMsg);
     return response.json();
+}
+
+/** Delay (ms) before re-invalidating to catch async execution records from core jobs. */
+const REFETCH_DELAY_MS = 3000;
+
+/** Handles runJob success: shows toast and invalidates execution history. */
+function onRunSuccess(queryClient: ReturnType<typeof useQueryClient>, data: CronJobDto, id: number): void {
+    queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs'] });
+    toast.success(`Triggered "${data.name}"`);
+    queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs', id, 'executions'] });
+    setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs'] });
+        queryClient.invalidateQueries({ queryKey: ['admin', 'cron-jobs', id, 'executions'] });
+    }, REFETCH_DELAY_MS);
 }
 
 function useCronJobMutations() {
@@ -41,7 +56,8 @@ function useCronJobMutations() {
 
     const runJob = useMutation<CronJobDto, Error, number>({
         mutationFn: (id) => cronFetch(`/admin/cron-jobs/${id}/run`, 'POST', 'Failed to trigger cron job'),
-        onSuccess: invalidate,
+        onSuccess: (data, id) => onRunSuccess(queryClient, data, id),
+        onError: () => { toast.error('Failed to trigger cron job'); },
     });
 
     return { pauseJob, resumeJob, updateSchedule, runJob };
