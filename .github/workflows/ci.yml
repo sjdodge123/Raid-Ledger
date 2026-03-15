@@ -81,6 +81,10 @@ jobs:
   integration-tests:
     runs-on: ubuntu-latest
     needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/3, 2/3, 3/3]
 
     services:
       postgres:
@@ -137,8 +141,8 @@ jobs:
       - name: Build contract
         run: npm run build -w packages/contract
 
-      - name: Run integration tests
-        run: npm run test:integration -w api
+      - name: Run integration tests (shard ${{ matrix.shard }})
+        run: npm run test:integration -w api -- --shard=${{ matrix.shard }}
 
   smoke-tests:
     runs-on: ubuntu-latest
