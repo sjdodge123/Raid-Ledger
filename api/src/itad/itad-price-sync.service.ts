@@ -9,7 +9,7 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { isNotNull, eq } from 'drizzle-orm';
+import { isNotNull, eq, and, lt, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -18,12 +18,31 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import type { ItadOverviewGameEntry } from './itad-price.types';
 
 /** Number of games to fetch from ITAD per batch request. */
-const CHUNK_SIZE = 50;
+export const CHUNK_SIZE = 50;
 
 /** Delay (ms) before bootstrap sync fires. */
 const BOOTSTRAP_DELAY_MS = 30_000;
 
+/** Clear stale pricing after this many days without valid data. */
+const STALE_PRICING_DAYS = 7;
+
 type Db = PostgresJsDatabase<typeof schema>;
+
+/** Build the SET clause data from an ITAD entry. */
+export function buildUpdateData(
+  entry: ItadOverviewGameEntry,
+  now: Date,
+): Record<string, unknown> {
+  return {
+    itadCurrentPrice: entry.current?.price.amount.toFixed(2) ?? null,
+    itadCurrentCut: entry.current?.cut ?? null,
+    itadCurrentShop: entry.current?.shop.name ?? null,
+    itadCurrentUrl: entry.current?.url ?? null,
+    itadLowestPrice: entry.lowest?.price.amount.toFixed(2) ?? null,
+    itadLowestCut: entry.lowest?.cut ?? null,
+    itadPriceUpdatedAt: now,
+  };
+}
 
 @Injectable()
 export class ItadPriceSyncService implements OnApplicationBootstrap {
@@ -70,6 +89,10 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
     for (const chunk of chunks) {
       await this.processChunk(chunk);
     }
+    const cleared = await this.clearStalePricing();
+    if (cleared > 0) {
+      this.logger.log(`Cleared stale pricing for ${cleared} games`);
+    }
     this.logger.log('ITAD pricing sync complete');
   }
 
@@ -112,31 +135,38 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
     const now = new Date();
     for (const game of chunk) {
       const entry = entryMap.get(game.itadGameId);
-      const data = this.buildUpdateData(entry, now);
+      if (!entry) continue; // skip — stale cleanup handles missing entries
       await this.db
         .update(schema.games)
-        .set(data)
+        .set(buildUpdateData(entry, now))
         .where(eq(schema.games.id, game.id));
     }
   }
 
-  /** Build the SET clause data from an ITAD entry. */
-  private buildUpdateData(
-    entry: ItadOverviewGameEntry | undefined,
-    now: Date,
-  ): Record<string, unknown> {
-    if (!entry) {
-      return { itadPriceUpdatedAt: now };
-    }
-    return {
-      itadCurrentPrice: entry.current?.price.amount.toFixed(2) ?? null,
-      itadCurrentCut: entry.current?.cut ?? null,
-      itadCurrentShop: entry.current?.shop.name ?? null,
-      itadCurrentUrl: entry.current?.url ?? null,
-      itadLowestPrice: entry.lowest?.price.amount.toFixed(2) ?? null,
-      itadLowestCut: entry.lowest?.cut ?? null,
-      itadPriceUpdatedAt: now,
-    };
+  /** Clear pricing columns for games not updated in STALE_PRICING_DAYS. */
+  async clearStalePricing(): Promise<number> {
+    const result = await this.db
+      .update(schema.games)
+      .set({
+        itadCurrentPrice: null,
+        itadCurrentCut: null,
+        itadCurrentShop: null,
+        itadCurrentUrl: null,
+        itadLowestPrice: null,
+        itadLowestCut: null,
+      })
+      .where(
+        and(
+          isNotNull(schema.games.itadGameId),
+          isNotNull(schema.games.itadCurrentPrice),
+          lt(
+            schema.games.itadPriceUpdatedAt,
+            sql`NOW() - INTERVAL '${sql.raw(String(STALE_PRICING_DAYS))} days'`,
+          ),
+        ),
+      )
+      .returning({ id: schema.games.id });
+    return result.length;
   }
 
   /** Split an array into chunks of the given size. */

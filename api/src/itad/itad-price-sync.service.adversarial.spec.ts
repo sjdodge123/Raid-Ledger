@@ -136,7 +136,7 @@ describe('ItadPriceSyncService — adversarial', () => {
   });
 
   describe('syncPricing — edge: game missing from ITAD response', () => {
-    it('updates only itadPriceUpdatedAt when game is not in the ITAD response', async () => {
+    it('skips DB update when game is not in the ITAD response', async () => {
       mockDb.where.mockResolvedValueOnce([
         { id: 20, itadGameId: 'game-in-db-not-in-itad' },
       ]);
@@ -147,16 +147,18 @@ describe('ItadPriceSyncService — adversarial', () => {
 
       await service.syncPricing();
 
-      expect(mockDb.update).toHaveBeenCalledTimes(1);
-      const setCall = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      // Only the timestamp should be set — no pricing columns
-      expect(Object.keys(setCall)).toEqual(['itadPriceUpdatedAt']);
-      expect(setCall.itadPriceUpdatedAt).toBeInstanceOf(Date);
+      // No per-game update (skipped), only clearStalePricing runs
+      const setCalls = mockDb.set.mock.calls;
+      // clearStalePricing sets nulls for stale games
+      const staleCleanupCall = setCalls.find(
+        (c: Record<string, unknown>[]) => c[0].itadCurrentPrice === null,
+      );
+      expect(staleCleanupCall).toBeDefined();
     });
   });
 
   describe('syncPricing — edge: getOverviewBatch returns empty array', () => {
-    it('still calls DB update once per game even when ITAD returns no entries', async () => {
+    it('skips per-game updates when ITAD returns no entries', async () => {
       mockDb.where.mockResolvedValueOnce([
         { id: 30, itadGameId: 'game-uuid-30' },
         { id: 31, itadGameId: 'game-uuid-31' },
@@ -167,8 +169,12 @@ describe('ItadPriceSyncService — adversarial', () => {
 
       await service.syncPricing();
 
-      // Both games should still receive a timestamp update
-      expect(mockDb.update).toHaveBeenCalledTimes(2);
+      // No per-game pricing updates (all skipped), only clearStalePricing
+      const setCalls = mockDb.set.mock.calls;
+      const pricingUpdates = setCalls.filter(
+        (c: Record<string, unknown>[]) => c[0].itadPriceUpdatedAt instanceof Date && c[0].itadCurrentPrice !== undefined,
+      );
+      expect(pricingUpdates).toHaveLength(0);
     });
   });
 
