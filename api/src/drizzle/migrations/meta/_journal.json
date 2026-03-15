@@ -673,6 +673,13 @@
       "when": 1773500000000,
       "tag": "0095_add_games_name_trgm_index",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1773510443491,
+      "tag": "0096_cynical_living_mummy",
+      "breakpoints": true
     }
   ]
 }
