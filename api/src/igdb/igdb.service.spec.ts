@@ -93,6 +93,13 @@ describe('IgdbService', () => {
       itadGameId: null,
       itadBoxartUrl: null,
       itadTags: [],
+      itadCurrentPrice: null,
+      itadCurrentCut: null,
+      itadCurrentShop: null,
+      itadCurrentUrl: null,
+      itadLowestPrice: null,
+      itadLowestCut: null,
+      itadPriceUpdatedAt: null,
     },
   ];
 

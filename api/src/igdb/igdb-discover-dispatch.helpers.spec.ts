@@ -1,6 +1,6 @@
 /**
- * Unit tests for igdb-discover-dispatch.helpers (ROK-803).
- * Verifies correct routing of category slugs to fetch functions.
+ * Unit tests for igdb-discover-dispatch.helpers (ROK-803, ROK-818).
+ * Updated: dispatchDiscoverRow no longer takes ItadPriceService.
  */
 import {
   dispatchDiscoverRow,
@@ -10,7 +10,15 @@ import {
 /** Build a DB mock that chains and returns empty results. */
 function buildEmptyDb() {
   const db: Record<string, jest.Mock> = {};
-  const chain = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy', 'where'];
+  const chain = [
+    'select',
+    'from',
+    'innerJoin',
+    'leftJoin',
+    'orderBy',
+    'groupBy',
+    'where',
+  ];
   for (const m of chain) db[m] = jest.fn().mockReturnThis();
   db.limit = jest.fn().mockResolvedValue([]);
   return db;
@@ -22,11 +30,6 @@ function buildRedisMock() {
     get: jest.fn().mockResolvedValue(null),
     setex: jest.fn().mockResolvedValue('OK'),
   };
-}
-
-/** Build a mock ITAD price service. */
-function buildItadMock() {
-  return { getOverviewBatch: jest.fn().mockResolvedValue([]) };
 }
 
 describe('dispatchDiscoverRow', () => {
@@ -41,7 +44,6 @@ describe('dispatchDiscoverRow', () => {
       buildEmptyDb() as never,
       buildRedisMock() as never,
       600,
-      buildItadMock() as never,
     );
     expect(result.slug).toBe('wishlisted-on-sale');
     expect(result.games).toEqual([]);
@@ -58,7 +60,6 @@ describe('dispatchDiscoverRow', () => {
       buildEmptyDb() as never,
       buildRedisMock() as never,
       600,
-      buildItadMock() as never,
     );
     expect(result.slug).toBe('most-played-on-sale');
     expect(result.games).toEqual([]);
@@ -66,14 +67,12 @@ describe('dispatchDiscoverRow', () => {
 
   it('returns correct slug for best-price', async () => {
     const db = buildEmptyDb();
-    db.where = jest.fn().mockResolvedValue([]);
     const cat = { category: 'Best Price', slug: 'best-price', cached: false };
     const result = await dispatchDiscoverRow(
       cat,
       db as never,
       buildRedisMock() as never,
       600,
-      buildItadMock() as never,
     );
     expect(result.slug).toBe('best-price');
     expect(result.games).toEqual([]);
@@ -90,7 +89,6 @@ describe('dispatchDiscoverRow', () => {
       buildEmptyDb() as never,
       buildRedisMock() as never,
       600,
-      buildItadMock() as never,
     );
     expect(result.slug).toBe('community-wants-to-play');
     expect(result.games).toEqual([]);
@@ -107,7 +105,6 @@ describe('dispatchDiscoverRow', () => {
       buildEmptyDb() as never,
       buildRedisMock() as never,
       600,
-      buildItadMock() as never,
     );
     expect(result.slug).toBe('most-wishlisted');
     expect(result.games).toEqual([]);
@@ -115,9 +112,6 @@ describe('dispatchDiscoverRow', () => {
 
   it('falls back to fetchCategoryRow for standard slugs', async () => {
     const db = buildEmptyDb();
-    db.where = jest.fn().mockReturnThis();
-    db.orderBy = jest.fn().mockReturnThis();
-    db.limit = jest.fn().mockResolvedValue([]);
     const cat = {
       category: 'Highest Rated',
       slug: 'highest-rated',
@@ -129,7 +123,6 @@ describe('dispatchDiscoverRow', () => {
       db as never,
       redis as never,
       600,
-      buildItadMock() as never,
     );
     expect(result.slug).toBe('highest-rated');
   });

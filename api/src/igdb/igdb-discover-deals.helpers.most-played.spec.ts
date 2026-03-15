@@ -1,26 +1,21 @@
 /**
- * Unit tests for fetchMostPlayedOnSaleRow (ROK-803).
- * Covers the "Most Played Games On Sale" discover category.
+ * Unit tests for fetchMostPlayedOnSaleRow (ROK-803, ROK-818).
+ * Updated: uses DB pricing columns instead of ITAD API calls.
  */
 import { fetchMostPlayedOnSaleRow } from './igdb-discover-deals.helpers';
 import {
-  buildPriceService,
   buildRedisMock,
   buildPlaytimeDb,
-  makeItadEntry,
-  makeItadEntryNoDeal,
   CACHE_TTL,
 } from './igdb-discover-deals.test-fixtures';
 
 describe('fetchMostPlayedOnSaleRow', () => {
-  it('returns empty games when no playtime entries', async () => {
-    const db = buildPlaytimeDb([], []);
-    const svc = buildPriceService([]);
+  it('returns empty games when no playtime entries on sale', async () => {
+    const db = buildPlaytimeDb([]);
     const redis = buildRedisMock();
 
     const result = await fetchMostPlayedOnSaleRow(
       db as never,
-      svc as never,
       redis as never,
       CACHE_TTL,
     );
@@ -29,35 +24,14 @@ describe('fetchMostPlayedOnSaleRow', () => {
     expect(result.games).toEqual([]);
   });
 
-  it('filters out games not on sale', async () => {
-    const db = buildPlaytimeDb(
-      [{ gameId: 2, totalPlaytime: 1000 }],
-      [{ id: 2, name: 'Game B', itadGameId: 'itad-2' }],
-    );
-    const svc = buildPriceService([makeItadEntryNoDeal('itad-2')]);
-    const redis = buildRedisMock();
-
-    const result = await fetchMostPlayedOnSaleRow(
-      db as never,
-      svc as never,
-      redis as never,
-      CACHE_TTL,
-    );
-
-    expect(result.games).toEqual([]);
-  });
-
   it('includes most played games that are on sale', async () => {
-    const db = buildPlaytimeDb(
-      [{ gameId: 2, totalPlaytime: 1000 }],
-      [{ id: 2, name: 'Game B', itadGameId: 'itad-2' }],
-    );
-    const svc = buildPriceService([makeItadEntry('itad-2', 30)]);
+    const db = buildPlaytimeDb([
+      { id: 2, name: 'Game B', itadGameId: 'itad-2', itadCurrentCut: 30 },
+    ]);
     const redis = buildRedisMock();
 
     const result = await fetchMostPlayedOnSaleRow(
       db as never,
-      svc as never,
       redis as never,
       CACHE_TTL,
     );
@@ -69,12 +43,10 @@ describe('fetchMostPlayedOnSaleRow', () => {
   it('returns cached data when available', async () => {
     const cachedGames = [{ id: 2, name: 'Cached' }];
     const redis = buildRedisMock(JSON.stringify(cachedGames));
-    const db = buildPlaytimeDb([], []);
-    const svc = buildPriceService([]);
+    const db = buildPlaytimeDb([]);
 
     const result = await fetchMostPlayedOnSaleRow(
       db as never,
-      svc as never,
       redis as never,
       CACHE_TTL,
     );

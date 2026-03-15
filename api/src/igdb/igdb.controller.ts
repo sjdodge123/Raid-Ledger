@@ -100,9 +100,7 @@ export class IgdbController {
     const categories = buildDiscoverCategories();
 
     const rows = await Promise.all(
-      categories.map((cat) =>
-        dispatchDiscoverRow(cat, db, redis, cacheTtl, this.itadPriceService),
-      ),
+      categories.map((cat) => dispatchDiscoverRow(cat, db, redis, cacheTtl)),
     );
     return { rows: rows.filter((r) => r.games.length > 0) };
   }

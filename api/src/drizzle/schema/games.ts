@@ -9,6 +9,7 @@ import {
   boolean,
   varchar,
   unique,
+  numeric,
 } from 'drizzle-orm/pg-core';
 
 /**
@@ -79,6 +80,22 @@ export const games = pgTable('games', {
     .notNull(),
   /** ROK-788: Blizzard API namespace prefix (e.g., 'classic1x', 'classic', 'classicann') */
   apiNamespacePrefix: text('api_namespace_prefix'),
+
+  // ROK-818: ITAD pricing data (synced via cron)
+  /** Current best deal price from ITAD */
+  itadCurrentPrice: numeric('itad_current_price', { precision: 10, scale: 2 }),
+  /** Current discount percentage (0-100) */
+  itadCurrentCut: integer('itad_current_cut'),
+  /** Store name offering the current deal */
+  itadCurrentShop: text('itad_current_shop'),
+  /** URL to the current deal */
+  itadCurrentUrl: text('itad_current_url'),
+  /** Historical lowest price ever */
+  itadLowestPrice: numeric('itad_lowest_price', { precision: 10, scale: 2 }),
+  /** Historical lowest discount percentage (0-100) */
+  itadLowestCut: integer('itad_lowest_cut'),
+  /** Last successful ITAD pricing sync */
+  itadPriceUpdatedAt: timestamp('itad_price_updated_at'),
 });
 
 /**
