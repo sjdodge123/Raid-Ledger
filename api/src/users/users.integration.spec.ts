@@ -21,15 +21,18 @@ import { UsersService } from './users.service';
 let testApp: TestApp;
 let adminToken: string;
 
-beforeAll(async () => {
+async function setupAll(): Promise<void> {
   testApp = await getTestApp();
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-});
+}
 
-afterEach(async () => {
+async function resetAfterEach(): Promise<void> {
   testApp.seed = await truncateAllTables(testApp.db);
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-});
+}
+
+beforeAll(() => setupAll());
+afterEach(() => resetAfterEach());
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -78,6 +81,18 @@ async function seedCascadeData(userId: number): Promise<void> {
     name: 'Test Template',
     config: { title: 'T', durationMinutes: 60 },
   });
+  // Event signup (event owned by admin so it survives user deletion)
+  const [evt] = await testApp.db
+    .insert(schema.events)
+    .values({
+      title: 'Cascade Signup Test',
+      creatorId: testApp.seed.adminUser.id,
+      duration: [start, end] as [Date, Date],
+    })
+    .returning();
+  await testApp.db
+    .insert(schema.eventSignups)
+    .values({ eventId: evt.id, userId });
 }
 
 // ─── deleteUser cascade ──────────────────────────────────────────────────────
@@ -111,11 +126,16 @@ async function testDeletesSessionsCredentialsAvailabilityTemplates() {
     .select()
     .from(schema.eventTemplates)
     .where(eq(schema.eventTemplates.userId, userId));
+  const signups = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, userId));
 
   expect(sessions).toHaveLength(0);
   expect(creds).toHaveLength(0);
   expect(avail).toHaveLength(0);
   expect(templates).toHaveLength(0);
+  expect(signups).toHaveLength(0);
 }
 
 async function testReassignsEventsToAdmin() {
@@ -218,7 +238,7 @@ async function testUserRowRemoved() {
 }
 
 describe('deleteUser cascade (integration)', () => {
-  it('deletes sessions, credentials, availability, templates for user', () =>
+  it('deletes sessions, credentials, availability, templates, signups for user', () =>
     testDeletesSessionsCredentialsAvailabilityTemplates());
   it('reassigns events to admin user', () => testReassignsEventsToAdmin());
   it('unclaims pug slots and reassigns created slots', () =>
