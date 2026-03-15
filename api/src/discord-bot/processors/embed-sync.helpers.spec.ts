@@ -84,10 +84,14 @@ function makeEventRow(overrides: {
     id: 1,
     title: 'Test Event',
     description: null,
-    duration: [new Date(overrides.startMs), new Date(overrides.endMs)] as [Date, Date],
-    extendedUntil: overrides.extendedUntilMs != null
-      ? new Date(overrides.extendedUntilMs)
-      : null,
+    duration: [new Date(overrides.startMs), new Date(overrides.endMs)] as [
+      Date,
+      Date,
+    ],
+    extendedUntil:
+      overrides.extendedUntilMs != null
+        ? new Date(overrides.extendedUntilMs)
+        : null,
     maxAttendees: overrides.maxAttendees ?? null,
     slotConfig: overrides.slotConfig ?? null,
     gameId: null,
@@ -122,7 +126,9 @@ describe('computeEmbedState — time-based transitions', () => {
       startMs: now - 4 * 3600000,
       endMs: now - 1 * 3600000,
     });
-    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(EMBED_STATES.COMPLETED);
+    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(
+      EMBED_STATES.COMPLETED,
+    );
   });
 
   it('returns LIVE when event is in progress', () => {
@@ -131,7 +137,9 @@ describe('computeEmbedState — time-based transitions', () => {
       startMs: now - 30 * 60000,
       endMs: now + 90 * 60000,
     });
-    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(EMBED_STATES.LIVE);
+    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(
+      EMBED_STATES.LIVE,
+    );
   });
 
   it('returns IMMINENT when event starts within 2 hours', () => {
@@ -140,7 +148,9 @@ describe('computeEmbedState — time-based transitions', () => {
       startMs: now + 60 * 60000,
       endMs: now + 4 * 3600000,
     });
-    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(EMBED_STATES.IMMINENT);
+    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(
+      EMBED_STATES.IMMINENT,
+    );
   });
 
   it('returns LIVE (not COMPLETED) when extendedUntil has not passed', () => {
@@ -150,7 +160,9 @@ describe('computeEmbedState — time-based transitions', () => {
       endMs: now - 10 * 60000,
       extendedUntilMs: now + 20 * 60000,
     });
-    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(EMBED_STATES.LIVE);
+    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(
+      EMBED_STATES.LIVE,
+    );
   });
 
   it('returns COMPLETED when extendedUntil has passed', () => {
@@ -160,7 +172,9 @@ describe('computeEmbedState — time-based transitions', () => {
       endMs: now - 60 * 60000,
       extendedUntilMs: now - 5 * 60000,
     });
-    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(EMBED_STATES.COMPLETED);
+    expect(helpers.computeEmbedState(event, makeEmbedData())).toBe(
+      EMBED_STATES.COMPLETED,
+    );
   });
 });
 
@@ -171,9 +185,9 @@ describe('computeEmbedState — capacity-based transitions', () => {
       startMs: now + 25 * 3600000,
       endMs: now + 28 * 3600000,
     });
-    expect(helpers.computeEmbedState(event, makeEmbedData({ signupCount: 0 }))).toBe(
-      EMBED_STATES.POSTED,
-    );
+    expect(
+      helpers.computeEmbedState(event, makeEmbedData({ signupCount: 0 })),
+    ).toBe(EMBED_STATES.POSTED);
   });
 
   it('returns FILLING when there are signups but not full', () => {
@@ -183,9 +197,12 @@ describe('computeEmbedState — capacity-based transitions', () => {
       endMs: now + 28 * 3600000,
       maxAttendees: 10,
     });
-    expect(helpers.computeEmbedState(event, makeEmbedData({ signupCount: 5, maxAttendees: 10 }))).toBe(
-      EMBED_STATES.FILLING,
-    );
+    expect(
+      helpers.computeEmbedState(
+        event,
+        makeEmbedData({ signupCount: 5, maxAttendees: 10 }),
+      ),
+    ).toBe(EMBED_STATES.FILLING);
   });
 
   it('returns FULL when signupCount reaches maxAttendees', () => {
@@ -195,9 +212,12 @@ describe('computeEmbedState — capacity-based transitions', () => {
       endMs: now + 28 * 3600000,
       maxAttendees: 5,
     });
-    expect(helpers.computeEmbedState(event, makeEmbedData({ signupCount: 5, maxAttendees: 5 }))).toBe(
-      EMBED_STATES.FULL,
-    );
+    expect(
+      helpers.computeEmbedState(
+        event,
+        makeEmbedData({ signupCount: 5, maxAttendees: 5 }),
+      ),
+    ).toBe(EMBED_STATES.FULL);
   });
 
   it('returns FULL when signupCount reaches total MMO slots', () => {

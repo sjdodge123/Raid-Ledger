@@ -72,17 +72,25 @@ describe('buildEmbedEventData — signupCount', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: 'u1', username: 'alice', role: 'tank', status: 'signed_up',
-          preferredRoles: ['tank'], className: null },
-        { discordId: 'u2', username: 'bob', role: null, status: 'declined',
-          preferredRoles: null, className: null },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: 'tank',
+          status: 'signed_up',
+          preferredRoles: ['tank'],
+          className: null,
+        },
+        {
+          discordId: 'u2',
+          username: 'bob',
+          role: null,
+          status: 'declined',
+          preferredRoles: null,
+          className: null,
+        },
       ],
     );
-    const result = await buildEmbedEventData(
-      db as never,
-      makeEventDto(),
-      1,
-    );
+    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
     expect(result.signupCount).toBe(1);
   });
 
@@ -90,10 +98,22 @@ describe('buildEmbedEventData — signupCount', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: 'u1', username: 'alice', role: null, status: 'roached_out',
-          preferredRoles: null, className: null },
-        { discordId: 'u2', username: 'bob', role: 'healer', status: 'signed_up',
-          preferredRoles: ['healer'], className: null },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: null,
+          status: 'roached_out',
+          preferredRoles: null,
+          className: null,
+        },
+        {
+          discordId: 'u2',
+          username: 'bob',
+          role: 'healer',
+          status: 'signed_up',
+          preferredRoles: ['healer'],
+          className: null,
+        },
       ],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -104,8 +124,14 @@ describe('buildEmbedEventData — signupCount', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: 'u1', username: 'alice', role: null, status: 'departed',
-          preferredRoles: null, className: null },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: null,
+          status: 'departed',
+          preferredRoles: null,
+          className: null,
+        },
       ],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -116,12 +142,30 @@ describe('buildEmbedEventData — signupCount', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: 'u1', username: 'alice', role: 'tank', status: 'signed_up',
-          preferredRoles: ['tank'], className: null },
-        { discordId: 'u2', username: 'bob', role: null, status: 'tentative',
-          preferredRoles: ['dps'], className: null },
-        { discordId: 'u3', username: 'charlie', role: 'dps', status: 'confirmed',
-          preferredRoles: ['dps'], className: null },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: 'tank',
+          status: 'signed_up',
+          preferredRoles: ['tank'],
+          className: null,
+        },
+        {
+          discordId: 'u2',
+          username: 'bob',
+          role: null,
+          status: 'tentative',
+          preferredRoles: ['dps'],
+          className: null,
+        },
+        {
+          discordId: 'u3',
+          username: 'charlie',
+          role: 'dps',
+          status: 'confirmed',
+          preferredRoles: ['dps'],
+          className: null,
+        },
       ],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -142,10 +186,22 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: 'u1', username: 'alice', role: 'tank', status: 'signed_up',
-          preferredRoles: ['tank'], className: null },
-        { discordId: 'u2', username: 'bob', role: null, status: 'declined',
-          preferredRoles: null, className: null },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: 'tank',
+          status: 'signed_up',
+          preferredRoles: ['tank'],
+          className: null,
+        },
+        {
+          discordId: 'u2',
+          username: 'bob',
+          role: null,
+          status: 'declined',
+          preferredRoles: null,
+          className: null,
+        },
       ],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -157,10 +213,22 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: null, username: null, role: 'dps', status: 'signed_up',
-          preferredRoles: null, className: null },
-        { discordId: 'u1', username: 'alice', role: 'tank', status: 'signed_up',
-          preferredRoles: ['tank'], className: null },
+        {
+          discordId: null,
+          username: null,
+          role: 'dps',
+          status: 'signed_up',
+          preferredRoles: null,
+          className: null,
+        },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: 'tank',
+          status: 'signed_up',
+          preferredRoles: ['tank'],
+          className: null,
+        },
       ],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -172,8 +240,14 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: 'u1', username: 'alice', role: 'healer', status: 'signed_up',
-          preferredRoles: ['healer'], className: 'Paladin' },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: 'healer',
+          status: 'signed_up',
+          preferredRoles: ['healer'],
+          className: 'Paladin',
+        },
       ],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -188,8 +262,14 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: 'u1', username: 'alice', role: null, status: 'signed_up',
-          preferredRoles: ['dps'], className: null },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: null,
+          status: 'signed_up',
+          preferredRoles: ['dps'],
+          className: null,
+        },
       ],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -200,8 +280,14 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     const db = makeMockDb(
       [],
       [
-        { discordId: 'u1', username: 'alice', role: 'dps', status: 'signed_up',
-          preferredRoles: ['dps'], className: null },
+        {
+          discordId: 'u1',
+          username: 'alice',
+          role: 'dps',
+          status: 'signed_up',
+          preferredRoles: ['dps'],
+          className: null,
+        },
       ],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -237,7 +323,10 @@ describe('buildEmbedEventData — roleCounts', () => {
 
   it('omits null roles from roleCounts', async () => {
     const db = makeMockDb(
-      [{ role: null, count: 3 }, { role: 'tank', count: 1 }],
+      [
+        { role: null, count: 3 },
+        { role: 'tank', count: 1 },
+      ],
       [],
     );
     const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
@@ -286,8 +375,14 @@ describe('buildEmbedEventData — game field', () => {
   it('maps game name and coverUrl when game is present', async () => {
     const db = makeMockDb([], []);
     const dto = makeEventDto({
-      game: { id: 1, name: 'World of Warcraft', coverUrl: 'https://img.example.com/wow.jpg',
-        slug: 'world-of-warcraft', hasRoles: true, hasSpecs: false },
+      game: {
+        id: 1,
+        name: 'World of Warcraft',
+        coverUrl: 'https://img.example.com/wow.jpg',
+        slug: 'world-of-warcraft',
+        hasRoles: true,
+        hasSpecs: false,
+      },
     } as never);
     const result = await buildEmbedEventData(db as never, dto, 1);
     expect(result.game).toMatchObject({
@@ -311,7 +406,12 @@ describe('buildEmbedEventData — slotConfig', () => {
     const slotConfig = { type: 'mmo', tank: 1, healer: 1, dps: 3 };
     const dto = makeEventDto({ slotConfig: slotConfig as never });
     const result = await buildEmbedEventData(db as never, dto, 1);
-    expect(result.slotConfig).toMatchObject({ type: 'mmo', tank: 1, healer: 1, dps: 3 });
+    expect(result.slotConfig).toMatchObject({
+      type: 'mmo',
+      tank: 1,
+      healer: 1,
+      dps: 3,
+    });
   });
 
   it('sets slotConfig to null when not present', async () => {

@@ -80,11 +80,7 @@ describe('countFilledPerRole', () => {
   });
 
   it('ignores assignments with null role', () => {
-    const assignments = [
-      { role: null },
-      { role: 'tank' },
-      { role: null },
-    ];
+    const assignments = [{ role: null }, { role: 'tank' }, { role: null }];
     const result = countFilledPerRole(assignments);
     expect(result).toEqual({ tank: 1, healer: 0, dps: 0 });
   });
@@ -198,7 +194,14 @@ describe('findOldestTentativeOccupant', () => {
 
   it('returns null when all occupants are confirmed', () => {
     const assignments = [
-      { id: 1, signupId: 10, role: 'tank', position: 1, eventId: 1, isOverride: 0 },
+      {
+        id: 1,
+        signupId: 10,
+        role: 'tank',
+        position: 1,
+        eventId: 1,
+        isOverride: 0,
+      },
     ];
     const signupById = new Map([
       [10, { status: 'signed_up', signedUpAt: new Date('2026-01-01') }],
@@ -209,32 +212,60 @@ describe('findOldestTentativeOccupant', () => {
 
   it('returns the tentative occupant when present', () => {
     const assignments = [
-      { id: 1, signupId: 10, role: 'tank', position: 1, eventId: 1, isOverride: 0 },
+      {
+        id: 1,
+        signupId: 10,
+        role: 'tank',
+        position: 1,
+        eventId: 1,
+        isOverride: 0,
+      },
     ];
     const signupById = new Map([
       [10, { status: 'tentative', signedUpAt: new Date('2026-01-01') }],
     ]);
     const result = findOldestTentativeOccupant(assignments, 'tank', signupById);
     expect(result).not.toBeNull();
-    expect(result!.signupId).toBe(10);
+    expect(result.signupId).toBe(10);
   });
 
   it('returns the oldest tentative occupant when multiple exist', () => {
     const assignments = [
-      { id: 1, signupId: 10, role: 'tank', position: 1, eventId: 1, isOverride: 0 },
-      { id: 2, signupId: 20, role: 'tank', position: 2, eventId: 1, isOverride: 0 },
+      {
+        id: 1,
+        signupId: 10,
+        role: 'tank',
+        position: 1,
+        eventId: 1,
+        isOverride: 0,
+      },
+      {
+        id: 2,
+        signupId: 20,
+        role: 'tank',
+        position: 2,
+        eventId: 1,
+        isOverride: 0,
+      },
     ];
     const signupById = new Map([
       [10, { status: 'tentative', signedUpAt: new Date('2026-01-02') }],
       [20, { status: 'tentative', signedUpAt: new Date('2026-01-01') }],
     ]);
     const result = findOldestTentativeOccupant(assignments, 'tank', signupById);
-    expect(result!.signupId).toBe(20);
+    expect(result.signupId).toBe(20);
   });
 
   it('ignores assignments for different roles', () => {
     const assignments = [
-      { id: 1, signupId: 10, role: 'healer', position: 1, eventId: 1, isOverride: 0 },
+      {
+        id: 1,
+        signupId: 10,
+        role: 'healer',
+        position: 1,
+        eventId: 1,
+        isOverride: 0,
+      },
     ];
     const signupById = new Map([
       [10, { status: 'tentative', signedUpAt: new Date('2026-01-01') }],
@@ -245,7 +276,14 @@ describe('findOldestTentativeOccupant', () => {
 
   it('handles signup not found in map (treats as non-tentative)', () => {
     const assignments = [
-      { id: 1, signupId: 99, role: 'tank', position: 1, eventId: 1, isOverride: 0 },
+      {
+        id: 1,
+        signupId: 99,
+        role: 'tank',
+        position: 1,
+        eventId: 1,
+        isOverride: 0,
+      },
     ];
     const result = findOldestTentativeOccupant(assignments, 'tank', new Map());
     expect(result).toBeNull();
@@ -312,7 +350,12 @@ describe('findRoleChanges', () => {
 
 describe('buildPromotionWarnings', () => {
   it('returns empty array when assigned role is in preferred roles', () => {
-    const warnings = buildPromotionWarnings('user1', ['tank', 'dps'], 'tank', []);
+    const warnings = buildPromotionWarnings(
+      'user1',
+      ['tank', 'dps'],
+      'tank',
+      [],
+    );
     expect(warnings).toHaveLength(0);
   });
 
@@ -343,7 +386,12 @@ describe('buildPromotionWarnings', () => {
     const chainMoves = [
       { signupId: 1, username: 'mover', fromRole: 'dps', toRole: 'healer' },
     ];
-    const warnings = buildPromotionWarnings('user1', ['tank'], 'tank', chainMoves);
+    const warnings = buildPromotionWarnings(
+      'user1',
+      ['tank'],
+      'tank',
+      chainMoves,
+    );
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('mover');
     expect(warnings[0]).toContain('dps');
@@ -354,7 +402,12 @@ describe('buildPromotionWarnings', () => {
     const chainMoves = [
       { signupId: 1, username: 'mover', fromRole: 'tank', toRole: 'dps' },
     ];
-    const warnings = buildPromotionWarnings('user1', ['healer'], 'tank', chainMoves);
+    const warnings = buildPromotionWarnings(
+      'user1',
+      ['healer'],
+      'tank',
+      chainMoves,
+    );
     expect(warnings).toHaveLength(2);
   });
 });
@@ -469,7 +522,13 @@ describe('bfsRearrangementChain', () => {
   it('does not mutate the input newPrefs array', () => {
     const newPrefs = ['tank', 'dps'];
     const originalPrefs = [...newPrefs];
-    bfsRearrangementChain(newPrefs, [], [], { tank: 1, dps: 3 }, { tank: 0, dps: 0 });
+    bfsRearrangementChain(
+      newPrefs,
+      [],
+      [],
+      { tank: 1, dps: 3 },
+      { tank: 0, dps: 0 },
+    );
     expect(newPrefs).toEqual(originalPrefs);
   });
 });
