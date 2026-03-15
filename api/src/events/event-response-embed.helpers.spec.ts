@@ -381,9 +381,8 @@ describe('buildEmbedEventData — game field', () => {
         coverUrl: 'https://img.example.com/wow.jpg',
         slug: 'world-of-warcraft',
         hasRoles: true,
-        hasSpecs: false,
       },
-    } as never);
+    });
     const result = await buildEmbedEventData(db as never, dto, 1);
     expect(result.game).toMatchObject({
       name: 'World of Warcraft',
