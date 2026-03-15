@@ -3,6 +3,7 @@
  */
 import { type TestApp } from '../common/testing/test-app';
 import * as bcrypt from 'bcrypt';
+import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 
 /** Helper to create a member user with local credentials and return their token. */
@@ -22,6 +23,11 @@ export async function createMemberAndLogin(
   const loginRes = await testApp.request
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
+  if (loginRes.status !== 200) {
+    throw new Error(
+      `createMemberAndLogin login failed for ${email}: ${loginRes.status} — ${JSON.stringify(loginRes.body)}`,
+    );
+  }
   return { userId: user.id, token: loginRes.body.access_token as string };
 }
 
@@ -68,4 +74,97 @@ export async function createPastEvent(
     })
     .returning();
   return event.id;
+}
+
+/** Standard MMO slot config for allocation tests. */
+export const MMO_SLOT_CONFIG = {
+  type: 'mmo',
+  tank: 1,
+  healer: 1,
+  dps: 3,
+};
+
+/** Helper to create an MMO event with a given slot config. */
+export async function createMmoEvent(
+  testApp: TestApp,
+  adminToken: string,
+  slotConfig: Record<string, unknown> = MMO_SLOT_CONFIG,
+  overrides: Record<string, unknown> = {},
+): Promise<number> {
+  return createFutureEvent(testApp, adminToken, {
+    slotConfig,
+    ...overrides,
+  });
+}
+
+/** Helper to sign up a user with preferred roles via HTTP. */
+export async function signupWithPrefs(
+  testApp: TestApp,
+  token: string,
+  eventId: number,
+  preferredRoles: string[],
+): Promise<{ id: number; status: number; body: Record<string, unknown> }> {
+  const res = await testApp.request
+    .post(`/events/${eventId}/signup`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ preferredRoles });
+  return { id: res.body.id as number, status: res.status, body: res.body };
+}
+
+/** Get all roster assignments for an event from the DB. */
+export async function getAllRosterAssignments(
+  testApp: TestApp,
+  eventId: number,
+): Promise<Array<typeof schema.rosterAssignments.$inferSelect>> {
+  return testApp.db
+    .select()
+    .from(schema.rosterAssignments)
+    .where(eq(schema.rosterAssignments.eventId, eventId));
+}
+
+/** Get the roster assignment for a specific signup. */
+export async function getSignupAssignment(
+  testApp: TestApp,
+  signupId: number,
+): Promise<typeof schema.rosterAssignments.$inferSelect | undefined> {
+  const [row] = await testApp.db
+    .select()
+    .from(schema.rosterAssignments)
+    .where(eq(schema.rosterAssignments.signupId, signupId))
+    .limit(1);
+  return row;
+}
+
+/** Create an MMO game with hasRoles=true. */
+export async function createMmoGame(
+  testApp: TestApp,
+  name = 'WoW Test',
+  slug = 'wow-test',
+): Promise<typeof schema.games.$inferSelect> {
+  const [game] = await testApp.db
+    .insert(schema.games)
+    .values({ name, slug, hasRoles: true, hasSpecs: true })
+    .returning();
+  return game;
+}
+
+/** Create a character for a user and mark it as main. */
+export async function createMainCharacter(
+  testApp: TestApp,
+  userId: number,
+  gameId: number,
+  charClass: string,
+): Promise<typeof schema.characters.$inferSelect> {
+  const [char] = await testApp.db
+    .insert(schema.characters)
+    .values({
+      userId,
+      gameId,
+      name: `Main-${charClass}`,
+      class: charClass,
+      role: charClass.toLowerCase(),
+      isMain: true,
+    })
+    .returning();
+  return char;
 }
