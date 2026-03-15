@@ -78,9 +78,13 @@ jobs:
         run: npx vitest run --coverage
         working-directory: web
 
-  integration-tests:
+  integration-test-shard:
     runs-on: ubuntu-latest
     needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/3, 2/3, 3/3]
 
     services:
       postgres:
@@ -137,8 +141,20 @@ jobs:
       - name: Build contract
         run: npm run build -w packages/contract
 
-      - name: Run integration tests
-        run: npm run test:integration -w api
+      - name: Run integration tests (shard ${{ matrix.shard }})
+        run: npm run test:integration -w api -- --shard=${{ matrix.shard }}
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: integration-test-shard
+    if: always()
+    steps:
+      - name: Check shard results
+        run: |
+          if [ "${{ needs.integration-test-shard.result }}" != "success" ]; then
+            echo "Integration test shards failed"
+            exit 1
+          fi
 
   smoke-tests:
     runs-on: ubuntu-latest

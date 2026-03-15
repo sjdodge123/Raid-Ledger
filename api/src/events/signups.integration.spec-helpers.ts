@@ -97,7 +97,10 @@ export async function createMmoEvent(
   });
 }
 
-/** Helper to sign up a user with preferred roles via HTTP. */
+/**
+ * Helper to sign up a user with preferred roles via HTTP.
+ * Throws on non-201 responses to fail fast when used as a precondition.
+ */
 export async function signupWithPrefs(
   testApp: TestApp,
   token: string,
@@ -108,6 +111,11 @@ export async function signupWithPrefs(
     .post(`/events/${eventId}/signup`)
     .set('Authorization', `Bearer ${token}`)
     .send({ preferredRoles });
+  if (res.status !== 201) {
+    throw new Error(
+      `signupWithPrefs failed: expected 201 but got ${res.status} — ${JSON.stringify(res.body)}`,
+    );
+  }
   return { id: res.body.id as number, status: res.status, body: res.body };
 }
 

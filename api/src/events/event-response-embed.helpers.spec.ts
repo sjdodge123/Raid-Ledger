@@ -14,6 +14,11 @@
  */
 import { buildEmbedEventData } from './event-response-embed.helpers';
 import type { EventResponseDto } from '@raid-ledger/contract';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../drizzle/schema';
+
+/** DB type expected by buildEmbedEventData. */
+type EmbedDb = PostgresJsDatabase<typeof schema>;
 
 // ─── Mock helpers ─────────────────────────────────────────────────────────
 
@@ -31,11 +36,11 @@ function makeSelectChain(rows: unknown[] = []) {
   return chain;
 }
 
-/** Build a minimal DB mock that returns role-count rows first, then signup rows. */
-function makeMockDb(
-  roleCountRows: unknown[],
-  signupRows: unknown[],
-): Record<string, jest.Mock> {
+/**
+ * Build a minimal DB mock that returns role-count rows first, then signup rows.
+ * Returns the mock cast to EmbedDb so callers don't need `as never`.
+ */
+function makeMockDb(roleCountRows: unknown[], signupRows: unknown[]): EmbedDb {
   const roleCountChain = makeSelectChain(roleCountRows);
   const signupChain = makeSelectChain(signupRows);
   let callCount = 0;
@@ -45,7 +50,7 @@ function makeMockDb(
     // Both are called via Promise.all — we alternate responses by call order.
     return callCount === 1 ? roleCountChain : signupChain;
   });
-  return { select: selectFn };
+  return { select: selectFn } as unknown as EmbedDb;
 }
 
 /** Minimal EventResponseDto fixture. */
@@ -90,7 +95,7 @@ describe('buildEmbedEventData — signupCount', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupCount).toBe(1);
   });
 
@@ -116,7 +121,7 @@ describe('buildEmbedEventData — signupCount', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupCount).toBe(1);
   });
 
@@ -134,7 +139,7 @@ describe('buildEmbedEventData — signupCount', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupCount).toBe(0);
   });
 
@@ -168,13 +173,13 @@ describe('buildEmbedEventData — signupCount', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupCount).toBe(3);
   });
 
   it('returns 0 when no signups exist', async () => {
     const db = makeMockDb([], []);
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupCount).toBe(0);
   });
 });
@@ -204,7 +209,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupMentions).toHaveLength(1);
     expect(result.signupMentions![0].username).toBe('alice');
   });
@@ -231,7 +236,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupMentions).toHaveLength(1);
     expect(result.signupMentions![0].discordId).toBe('u1');
   });
@@ -250,7 +255,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     const mention = result.signupMentions![0];
     expect(mention.role).toBe('healer');
     expect(mention.className).toBe('Paladin');
@@ -272,7 +277,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupMentions![0].role).toBeNull();
   });
 
@@ -290,7 +295,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
         },
       ],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupMentions![0].className).toBeNull();
   });
 });
@@ -307,7 +312,7 @@ describe('buildEmbedEventData — roleCounts', () => {
       ],
       [],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.roleCounts).toMatchObject({
       tank: 2,
       healer: 1,
@@ -317,7 +322,7 @@ describe('buildEmbedEventData — roleCounts', () => {
 
   it('returns empty roleCounts when no assignments exist', async () => {
     const db = makeMockDb([], []);
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.roleCounts).toEqual({});
   });
 
@@ -329,7 +334,7 @@ describe('buildEmbedEventData — roleCounts', () => {
       ],
       [],
     );
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.roleCounts).toEqual({ tank: 1 });
     expect(result.roleCounts).not.toHaveProperty('null');
   });
@@ -347,7 +352,7 @@ describe('buildEmbedEventData — event metadata', () => {
       startTime: '2026-06-01T20:00:00.000Z',
       endTime: '2026-06-01T23:00:00.000Z',
     });
-    const result = await buildEmbedEventData(db as never, dto, 42);
+    const result = await buildEmbedEventData(db, dto, 42);
     expect(result.id).toBe(42);
     expect(result.title).toBe('Epic Raid');
     expect(result.description).toBe('Big boss night');
@@ -357,14 +362,14 @@ describe('buildEmbedEventData — event metadata', () => {
 
   it('passes through maxAttendees as null when not set', async () => {
     const db = makeMockDb([], []);
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.maxAttendees).toBeNull();
   });
 
   it('passes through maxAttendees when set', async () => {
     const db = makeMockDb([], []);
     const dto = makeEventDto({ maxAttendees: 25 });
-    const result = await buildEmbedEventData(db as never, dto, 1);
+    const result = await buildEmbedEventData(db, dto, 1);
     expect(result.maxAttendees).toBe(25);
   });
 });
@@ -383,7 +388,7 @@ describe('buildEmbedEventData — game field', () => {
         hasRoles: true,
       },
     });
-    const result = await buildEmbedEventData(db as never, dto, 1);
+    const result = await buildEmbedEventData(db, dto, 1);
     expect(result.game).toMatchObject({
       name: 'World of Warcraft',
       coverUrl: 'https://img.example.com/wow.jpg',
@@ -392,7 +397,7 @@ describe('buildEmbedEventData — game field', () => {
 
   it('sets game to null when event has no game', async () => {
     const db = makeMockDb([], []);
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.game).toBeNull();
   });
 });
@@ -403,8 +408,10 @@ describe('buildEmbedEventData — slotConfig', () => {
   it('passes through slotConfig when present', async () => {
     const db = makeMockDb([], []);
     const slotConfig = { type: 'mmo', tank: 1, healer: 1, dps: 3 };
-    const dto = makeEventDto({ slotConfig: slotConfig as never });
-    const result = await buildEmbedEventData(db as never, dto, 1);
+    const dto = makeEventDto({
+      slotConfig: slotConfig as EventResponseDto['slotConfig'],
+    });
+    const result = await buildEmbedEventData(db, dto, 1);
     expect(result.slotConfig).toMatchObject({
       type: 'mmo',
       tank: 1,
@@ -415,7 +422,7 @@ describe('buildEmbedEventData — slotConfig', () => {
 
   it('sets slotConfig to null when not present', async () => {
     const db = makeMockDb([], []);
-    const result = await buildEmbedEventData(db as never, makeEventDto(), 1);
+    const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.slotConfig).toBeNull();
   });
 });

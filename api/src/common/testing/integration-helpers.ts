@@ -85,6 +85,34 @@ export async function truncateAllTables(
 }
 
 /**
+ * Poll an assertion function until it passes or the deadline expires.
+ * Replaces fixed `setTimeout` waits for fire-and-forget async operations
+ * (e.g., checkTentativeDisplacement) with a retry loop that fails fast.
+ *
+ * @param fn - Async function containing expect() assertions.
+ * @param deadlineMs - Max time to retry (default 2000ms).
+ * @param intervalMs - Polling interval (default 100ms).
+ */
+export async function waitFor(
+  fn: () => Promise<void>,
+  deadlineMs = 2000,
+  intervalMs = 100,
+): Promise<void> {
+  const start = Date.now();
+  let lastError: unknown;
+  while (Date.now() - start < deadlineMs) {
+    try {
+      await fn();
+      return;
+    } catch (err) {
+      lastError = err;
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Login as the seeded admin user and return a JWT access token.
  * Convenience helper for tests that need authenticated requests.
  */

@@ -8,6 +8,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
+  waitFor,
 } from '../common/testing/integration-helpers';
 import {
   createMemberAndLogin,
@@ -124,7 +125,7 @@ async function testAllSlotsFull() {
   // Event with 1 tank, 1 healer, 1 dps (3 total slots)
   const tinyConfig = { type: 'mmo', tank: 1, healer: 1, dps: 1 };
   const eventId = await createMmoEvent(testApp, adminToken, tinyConfig);
-  // Admin auto-signup takes one generic slot. Fill all 3 role slots.
+  // Admin auto-signup has no prefs, so gets no roster assignment. Fill all 3 role slots.
   const { token: t1 } = await createMemberAndLogin(
     testApp,
     'filler1',
@@ -178,14 +179,14 @@ async function testTentativeKeepsSlot() {
     .set('Authorization', `Bearer ${token}`)
     .send({ status: 'tentative' });
   expect(updateRes.status).toBe(200);
-  // Wait for async displacement check to complete before afterEach truncation.
-  // The updateStatus() fires checkTentativeDisplacement as fire-and-forget;
-  // we must allow it to finish to avoid racing with afterEach truncation.
-  await new Promise((r) => setTimeout(r, 1000));
-  // Assignment should still be tank (no confirmed competitor to displace them)
-  const afterAssignment = await getSignupAssignment(testApp, signup.id);
-  expect(afterAssignment).toBeDefined();
-  expect(afterAssignment!.role).toBe('tank');
+  // Poll until the async displacement check completes. The updateStatus()
+  // fires checkTentativeDisplacement as fire-and-forget; waitFor retries
+  // assertions until they pass (or the 2s deadline expires).
+  await waitFor(async () => {
+    const afterAssignment = await getSignupAssignment(testApp, signup.id);
+    expect(afterAssignment).toBeDefined();
+    expect(afterAssignment!.role).toBe('tank');
+  });
 }
 
 // ─── A7: Confirmed displaces tentative ────────────────────────────────────
@@ -218,24 +219,27 @@ async function testConfirmedDisplacesTentative() {
     .set('Authorization', `Bearer ${memberA.token}`)
     .send({ status: 'tentative' });
   expect(tentRes.status).toBe(200);
-  // Wait for async tentative displacement check
-  await new Promise((r) => setTimeout(r, 500));
+  // Wait for async tentative displacement check to settle before next signup
+  await waitFor(async () => {
+    const a = await getSignupAssignment(testApp, signupA.id);
+    expect(a).toBeDefined();
+    expect(a!.role).toBe('healer');
+  });
   // UserB signs up confirmed, also wants healer
   const signupB = await signupWithPrefs(testApp, memberB.token, eventId, [
     'healer',
   ]);
   expect(signupB.status).toBe(201);
-  // Wait for displacement to complete
-  await new Promise((r) => setTimeout(r, 500));
-  // UserB should have healer, UserA should not
-  const assignB = await getSignupAssignment(testApp, signupB.id);
-  expect(assignB).toBeDefined();
-  expect(assignB!.role).toBe('healer');
-  const assignA = await getSignupAssignment(testApp, signupA.id);
-  // UserA is either unassigned or moved to a different role
-  if (assignA) {
-    expect(assignA.role).not.toBe('healer');
-  }
+  // Poll until displacement completes: UserB gets healer, UserA is displaced.
+  await waitFor(async () => {
+    const assignB = await getSignupAssignment(testApp, signupB.id);
+    expect(assignB).toBeDefined();
+    expect(assignB!.role).toBe('healer');
+    // Explicitly verify UserA was displaced — must NOT still hold healer.
+    // Assert unconditionally so a missing assignment is a clear signal.
+    const assignA = await getSignupAssignment(testApp, signupA.id);
+    expect(assignA?.role ?? null).not.toBe('healer');
+  });
 }
 
 // ─── A8: Concurrent last slot ─────────────────────────────────────────────
@@ -271,33 +275,35 @@ async function testConcurrentLastSlot() {
   expect(playerAssignments).toHaveLength(2);
 }
 
-beforeAll(() => setupAll());
-afterEach(() => resetAfterEach());
+describe('Signup allocation (integration)', () => {
+  beforeAll(() => setupAll());
+  afterEach(() => resetAfterEach());
 
-describe('Signup allocation — role preference matching', () => {
-  it('assigns tank slot when user prefers tank (A1)', () =>
-    testRolePrefMatching());
-  it('sorts by role priority: tank > healer > dps (A2, ROK-823)', () =>
-    testRolePrioritySort());
-  it('falls to next available when preferred role is full (A3)', () =>
-    testFallsToNextWhenFull());
-});
+  describe('role preference matching', () => {
+    it('assigns tank slot when user prefers tank (A1)', () =>
+      testRolePrefMatching());
+    it('sorts by role priority: tank > healer > dps (A2, ROK-823)', () =>
+      testRolePrioritySort());
+    it('falls to next available when preferred role is full (A3)', () =>
+      testFallsToNextWhenFull());
+  });
 
-describe('Signup allocation — fallback and capacity', () => {
-  it('assigns a slot even without preferred roles (A4)', () =>
-    testNoPrefFallback());
-  it('benches player when all role slots are full (A5)', () =>
-    testAllSlotsFull());
-});
+  describe('fallback and capacity', () => {
+    it('assigns a slot even without preferred roles (A4)', () =>
+      testNoPrefFallback());
+    it('benches player when all role slots are full (A5)', () =>
+      testAllSlotsFull());
+  });
 
-describe('Signup allocation — tentative and displacement', () => {
-  it('tentative player keeps their slot when uncontested (A6)', () =>
-    testTentativeKeepsSlot());
-  it('confirmed player displaces tentative from same role (A7)', () =>
-    testConfirmedDisplacesTentative());
-});
+  describe('tentative and displacement', () => {
+    it('tentative player keeps their slot when uncontested (A6)', () =>
+      testTentativeKeepsSlot());
+    it('confirmed player displaces tentative from same role (A7)', () =>
+      testConfirmedDisplacesTentative());
+  });
 
-describe('Signup allocation — concurrency', () => {
-  it('handles concurrent signups for last slot without duplicates (A8)', () =>
-    testConcurrentLastSlot());
+  describe('concurrency', () => {
+    it('handles concurrent signups for last slot without duplicates (A8)', () =>
+      testConcurrentLastSlot());
+  });
 });
