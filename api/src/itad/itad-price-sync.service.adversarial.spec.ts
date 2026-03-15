@@ -172,7 +172,9 @@ describe('ItadPriceSyncService — adversarial', () => {
       // No per-game pricing updates (all skipped), only clearStalePricing
       const setCalls = mockDb.set.mock.calls;
       const pricingUpdates = setCalls.filter(
-        (c: Record<string, unknown>[]) => c[0].itadPriceUpdatedAt instanceof Date && c[0].itadCurrentPrice !== undefined,
+        (c: Record<string, unknown>[]) =>
+          c[0].itadPriceUpdatedAt instanceof Date &&
+          c[0].itadCurrentPrice !== undefined,
       );
       expect(pricingUpdates).toHaveLength(0);
     });
