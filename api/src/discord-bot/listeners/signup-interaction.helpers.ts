@@ -5,6 +5,7 @@ import type {
 } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
+import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 
 /**
@@ -104,6 +105,27 @@ export async function safeEditReply(
     }
     throw error;
   }
+}
+
+/** Parse a signup button customId into action + eventId. */
+export function parseButtonCustomId(
+  customId: string,
+): { action: string; eventId: number } | null {
+  const parts = customId.split(':');
+  if (parts.length !== 2) return null;
+  const [action, eventIdStr] = parts;
+  const eventId = parseInt(eventIdStr, 10);
+  if (isNaN(eventId)) return null;
+  const validActions = [
+    SIGNUP_BUTTON_IDS.SIGNUP,
+    SIGNUP_BUTTON_IDS.TENTATIVE,
+    SIGNUP_BUTTON_IDS.DECLINE,
+    SIGNUP_BUTTON_IDS.JOIN_SIGNUP,
+    SIGNUP_BUTTON_IDS.QUICK_SIGNUP,
+  ];
+  if (!validActions.includes(action as (typeof validActions)[number]))
+    return null;
+  return { action, eventId };
 }
 
 /** Find a linked Raid Ledger user by their Discord ID. */

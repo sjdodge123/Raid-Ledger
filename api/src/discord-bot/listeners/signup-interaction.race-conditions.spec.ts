@@ -7,6 +7,7 @@ import {
   makeSelectMenuInteraction,
   makeChain,
 } from './signup-interaction.spec-helpers';
+import { setCooldown } from './signup-interaction.helpers';
 
 let mocks: SignupInteractionMocks;
 const originalClientUrl = process.env.CLIENT_URL;
@@ -262,6 +263,114 @@ function selectMenuRaceTests() {
   });
 }
 
+function declineReSignupRegressionTests() {
+  it('should defer and complete signup after a prior decline', async () => {
+    const userId = 'user-decline-resignup-1';
+
+    // Step 1: Decline — existing signup is cancelled
+    mocks.mockSignupsService.findByDiscordUser.mockResolvedValueOnce({
+      id: 10,
+      status: 'signed_up',
+      user: { id: 50, discordId: userId },
+      discordUserId: null,
+    });
+    const declineInteraction = makeButtonInteraction(
+      `${SIGNUP_BUTTON_IDS.DECLINE}:3001`,
+      userId,
+    );
+    await mocks.listener.handleButtonInteraction(declineInteraction);
+
+    expect(declineInteraction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
+    expect(declineInteraction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('declined'),
+      }),
+    );
+
+    // Step 2: Re-signup — no existing signup found (deleted)
+    // Expire the cooldown so the re-signup is not rate-limited
+    setCooldown(`${userId}:3001`, 0);
+    jest.clearAllMocks();
+    mocks.mockSignupsService.findByDiscordUser.mockResolvedValueOnce(null);
+    mocks.mockDb.select.mockReturnValueOnce({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([{ id: 50, discordId: userId }]),
+        }),
+      }),
+    });
+    mocks.mockDb.select.mockReturnValueOnce({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest
+            .fn()
+            .mockResolvedValue([
+              { id: 3001, title: 'Raid Night', gameId: null },
+            ]),
+        }),
+      }),
+    });
+
+    const signupInteraction = makeButtonInteraction(
+      `${SIGNUP_BUTTON_IDS.SIGNUP}:3001`,
+      userId,
+    );
+    await mocks.listener.handleButtonInteraction(signupInteraction);
+
+    expect(signupInteraction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
+    expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(3001, 50);
+    expect(signupInteraction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Raid Night'),
+      }),
+    );
+  });
+
+  it('should not await embed update so handler resolves quickly', async () => {
+    const userId = 'user-embed-fireforget-1';
+    mocks.mockSignupsService.findByDiscordUser.mockResolvedValueOnce({
+      id: 11,
+      status: 'signed_up',
+      user: { id: 51, discordId: userId },
+      discordUserId: null,
+    });
+
+    const interaction = makeButtonInteraction(
+      `${SIGNUP_BUTTON_IDS.DECLINE}:3002`,
+      userId,
+    );
+    await mocks.listener.handleButtonInteraction(interaction);
+
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('declined'),
+      }),
+    );
+    // Embed update is fire-and-forget — handler completes
+    // even if updateEmbedSignupCount is slow
+  });
+}
+
+function selectMenuErrorHandlingTests() {
+  it('should catch unhandled errors from select menu handler', async () => {
+    const userId = 'user-select-unhandled-1';
+    const interaction = makeSelectMenuInteraction(
+      `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:4001`,
+      ['char-1'],
+      userId,
+    );
+    interaction.deferUpdate.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(
+      mocks.listener.handleSelectMenuInteraction(interaction),
+    ).resolves.not.toThrow();
+  });
+}
+
 describe('SignupInteractionListener — error handling & race conditions', () => {
   beforeEach(async () => {
     await setupRaceModule();
@@ -280,5 +389,10 @@ describe('SignupInteractionListener — error handling & race conditions', () =>
     expiredInteractionDeferTests();
     errorPathRaceTests();
     selectMenuRaceTests();
+  });
+
+  describe('Regression: ROK-829 — decline → re-signup flow', () => {
+    declineReSignupRegressionTests();
+    selectMenuErrorHandlingTests();
   });
 });

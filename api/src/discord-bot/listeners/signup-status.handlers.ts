@@ -38,7 +38,7 @@ export async function handleTentative(
       content: "You're marked as **tentative**.",
       embeds: [],
     });
-    await deps.updateEmbedSignupCount(eventId);
+    void deps.updateEmbedSignupCount(eventId);
     return;
   }
 
@@ -86,11 +86,15 @@ async function handleUnlinkedTentative(
     content: `You're marked as **tentative**.${benchSuffix(result.assignedSlot)}`,
     embeds: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
 }
 
 /**
  * Handle the Decline button click.
+ *
+ * The embed update is fire-and-forget so the interaction completes
+ * quickly and the embed is not mid-edit when the user re-clicks
+ * (avoids Discord 3-second timeout on the follow-up interaction — ROK-829).
  */
 export async function handleDecline(
   interaction: ButtonInteraction,
@@ -113,7 +117,7 @@ export async function handleDecline(
     content: "You've **declined** this event.",
     embeds: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
 }
 
 async function createDeclinedSignup(
@@ -206,7 +210,7 @@ async function quickSignupAnonymous(
     content: `You're signed up as **${interaction.user.username}**!${benchSuffix(result.assignedSlot)}${accountLink}`,
     embeds: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
 }
 
 /**
