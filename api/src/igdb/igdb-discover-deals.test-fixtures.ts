@@ -1,18 +1,9 @@
 /**
- * Shared test fixtures for igdb-discover-deals.helpers specs.
- * Extracted to deduplicate mock builders across split spec files.
+ * Shared test fixtures for igdb-discover-deals.helpers specs (ROK-818).
+ * Updated: deal helpers now query DB pricing columns, no ITAD service.
  */
-import type { ItadPriceService } from '../itad/itad-price.service';
-import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
 
 export const CACHE_TTL = 600;
-
-/** Build a minimal ItadPriceService mock. */
-export function buildPriceService(
-  entries: ItadOverviewGameEntry[],
-): Pick<ItadPriceService, 'getOverviewBatch'> {
-  return { getOverviewBatch: jest.fn().mockResolvedValue(entries) };
-}
 
 /** Build a Redis mock with optional cached data. */
 export function buildRedisMock(cached: string | null = null) {
@@ -38,169 +29,142 @@ export function buildRedisError() {
   };
 }
 
-/** Map a minimal game row to include slug and visibility fields. */
-function toDbRow(g: { id: number; name: string; itadGameId: string | null }) {
+interface PartialGameInput {
+  id: number;
+  name: string;
+  itadGameId?: string | null;
+  itadCurrentCut?: number | null;
+  itadCurrentPrice?: string | null;
+  itadLowestPrice?: string | null;
+}
+
+/** Default IGDB/config fields for a stub game row. */
+function baseGameDefaults(g: PartialGameInput) {
   return {
-    ...g,
+    id: g.id,
+    name: g.name,
     slug: g.name.toLowerCase().replace(/\s+/g, '-'),
     hidden: false,
     banned: false,
+    igdbId: g.id * 10,
+    coverUrl: null,
+    genres: [],
+    cachedAt: new Date(),
+    summary: null,
+    rating: null,
+    aggregatedRating: null,
+    popularity: null,
+    gameModes: [],
+    themes: [],
+    platforms: [],
+    screenshots: [],
+    videos: [],
+    firstReleaseDate: null,
+    playerCount: null,
+    twitchGameId: null,
+    steamAppId: null,
+    crossplay: null,
   };
 }
 
-/** Build a DB mock that returns wishlisted games and game rows. */
+/** Config and ITAD pricing fields for a stub game row. */
+function configAndPricingDefaults(g: PartialGameInput) {
+  return {
+    shortName: null,
+    colorHex: null,
+    hasRoles: false,
+    hasSpecs: false,
+    enabled: true,
+    itadBoxartUrl: null,
+    itadTags: [],
+    maxCharactersPerUser: 10,
+    apiNamespacePrefix: null,
+    itadGameId: g.itadGameId ?? null,
+    itadCurrentCut: g.itadCurrentCut ?? null,
+    itadCurrentPrice: g.itadCurrentPrice ?? null,
+    itadCurrentShop: null,
+    itadCurrentUrl: null,
+    itadLowestPrice: g.itadLowestPrice ?? null,
+    itadLowestCut: null,
+    itadPriceUpdatedAt: null,
+  };
+}
+
+/** Map a minimal game row to include all required fields. */
+function toFullDbRow(g: PartialGameInput) {
+  return { ...baseGameDefaults(g), ...configAndPricingDefaults(g) };
+}
+
+/** Build a DB mock for wishlisted-on-sale (JOIN query). */
 export function buildWishlistDb(
-  wishlistGames: { gameId: number; count: number }[],
-  gameRows: { id: number; name: string; itadGameId: string | null }[],
+  resultRows: {
+    id: number;
+    name: string;
+    itadGameId?: string | null;
+    itadCurrentCut?: number | null;
+  }[],
 ) {
   const db: Record<string, jest.Mock> = {};
   const chain = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy'];
   for (const m of chain) db[m] = jest.fn().mockReturnThis();
-
-  let whereCallCount = 0;
-  db.where = jest.fn().mockImplementation(() => {
-    whereCallCount++;
-    if (whereCallCount === 1) return db;
-    return Promise.resolve(gameRows.map(toDbRow));
-  });
-  db.limit = jest.fn().mockResolvedValue(wishlistGames);
+  db.where = jest.fn().mockReturnThis();
+  db.limit = jest
+    .fn()
+    .mockResolvedValue(
+      resultRows.map((r) => ({ game: toFullDbRow(r), count: 5 })),
+    );
   return db;
 }
 
-/** Build a DB mock for playtime games, game rows, and heart counts. */
+/** Build a DB mock for most-played-on-sale (JOIN query). */
 export function buildPlaytimeDb(
-  playtimeGames: { gameId: number; totalPlaytime: number }[],
-  gameRows: { id: number; name: string; itadGameId: string | null }[],
-  heartCounts: { gameId: number; count: number }[] = [],
+  resultRows: {
+    id: number;
+    name: string;
+    itadGameId?: string | null;
+    itadCurrentCut?: number | null;
+  }[],
 ) {
   const db: Record<string, jest.Mock> = {};
-  const chain = ['select', 'from', 'innerJoin', 'orderBy'];
+  const chain = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy'];
   for (const m of chain) db[m] = jest.fn().mockReturnThis();
-
-  let whereCallCount = 0;
-  db.where = jest.fn().mockImplementation(() => {
-    whereCallCount++;
-    if (whereCallCount === 1) return db;
-    if (whereCallCount === 2) return Promise.resolve(gameRows.map(toDbRow));
-    return db; // heart count query chain
-  });
-  let groupByCallCount = 0;
-  db.groupBy = jest.fn().mockImplementation(() => {
-    groupByCallCount++;
-    if (groupByCallCount === 1) return db;
-    return Promise.resolve(heartCounts);
-  });
-  db.limit = jest.fn().mockResolvedValue(playtimeGames);
+  db.where = jest.fn().mockReturnThis();
+  db.limit = jest.fn().mockResolvedValue(
+    resultRows.map((r) => ({
+      game: toFullDbRow(r),
+      totalPlaytime: 1000,
+    })),
+  );
   return db;
 }
 
-/** Build a DB mock for games with ITAD IDs (best price). */
+/** Build a DB mock for best-price (LEFT JOIN with hearts). */
 export function buildBestPriceDb(
-  gameRows: { id: number; name: string; itadGameId: string | null }[],
-  heartCounts: { gameId: number; count: number }[] = [],
+  resultRows: {
+    id: number;
+    name: string;
+    itadGameId?: string | null;
+    itadCurrentCut?: number | null;
+    itadCurrentPrice?: string | null;
+    itadLowestPrice?: string | null;
+  }[],
 ) {
   const db: Record<string, jest.Mock> = {};
-  db.select = jest.fn().mockReturnThis();
-  db.from = jest.fn().mockReturnThis();
-  db.orderBy = jest.fn().mockReturnThis();
-  let whereCallCount = 0;
-  db.where = jest.fn().mockImplementation(() => {
-    whereCallCount++;
-    if (whereCallCount === 1) return Promise.resolve(gameRows.map(toDbRow));
-    return db; // heart count query chain
-  });
-  db.groupBy = jest.fn().mockResolvedValue(heartCounts);
+  const chain = [
+    'select',
+    'from',
+    'leftJoin',
+    'innerJoin',
+    'orderBy',
+    'groupBy',
+  ];
+  for (const m of chain) db[m] = jest.fn().mockReturnThis();
+  db.where = jest.fn().mockReturnThis();
+  db.limit = jest.fn().mockResolvedValue(
+    resultRows.map((r) => ({
+      game: toFullDbRow(r),
+      hearts: 5,
+    })),
+  );
   return db;
-}
-
-/** ITAD entry with a current deal at a given discount percentage. */
-export function makeItadEntry(
-  id: string,
-  discount: number,
-  price = 29.99,
-): ItadOverviewGameEntry {
-  return {
-    id,
-    current: {
-      shop: { id: 61, name: 'Steam' },
-      price: {
-        amount: price,
-        amountInt: Math.round(price * 100),
-        currency: 'USD',
-      },
-      regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-      cut: discount,
-      url: `https://store.steampowered.com/app/${id}`,
-    },
-    lowest: {
-      shop: { id: 61, name: 'Steam' },
-      price: { amount: 14.99, amountInt: 1499, currency: 'USD' },
-      regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-      cut: 75,
-      timestamp: '2024-11-25T00:00:00Z',
-    },
-    bundled: 0,
-    urls: { game: `https://isthereanydeal.com/game/${id}/` },
-  };
-}
-
-/** ITAD entry with no active deal (cut = 0). */
-export function makeItadEntryNoDeal(id: string): ItadOverviewGameEntry {
-  return makeItadEntry(id, 0, 59.99);
-}
-
-/** ITAD entry with no historical low (lowest = null). */
-export function makeItadEntryNoLowest(
-  id: string,
-  discount: number,
-  price = 29.99,
-): ItadOverviewGameEntry {
-  return {
-    id,
-    current: {
-      shop: { id: 61, name: 'Steam' },
-      price: {
-        amount: price,
-        amountInt: Math.round(price * 100),
-        currency: 'USD',
-      },
-      regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-      cut: discount,
-      url: `https://store.steampowered.com/app/${id}`,
-    },
-    lowest: null,
-    bundled: 0,
-    urls: { game: `https://isthereanydeal.com/game/${id}/` },
-  };
-}
-
-/** ITAD entry at or below historical low ("Best Price" badge). */
-export function makeItadEntryBestPrice(
-  id: string,
-  discount: number,
-  price = 14.99,
-): ItadOverviewGameEntry {
-  return {
-    id,
-    current: {
-      shop: { id: 61, name: 'Steam' },
-      price: {
-        amount: price,
-        amountInt: Math.round(price * 100),
-        currency: 'USD',
-      },
-      regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-      cut: discount,
-      url: `https://store.steampowered.com/app/${id}`,
-    },
-    lowest: {
-      shop: { id: 61, name: 'Steam' },
-      price: { amount: 14.99, amountInt: 1499, currency: 'USD' },
-      regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-      cut: 75,
-      timestamp: '2024-11-25T00:00:00Z',
-    },
-    bundled: 0,
-    urls: { game: `https://isthereanydeal.com/game/${id}/` },
-  };
 }

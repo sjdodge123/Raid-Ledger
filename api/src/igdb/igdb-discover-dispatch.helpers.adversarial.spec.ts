@@ -1,18 +1,23 @@
 /**
- * Adversarial unit tests for igdb-discover-dispatch.helpers (ROK-803).
- * Edge cases: unknown slugs, arbitrary slug strings, isDealSlug boundaries.
+ * Adversarial unit tests for igdb-discover-dispatch.helpers (ROK-803, ROK-818).
+ * Updated: dispatchDiscoverRow no longer takes ItadPriceService.
  */
 import {
   dispatchDiscoverRow,
   isDealSlug,
 } from './igdb-discover-dispatch.helpers';
 
-// ─── Mock helpers ─────────────────────────────────────────────────────────────
-
 /** DB mock that chains all standard methods and terminates limit() with []. */
 function buildEmptyChainDb() {
   const db: Record<string, jest.Mock> = {};
-  const chain = ['select', 'from', 'innerJoin', 'orderBy', 'groupBy'];
+  const chain = [
+    'select',
+    'from',
+    'innerJoin',
+    'leftJoin',
+    'orderBy',
+    'groupBy',
+  ];
   for (const m of chain) db[m] = jest.fn().mockReturnThis();
   db.where = jest.fn().mockReturnThis();
   db.limit = jest.fn().mockResolvedValue([]);
@@ -26,19 +31,9 @@ function buildRedisMock() {
   };
 }
 
-function buildItadMock() {
-  return { getOverviewBatch: jest.fn().mockResolvedValue([]) };
-}
-
-// ─── dispatchDiscoverRow adversarial ─────────────────────────────────────────
-
 describe('dispatchDiscoverRow — adversarial', () => {
   it('handles an unknown slug by falling through to fetchCategoryRow', async () => {
     const db = buildEmptyChainDb();
-    db.where = jest.fn().mockReturnThis();
-    db.orderBy = jest.fn().mockReturnThis();
-    db.limit = jest.fn().mockResolvedValue([]);
-
     const cat = {
       category: 'Unknown Category',
       slug: 'totally-unknown-slug-xyz',
@@ -50,7 +45,6 @@ describe('dispatchDiscoverRow — adversarial', () => {
       db as never,
       buildRedisMock() as never,
       600,
-      buildItadMock() as never,
     );
 
     expect(result.slug).toBe('totally-unknown-slug-xyz');
@@ -58,78 +52,8 @@ describe('dispatchDiscoverRow — adversarial', () => {
     expect(result.games).toEqual([]);
   });
 
-  it('does not call ITAD service for non-deal slugs', async () => {
-    const db = buildEmptyChainDb();
-    db.where = jest.fn().mockReturnThis();
-    db.orderBy = jest.fn().mockReturnThis();
-    db.limit = jest.fn().mockResolvedValue([]);
-
-    const itad = buildItadMock();
-
-    const cat = {
-      category: 'Popular MMOs',
-      slug: 'popular-mmos',
-      cached: false,
-    };
-
-    await dispatchDiscoverRow(
-      cat,
-      db as never,
-      buildRedisMock() as never,
-      600,
-      itad as never,
-    );
-
-    expect(itad.getOverviewBatch).not.toHaveBeenCalled();
-  });
-
-  it('does not call ITAD service for community-wants-to-play', async () => {
-    const db = buildEmptyChainDb();
-    const itad = buildItadMock();
-
-    const cat = {
-      category: 'Your Community Wants to Play',
-      slug: 'community-wants-to-play',
-      cached: false,
-    };
-
-    await dispatchDiscoverRow(
-      cat,
-      db as never,
-      buildRedisMock() as never,
-      600,
-      itad as never,
-    );
-
-    expect(itad.getOverviewBatch).not.toHaveBeenCalled();
-  });
-
-  it('does not call ITAD service for most-wishlisted', async () => {
-    const db = buildEmptyChainDb();
-    const itad = buildItadMock();
-
-    const cat = {
-      category: 'Most Wishlisted',
-      slug: 'most-wishlisted',
-      cached: false,
-    };
-
-    await dispatchDiscoverRow(
-      cat,
-      db as never,
-      buildRedisMock() as never,
-      600,
-      itad as never,
-    );
-
-    expect(itad.getOverviewBatch).not.toHaveBeenCalled();
-  });
-
   it('preserves the category label in the returned row', async () => {
     const db = buildEmptyChainDb();
-    db.where = jest.fn().mockReturnThis();
-    db.limit = jest.fn().mockResolvedValue([]);
-
     const cat = {
       category: 'Trending Multiplayer',
       slug: 'trending-multiplayer',
@@ -141,19 +65,14 @@ describe('dispatchDiscoverRow — adversarial', () => {
       db as never,
       buildRedisMock() as never,
       300,
-      buildItadMock() as never,
     );
 
     expect(result.category).toBe('Trending Multiplayer');
   });
 
   it('passes the correct cacheTtl to deal category fetches', async () => {
-    // best-price calls db.select().from().where() — where() must resolve
     const db = buildEmptyChainDb();
-    db.where = jest.fn().mockResolvedValue([]);
     const redis = buildRedisMock();
-    const itad = buildItadMock();
-
     const cat = {
       category: 'Best Price',
       slug: 'best-price',
@@ -165,14 +84,11 @@ describe('dispatchDiscoverRow — adversarial', () => {
       db as never,
       redis as never,
       1800,
-      itad as never,
     );
 
     expect(result.slug).toBe('best-price');
   });
 });
-
-// ─── isDealSlug adversarial ───────────────────────────────────────────────────
 
 describe('isDealSlug — adversarial', () => {
   it('returns false for empty string', () => {

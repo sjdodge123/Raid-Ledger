@@ -107,6 +107,24 @@ export function mapApiGameToDbRow(game: IgdbApiGame) {
   };
 }
 
+/** Extract ITAD pricing fields from a DB row (ROK-818). */
+function mapItadPricing(g: typeof schema.games.$inferSelect) {
+  return {
+    itadGameId: g.itadGameId ?? null,
+    itadBoxartUrl: g.itadBoxartUrl ?? null,
+    itadTags: (g.itadTags as string[]) ?? [],
+    itadCurrentPrice:
+      g.itadCurrentPrice != null ? Number(g.itadCurrentPrice) : null,
+    itadCurrentCut: g.itadCurrentCut ?? null,
+    itadCurrentShop: g.itadCurrentShop ?? null,
+    itadCurrentUrl: g.itadCurrentUrl ?? null,
+    itadLowestPrice:
+      g.itadLowestPrice != null ? Number(g.itadLowestPrice) : null,
+    itadLowestCut: g.itadLowestCut ?? null,
+    itadPriceUpdatedAt: g.itadPriceUpdatedAt?.toISOString() ?? null,
+  };
+}
+
 /**
  * Map a database game row to a GameDetailDto.
  * @param g - Database game row
@@ -137,8 +155,6 @@ export function mapDbRowToDetail(
     playerCount: g.playerCount as { min: number; max: number } | null,
     twitchGameId: g.twitchGameId,
     crossplay: g.crossplay ?? null,
-    itadGameId: g.itadGameId ?? null,
-    itadBoxartUrl: g.itadBoxartUrl ?? null,
-    itadTags: (g.itadTags as string[]) ?? [],
+    ...mapItadPricing(g),
   };
 }

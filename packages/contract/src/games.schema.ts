@@ -56,6 +56,20 @@ export const GameDetailSchema = z.object({
     itadBoxartUrl: z.string().nullable().optional(),
     /** ROK-773: ITAD tags (genre-like labels from ITAD) */
     itadTags: z.array(z.string()).optional(),
+    /** ROK-818: Current best deal price from ITAD */
+    itadCurrentPrice: z.number().nullable().optional(),
+    /** ROK-818: Current discount percentage (0-100) */
+    itadCurrentCut: z.number().nullable().optional(),
+    /** ROK-818: Store name offering the current deal */
+    itadCurrentShop: z.string().nullable().optional(),
+    /** ROK-818: URL to the current deal */
+    itadCurrentUrl: z.string().nullable().optional(),
+    /** ROK-818: Historical lowest price ever */
+    itadLowestPrice: z.number().nullable().optional(),
+    /** ROK-818: Historical lowest discount percentage (0-100) */
+    itadLowestCut: z.number().nullable().optional(),
+    /** ROK-818: Last successful ITAD pricing sync timestamp */
+    itadPriceUpdatedAt: z.string().nullable().optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;

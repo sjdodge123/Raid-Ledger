@@ -680,6 +680,13 @@
       "when": 1773510443491,
       "tag": "0096_cynical_living_mummy",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1773600000000,
+      "tag": "0097_itad_pricing_columns",
+      "breakpoints": true
     }
   ]
 }

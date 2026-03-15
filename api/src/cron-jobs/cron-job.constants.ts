@@ -124,4 +124,8 @@ export const CORE_JOB_METADATA: Record<
     description: 'Syncs Steam library data for all linked users daily at 4 AM',
     category: 'Data Sync',
   },
+  ItadPriceSyncService_syncPricing: {
+    description: 'Syncs ITAD pricing data for all linked games every 4 hours',
+    category: 'Data Sync',
+  },
 };
