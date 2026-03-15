@@ -18,6 +18,7 @@ export interface EligibleEvent {
   channelId: string;
   guildId: string;
   messageId: string;
+  createdAt: string;
 }
 
 /** Raw row shape returned by the eligible events query. */
@@ -33,6 +34,7 @@ interface EligibleEventRow {
   channel_id: string;
   guild_id: string;
   message_id: string;
+  created_at: string;
   [key: string]: unknown;
 }
 
@@ -50,6 +52,7 @@ function mapEligibleRow(r: EligibleEventRow): EligibleEvent {
     channelId: r.channel_id,
     guildId: r.guild_id,
     messageId: r.message_id,
+    createdAt: r.created_at,
   };
 }
 
@@ -62,7 +65,7 @@ export async function findEligibleEvents(
 
   const rows = await db.execute<EligibleEventRow>(sql`
     SELECT e.id, e.title, e.game_id, g.name AS game_name, e.creator_id,
-      lower(e.duration)::text AS start_time, e.max_attendees,
+      lower(e.duration)::text AS start_time, e.max_attendees, e.created_at::text AS created_at,
       (SELECT count(*) FROM event_signups es WHERE es.event_id = e.id AND es.status NOT IN ('roached_out', 'departed', 'declined'))::text AS signup_count,
       dem.channel_id, dem.guild_id, dem.message_id
     FROM events e
@@ -127,4 +130,39 @@ export function buildSignupSummary(event: EligibleEvent): string {
 /** Build the Discord embed URL for an event. */
 export function buildDiscordUrl(event: EligibleEvent): string {
   return `https://discord.com/channels/${event.guildId}/${event.channelId}/${event.messageId}`;
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Calculate the grace period in milliseconds for a newly created event.
+ * Events created far in advance (>= 72h) get no grace period.
+ * Events created closer to start time get a shorter grace to prevent
+ * immediate recruitment reminders before signups have time to come in.
+ */
+export function calculateGracePeriodMs(
+  createdAt: string,
+  startTime: string,
+): number {
+  const timeUntilEvent =
+    new Date(startTime).getTime() - new Date(createdAt).getTime();
+  if (timeUntilEvent >= 72 * HOUR_MS) return 0;
+  if (timeUntilEvent >= 48 * HOUR_MS) return 12 * HOUR_MS;
+  if (timeUntilEvent >= 24 * HOUR_MS) return 6 * HOUR_MS;
+  if (timeUntilEvent >= 12 * HOUR_MS) return 3 * HOUR_MS;
+  return 1 * HOUR_MS;
+}
+
+/**
+ * Check whether an event is still within its creation grace period.
+ * Returns true if the event should be skipped (grace period active),
+ * false if it should be processed (grace period elapsed or none).
+ */
+export function isWithinGracePeriod(event: EligibleEvent): boolean {
+  const gracePeriodMs = calculateGracePeriodMs(
+    event.createdAt,
+    event.startTime,
+  );
+  if (gracePeriodMs === 0) return false;
+  return Date.now() < new Date(event.createdAt).getTime() + gracePeriodMs;
 }

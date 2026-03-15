@@ -31,6 +31,7 @@ function makeEventRow(
     channel_id: string;
     guild_id: string;
     message_id: string;
+    created_at: string;
   }> = {},
 ) {
   return {
@@ -45,6 +46,7 @@ function makeEventRow(
     channel_id: 'channel-abc',
     guild_id: 'guild-xyz',
     message_id: 'msg-123',
+    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   };
 }
@@ -698,6 +700,155 @@ describe('RecruitmentReminderService', () => {
       await service.checkAndSendReminders();
 
       expect(mockDb.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkAndSendReminders — grace period (ROK-826)', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should skip event created 30h before start when cron runs 1h after creation (needs 6h grace)', async () => {
+      const createdAt = new Date('2026-03-15T10:00:00Z');
+      const startTime = new Date('2026-03-16T16:00:00Z'); // 30h after creation
+      const cronTime = new Date('2026-03-15T11:00:00Z'); // 1h after creation
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]);
+
+      const result = await service.checkAndSendReminders();
+
+      expect(result).toBe(false);
+      expect(mockRedis.get).not.toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+      expect(mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+    });
+
+    it('should process event created 30h before start when cron runs 7h after creation (6h grace elapsed)', async () => {
+      const createdAt = new Date('2026-03-15T10:00:00Z');
+      const startTime = new Date('2026-03-16T16:00:00Z'); // 30h after creation
+      const cronTime = new Date('2026-03-15T17:00:00Z'); // 7h after creation
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([{ id: 5 }])
+        .mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip event created 50h before start when cron runs 5h after creation (needs 12h grace)', async () => {
+      const createdAt = new Date('2026-03-15T10:00:00Z');
+      const startTime = new Date('2026-03-17T12:00:00Z'); // 50h after creation
+      const cronTime = new Date('2026-03-15T15:00:00Z'); // 5h after creation
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]);
+
+      const result = await service.checkAndSendReminders();
+
+      expect(result).toBe(false);
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('should process event created 50h before start when cron runs 13h after creation (12h grace elapsed)', async () => {
+      const createdAt = new Date('2026-03-15T10:00:00Z');
+      const startTime = new Date('2026-03-17T12:00:00Z'); // 50h after creation
+      const cronTime = new Date('2026-03-15T23:00:00Z'); // 13h after creation
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]); // findRecipients (DMs deferred — >24h away)
+
+      await service.checkAndSendReminders();
+
+      // Event is >24h away so DMs are deferred, but bump proves it was processed
+      expect(mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+    });
+
+    it('should process event created 80h before start (no grace, >72h)', async () => {
+      const createdAt = new Date('2026-03-12T10:00:00Z');
+      const startTime = new Date('2026-03-15T18:00:00Z'); // 80h after creation
+      const cronTime = new Date('2026-03-12T10:15:00Z'); // 15min after creation
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]); // findRecipients (DMs deferred — >24h away)
+
+      await service.checkAndSendReminders();
+
+      // Event is >24h away so DMs are deferred, but bump proves it was processed
+      expect(mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip event created 10h before start when cron runs 30min after creation (needs 1h grace)', async () => {
+      const createdAt = new Date('2026-03-15T10:00:00Z');
+      const startTime = new Date('2026-03-15T20:00:00Z'); // 10h after creation
+      const cronTime = new Date('2026-03-15T10:30:00Z'); // 30min after creation
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]);
+
+      const result = await service.checkAndSendReminders();
+
+      expect(result).toBe(false);
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('should process event created 10h before start when cron runs 2h after creation (1h grace elapsed)', async () => {
+      const createdAt = new Date('2026-03-15T10:00:00Z');
+      const startTime = new Date('2026-03-15T20:00:00Z'); // 10h after creation
+      const cronTime = new Date('2026-03-15T12:00:00Z'); // 2h after creation
+
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([{ id: 5 }])
+        .mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
     });
   });
 });
