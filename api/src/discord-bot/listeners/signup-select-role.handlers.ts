@@ -119,7 +119,7 @@ async function confirmCharRoleSignup(
     embeds: [],
     components: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
 }
 
 export async function replyNoLinkedAccount(
@@ -198,7 +198,7 @@ async function signupAnonymousWithRoles(
     embeds: [],
     components: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
 }
 
 function formatAnonymousRoleConfirmation(
@@ -268,7 +268,7 @@ async function confirmNoCharSignup(
     embeds: [],
     components: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
 }
 
 async function fetchEventTitle(

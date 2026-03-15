@@ -161,7 +161,7 @@ async function signupSingleCharacter(
     content: `Signed up as **${char.name}**!${benchSuffix(result.assignedSlot)}`,
     embeds: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
   return true;
 }
 
@@ -186,6 +186,6 @@ async function signupWithoutCharacter(a: NoCharSignupArgs): Promise<boolean> {
     content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${nudge}`,
     embeds: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
   return true;
 }

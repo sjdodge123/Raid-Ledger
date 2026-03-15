@@ -79,7 +79,7 @@ async function reactivateIfNeeded(
       : { userId: existingSignup.user.id },
     { status: 'signed_up' },
   );
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
   return true;
 }
 
@@ -255,7 +255,7 @@ export async function handleNewLinkedSignup(
     content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}`,
     embeds: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
 }
 
 /** Wrapper for shared character select dropdown. */

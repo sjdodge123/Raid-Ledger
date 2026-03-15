@@ -615,6 +615,8 @@ function embedUpdateAfterCharSelectTest() {
       userId,
     );
     await mocks.listener.handleSelectMenuInteraction(interaction);
+    // Flush fire-and-forget embed update (ROK-829: void instead of await)
+    await new Promise(process.nextTick);
 
     expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(1015, 77);
     expect(mocks.mockSignupsService.confirmSignup).toHaveBeenCalledWith(

@@ -20,7 +20,7 @@ export async function signupAsTentative(
     { userId },
     { status: 'tentative' },
   );
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
   return result.assignedSlot ?? undefined;
 }
 
@@ -211,7 +211,7 @@ async function tentativeSingleCharacter(
     content: `You're marked as **tentative** with **${char.name}**.${benchSuffix(result.assignedSlot)}`,
     embeds: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
   return true;
 }
 

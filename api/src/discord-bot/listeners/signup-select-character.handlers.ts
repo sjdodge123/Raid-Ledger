@@ -162,5 +162,5 @@ async function signupWithCharacterDirect(
     embeds: [],
     components: [],
   });
-  await deps.updateEmbedSignupCount(eventId);
+  void deps.updateEmbedSignupCount(eventId);
 }

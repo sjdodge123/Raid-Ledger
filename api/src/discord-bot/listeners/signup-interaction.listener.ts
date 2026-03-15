@@ -34,6 +34,7 @@ import {
   safeReply,
   safeEditReply,
   findLinkedUser,
+  parseButtonCustomId,
 } from './signup-interaction.helpers';
 import {
   handleExistingSignup,
@@ -125,7 +126,7 @@ export class SignupInteractionListener {
   private async handleButtonInteraction(
     interaction: ButtonInteraction,
   ): Promise<void> {
-    const parsed = this.parseButtonCustomId(interaction.customId);
+    const parsed = parseButtonCustomId(interaction.customId);
     if (!parsed) return;
     try {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -165,26 +166,6 @@ export class SignupInteractionListener {
         this.logger,
       );
     }
-  }
-
-  private parseButtonCustomId(
-    customId: string,
-  ): { action: string; eventId: number } | null {
-    const parts = customId.split(':');
-    if (parts.length !== 2) return null;
-    const [action, eventIdStr] = parts;
-    const eventId = parseInt(eventIdStr, 10);
-    if (isNaN(eventId)) return null;
-    const validActions = [
-      SIGNUP_BUTTON_IDS.SIGNUP,
-      SIGNUP_BUTTON_IDS.TENTATIVE,
-      SIGNUP_BUTTON_IDS.DECLINE,
-      SIGNUP_BUTTON_IDS.JOIN_SIGNUP,
-      SIGNUP_BUTTON_IDS.QUICK_SIGNUP,
-    ];
-    if (!validActions.includes(action as (typeof validActions)[number]))
-      return null;
-    return { action, eventId };
   }
 
   private isRateLimited(userId: string, eventId: number): boolean {
@@ -254,7 +235,22 @@ export class SignupInteractionListener {
   private async handleSelectMenuInteraction(
     interaction: StringSelectMenuInteraction,
   ): Promise<void> {
-    await handleSelectMenuInteraction(interaction, this.getDeps());
+    try {
+      await handleSelectMenuInteraction(interaction, this.getDeps());
+    } catch (error) {
+      this.logger.error(
+        `Error handling select menu interaction ${interaction.customId}:`,
+        error,
+      );
+      await safeReply(
+        interaction,
+        {
+          content: 'Something went wrong. Please try again.',
+          flags: MessageFlags.Ephemeral,
+        },
+        this.logger,
+      );
+    }
   }
 
   /** Update the embed to reflect current signup count. */
