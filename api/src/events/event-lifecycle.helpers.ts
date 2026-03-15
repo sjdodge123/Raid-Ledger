@@ -13,6 +13,7 @@ import type { CancelEventDto, RescheduleEventDto } from '@raid-ledger/contract';
 import type { NotificationService } from '../notifications/notification.service';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
+import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
 
 type EventSelect = typeof schema.events.$inferSelect;
 
@@ -146,15 +147,9 @@ export async function resetSignupConfirmations(
     );
 }
 
-/** Formats a date for notification display. */
-function formatTime(d: Date): string {
-  return d.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+/** Formats a date for Discord notification display using native timestamps. */
+function formatDiscordTime(d: Date): string {
+  return `${toDiscordTimestamp(d, 'f')} (${toDiscordTimestamp(d, 'R')})`;
 }
 
 /** Builds the payload for a reschedule notification. */
@@ -244,7 +239,7 @@ async function notifyReschedule(
     existing,
     dto,
   );
-  const message = `"${existing.title}" has been moved to ${formatTime(newStart)}`;
+  const message = `"${existing.title}" has been rescheduled to ${formatDiscordTime(newStart)}`;
   await sendRescheduleNotifications(
     notificationService,
     usersToNotify,
