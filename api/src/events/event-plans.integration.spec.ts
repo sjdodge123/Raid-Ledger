@@ -1,5 +1,5 @@
 /**
- * Event Plans Integration Tests (ROK-523)
+ * Event Plans Integration Tests (ROK-523, ROK-833)
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -9,6 +9,14 @@ import {
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import {
+  createEventFromPlan,
+  insertConvertedPlan,
+} from './event-plans-crud.helpers';
+import { handleNoWinner } from './event-plans-lifecycle.helpers';
+import type { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { EventsService } from './events.service';
+import { SignupsService } from './signups.service';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -355,6 +363,270 @@ async function testCascadeDeleteUser() {
   expect(retrieved).toBeUndefined();
 }
 
+// ─── processPollClose helpers ────────────────────────────────────────────────
+
+/** No-op Discord client mock for helpers that accept it as a parameter. */
+function mockDiscordClient(): DiscordBotClientService {
+  return {
+    sendDirectMessage: jest.fn().mockResolvedValue(undefined),
+    deleteMessage: jest.fn().mockResolvedValue(undefined),
+    isConnected: jest.fn().mockReturnValue(false),
+    getClient: jest.fn().mockReturnValue(null),
+  } as unknown as DiscordBotClientService;
+}
+
+async function testCreateEventFromPlan() {
+  const eventsService = testApp.app.get(EventsService);
+  const signupsService = testApp.app.get(SignupsService);
+  const plan = await insertPlanDirectly(testApp.seed.adminUser.id, {
+    title: 'Poll Winner Plan',
+    gameId: testApp.seed.game.id,
+    durationMinutes: 120,
+  });
+  await createEventFromPlan(
+    testApp.db,
+    mockDiscordClient(),
+    eventsService,
+    signupsService,
+    plan,
+    0,
+  );
+  const [updated] = await testApp.db
+    .select()
+    .from(schema.eventPlans)
+    .where(eq(schema.eventPlans.id, plan.id))
+    .limit(1);
+  expect(updated.status).toBe('completed');
+  expect(updated.winningOption).toBe(0);
+  expect(updated.createdEventId).toEqual(expect.any(Number));
+  const [event] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, updated.createdEventId!))
+    .limit(1);
+  expect(event).toBeDefined();
+  expect(event.title).toBe('Poll Winner Plan');
+}
+
+async function testTieBreakPicksEarliest() {
+  const eventsService = testApp.app.get(EventsService);
+  const signupsService = testApp.app.get(SignupsService);
+  const earlyDate = new Date(Date.now() + 24 * 3600000);
+  const lateDate = new Date(Date.now() + 48 * 3600000);
+  const plan = await insertPlanDirectly(testApp.seed.adminUser.id, {
+    title: 'Tie Plan',
+    durationMinutes: 60,
+    pollOptions: [
+      { date: lateDate.toISOString(), label: 'Late Option' },
+      { date: earlyDate.toISOString(), label: 'Early Option' },
+    ],
+  });
+  // Winner index 1 = the earlier date option
+  await createEventFromPlan(
+    testApp.db,
+    mockDiscordClient(),
+    eventsService,
+    signupsService,
+    plan,
+    1,
+  );
+  const [updated] = await testApp.db
+    .select()
+    .from(schema.eventPlans)
+    .where(eq(schema.eventPlans.id, plan.id))
+    .limit(1);
+  expect(updated.status).toBe('completed');
+  expect(updated.winningOption).toBe(1);
+  const [event] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, updated.createdEventId!))
+    .limit(1);
+  expect(event).toBeDefined();
+}
+
+async function testNoVotesExpires() {
+  const plan = await insertPlanDirectly(testApp.seed.adminUser.id, {
+    title: 'No Votes Plan',
+  });
+  await handleNoWinner(testApp.db, mockDiscordClient(), plan);
+  const [updated] = await testApp.db
+    .select()
+    .from(schema.eventPlans)
+    .where(eq(schema.eventPlans.id, plan.id))
+    .limit(1);
+  expect(updated.status).toBe('expired');
+}
+
+async function testCreatorAutoSignup() {
+  const eventsService = testApp.app.get(EventsService);
+  const signupsService = testApp.app.get(SignupsService);
+  const plan = await insertPlanDirectly(testApp.seed.adminUser.id, {
+    title: 'Signup Plan',
+    durationMinutes: 90,
+  });
+  await createEventFromPlan(
+    testApp.db,
+    mockDiscordClient(),
+    eventsService,
+    signupsService,
+    plan,
+    0,
+  );
+  const [updated] = await testApp.db
+    .select()
+    .from(schema.eventPlans)
+    .where(eq(schema.eventPlans.id, plan.id))
+    .limit(1);
+  const signups = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.eventId, updated.createdEventId!));
+  expect(signups.length).toBe(1);
+  expect(signups[0].userId).toBe(testApp.seed.adminUser.id);
+}
+
+async function testSlotConfigPreserved() {
+  const eventsService = testApp.app.get(EventsService);
+  const signupsService = testApp.app.get(SignupsService);
+  const slotConfig = {
+    type: 'mmo',
+    tank: 2,
+    healer: 3,
+    dps: 10,
+    flex: 0,
+    bench: 5,
+  };
+  const plan = await insertPlanDirectly(testApp.seed.adminUser.id, {
+    title: 'Slots Plan',
+    durationMinutes: 120,
+    slotConfig,
+    gameId: testApp.seed.game.id,
+  });
+  await createEventFromPlan(
+    testApp.db,
+    mockDiscordClient(),
+    eventsService,
+    signupsService,
+    plan,
+    0,
+  );
+  const [updated] = await testApp.db
+    .select()
+    .from(schema.eventPlans)
+    .where(eq(schema.eventPlans.id, plan.id))
+    .limit(1);
+  const [event] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, updated.createdEventId!))
+    .limit(1);
+  const sc = event.slotConfig as Record<string, unknown>;
+  expect(sc.type).toBe('mmo');
+  expect(sc.tank).toBe(2);
+  expect(sc.healer).toBe(3);
+}
+
+// ─── convertFromEvent helpers ────────────────────────────────────────────────
+
+async function testConvertPreservesFields() {
+  const eventId = await createFutureEvent({
+    title: 'Convert Me',
+    gameId: testApp.seed.game.id,
+  });
+  const [event] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  const start = new Date(event.duration[0]);
+  const end = new Date(event.duration[1]);
+  const durationMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
+  const pollOptions = [
+    { date: new Date(Date.now() + 24 * 3600000).toISOString(), label: 'A' },
+    { date: new Date(Date.now() + 48 * 3600000).toISOString(), label: 'B' },
+  ];
+  const eventsService = testApp.app.get(EventsService);
+  const eventDto = await eventsService.findOne(eventId);
+  const plan = await insertConvertedPlan(
+    testApp.db,
+    testApp.seed.adminUser.id,
+    eventDto,
+    durationMinutes,
+    pollOptions,
+    24,
+    'test-channel-789',
+  );
+  expect(plan.title).toBe('Convert Me');
+  expect(plan.gameId).toBe(testApp.seed.game.id);
+  expect(plan.durationMinutes).toBe(durationMinutes);
+  expect(plan.status).toBe('polling');
+  expect(plan.pollChannelId).toBe('test-channel-789');
+  const opts = plan.pollOptions as Array<{ date: string; label: string }>;
+  expect(opts).toHaveLength(2);
+}
+
+async function testConvertPreservesSlotConfig() {
+  const slotConfig = {
+    type: 'mmo',
+    tank: 1,
+    healer: 2,
+    dps: 5,
+    flex: 1,
+    bench: 2,
+  };
+  const eventId = await createFutureEvent({
+    title: 'Slots Event',
+    slotConfig,
+    gameId: testApp.seed.game.id,
+  });
+  const eventsService = testApp.app.get(EventsService);
+  const eventDto = await eventsService.findOne(eventId);
+  const pollOptions = [
+    { date: new Date(Date.now() + 24 * 3600000).toISOString(), label: 'A' },
+    { date: new Date(Date.now() + 48 * 3600000).toISOString(), label: 'B' },
+  ];
+  const plan = await insertConvertedPlan(
+    testApp.db,
+    testApp.seed.adminUser.id,
+    eventDto,
+    180,
+    pollOptions,
+    24,
+    'test-channel-slots',
+  );
+  const sc = plan.slotConfig as Record<string, unknown>;
+  expect(sc.type).toBe('mmo');
+  expect(sc.tank).toBe(1);
+  expect(sc.healer).toBe(2);
+  expect(sc.dps).toBe(5);
+}
+
+async function testConvertPreservesGame() {
+  const eventId = await createFutureEvent({
+    title: 'Game Event',
+    gameId: testApp.seed.game.id,
+  });
+  const eventsService = testApp.app.get(EventsService);
+  const eventDto = await eventsService.findOne(eventId);
+  const pollOptions = [
+    { date: new Date(Date.now() + 24 * 3600000).toISOString(), label: 'A' },
+    { date: new Date(Date.now() + 48 * 3600000).toISOString(), label: 'B' },
+  ];
+  const plan = await insertConvertedPlan(
+    testApp.db,
+    testApp.seed.adminUser.id,
+    eventDto,
+    120,
+    pollOptions,
+    12,
+    'test-channel-game',
+  );
+  expect(plan.gameId).toBe(testApp.seed.game.id);
+  expect(plan.pollDurationHours).toBe(12);
+  expect(plan.pollMode).toBe('standard');
+}
+
 beforeAll(() => setupAll());
 afterEach(() => resetAfterEach());
 
@@ -395,4 +667,23 @@ describe('Event Plans — poll results access', () => {
 describe('Event Plans — cascade behavior', () => {
   it('should cascade delete when creator deleted', () =>
     testCascadeDeleteUser());
+});
+
+describe('Event Plans — processPollClose', () => {
+  it('should create event from plan with winning time slot', () =>
+    testCreateEventFromPlan());
+  it('should pick earlier option on tie', () => testTieBreakPicksEarliest());
+  it('should expire plan when no votes', () => testNoVotesExpires());
+  it('should auto-signup creator on event creation', () =>
+    testCreatorAutoSignup());
+  it('should preserve slot config on created event', () =>
+    testSlotConfigPreserved());
+});
+
+describe('Event Plans — convertFromEvent', () => {
+  it('should create plan preserving event fields', () =>
+    testConvertPreservesFields());
+  it('should preserve slot config from event', () =>
+    testConvertPreservesSlotConfig());
+  it('should preserve game association', () => testConvertPreservesGame());
 });
