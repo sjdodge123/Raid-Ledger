@@ -4,12 +4,15 @@
  * - buildUpdateData with null current / null lowest / both null
  * - onApplicationBootstrap setTimeout wiring
  * - getOverviewBatch returns empty array (no entries) — DB update still fires
- * - Games not in the ITAD response map still get a timestamp update
+ * - Games not in the ITAD response map are skipped (stale cleanup handles them)
  * - Multiple chunk failures don't abort the entire sync
- * - DB update is called per-game, not once per chunk
+ * - Bulk update is called once per chunk via db.execute()
  */
 import { Test } from '@nestjs/testing';
-import { ItadPriceSyncService } from './itad-price-sync.service';
+import {
+  ItadPriceSyncService,
+  buildUpdateData,
+} from './itad-price-sync.service';
 import { ItadPriceService } from './itad-price.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -74,69 +77,47 @@ describe('ItadPriceSyncService — adversarial', () => {
     service = module.get(ItadPriceSyncService);
   });
 
-  describe('syncPricing — edge: entry with null current deal', () => {
-    it('writes null pricing columns when current is null but lowest exists', async () => {
-      mockDb.where.mockResolvedValueOnce([
-        { id: 10, itadGameId: 'game-null-current' },
-      ]);
+  describe('buildUpdateData — edge: null deal fields', () => {
+    it('writes null pricing columns when current is null but lowest exists', () => {
       const entry = buildEntry('game-null-current', { current: null });
-      mockItadPriceService.getOverviewBatch.mockResolvedValueOnce([entry]);
-      mockDb.returning.mockResolvedValue([]);
+      const data = buildUpdateData(entry, new Date());
 
-      await service.syncPricing();
-
-      const setCall = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setCall.itadCurrentPrice).toBeNull();
-      expect(setCall.itadCurrentCut).toBeNull();
-      expect(setCall.itadCurrentShop).toBeNull();
-      expect(setCall.itadCurrentUrl).toBeNull();
-      // lowest data should still be written
-      expect(setCall.itadLowestPrice).toBe('4.99');
-      expect(setCall.itadLowestCut).toBe(88);
-      expect(setCall.itadPriceUpdatedAt).toBeInstanceOf(Date);
+      expect(data.itadCurrentPrice).toBeNull();
+      expect(data.itadCurrentCut).toBeNull();
+      expect(data.itadCurrentShop).toBeNull();
+      expect(data.itadCurrentUrl).toBeNull();
+      expect(data.itadLowestPrice).toBe('4.99');
+      expect(data.itadLowestCut).toBe(88);
+      expect(data.itadPriceUpdatedAt).toBeInstanceOf(Date);
     });
 
-    it('writes null lowest columns when lowest is null but current exists', async () => {
-      mockDb.where.mockResolvedValueOnce([
-        { id: 11, itadGameId: 'game-null-lowest' },
-      ]);
+    it('writes null lowest columns when lowest is null but current exists', () => {
       const entry = buildEntry('game-null-lowest', { lowest: null });
-      mockItadPriceService.getOverviewBatch.mockResolvedValueOnce([entry]);
-      mockDb.returning.mockResolvedValue([]);
+      const data = buildUpdateData(entry, new Date());
 
-      await service.syncPricing();
-
-      const setCall = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setCall.itadCurrentPrice).toBe('9.99');
-      expect(setCall.itadCurrentCut).toBe(75);
-      expect(setCall.itadLowestPrice).toBeNull();
-      expect(setCall.itadLowestCut).toBeNull();
+      expect(data.itadCurrentPrice).toBe('9.99');
+      expect(data.itadCurrentCut).toBe(75);
+      expect(data.itadLowestPrice).toBeNull();
+      expect(data.itadLowestCut).toBeNull();
     });
 
-    it('writes all pricing nulls when both current and lowest are null', async () => {
-      mockDb.where.mockResolvedValueOnce([
-        { id: 12, itadGameId: 'game-all-null' },
-      ]);
+    it('writes all pricing nulls when both current and lowest are null', () => {
       const entry = buildEntry('game-all-null', {
         current: null,
         lowest: null,
       });
-      mockItadPriceService.getOverviewBatch.mockResolvedValueOnce([entry]);
-      mockDb.returning.mockResolvedValue([]);
+      const data = buildUpdateData(entry, new Date());
 
-      await service.syncPricing();
-
-      const setCall = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setCall.itadCurrentPrice).toBeNull();
-      expect(setCall.itadCurrentCut).toBeNull();
-      expect(setCall.itadLowestPrice).toBeNull();
-      expect(setCall.itadLowestCut).toBeNull();
-      expect(setCall.itadPriceUpdatedAt).toBeInstanceOf(Date);
+      expect(data.itadCurrentPrice).toBeNull();
+      expect(data.itadCurrentCut).toBeNull();
+      expect(data.itadLowestPrice).toBeNull();
+      expect(data.itadLowestCut).toBeNull();
+      expect(data.itadPriceUpdatedAt).toBeInstanceOf(Date);
     });
   });
 
   describe('syncPricing — edge: game missing from ITAD response', () => {
-    it('skips DB update when game is not in the ITAD response', async () => {
+    it('skips bulk update when game is not in the ITAD response', async () => {
       mockDb.where.mockResolvedValueOnce([
         { id: 20, itadGameId: 'game-in-db-not-in-itad' },
       ]);
@@ -147,18 +128,14 @@ describe('ItadPriceSyncService — adversarial', () => {
 
       await service.syncPricing();
 
-      // No per-game update (skipped), only clearStalePricing runs
-      const setCalls = mockDb.set.mock.calls;
-      // clearStalePricing sets nulls for stale games
-      const staleCleanupCall = setCalls.find(
-        (c: Record<string, unknown>[]) => c[0].itadCurrentPrice === null,
-      );
-      expect(staleCleanupCall).toBeDefined();
+      // No bulk execute for pricing (no matched games), only clearStalePricing's
+      // update/set/where/returning chain runs
+      expect(mockDb.execute).not.toHaveBeenCalled();
     });
   });
 
   describe('syncPricing — edge: getOverviewBatch returns empty array', () => {
-    it('skips per-game updates when ITAD returns no entries', async () => {
+    it('skips bulk update when ITAD returns no entries', async () => {
       mockDb.where.mockResolvedValueOnce([
         { id: 30, itadGameId: 'game-uuid-30' },
         { id: 31, itadGameId: 'game-uuid-31' },
@@ -169,14 +146,8 @@ describe('ItadPriceSyncService — adversarial', () => {
 
       await service.syncPricing();
 
-      // No per-game pricing updates (all skipped), only clearStalePricing
-      const setCalls = mockDb.set.mock.calls;
-      const pricingUpdates = setCalls.filter(
-        (c: Record<string, unknown>[]) =>
-          c[0].itadPriceUpdatedAt instanceof Date &&
-          c[0].itadCurrentPrice !== undefined,
-      );
-      expect(pricingUpdates).toHaveLength(0);
+      // No bulk execute for pricing (no matched games)
+      expect(mockDb.execute).not.toHaveBeenCalled();
     });
   });
 
@@ -235,11 +206,8 @@ describe('ItadPriceSyncService — adversarial', () => {
     });
   });
 
-  describe('syncPricing — price formatting', () => {
-    it('formats price amounts to 2 decimal places in update data', async () => {
-      mockDb.where.mockResolvedValueOnce([
-        { id: 40, itadGameId: 'game-price-fmt' },
-      ]);
+  describe('buildUpdateData — price formatting', () => {
+    it('formats price amounts to 2 decimal places', () => {
       const entry = buildEntry('game-price-fmt', {
         current: {
           shop: { id: 1, name: 'Steam' },
@@ -249,14 +217,10 @@ describe('ItadPriceSyncService — adversarial', () => {
           url: 'https://store.steampowered.com/app/40',
         },
       });
-      mockItadPriceService.getOverviewBatch.mockResolvedValueOnce([entry]);
-      mockDb.returning.mockResolvedValue([]);
+      const data = buildUpdateData(entry, new Date());
 
-      await service.syncPricing();
-
-      const setCall = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       // toFixed(2) on 9.9 should produce '9.90'
-      expect(setCall.itadCurrentPrice).toBe('9.90');
+      expect(data.itadCurrentPrice).toBe('9.90');
     });
   });
 

@@ -72,9 +72,7 @@ describe('GameDetailSchema — ITAD pricing fields (ROK-818 contract)', () => {
         expect(result.data.itadCurrentShop).toBe('Steam');
         expect(result.data.itadLowestPrice).toBe(4.99);
         expect(result.data.itadLowestCut).toBe(88);
-        expect(result.data.itadPriceUpdatedAt).toBe(
-          '2026-03-15T12:00:00.000Z',
-        );
+        expect(result.data.itadPriceUpdatedAt).toBe('2026-03-15T12:00:00.000Z');
       }
     });
 
