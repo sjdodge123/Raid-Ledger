@@ -7,10 +7,11 @@ import type { JSX } from 'react';
 interface PlaytimeMinInputProps {
     value?: number;
     onChange: (value: number | undefined) => void;
+    disabled?: boolean;
 }
 
-/** Number input for minimum playtime hours. */
-export function PlaytimeMinInput({ value, onChange }: PlaytimeMinInputProps): JSX.Element {
+/** Number input for minimum playtime hours. Disabled when no game is selected. */
+export function PlaytimeMinInput({ value, onChange, disabled }: PlaytimeMinInputProps): JSX.Element {
     const displayValue = value ? String(Math.round(value / 60)) : '';
 
     const handleChange = (rawValue: string): void => {
@@ -23,16 +24,18 @@ export function PlaytimeMinInput({ value, onChange }: PlaytimeMinInputProps): JS
     };
 
     return (
-        <label className="flex flex-col gap-1.5">
+        <label className={`flex flex-col gap-1.5 ${disabled ? 'opacity-50' : ''}`}>
             <span className="text-xs font-medium text-muted">Min Hours</span>
             <input
                 type="number"
                 aria-label="Min Hours"
                 min={0}
-                value={displayValue}
+                value={disabled ? '' : displayValue}
                 onChange={(e) => handleChange(e.target.value)}
+                disabled={disabled}
+                title={disabled ? 'Select a game first' : undefined}
                 placeholder="0"
-                className="w-24 px-2 py-1.5 bg-surface border border-edge rounded text-foreground text-sm placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-24 px-2 py-1.5 bg-surface border border-edge rounded text-foreground text-sm placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed"
             />
         </label>
     );

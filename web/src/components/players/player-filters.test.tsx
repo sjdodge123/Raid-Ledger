@@ -62,10 +62,10 @@ describe('PlayerFilters — play history dropdown', () => {
         expect(select.value).toBe('');
     });
 
-    it('calls setFilter on change', async () => {
+    it('calls setFilter on change (requires gameId)', async () => {
         const user = userEvent.setup();
         const setFilter = vi.fn();
-        renderFilters({}, setFilter);
+        renderFilters({ gameId: 1 }, setFilter);
         await user.selectOptions(screen.getByLabelText(/play history/i), 'played_recently');
         expect(setFilter).toHaveBeenCalledWith('playHistory', 'played_recently');
     });

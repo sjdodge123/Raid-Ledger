@@ -17,6 +17,7 @@ interface PlayerFiltersProps {
 
 /** Players-specific filter controls grid. */
 export function PlayerFilters({ filters, setFilter }: PlayerFiltersProps): JSX.Element {
+    const hasGame = !!filters.gameId;
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <GameFilterInput
@@ -34,10 +35,12 @@ export function PlayerFilters({ filters, setFilter }: PlayerFiltersProps): JSX.E
             <PlayHistorySelect
                 value={filters.playHistory ?? ''}
                 onChange={(v) => setFilter('playHistory', v || undefined)}
+                disabled={!hasGame}
             />
             <PlaytimeMinInput
                 value={filters.playtimeMin}
                 onChange={(v) => setFilter('playtimeMin', v || undefined)}
+                disabled={!hasGame}
             />
         </div>
     );

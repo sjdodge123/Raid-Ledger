@@ -188,6 +188,16 @@ export async function findAllWithRolesQuery(
   return { data: rows, total: Number(countResult.count) };
 }
 
+/** Find the first admin user (for fallback assignments). */
+export async function findAdminUser(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<{ id: number } | undefined> {
+  return db.query.users.findFirst({
+    where: eq(schema.users.role, 'admin'),
+    columns: { id: true },
+  });
+}
+
 /** Correlated subquery: Steam playtime in seconds for a game (ROK-805). */
 function playtimeSubquery(userId: number) {
   return sql<number | null>`(
