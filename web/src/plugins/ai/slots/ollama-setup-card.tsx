@@ -38,18 +38,29 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
             await qc.invalidateQueries({ queryKey: ['admin', 'ai', 'providers'] });
             const providers = qc.getQueryData<AiProviderInfoDto[]>(['admin', 'ai', 'providers']);
             const ollama = providers?.find((p) => p.key === 'ollama');
-            if (ollama?.available) {
+            if (!ollama) return;
+            if (ollama.available) {
                 setLocalSetup(false);
                 toast.success('Ollama is ready');
+            } else if (ollama.setupStep === 'error') {
+                setLocalSetup(false);
+                toast.error(ollama.error || 'Ollama setup failed');
+            } else if (!ollama.setupInProgress && localSetup) {
+                // Server says setup is not running but we think it is — clear local state
+                setLocalSetup(false);
             }
         }, 5000);
         return () => { clearInterval(pollTimer); };
-    }, [setting, qc]);
+    }, [setting, localSetup, qc]);
 
     const handleSetup = async () => {
         setLocalSetup(true);
         try {
-            await setup.mutateAsync();
+            const result = await setup.mutateAsync();
+            if (result && !result.success) {
+                setLocalSetup(false);
+                toast.error(result.message || 'Ollama setup failed');
+            }
         } catch {
             setLocalSetup(false);
             toast.error('Failed to start Ollama setup');

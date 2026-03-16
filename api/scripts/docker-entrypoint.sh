@@ -3,6 +3,17 @@ set -e
 
 echo "🚀 Starting Raid-Ledger API..."
 
+# Grant nestjs user access to Docker socket if mounted (ROK-840: Ollama setup)
+if [ -S /var/run/docker.sock ]; then
+    SOCK_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "")
+    if [ -n "$SOCK_GID" ] && [ "$SOCK_GID" != "0" ]; then
+        addgroup -g "$SOCK_GID" docker_host 2>/dev/null || true
+        addgroup nestjs docker_host 2>/dev/null || true
+    else
+        chmod 666 /var/run/docker.sock 2>/dev/null || true
+    fi
+fi
+
 # Run database migrations if DATABASE_URL is set
 if [ -n "$DATABASE_URL" ]; then
     # Create backup directories (idempotent)
@@ -97,7 +108,7 @@ if [ -n "$DATABASE_URL" ]; then
 
 fi
 
-# Execute the main command
+# Execute the main command as non-root user
 echo "🎮 Starting server..."
-exec "$@"
+exec su-exec nestjs "$@"
 
