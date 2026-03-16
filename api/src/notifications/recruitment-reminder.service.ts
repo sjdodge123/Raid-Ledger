@@ -24,6 +24,7 @@ import {
   findAbsentUsers,
   buildSignupSummary,
   buildDiscordUrl,
+  isWithinGracePeriod,
 } from './recruitment-reminder.helpers';
 
 /** TTL for recruitment-reminder dedup keys: 48 hours in seconds */
@@ -60,11 +61,20 @@ export class RecruitmentReminderService {
   async checkAndSendReminders(): Promise<void | false> {
     const events = await findEligibleEvents(this.db);
     if (events.length === 0) return false;
-    this.logger.log(
-      `Found ${events.length} eligible events for recruitment reminders`,
-    );
 
-    for (const event of events) {
+    const graceSkipped = events.filter((e) => isWithinGracePeriod(e));
+    const eligible = events.filter((e) => !isWithinGracePeriod(e));
+    if (graceSkipped.length > 0) {
+      this.logger.debug(
+        `Skipped ${graceSkipped.length} events in grace period: ${graceSkipped.map((e) => e.id).join(', ')}`,
+      );
+    }
+    if (eligible.length === 0) return false;
+
+    this.logger.log(
+      `Found ${eligible.length} eligible events for recruitment reminders`,
+    );
+    for (const event of eligible) {
       await this.processEvent(event);
     }
   }

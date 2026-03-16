@@ -1,11 +1,9 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { RecruitmentReminderService } from './recruitment-reminder.service';
-import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import { REDIS_CLIENT } from '../redis/redis.module';
-import { NotificationService } from './notification.service';
-import { SettingsService } from '../settings/settings.service';
-import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
-import { CronJobService } from '../cron-jobs/cron-job.service';
+import {
+  makeEventRow,
+  createRecruitmentReminderTestModule,
+  type RecruitmentReminderTestMocks,
+} from './recruitment-reminder.service.spec-helpers';
 
 // Mock discord.js — uses shared mock (includes Client + PermissionsBitField)
 jest.mock(
@@ -14,119 +12,21 @@ jest.mock(
     jest.requireActual('../common/testing/discord-js-mock').discordJsFullMock,
 );
 
-/**
- * Helper to build a minimal EligibleEvent-shaped row returned from db.execute
- * for the findEligibleEvents query.
- */
-function makeEventRow(
-  overrides: Partial<{
-    id: number;
-    title: string;
-    game_id: number;
-    game_name: string;
-    creator_id: number;
-    start_time: string;
-    max_attendees: number | null;
-    signup_count: string;
-    channel_id: string;
-    guild_id: string;
-    message_id: string;
-  }> = {},
-) {
-  return {
-    id: 42,
-    title: 'Mythic Raid Night',
-    game_id: 7,
-    game_name: 'World of Warcraft',
-    creator_id: 1,
-    start_time: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString(),
-    max_attendees: 20,
-    signup_count: '10',
-    channel_id: 'channel-abc',
-    guild_id: 'guild-xyz',
-    message_id: 'msg-123',
-    ...overrides,
-  };
-}
-
 describe('RecruitmentReminderService', () => {
   let service: RecruitmentReminderService;
-  let mockDb: {
-    execute: jest.Mock;
-    update: jest.Mock;
-    set: jest.Mock;
-    where: jest.Mock;
-  };
-  let mockRedis: { get: jest.Mock; set: jest.Mock };
-  let mockNotificationService: {
-    create: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
-  };
-  let mockSettingsService: {
-    getDefaultTimezone: jest.Mock;
-    getClientUrl: jest.Mock;
-  };
-  let mockDiscordBotClient: { isConnected: jest.Mock; sendEmbed: jest.Mock };
-  let mockCronJobService: { executeWithTracking: jest.Mock };
+  let mocks: RecruitmentReminderTestMocks;
 
   beforeEach(async () => {
-    mockDb = {
-      execute: jest.fn(),
-      update: jest.fn().mockReturnThis(),
-      set: jest.fn().mockReturnThis(),
-      where: jest.fn().mockResolvedValue(undefined),
-    };
-
-    mockRedis = {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue('OK'),
-    };
-
-    mockNotificationService = {
-      create: jest.fn().mockResolvedValue({ id: 'notif-uuid-1' }),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
-    };
-
-    mockSettingsService = {
-      getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
-      getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
-    };
-
-    mockDiscordBotClient = {
-      isConnected: jest.fn().mockReturnValue(true),
-      sendEmbed: jest.fn().mockResolvedValue({ id: 'bump-msg-001' }),
-    };
-
-    mockCronJobService = {
-      executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) =>
-        fn(),
-      ),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        RecruitmentReminderService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: REDIS_CLIENT, useValue: mockRedis },
-        { provide: NotificationService, useValue: mockNotificationService },
-        { provide: SettingsService, useValue: mockSettingsService },
-        { provide: DiscordBotClientService, useValue: mockDiscordBotClient },
-        { provide: CronJobService, useValue: mockCronJobService },
-      ],
-    }).compile();
-
-    service = module.get<RecruitmentReminderService>(
-      RecruitmentReminderService,
-    );
+    ({ service, mocks } = await createRecruitmentReminderTestModule());
   });
 
   describe('handleCron', () => {
     it('should delegate to CronJobService.executeWithTracking', async () => {
-      mockDb.execute.mockResolvedValue([]);
+      mocks.mockDb.execute.mockResolvedValue([]);
 
       await service.handleCron();
 
-      expect(mockCronJobService.executeWithTracking).toHaveBeenCalledWith(
+      expect(mocks.mockCronJobService.executeWithTracking).toHaveBeenCalledWith(
         'RecruitmentReminderService_checkAndSendReminders',
         expect.any(Function),
       );
@@ -135,39 +35,43 @@ describe('RecruitmentReminderService', () => {
 
   describe('checkAndSendReminders — no eligible events', () => {
     it('should do nothing when no eligible events are found', async () => {
-      mockDb.execute.mockResolvedValue([]);
+      mocks.mockDb.execute.mockResolvedValue([]);
 
       await service.checkAndSendReminders();
 
-      expect(mockRedis.get).not.toHaveBeenCalled();
-      expect(mockNotificationService.create).not.toHaveBeenCalled();
-      expect(mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mocks.mockRedis.get).not.toHaveBeenCalled();
+      expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
+      expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
     });
   });
 
   describe('checkAndSendReminders — deduplication', () => {
     it('should skip event when both Redis dedup keys already exist', async () => {
       const event = makeEventRow();
-      mockDb.execute.mockResolvedValueOnce([event]);
-      mockRedis.get.mockResolvedValue('1'); // both bump and dm keys exist
+      mocks.mockDb.execute.mockResolvedValueOnce([event]);
+      mocks.mockRedis.get.mockResolvedValue('1'); // both bump and dm keys exist
 
       await service.checkAndSendReminders();
 
-      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:42');
-      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-dm:event:42');
-      expect(mockNotificationService.create).not.toHaveBeenCalled();
+      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+        'recruitment-bump:event:42',
+      );
+      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+        'recruitment-dm:event:42',
+      );
+      expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
     });
 
     it('should set Redis DM dedup key with 48h TTL before dispatching DMs', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event]) // findEligibleEvents
         .mockResolvedValueOnce([{ id: 10 }, { id: 11 }]) // findRecipients
         .mockResolvedValueOnce([]); // findAbsentUsers
 
       await service.checkAndSendReminders();
 
-      expect(mockRedis.set).toHaveBeenCalledWith(
+      expect(mocks.mockRedis.set).toHaveBeenCalledWith(
         'recruitment-dm:event:42',
         '1',
         'EX',
@@ -178,37 +82,41 @@ describe('RecruitmentReminderService', () => {
     it('should process multiple events independently', async () => {
       const event1 = makeEventRow({ id: 10, title: 'Event 1' });
       const event2 = makeEventRow({ id: 20, title: 'Event 2' });
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event1, event2]) // findEligibleEvents
         .mockResolvedValueOnce([]) // findRecipients for event1
         .mockResolvedValueOnce([]) // findRecipients for event2
         .mockResolvedValueOnce([]); // findAbsentUsers — may not be called when no recipients
 
-      mockRedis.get.mockResolvedValue(null); // neither event deduplicated
+      mocks.mockRedis.get.mockResolvedValue(null); // neither event deduplicated
 
       await service.checkAndSendReminders();
 
-      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:10');
-      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:20');
+      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+        'recruitment-bump:event:10',
+      );
+      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+        'recruitment-bump:event:20',
+      );
     });
   });
 
   describe('checkAndSendReminders — recipients', () => {
     it('should send DMs to all recipients when none are absent', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event]) // findEligibleEvents
         .mockResolvedValueOnce([{ id: 5 }, { id: 6 }, { id: 7 }]) // findRecipients
         .mockResolvedValueOnce([]); // findAbsentUsers → no absent users
 
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledTimes(3);
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledTimes(3);
     });
 
     it('should exclude absent users from DM list', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event]) // findEligibleEvents
         .mockResolvedValueOnce([{ id: 5 }, { id: 6 }, { id: 7 }]) // findRecipients
         .mockResolvedValueOnce([{ user_id: 6 }]); // findAbsentUsers → user 6 is absent
@@ -216,8 +124,8 @@ describe('RecruitmentReminderService', () => {
       await service.checkAndSendReminders();
 
       // Only 2 DMs: users 5 and 7 (not 6)
-      expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
-      const calls = mockNotificationService.create.mock.calls.map(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledTimes(2);
+      const calls = mocks.mockNotificationService.create.mock.calls.map(
         (c: Array<{ userId: number }>) => c[0].userId,
       );
       expect(calls).toContain(5);
@@ -227,19 +135,19 @@ describe('RecruitmentReminderService', () => {
 
     it('should exclude ALL users when all are absent', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event]) // findEligibleEvents
         .mockResolvedValueOnce([{ id: 5 }, { id: 6 }]) // findRecipients
         .mockResolvedValueOnce([{ user_id: 5 }, { user_id: 6 }]); // both absent
 
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).not.toHaveBeenCalled();
+      expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
     });
 
     it('should skip absent user check when recipient list is empty', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event]) // findEligibleEvents
         .mockResolvedValueOnce([]); // findRecipients → empty
 
@@ -247,20 +155,20 @@ describe('RecruitmentReminderService', () => {
 
       // findAbsentUsers should not fire a DB query when there are no recipients
       // db.execute called: findEligibleEvents + findRecipients only = 2 times
-      expect(mockDb.execute).toHaveBeenCalledTimes(2);
-      expect(mockNotificationService.create).not.toHaveBeenCalled();
+      expect(mocks.mockDb.execute).toHaveBeenCalledTimes(2);
+      expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
     });
 
     it('should still post channel bump even when there are no recipients', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event]) // findEligibleEvents
         .mockResolvedValueOnce([]); // findRecipients → empty
 
       await service.checkAndSendReminders();
 
       // Channel bump should still fire
-      expect(mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -280,7 +188,7 @@ describe('RecruitmentReminderService', () => {
         guild_id: 'guild-xyz',
         message_id: 'msg-123',
       });
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event])
         .mockResolvedValueOnce([{ id: 5 }])
         .mockResolvedValueOnce([]);
@@ -289,7 +197,7 @@ describe('RecruitmentReminderService', () => {
     it('should create notification with type recruitment_reminder', async () => {
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'recruitment_reminder' }),
       );
     });
@@ -297,7 +205,7 @@ describe('RecruitmentReminderService', () => {
     it('should include eventId in notification payload', async () => {
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ eventId: 42 }),
         }),
@@ -307,7 +215,7 @@ describe('RecruitmentReminderService', () => {
     it('should include gameName in notification payload', async () => {
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ gameName: 'World of Warcraft' }),
         }),
@@ -317,7 +225,7 @@ describe('RecruitmentReminderService', () => {
     it('should include signupSummary with max_attendees when set', async () => {
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             signupSummary: '10/20 spots filled',
@@ -329,7 +237,7 @@ describe('RecruitmentReminderService', () => {
     it('should include event URL in payload', async () => {
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             url: 'http://localhost:5173/events/42',
@@ -341,7 +249,7 @@ describe('RecruitmentReminderService', () => {
     it('should include discordUrl in payload', async () => {
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             discordUrl:
@@ -354,7 +262,7 @@ describe('RecruitmentReminderService', () => {
     it('should include startTime in payload', async () => {
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             startTime: '2026-03-04T20:00:00.000Z',
@@ -364,13 +272,13 @@ describe('RecruitmentReminderService', () => {
     });
 
     it('should include voiceChannelId in payload when resolveVoiceChannelForEvent returns a value', async () => {
-      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
+      mocks.mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
         'vc-999',
       );
 
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ voiceChannelId: 'vc-999' }),
         }),
@@ -378,20 +286,20 @@ describe('RecruitmentReminderService', () => {
     });
 
     it('should NOT include voiceChannelId in payload when resolveVoiceChannelForEvent returns null', async () => {
-      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
+      mocks.mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
         null,
       );
 
       await service.checkAndSendReminders();
 
-      const call = mockNotificationService.create.mock.calls[0][0];
+      const call = mocks.mockNotificationService.create.mock.calls[0][0];
       expect(call.payload).not.toHaveProperty('voiceChannelId');
     });
 
     it('should set title to "Spots Available — {eventTitle}"', async () => {
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Spots Available — Mythic Raid Night',
         }),
@@ -402,14 +310,14 @@ describe('RecruitmentReminderService', () => {
   describe('checkAndSendReminders — signupSummary formatting', () => {
     it('should format signupSummary as "X signed up" when max_attendees is null', async () => {
       const event = makeEventRow({ max_attendees: null, signup_count: '5' });
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event])
         .mockResolvedValueOnce([{ id: 5 }])
         .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ signupSummary: '5 signed up' }),
         }),
@@ -418,14 +326,14 @@ describe('RecruitmentReminderService', () => {
 
     it('should format signupSummary as "X/Y spots filled" when max_attendees is set', async () => {
       const event = makeEventRow({ max_attendees: 30, signup_count: '15' });
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event])
         .mockResolvedValueOnce([{ id: 5 }])
         .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             signupSummary: '15/30 spots filled',
@@ -438,13 +346,13 @@ describe('RecruitmentReminderService', () => {
   describe('checkAndSendReminders — error handling in sendRecruitmentDMs', () => {
     it('should continue processing remaining recipients when one DM fails', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event])
         .mockResolvedValueOnce([{ id: 5 }, { id: 6 }])
         .mockResolvedValueOnce([]);
 
       // First notification fails, second succeeds
-      mockNotificationService.create
+      mocks.mockNotificationService.create
         .mockRejectedValueOnce(new Error('DM failed for user 5'))
         .mockResolvedValueOnce({ id: 'notif-uuid-2' });
 
@@ -452,38 +360,40 @@ describe('RecruitmentReminderService', () => {
       await expect(service.checkAndSendReminders()).resolves.not.toThrow();
 
       // Both were attempted
-      expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledTimes(2);
     });
 
     it('should still post channel bump when DM sending fails', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event])
         .mockResolvedValueOnce([{ id: 5 }])
         .mockResolvedValueOnce([]);
 
-      mockNotificationService.create.mockRejectedValue(new Error('DM failed'));
+      mocks.mockNotificationService.create.mockRejectedValue(
+        new Error('DM failed'),
+      );
 
       await service.checkAndSendReminders();
 
-      expect(mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('checkAndSendReminders — channel bump', () => {
     it('should post channel bump embed when bot is connected', async () => {
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      mockDiscordBotClient.isConnected.mockReturnValue(true);
+      mocks.mockDiscordBotClient.isConnected.mockReturnValue(true);
 
       await service.checkAndSendReminders();
 
-      expect(mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
-      expect(mockDiscordBotClient.sendEmbed).toHaveBeenCalledWith(
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledWith(
         'channel-abc',
         expect.anything(),
         expect.anything(),
@@ -492,20 +402,24 @@ describe('RecruitmentReminderService', () => {
 
     it('should skip channel bump when bot is not connected', async () => {
       const event = makeEventRow();
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
-      mockDiscordBotClient.isConnected.mockReturnValue(false);
+      mocks.mockDiscordBotClient.isConnected.mockReturnValue(false);
 
       await service.checkAndSendReminders();
 
-      expect(mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
     });
 
     it('should not throw when channel bump sendEmbed fails', async () => {
       const event = makeEventRow();
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
-      mockDiscordBotClient.sendEmbed.mockRejectedValue(
+      mocks.mockDiscordBotClient.sendEmbed.mockRejectedValue(
         new Error('Channel not found'),
       );
 
@@ -514,16 +428,18 @@ describe('RecruitmentReminderService', () => {
 
     it('should use clientUrl from settings in the bump Sign Up button URL', async () => {
       const event = makeEventRow({ id: 99 });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
-      mockSettingsService.getClientUrl.mockResolvedValue(
+      mocks.mockSettingsService.getClientUrl.mockResolvedValue(
         'https://raidledger.example.com',
       );
 
       await service.checkAndSendReminders();
 
       // sendEmbed is called with (channelId, embed, row)
-      const [, , row] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+      const [, , row] = mocks.mockDiscordBotClient.sendEmbed.mock.calls[0] as [
         string,
         unknown,
         { toJSON: () => { components: Array<{ url: string; label: string }> } },
@@ -540,13 +456,15 @@ describe('RecruitmentReminderService', () => {
 
     it('should fall back to http://localhost:5173 for clientUrl when settings returns null', async () => {
       const event = makeEventRow({ id: 55 });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
-      mockSettingsService.getClientUrl.mockResolvedValue(null);
+      mocks.mockSettingsService.getClientUrl.mockResolvedValue(null);
 
       await service.checkAndSendReminders();
 
-      const [, , row] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+      const [, , row] = mocks.mockDiscordBotClient.sendEmbed.mock.calls[0] as [
         string,
         unknown,
         { toJSON: () => { components: Array<{ url: string; label: string }> } },
@@ -563,11 +481,13 @@ describe('RecruitmentReminderService', () => {
         max_attendees: 10,
         signup_count: '10',
       });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      expect(mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
     });
 
     it('should skip channel bump when event is over-full (signupCount > maxAttendees)', async () => {
@@ -575,11 +495,13 @@ describe('RecruitmentReminderService', () => {
         max_attendees: 10,
         signup_count: '12',
       });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      expect(mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
     });
 
     it('should post channel bump when max_attendees is null (no cap)', async () => {
@@ -587,22 +509,26 @@ describe('RecruitmentReminderService', () => {
         max_attendees: null,
         signup_count: '50',
       });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      expect(mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
 
     it('should use "tomorrow" in embed title when event is <= 24h away', async () => {
       const event = makeEventRow({
         start_time: new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString(),
       });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      const [, embed] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+      const [, embed] = mocks.mockDiscordBotClient.sendEmbed.mock.calls[0] as [
         string,
         { toJSON: () => { title: string } },
       ];
@@ -613,11 +539,13 @@ describe('RecruitmentReminderService', () => {
       const event = makeEventRow({
         start_time: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
       });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      const [, embed] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+      const [, embed] = mocks.mockDiscordBotClient.sendEmbed.mock.calls[0] as [
         string,
         { toJSON: () => { title: string } },
       ];
@@ -633,11 +561,13 @@ describe('RecruitmentReminderService', () => {
         max_attendees: 20,
         signup_count: '10',
       });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      const [, embed] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+      const [, embed] = mocks.mockDiscordBotClient.sendEmbed.mock.calls[0] as [
         string,
         { toJSON: () => { description: string; title: string } },
       ];
@@ -650,42 +580,48 @@ describe('RecruitmentReminderService', () => {
 
   describe('checkAndSendReminders — settings fallbacks', () => {
     it('should fall back to UTC when getDefaultTimezone returns null', async () => {
-      mockSettingsService.getDefaultTimezone.mockResolvedValue(null);
+      mocks.mockSettingsService.getDefaultTimezone.mockResolvedValue(null);
 
       const event = makeEventRow();
-      mockDb.execute
+      mocks.mockDb.execute
         .mockResolvedValueOnce([event])
         .mockResolvedValueOnce([{ id: 5 }])
         .mockResolvedValueOnce([]);
 
       // Should not throw — UTC fallback is used
       await expect(service.checkAndSendReminders()).resolves.not.toThrow();
-      expect(mockNotificationService.create).toHaveBeenCalled();
+      expect(mocks.mockNotificationService.create).toHaveBeenCalled();
     });
   });
 
   describe('checkAndSendReminders — bump message ID persistence (ROK-728)', () => {
     it('should persist bump message ID after posting channel bump', async () => {
       const event = makeEventRow({ id: 42 });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
-      mockDiscordBotClient.sendEmbed.mockResolvedValue({ id: 'bump-msg-999' });
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
+      mocks.mockDiscordBotClient.sendEmbed.mockResolvedValue({
+        id: 'bump-msg-999',
+      });
 
       await service.checkAndSendReminders();
 
-      expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalledWith(
+      expect(mocks.mockDb.update).toHaveBeenCalled();
+      expect(mocks.mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({ bumpMessageId: 'bump-msg-999' }),
       );
     });
 
     it('should not persist bump message ID when bot is disconnected', async () => {
       const event = makeEventRow();
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
-      mockDiscordBotClient.isConnected.mockReturnValue(false);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
+      mocks.mockDiscordBotClient.isConnected.mockReturnValue(false);
 
       await service.checkAndSendReminders();
 
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(mocks.mockDb.update).not.toHaveBeenCalled();
     });
 
     it('should not persist bump message ID when event is full', async () => {
@@ -693,11 +629,13 @@ describe('RecruitmentReminderService', () => {
         max_attendees: 10,
         signup_count: '10',
       });
-      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(mocks.mockDb.update).not.toHaveBeenCalled();
     });
   });
 });
