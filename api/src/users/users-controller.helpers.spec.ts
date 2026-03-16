@@ -143,7 +143,10 @@ describe('parsePlayHistory', () => {
 
 describe('resolveSources', () => {
   it('prefers sourcesStr over single source', () => {
-    expect(resolveSources('manual', 'discord,steam_library')).toEqual(['discord', 'steam_library']);
+    expect(resolveSources('manual', 'discord,steam_library')).toEqual([
+      'discord',
+      'steam_library',
+    ]);
   });
 
   it('falls back to single source when sourcesStr is undefined', () => {
@@ -158,13 +161,19 @@ describe('resolveSources', () => {
 describe('buildPaginatedMeta', () => {
   it('returns hasMore true when more items exist', () => {
     expect(buildPaginatedMeta(50, 1, 20)).toEqual({
-      total: 50, page: 1, limit: 20, hasMore: true,
+      total: 50,
+      page: 1,
+      limit: 20,
+      hasMore: true,
     });
   });
 
   it('returns hasMore false when all items shown', () => {
     expect(buildPaginatedMeta(10, 1, 20)).toEqual({
-      total: 10, page: 1, limit: 20, hasMore: false,
+      total: 10,
+      page: 1,
+      limit: 20,
+      hasMore: false,
     });
   });
 });
