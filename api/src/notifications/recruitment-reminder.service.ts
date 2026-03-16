@@ -62,11 +62,19 @@ export class RecruitmentReminderService {
     const events = await findEligibleEvents(this.db);
     if (events.length === 0) return false;
 
-    const graceSkipped = events.filter((e) => isWithinGracePeriod(e));
-    const eligible = events.filter((e) => !isWithinGracePeriod(e));
-    if (graceSkipped.length > 0) {
+    const now = Date.now();
+    const eligible: EligibleEvent[] = [];
+    const graceSkippedIds: number[] = [];
+    for (const e of events) {
+      if (isWithinGracePeriod(e, now)) {
+        graceSkippedIds.push(e.id);
+      } else {
+        eligible.push(e);
+      }
+    }
+    if (graceSkippedIds.length > 0) {
       this.logger.debug(
-        `Skipped ${graceSkipped.length} events in grace period: ${graceSkipped.map((e) => e.id).join(', ')}`,
+        `Skipped ${graceSkippedIds.length} events in grace period: ${graceSkippedIds.join(', ')}`,
       );
     }
     if (eligible.length === 0) return false;

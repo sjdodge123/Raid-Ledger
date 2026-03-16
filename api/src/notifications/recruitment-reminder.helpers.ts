@@ -157,12 +157,18 @@ export function calculateGracePeriodMs(
  * Check whether an event is still within its creation grace period.
  * Returns true if the event should be skipped (grace period active),
  * false if it should be processed (grace period elapsed or none).
+ * @param event - The eligible event to check
+ * @param now - Optional timestamp (ms) to use instead of Date.now()
  */
-export function isWithinGracePeriod(event: EligibleEvent): boolean {
+export function isWithinGracePeriod(
+  event: EligibleEvent,
+  now?: number,
+): boolean {
   const gracePeriodMs = calculateGracePeriodMs(
     event.createdAt,
     event.startTime,
   );
   if (gracePeriodMs === 0) return false;
-  return Date.now() < new Date(event.createdAt).getTime() + gracePeriodMs;
+  const currentTime = now ?? Date.now();
+  return currentTime < new Date(event.createdAt).getTime() + gracePeriodMs;
 }
