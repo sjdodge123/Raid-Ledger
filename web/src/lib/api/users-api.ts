@@ -11,18 +11,24 @@ import type {
 } from "@raid-ledger/contract";
 import { fetchApi } from "./fetch-api";
 
-/** Fetch paginated player list (public) */
+/** Fetch paginated player list (public, ROK-821: extended filters). */
 export async function getPlayers(params?: {
   page?: number;
   search?: string;
   gameId?: number;
-  source?: string;
+  sources?: string;
+  role?: string;
+  playtimeMin?: number;
+  playHistory?: string;
 }): Promise<PlayersListResponseDto> {
   const sp = new URLSearchParams();
   if (params?.page) sp.set("page", String(params.page));
   if (params?.search) sp.set("search", params.search);
   if (params?.gameId) sp.set("gameId", String(params.gameId));
-  if (params?.source) sp.set("source", params.source);
+  if (params?.sources) sp.set("sources", params.sources);
+  if (params?.role) sp.set("role", params.role);
+  if (params?.playtimeMin) sp.set("playtimeMin", String(params.playtimeMin));
+  if (params?.playHistory) sp.set("playHistory", params.playHistory);
   const query = sp.toString();
   return fetchApi(`/users${query ? `?${query}` : ""}`);
 }

@@ -19,18 +19,27 @@ export function usePlayers(page: number, search: string, gameId?: number) {
     });
 }
 
+/** Params for the infinite players query (ROK-821). */
+export interface InfinitePlayersParams {
+    search?: string;
+    gameId?: number;
+    sources?: string;
+    role?: string;
+    playtimeMin?: number;
+    playHistory?: string;
+}
+
 /**
- * Infinite-scroll variant of usePlayers (ROK-361).
+ * Infinite-scroll variant of usePlayers (ROK-361, ROK-821: params object).
  */
-export function useInfinitePlayers(search: string, gameId?: number, source?: string) {
+export function useInfinitePlayers(search: string, params?: InfinitePlayersParams) {
     return useInfiniteList<UserPreviewDto>({
-        queryKey: ['players', 'infinite', search, gameId, source],
+        queryKey: ['players', 'infinite', search, params],
         queryFn: (page) =>
             getPlayers({
                 page,
                 search: search || undefined,
-                gameId,
-                source,
+                ...params,
             }),
     });
 }

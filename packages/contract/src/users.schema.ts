@@ -105,6 +105,19 @@ export const PlayersListResponseSchema = z.object({
 export type PlayersListResponseDto = z.infer<typeof PlayersListResponseSchema>;
 
 // ==========================================
+// Game Interest Source & Play History Filters (ROK-821)
+// ==========================================
+
+/** Valid sources for game interest records. */
+export const GameInterestSourceValues = ['manual', 'discord', 'steam_library', 'steam_wishlist'] as const;
+export const GameInterestSourceSchema = z.enum(GameInterestSourceValues);
+export type GameInterestSource = z.infer<typeof GameInterestSourceSchema>;
+
+/** Filter options for play history. */
+export const PlayHistoryFilterSchema = z.enum(['played_recently', 'played_ever', 'any']);
+export type PlayHistoryFilter = z.infer<typeof PlayHistoryFilterSchema>;
+
+// ==========================================
 // Role Update DTO (Admin-only)
 // ==========================================
 

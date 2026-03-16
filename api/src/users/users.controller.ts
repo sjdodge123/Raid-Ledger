@@ -23,27 +23,32 @@ import { UsersService } from './users.service';
 import { AvatarService } from './avatar.service';
 import { CharactersService } from '../characters/characters.service';
 import { EventsService } from '../events/events.service';
-import {
+import type {
   PlayersListResponseDto,
   RecentPlayersResponseDto,
   UserManagementListResponseDto,
   UserProfileDto,
-  UpdateUserRoleSchema,
   UserEventSignupsResponseDto,
-  ActivityPeriodSchema,
   UserActivityResponseDto,
-} from '@raid-ledger/contract';
-import type {
   UserHeartedGamesResponseDto,
   SteamLibraryResponseDto,
   SteamWishlistResponseDto,
+  UserRole,
 } from '@raid-ledger/contract';
-import type { UserRole } from '@raid-ledger/contract';
+import {
+  UpdateUserRoleSchema,
+  ActivityPeriodSchema,
+} from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
 import { OperatorGuard } from '../auth/operator.guard';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
-import { parsePagination, validateSource } from './users-controller.helpers';
-import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
+import {
+  parsePagination,
+  parsePlaytimeMin,
+  parsePlayHistory,
+  resolveSources,
+  buildPaginatedMeta,
+} from './users-controller.helpers';
 
 interface AuthenticatedRequest {
   user: { id: number; role: UserRole; impersonatedBy?: number | null };
@@ -59,7 +64,7 @@ export class UsersController {
     private readonly eventsService: EventsService,
   ) {}
 
-  /** List all registered players (paginated, with optional search). */
+  /** List all registered players (paginated, with optional search and filters). */
   @Get()
   async listPlayers(
     @Query('page') pageStr?: string,
@@ -67,25 +72,29 @@ export class UsersController {
     @Query('search') search?: string,
     @Query('gameId') gameIdStr?: string,
     @Query('source') source?: string,
+    @Query('sources') sourcesStr?: string,
+    @Query('role') role?: string,
+    @Query('playtimeMin') playtimeMinStr?: string,
+    @Query('playHistory') playHistoryStr?: string,
   ): Promise<PlayersListResponseDto> {
     const { page, limit } = parsePagination(pageStr, limitStr);
     const gameId = gameIdStr ? parseInt(gameIdStr, 10) || undefined : undefined;
-    validateSource(source, HEART_SOURCES);
+    const sources = resolveSources(source, sourcesStr);
+    const playtimeMin = parsePlaytimeMin(playtimeMinStr);
+    const playHistory = parsePlayHistory(playHistoryStr);
     const result = await this.usersService.findAll(
       page,
       limit,
       search || undefined,
       gameId,
-      source || undefined,
+      sources,
+      playtimeMin,
+      playHistory,
+      role || undefined,
     );
     return {
       data: result.data,
-      meta: {
-        total: result.total,
-        page,
-        limit,
-        hasMore: page * limit < result.total,
-      },
+      meta: buildPaginatedMeta(result.total, page, limit),
     };
   }
 
@@ -155,12 +164,7 @@ export class UsersController {
     const result = await this.usersService.getHeartedGames(id, page, limit);
     return {
       data: result.data,
-      meta: {
-        total: result.total,
-        page,
-        limit,
-        hasMore: page * limit < result.total,
-      },
+      meta: buildPaginatedMeta(result.total, page, limit),
     };
   }
 
@@ -177,12 +181,7 @@ export class UsersController {
     const result = await this.usersService.getSteamLibrary(id, page, limit);
     return {
       data: result.data,
-      meta: {
-        total: result.total,
-        page,
-        limit,
-        hasMore: page * limit < result.total,
-      },
+      meta: buildPaginatedMeta(result.total, page, limit),
     };
   }
 
@@ -199,12 +198,7 @@ export class UsersController {
     const result = await this.usersService.getSteamWishlist(id, page, limit);
     return {
       data: result.data,
-      meta: {
-        total: result.total,
-        page,
-        limit,
-        hasMore: page * limit < result.total,
-      },
+      meta: buildPaginatedMeta(result.total, page, limit),
     };
   }
 
@@ -260,12 +254,7 @@ export class UsersController {
         ...u,
         createdAt: u.createdAt.toISOString(),
       })),
-      meta: {
-        total: result.total,
-        page,
-        limit,
-        hasMore: page * limit < result.total,
-      },
+      meta: buildPaginatedMeta(result.total, page, limit),
     };
   }
 

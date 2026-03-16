@@ -128,6 +128,149 @@ describe('UsersController', () => {
     eventsService = module.get<EventsService>(EventsService);
   });
 
+  describe('listPlayers (ROK-821)', () => {
+    const mockFindAllResult = {
+      data: [
+        {
+          id: 1,
+          username: 'Alice',
+          avatar: null,
+          discordId: null,
+          customAvatarUrl: null,
+        },
+      ],
+      total: 1,
+    };
+
+    it('should pass sources array to findAll', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        '1',
+        '20',
+        undefined,
+        '42',
+        undefined,
+        'manual,discord',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        42,
+        ['manual', 'discord'],
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should pass role to findAll', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        '1',
+        '20',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'admin',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        undefined,
+        [],
+        undefined,
+        undefined,
+        'admin',
+      );
+    });
+
+    it('should pass playtimeMin to findAll', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        '1',
+        '20',
+        undefined,
+        '42',
+        undefined,
+        undefined,
+        undefined,
+        '120',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        42,
+        [],
+        120,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should pass playHistory to findAll', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers(
+        '1',
+        '20',
+        undefined,
+        '42',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'played_recently',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        42,
+        [],
+        undefined,
+        'played_recently',
+        undefined,
+      );
+    });
+
+    it('should treat old single source param as sources array', async () => {
+      const spy = jest
+        .spyOn(usersService, 'findAll')
+        .mockResolvedValue(mockFindAllResult);
+      await controller.listPlayers('1', '20', undefined, '42', 'manual');
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        20,
+        undefined,
+        42,
+        ['manual'],
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should return paginated response shape', async () => {
+      jest.spyOn(usersService, 'findAll').mockResolvedValue(mockFindAllResult);
+      const result = await controller.listPlayers('1', '20');
+      expect(result).toMatchObject({
+        data: expect.any(Array),
+        meta: { total: 1, page: 1, limit: 20, hasMore: false },
+      });
+    });
+  });
+
   describe('listRecentPlayers', () => {
     it('should return 200 with correct shape', async () => {
       const mockRows = [

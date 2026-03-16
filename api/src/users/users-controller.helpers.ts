@@ -4,6 +4,10 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import { ZodError, type ZodSchema } from 'zod';
+import {
+  GameInterestSourceValues,
+  PlayHistoryFilterSchema,
+} from '@raid-ledger/contract';
 
 /**
  * Parse a body against a Zod schema, throwing BadRequestException on failure.
@@ -43,6 +47,58 @@ export function parsePagination(
   const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(limitStr ?? '20', 10) || 20));
   return { page, limit };
+}
+
+/**
+ * Parse comma-separated sources string, validating each against GameInterestSourceValues.
+ * Invalid values are silently dropped.
+ */
+export function parseSources(sourcesStr?: string): string[] {
+  if (!sourcesStr?.trim()) return [];
+  const allowed = new Set<string>(GameInterestSourceValues);
+  return sourcesStr
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => allowed.has(s));
+}
+
+/**
+ * Parse playtimeMin query param to a positive integer, or undefined.
+ * Returns undefined for zero, negative, or non-numeric values.
+ */
+export function parsePlaytimeMin(str?: string): number | undefined {
+  if (!str?.trim()) return undefined;
+  const n = Math.floor(Number(str));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/**
+ * Parse playHistory query param against PlayHistoryFilterSchema.
+ * Returns the value if valid, undefined otherwise.
+ */
+export function parsePlayHistory(str?: string): string | undefined {
+  if (!str?.trim()) return undefined;
+  const result = PlayHistoryFilterSchema.safeParse(str);
+  return result.success ? result.data : undefined;
+}
+
+/**
+ * Merge legacy single-source param with new multi-source param.
+ * Backward compat: if old `source` param sent, treat as `sources=[value]`.
+ */
+export function resolveSources(source?: string, sourcesStr?: string): string[] {
+  if (sourcesStr) return parseSources(sourcesStr);
+  if (source) return parseSources(source);
+  return [];
+}
+
+/** Build paginated meta object for list responses. */
+export function buildPaginatedMeta(
+  total: number,
+  page: number,
+  limit: number,
+): { total: number; page: number; limit: number; hasMore: boolean } {
+  return { total, page, limit, hasMore: page * limit < total };
 }
 
 /** Resolve week start date from query param or current week. */

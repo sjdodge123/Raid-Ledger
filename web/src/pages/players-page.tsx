@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useInfinitePlayers } from '../hooks/use-players';
+import { usePlayerFilters } from '../hooks/use-player-filters';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 import { NewMembersSection } from '../components/players/NewMembersSection';
 import { MobilePlayerCard } from '../components/players/mobile-player-card';
 import { PlayersMobileToolbar } from '../components/players/players-mobile-toolbar';
-import { PlayerFilterBar } from '../components/players/player-filter-bar';
+import { FilterPanelTrigger, FilterPanel } from '../components/ui/filter-panel';
+import { PlayerFilters } from '../components/players/player-filters';
 import { InfiniteScrollSentinel } from '../components/ui/infinite-scroll-sentinel';
 import { PullToRefresh } from '../components/ui/pull-to-refresh';
 import type { UserPreviewDto } from '@raid-ledger/contract';
 
-function usePlayerSearch() {
-    const [searchParams] = useSearchParams();
-    const gameIdParam = searchParams.get('gameId');
-    const gameId = gameIdParam ? parseInt(gameIdParam, 10) || undefined : undefined;
-    const source = searchParams.get('source') || undefined;
+/** Debounced search state for text input. */
+function useDebounceSearch() {
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -23,9 +22,8 @@ function usePlayerSearch() {
         return () => clearTimeout(timer);
     }, [search]);
 
-    return { gameId, source, search, setSearch, debouncedSearch };
+    return { search, setSearch, debouncedSearch };
 }
-
 
 function DesktopSearchInput({ search, setSearch }: { search: string; setSearch: (v: string) => void }) {
     return (
@@ -74,21 +72,26 @@ function PlayerGrid({ players, debouncedSearch }: { players: UserPreviewDto[]; d
 }
 
 export function PlayersPage() {
-    const { gameId, source, search, setSearch, debouncedSearch } = usePlayerSearch();
-    const { items: players, total, isLoading, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, gameId, source);
-    const countLabel = source === 'steam_library' ? 'own' : source === 'steam_wishlist' ? 'wishlisted' : gameId ? 'interested' : 'registered';
+    const { search, setSearch, debouncedSearch } = useDebounceSearch();
+    const { filters, setFilter, clearAll, activeFilterCount, apiParams, isOpen, toggleOpen } = usePlayerFilters();
+    const { items: players, total, isLoading, isFetchingNextPage, hasNextPage, sentinelRef, refetch } = useInfinitePlayers(debouncedSearch, apiParams);
 
     return (
         <PullToRefresh onRefresh={refetch}>
             <div className="pb-20 md:pb-0">
-                <PlayersMobileToolbar searchQuery={search} onSearchChange={setSearch} />
+                <PlayersMobileToolbar searchQuery={search} onSearchChange={setSearch} activeFilterCount={activeFilterCount} onFilterToggle={toggleOpen} />
                 <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
                     <div className="flex items-center justify-between flex-wrap gap-4">
-                        <h1 className="text-2xl font-bold text-foreground">Players</h1>
-                        <span className="text-sm text-muted">{total} {countLabel}</span>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-foreground">Players</h1>
+                            <FilterPanelTrigger activeFilterCount={activeFilterCount} onClick={toggleOpen} />
+                        </div>
+                        <span className="text-sm text-muted">{total} {activeFilterCount > 0 ? 'matching' : 'registered'}</span>
                     </div>
-                    <PlayerFilterBar />
-                    {!debouncedSearch && !gameId && <NewMembersSection />}
+                    <FilterPanel activeFilterCount={activeFilterCount} onClearAll={clearAll} isOpen={isOpen} onToggle={toggleOpen}>
+                        <PlayerFilters filters={filters} setFilter={setFilter} />
+                    </FilterPanel>
+                    {activeFilterCount === 0 && !debouncedSearch && <NewMembersSection />}
                     <DesktopSearchInput search={search} setSearch={setSearch} />
                     {isLoading ? <PlayersLoadingSkeleton /> : <PlayerGrid players={players} debouncedSearch={debouncedSearch} />}
                     {!isLoading && players.length > 0 && <InfiniteScrollSentinel sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} />}

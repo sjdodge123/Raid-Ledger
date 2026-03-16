@@ -210,17 +210,29 @@ export class UsersService {
     this.userCountCachedAt = 0;
   }
 
-  /** Paginated list of all users with optional search and gameId filter. */
+  /** Paginated list of all users with optional search and filters (ROK-821). */
   async findAll(
     page: number,
     limit: number,
     search?: string,
     gameId?: number,
-    source?: string,
+    sources?: string[],
+    playtimeMin?: number,
+    playHistory?: string,
+    role?: string,
   ) {
     return gameId
-      ? findAllByGame(this.db, page, limit, search, gameId, source)
-      : findAllUsers(this.db, page, limit, search);
+      ? findAllByGame(
+          this.db,
+          page,
+          limit,
+          search,
+          gameId,
+          sources,
+          playtimeMin,
+          playHistory,
+        )
+      : findAllUsers(this.db, page, limit, search, role);
   }
 
   /** Find recently joined users (last 30 days, max 10) (ROK-298). */
