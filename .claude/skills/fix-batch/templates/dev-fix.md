@@ -38,23 +38,32 @@ Do NOT attempt to implement a full-scope change.
 
 ### Regression Test (Bug label ONLY — skip for Tech Debt / Chore / Perf)
 
-Every bug fix MUST include a regression test that would catch the bug if it returned. Choose the appropriate type:
+Every bug fix MUST include a **comprehensive regression test** that would catch the bug if it ever returned. This is non-negotiable — a bug fix without a regression test is incomplete.
 
-**UI-touching bugs** → Playwright smoke test:
-- Add a `test.describe('Regression: ROK-XXX — <short description>', ...)` block to `scripts/verify-ui.spec.ts`
-- Read existing tests in that file first for patterns (storageState, selectors, assertions)
-- Test the specific user flow that was broken, asserting the correct behavior
-- Keep it focused — one `test()` per regression, not a full feature suite
+**Prefer integration tests over unit tests.** Unit tests with mocked dependencies cannot catch persistence bugs or cross-layer issues.
 
-**Backend-only bugs** → Unit or integration regression test:
-- Add a `describe('Regression: ROK-XXX', ...)` block to the relevant `*.spec.ts` test file
-- If no test file exists for the module, create one following patterns in `TESTING.md`
-- Test the specific code path that was broken, asserting the correct behavior
+**Test type priority (use the highest tier that applies):**
 
-The test should:
-1. Set up the conditions that previously triggered the bug
-2. Execute the action
+1. **Playwright smoke test** (UI-touching bugs or any bug where the symptom is user-visible):
+   - Add a `test.describe('Regression: ROK-XXX — <short description>', ...)` block to `scripts/verify-ui.spec.ts`
+   - Read existing tests in that file first for patterns (storageState, selectors, assertions)
+   - Test the specific user flow that was broken, asserting the correct behavior
+
+2. **Integration test** (backend bugs involving DB, services, or cross-module logic):
+   - Add a `describe('Regression: ROK-XXX', ...)` block to the relevant `*.integration.spec.ts` file
+   - Use real database, real service instances — NOT mocked DB
+   - Test the full request→service→persistence→response path
+   - Read `TESTING.md` for integration test patterns and shared test infra
+
+3. **Unit test** (ONLY for pure logic bugs — no DB, no HTTP, no side effects):
+   - Add a `describe('Regression: ROK-XXX', ...)` block to the relevant `*.spec.ts` file
+   - Only appropriate for pure functions, validators, helpers, or computation logic
+
+**The test MUST:**
+1. Set up the exact conditions that previously triggered the bug
+2. Execute the action through the same code path the user hits
 3. Assert the **correct** behavior (not the buggy behavior)
+4. Be comprehensive enough to catch regressions — not just a happy-path assertion
 
 ### Critical Rules — Fix-Batch Standing Rules
 - **Stay in your worktree** — all file reads, edits, builds, and tests must use paths within `<WORKTREE_PATH>`. Never `cd` outside.

@@ -89,7 +89,52 @@ Spike agents can run in parallel (they're read-only). When each completes:
 
 3. If the spike reveals the story is **full-scope** (contract changes, migrations, 3+ modules), remove it from the batch and recommend `/build`. Update state: `status: "deferred"`.
 
-Once all spikes are complete, proceed to spawn dev agents.
+Once all spikes are complete, proceed to planner step (or dev agents if no stories need planning).
+
+---
+
+## 2c½. Planner Pass (Standard Stories That Need Planning)
+
+For any story where `needs_planner: true`, run a **Plan agent** before spawning the dev agent. This ensures the dev has a clear implementation approach, correct file targets, and test strategy.
+
+**Skip this step entirely** if all stories have `needs_planner: false`.
+
+For each story needing a planner, spawn a Plan agent:
+
+```
+Agent(subagent_type: "Plan", description: "Plan ROK-<num>",
+      prompt: """
+      Plan the implementation for ROK-<num>: <story title>
+
+      ## Story Description
+      <paste full story description from Linear>
+
+      ## Spike Findings (if applicable)
+      <paste spike_summary if story had unknown root cause, otherwise omit>
+
+      ## Task
+      Produce a brief implementation plan covering:
+      1. Which files need changes and what changes in each
+      2. The order of changes (what depends on what)
+      3. Test strategy — which tests to add/modify, what assertions matter
+      4. Any gotchas or edge cases the dev should watch for
+      5. If the story involves multiple concerns (e.g., backend + frontend), how they connect
+
+      Keep it concise — this is a fix/tech-debt story, not a feature. Focus on the approach, not boilerplate.
+      """)
+```
+
+Planner agents can run in parallel (they're read-only). When each completes:
+
+1. **Record the plan** in state:
+   ```yaml
+   plan_summary: |
+     <concise implementation plan from planner>
+   ```
+
+2. If the planner reveals the story is actually **full-scope**, remove it from the batch and recommend `/build`. Update state: `status: "deferred"`.
+
+Once all planners are complete, proceed to spawn dev agents. The plan summary is included in each dev agent's prompt.
 
 ---
 

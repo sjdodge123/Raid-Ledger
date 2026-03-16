@@ -31,17 +31,19 @@ Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linea
 ## Pipeline Overview (4 steps)
 
 ```
-Step 1: Gather    → Linear search by label, profile (incl. root cause assessment), present, operator approves
-Step 2: Implement → Batch branch, worktrees, spike unknown bugs, parallel devs, merge into batch branch
-Step 3: Validate  → Build + typecheck + lint + unit tests + integration tests + optional smoke
+Step 1: Gather    → Linear search by label, profile (incl. root cause + planner assessment), present, operator approves
+Step 2: Implement → Batch branch, worktrees, spike unknown bugs, plan complex stories, parallel devs, merge into batch branch
+Step 3: Review & Validate → Code review, test gap analysis, build + typecheck + lint + unit tests + integration tests + smoke
 Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 ```
 
-**Four gates before PR:**
-1. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
-2. **Unit tests** — all workspaces pass
-3. **Integration tests** — `npm run test:integration -w api`
-4. **CI** — build + type check + lint (validated as part of gate 1-2 process)
+**Six gates before PR:**
+1. **Code review** — reviewer agent checks correctness, security, performance, and contract integrity
+2. **Test gap analysis** — reviewer identifies untested changes; lead adds missing tests before proceeding
+3. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
+4. **Unit tests** — all workspaces pass
+5. **Integration tests** — `npm run test:integration -w api`
+6. **CI** — build + type check + lint (validated as part of gate 3-4 process)
 
 ---
 
@@ -154,7 +156,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 |------|------|-------------|
 | 1 | `steps/step-1-gather.md` | Cleanup, fetch stories by label, profile, present batch, init state |
 | 2 | `steps/step-2-implement.md` | Batch branch, worktrees, spawn devs, merge into batch branch |
-| 3 | `steps/step-3-validate.md` | Build + typecheck + lint + unit tests + integration tests + optional smoke |
+| 3 | `steps/step-3-validate.md` | Code review, test gap analysis, build + typecheck + lint + unit tests + integration tests + smoke |
 | 4 | `steps/step-4-ship.md` | Single PR, auto-merge, Linear "Done", cleanup, summary, wiki sync (4f) |
 
 ---
@@ -164,6 +166,8 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 | Agent | Template | When | Model | Lifetime |
 |-------|----------|------|-------|----------|
 | Spike | Explore subagent | Step 2c (unknown root cause bugs only) | opus | Per-story |
+| Planner | Plan subagent | Step 2c½ (standard stories needing plan) | opus | Per-story |
 | Dev | `templates/dev-fix.md` | Step 2d (one per story) | opus | Per-story |
+| Reviewer | `devedup-rl:reviewer` subagent | Step 3a (once, on batch branch diff) | sonnet | Once per batch |
 
-3 agent types total: Lead + Spike (conditional) + Dev.
+5 agent types total: Lead + Spike (conditional) + Planner (conditional) + Dev + Reviewer.
