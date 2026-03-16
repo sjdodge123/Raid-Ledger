@@ -2,7 +2,7 @@
  * Central hook for player filter state + URL sync (ROK-821).
  * Reads from and writes to URL search params for shareable filter state.
  */
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 /** All filter values for the players page. */
@@ -70,14 +70,16 @@ function countActiveFilters(f: PlayerFilters): number {
     return count;
 }
 
+/** All source values joined for the API (must match GameInterestSourceValues in contract). */
+const ALL_SOURCES = 'manual,discord,steam_library,steam_wishlist';
+
 /**
  * Central hook managing all player filter state + URL sync.
  * @returns Filter state, setters, and API-ready params.
  */
 export function usePlayerFilters(): UsePlayerFiltersResult {
     const [searchParams, setSearchParams] = useSearchParams();
-    const initialCount = useRef(countActiveFilters(readFiltersFromParams(searchParams)));
-    const [isOpen, setIsOpen] = useState(initialCount.current > 0);
+    const [isOpen, setIsOpen] = useState(() => countActiveFilters(readFiltersFromParams(searchParams)) > 0);
 
     const filters = useMemo(() => readFiltersFromParams(searchParams), [searchParams]);
     const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
@@ -105,7 +107,6 @@ export function usePlayerFilters(): UsePlayerFiltersResult {
         setIsOpen((prev) => !prev);
     }, []);
 
-    const ALL_SOURCES = 'manual,discord,steam_library,steam_wishlist';
     const apiParams = useMemo((): PlayerApiParams => ({
         gameId: filters.gameId,
         sources: filters.sources?.join(',') || (filters.gameId ? ALL_SOURCES : undefined),
