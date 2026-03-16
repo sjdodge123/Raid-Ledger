@@ -27,10 +27,10 @@ describe('PlayerFilters — source checkboxes', () => {
         expect(screen.getByLabelText(/steam wishlist/i)).toBeInTheDocument();
     });
 
-    it('all checkboxes unchecked by default', () => {
+    it('all checkboxes checked by default (empty = all sources)', () => {
         renderFilters();
         const manual = screen.getByLabelText(/manual/i) as HTMLInputElement;
-        expect(manual.checked).toBe(false);
+        expect(manual.checked).toBe(true);
     });
 
     it('checks sources when filter has them', () => {
@@ -41,12 +41,12 @@ describe('PlayerFilters — source checkboxes', () => {
         expect(discord.checked).toBe(true);
     });
 
-    it('calls setFilter when a source checkbox is toggled', async () => {
+    it('unchecking one source sends the remaining three', async () => {
         const user = userEvent.setup();
         const setFilter = vi.fn();
         renderFilters({}, setFilter);
         await user.click(screen.getByLabelText(/manual/i));
-        expect(setFilter).toHaveBeenCalledWith('sources', ['manual']);
+        expect(setFilter).toHaveBeenCalledWith('sources', ['discord', 'steam_library', 'steam_wishlist']);
     });
 });
 

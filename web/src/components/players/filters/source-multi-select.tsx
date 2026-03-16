@@ -16,14 +16,19 @@ interface SourceMultiSelectProps {
     onChange: (sources: string[]) => void;
 }
 
-/** Checkbox group for source filtering. */
+const ALL_SOURCE_VALUES = SOURCE_OPTIONS.map((o) => o.value);
+
+/** Checkbox group for source filtering. Empty = all selected (no filter). */
 export function SourceMultiSelect({ selectedSources, onChange }: SourceMultiSelectProps): JSX.Element {
+    const effectiveSources = selectedSources.length > 0 ? selectedSources : ALL_SOURCE_VALUES;
+
     const handleToggle = (source: string): void => {
-        const isSelected = selectedSources.includes(source);
+        const isSelected = effectiveSources.includes(source);
         const next = isSelected
-            ? selectedSources.filter((s) => s !== source)
-            : [...selectedSources, source];
-        onChange(next);
+            ? effectiveSources.filter((s) => s !== source)
+            : [...effectiveSources, source];
+        const allSelected = next.length === ALL_SOURCE_VALUES.length;
+        onChange(allSelected ? [] : next);
     };
 
     return (
@@ -34,7 +39,7 @@ export function SourceMultiSelect({ selectedSources, onChange }: SourceMultiSele
                     <SourceCheckbox
                         key={opt.value}
                         label={opt.label}
-                        checked={selectedSources.includes(opt.value)}
+                        checked={effectiveSources.includes(opt.value)}
                         onChange={() => handleToggle(opt.value)}
                     />
                 ))}
