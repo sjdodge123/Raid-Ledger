@@ -86,4 +86,46 @@ describe('OllamaSetupCard', () => {
         renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
         expect(screen.getByText(/Self-hosted LLM inference via Docker/)).toBeInTheDocument();
     });
+
+    describe('Regression: ROK-840', () => {
+        it('shows progress bar when setupInProgress from server (refresh scenario)', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'pulling_model',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/pulling default model/i)).toBeInTheDocument();
+            expect(screen.getByText(/setting up/i)).toBeInTheDocument();
+        });
+
+        it('hides setup button when setup is in progress from server', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'starting',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(
+                screen.queryByRole('button', { name: /setup ollama/i }),
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows error step text when setup errored', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: false,
+                setupStep: 'error',
+                error: 'Model pull failed',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            // Error state should not show progress bar
+            expect(
+                screen.queryByText(/pulling default model/i),
+            ).not.toBeInTheDocument();
+        });
+    });
 });

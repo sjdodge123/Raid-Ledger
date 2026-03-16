@@ -7,6 +7,7 @@ import { SettingsService } from '../settings/settings.service';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { OllamaDockerService } from './providers/ollama-docker.service';
 import { OllamaModelService } from './providers/ollama-model.service';
+import { OllamaSetupService } from './providers/ollama-setup.service';
 import type { LlmProvider } from './llm-provider.interface';
 
 function createMockProvider(overrides: Partial<LlmProvider> = {}): LlmProvider {
@@ -37,9 +38,9 @@ describe('AiProvidersController', () => {
     startContainer: jest.Mock;
     stopContainer: jest.Mock;
   };
-  let mockOllamaModel: {
-    pullModel: jest.Mock;
-    isModelAvailable: jest.Mock;
+  let mockSetupService: {
+    getSetupState: jest.Mock;
+    startSetup: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -58,9 +59,17 @@ describe('AiProvidersController', () => {
       startContainer: jest.fn().mockResolvedValue(undefined),
       stopContainer: jest.fn().mockResolvedValue(undefined),
     };
-    mockOllamaModel = {
-      pullModel: jest.fn().mockResolvedValue(undefined),
-      isModelAvailable: jest.fn().mockResolvedValue(false),
+    mockSetupService = {
+      getSetupState: jest.fn().mockResolvedValue({
+        running: false,
+        step: '',
+        error: undefined,
+      }),
+      startSetup: jest.fn().mockResolvedValue({
+        step: 'starting',
+        message: 'Setup started',
+        success: true,
+      }),
     };
 
     const module = await Test.createTestingModule({
@@ -69,7 +78,8 @@ describe('AiProvidersController', () => {
         { provide: LlmProviderRegistry, useValue: mockRegistry },
         { provide: SettingsService, useValue: mockSettings },
         { provide: OllamaDockerService, useValue: mockDocker },
-        { provide: OllamaModelService, useValue: mockOllamaModel },
+        { provide: OllamaModelService, useValue: {} },
+        { provide: OllamaSetupService, useValue: mockSetupService },
         { provide: PluginRegistryService, useValue: { isActive: jest.fn() } },
         { provide: Reflector, useValue: new Reflector() },
       ],
@@ -147,27 +157,13 @@ describe('AiProvidersController', () => {
   });
 
   describe('setupOllama', () => {
-    it('returns error when Docker is not available', async () => {
-      mockDocker.isDockerAvailable.mockResolvedValue(false);
+    it('delegates to OllamaSetupService', async () => {
       const result = await controller.setupOllama();
-      expect(result.success).toBe(false);
-      expect(result.step).toBe('error');
-    });
-
-    it('starts async setup and returns starting step', async () => {
-      mockDocker.isDockerAvailable.mockResolvedValue(true);
-      mockDocker.getContainerStatus.mockResolvedValue('stopped');
-      const result = await controller.setupOllama();
-      expect(result.success).toBe(true);
-      expect(result.step).toBe('starting');
-    });
-
-    it('skips start if container is already running', async () => {
-      mockDocker.isDockerAvailable.mockResolvedValue(true);
-      mockDocker.getContainerStatus.mockResolvedValue('running');
-      const result = await controller.setupOllama();
-      expect(result.success).toBe(true);
-      expect(mockDocker.startContainer).not.toHaveBeenCalled();
+      expect(mockSetupService.startSetup).toHaveBeenCalled();
+      expect(result).toMatchObject({
+        step: 'starting',
+        success: true,
+      });
     });
   });
 
@@ -175,6 +171,60 @@ describe('AiProvidersController', () => {
     it('stops the Ollama container', async () => {
       await controller.stopOllama();
       expect(mockDocker.stopContainer).toHaveBeenCalled();
+    });
+  });
+
+  describe('Regression: ROK-840', () => {
+    it('reads setup state from DB, surviving page refresh', async () => {
+      const provider = createMockProvider();
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockResolvedValue('ollama');
+      mockSetupService.getSetupState.mockResolvedValue({
+        running: true,
+        step: 'pulling_model',
+        error: undefined,
+      });
+
+      const result = await controller.listProviders();
+      const ollama = result.find((p) => p.key === 'ollama');
+
+      expect(ollama!.setupInProgress).toBe(true);
+      expect(ollama!.setupStep).toBe('pulling_model');
+    });
+
+    it('shows completed state after setup finishes', async () => {
+      const provider = createMockProvider();
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockResolvedValue('ollama');
+      mockSetupService.getSetupState.mockResolvedValue({
+        running: false,
+        step: 'ready',
+        error: undefined,
+      });
+
+      const result = await controller.listProviders();
+      const ollama = result.find((p) => p.key === 'ollama');
+
+      expect(ollama!.setupInProgress).toBe(false);
+    });
+
+    it('shows persisted error state after refresh', async () => {
+      const provider = createMockProvider({
+        isAvailable: jest.fn().mockResolvedValue(false),
+      });
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockResolvedValue('ollama');
+      mockSetupService.getSetupState.mockResolvedValue({
+        running: false,
+        step: 'error',
+        error: 'Model pull failed',
+      });
+
+      const result = await controller.listProviders();
+      const ollama = result.find((p) => p.key === 'ollama');
+
+      expect(ollama!.setupStep).toBe('error');
+      expect(ollama!.error).toBe('Model pull failed');
     });
   });
 });

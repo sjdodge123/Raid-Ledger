@@ -21,6 +21,9 @@ export const BASE_SYSTEM_PROMPT = [
   'If asked about something outside your scope, politely decline.',
 ].join(' ');
 
+/** Docker container name used for the managed Ollama instance. */
+export const OLLAMA_CONTAINER_NAME = 'raid-ledger-ollama';
+
 /** Setting keys stored in app_settings for AI configuration. */
 export const AI_SETTING_KEYS = {
   PROVIDER: 'ai_provider',
@@ -31,6 +34,8 @@ export const AI_SETTING_KEYS = {
   OPENAI_API_KEY: 'ai_openai_api_key',
   CLAUDE_API_KEY: 'ai_claude_api_key',
   GOOGLE_API_KEY: 'ai_google_api_key',
+  OLLAMA_SETUP_STEP: 'ai_ollama_setup_step',
+  OLLAMA_SETUP_ERROR: 'ai_ollama_setup_error',
 } as const;
 
 /** Default models for cloud providers. */
