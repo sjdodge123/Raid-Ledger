@@ -108,7 +108,8 @@ if [ -n "$DATABASE_URL" ]; then
 
 fi
 
-# Execute the main command as non-root user
+# Execute the main command as non-root user (uid 1001 = nestjs)
+# su-exec can't resolve system users by name, must use uid
 echo "🎮 Starting server..."
-exec su-exec nestjs "$@"
+exec su-exec 1001 "$@"
 
