@@ -35,7 +35,7 @@ describe('usePlayerFilters', () => {
             wrapper: wrapper(['/players?sources=manual,discord']),
         });
         expect(result.current.filters.sources).toEqual(['manual', 'discord']);
-        expect(result.current.activeFilterCount).toBe(1);
+        expect(result.current.activeFilterCount).toBe(0); // sources don't count toward badge
     });
 
     it('reads role from URL params', () => {
@@ -62,11 +62,11 @@ describe('usePlayerFilters', () => {
         expect(result.current.activeFilterCount).toBe(1);
     });
 
-    it('counts multiple active filters', () => {
+    it('counts multiple active filters (sources excluded from count)', () => {
         const { result } = renderHook(() => usePlayerFilters(), {
             wrapper: wrapper(['/players?gameId=1&sources=manual&role=admin']),
         });
-        expect(result.current.activeFilterCount).toBe(3);
+        expect(result.current.activeFilterCount).toBe(2);
     });
 
     it('setFilter updates a filter value', () => {

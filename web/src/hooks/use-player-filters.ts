@@ -60,11 +60,10 @@ function readFiltersFromParams(sp: URLSearchParams): PlayerFilters {
     };
 }
 
-/** Count how many filters are active. */
+/** Count how many filters are active (sources excluded — it refines the game filter, not a standalone filter). */
 function countActiveFilters(f: PlayerFilters): number {
     let count = 0;
     if (f.gameId) count++;
-    if (f.sources && f.sources.length > 0) count++;
     if (f.playHistory) count++;
     if (f.playtimeMin) count++;
     if (f.role) count++;
