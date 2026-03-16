@@ -48,11 +48,12 @@ function parseSourcesParam(value: string | null): string[] | undefined {
     return parts.length > 0 ? parts : undefined;
 }
 
-/** Read all filter values from URL search params. */
+/** Read all filter values from URL search params. Supports legacy `source` (singular) param. */
 function readFiltersFromParams(sp: URLSearchParams): PlayerFilters {
+    const sources = parseSourcesParam(sp.get('sources')) ?? parseSourcesParam(sp.get('source'));
     return {
         gameId: parseIntParam(sp.get('gameId')),
-        sources: parseSourcesParam(sp.get('sources')),
+        sources,
         playHistory: sp.get('playHistory') || undefined,
         playtimeMin: parseIntParam(sp.get('playtimeMin')),
         role: sp.get('role') || undefined,
@@ -85,6 +86,7 @@ export function usePlayerFilters(): UsePlayerFiltersResult {
     const setFilter = useCallback(<K extends keyof PlayerFilters>(key: K, value: PlayerFilters[K]) => {
         setSearchParams((prev) => {
             const next = new URLSearchParams(prev);
+            next.delete('source'); // remove legacy singular param
             if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
                 next.delete(key);
             } else if (Array.isArray(value)) {
