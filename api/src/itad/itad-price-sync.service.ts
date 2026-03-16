@@ -9,7 +9,7 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { isNotNull, eq, and, lt, sql } from 'drizzle-orm';
+import { isNotNull, and, lt, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -23,16 +23,24 @@ export const CHUNK_SIZE = 50;
 /** Delay (ms) before bootstrap sync fires. */
 const BOOTSTRAP_DELAY_MS = 30_000;
 
-/** Clear stale pricing after this many days without valid data. */
-const STALE_PRICING_DAYS = 7;
-
 type Db = PostgresJsDatabase<typeof schema>;
+
+/** Pricing fields extracted from an ITAD entry for DB persistence. */
+export interface ItadPricingData {
+  itadCurrentPrice: string | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+  itadLowestPrice: string | null;
+  itadLowestCut: number | null;
+  itadPriceUpdatedAt: Date;
+}
 
 /** Build the SET clause data from an ITAD entry. */
 export function buildUpdateData(
   entry: ItadOverviewGameEntry,
   now: Date,
-): Record<string, unknown> {
+): ItadPricingData {
   return {
     itadCurrentPrice: entry.current?.price.amount.toFixed(2) ?? null,
     itadCurrentCut: entry.current?.cut ?? null,
@@ -42,6 +50,39 @@ export function buildUpdateData(
     itadLowestCut: entry.lowest?.cut ?? null,
     itadPriceUpdatedAt: now,
   };
+}
+
+/** Row shape for the bulk pricing UPDATE ... FROM VALUES. */
+type PricingRow = ItadPricingData & { id: number };
+
+/**
+ * Execute a single UPDATE ... FROM VALUES for all matched games.
+ * Follows the same pattern as steam-playtime.helpers.ts.
+ */
+export async function executeBulkPricingUpdate(
+  db: Db,
+  rows: PricingRow[],
+): Promise<void> {
+  const frags = rows.map(
+    (r) =>
+      sql`(${r.id}::int, ${r.itadCurrentPrice}::numeric, ${r.itadCurrentCut}::int, ${r.itadCurrentShop}::text, ${r.itadCurrentUrl}::text, ${r.itadLowestPrice}::numeric, ${r.itadLowestCut}::int, ${r.itadPriceUpdatedAt}::timestamptz)`,
+  );
+  const valuesList = sql.join(frags, sql`, `);
+
+  await db.execute(sql`
+    UPDATE ${schema.games} AS g
+    SET
+      itad_current_price = v.current_price,
+      itad_current_cut = v.current_cut,
+      itad_current_shop = v.current_shop,
+      itad_current_url = v.current_url,
+      itad_lowest_price = v.lowest_price,
+      itad_lowest_cut = v.lowest_cut,
+      itad_price_updated_at = v.updated_at
+    FROM (VALUES ${valuesList})
+      AS v(id, current_price, current_cut, current_shop, current_url, lowest_price, lowest_cut, updated_at)
+    WHERE g.id = v.id
+  `);
 }
 
 @Injectable()
@@ -127,20 +168,23 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
     }
   }
 
-  /** Update each game row with its ITAD pricing data. */
+  /**
+   * Bulk-update game rows with ITAD pricing data.
+   * Uses a single UPDATE ... FROM VALUES instead of N individual queries.
+   */
   private async updateGamesWithPricing(
     chunk: { id: number; itadGameId: string }[],
     entryMap: Map<string, ItadOverviewGameEntry>,
   ): Promise<void> {
     const now = new Date();
-    for (const game of chunk) {
-      const entry = entryMap.get(game.itadGameId);
-      if (!entry) continue; // skip — stale cleanup handles missing entries
-      await this.db
-        .update(schema.games)
-        .set(buildUpdateData(entry, now))
-        .where(eq(schema.games.id, game.id));
-    }
+    const matched = chunk.filter((g) => entryMap.has(g.itadGameId));
+    if (matched.length === 0) return;
+
+    const rows = matched.map((g) => {
+      const data = buildUpdateData(entryMap.get(g.itadGameId)!, now);
+      return { id: g.id, ...data };
+    });
+    await executeBulkPricingUpdate(this.db, rows);
   }
 
   /** Clear pricing columns for games not updated in STALE_PRICING_DAYS. */
@@ -159,10 +203,7 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
         and(
           isNotNull(schema.games.itadGameId),
           isNotNull(schema.games.itadCurrentPrice),
-          lt(
-            schema.games.itadPriceUpdatedAt,
-            sql`NOW() - INTERVAL '${sql.raw(String(STALE_PRICING_DAYS))} days'`,
-          ),
+          lt(schema.games.itadPriceUpdatedAt, sql`NOW() - INTERVAL '7 days'`),
         ),
       )
       .returning({ id: schema.games.id });

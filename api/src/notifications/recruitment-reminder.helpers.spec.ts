@@ -252,17 +252,28 @@ describe('isWithinGracePeriod', () => {
     expect(isWithinGracePeriod(event)).toBe(false);
   });
 
-  it('should return false for event where createdAt is after startTime (no grace for past-start events)', () => {
+  it('should return true for event where createdAt is after startTime (1h grace still active)', () => {
     jest.setSystemTime(new Date('2026-03-10T11:00:00Z'));
-    // createdAt > startTime — negative timeUntilEvent → falls through to 1h grace
-    // but the grace is still tested vs current time; since 1h after creation hasn't elapsed
-    // this is a data-anomaly case — we just verify it doesn't crash and returns a boolean
+    // createdAt > startTime — negative timeUntilEvent → falls through to 1h grace.
+    // now (11:00) < createdAt (11:00) + 1h (12:00) → grace still active → true
     const event = makeGraceEvent(
       '2026-03-10T11:00:00Z', // createdAt
       '2026-03-10T10:00:00Z', // startTime is before createdAt
     );
 
-    const result = isWithinGracePeriod(event);
-    expect(typeof result).toBe('boolean');
+    expect(isWithinGracePeriod(event)).toBe(true);
+  });
+
+  it('should use explicit now parameter instead of Date.now() when provided', () => {
+    // Do NOT set fake timers to a specific time — the explicit `now` param should win
+    jest.setSystemTime(new Date('2099-01-01T00:00:00Z')); // far in future (grace would be expired)
+    const event = makeGraceEvent(
+      '2026-03-10T10:00:00Z',
+      '2026-03-11T16:00:00Z', // 30h gap → 6h grace
+    );
+    // Pass an explicit now within the grace period (2h after creation)
+    const explicitNow = new Date('2026-03-10T12:00:00Z').getTime();
+
+    expect(isWithinGracePeriod(event, explicitNow)).toBe(true);
   });
 });

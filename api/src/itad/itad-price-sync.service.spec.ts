@@ -3,7 +3,10 @@
  * Verifies cron-based ITAD pricing sync behavior.
  */
 import { Test } from '@nestjs/testing';
-import { ItadPriceSyncService } from './itad-price-sync.service';
+import {
+  ItadPriceSyncService,
+  buildUpdateData,
+} from './itad-price-sync.service';
 import { ItadPriceService } from './itad-price.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -76,7 +79,7 @@ describe('ItadPriceSyncService', () => {
         },
       ];
       mockItadPriceService.getOverviewBatch.mockResolvedValueOnce(entries);
-      // update query returning
+      // stale-pricing returning (clearStalePricing)
       mockDb.returning.mockResolvedValue([]);
 
       await service.syncPricing();
@@ -85,6 +88,21 @@ describe('ItadPriceSyncService', () => {
         'game-uuid-1',
         'game-uuid-2',
       ]);
+
+      // Verify bulk pricing update was executed via db.execute()
+      expect(mockDb.execute).toHaveBeenCalled();
+
+      // Verify buildUpdateData produces the correct pricing shape
+      const data = buildUpdateData(entries[0], new Date());
+      expect(data).toMatchObject({
+        itadCurrentPrice: '9.99',
+        itadCurrentCut: 75,
+        itadCurrentShop: 'Steam',
+        itadCurrentUrl: 'https://store.steampowered.com/app/1',
+        itadLowestPrice: '4.99',
+        itadLowestCut: 88,
+        itadPriceUpdatedAt: expect.any(Date),
+      });
     });
 
     it('chunks games into batches of 50', async () => {

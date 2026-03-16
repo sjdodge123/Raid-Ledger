@@ -98,6 +98,10 @@ export const SETTING_KEYS = {
   AI_CLAUDE_API_KEY: 'ai_claude_api_key',
   /** ROK-542: Google (Gemini) API key */
   AI_GOOGLE_API_KEY: 'ai_google_api_key',
+  /** ROK-840: Ollama Docker setup progress step */
+  AI_OLLAMA_SETUP_STEP: 'ai_ollama_setup_step',
+  /** ROK-840: Ollama Docker setup error message */
+  AI_OLLAMA_SETUP_ERROR: 'ai_ollama_setup_error',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

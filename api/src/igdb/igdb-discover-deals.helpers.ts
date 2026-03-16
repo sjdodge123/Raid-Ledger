@@ -187,6 +187,9 @@ async function queryBestPrice(db: Db): Promise<GameDetailDto[]> {
       and(
         gt(schema.games.itadCurrentCut, 0),
         isNotNull(schema.games.itadGameId),
+        // Explicit null guards required: cut > 0 doesn't guarantee price
+        // columns are non-null — a row could have a cut value from a previous
+        // sync while prices were cleared by stale-pricing cleanup.
         isNotNull(schema.games.itadCurrentPrice),
         isNotNull(schema.games.itadLowestPrice),
         lte(schema.games.itadCurrentPrice, schema.games.itadLowestPrice),
