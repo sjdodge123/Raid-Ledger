@@ -4,6 +4,7 @@
  */
 import type { JSX } from 'react';
 import type { PlayerFilters as FiltersState } from '../../hooks/use-player-filters';
+import { GameFilterInput } from './filters/game-filter-input';
 import { SourceMultiSelect } from './filters/source-multi-select';
 import { PlayHistorySelect } from './filters/play-history-select';
 import { PlaytimeMinInput } from './filters/playtime-min-input';
@@ -18,6 +19,10 @@ interface PlayerFiltersProps {
 export function PlayerFilters({ filters, setFilter }: PlayerFiltersProps): JSX.Element {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <GameFilterInput
+                gameId={filters.gameId}
+                onChange={(id) => setFilter('gameId', id)}
+            />
             <SourceMultiSelect
                 selectedSources={filters.sources ?? []}
                 onChange={(sources) => setFilter('sources', sources.length > 0 ? sources : undefined)}

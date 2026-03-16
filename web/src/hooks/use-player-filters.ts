@@ -2,7 +2,7 @@
  * Central hook for player filter state + URL sync (ROK-821).
  * Reads from and writes to URL search params for shareable filter state.
  */
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 /** All filter values for the players page. */
@@ -76,7 +76,8 @@ function countActiveFilters(f: PlayerFilters): number {
  */
 export function usePlayerFilters(): UsePlayerFiltersResult {
     const [searchParams, setSearchParams] = useSearchParams();
-    const [isOpen, setIsOpen] = useState(false);
+    const initialCount = useRef(countActiveFilters(readFiltersFromParams(searchParams)));
+    const [isOpen, setIsOpen] = useState(initialCount.current > 0);
 
     const filters = useMemo(() => readFiltersFromParams(searchParams), [searchParams]);
     const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
