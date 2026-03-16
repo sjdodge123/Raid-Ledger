@@ -61,8 +61,10 @@ RUN apk add --no-cache \
   logrotate
 
 # Create app user and directories
+# Add app user to redis group so API can access Redis Unix socket (ROK-840)
 RUN addgroup -g 1001 -S app && \
-  adduser -S -D -H -u 1001 -G app app
+  adduser -S -D -H -u 1001 -G app app && \
+  addgroup app redis
 
 WORKDIR /app
 
@@ -162,7 +164,7 @@ killasgroup=true
 stopasgroup=true
 
 [program:redis]
-command=/bin/bash -c '/usr/bin/redis-server --dir /data/redis --daemonize no --port 0 --unixsocket /tmp/redis.sock --unixsocketperm 700 2>&1 | tee -a /data/logs/redis.log'
+command=/bin/bash -c '/usr/bin/redis-server --dir /data/redis --daemonize no --port 0 --unixsocket /tmp/redis.sock --unixsocketperm 770 2>&1 | tee -a /data/logs/redis.log'
 user=redis
 autostart=true
 autorestart=true

@@ -278,6 +278,85 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # Container startup validation — runs on PRs that touch Docker/entrypoint files
+  # Builds the allinone image and verifies the API starts and responds to health checks
+  container-startup:
+    if: |
+      github.event_name == 'pull_request' && (
+        contains(github.event.pull_request.title, 'Docker') ||
+        contains(github.event.pull_request.title, 'docker') ||
+        contains(github.event.pull_request.title, 'entrypoint') ||
+        contains(github.event.pull_request.title, 'Ollama') ||
+        contains(github.event.pull_request.title, 'ollama') ||
+        contains(github.event.pull_request.title, 'allinone') ||
+        contains(github.event.pull_request.title, 'Dockerfile')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build allinone image
+        run: docker build -f Dockerfile.allinone -t raid-ledger:ci-test --build-arg COMMIT_SHA=${{ github.sha }} .
+
+      - name: Start container
+        run: |
+          docker run -d --name rl-ci-test \
+            -p 8080:80 \
+            -e ADMIN_PASSWORD=ci-test-password \
+            raid-ledger:ci-test
+
+      - name: Wait for health check (max 90s)
+        run: |
+          echo "Waiting for container to become healthy..."
+          for i in $(seq 1 90); do
+            STATUS=$(docker inspect rl-ci-test --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
+            if [ "$STATUS" = "healthy" ]; then
+              echo "✅ Container healthy after ${i}s"
+              exit 0
+            fi
+            if [ "$STATUS" = "unhealthy" ]; then
+              echo "❌ Container unhealthy after ${i}s"
+              docker logs rl-ci-test --tail 50
+              exit 1
+            fi
+            # Also check if container exited
+            RUNNING=$(docker inspect rl-ci-test --format '{{.State.Running}}' 2>/dev/null || echo "false")
+            if [ "$RUNNING" = "false" ]; then
+              echo "❌ Container exited unexpectedly"
+              docker logs rl-ci-test --tail 50
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "❌ Timed out waiting for healthy status"
+          docker logs rl-ci-test --tail 50
+          exit 1
+
+      - name: Verify API responds
+        run: |
+          # Hit the health endpoint through nginx
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/health)
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ API health check returned 200"
+          else
+            echo "❌ API health check returned $HTTP_CODE"
+            docker logs rl-ci-test --tail 30
+            exit 1
+          fi
+
+      - name: Verify Redis connectivity
+        run: |
+          # Check that Redis is accessible from inside the container
+          docker exec rl-ci-test redis-cli -s /tmp/redis.sock ping | grep -q PONG
+          echo "✅ Redis responding on Unix socket"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop rl-ci-test 2>/dev/null || true
+          docker rm rl-ci-test 2>/dev/null || true
+
   # Docker image build — only on main after all tests pass
   docker-build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
