@@ -3,11 +3,12 @@
  * Extracted from users.service.ts for file size compliance (ROK-711).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, sql, asc, and, gte, desc, inArray } from 'drizzle-orm';
+import { eq, sql, asc, and, gte, gt, desc, inArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type {
   ActivityPeriod,
   GameActivityEntryDto,
+  UserRole,
 } from '@raid-ledger/contract';
 import { buildWordMatchFilters } from '../common/search.util';
 import {
@@ -48,69 +49,104 @@ type UserListResult = {
 /** SQL expression for distinct user count in game interest queries (::int for consistent typing with igdb-interest.helpers). */
 const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
 
-/** Build WHERE conditions for game interest queries. */
+/** Build WHERE conditions for game interest queries (ROK-821: multi-source, playtime, playHistory, role). */
 function buildGameInterestConditions(
   gameId: number,
   search: string | undefined,
-  source?: string,
+  sources?: string[],
+  playtimeMin?: number,
+  playHistory?: string,
+  role?: string,
 ) {
   const conditions = [eq(schema.gameInterests.gameId, gameId)];
-  if (source) {
-    conditions.push(eq(schema.gameInterests.source, source));
+  if (sources && sources.length > 0) {
+    conditions.push(inArray(schema.gameInterests.source, sources));
   } else {
     conditions.push(inArray(schema.gameInterests.source, HEART_SOURCES));
+  }
+  if (playtimeMin && playtimeMin > 0) {
+    conditions.push(gte(schema.gameInterests.playtimeForever, playtimeMin));
+  }
+  if (playHistory === 'played_recently') {
+    conditions.push(gt(schema.gameInterests.playtime2weeks, 0));
+  } else if (playHistory === 'played_ever') {
+    conditions.push(gt(schema.gameInterests.playtimeForever, 0));
+  }
+  if (role) {
+    conditions.push(eq(schema.users.role, role as UserRole));
   }
   const searchCondition = buildSearchCondition(search);
   if (searchCondition) conditions.push(searchCondition);
   return and(...conditions);
 }
 
-/** Find all users filtered by gameId (users interested in the game). */
+/** Find all users filtered by gameId (users interested in the game, ROK-821). */
 export async function findAllByGame(
   db: PostgresJsDatabase<typeof schema>,
   page: number,
   limit: number,
   search: string | undefined,
   gameId: number,
-  source?: string,
+  sources?: string[],
+  playtimeMin?: number,
+  playHistory?: string,
+  role?: string,
 ): Promise<UserListResult> {
   const offset = (page - 1) * limit;
-  const whereClause = buildGameInterestConditions(gameId, search, source);
-  const joinCond = eq(schema.gameInterests.userId, schema.users.id);
+  const where = buildGameInterestConditions(
+    gameId,
+    search,
+    sources,
+    playtimeMin,
+    playHistory,
+    role,
+  );
+  const join = eq(schema.gameInterests.userId, schema.users.id);
+  return queryGameInterestResults(db, where, join, offset, limit);
+}
+
+/** Execute count + data queries for game interest filters. */
+async function queryGameInterestResults(
+  db: PostgresJsDatabase<typeof schema>,
+  where: ReturnType<typeof and>,
+  join: ReturnType<typeof eq>,
+  offset: number,
+  limit: number,
+): Promise<UserListResult> {
   const [countResult] = await db
     .select({ count: DISTINCT_USER_COUNT })
     .from(schema.gameInterests)
-    .innerJoin(schema.users, joinCond)
-    .where(whereClause);
+    .innerJoin(schema.users, join)
+    .where(where);
   const rows = await db
     .selectDistinctOn([schema.users.id], USER_LIST_COLUMNS)
     .from(schema.gameInterests)
-    .innerJoin(schema.users, joinCond)
-    .where(whereClause)
+    .innerJoin(schema.users, join)
+    .where(where)
     .orderBy(schema.users.id, asc(schema.users.username))
     .limit(limit)
     .offset(offset);
   return { data: rows, total: Number(countResult.count) };
 }
 
-/** Find all users (no game filter). */
+/** Build combined search + role WHERE condition (ROK-821). */
+function buildUserListConditions(search?: string, role?: string) {
+  const searchCond = buildSearchCondition(search);
+  const roleCond = role ? eq(schema.users.role, role as UserRole) : undefined;
+  if (searchCond && roleCond) return and(searchCond, roleCond);
+  return searchCond ?? roleCond;
+}
+
+/** Find all users (no game filter, ROK-821: optional role filter). */
 export async function findAllUsers(
   db: PostgresJsDatabase<typeof schema>,
   page: number,
   limit: number,
   search?: string,
-): Promise<{
-  data: Array<{
-    id: number;
-    username: string;
-    avatar: string | null;
-    discordId: string | null;
-    customAvatarUrl: string | null;
-  }>;
-  total: number;
-}> {
+  role?: string,
+): Promise<UserListResult> {
   const offset = (page - 1) * limit;
-  const conditions = buildSearchCondition(search);
+  const conditions = buildUserListConditions(search, role);
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.users)
@@ -150,6 +186,16 @@ export async function findAllWithRolesQuery(
     .limit(limit)
     .offset(offset);
   return { data: rows, total: Number(countResult.count) };
+}
+
+/** Find the first admin user (for fallback assignments). */
+export async function findAdminUser(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<{ id: number } | undefined> {
+  return db.query.users.findFirst({
+    where: eq(schema.users.role, 'admin'),
+    columns: { id: true },
+  });
 }
 
 /** Correlated subquery: Steam playtime in seconds for a game (ROK-805). */
@@ -292,52 +338,5 @@ export async function fetchGameActivity(
   return mergeActivityWithSteam(discordRows, steamRows, period);
 }
 
-/** Delete user-owned rows (sessions, credentials, availability, templates). */
-async function deleteUserOwnedData(
-  tx: PostgresJsDatabase<typeof schema>,
-  userId: number,
-): Promise<void> {
-  await tx.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
-  await tx
-    .delete(schema.localCredentials)
-    .where(eq(schema.localCredentials.userId, userId));
-  await tx
-    .delete(schema.availability)
-    .where(eq(schema.availability.userId, userId));
-  await tx
-    .delete(schema.eventTemplates)
-    .where(eq(schema.eventTemplates.userId, userId));
-}
-
-/** Reassign user-created entities (pug slots, events) to another user. */
-async function reassignUserEntities(
-  tx: PostgresJsDatabase<typeof schema>,
-  userId: number,
-  reassignToUserId: number,
-): Promise<void> {
-  await tx
-    .update(schema.pugSlots)
-    .set({ claimedByUserId: null })
-    .where(eq(schema.pugSlots.claimedByUserId, userId));
-  await tx
-    .update(schema.pugSlots)
-    .set({ createdBy: reassignToUserId })
-    .where(eq(schema.pugSlots.createdBy, userId));
-  await tx
-    .update(schema.events)
-    .set({ creatorId: reassignToUserId, updatedAt: new Date() })
-    .where(eq(schema.events.creatorId, userId));
-}
-
-/** Delete a user and cascade all related data in a transaction. */
-export async function deleteUserTransaction(
-  db: PostgresJsDatabase<typeof schema>,
-  userId: number,
-  reassignToUserId: number,
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    await deleteUserOwnedData(tx, userId);
-    await reassignUserEntities(tx, userId, reassignToUserId);
-    await tx.delete(schema.users).where(eq(schema.users.id, userId));
-  });
-}
+// deleteUserTransaction moved to users-delete.helpers.ts (ROK-821 file size compliance)
+export { deleteUserTransaction } from './users-delete.helpers';

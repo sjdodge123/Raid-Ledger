@@ -1,16 +1,27 @@
 /**
- * Unit tests for users-query.helpers (ROK-779, ROK-804).
+ * Unit tests for users-query.helpers (ROK-779, ROK-804, ROK-821).
  * - fetchHeartedGames: verifies HEART_SOURCES allowlist
- * - findAllByGame: verifies deduplication and HEART_SOURCES filter
+ * - findAllByGame: verifies deduplication, HEART_SOURCES filter, multi-source, playtime, playHistory
+ * - findAllUsers: verifies role filter
  */
-import { fetchHeartedGames, findAllByGame } from './users-query.helpers';
+import {
+  fetchHeartedGames,
+  findAllByGame,
+  findAllUsers,
+} from './users-query.helpers';
 import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
-import { inArray } from 'drizzle-orm';
+import { inArray, eq, gte, gt } from 'drizzle-orm';
 
 jest.mock('drizzle-orm', () => {
   const actual =
     jest.requireActual<typeof import('drizzle-orm')>('drizzle-orm');
-  return { ...actual, inArray: jest.fn(actual.inArray) };
+  return {
+    ...actual,
+    inArray: jest.fn(actual.inArray),
+    eq: jest.fn(actual.eq),
+    gte: jest.fn(actual.gte),
+    gt: jest.fn(actual.gt),
+  };
 });
 
 // ─── Mock builders ──────────────────────────────────────────────────────────
@@ -224,7 +235,7 @@ function describeFindAllByGame() {
       countRows: [{ count: 1 }],
       dataRows: [mockUser(1, 'Alice')],
     });
-    await findAllByGame(db as never, 1, 10, undefined, 42, 'manual');
+    await findAllByGame(db as never, 1, 10, undefined, 42, ['manual']);
     const heartSourceCalls = (inArray as jest.Mock).mock.calls.filter(
       (call: unknown[]) => call[1] === HEART_SOURCES,
     );
@@ -313,7 +324,7 @@ describe('findAllByGame — deduplication edge cases', () => {
       countRows: [{ count: 1 }],
       dataRows: [mockUser(7, 'Dave')],
     });
-    await findAllByGame(db as never, 1, 10, undefined, 42, 'discord');
+    await findAllByGame(db as never, 1, 10, undefined, 42, ['discord']);
     // inArray should not have been called with HEART_SOURCES
     const heartSourceCalls = (inArray as jest.Mock).mock.calls.filter(
       (call: unknown[]) => call[1] === HEART_SOURCES,
@@ -358,5 +369,168 @@ describe('findAllByGame — deduplication edge cases', () => {
     const result = await findAllByGame(db as never, 1, 10, undefined, 42);
     expect(result.total).toBe(1);
     expect(result.data).toHaveLength(1);
+  });
+});
+
+// ─── findAllByGame — multi-source, playtime, playHistory (ROK-821) ───────────
+
+describe('findAllByGame — advanced filters (ROK-821)', () => {
+  beforeEach(() => {
+    (inArray as jest.Mock).mockClear();
+    (gte as jest.Mock).mockClear();
+    (gt as jest.Mock).mockClear();
+  });
+
+  it('uses sources array when provided', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    await findAllByGame(db as never, 1, 10, undefined, 42, [
+      'manual',
+      'discord',
+    ]);
+    const sourceCalls = (inArray as jest.Mock).mock.calls.filter(
+      (call: unknown[]) => Array.isArray(call[1]) && call[1].includes('manual'),
+    );
+    expect(sourceCalls.length).toBeGreaterThan(0);
+    expect(sourceCalls[0][1]).toEqual(['manual', 'discord']);
+  });
+
+  it('falls back to HEART_SOURCES when sources is empty array', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    await findAllByGame(db as never, 1, 10, undefined, 42, []);
+    expect(inArray).toHaveBeenCalledWith(expect.anything(), HEART_SOURCES);
+  });
+
+  it('applies playtimeMin filter via gte', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    await findAllByGame(db as never, 1, 10, undefined, 42, [], 120);
+    expect(gte).toHaveBeenCalledWith(expect.anything(), 120);
+  });
+
+  it('applies played_recently filter via gt on playtime2weeks', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    await findAllByGame(
+      db as never,
+      1,
+      10,
+      undefined,
+      42,
+      [],
+      undefined,
+      'played_recently',
+    );
+    expect(gt).toHaveBeenCalledWith(expect.anything(), 0);
+  });
+
+  it('applies played_ever filter via gt on playtimeForever', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    await findAllByGame(
+      db as never,
+      1,
+      10,
+      undefined,
+      42,
+      [],
+      undefined,
+      'played_ever',
+    );
+    expect(gt).toHaveBeenCalledWith(expect.anything(), 0);
+  });
+
+  it('does not apply play history filter for "any"', async () => {
+    const db = buildFindAllByGameDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Alice')],
+    });
+    (gt as jest.Mock).mockClear();
+    await findAllByGame(
+      db as never,
+      1,
+      10,
+      undefined,
+      42,
+      [],
+      undefined,
+      'any',
+    );
+    expect(gt).not.toHaveBeenCalled();
+  });
+});
+
+// ─── findAllUsers — role filter (ROK-821) ────────────────────────────────────
+
+function buildFindAllUsersDb(opts: {
+  countRows: { count: number }[];
+  dataRows: ReturnType<typeof mockUser>[];
+}) {
+  const db: Record<string, jest.Mock> = {};
+  const chain = ['from', 'orderBy'];
+  for (const m of chain) db[m] = jest.fn().mockReturnThis();
+  db.select = jest.fn().mockReturnThis();
+  let whereCallCount = 0;
+  db.where = jest.fn().mockImplementation(() => {
+    whereCallCount++;
+    if (whereCallCount === 1) return Promise.resolve(opts.countRows);
+    return db;
+  });
+  db.limit = jest.fn().mockReturnThis();
+  db.offset = jest.fn().mockResolvedValue(opts.dataRows);
+  return db;
+}
+
+describe('findAllUsers — role filter (ROK-821)', () => {
+  beforeEach(() => {
+    (eq as jest.Mock).mockClear();
+  });
+
+  it('applies role filter when role is provided', async () => {
+    const db = buildFindAllUsersDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(1, 'Admin')],
+    });
+    await findAllUsers(db as never, 1, 10, undefined, 'admin');
+    const roleCalls = (eq as jest.Mock).mock.calls.filter(
+      (call: unknown[]) => call[1] === 'admin',
+    );
+    expect(roleCalls.length).toBeGreaterThan(0);
+  });
+
+  it('does not apply role filter when role is undefined', async () => {
+    const db = buildFindAllUsersDb({
+      countRows: [{ count: 2 }],
+      dataRows: [mockUser(1, 'Alice'), mockUser(2, 'Bob')],
+    });
+    (eq as jest.Mock).mockClear();
+    await findAllUsers(db as never, 1, 10);
+    const roleCalls = (eq as jest.Mock).mock.calls.filter(
+      (call: unknown[]) =>
+        call[1] === 'admin' || call[1] === 'member' || call[1] === 'operator',
+    );
+    expect(roleCalls).toHaveLength(0);
+  });
+
+  it('returns correct total and data', async () => {
+    const db = buildFindAllUsersDb({
+      countRows: [{ count: 1 }],
+      dataRows: [mockUser(5, 'Admin')],
+    });
+    const result = await findAllUsers(db as never, 1, 10, undefined, 'admin');
+    expect(result.total).toBe(1);
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({ id: 5, username: 'Admin' });
   });
 });

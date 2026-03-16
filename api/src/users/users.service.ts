@@ -15,16 +15,14 @@ import {
   fetchGameActivity,
   fetchHeartedGames,
   deleteUserTransaction,
+  findAdminUser,
 } from './users-query.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 
-/** Number of days to look back for "recently joined" users. */
 export const RECENT_MEMBER_DAYS = 30;
-/** Maximum number of recent members to return. */
 export const RECENT_MEMBER_LIMIT = 10;
-/** How long the user count cache is considered fresh (ms). */
 export const USER_COUNT_CACHE_TTL_MS = 5 * 60_000;
 
 @Injectable()
@@ -210,17 +208,30 @@ export class UsersService {
     this.userCountCachedAt = 0;
   }
 
-  /** Paginated list of all users with optional search and gameId filter. */
+  /** Paginated list of all users with optional search and filters (ROK-821). */
   async findAll(
     page: number,
     limit: number,
     search?: string,
     gameId?: number,
-    source?: string,
+    sources?: string[],
+    playtimeMin?: number,
+    playHistory?: string,
+    role?: string,
   ) {
     return gameId
-      ? findAllByGame(this.db, page, limit, search, gameId, source)
-      : findAllUsers(this.db, page, limit, search);
+      ? findAllByGame(
+          this.db,
+          page,
+          limit,
+          search,
+          gameId,
+          sources,
+          playtimeMin,
+          playHistory,
+          role,
+        )
+      : findAllUsers(this.db, page, limit, search, role);
   }
 
   /** Find recently joined users (last 30 days, max 10) (ROK-298). */
@@ -335,9 +346,6 @@ export class UsersService {
 
   /** Find the instance admin (first admin user by ID). */
   async findAdmin(): Promise<{ id: number } | undefined> {
-    return this.db.query.users.findFirst({
-      where: eq(schema.users.role, 'admin'),
-      columns: { id: true },
-    });
+    return findAdminUser(this.db);
   }
 }
