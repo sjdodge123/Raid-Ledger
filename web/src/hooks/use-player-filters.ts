@@ -105,13 +105,16 @@ export function usePlayerFilters(): UsePlayerFiltersResult {
         setIsOpen((prev) => !prev);
     }, []);
 
-    const apiParams = useMemo((): PlayerApiParams => ({
-        gameId: filters.gameId,
-        sources: filters.sources?.join(',') || undefined,
-        playHistory: filters.playHistory,
-        playtimeMin: filters.playtimeMin,
-        role: filters.role,
-    }), [filters]);
+    const apiParams = useMemo((): PlayerApiParams => {
+        const needsAllSources = !filters.sources && (filters.playHistory || filters.playtimeMin);
+        return {
+            gameId: filters.gameId,
+            sources: filters.sources?.join(',') || (needsAllSources ? 'manual,discord,steam_library,steam_wishlist' : undefined),
+            playHistory: filters.playHistory,
+            playtimeMin: filters.playtimeMin,
+            role: filters.role,
+        };
+    }, [filters]);
 
     return { filters, setFilter, clearAll, activeFilterCount, apiParams, isOpen, toggleOpen };
 }

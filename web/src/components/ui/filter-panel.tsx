@@ -8,12 +8,13 @@ import { BottomSheet } from './bottom-sheet';
 import { useMediaQuery } from '../../hooks/use-media-query';
 
 interface FilterPanelTriggerProps {
-    activeFilterCount: number;
+    resultCount?: number;
+    hasActiveFilters: boolean;
     onClick: () => void;
 }
 
-/** Funnel icon button with optional badge showing active filter count. */
-export function FilterPanelTrigger({ activeFilterCount, onClick }: FilterPanelTriggerProps): JSX.Element {
+/** Funnel icon button with result count badge when filters are active. */
+export function FilterPanelTrigger({ resultCount, hasActiveFilters, onClick }: FilterPanelTriggerProps): JSX.Element {
     return (
         <button
             type="button"
@@ -22,7 +23,7 @@ export function FilterPanelTrigger({ activeFilterCount, onClick }: FilterPanelTr
             className="relative inline-flex items-center gap-1.5 px-3 py-2 text-sm text-muted hover:text-foreground transition-colors"
         >
             <FunnelIcon className="w-5 h-5" />
-            {activeFilterCount > 0 && <FilterBadge count={activeFilterCount} />}
+            {hasActiveFilters && resultCount !== undefined && <FilterBadge count={resultCount} />}
         </button>
     );
 }

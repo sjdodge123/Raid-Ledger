@@ -11,30 +11,30 @@ import { renderWithProviders } from '../../test/render-helpers';
 describe('FilterPanelTrigger', () => {
     it('renders a button with funnel icon', () => {
         renderWithProviders(
-            <FilterPanelTrigger activeFilterCount={0} onClick={vi.fn()} />,
+            <FilterPanelTrigger hasActiveFilters={false} onClick={vi.fn()} />,
         );
         expect(screen.getByRole('button', { name: /filter/i })).toBeInTheDocument();
     });
 
-    it('shows badge with count when activeFilterCount > 0', () => {
+    it('shows badge with result count when filters are active', () => {
         renderWithProviders(
-            <FilterPanelTrigger activeFilterCount={3} onClick={vi.fn()} />,
+            <FilterPanelTrigger resultCount={6} hasActiveFilters={true} onClick={vi.fn()} />,
         );
-        expect(screen.getByText('3')).toBeInTheDocument();
+        expect(screen.getByText('6')).toBeInTheDocument();
     });
 
-    it('does not show badge when activeFilterCount is 0', () => {
+    it('does not show badge when no filters are active', () => {
         renderWithProviders(
-            <FilterPanelTrigger activeFilterCount={0} onClick={vi.fn()} />,
+            <FilterPanelTrigger resultCount={20} hasActiveFilters={false} onClick={vi.fn()} />,
         );
-        expect(screen.queryByText('0')).not.toBeInTheDocument();
+        expect(screen.queryByText('20')).not.toBeInTheDocument();
     });
 
     it('calls onClick when clicked', async () => {
         const user = userEvent.setup();
         const onClick = vi.fn();
         renderWithProviders(
-            <FilterPanelTrigger activeFilterCount={0} onClick={onClick} />,
+            <FilterPanelTrigger hasActiveFilters={false} onClick={onClick} />,
         );
         await user.click(screen.getByRole('button', { name: /filter/i }));
         expect(onClick).toHaveBeenCalledOnce();

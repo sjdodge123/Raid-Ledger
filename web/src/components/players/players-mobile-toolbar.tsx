@@ -4,14 +4,14 @@ import { MobilePageToolbar } from '../layout/mobile-page-toolbar';
 interface PlayersMobileToolbarProps {
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    activeFilterCount?: number;
+    hasActiveFilters?: boolean;
     onFilterToggle?: () => void;
 }
 
 /**
  * Mobile toolbar for Players page — sticky search bar + filter trigger (ROK-329, ROK-821).
  */
-export function PlayersMobileToolbar({ searchQuery, onSearchChange, activeFilterCount = 0, onFilterToggle }: PlayersMobileToolbarProps) {
+export function PlayersMobileToolbar({ searchQuery, onSearchChange, hasActiveFilters = false, onFilterToggle }: PlayersMobileToolbarProps) {
     return (
         <MobilePageToolbar aria-label="Players search">
             <div className="flex items-center gap-2">
@@ -27,15 +27,15 @@ export function PlayersMobileToolbar({ searchQuery, onSearchChange, activeFilter
                     />
                 </div>
                 {onFilterToggle && (
-                    <MobileFilterButton count={activeFilterCount} onClick={onFilterToggle} />
+                    <MobileFilterButton hasActive={hasActiveFilters} onClick={onFilterToggle} />
                 )}
             </div>
         </MobilePageToolbar>
     );
 }
 
-/** Funnel icon button for mobile toolbar. */
-function MobileFilterButton({ count, onClick }: { count: number; onClick: () => void }) {
+/** Funnel icon button for mobile toolbar — dot indicator when filters are active. */
+function MobileFilterButton({ hasActive, onClick }: { hasActive: boolean; onClick: () => void }) {
     return (
         <button
             type="button"
@@ -44,10 +44,8 @@ function MobileFilterButton({ count, onClick }: { count: number; onClick: () => 
             className="relative flex items-center justify-center w-10 h-10 text-muted hover:text-foreground transition-colors"
         >
             <FunnelIcon className="w-5 h-5" />
-            {count > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 text-[10px] font-bold text-white bg-emerald-500 rounded-full">
-                    {count}
-                </span>
+            {hasActive && (
+                <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full" />
             )}
         </button>
     );
