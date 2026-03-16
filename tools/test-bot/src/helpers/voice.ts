@@ -22,7 +22,12 @@ export async function joinVoice(channelId: string): Promise<void> {
     selfMute: true,
   });
 
-  await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+  try {
+    await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+  } catch (err) {
+    connection.destroy();
+    throw err;
+  }
   console.log(`[test-bot] Joined voice channel: ${channel.name}`);
 }
 

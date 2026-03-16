@@ -13,7 +13,7 @@ let page: Page | null = null;
 export async function connectCDP(): Promise<Page> {
   try {
     browser = await chromium.connectOverCDP(CDP_URL, { timeout: 10_000 });
-    console.log('[mcp-discord] Connected to CDP');
+    console.error('[mcp-discord] Connected to CDP');
   } catch (err) {
     throw new Error(
       `Failed to connect to Discord via CDP at ${CDP_URL}. ` +
@@ -37,7 +37,7 @@ export async function connectCDP(): Promise<Page> {
 
   if (!page) throw new Error('No Discord page found in CDP contexts');
 
-  console.log(`[mcp-discord] Connected to page: ${page.url()}`);
+  console.error(`[mcp-discord] Connected to page: ${page.url()}`);
   return page;
 }
 
@@ -51,7 +51,7 @@ export async function disconnectCDP(): Promise<void> {
     await browser.close().catch(() => {});
     browser = null;
     page = null;
-    console.log('[mcp-discord] Disconnected from CDP');
+    console.error('[mcp-discord] Disconnected from CDP');
   }
 }
 

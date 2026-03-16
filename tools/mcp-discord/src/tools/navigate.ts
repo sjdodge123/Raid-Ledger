@@ -18,10 +18,16 @@ export const TOOL_SCHEMA = {
   required: ['guildId', 'channelId'],
 };
 
+const SNOWFLAKE_RE = /^\d{17,20}$/;
+
 export async function execute(params: {
   guildId: string;
   channelId: string;
-}): Promise<{ success: boolean; url: string }> {
+}): Promise<{ success: boolean; url: string; error?: string }> {
+  if (!SNOWFLAKE_RE.test(params.guildId) || !SNOWFLAKE_RE.test(params.channelId)) {
+    return { success: false, url: '', error: 'Invalid guild or channel ID — must be a Discord snowflake (17-20 digit number)' };
+  }
+
   const page = getPage();
   const url = `https://discord.com/channels/${params.guildId}/${params.channelId}`;
 
