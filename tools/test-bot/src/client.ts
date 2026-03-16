@@ -2,6 +2,7 @@ import {
   Client,
   GatewayIntentBits,
   Guild,
+  Partials,
   type TextChannel,
   type VoiceChannel,
 } from 'discord.js';
@@ -21,6 +22,11 @@ export async function connect(): Promise<Client> {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.DirectMessages,
     ],
+    partials: [Partials.Channel],
+  });
+
+  client.on('error', (err) => {
+    console.error('[test-bot] Client error:', err);
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -33,7 +39,10 @@ export async function connect(): Promise<Client> {
       console.log(`[test-bot] Ready as ${client!.user?.tag}`);
       resolve();
     });
-    client!.login(BOT_TOKEN).catch(reject);
+    client!.login(BOT_TOKEN).catch((err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
   });
 
   guild = client.guilds.cache.get(GUILD_ID) ?? null;

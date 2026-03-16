@@ -128,6 +128,7 @@ async function main() {
   console.error('[mcp-discord] MCP server running on stdio');
 
   process.on('SIGINT', async () => {
+    await server.close();
     await disconnectCDP();
     process.exit(0);
   });

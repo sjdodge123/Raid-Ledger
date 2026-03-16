@@ -33,11 +33,11 @@ export async function execute(params: {
   const messages = await page.evaluate((maxCount: number) => {
     const results: ScrapedMessage[] = [];
 
-    // Try multiple selector strategies — Discord DOM changes frequently
-    const messageEls =
-      document.querySelectorAll('[id^="chat-messages-"]') ??
-      document.querySelectorAll('[class*="messageListItem"]') ??
-      document.querySelectorAll('[role="listitem"]');
+    // Try multiple selector strategies — Discord DOM changes frequently.
+    // querySelectorAll always returns a NodeList (never null), so check .length for fallback.
+    let messageEls = document.querySelectorAll('[id^="chat-messages-"]');
+    if (messageEls.length === 0) messageEls = document.querySelectorAll('[class*="messageListItem"]');
+    if (messageEls.length === 0) messageEls = document.querySelectorAll('[role="listitem"]');
 
     const els = Array.from(messageEls).slice(-maxCount);
 

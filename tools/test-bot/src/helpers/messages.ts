@@ -87,10 +87,16 @@ export async function waitForMessage(
     function handler(msg: Message) {
       if (msg.channelId !== channelId) return;
       const simple = toSimpleMessage(msg);
-      if (predicate(simple)) {
+      try {
+        if (predicate(simple)) {
+          clearTimeout(timer);
+          client.off('messageCreate', handler);
+          resolve(simple);
+        }
+      } catch (err) {
         clearTimeout(timer);
         client.off('messageCreate', handler);
-        resolve(simple);
+        reject(err);
       }
     }
 
@@ -98,13 +104,20 @@ export async function waitForMessage(
   });
 }
 
-/** Read recent DMs sent to the test bot. */
-export async function readDMs(count = 10): Promise<SimpleMessage[]> {
+/**
+ * Read recent DMs between the test bot and a specific user.
+ * Bots cannot browse their own DM inbox — you must specify which user's
+ * DM channel to read from.
+ */
+export async function readDMs(
+  userId: string,
+  count = 10,
+): Promise<SimpleMessage[]> {
   const client = getClient();
-  const user = client.user;
-  if (!user) throw new Error('Bot user not available');
+  if (!userId) throw new Error('userId is required — bots cannot read their own DM inbox');
 
-  const dmChannel = user.dmChannel ?? (await user.createDM());
+  const user = await client.users.fetch(userId);
+  const dmChannel = await user.createDM();
   const msgs = await dmChannel.messages.fetch({ limit: count });
   return msgs.map(toSimpleMessage).reverse();
 }
