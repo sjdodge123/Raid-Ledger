@@ -49,13 +49,14 @@ type UserListResult = {
 /** SQL expression for distinct user count in game interest queries (::int for consistent typing with igdb-interest.helpers). */
 const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
 
-/** Build WHERE conditions for game interest queries (ROK-821: multi-source, playtime, playHistory). */
+/** Build WHERE conditions for game interest queries (ROK-821: multi-source, playtime, playHistory, role). */
 function buildGameInterestConditions(
   gameId: number,
   search: string | undefined,
   sources?: string[],
   playtimeMin?: number,
   playHistory?: string,
+  role?: string,
 ) {
   const conditions = [eq(schema.gameInterests.gameId, gameId)];
   if (sources && sources.length > 0) {
@@ -70,6 +71,9 @@ function buildGameInterestConditions(
     conditions.push(gt(schema.gameInterests.playtime2weeks, 0));
   } else if (playHistory === 'played_ever') {
     conditions.push(gt(schema.gameInterests.playtimeForever, 0));
+  }
+  if (role) {
+    conditions.push(eq(schema.users.role, role as UserRole));
   }
   const searchCondition = buildSearchCondition(search);
   if (searchCondition) conditions.push(searchCondition);
@@ -86,6 +90,7 @@ export async function findAllByGame(
   sources?: string[],
   playtimeMin?: number,
   playHistory?: string,
+  role?: string,
 ): Promise<UserListResult> {
   const offset = (page - 1) * limit;
   const where = buildGameInterestConditions(
@@ -94,6 +99,7 @@ export async function findAllByGame(
     sources,
     playtimeMin,
     playHistory,
+    role,
   );
   const join = eq(schema.gameInterests.userId, schema.users.id);
   return queryGameInterestResults(db, where, join, offset, limit);

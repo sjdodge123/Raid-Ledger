@@ -231,6 +231,7 @@ export class UsersService {
           sources,
           playtimeMin,
           playHistory,
+          role,
         )
       : findAllUsers(this.db, page, limit, search, role);
   }
