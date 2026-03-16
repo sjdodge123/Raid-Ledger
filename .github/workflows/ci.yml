@@ -306,50 +306,44 @@ jobs:
             -e ADMIN_PASSWORD=ci-test-password \
             raid-ledger:ci-test
 
-      - name: Wait for health check (max 90s)
+      - name: Wait for API to start (max 120s)
         run: |
-          echo "Waiting for container to become healthy..."
-          for i in $(seq 1 90); do
-            STATUS=$(docker inspect rl-ci-test --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
-            if [ "$STATUS" = "healthy" ]; then
-              echo "✅ Container healthy after ${i}s"
-              exit 0
-            fi
-            if [ "$STATUS" = "unhealthy" ]; then
-              echo "❌ Container unhealthy after ${i}s"
-              docker logs rl-ci-test --tail 50
-              exit 1
-            fi
-            # Also check if container exited
+          echo "Waiting for API to respond..."
+          for i in $(seq 1 120); do
+            # Check if container exited
             RUNNING=$(docker inspect rl-ci-test --format '{{.State.Running}}' 2>/dev/null || echo "false")
             if [ "$RUNNING" = "false" ]; then
               echo "❌ Container exited unexpectedly"
               docker logs rl-ci-test --tail 50
               exit 1
             fi
+            # Poll API health directly inside the container (bypasses nginx IPv6 issues)
+            if docker exec rl-ci-test wget -qO- http://127.0.0.1:3000/health 2>/dev/null | grep -q '"status":"ok"'; then
+              echo "✅ API healthy after ${i}s"
+              exit 0
+            fi
             sleep 1
           done
-          echo "❌ Timed out waiting for healthy status"
+          echo "❌ Timed out waiting for API"
           docker logs rl-ci-test --tail 50
           exit 1
 
-      - name: Verify API responds
+      - name: Verify Redis connectivity
         run: |
-          # Hit the health endpoint through nginx
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/health)
+          docker exec rl-ci-test redis-cli -s /tmp/redis.sock ping | grep -q PONG
+          echo "✅ Redis responding on Unix socket"
+
+      - name: Verify nginx proxy
+        run: |
+          # Use 127.0.0.1 to avoid IPv6 resolution issues in CI
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/api/health)
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ API health check returned 200"
+            echo "✅ Nginx proxy to API working"
           else
-            echo "❌ API health check returned $HTTP_CODE"
+            echo "❌ Nginx proxy returned $HTTP_CODE"
             docker logs rl-ci-test --tail 30
             exit 1
           fi
-
-      - name: Verify Redis connectivity
-        run: |
-          # Check that Redis is accessible from inside the container
-          docker exec rl-ci-test redis-cli -s /tmp/redis.sock ping | grep -q PONG
-          echo "✅ Redis responding on Unix socket"
 
       - name: Cleanup
         if: always()
