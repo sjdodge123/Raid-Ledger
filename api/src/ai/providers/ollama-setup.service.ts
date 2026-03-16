@@ -2,10 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SettingsService } from '../../settings/settings.service';
 import { OllamaDockerService } from './ollama-docker.service';
 import { OllamaModelService } from './ollama-model.service';
-import { LlmProviderRegistry } from '../llm-provider-registry';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from '../llm.constants';
 import type { SettingKey } from '../../drizzle/schema';
 import type { AiOllamaSetupDto } from '@raid-ledger/contract';
+import { fetchOllama } from './ollama.helpers';
+import type { OllamaRawModel } from './ollama.helpers';
 
 /** Steps that indicate setup is actively running. */
 const RUNNING_STEPS = new Set(['pulling_image', 'starting', 'pulling_model']);
@@ -29,7 +30,6 @@ export class OllamaSetupService {
     private readonly settings: SettingsService,
     private readonly docker: OllamaDockerService,
     private readonly ollamaModel: OllamaModelService,
-    private readonly registry: LlmProviderRegistry,
   ) {}
 
   /** Read persisted setup state from DB. */
@@ -119,12 +119,22 @@ export class OllamaSetupService {
     await this.settings.set(AI_SETTING_KEYS.PROVIDER as SettingKey, 'ollama');
   }
 
-  /** Wait for Ollama to respond to health checks. Throws on timeout. */
+  /**
+   * Wait for Ollama to respond to health checks. Throws on timeout.
+   * Uses the container URL directly — not the provider's settings-based URL —
+   * because settings haven't been persisted yet at this point in the flow.
+   */
   private async waitForHealth(): Promise<void> {
+    const network = await this.docker.getApiNetwork();
+    const url = this.docker.getContainerUrl(network);
     for (let i = 0; i < 30; i++) {
-      const provider = this.registry.resolve('ollama');
       try {
-        if (provider && (await provider.isAvailable())) return;
+        const data = await fetchOllama<{ models: OllamaRawModel[] }>(
+          url,
+          '/api/tags',
+          { timeoutMs: 3_000 },
+        );
+        if ((data.models ?? []).length >= 0) return;
       } catch {
         /* not ready yet */
       }

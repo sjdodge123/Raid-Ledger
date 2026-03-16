@@ -3,8 +3,15 @@ import { OllamaSetupService } from './ollama-setup.service';
 import { OllamaDockerService } from './ollama-docker.service';
 import { OllamaModelService } from './ollama-model.service';
 import { SettingsService } from '../../settings/settings.service';
-import { LlmProviderRegistry } from '../llm-provider-registry';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from '../llm.constants';
+
+jest.mock('./ollama.helpers', () => ({
+  fetchOllama: jest.fn(),
+}));
+
+import { fetchOllama } from './ollama.helpers';
+
+const mockFetchOllama = fetchOllama as jest.Mock;
 
 describe('Regression: ROK-840', () => {
   describe('OllamaSetupService', () => {
@@ -12,7 +19,6 @@ describe('Regression: ROK-840', () => {
     let mockSettings: Record<string, jest.Mock>;
     let mockDocker: Record<string, jest.Mock>;
     let mockModelService: Record<string, jest.Mock>;
-    let mockRegistry: Record<string, jest.Mock>;
 
     beforeEach(async () => {
       mockSettings = {
@@ -31,11 +37,8 @@ describe('Regression: ROK-840', () => {
       mockModelService = {
         pullModel: jest.fn().mockResolvedValue(undefined),
       };
-      mockRegistry = {
-        resolve: jest.fn().mockReturnValue({
-          isAvailable: jest.fn().mockResolvedValue(true),
-        }),
-      };
+      // Default: health check succeeds immediately
+      mockFetchOllama.mockResolvedValue({ models: [] });
 
       const module = await Test.createTestingModule({
         providers: [
@@ -43,11 +46,14 @@ describe('Regression: ROK-840', () => {
           { provide: SettingsService, useValue: mockSettings },
           { provide: OllamaDockerService, useValue: mockDocker },
           { provide: OllamaModelService, useValue: mockModelService },
-          { provide: LlmProviderRegistry, useValue: mockRegistry },
         ],
       }).compile();
 
       service = module.get(OllamaSetupService);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
     });
 
     describe('getSetupState', () => {
@@ -218,15 +224,28 @@ describe('Regression: ROK-840', () => {
         expect(mockDocker.startContainer).not.toHaveBeenCalled();
       });
 
+      it('should use container URL for health check, not provider settings', async () => {
+        mockDocker.getContainerStatus.mockResolvedValue('not-found');
+        mockDocker.getApiNetwork.mockResolvedValue('my-network');
+        mockDocker.getContainerUrl.mockReturnValue(
+          'http://raid-ledger-ollama:11434',
+        );
+
+        await service.runSetup();
+
+        expect(mockFetchOllama).toHaveBeenCalledWith(
+          'http://raid-ledger-ollama:11434',
+          '/api/tags',
+          expect.objectContaining({ timeoutMs: 3_000 }),
+        );
+      });
+
       it('should abort and persist error when health check times out', async () => {
         jest.useFakeTimers();
         mockDocker.getContainerStatus.mockResolvedValue('not-found');
-        mockRegistry.resolve.mockReturnValue({
-          isAvailable: jest.fn().mockResolvedValue(false),
-        });
+        mockFetchOllama.mockRejectedValue(new Error('ECONNREFUSED'));
 
         const setupPromise = service.runSetup();
-        // Advance through all 30 health check retries (30 × 2000ms)
         for (let i = 0; i < 30; i++) {
           await jest.advanceTimersByTimeAsync(2000);
         }
@@ -240,7 +259,6 @@ describe('Regression: ROK-840', () => {
           AI_SETTING_KEYS.OLLAMA_SETUP_ERROR,
           'Health check timed out',
         );
-        // Should NOT have proceeded to model pull
         expect(mockModelService.pullModel).not.toHaveBeenCalled();
         jest.useRealTimers();
       });
