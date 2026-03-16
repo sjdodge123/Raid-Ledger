@@ -37,9 +37,7 @@ FROM node:20-alpine AS production
 WORKDIR /app
 
 # Install PostgreSQL client for pg_dump (used by backup service and entrypoint)
-# Install Docker CLI for Ollama container management (ROK-840)
-# Install su-exec for dropping privileges after socket permission fix
-RUN apk add --no-cache postgresql-client docker-cli su-exec
+RUN apk add --no-cache postgresql-client
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs \
@@ -78,8 +76,8 @@ COPY --from=builder /app/api/assets ./assets
 RUN mkdir -p /data/avatars /data/backups/daily /data/backups/migrations \
     && chown -R nestjs:nodejs /data
 
-# Note: entrypoint runs as root to fix Docker socket permissions,
-# then drops to nestjs via su-exec (ROK-840)
+# Switch to non-root user
+USER nestjs
 
 # Expose port
 EXPOSE 3000

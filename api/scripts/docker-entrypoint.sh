@@ -3,17 +3,6 @@ set -e
 
 echo "🚀 Starting Raid-Ledger API..."
 
-# Grant nestjs user access to Docker socket if mounted (ROK-840: Ollama setup)
-if [ -S /var/run/docker.sock ]; then
-    SOCK_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "")
-    if [ -n "$SOCK_GID" ] && [ "$SOCK_GID" != "0" ]; then
-        addgroup -g "$SOCK_GID" docker_host 2>/dev/null || true
-        addgroup nestjs docker_host 2>/dev/null || true
-    else
-        chmod 666 /var/run/docker.sock 2>/dev/null || true
-    fi
-fi
-
 # Run database migrations if DATABASE_URL is set
 if [ -n "$DATABASE_URL" ]; then
     # Create backup directories (idempotent)
@@ -76,17 +65,17 @@ if [ -n "$DATABASE_URL" ]; then
 
     # Always seed games (needed for event creation, even without IGDB keys)
     echo "🎮 Seeding games cache..."
-    
+
     # Seed IGDB games cache (enables game search without API keys)
     node ./dist/scripts/seed-igdb-games.js 2>&1 || {
         echo "ℹ️ IGDB games seeding skipped (may already exist)"
     }
-    
+
     # Seed game registry
     node ./dist/scripts/seed-games.js 2>&1 || {
         echo "ℹ️ Game seeding skipped (may already exist)"
     }
-    
+
     echo "✅ Games seeded"
 
     # Flush stale IGDB search cache so seed data takes precedence
@@ -108,8 +97,6 @@ if [ -n "$DATABASE_URL" ]; then
 
 fi
 
-# Execute the main command as non-root user (uid 1001 = nestjs)
-# su-exec can't resolve system users by name, must use uid
+# Execute the main command
 echo "🎮 Starting server..."
-exec su-exec 1001 "$@"
-
+exec "$@"
