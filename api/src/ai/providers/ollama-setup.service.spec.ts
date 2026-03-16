@@ -217,6 +217,33 @@ describe('Regression: ROK-840', () => {
 
         expect(mockDocker.startContainer).not.toHaveBeenCalled();
       });
+
+      it('should abort and persist error when health check times out', async () => {
+        jest.useFakeTimers();
+        mockDocker.getContainerStatus.mockResolvedValue('not-found');
+        mockRegistry.resolve.mockReturnValue({
+          isAvailable: jest.fn().mockResolvedValue(false),
+        });
+
+        const setupPromise = service.runSetup();
+        // Advance through all 30 health check retries (30 × 2000ms)
+        for (let i = 0; i < 30; i++) {
+          await jest.advanceTimersByTimeAsync(2000);
+        }
+        await setupPromise;
+
+        expect(mockSettings.set).toHaveBeenCalledWith(
+          AI_SETTING_KEYS.OLLAMA_SETUP_STEP,
+          'error',
+        );
+        expect(mockSettings.set).toHaveBeenCalledWith(
+          AI_SETTING_KEYS.OLLAMA_SETUP_ERROR,
+          'Health check timed out',
+        );
+        // Should NOT have proceeded to model pull
+        expect(mockModelService.pullModel).not.toHaveBeenCalled();
+        jest.useRealTimers();
+      });
     });
   });
 });

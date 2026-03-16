@@ -84,21 +84,21 @@ export class OllamaSetupService {
 
   /** Execute the full setup flow (pull image, start, pull model, persist config). */
   async runSetup(): Promise<void> {
-    const status = await this.docker.getContainerStatus();
-    if (status !== 'running') {
-      await this.setStep('pulling_image');
-      await this.docker.startContainer();
-      await this.setStep('starting');
-      await this.waitForHealth();
-    }
     try {
+      const status = await this.docker.getContainerStatus();
+      if (status !== 'running') {
+        await this.setStep('pulling_image');
+        await this.docker.startContainer();
+        await this.setStep('starting');
+        await this.waitForHealth();
+      }
       await this.setStep('pulling_model');
       await this.ollamaModel.pullModel(AI_DEFAULTS.model);
       await this.persistConfig();
       await this.setStep('ready');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.logger.error(`Ollama model pull failed: ${msg}`);
+      this.logger.error(`Ollama setup failed: ${msg}`);
       await this.setStep('error');
       await this.settings.set(
         AI_SETTING_KEYS.OLLAMA_SETUP_ERROR as SettingKey,
@@ -119,7 +119,7 @@ export class OllamaSetupService {
     await this.settings.set(AI_SETTING_KEYS.PROVIDER as SettingKey, 'ollama');
   }
 
-  /** Wait for Ollama to respond to health checks. */
+  /** Wait for Ollama to respond to health checks. Throws on timeout. */
   private async waitForHealth(): Promise<void> {
     for (let i = 0; i < 30; i++) {
       const provider = this.registry.resolve('ollama');
@@ -136,6 +136,7 @@ export class OllamaSetupService {
       AI_SETTING_KEYS.OLLAMA_SETUP_ERROR as SettingKey,
       'Health check timed out',
     );
+    throw new Error('Ollama health check timed out');
   }
 
   /** Persist a setup step to settings. */
