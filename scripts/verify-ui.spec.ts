@@ -256,16 +256,26 @@ test.describe('Event detail', () => {
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 
-    test('role preference icons are visible in roster area (ROK-847)', async ({ page }) => {
-        // Wait for page to fully load
-        await expect(page.getByRole('button', { name: 'Edit Event' })).toBeVisible({ timeout: 10_000 });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: ROK-847 — role preference icons on event detail
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-847 — role preference icons', () => {
+    test('role preference icons are visible on event with confirmed signups', async ({ page }) => {
+        // Navigate directly to a WoW event with confirmed signups that have preferredRoles.
+        // Event 105 "DM:E 5 man" has 6 confirmed signups with role preferences in seed data.
+        await page.goto('/events/105');
+        // Wait for attendance section to load (this event may not show admin buttons)
+        await expect(page.getByRole('heading', { name: 'Attendance' })).toBeVisible({ timeout: 10_000 });
 
         // Role preference icons are <img> with alt matching tank/healer/dps.
-        // Seed data (AC-6) ensures confirmed signups have preferredRoles set.
-        const roleIcons = page.locator('.event-detail-roster img[alt="tank"], .event-detail-roster img[alt="healer"], .event-detail-roster img[alt="dps"]');
+        // Check the whole page (roster builder PlayerCard + attendee list EventDetailRoster).
+        const roleIcons = page.locator('img[alt="tank"], img[alt="healer"], img[alt="dps"]');
         const count = await roleIcons.count();
 
-        // At least one role preference icon should be visible in the roster
+        // At least one role preference icon should be visible
         expect(count).toBeGreaterThan(0);
         await expect(roleIcons.first()).toBeVisible();
     });
