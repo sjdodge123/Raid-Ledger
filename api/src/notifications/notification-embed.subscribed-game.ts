@@ -3,6 +3,7 @@
  * Mirrors the channel embed layout from discord-embed.factory.ts.
  */
 import { EmbedBuilder } from 'discord.js';
+import { formatDurationMs } from '../discord-bot/utils/format-duration';
 import { toStr } from './notification-embed.helpers';
 
 /** Override the embed description with structured game-affinity lines. */
@@ -30,8 +31,5 @@ function computeDurationSuffix(start: unknown, end: unknown): string {
   if (!start || !end) return '';
   const ms = new Date(toStr(end)).getTime() - new Date(toStr(start)).getTime();
   if (ms <= 0) return '';
-  const h = Math.floor(ms / 3_600_000);
-  const m = Math.floor((ms % 3_600_000) / 60_000);
-  if (h > 0 && m > 0) return ` (${h}h ${m}m)`;
-  return h > 0 ? ` (${h}h)` : ` (${m}m)`;
+  return ` (${formatDurationMs(ms)})`;
 }
