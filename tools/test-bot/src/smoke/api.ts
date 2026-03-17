@@ -56,6 +56,19 @@ export class ApiClient {
     return res.json() as Promise<T>;
   }
 
+  async put<T = unknown>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: 'PUT',
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`PUT ${path} → ${res.status}: ${text}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
   async patch<T = unknown>(path: string, body: unknown): Promise<T> {
     const res = await fetch(`${this.baseUrl}${path}`, {
       method: 'PATCH',
