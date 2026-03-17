@@ -6,7 +6,6 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
-import { SettingsService } from '../settings/settings.service';
 
 /** TTL for game-alert dedup keys: 30 days in seconds */
 const GAME_ALERT_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -17,8 +16,10 @@ export interface GameAffinityNotificationInput {
   gameName: string;
   gameId: number;
   startTime: string;
+  endTime: string;
   creatorId: number;
   clientUrl?: string | null;
+  gameCoverUrl?: string | null;
   /** ROK-504: Discord message info for "View in Discord" button */
   discordMessage?: {
     guildId: string;
@@ -42,7 +43,6 @@ export class GameAffinityNotificationService {
     @Inject(REDIS_CLIENT)
     private redis: Redis,
     private readonly notificationService: NotificationService,
-    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -90,33 +90,19 @@ export class GameAffinityNotificationService {
     return recipientIds;
   }
 
-  /** Format the event date for affinity notification messages. */
-  private async formatEventDate(startTime: string): Promise<string> {
-    const defaultTimezone =
-      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-    return new Date(startTime).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      timeZone: defaultTimezone,
-    });
-  }
-
   /** Build and dispatch notifications to all recipients. */
   private async dispatchAffinityNotifications(
     input: GameAffinityNotificationInput,
     recipientIds: number[],
   ): Promise<void> {
-    const eventDate = await this.formatEventDate(input.startTime);
-    const message = `New event for ${input.gameName}: ${input.eventTitle} on ${eventDate}`;
     const payload = await this.buildAffinityPayload(input);
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
         this.notificationService.create({
           userId,
           type: 'subscribed_game',
-          title: `New ${input.gameName} Event`,
-          message,
+          title: `New Event: ${input.eventTitle}`,
+          message: `A new ${input.gameName} event has been scheduled.`,
           payload,
         }),
       ),
@@ -143,7 +129,10 @@ export class GameAffinityNotificationService {
     return {
       eventId: input.eventId,
       gameId: input.gameId,
+      gameName: input.gameName,
       startTime: input.startTime,
+      endTime: input.endTime,
+      ...(input.gameCoverUrl ? { gameCoverUrl: input.gameCoverUrl } : {}),
       ...(eventUrl ? { url: eventUrl } : {}),
       ...(discordUrl ? { discordUrl } : {}),
       ...(voiceChannelId ? { voiceChannelId } : {}),

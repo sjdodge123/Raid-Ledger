@@ -15,6 +15,7 @@ import {
   SIGNUP_BUTTON_IDS,
 } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
+import { applySubscribedGameEmbed } from './notification-embed.subscribed-game';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -37,15 +38,12 @@ export function getColorForType(type: NotificationType): number {
     missed_event_nudge: EMBED_COLORS.REMINDER,
     role_gap_alert: EMBED_COLORS.REMINDER,
     recruitment_reminder: EMBED_COLORS.ANNOUNCEMENT,
+    slot_vacated: EMBED_COLORS.ROSTER_UPDATE,
+    member_returned: EMBED_COLORS.ROSTER_UPDATE,
+    bench_promoted: EMBED_COLORS.ROSTER_UPDATE,
+    roster_reassigned: EMBED_COLORS.ROSTER_UPDATE,
+    tentative_displaced: EMBED_COLORS.ROSTER_UPDATE,
   };
-  const rosterTypes: NotificationType[] = [
-    'slot_vacated',
-    'member_returned',
-    'bench_promoted',
-    'roster_reassigned',
-    'tentative_displaced',
-  ];
-  if (rosterTypes.includes(type)) return EMBED_COLORS.ROSTER_UPDATE;
   return map[type] ?? EMBED_COLORS.SYSTEM;
 }
 
@@ -124,7 +122,6 @@ const TYPE_FIELD_DEFS: Partial<
 > = {
   event_reminder: { fields: [['eventTitle', 'Event']], voice: true },
   new_event: { fields: [['gameName', 'Game']], voice: true },
-  subscribed_game: { fields: [], voice: true },
   slot_vacated: { fields: [['slotName', 'Slot']], voice: true },
   member_returned: { fields: [['slotName', 'Slot']], voice: true },
   event_cancelled: { fields: [['eventTitle', 'Event']], voice: false },
@@ -157,6 +154,10 @@ export function addTypeSpecificFields(
   payload?: Record<string, unknown>,
 ): void {
   if (!payload) return;
+  if (type === 'subscribed_game') {
+    applySubscribedGameEmbed(embed, payload);
+    return;
+  }
   if (type === 'roster_reassigned') {
     addRosterReassignedFields(embed, payload);
     return;
@@ -205,7 +206,6 @@ export function buildExtraRows(
   return undefined;
 }
 
-/** Build reschedule confirm/tentative/decline row. */
 function buildRescheduleRow(eventId: string): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -223,7 +223,6 @@ function buildRescheduleRow(eventId: string): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
-/** Build signup/tentative/decline row for recruitment. */
 function buildSignupRow(eventId: string): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()

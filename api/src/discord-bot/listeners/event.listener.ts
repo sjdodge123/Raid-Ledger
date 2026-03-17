@@ -231,8 +231,10 @@ export class DiscordEventListener {
       gameName: payload.event.game!.name,
       gameId: payload.gameId!,
       startTime: payload.event.startTime,
+      endTime: payload.event.endTime,
       creatorId: payload.creatorId!,
       clientUrl: context.clientUrl,
+      gameCoverUrl: payload.event.game!.coverUrl,
       discordMessage,
     }).catch((err: unknown) => {
       this.logger.warn(
