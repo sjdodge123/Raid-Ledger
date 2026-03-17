@@ -66,6 +66,15 @@ export class DemoTestService {
       });
   }
 
+  /** Add a game interest for a user -- DEMO_MODE only (for smoke tests). */
+  async addGameInterestForTest(userId: number, gameId: number): Promise<void> {
+    await this.assertDemoMode();
+    await this.db
+      .insert(schema.gameInterests)
+      .values({ userId, gameId, source: 'manual' })
+      .onConflictDoNothing();
+  }
+
   /** Create a signup for any user -- DEMO_MODE only (for smoke tests). */
   async createSignupForTest(
     eventId: number,

@@ -163,6 +163,15 @@ export async function removeSignup(
   return api.delete(`/events/${eventId}/signups/${signupId}`);
 }
 
+/** Add a game interest for a user (DEMO_MODE admin endpoint). */
+export async function addGameInterest(
+  api: ApiClient,
+  userId: number,
+  gameId: number,
+) {
+  return api.post('/admin/test/add-game-interest', { userId, gameId });
+}
+
 export async function deleteEvent(api: ApiClient, eventId: number) {
   return api.delete(`/events/${eventId}`).catch(() => {});
 }

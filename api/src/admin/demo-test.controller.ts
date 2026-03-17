@@ -31,6 +31,11 @@ const VALID_ROLES = [
   'bench',
 ] as const;
 
+const AddGameInterestSchema = z.object({
+  userId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 const CreateTestSignupSchema = z.object({
@@ -90,6 +95,20 @@ export class DemoTestController {
         status: parsed.status,
       },
     );
+  }
+
+  /** Add a game interest for a user -- DEMO_MODE only (smoke tests). */
+  @Post('add-game-interest')
+  @HttpCode(HttpStatus.OK)
+  async addGameInterestForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(AddGameInterestSchema, body);
+    await this.demoTestService.addGameInterestForTest(
+      parsed.userId,
+      parsed.gameId,
+    );
+    return { success: true };
   }
 
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */
