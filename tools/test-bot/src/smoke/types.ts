@@ -31,6 +31,8 @@ export interface TestContext {
   testCharRole?: string;
   /** Demo user IDs for multi-user roster tests */
   demoUserIds?: number[];
+  /** Demo user whose discordId = test bot (receives DMs) */
+  dmRecipientUserId: number;
 }
 
 export interface SmokeTest {

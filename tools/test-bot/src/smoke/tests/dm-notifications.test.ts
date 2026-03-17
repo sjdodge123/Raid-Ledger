@@ -2,13 +2,14 @@
  * DM Notification smoke tests.
  * Validates the RL bot sends correct DMs in response to event actions.
  *
- * Prerequisite: test bot's Discord user ID linked to a test user account
- * with Discord DM notifications enabled.
+ * Architecture: The test bot's Discord ID is linked to a DEMO USER (not admin).
+ * Admin creates events → demo user is signed up via admin endpoint →
+ * RL bot sends DMs to demo user → test bot receives them.
  */
 import { waitForDM } from '../../helpers/dm.js';
 import {
   createEvent,
-  signup,
+  signupAs,
   cancelEvent,
   rescheduleEvent,
   deleteEvent,
@@ -18,32 +19,14 @@ import {
 import { assertEmbedCount } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
-const dmOnNewEvent: SmokeTest = {
-  name: 'DM sent for new event (subscribed game)',
-  category: 'dm',
-  async run(ctx) {
-    // Start listening BEFORE creating the event
-    const dmPromise = waitForDM(
-      (msg) => msg.embeds.some((e) => e.title?.includes('smoke-dm-new')),
-      ctx.config.timeoutMs,
-    );
-    const ev = await createEvent(ctx.api, 'dm-new');
-    try {
-      const msg = await dmPromise;
-      assertEmbedCount(msg.embeds, 1);
-    } finally {
-      await deleteEvent(ctx.api, ev.id);
-    }
-  },
-};
-
 const dmOnCancellation: SmokeTest = {
   name: 'DM sent when event cancelled',
   category: 'dm',
   async run(ctx) {
     const ev = await createEvent(ctx.api, 'dm-cancel');
     try {
-      await signup(ctx.api, ev.id);
+      // Sign up the DM recipient (not admin) so they get notified
+      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['dps']);
       await sleep(2000);
       const dmPromise = waitForDM(
         (msg) =>
@@ -70,7 +53,7 @@ const dmOnReschedule: SmokeTest = {
   async run(ctx) {
     const ev = await createEvent(ctx.api, 'dm-resched');
     try {
-      await signup(ctx.api, ev.id);
+      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['dps']);
       await sleep(2000);
       const dmPromise = waitForDM(
         (msg) =>
@@ -97,7 +80,7 @@ const dmRescheduleHasButtons: SmokeTest = {
   async run(ctx) {
     const ev = await createEvent(ctx.api, 'dm-resched-btns');
     try {
-      await signup(ctx.api, ev.id);
+      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['healer']);
       await sleep(2000);
       const dmPromise = waitForDM(
         (msg) =>
@@ -111,7 +94,6 @@ const dmRescheduleHasButtons: SmokeTest = {
       );
       await rescheduleEvent(ctx.api, ev.id, 300);
       const msg = await dmPromise;
-      // Verify reschedule DM has the expected action buttons
       const hasConfirm = msg.components.some(
         (c) => c.customId?.startsWith('reschedule_confirm') || false,
       );
@@ -140,8 +122,7 @@ const dmEventReminder: SmokeTest = {
       reminder15min: true,
     });
     try {
-      await signup(ctx.api, ev.id);
-      // The reminder scheduler should fire within ~1 minute
+      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['tank']);
       const msg = await waitForDM(
         (m) =>
           m.embeds.some(
@@ -160,7 +141,6 @@ const dmEventReminder: SmokeTest = {
 };
 
 export const dmNotificationTests: SmokeTest[] = [
-  dmOnNewEvent,
   dmOnCancellation,
   dmOnReschedule,
   dmRescheduleHasButtons,

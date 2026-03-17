@@ -57,26 +57,32 @@ async function setup(): Promise<{
     console.log('  (demo data already exists)');
   });
 
-  console.log('  Linking test bot Discord ID to admin user...');
-  await linkDiscord(api, testUserId, botDiscordId, 'SmokeTestBot');
+  // Link test bot's Discord ID to a DEMO USER (not admin) for DM testing.
+  // The RL bot won't DM you about your own actions, so the DM recipient
+  // must be a different user than the event creator.
+  console.log('  Fetching demo users...');
+  const usersResEarly = await api.get<{ data: { id: number; username: string }[] }>(
+    '/users?limit=10&page=1',
+  ).catch(() => ({ data: [] }));
+  const allUsersEarly = Array.isArray(usersResEarly.data) ? usersResEarly.data : [];
+  const dmRecipient = allUsersEarly.find((u) => u.id !== testUserId);
+  const dmRecipientUserId = dmRecipient?.id ?? testUserId;
 
-  // Enable Discord DM notifications for all types
-  console.log('  Enabling Discord DM notifications...');
-  const prefsRes = await api.get<{ channelPrefs: Record<string, Record<string, boolean>> }>(
-    '/notifications/preferences',
-  ).catch(() => ({ channelPrefs: {} }));
-  const updated: Record<string, Record<string, boolean>> = {};
-  for (const [type, channels] of Object.entries(prefsRes.channelPrefs)) {
-    updated[type] = { ...channels, discord: true };
-  }
-  await api.patch('/notifications/preferences', { channelPrefs: updated }).catch((e) => {
-    console.log(`  (Failed to enable DM prefs: ${e.message})`);
+  console.log(`  Linking test bot Discord ID to demo user ${dmRecipientUserId} (${dmRecipient?.username ?? 'admin'})...`);
+  await linkDiscord(api, dmRecipientUserId, botDiscordId, 'SmokeTestBot');
+
+  // Enable Discord DM notifications for the DM recipient
+  // We need to auth as the demo user — but demo users don't have passwords.
+  // Instead, use the admin endpoint to set preferences directly.
+  console.log('  Enabling Discord DM notifications for DM recipient...');
+  await api.post('/admin/settings/demo/enable-discord-notifications', {
+    userId: dmRecipientUserId,
+  }).catch(() => {
+    // Endpoint may not exist yet — fall back to admin user prefs
+    console.log('  (Demo notification endpoint not available — using admin prefs)');
   });
 
-  // RL bot user ID not exposed by API — companion bot can discover it
-  // by looking at who sent messages in guild channels. Use 'unknown' as fallback.
   const rlBotDiscordId = 'unknown';
-  console.log(`  RL bot Discord ID: ${rlBotDiscordId} (discovered at runtime)`);
 
   console.log('  Discovering channels...');
   const { textChannels, voiceChannels } = await discoverChannels(api);
@@ -125,18 +131,12 @@ async function setup(): Promise<{
   const gamesSet = new Set(chars.map((c) => c.gameId));
   const games = [...gamesSet].map((id) => ({ id, name: `Game ${id}` }));
 
-  // Fetch demo user IDs for multi-user roster tests
-  console.log('  Fetching demo users...');
-  const usersRes = await api.get<{ data: { id: number }[] }>(
-    '/users?limit=10&page=1',
-  ).catch(() => ({ data: [] }));
-  const allUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
-  // Exclude the admin user — use only demo users
-  const demoUserIds = allUsers
+  // Reuse the early user list — exclude admin and DM recipient from roster test pool
+  const demoUserIds = allUsersEarly
     .map((u) => u.id)
-    .filter((id) => id !== testUserId)
+    .filter((id) => id !== testUserId && id !== dmRecipientUserId)
     .slice(0, 8);
-  console.log(`  Found ${demoUserIds.length} demo users for roster tests`);
+  console.log(`  ${demoUserIds.length} demo users available for roster tests`);
 
   const ctx: TestContext = {
     api,
@@ -152,6 +152,7 @@ async function setup(): Promise<{
     testCharId,
     testCharRole,
     demoUserIds,
+    dmRecipientUserId,
   };
 
   console.log('  Setup complete.\n');

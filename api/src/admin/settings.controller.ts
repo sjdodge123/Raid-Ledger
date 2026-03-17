@@ -267,6 +267,16 @@ export class AdminSettingsController {
     return { success: true, user };
   }
 
+  /** Enable Discord DM notifications for a user — DEMO_MODE only. */
+  @Post('demo/enable-discord-notifications')
+  @HttpCode(HttpStatus.OK)
+  async enableDiscordNotificationsForTest(
+    @Body() body: { userId: number },
+  ) {
+    await this.demoDataService.enableDiscordNotificationsForTest(body.userId);
+    return { success: true };
+  }
+
   /** Create a signup for any user — DEMO_MODE only (smoke tests). */
   @Post('demo/signup')
   @HttpCode(HttpStatus.OK)

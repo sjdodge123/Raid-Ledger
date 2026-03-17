@@ -92,6 +92,26 @@ export class DemoDataService {
     return result;
   }
 
+  /** Enable Discord DM notifications for a user — DEMO_MODE only. */
+  async enableDiscordNotificationsForTest(userId: number) {
+    const demoMode = await this.settingsService.getDemoMode();
+    if (!demoMode) {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+    // Build prefs with discord=true for all types
+    const prefs: Record<string, Record<string, boolean>> = {};
+    for (const type of schema.NOTIFICATION_TYPES) {
+      prefs[type] = { inApp: true, push: true, discord: true };
+    }
+    await this.db
+      .insert(schema.userNotificationPreferences)
+      .values({ userId, channelPrefs: prefs as never })
+      .onConflictDoUpdate({
+        target: schema.userNotificationPreferences.userId,
+        set: { channelPrefs: prefs as never },
+      });
+  }
+
   /** Link a Discord ID to a user — DEMO_MODE only (for smoke tests). */
   async linkDiscordForTest(
     userId: number,
