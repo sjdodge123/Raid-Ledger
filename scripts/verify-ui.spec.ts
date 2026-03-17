@@ -255,6 +255,20 @@ test.describe('Event detail', () => {
         // the page renders correctly.
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
+
+    test('role preference icons are visible in roster area (ROK-847)', async ({ page }) => {
+        // Wait for page to fully load
+        await expect(page.getByRole('button', { name: 'Edit Event' })).toBeVisible({ timeout: 10_000 });
+
+        // Role preference icons are <img> with alt matching tank/healer/dps.
+        // Seed data (AC-6) ensures confirmed signups have preferredRoles set.
+        const roleIcons = page.locator('.event-detail-roster img[alt="tank"], .event-detail-roster img[alt="healer"], .event-detail-roster img[alt="dps"]');
+        const count = await roleIcons.count();
+
+        // At least one role preference icon should be visible in the roster
+        expect(count).toBeGreaterThan(0);
+        await expect(roleIcons.first()).toBeVisible();
+    });
 });
 
 // ---------------------------------------------------------------------------

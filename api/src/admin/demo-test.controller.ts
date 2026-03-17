@@ -23,7 +23,12 @@ const EnableNotificationsSchema = z.object({
 });
 
 const VALID_ROLES = [
-  'tank', 'healer', 'dps', 'flex', 'player', 'bench',
+  'tank',
+  'healer',
+  'dps',
+  'flex',
+  'player',
+  'bench',
 ] as const;
 
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
@@ -67,9 +72,7 @@ export class DemoTestController {
     @Body() body: unknown,
   ): Promise<{ success: boolean }> {
     const parsed = this.parseBody(EnableNotificationsSchema, body);
-    await this.demoTestService.enableDiscordNotificationsForTest(
-      parsed.userId,
-    );
+    await this.demoTestService.enableDiscordNotificationsForTest(parsed.userId);
     return { success: true };
   }
 
