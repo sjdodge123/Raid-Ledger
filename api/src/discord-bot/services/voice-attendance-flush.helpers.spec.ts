@@ -43,7 +43,11 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
   describe('AC1: unrecognized channel logs WARN', () => {
     it('logs a WARN when channelId does not match any binding or default', async () => {
       const bindings = [
-        { channelId: 'some-other-ch', bindingPurpose: 'game-voice-monitor', gameId: 1 },
+        {
+          channelId: 'some-other-ch',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 1,
+        },
       ];
 
       await findActiveEventsForChannel(
@@ -138,7 +142,11 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
   describe('AC2: binding match logs DEBUG', () => {
     it('logs DEBUG when channel matches a game-voice-monitor binding', async () => {
       const bindings = [
-        { channelId: 'voice-ch-1', bindingPurpose: 'game-voice-monitor', gameId: 5 },
+        {
+          channelId: 'voice-ch-1',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 5,
+        },
       ];
 
       await findActiveEventsForChannel(
@@ -156,7 +164,11 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
 
     it('debug message contains binding purpose and channel id', async () => {
       const bindings = [
-        { channelId: 'voice-ch-2', bindingPurpose: 'game-voice-monitor', gameId: 7 },
+        {
+          channelId: 'voice-ch-2',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 7,
+        },
       ];
 
       await findActiveEventsForChannel(
@@ -174,7 +186,11 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
 
     it('logs DEBUG with active event count for binding match', async () => {
       const bindings = [
-        { channelId: 'voice-ch-3', bindingPurpose: 'game-voice-monitor', gameId: 10 },
+        {
+          channelId: 'voice-ch-3',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 10,
+        },
       ];
       mockDb.where.mockResolvedValueOnce([
         { id: 1, gameId: 10 },
@@ -198,7 +214,11 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
 
     it('logs DEBUG when channel matches a general-lobby binding', async () => {
       const bindings = [
-        { channelId: 'lobby-ch', bindingPurpose: 'general-lobby', gameId: null },
+        {
+          channelId: 'lobby-ch',
+          bindingPurpose: 'general-lobby',
+          gameId: null,
+        },
       ];
 
       await findActiveEventsForChannel(
@@ -216,7 +236,11 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
 
     it('returns active events from DB for binding match', async () => {
       const bindings = [
-        { channelId: 'voice-ch-4', bindingPurpose: 'game-voice-monitor', gameId: 3 },
+        {
+          channelId: 'voice-ch-4',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 3,
+        },
       ];
       mockDb.where.mockResolvedValueOnce([{ id: 99, gameId: 3 }]);
 
@@ -286,7 +310,13 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
       await findActiveEventsForChannel(
         mockDb as never,
         'default-v',
-        [{ channelId: 'other-ch', bindingPurpose: 'event-channel', gameId: null }],
+        [
+          {
+            channelId: 'other-ch',
+            bindingPurpose: 'event-channel',
+            gameId: null,
+          },
+        ],
         VOICE_PURPOSES,
         'default-v',
         logger,
@@ -297,7 +327,11 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
 
     it('binding match takes priority over default voice channel (no double log)', async () => {
       const bindings = [
-        { channelId: 'shared-ch', bindingPurpose: 'game-voice-monitor', gameId: 1 },
+        {
+          channelId: 'shared-ch',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 1,
+        },
       ];
 
       await findActiveEventsForChannel(
@@ -312,9 +346,7 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
       expect(logger.warn).not.toHaveBeenCalled();
       // Only binding-path debug messages, not default-path
       const debugMsgs = logger.debug.mock.calls.map((c) => c[0] as string);
-      const hasBindingMsg = debugMsgs.some((m) =>
-        m.includes('binding match'),
-      );
+      const hasBindingMsg = debugMsgs.some((m) => m.includes('binding(s)'));
       expect(hasBindingMsg).toBe(true);
     });
   });
@@ -341,9 +373,68 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
       expect(logger.warn).toHaveBeenCalledTimes(1);
     });
 
+    it('multi-game channel queries ALL bindings, not just first', async () => {
+      const bindings = [
+        { channelId: 'wow-ch', bindingPurpose: 'game-voice-monitor', gameId: 10 },
+        { channelId: 'wow-ch', bindingPurpose: 'game-voice-monitor', gameId: 20 },
+      ];
+      mockDb.where.mockResolvedValueOnce([
+        { id: 1, gameId: 10 },
+        { id: 2, gameId: 20 },
+      ]);
+
+      const result = await findActiveEventsForChannel(
+        mockDb as never,
+        'wow-ch',
+        bindings,
+        VOICE_PURPOSES,
+        null,
+        logger,
+      );
+
+      // Both games' events should be returned
+      expect(result).toEqual([
+        { eventId: 1, gameId: 10 },
+        { eventId: 2, gameId: 20 },
+      ]);
+      // Log should mention both bindings
+      const firstDebug = logger.debug.mock.calls[0];
+      expect(firstDebug[1]).toBe(2); // 2 bindings
+    });
+
+    it('general-lobby binding among game bindings queries ALL events', async () => {
+      const bindings = [
+        { channelId: 'shared-ch', bindingPurpose: 'game-voice-monitor', gameId: 5 },
+        { channelId: 'shared-ch', bindingPurpose: 'general-lobby', gameId: null },
+      ];
+      mockDb.where.mockResolvedValueOnce([
+        { id: 1, gameId: 5 },
+        { id: 2, gameId: 99 },
+      ]);
+
+      const result = await findActiveEventsForChannel(
+        mockDb as never,
+        'shared-ch',
+        bindings,
+        VOICE_PURPOSES,
+        null,
+        logger,
+      );
+
+      // general-lobby means all events, not just gameId=5
+      expect(result).toHaveLength(2);
+      // gameIds arg should be 'all' (general-lobby → no filter)
+      const firstDebug = logger.debug.mock.calls[0];
+      expect(firstDebug[3]).toBe('all');
+    });
+
     it('unrecognized non-voice binding still logs WARN', async () => {
       const bindings = [
-        { channelId: 'random-ch', bindingPurpose: 'event-channel', gameId: null },
+        {
+          channelId: 'random-ch',
+          bindingPurpose: 'event-channel',
+          gameId: null,
+        },
       ];
 
       await findActiveEventsForChannel(

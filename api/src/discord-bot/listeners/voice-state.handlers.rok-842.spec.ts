@@ -10,14 +10,17 @@ function makeDeps(
   activeEvents: Array<{ eventId: number; gameId: number | null }>,
 ): {
   deps: VoiceHandlerDeps;
-  mockLogger: { debug: jest.Mock; error: jest.Mock; warn: jest.Mock; log: jest.Mock };
+  mockLogger: {
+    debug: jest.Mock;
+    error: jest.Mock;
+    warn: jest.Mock;
+    log: jest.Mock;
+  };
   mockFindActive: jest.Mock;
   mockHandleJoin: jest.Mock;
   mockFindByDiscordId: jest.Mock;
 } {
-  const mockFindActive = jest
-    .fn()
-    .mockResolvedValue(activeEvents);
+  const mockFindActive = jest.fn().mockResolvedValue(activeEvents);
   const mockHandleJoin = jest.fn();
   const mockFindByDiscordId = jest.fn().mockResolvedValue(null);
   const mockLogger = {
@@ -48,7 +51,13 @@ function makeDeps(
     channelMembers: new Map(),
   } satisfies VoiceHandlerDeps;
 
-  return { deps, mockLogger, mockFindActive, mockHandleJoin, mockFindByDiscordId };
+  return {
+    deps,
+    mockLogger,
+    mockFindActive,
+    mockHandleJoin,
+    mockFindByDiscordId,
+  };
 }
 
 const dm = {

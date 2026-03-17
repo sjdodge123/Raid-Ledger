@@ -78,7 +78,11 @@ function wireHandleRemindersDb(
 /** Build and return a module with an optional VoiceAttendanceService. */
 async function buildModule(opts: {
   mockDb: Record<string, jest.Mock>;
-  mockNotificationService: { create: jest.Mock; getDiscordEmbedUrl: jest.Mock; resolveVoiceChannelForEvent: jest.Mock };
+  mockNotificationService: {
+    create: jest.Mock;
+    getDiscordEmbedUrl: jest.Mock;
+    resolveVoiceChannelForEvent: jest.Mock;
+  };
   voiceAttendance?: { isUserActive: jest.Mock } | null;
 }): Promise<EventReminderService> {
   const providers: unknown[] = [
@@ -88,8 +92,8 @@ async function buildModule(opts: {
     {
       provide: CronJobService,
       useValue: {
-        executeWithTracking: jest.fn(
-          (_name: string, fn: () => Promise<void>) => fn(),
+        executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) =>
+          fn(),
         ),
       },
     },
@@ -115,7 +119,9 @@ async function buildModule(opts: {
   // When null, VoiceAttendanceService is NOT provided — @Optional() resolves to null.
 
   const module: TestingModule = await Test.createTestingModule({
-    providers: providers as Parameters<typeof Test.createTestingModule>[0]['providers'],
+    providers: providers as Parameters<
+      typeof Test.createTestingModule
+    >[0]['providers'],
   }).compile();
 
   return module.get<EventReminderService>(EventReminderService);
