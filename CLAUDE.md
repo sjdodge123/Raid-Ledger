@@ -55,3 +55,47 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - **Smoke tests:** `npx playwright test` (Playwright, requires DEMO_MODE=true for auth flows)
 - **Read `TESTING.md` before writing or modifying any test file.**
 - Shared test infra: `api/src/common/testing/` (drizzle-mock, factories), `web/src/test/` (MSW handlers, render helpers, factories)
+
+## Discord Testing (tools/)
+
+Two tools exist for testing Discord bot functionality. **Use these when testing any Discord-related feature** (events, attendance, notifications, embeds, voice).
+
+### Launch Discord with CDP
+
+```bash
+./scripts/launch-discord.sh          # Launch with CDP on port 9222
+./scripts/launch-discord.sh --kill   # Kill + relaunch with CDP
+```
+
+### Companion Bot (`tools/test-bot/`)
+
+A discord.js v14 bot for **API-level testing** — CI-compatible, stable, uses official Discord APIs.
+
+- **Config:** `tools/test-bot/.env` (token + guild ID are static; channel IDs are per-test)
+- **Programmatic usage:** `import { connect, readLastMessages, joinVoice, ... } from '../tools/test-bot/src/index.js'`
+- **Available helpers:**
+  - Messages: `readLastMessages(channelId, count)`, `waitForMessage(channelId, predicate, timeout)`, `readDMs(count)`
+  - Voice: `joinVoice(channelId)`, `leaveVoice()`, `moveToChannel(channelId)`, `getVoiceMembers(channelId)`
+  - Interactions: `clickButton()`, `selectDropdownOption()` (limited — bots can't click other bots' buttons via Discord API)
+- **Key limitation:** Bots cannot interact with other bots' message components. Test button/interaction handlers directly in NestJS integration tests instead.
+
+### MCP Discord Tools (`tools/mcp-discord/`)
+
+Playwright-over-CDP tools for **UI-level verification** — local dev only, requires Discord running with CDP.
+
+- **Registered in `.mcp.json`** as `mcp-discord` — tools are available as `mcp__mcp-discord__*`
+- **7 tools:** `discord_screenshot`, `discord_read_messages`, `discord_navigate_channel`, `discord_verify_embed`, `discord_click_button`, `discord_check_voice_members`, `discord_check_notification`
+- **When to use:** Visual verification of embeds, checking notification delivery in DMs, verifying voice channel membership shown in Discord UI, screenshots for debugging
+- **Not for CI** — requires local Discord Electron with CDP enabled
+
+### When to use which tool
+
+| Scenario | Tool | Why |
+|----------|------|-----|
+| Verify bot sends correct embed content | Companion bot (`readLastMessages`) | API-level, reliable, CI-safe |
+| Verify embed renders correctly in Discord | MCP (`discord_verify_embed`) | Needs visual/DOM inspection |
+| Check who's in a voice channel (API) | Companion bot (`getVoiceMembers`) | Uses guild cache, fast |
+| Check voice UI shows members correctly | MCP (`discord_check_voice_members`) | Reads Discord sidebar DOM |
+| Test button click handlers | NestJS integration tests | Bots can't click other bots' buttons |
+| Debug what Discord looks like right now | MCP (`discord_screenshot`) | Visual aid |
+| Wait for bot to respond to a command | Companion bot (`waitForMessage`) | Event-based, reliable |
