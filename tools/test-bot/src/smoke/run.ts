@@ -60,6 +60,19 @@ async function setup(): Promise<{
   console.log('  Linking test bot Discord ID to admin user...');
   await linkDiscord(api, testUserId, botDiscordId, 'SmokeTestBot');
 
+  // Enable Discord DM notifications for all types
+  console.log('  Enabling Discord DM notifications...');
+  const prefsRes = await api.get<{ channelPrefs: Record<string, Record<string, boolean>> }>(
+    '/notifications/preferences',
+  ).catch(() => ({ channelPrefs: {} }));
+  const updated: Record<string, Record<string, boolean>> = {};
+  for (const [type, channels] of Object.entries(prefsRes.channelPrefs)) {
+    updated[type] = { ...channels, discord: true };
+  }
+  await api.patch('/notifications/preferences', { channelPrefs: updated }).catch((e) => {
+    console.log(`  (Failed to enable DM prefs: ${e.message})`);
+  });
+
   // RL bot user ID not exposed by API — companion bot can discover it
   // by looking at who sent messages in guild channels. Use 'unknown' as fallback.
   const rlBotDiscordId = 'unknown';
@@ -208,11 +221,25 @@ async function main() {
     ...interactionFlowTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 
-  console.log(`=== Running ${allTests.length} tests in parallel ===\n`);
+  // Voice tests must run sequentially (single voice connection per bot)
+  const voiceTests = allTests.filter((t) => t.category === 'voice');
+  const parallelTests = allTests.filter((t) => t.category !== 'voice');
 
-  const results = await Promise.all(
-    allTests.map((t) => runTest(t, ctx)),
+  console.log(
+    `=== Running ${parallelTests.length} tests in parallel` +
+      `${voiceTests.length ? `, ${voiceTests.length} voice tests sequentially` : ''} ===\n`,
   );
+
+  const parallelResults = await Promise.all(
+    parallelTests.map((t) => runTest(t, ctx)),
+  );
+
+  const voiceResults: TestResult[] = [];
+  for (const t of voiceTests) {
+    voiceResults.push(await runTest(t, ctx));
+  }
+
+  const results = [...parallelResults, ...voiceResults];
 
   const failCount = report(results);
 
