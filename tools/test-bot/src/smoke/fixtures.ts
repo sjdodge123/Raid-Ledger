@@ -132,6 +132,37 @@ export async function updateSignupStatus(
   return api.patch(`/events/${eventId}/signup/status`, { status });
 }
 
+/** Create a PUG invite slot for a Discord user. */
+export async function createPugInvite(
+  api: ApiClient,
+  eventId: number,
+  discordUsername: string,
+  role?: string,
+) {
+  return api.post(`/events/${eventId}/pugs`, {
+    discordUsername,
+    role: role ?? 'dps',
+  });
+}
+
+/** Update roster assignments (admin). */
+export async function updateRoster(
+  api: ApiClient,
+  eventId: number,
+  assignments: { userId: number; slot: string; position: number }[],
+) {
+  return api.patch(`/events/${eventId}/roster`, { assignments });
+}
+
+/** Remove a specific signup (admin). */
+export async function removeSignup(
+  api: ApiClient,
+  eventId: number,
+  signupId: number,
+) {
+  return api.delete(`/events/${eventId}/signups/${signupId}`);
+}
+
 export async function deleteEvent(api: ApiClient, eventId: number) {
   return api.delete(`/events/${eventId}`).catch(() => {});
 }
