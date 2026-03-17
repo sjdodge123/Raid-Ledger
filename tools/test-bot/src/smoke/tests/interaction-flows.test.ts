@@ -209,14 +209,15 @@ const eventDeleteCleansEmbed: SmokeTest = {
       );
       // Delete the event — embed should be removed from channel
       await deleteEvent(ctx.api, ev.id);
-      await sleep(6000);
-      // Verify embed is gone (or modified to show deleted state)
+      await sleep(10000);
+      // Verify embed is gone from the channel
       const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const stillThere = msgs.find((m) =>
         m.embeds.some((e) => e.title?.includes(ev.title)),
       );
-      // Event embeds may be deleted or updated — either is acceptable
-      // The key test is that deleteEvent didn't throw
+      if (stillThere) {
+        throw new Error('Embed still present after event deletion');
+      }
     } finally {
       // Already deleted above
     }

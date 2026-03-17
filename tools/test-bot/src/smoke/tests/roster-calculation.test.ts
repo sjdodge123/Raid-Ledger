@@ -4,7 +4,7 @@
  * using different preferred roles, then verifying the embed reflects correct
  * slot assignments, role shifts, and tentative displacement.
  *
- * Uses POST /admin/settings/demo/signup to create signups for demo users.
+ * Uses POST /admin/test/signup to create signups for demo users.
  */
 import { waitForMessage, readLastMessages } from '../../helpers/messages.js';
 import {

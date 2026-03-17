@@ -13,8 +13,6 @@ export interface TestContext {
   testUserId: number;
   /** Test bot's Discord user ID (linked to testUserId) */
   testBotDiscordId: string;
-  /** RL bot's Discord user ID (for reading DMs) */
-  rlBotDiscordId: string;
   /** Default notification channel (where embeds post) */
   defaultChannelId: string;
   /** All text channels in the guild */

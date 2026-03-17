@@ -84,9 +84,7 @@ const slotVacatedNotification: SmokeTest = {
       // Remove the first signup — should trigger slot_vacated to creator
       const signupId = (res1 as { id?: number }).id;
       if (signupId) {
-        await ctx.api
-          .delete(`/events/${ev.id}/signups/${signupId}`)
-          .catch(() => {});
+        await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
       }
       await sleep(1000);
       // slot_vacated notification is buffered 3 min — just verify the
@@ -139,13 +137,11 @@ const rosterReassignmentNotification: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[1], ['dps']);
       await sleep(2000);
       // Reassign user from tank to healer
-      await ctx.api
-        .patch(`/events/${ev.id}/roster`, {
-          assignments: [
-            { userId: users[0], slot: 'healer', position: 1 },
-          ],
-        })
-        .catch(() => {});
+      await ctx.api.patch(`/events/${ev.id}/roster`, {
+        assignments: [
+          { userId: users[0], slot: 'healer', position: 1 },
+        ],
+      });
       await sleep(1000);
       // roster_reassigned notification buffered for creator
     } finally {
@@ -212,7 +208,7 @@ const welcomeDmNotification: SmokeTest = {
     // We already enabled them during setup — check Redis dedup key exists.
     // This is a lightweight verification that the welcome path was triggered.
     await ctx.api
-      .post('/admin/settings/demo/enable-discord-notifications', {
+      .post('/admin/test/enable-discord-notifications', {
         userId: ctx.dmRecipientUserId,
       });
     await sleep(1000);

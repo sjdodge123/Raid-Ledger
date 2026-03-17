@@ -98,7 +98,7 @@ Playwright-over-CDP tools for **UI-level verification** — local dev only, requ
 3. If adding new Discord functionality, add a corresponding smoke test
 4. Never modify a smoke test just to make CI pass — investigate why it broke first
 
-**Test categories:** embed lifecycle (11), DM notifications (7), interaction flows (7), voice (3) + 2 slow tests behind `SMOKE_INCLUDE_SLOW=1`
+**Test categories:** channel embeds (7), roster calculation (4), DM notifications (7+1 slow), interaction flows (7), voice (3+1 slow)
 
 **Files that trigger smoke test review:**
 - `api/src/discord-bot/**` — bot listeners, embed factory, channel bindings, voice state

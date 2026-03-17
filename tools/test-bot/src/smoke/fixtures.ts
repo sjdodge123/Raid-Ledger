@@ -99,7 +99,7 @@ export async function linkDiscord(
   discordId: string,
   username: string,
 ) {
-  return api.post('/admin/settings/demo/link-discord', {
+  return api.post('/admin/test/link-discord', {
     userId,
     discordId,
     username,
@@ -114,7 +114,7 @@ export async function signupAs(
   preferredRoles?: string[],
   opts?: { characterId?: string; status?: string },
 ) {
-  return api.post('/admin/settings/demo/signup', {
+  return api.post('/admin/test/signup', {
     eventId,
     userId,
     preferredRoles,

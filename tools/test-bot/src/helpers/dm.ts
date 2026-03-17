@@ -1,45 +1,6 @@
 import { ChannelType, type Message } from 'discord.js';
 import { getClient } from '../client.js';
-import type { SimpleMessage } from './messages.js';
-
-// Re-use the normalizer from messages — but we need it here for DM events.
-// Import toSimpleMessage is not exported, so we inline a lightweight version.
-function normalize(msg: Message): SimpleMessage {
-  return {
-    id: msg.id,
-    authorId: msg.author.id,
-    authorTag: msg.author.tag,
-    content: msg.content,
-    embeds: msg.embeds.map((e) => ({
-      title: e.title,
-      description: e.description,
-      color: e.color,
-      fields: e.fields.map((f) => ({
-        name: f.name,
-        value: f.value,
-        inline: f.inline ?? false,
-      })),
-      footer: e.footer?.text ?? null,
-      thumbnail: e.thumbnail?.url ?? null,
-      timestamp: e.timestamp,
-    })),
-    components: msg.components.flatMap((row) => {
-      if (!('components' in row)) return [];
-      return (
-        row.components as Array<{
-          type: { toString(): string };
-          customId: string | null;
-          label?: string | null;
-        }>
-      ).map((c) => ({
-        type: c.type.toString(),
-        customId: c.customId,
-        label: c.label ?? null,
-      }));
-    }),
-    timestamp: msg.createdAt,
-  };
-}
+import { toSimpleMessage, type SimpleMessage } from './messages.js';
 
 /**
  * Wait for a DM message matching a predicate.
@@ -58,7 +19,7 @@ export async function waitForDM(
 
     function handler(msg: Message) {
       if (msg.channel.type !== ChannelType.DM) return;
-      const simple = normalize(msg);
+      const simple = toSimpleMessage(msg);
       try {
         if (predicate(simple)) {
           clearTimeout(timer);
