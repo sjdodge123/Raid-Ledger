@@ -88,6 +88,25 @@ Playwright-over-CDP tools for **UI-level verification** — local dev only, requ
 - **When to use:** Visual verification of embeds, checking notification delivery in DMs, verifying voice channel membership shown in Discord UI, screenshots for debugging
 - **Not for CI** — requires local Discord Electron with CDP enabled
 
+### Discord Smoke Tests (MANDATORY)
+
+**28 smoke tests** validate real Discord behavior end-to-end: `cd tools/test-bot && npm run smoke`
+
+**When modifying Discord bot code, you MUST:**
+1. Run the smoke tests locally before pushing
+2. If a test fails due to intentional behavior change, update the test to match the new behavior — do NOT delete or weaken the assertion
+3. If adding new Discord functionality, add a corresponding smoke test
+4. Never modify a smoke test just to make CI pass — investigate why it broke first
+
+**Test categories:** embed lifecycle (11), DM notifications (7), interaction flows (7), voice (3) + 2 slow tests behind `SMOKE_INCLUDE_SLOW=1`
+
+**Files that trigger smoke test review:**
+- `api/src/discord-bot/**` — bot listeners, embed factory, channel bindings, voice state
+- `api/src/notifications/**` — notification dispatch, DM embeds, reminder services
+- `api/src/events/signups*` — signup creation, auto-allocation, roster assignment
+- `api/src/events/event-lifecycle*` — cancel, reschedule, delete flows
+- `tools/test-bot/src/smoke/**` — the tests themselves
+
 ### When to use which tool
 
 | Scenario | Tool | Why |
