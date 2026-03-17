@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
-    "demo": "tsx src/demo.ts"
+    "demo": "tsx src/demo.ts",
+    "smoke": "tsx src/smoke/run.ts"
   },
   "dependencies": {
     "@discordjs/voice": "^0.18.0",

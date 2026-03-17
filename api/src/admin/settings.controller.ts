@@ -253,6 +253,44 @@ export class AdminSettingsController {
     return this.demoDataService.clearDemoData();
   }
 
+  /** Link a Discord ID to a user — DEMO_MODE only (smoke tests). */
+  @Post('demo/link-discord')
+  @HttpCode(HttpStatus.OK)
+  async linkDiscordForTest(
+    @Body() body: { userId: number; discordId: string; username: string },
+  ) {
+    const user = await this.demoDataService.linkDiscordForTest(
+      body.userId,
+      body.discordId,
+      body.username,
+    );
+    return { success: true, user };
+  }
+
+  /** Create a signup for any user — DEMO_MODE only (smoke tests). */
+  @Post('demo/signup')
+  @HttpCode(HttpStatus.OK)
+  async createSignupForTest(
+    @Body()
+    body: {
+      eventId: number;
+      userId: number;
+      preferredRoles?: string[];
+      characterId?: string;
+      status?: string;
+    },
+  ) {
+    return this.demoDataService.createSignupForTest(
+      body.eventId,
+      body.userId,
+      {
+        preferredRoles: body.preferredRoles,
+        characterId: body.characterId,
+        status: body.status,
+      },
+    );
+  }
+
   // ── Steam ───────────────────────────────────────────────
   @Get('steam')
   async getSteamStatus(): Promise<SteamConfigStatusDto> {

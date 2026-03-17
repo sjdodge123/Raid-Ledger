@@ -1,13 +1,16 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, ForbiddenException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
+import { SignupsService } from '../events/signups.service';
 import type {
   DemoDataStatusDto,
   DemoDataResultDto,
   DemoDataCountsDto,
 } from '@raid-ledger/contract';
+import { eq } from 'drizzle-orm';
 import { createRng } from './demo-data-generator';
 import * as coreH from './demo-data-install-core.helpers';
 import * as signupsH from './demo-data-install-signups.helpers';
@@ -24,6 +27,7 @@ export class DemoDataService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   async getStatus(): Promise<DemoDataStatusDto> {
@@ -57,6 +61,53 @@ export class DemoDataService {
       }
       return this.buildInstallResult(false, clearH.emptyCounts(), error);
     }
+  }
+
+  /** Create a signup for any user — DEMO_MODE only (for smoke tests). */
+  async createSignupForTest(
+    eventId: number,
+    userId: number,
+    dto?: {
+      preferredRoles?: string[];
+      characterId?: string;
+      status?: string;
+    },
+  ) {
+    const demoMode = await this.settingsService.getDemoMode();
+    if (!demoMode) {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+    const svc = this.moduleRef.get(SignupsService, { strict: false });
+    const result = await svc.signup(eventId, userId, dto as never);
+    // If a non-default status was requested, update it directly
+    if (dto?.status && dto.status !== 'signed_up') {
+      const signupId = (result as { signupId?: number }).signupId;
+      if (signupId) {
+        await this.db
+          .update(schema.eventSignups)
+          .set({ status: dto.status })
+          .where(eq(schema.eventSignups.id, signupId));
+      }
+    }
+    return result;
+  }
+
+  /** Link a Discord ID to a user — DEMO_MODE only (for smoke tests). */
+  async linkDiscordForTest(
+    userId: number,
+    discordId: string,
+    username: string,
+  ) {
+    const demoMode = await this.settingsService.getDemoMode();
+    if (!demoMode) {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ discordId, username, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
+    return updated;
   }
 
   async clearDemoData(): Promise<DemoDataResultDto> {
