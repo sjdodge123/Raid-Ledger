@@ -118,27 +118,24 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     channelId: string,
   ): Promise<Array<{ eventId: number; gameId: number | null }>> {
     const guildId = this.clientService.getGuildId();
-    if (!guildId) return [];
-    const now = new Date();
-    const bindings = await this.channelBindingsService.getBindings(guildId);
-    const vb = bindings.find(
-      (b) =>
-        b.channelId === channelId &&
-        VOICE_BINDING_PURPOSES.includes(b.bindingPurpose),
-    );
-    if (vb) {
-      const gameFilter =
-        vb.bindingPurpose === 'game-voice-monitor' && vb.gameId !== null
-          ? vb.gameId
-          : null;
-      return flushH.queryActiveEvents(this.db, gameFilter, now);
+    if (!guildId) {
+      this.logger.warn(
+        '[voice-pipe] findActive: no guildId, channelId=%s',
+        channelId,
+      );
+      return [];
     }
+    const bindings = await this.channelBindingsService.getBindings(guildId);
     const defaultVoice =
       await this.settingsService.getDiscordBotDefaultVoiceChannel();
-    if (defaultVoice && channelId === defaultVoice) {
-      return flushH.queryActiveEvents(this.db, null, now);
-    }
-    return [];
+    return flushH.findActiveEventsForChannel(
+      this.db,
+      channelId,
+      bindings,
+      VOICE_BINDING_PURPOSES,
+      defaultVoice ?? null,
+      this.logger,
+    );
   }
 
   async flushToDb(): Promise<void> {

@@ -102,6 +102,9 @@ async function snapshotSingleEvent(
     event.recurrenceGroupId,
   );
   if (!voiceChannelId) {
+    deps.logger.log(
+      `[voice-pipe] snapshot: no voice channel resolved for eventId=${event.id}`,
+    );
     return;
   }
   const count = await deps.snapshotEvent(event.id, voiceChannelId);

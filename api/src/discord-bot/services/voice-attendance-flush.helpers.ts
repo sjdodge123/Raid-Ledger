@@ -11,7 +11,11 @@ import {
 } from './voice-attendance.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
-type Logger = { error: (msg: string) => void; debug: (msg: string) => void };
+type Logger = {
+  error: (msg: string, ...args: unknown[]) => void;
+  debug: (msg: string, ...args: unknown[]) => void;
+  warn: (msg: string, ...args: unknown[]) => void;
+};
 
 /** Flush a single in-memory session to the database. */
 export async function flushSingleSession(
@@ -125,4 +129,101 @@ export async function fetchVoiceSessions(
     .select()
     .from(schema.eventVoiceSessions)
     .where(eq(schema.eventVoiceSessions.eventId, eventId));
+}
+
+/** Minimal binding shape for findActiveEventsForChannel. */
+interface BindingSlim {
+  channelId: string;
+  bindingPurpose: string;
+  gameId: number | null;
+}
+
+/** Resolve active events for a voice channel with diagnostic logging. */
+export async function findActiveEventsForChannel(
+  db: Db,
+  channelId: string,
+  bindings: BindingSlim[],
+  voiceBindingPurposes: readonly string[],
+  defaultVoiceChannelId: string | null,
+  logger: Logger,
+): Promise<Array<{ eventId: number; gameId: number | null }>> {
+  const now = new Date();
+  const vb = bindings.find(
+    (b) =>
+      b.channelId === channelId &&
+      voiceBindingPurposes.includes(b.bindingPurpose),
+  );
+  if (vb) {
+    return resolveBindingEvents(db, vb, channelId, now, logger);
+  }
+  if (defaultVoiceChannelId && channelId === defaultVoiceChannelId) {
+    return resolveDefaultVoiceEvents(db, channelId, now, logger);
+  }
+  logUnrecognizedChannel(channelId, bindings, voiceBindingPurposes, logger);
+  return [];
+}
+
+/** Resolve events for a matched voice binding. */
+async function resolveBindingEvents(
+  db: Db,
+  vb: BindingSlim,
+  channelId: string,
+  now: Date,
+  logger: Logger,
+): Promise<Array<{ eventId: number; gameId: number | null }>> {
+  logger.debug(
+    '[voice-pipe] findActive: binding match purpose=%s gameFilter=%s channelId=%s',
+    vb.bindingPurpose,
+    vb.gameId,
+    channelId,
+  );
+  const gameFilter =
+    vb.bindingPurpose === 'game-voice-monitor' && vb.gameId !== null
+      ? vb.gameId
+      : null;
+  const events = await queryActiveEvents(db, gameFilter, now);
+  logger.debug(
+    '[voice-pipe] findActive: %d active event(s) for channelId=%s',
+    events.length,
+    channelId,
+  );
+  return events;
+}
+
+/** Resolve events for the default voice channel. */
+async function resolveDefaultVoiceEvents(
+  db: Db,
+  channelId: string,
+  now: Date,
+  logger: Logger,
+): Promise<Array<{ eventId: number; gameId: number | null }>> {
+  logger.debug(
+    '[voice-pipe] findActive: default voice match channelId=%s',
+    channelId,
+  );
+  const events = await queryActiveEvents(db, null, now);
+  logger.debug(
+    '[voice-pipe] findActive: %d active event(s) for channelId=%s',
+    events.length,
+    channelId,
+  );
+  return events;
+}
+
+/** Log a warning when a channel is not recognized. */
+function logUnrecognizedChannel(
+  channelId: string,
+  bindings: BindingSlim[],
+  voiceBindingPurposes: readonly string[],
+  logger: Logger,
+): void {
+  const voiceBindingCount = bindings.filter((b) =>
+    voiceBindingPurposes.includes(b.bindingPurpose),
+  ).length;
+  logger.warn(
+    '[voice-pipe] findActive: unrecognized channel=%s, bindings=%d, voiceBindings=%d',
+    channelId,
+    bindings.length,
+    voiceBindingCount,
+  );
 }

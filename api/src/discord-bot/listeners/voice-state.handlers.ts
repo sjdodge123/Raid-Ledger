@@ -42,6 +42,11 @@ export async function trackScheduledEventJoin(
 ): Promise<void> {
   const activeEvents =
     await deps.voiceAttendanceService.findActiveScheduledEvents(channelId);
+  deps.logger.debug(
+    '[voice-pipe] trackJoin: channelId=%s activeEvents=%d',
+    channelId,
+    activeEvents.length,
+  );
   if (activeEvents.length === 0) return;
   const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
   for (const { eventId } of activeEvents) {
