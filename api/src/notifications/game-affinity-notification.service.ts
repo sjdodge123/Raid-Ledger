@@ -101,8 +101,8 @@ export class GameAffinityNotificationService {
         this.notificationService.create({
           userId,
           type: 'subscribed_game',
-          title: `New Event: ${input.eventTitle}`,
-          message: `A new ${input.gameName} event has been scheduled.`,
+          title: input.eventTitle,
+          message: `Based on your interest in ${input.gameName}`,
           payload,
         }),
       ),

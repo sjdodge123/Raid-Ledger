@@ -23,8 +23,18 @@ const EnableNotificationsSchema = z.object({
 });
 
 const VALID_ROLES = [
-  'tank', 'healer', 'dps', 'flex', 'player', 'bench',
+  'tank',
+  'healer',
+  'dps',
+  'flex',
+  'player',
+  'bench',
 ] as const;
+
+const AddGameInterestSchema = z.object({
+  userId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+});
 
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
@@ -67,9 +77,7 @@ export class DemoTestController {
     @Body() body: unknown,
   ): Promise<{ success: boolean }> {
     const parsed = this.parseBody(EnableNotificationsSchema, body);
-    await this.demoTestService.enableDiscordNotificationsForTest(
-      parsed.userId,
-    );
+    await this.demoTestService.enableDiscordNotificationsForTest(parsed.userId);
     return { success: true };
   }
 
@@ -87,6 +95,20 @@ export class DemoTestController {
         status: parsed.status,
       },
     );
+  }
+
+  /** Add a game interest for a user -- DEMO_MODE only (smoke tests). */
+  @Post('add-game-interest')
+  @HttpCode(HttpStatus.OK)
+  async addGameInterestForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(AddGameInterestSchema, body);
+    await this.demoTestService.addGameInterestForTest(
+      parsed.userId,
+      parsed.gameId,
+    );
+    return { success: true };
   }
 
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */
