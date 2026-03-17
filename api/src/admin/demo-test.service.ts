@@ -54,9 +54,7 @@ export class DemoTestService {
   }
 
   /** Enable Discord DM notifications for a user -- DEMO_MODE only. */
-  async enableDiscordNotificationsForTest(
-    userId: number,
-  ): Promise<void> {
+  async enableDiscordNotificationsForTest(userId: number): Promise<void> {
     await this.assertDemoMode();
     const prefs = this.buildAllChannelsEnabled();
     await this.db
@@ -66,6 +64,15 @@ export class DemoTestService {
         target: schema.userNotificationPreferences.userId,
         set: { channelPrefs: prefs },
       });
+  }
+
+  /** Add a game interest for a user -- DEMO_MODE only (for smoke tests). */
+  async addGameInterestForTest(userId: number, gameId: number): Promise<void> {
+    await this.assertDemoMode();
+    await this.db
+      .insert(schema.gameInterests)
+      .values({ userId, gameId, source: 'manual' })
+      .onConflictDoNothing();
   }
 
   /** Create a signup for any user -- DEMO_MODE only (for smoke tests). */
@@ -100,9 +107,10 @@ export class DemoTestService {
   }
 
   /** Build a CreateSignupDto, filtering preferredRoles to valid values. */
-  private buildSignupDto(
-    dto?: { preferredRoles?: string[]; characterId?: string },
-  ): CreateSignupDto | undefined {
+  private buildSignupDto(dto?: {
+    preferredRoles?: string[];
+    characterId?: string;
+  }): CreateSignupDto | undefined {
     if (!dto) return undefined;
     const validRoles = new Set(['tank', 'healer', 'dps']);
     const filtered = dto.preferredRoles?.filter((r) =>

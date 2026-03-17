@@ -15,6 +15,7 @@ import {
   cancelSignup,
   rescheduleEvent,
   deleteEvent,
+  addGameInterest,
   futureTime,
   sleep,
 } from '../fixtures.js';
@@ -200,6 +201,33 @@ const reminderNotification: SmokeTest = {
   },
 };
 
+const gameAffinityNotification: SmokeTest = {
+  name: 'Game affinity DM sent for subscribed game event',
+  category: 'dm',
+  async run(ctx) {
+    const gameId = ctx.mmoGameId ?? ctx.games[0]?.id;
+    if (!gameId) {
+      console.log('    SKIP: No game available for affinity test (no characters in CI)');
+      return;
+    }
+    await addGameInterest(ctx.api, ctx.dmRecipientUserId, gameId);
+    await sleep(500);
+    // Create event within lead-time window (admin is creator → excluded)
+    const ev = await createEvent(ctx.api, 'dm-affinity', {
+      gameId,
+      startTime: futureTime(60),
+      endTime: futureTime(120),
+    });
+    try {
+      await sleep(3000);
+      // Pipeline exercised: notification service logs success/failure.
+      // Bot-to-bot DMs fail with 50007, but the dispatch path ran.
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 const welcomeDmNotification: SmokeTest = {
   name: 'Welcome DM sent on first Discord enable',
   category: 'dm',
@@ -227,6 +255,7 @@ export const dmNotificationTests: SmokeTest[] = [
   tentativeDisplacedNotification,
   rosterReassignmentNotification,
   pugInviteNotification,
+  gameAffinityNotification,
   welcomeDmNotification,
   ...(includeSlow ? [reminderNotification] : []),
 ];

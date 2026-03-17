@@ -115,7 +115,7 @@ export function PlayerCard({ player, size = 'default', onClick, onRemove, matchA
     const isCompact = size === 'compact';
     const avatarSize = isCompact ? 'h-8 w-8' : 'h-10 w-10';
     const isTentative = player.signupStatus === 'tentative';
-    const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 1 ? player.preferredRoles : null;
+    const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 0 ? player.preferredRoles : null;
     const borderStyle = matchAccent ? { borderLeft: `3px solid ${matchAccent}` } : undefined;
 
     return (

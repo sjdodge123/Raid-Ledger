@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { UserLink } from '../../components/common/UserLink';
 import { toAvatarUser } from '../../lib/avatar';
 import { CharacterCardCompact } from '../../components/characters/character-card-compact';
+import { RoleIcon } from '../../components/shared/RoleIcon';
 import { PluginSlot } from '../../plugins';
 import { toast } from '../../lib/toast';
 import type { EventResponseDto, EventRosterDto } from '@raid-ledger/contract';
@@ -13,6 +14,8 @@ interface SignupItem {
     confirmationStatus: string;
     isAnonymous?: boolean;
     discordUsername?: string | null;
+    /** ROK-847: Preferred roles the player is willing to play */
+    preferredRoles?: string[] | null;
     user: {
         id: number;
         username: string;
@@ -41,6 +44,18 @@ interface EventDetailRosterProps {
     event: EventResponseDto;
 }
 
+/** Inline role preference icons for a signup (ROK-847). */
+function RolePreferenceBadges({ roles }: { roles?: string[] | null }) {
+    if (!roles || roles.length === 0) return null;
+    return (
+        <span className="flex shrink-0 items-center gap-0.5">
+            {roles.map((r) => (
+                <RoleIcon key={r} role={r} size="w-4 h-4" />
+            ))}
+        </span>
+    );
+}
+
 function AnonymousUserLabel({ signup }: { signup: SignupItem }) {
     return (
         <span className="flex items-center gap-1.5 text-sm text-muted">
@@ -60,6 +75,7 @@ function SignupEntry({ signup, event, showBadge }: {
                 {signup.isAnonymous
                     ? <AnonymousUserLabel signup={signup} />
                     : <UserLink userId={signup.user.id} username={signup.user.username} user={toAvatarUser(signup.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />}
+                <RolePreferenceBadges roles={signup.preferredRoles} />
                 {showBadge && <span className={showBadge.className}>{showBadge.text}</span>}
             </div>
             {signup.character && (
@@ -109,6 +125,7 @@ function ConfirmedGroup({ signups, event }: { signups: SignupItem[]; event: Even
                     <div key={s.id}>
                         <div className="flex items-center gap-2">
                             <UserLink userId={s.user.id} username={s.user.username} user={toAvatarUser(s.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />
+                            <RolePreferenceBadges roles={s.preferredRoles} />
                             <PluginSlot name="event-detail:signup-warnings" context={{ characterLevel: s.character?.level, contentInstances: event.contentInstances ?? [], gameSlug: event.game?.slug }} />
                         </div>
                         {s.character && (

@@ -192,39 +192,48 @@ describe('DiscordNotificationEmbedService — voice channel fields (ROK-507)', (
   // ─── subscribed_game ─────────────────────────────────────────────────────
 
   describe('subscribed_game type', () => {
-    it('adds Voice Channel field when voiceChannelId is in payload', async () => {
+    it('includes voice channel in description when voiceChannelId is in payload', async () => {
       const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-3',
           type: 'subscribed_game',
-          title: 'New WoW Event',
-          message: 'New event for your subscribed game',
-          payload: { eventId: 7, voiceChannelId: '777888999' },
+          title: 'New Event: Mythic Raid',
+          message: 'A new WoW event has been scheduled.',
+          payload: {
+            eventId: 7,
+            gameName: 'World of Warcraft',
+            startTime: '2026-03-20T19:00:00Z',
+            endTime: '2026-03-20T22:00:00Z',
+            voiceChannelId: '777888999',
+          },
         },
         'Community',
       );
 
-      const json = embed.toJSON() as { fields: EmbedFields };
-      const vcField = getVoiceChannelField(json.fields);
-
-      expect(vcField).toBeDefined();
-      expect(vcField?.value).toBe('<#777888999>');
+      const json = embed.toJSON();
+      expect(json.description).toContain('<#777888999>');
+      expect(json.description).toContain('**World of Warcraft**');
     });
 
-    it('omits Voice Channel field when voiceChannelId is absent', async () => {
+    it('omits voice channel from description when voiceChannelId is absent', async () => {
       const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-3',
           type: 'subscribed_game',
-          title: 'New Event',
-          message: 'New event',
-          payload: { eventId: 7 },
+          title: 'New Event: Mythic Raid',
+          message: 'A new WoW event has been scheduled.',
+          payload: {
+            eventId: 7,
+            gameName: 'WoW',
+            startTime: '2026-03-20T19:00:00Z',
+            endTime: '2026-03-20T22:00:00Z',
+          },
         },
         'Community',
       );
 
-      const json = embed.toJSON() as { fields?: EmbedFields };
-      expect(getVoiceChannelField(json.fields)).toBeUndefined();
+      const json = embed.toJSON();
+      expect(json.description).not.toContain('<#');
     });
   });
 

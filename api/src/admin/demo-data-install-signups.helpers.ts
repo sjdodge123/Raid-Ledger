@@ -7,9 +7,12 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import {
   createRng,
+  pickN,
+  randInt,
   generateSignups,
   generateEvents,
 } from './demo-data-generator';
+import type { Rng } from './demo-data-generator';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type BatchInsert = (
@@ -45,6 +48,14 @@ function groupBy<T, K extends string | number>(
     map.set(k, list);
   }
   return map;
+}
+
+const ROLE_OPTIONS = ['tank', 'healer', 'dps'] as const;
+
+/** Pick 1-2 random preferred roles for a confirmed signup. */
+function randomPreferredRoles(rng: Rng): string[] {
+  const count = randInt(rng, 1, 2);
+  return pickN(rng, ROLE_OPTIONS, count);
 }
 
 /** Build event-to-maxAttendees map from generated events. */
@@ -103,6 +114,23 @@ export async function installSignups(
   return { createdSignups, uniqueSignups };
 }
 
+/** Build a single signup value with optional preferredRoles. */
+function buildSignupValue(
+  rng: Rng,
+  eventId: number,
+  userId: number,
+  characterId: string | null,
+): Record<string, unknown> {
+  const isConfirmed = !!characterId;
+  return {
+    eventId,
+    userId,
+    characterId,
+    confirmationStatus: isConfirmed ? 'confirmed' : 'pending',
+    preferredRoles: isConfirmed ? randomPreferredRoles(rng) : null,
+  };
+}
+
 /** Build original event signup values with random user selection. */
 function buildOrigSignupValues(
   origEvents: (typeof schema.events.$inferSelect)[],
@@ -121,15 +149,8 @@ function buildOrigSignupValues(
     }
     for (const user of shuffled.slice(0, numSignups)) {
       const charKey = event.gameId ? `${user.id}:${event.gameId}` : null;
-      const characterId = charKey
-        ? (charByUserGame.get(charKey) ?? null)
-        : null;
-      values.push({
-        eventId: event.id,
-        userId: user.id,
-        characterId,
-        confirmationStatus: characterId ? 'confirmed' : 'pending',
-      });
+      const charId = charKey ? (charByUserGame.get(charKey) ?? null) : null;
+      values.push(buildSignupValue(eventRng, event.id, user.id, charId));
     }
   }
   return values;
@@ -142,19 +163,15 @@ function buildGenSignupValues(
   charByUserGame: Map<string, string>,
   generatedSignups: ReturnType<typeof generateSignups>,
 ): Record<string, unknown>[] {
+  const rng = createRng(0xbeef);
   const values: Record<string, unknown>[] = [];
   for (const signup of generatedSignups) {
     const event = genEvents[signup.eventIdx];
     const user = userByName.get(signup.username);
     if (!event || !user) continue;
     const charKey = event.gameId ? `${user.id}:${event.gameId}` : null;
-    const characterId = charKey ? (charByUserGame.get(charKey) ?? null) : null;
-    values.push({
-      eventId: event.id,
-      userId: user.id,
-      characterId,
-      confirmationStatus: characterId ? 'confirmed' : 'pending',
-    });
+    const charId = charKey ? (charByUserGame.get(charKey) ?? null) : null;
+    values.push(buildSignupValue(rng, event.id, user.id, charId));
   }
   return values;
 }

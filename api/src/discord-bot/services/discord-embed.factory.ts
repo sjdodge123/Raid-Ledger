@@ -19,6 +19,7 @@ import {
   buildAdHocCompletedEmbed as buildAdHocCompletedEmbedHelper,
 } from './discord-embed.helpers';
 import { createInviteEmbed } from './discord-embed-invite.helpers';
+import { formatDurationMs } from '../utils/format-duration';
 
 /** Minimal event data needed to build an embed. */
 export interface EmbedEventData {
@@ -261,16 +262,9 @@ export class DiscordEmbedFactory {
   } {
     const startDate = new Date(event.startTime);
     const endDate = new Date(event.endTime);
-    const durationMs = endDate.getTime() - startDate.getTime();
-    const hours = Math.floor(durationMs / (1000 * 60 * 60));
-    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-    const durationStr =
-      hours > 0
-        ? minutes > 0
-          ? `${hours}h ${minutes}m`
-          : `${hours}h`
-        : `${minutes}m`;
-
+    const durationStr = formatDurationMs(
+      endDate.getTime() - startDate.getTime(),
+    );
     const startUnix = Math.floor(startDate.getTime() / 1000);
     const timeDisplay = `<t:${startUnix}:f> (<t:${startUnix}:R>)`;
     return { timeDisplay, durationStr };
