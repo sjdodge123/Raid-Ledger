@@ -27,7 +27,8 @@ export interface SimpleComponent {
   label: string | null;
 }
 
-function toSimpleMessage(msg: Message): SimpleMessage {
+/** Convert a discord.js Message to a plain-object SimpleMessage. */
+export function toSimpleMessage(msg: Message): SimpleMessage {
   return {
     id: msg.id,
     authorId: msg.author.id,

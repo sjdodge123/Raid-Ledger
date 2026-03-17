@@ -6,10 +6,11 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
-    "demo": "tsx src/demo.ts"
+    "demo": "tsx src/demo.ts",
+    "smoke": "tsx src/smoke/run.ts"
   },
   "dependencies": {
-    "@discordjs/voice": "^0.18.0",
+    "@discordjs/voice": "^0.19.1",
     "discord.js": "^14.25.1",
     "dotenv": "^16.4.7",
     "sodium-native": "^4.3.1"

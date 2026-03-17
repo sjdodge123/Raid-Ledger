@@ -1,0 +1,138 @@
+name: Discord Smoke Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  discord-smoke:
+    runs-on: ubuntu-latest
+    needs: [] # Runs independently — does not block main CI
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: raid_ledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d raid_ledger"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/raid_ledger
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret
+      CLIENT_URL: http://localhost:5173
+      CORS_ORIGIN: http://localhost:5173
+      DEMO_MODE: 'true'
+      ADMIN_PASSWORD: discord-smoke-ci-password
+      API_URL: http://localhost:3000
+      # Discord secrets — required for bot connectivity
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+      DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+      # Companion test bot (channels auto-discovered from API)
+      TEST_BOT_TOKEN: ${{ secrets.TEST_BOT_TOKEN }}
+      TEST_GUILD_ID: ${{ secrets.TEST_GUILD_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
+      - name: Build API
+        run: npm run build -w api
+
+      - name: Run database migrations
+        run: npm run db:migrate -w api
+
+      - name: Bootstrap admin account
+        run: npx ts-node api/scripts/bootstrap-admin.ts
+
+      - name: Start API server
+        run: node api/dist/src/main.js &
+        env:
+          PORT: '3000'
+
+      - name: Wait for API to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/system/status > /dev/null 2>&1; then
+              echo "API is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to start within 30s"
+          exit 1
+
+      - name: Wait for Discord bot to connect
+        run: |
+          echo "Authenticating..."
+          TOKEN=$(curl -sf http://localhost:3000/auth/local \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@local","password":"discord-smoke-ci-password"}' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+          echo "Waiting for Discord bot to connect..."
+          for i in $(seq 1 30); do
+            STATUS=$(curl -sf http://localhost:3000/admin/settings/discord-bot \
+              -H "Authorization: Bearer $TOKEN" \
+              2>/dev/null || echo '{}')
+            if echo "$STATUS" | python3 -c 'import sys,json; d=json.load(sys.stdin); exit(0 if d.get("data",{}).get("connected") else 1)' 2>/dev/null; then
+              echo "Discord bot connected"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Discord bot failed to connect within 60s"
+          exit 1
+
+      - name: Install test-bot dependencies
+        run: npm install
+        working-directory: tools/test-bot
+
+      - name: Run Discord smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          API_URL: http://localhost:3000
+          ADMIN_PASSWORD: discord-smoke-ci-password
