@@ -74,6 +74,21 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Database Changes:** Use Drizzle Kit for migrations. NEVER modify schema manually.
 - **Docker:** All services run via `docker-compose up`.
 
+### Deployment Topologies (CRITICAL — two different Docker configurations)
+
+| Aspect | Dev/CI (`docker-compose.yml`) | Prod (`Dockerfile.allinone`) |
+|--------|-------------------------------|------------------------------|
+| Image | `api/Dockerfile` | `Dockerfile.allinone` |
+| DB | Separate PostgreSQL container | Embedded PostgreSQL |
+| Redis | Separate container (TCP `redis:6379`) | Embedded (Unix socket `/tmp/redis.sock`, perms `770`) |
+| Web | Separate Nginx container | Embedded Nginx |
+| Process mgmt | Docker Compose | Supervisor |
+| API user | `nestjs` (uid 1001) | `app` (uid 1001) |
+| Entrypoint | `api/scripts/docker-entrypoint.sh` (runs as `nestjs`) | Same entrypoint, called by `start-api.sh` (runs as root via supervisor) |
+
+**Key files:** `Dockerfile.allinone` (327 lines), `api/Dockerfile`, `api/scripts/docker-entrypoint.sh`, `nginx/monolith.conf.template`
+**Deployment:** Watchtower auto-pulls GHCR images daily at 5 AM on the Synology NAS.
+
 ### Critical Don't-Miss Rules
 - **Constraint:** The Availability Domain uses `tsrange` for matchmaking. Do NOT use simple start/end timestamps.
 - **Constraint:** Discord Bot is a Module inside `api`, NOT a separate service.

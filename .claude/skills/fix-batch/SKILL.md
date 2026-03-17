@@ -82,6 +82,7 @@ No agents to respawn. No pings to send. The state file IS the recovery mechanism
 - Touches `packages/contract` → full → reject, recommend `/build`
 - Adds DB migration → full → reject, recommend `/build`
 - Touches 3+ modules → full → reject, recommend `/build`
+- Touches `Dockerfile*`, `docker-entrypoint.sh`, or `nginx/` → **NOT eligible for fix-batch** — infrastructure changes require their own PR with local container validation (see CLAUDE.md)
 - UI-only with no logic → light
 - Single module, no contract/migration → standard
 
