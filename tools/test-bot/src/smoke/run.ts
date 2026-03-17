@@ -52,13 +52,19 @@ async function setupDmRecipient(
   return dmRecipientUserId;
 }
 
-/** Discover the default notification channel by sending a test message. */
+/** Ensure a default notification channel is configured, then discover it. */
 async function discoverDefaultChannel(
   api: ApiClient,
   textChannels: DiscordChannel[],
 ): Promise<string> {
   console.log('  Discovering default notification channel...');
-  await api.post('/admin/settings/discord-bot/test-message');
+  // Ensure a default channel is set (CI starts with fresh DB)
+  await api.put(
+    '/admin/settings/discord-bot/channel',
+    { channelId: textChannels[0].id },
+  ).catch(() => {});
+  // Send a test message to confirm it works
+  await api.post('/admin/settings/discord-bot/test-message').catch(() => {});
   await new Promise((r) => setTimeout(r, 3000));
   let defaultChannelId = textChannels[0].id;
   for (const ch of textChannels) {
