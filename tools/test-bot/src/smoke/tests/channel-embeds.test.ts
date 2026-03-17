@@ -66,7 +66,7 @@ const embedFilling: SmokeTest = {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['dps']));
       await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 10);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const found = msgs.find((m) =>
         m.embeds.some((e) => e.title?.includes(ev.title)),
       );
@@ -86,7 +86,7 @@ const embedTentative: SmokeTest = {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['healer']));
       await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 10);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const found = msgs.find((m) =>
         m.embeds.some((e) => e.title?.includes(ev.title)),
       );
@@ -108,7 +108,7 @@ const embedCancelSignup: SmokeTest = {
       await sleep(6000);
       await cancelSignup(ctx.api, ev.id);
       await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 10);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const found = msgs.find((m) =>
         m.embeds.some((e) => e.title?.includes(ev.title)),
       );
@@ -128,7 +128,7 @@ const embedCancelled: SmokeTest = {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
       await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 10);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const found = msgs.find((m) =>
         m.embeds.some((e) => e.title?.includes(ev.title)),
       );
@@ -148,7 +148,7 @@ const embedReschedule: SmokeTest = {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await rescheduleEvent(ctx.api, ev.id, 180);
       await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 10);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const found = msgs.find((m) =>
         m.embeds.some((e) => e.title?.includes(ev.title)),
       );

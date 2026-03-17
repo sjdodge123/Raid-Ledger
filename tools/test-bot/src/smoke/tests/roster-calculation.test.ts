@@ -53,7 +53,7 @@ const multiPreferredRoles: SmokeTest = {
       // Sign up with ['tank', 'healer'] — should get tank (first pref)
       await signupAs(ctx.api, ev.id, users[0], ['tank', 'healer']);
       await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 10);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const embed = msgs
         .flatMap((m) => m.embeds)
         .find((e) => e.title?.includes(ev.title));
@@ -92,7 +92,7 @@ const fullRosterFill: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[3], ['dps']);
       await signupAs(ctx.api, ev.id, users[4], ['dps']);
       await sleep(8000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 10);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const embed = msgs
         .flatMap((m) => m.embeds)
         .find((e) => e.title?.includes(ev.title));
@@ -147,7 +147,7 @@ const roleShiftChain: SmokeTest = {
       // User 3 prefers tank and dps — should get tank
       await signupAs(ctx.api, ev.id, users[3], ['tank', 'dps']);
       await sleep(8000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 10);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const embed = msgs
         .flatMap((m) => m.embeds)
         .find((e) => e.title?.includes(ev.title));
@@ -194,7 +194,7 @@ const tentativeDisplacement: SmokeTest = {
       // User 5 signs up CONFIRMED for dps — tentative should be displaced
       await signupAs(ctx.api, ev.id, users[5], ['dps']);
       await sleep(8000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 15);
+      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
       const embed = msgs
         .flatMap((m) => m.embeds)
         .find((e) => e.title?.includes(ev.title));

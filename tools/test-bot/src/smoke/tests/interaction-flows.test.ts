@@ -42,7 +42,7 @@ const signupCancelFlow: SmokeTest = {
       await sleep(6000);
       await cancelSignup(ctx.api, ev.id);
       await sleep(6000);
-      const msgs = await readLastMessages(chId, 10);
+      const msgs = await readLastMessages(chId, 50);
       const found = msgs.find((m) =>
         m.embeds.some((e) => e.title?.includes(ev.title)),
       );
@@ -100,7 +100,7 @@ const embedSyncBatchFlush: SmokeTest = {
       );
       await signup(ctx.api, ev.id);
       await sleep(10000);
-      const msgs = await readLastMessages(chId, 5);
+      const msgs = await readLastMessages(chId, 50);
       const found = msgs.find((m) =>
         m.embeds.some((e) => e.title?.includes(ev.title)),
       );

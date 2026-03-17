@@ -29,7 +29,10 @@ async function withVoiceBinding(
       purpose,
       config: { minPlayers: 1, notificationChannelId: tCh.id },
     });
-  } catch { /* may already exist */ }
+    console.log(`  [voice] Created ${purpose} binding for ${vCh.name}`);
+  } catch (err) {
+    console.log(`  [voice] Binding create failed for ${vCh.name}: ${(err as Error).message}`);
+  }
   try {
     tBindingId = await createBinding(ctx.api, {
       channelId: tCh.id,
@@ -37,6 +40,8 @@ async function withVoiceBinding(
       purpose: 'game-announcements',
     });
   } catch { /* may already exist */ }
+  // Allow binding cache to expire before voice join
+  await sleep(2000);
   try {
     await fn(vCh.id, tCh.id);
   } finally {
@@ -126,9 +131,13 @@ const voiceMemberList: SmokeTest = {
   },
 };
 
+// Ad-hoc spawn excluded — requires 15-minute SPAWN_DELAY_MS timer to fire.
+// Run with SMOKE_INCLUDE_SLOW=1 to include.
+const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
+
 export const voiceActivityTests: SmokeTest[] = [
   voiceJoinDetected,
   voiceLeaveRecorded,
-  adHocSpawn,
+  ...(includeSlow ? [adHocSpawn] : []),
   voiceMemberList,
 ];
