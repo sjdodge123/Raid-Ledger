@@ -29,6 +29,25 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - Test files (`*.spec.ts`, `*.test.tsx`) have a relaxed **750-line** file limit (not 300).
 - Migration files are exempt from both limits.
 
+## Infrastructure Changes (STRICT — Dockerfiles, entrypoints, nginx)
+
+**Two deployment topologies exist — understand BOTH before changing either:**
+- `api/Dockerfile` — API-only image for docker-compose dev/test (user: `nestjs`, Redis via TCP)
+- `Dockerfile.allinone` — Production monolith for Synology NAS (user: `app`, supervisor, Redis via Unix socket at `/tmp/redis.sock` with `770` perms)
+
+**Mandatory before pushing ANY infrastructure change:**
+1. Read BOTH Dockerfiles to understand what your change affects
+2. Build the allinone image locally: `docker build -f Dockerfile.allinone -t rl:test .`
+3. Start it: `docker run --rm -d --name rl-test -p 8080:80 rl:test`
+4. Verify: `curl http://127.0.0.1:8080/api/health` returns `{"status":"ok"}`
+5. Cleanup: `docker stop rl-test`
+
+**Rules:**
+- Infrastructure changes get their OWN PR — never bundle with code changes
+- Never merge infrastructure PRs without CI passing (container-startup job)
+- One fix per outage attempt. If a hotfix fails, REVERT to last known good state — do not stack more fixes
+- The allinone entrypoint runs as root (supervisor manages child process users) — do NOT add privilege dropping to `docker-entrypoint.sh`
+
 ## Testing
 
 - **Backend:** `npm run test -w api` (Jest). Coverage: `npm run test:cov -w api`
