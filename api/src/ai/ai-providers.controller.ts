@@ -17,6 +17,7 @@ import {
 import { LlmProviderRegistry } from './llm-provider-registry';
 import { SettingsService } from '../settings/settings.service';
 import { OllamaDockerService } from './providers/ollama-docker.service';
+import { OllamaNativeService } from './providers/ollama-native.service';
 import { OllamaSetupService } from './providers/ollama-setup.service';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
 import type {
@@ -40,6 +41,7 @@ export class AiProvidersController {
     private readonly registry: LlmProviderRegistry,
     private readonly settings: SettingsService,
     private readonly docker: OllamaDockerService,
+    private readonly native: OllamaNativeService,
     private readonly ollamaSetup: OllamaSetupService,
   ) {}
 
@@ -83,10 +85,14 @@ export class AiProvidersController {
     return this.ollamaSetup.startSetup();
   }
 
-  /** POST /admin/ai/providers/ollama/stop — Stop Ollama container. */
+  /** POST /admin/ai/providers/ollama/stop — Stop Ollama (Docker or native). */
   @Post('ollama/stop')
   async stopOllama(): Promise<{ success: boolean }> {
-    await this.docker.stopContainer();
+    if (this.native.isAllinoneMode()) {
+      await this.native.stopService();
+    } else {
+      await this.docker.stopContainer();
+    }
     return { success: true };
   }
 
@@ -138,11 +144,20 @@ export class AiProvidersController {
       info.setupStep = 'error';
     }
     if (!info.available && !state.running) {
-      const status = await this.docker.getContainerStatus();
+      const exists = await this.hasExistingInstall();
       info.setupStep =
-        info.setupStep ||
-        (status !== 'not-found' ? 'container_exists' : undefined);
+        info.setupStep || (exists ? 'container_exists' : undefined);
     }
+  }
+
+  /** Check whether an Ollama install exists (Docker container or native). */
+  private async hasExistingInstall(): Promise<boolean> {
+    if (this.native.isAllinoneMode()) {
+      const status = await this.native.getServiceStatus();
+      return status !== 'not-found';
+    }
+    const status = await this.docker.getContainerStatus();
+    return status !== 'not-found';
   }
 
   /** Check availability with 3s timeout, capturing error details. */

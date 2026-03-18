@@ -13,6 +13,7 @@ interface OllamaSetupCardProps {
 }
 
 const STEP_LABELS: Record<string, { label: string; pct: number }> = {
+    downloading_binary: { label: 'Downloading Ollama...', pct: 15 },
     pulling_image: { label: 'Pulling Ollama Docker image...', pct: 25 },
     starting: { label: 'Starting container...', pct: 50 },
     pulling_model: { label: 'Pulling default model (llama3.2:3b)...', pct: 75 },

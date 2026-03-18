@@ -87,6 +87,99 @@ describe('OllamaSetupCard', () => {
         expect(screen.getByText(/Self-hosted LLM inference via Docker/)).toBeInTheDocument();
     });
 
+    describe('ROK-882: downloading_binary step', () => {
+        it('AC10: shows "Downloading Ollama..." during downloading_binary step', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'downloading_binary',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/downloading ollama/i)).toBeInTheDocument();
+        });
+
+        it('shows progress bar (not Setup Ollama button) during downloading_binary', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'downloading_binary',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(
+                screen.queryByRole('button', { name: /setup ollama/i }),
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows "Setting up..." badge during downloading_binary step', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'downloading_binary',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/setting up/i)).toBeInTheDocument();
+        });
+    });
+
+    describe('ROK-882: adversarial UI paths', () => {
+        it('shows Start Ollama button (not Setup) when container_exists', () => {
+            const provider = createOllamaProvider({
+                available: false,
+                setupStep: 'container_exists',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(
+                screen.getByRole('button', { name: /start ollama/i }),
+            ).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /setup ollama/i }),
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows "Selected · Offline" badge when active but not available', () => {
+            const provider = createOllamaProvider({
+                active: true,
+                available: false,
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/selected.*offline/i)).toBeInTheDocument();
+        });
+
+        it('shows default fallback step label for unknown step value', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'unknown_future_step',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            // Both the progress label and the badge show "Setting up..." for an unknown step
+            const matches = screen.getAllByText(/setting up\.\.\./i);
+            expect(matches.length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('shows Stop button but not Set as Active when available and already active', () => {
+            const provider = createOllamaProvider({
+                available: true,
+                active: true,
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /set as active/i }),
+            ).not.toBeInTheDocument();
+        });
+    });
+
     describe('Regression: ROK-840', () => {
         it('shows progress bar when setupInProgress from server (refresh scenario)', () => {
             const provider = createOllamaProvider({

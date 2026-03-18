@@ -8,6 +8,7 @@ import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.se
 import { OllamaDockerService } from './providers/ollama-docker.service';
 import { OllamaModelService } from './providers/ollama-model.service';
 import { OllamaSetupService } from './providers/ollama-setup.service';
+import { OllamaNativeService } from './providers/ollama-native.service';
 import type { LlmProvider } from './llm-provider.interface';
 
 function createMockProvider(overrides: Partial<LlmProvider> = {}): LlmProvider {
@@ -38,6 +39,11 @@ describe('AiProvidersController', () => {
     startContainer: jest.Mock;
     stopContainer: jest.Mock;
   };
+  let mockNative: {
+    isAllinoneMode: jest.Mock;
+    getServiceStatus: jest.Mock;
+    stopService: jest.Mock;
+  };
   let mockSetupService: {
     getSetupState: jest.Mock;
     startSetup: jest.Mock;
@@ -59,6 +65,11 @@ describe('AiProvidersController', () => {
       startContainer: jest.fn().mockResolvedValue(undefined),
       stopContainer: jest.fn().mockResolvedValue(undefined),
     };
+    mockNative = {
+      isAllinoneMode: jest.fn().mockReturnValue(false),
+      getServiceStatus: jest.fn().mockResolvedValue('not-found'),
+      stopService: jest.fn().mockResolvedValue(undefined),
+    };
     mockSetupService = {
       getSetupState: jest.fn().mockResolvedValue({
         running: false,
@@ -78,6 +89,7 @@ describe('AiProvidersController', () => {
         { provide: LlmProviderRegistry, useValue: mockRegistry },
         { provide: SettingsService, useValue: mockSettings },
         { provide: OllamaDockerService, useValue: mockDocker },
+        { provide: OllamaNativeService, useValue: mockNative },
         { provide: OllamaModelService, useValue: {} },
         { provide: OllamaSetupService, useValue: mockSetupService },
         { provide: PluginRegistryService, useValue: { isActive: jest.fn() } },
@@ -225,6 +237,107 @@ describe('AiProvidersController', () => {
 
       expect(ollama!.setupStep).toBe('error');
       expect(ollama!.error).toBe('Model pull failed');
+    });
+  });
+
+  describe('ROK-882: Native Ollama', () => {
+    it('AC8: stopOllama calls native stopService in allinone mode', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(true);
+
+      await controller.stopOllama();
+
+      expect(mockNative.stopService).toHaveBeenCalled();
+      expect(mockDocker.stopContainer).not.toHaveBeenCalled();
+    });
+
+    it('AC9: enrichOllamaInfo uses native status in allinone mode', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(true);
+      mockNative.getServiceStatus.mockResolvedValue('stopped');
+      const provider = createMockProvider({
+        isAvailable: jest.fn().mockResolvedValue(false),
+      });
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockResolvedValue('ollama');
+
+      const result = await controller.listProviders();
+      const ollama = result.find((p) => p.key === 'ollama');
+
+      expect(mockNative.getServiceStatus).toHaveBeenCalled();
+      expect(ollama!.setupStep).toBe('container_exists');
+    });
+
+    it('AC11: Docker stop path still works in dev mode', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(false);
+
+      await controller.stopOllama();
+
+      expect(mockDocker.stopContainer).toHaveBeenCalled();
+      expect(mockNative.stopService).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ROK-882: adversarial controller paths', () => {
+    it('stopOllama propagates error from native stopService', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(true);
+      mockNative.stopService.mockRejectedValue(
+        new Error('ERROR: ollama: ERROR (not running)'),
+      );
+
+      await expect(controller.stopOllama()).rejects.toThrow(
+        'ERROR: ollama: ERROR (not running)',
+      );
+    });
+
+    it('hasExistingInstall returns false when native status is not-found in allinone mode', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(true);
+      mockNative.getServiceStatus.mockResolvedValue('not-found');
+      const provider = createMockProvider({
+        isAvailable: jest.fn().mockResolvedValue(false),
+      });
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockResolvedValue('ollama');
+
+      const result = await controller.listProviders();
+      const ollama = result.find((p) => p.key === 'ollama');
+
+      expect(ollama!.setupStep).toBeUndefined();
+    });
+
+    it('hasExistingInstall uses docker in non-allinone mode and returns false when not-found', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(false);
+      mockDocker.getContainerStatus.mockResolvedValue('not-found');
+      const provider = createMockProvider({
+        isAvailable: jest.fn().mockResolvedValue(false),
+      });
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockResolvedValue('ollama');
+
+      const result = await controller.listProviders();
+      const ollama = result.find((p) => p.key === 'ollama');
+
+      expect(mockDocker.getContainerStatus).toHaveBeenCalled();
+      expect(ollama!.setupStep).toBeUndefined();
+    });
+
+    it('configureProvider throws BadRequestException when body has no fields', async () => {
+      const provider = createMockProvider({
+        key: 'openai',
+        requiresApiKey: true,
+      });
+      mockRegistry.resolve.mockReturnValue(provider);
+
+      await expect(controller.configureProvider('openai', {})).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('stopOllama returns success:true on successful native stop', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(true);
+      mockNative.stopService.mockResolvedValue(undefined);
+
+      const result = await controller.stopOllama();
+
+      expect(result).toEqual({ success: true });
     });
   });
 });
