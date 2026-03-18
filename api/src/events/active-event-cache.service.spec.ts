@@ -1,10 +1,15 @@
 import { Test } from '@nestjs/testing';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { ActiveEventCacheService, CachedEvent } from './active-event-cache.service';
+import {
+  ActiveEventCacheService,
+  CachedEvent,
+} from './active-event-cache.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
 
-function makeEvent(overrides: Partial<CachedEvent> & { id: number }): CachedEvent {
+function makeEvent(
+  overrides: Partial<CachedEvent> & { id: number },
+): CachedEvent {
   return {
     startTime: new Date('2026-03-18T20:00:00Z'),
     effectiveEndTime: new Date('2026-03-18T22:00:00Z'),
@@ -130,7 +135,6 @@ describe('ActiveEventCacheService', () => {
 
   describe('refresh', () => {
     it('populates cache from DB query', async () => {
-      const now = new Date();
       mockDb.where.mockResolvedValueOnce([
         {
           id: 1,
@@ -175,7 +179,8 @@ describe('ActiveEventCacheService', () => {
     it('handleDeleted removes event from cache', () => {
       (service as any).cache = new Map([[42, makeEvent({ id: 42 })]]);
       service.handleDeleted({ eventId: 42 });
-      expect((service as any).cache.has(42)).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- accessing private cache Map for test verification
+      expect((service as any).cache.has(42) as boolean).toBe(false);
     });
 
     it('handleCreated triggers refresh', async () => {
