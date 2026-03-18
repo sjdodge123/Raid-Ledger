@@ -143,8 +143,8 @@ function fetchAndCheck(
 
 /**
  * Internal polling fallback for waitForEmbedUpdate.
- * Polls at fixed 3s intervals (no backoff) — edits can arrive
- * at any time, so consistent polling density is important.
+ * Only matches messages that have been edited (editedAt is set),
+ * preventing false matches on the pre-update message.
  * Stops early when the promise has already settled.
  */
 async function pollFallback(
@@ -156,7 +156,7 @@ async function pollFallback(
 ): Promise<void> {
   while (Date.now() < deadline && !isSettled()) {
     const msgs = await readLastMessages(channelId, DEFAULT_FETCH_COUNT);
-    const match = msgs.find(predicate);
+    const match = msgs.find((m) => m.editedAt !== null && predicate(m));
     if (match) {
       settle(match);
       return;

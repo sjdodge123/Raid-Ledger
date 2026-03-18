@@ -9,6 +9,7 @@ export interface SimpleMessage {
   embeds: SimpleEmbed[];
   components: SimpleComponent[];
   timestamp: Date;
+  editedAt: Date | null;
 }
 
 export interface SimpleEmbed {
@@ -56,6 +57,7 @@ export function toSimpleMessage(msg: Message): SimpleMessage {
       }));
     }),
     timestamp: msg.createdAt,
+    editedAt: msg.editedAt,
   };
 }
 
