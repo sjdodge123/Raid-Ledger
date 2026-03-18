@@ -5,7 +5,6 @@
  * When an MMO game + character are available, events use slot configs
  * and signups include character/role assignment.
  */
-import { waitForMessage } from '../../helpers/messages.js';
 import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
 import {
   createEvent,
@@ -35,7 +34,7 @@ function mmoSignupOpts(ctx: TestContext, roles?: string[]) {
 }
 
 function embedInChannel(chId: string, title: string, timeoutMs: number) {
-  return waitForMessage(
+  return pollForEmbed(
     chId,
     (msg) => msg.embeds.some((e) => e.title?.includes(title)),
     timeoutMs,

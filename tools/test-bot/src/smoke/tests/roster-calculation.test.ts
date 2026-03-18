@@ -6,7 +6,6 @@
  *
  * Uses POST /admin/test/signup to create signups for demo users.
  */
-import { waitForMessage } from '../../helpers/messages.js';
 import { pollForEmbed } from '../../helpers/polling.js';
 import {
   createEvent,
@@ -26,7 +25,7 @@ const MMO_SLOTS = {
 };
 
 function embedInChannel(chId: string, title: string, timeoutMs: number) {
-  return waitForMessage(
+  return pollForEmbed(
     chId,
     (msg) => msg.embeds.some((e) => e.title?.includes(title)),
     timeoutMs,

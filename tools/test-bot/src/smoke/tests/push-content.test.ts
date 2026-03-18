@@ -4,7 +4,6 @@
  * suitable for Discord mobile push notification previews.
  * Content must be free of raw Discord tokens and markdown.
  */
-import { waitForMessage } from '../../helpers/messages.js';
 import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
 import {
   createEvent,
@@ -21,7 +20,7 @@ import {
 import type { SmokeTest, TestContext } from '../types.js';
 
 function embedInChannel(chId: string, title: string, timeoutMs: number) {
-  return waitForMessage(
+  return pollForEmbed(
     chId,
     (msg) => msg.embeds.some((e) => e.title?.includes(title)),
     timeoutMs,
