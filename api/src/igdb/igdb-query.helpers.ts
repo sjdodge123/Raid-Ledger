@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { type IgdbApiGame } from './igdb.constants';
+import { IGDB_CONFIG, type IgdbApiGame } from './igdb.constants';
 
 const logger = new Logger('IgdbQueryHelpers');
 
@@ -31,6 +31,7 @@ export async function executeIgdbQuery(
         'Content-Type': 'text/plain',
       },
       body,
+      signal: AbortSignal.timeout(IGDB_CONFIG.IGDB_API_TIMEOUT_MS),
     });
 
     if (!res.ok) {
