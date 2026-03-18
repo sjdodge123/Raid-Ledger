@@ -77,6 +77,7 @@ export class EventsAttendanceController {
   }
 
   @Get(':id/ad-hoc-roster')
+  @UseGuards(AuthGuard('jwt'))
   async getAdHocRoster(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<AdHocRosterResponseDto> {

@@ -160,9 +160,9 @@ async function testAggregateGameTimeReturnsHeatmap() {
   await insertGameTimeTemplate(userId, 0, 20);
   await insertGameTimeTemplate(userId, 0, 21);
 
-  const res = await testApp.request.get(
-    `/events/${eventId}/aggregate-game-time`,
-  );
+  const res = await testApp.request
+    .get(`/events/${eventId}/aggregate-game-time`)
+    .set('Authorization', `Bearer ${token}`);
 
   expect(res.status).toBe(200);
   expect(res.body.eventId).toBe(eventId);
@@ -194,9 +194,9 @@ async function testAggregateGameTimeEmpty() {
     })
     .returning();
 
-  const res = await testApp.request.get(
-    `/events/${event.id}/aggregate-game-time`,
-  );
+  const res = await testApp.request
+    .get(`/events/${event.id}/aggregate-game-time`)
+    .set('Authorization', `Bearer ${adminToken}`);
 
   expect(res.status).toBe(200);
   expect(res.body.totalUsers).toBe(0);
@@ -265,7 +265,9 @@ async function testRosterAvailability404() {
 }
 
 async function testAggregateGameTime404() {
-  const res = await testApp.request.get('/events/999999/aggregate-game-time');
+  const res = await testApp.request
+    .get('/events/999999/aggregate-game-time')
+    .set('Authorization', `Bearer ${adminToken}`);
   expect(res.status).toBe(404);
 }
 
