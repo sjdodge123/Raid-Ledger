@@ -13,7 +13,7 @@ export interface PollOptions {
   intervalMs?: number;
   /** Enable exponential backoff (default true). */
   backoff?: boolean;
-  /** Max messages to fetch per poll (default 50). */
+  /** Max messages to fetch per poll (default 100). */
   fetchCount?: number;
 }
 
@@ -33,7 +33,7 @@ export async function pollForEmbed(
 ): Promise<SimpleMessage> {
   const interval = opts?.intervalMs ?? DEFAULT_INTERVAL;
   const useBackoff = opts?.backoff ?? true;
-  const fetchCount = opts?.fetchCount ?? 50;
+  const fetchCount = opts?.fetchCount ?? 100;
   const deadline = Date.now() + timeoutMs;
   let currentInterval = interval;
 
@@ -136,7 +136,7 @@ async function pollFallback(
 ): Promise<void> {
   const interval = 3000;
   while (Date.now() < deadline) {
-    const msgs = await readLastMessages(channelId, 50);
+    const msgs = await readLastMessages(channelId, 100);
     const match = msgs.find(predicate);
     if (match) {
       settle(match);
