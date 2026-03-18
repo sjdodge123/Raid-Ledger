@@ -192,11 +192,8 @@ const multiUserSignupFlow: SmokeTest = {
   },
 };
 
-// ROK-846: embed not deleted when event is deleted — known bug, tracked.
-// This test catches a real defect. Once ROK-846 is fixed, remove the
-// expectedFailure flag and it should pass.
 const eventDeleteCleansEmbed: SmokeTest = {
-  name: 'Event deletion removes embed from channel (ROK-846)',
+  name: 'Event deletion removes embed from channel',
   category: 'flow',
   async run(ctx) {
     const ev = await createEvent(ctx.api, 'flow-delete');
@@ -221,9 +218,7 @@ const eventDeleteCleansEmbed: SmokeTest = {
       ).then(() => true).catch(() => false);
       const stillThere = !gone;
       if (stillThere) {
-        // ROK-846: known bug — embed stays after deletion.
-        // Log but don't fail so CI isn't blocked.
-        console.log('  [ROK-846] Embed still present after event deletion (known bug)');
+        throw new Error('Embed still present after event deletion');
       }
     } finally {
       // Already deleted above
