@@ -275,4 +275,66 @@ describe('AiProvidersController', () => {
       expect(mockNative.stopService).not.toHaveBeenCalled();
     });
   });
+
+  describe('ROK-882: adversarial controller paths', () => {
+    it('stopOllama propagates error from native stopService', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(true);
+      mockNative.stopService.mockRejectedValue(
+        new Error('ERROR: ollama: ERROR (not running)'),
+      );
+
+      await expect(controller.stopOllama()).rejects.toThrow(
+        'ERROR: ollama: ERROR (not running)',
+      );
+    });
+
+    it('hasExistingInstall returns false when native status is not-found in allinone mode', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(true);
+      mockNative.getServiceStatus.mockResolvedValue('not-found');
+      const provider = createMockProvider({
+        isAvailable: jest.fn().mockResolvedValue(false),
+      });
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockResolvedValue('ollama');
+
+      const result = await controller.listProviders();
+      const ollama = result.find((p) => p.key === 'ollama');
+
+      expect(ollama!.setupStep).toBeUndefined();
+    });
+
+    it('hasExistingInstall uses docker in non-allinone mode and returns false when not-found', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(false);
+      mockDocker.getContainerStatus.mockResolvedValue('not-found');
+      const provider = createMockProvider({
+        isAvailable: jest.fn().mockResolvedValue(false),
+      });
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockResolvedValue('ollama');
+
+      const result = await controller.listProviders();
+      const ollama = result.find((p) => p.key === 'ollama');
+
+      expect(mockDocker.getContainerStatus).toHaveBeenCalled();
+      expect(ollama!.setupStep).toBeUndefined();
+    });
+
+    it('configureProvider throws BadRequestException when body has no fields', async () => {
+      const provider = createMockProvider({ key: 'openai', requiresApiKey: true });
+      mockRegistry.resolve.mockReturnValue(provider);
+
+      await expect(
+        controller.configureProvider('openai', {}),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('stopOllama returns success:true on successful native stop', async () => {
+      mockNative.isAllinoneMode.mockReturnValue(true);
+      mockNative.stopService.mockResolvedValue(undefined);
+
+      const result = await controller.stopOllama();
+
+      expect(result).toEqual({ success: true });
+    });
+  });
 });

@@ -3,6 +3,7 @@ import type { IncomingMessage } from 'http';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as https from 'https';
+import * as http from 'http';
 
 type HttpsGetCb = (res: IncomingMessage) => void;
 
@@ -15,9 +16,11 @@ jest.mock('fs/promises', () => ({
   chmod: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('https');
+jest.mock('http');
 
 const mockCreateWriteStream = fs.createWriteStream as jest.Mock;
 const mockHttpsGet = https.get as jest.Mock;
+const mockHttpGet = http.get as jest.Mock;
 const mockRename = fsp.rename as jest.Mock;
 const mockChmod = fsp.chmod as jest.Mock;
 const mockUnlink = fsp.unlink as jest.Mock;
@@ -98,6 +101,119 @@ describe('downloadFile', () => {
     await expect(
       downloadFile('https://example.com/ollama', '/usr/local/bin/ollama'),
     ).rejects.toThrow('Download failed: HTTP 500');
+
+    expect(mockUnlink).toHaveBeenCalledWith('/usr/local/bin/ollama.tmp');
+  });
+
+  it('cleans up temp file when rename fails after successful download', async () => {
+    const response = new PassThrough();
+    mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
+      const req = new EventEmitter();
+      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      setTimeout(() => response.end('binary-data'), 10);
+      return req;
+    });
+    const writeStream = new PassThrough();
+    mockCreateWriteStream.mockReturnValue(writeStream);
+    mockRename.mockRejectedValueOnce(new Error('EXDEV: cross-device link'));
+
+    await expect(
+      downloadFile('https://example.com/ollama', '/usr/local/bin/ollama'),
+    ).rejects.toThrow('EXDEV: cross-device link');
+
+    expect(mockUnlink).toHaveBeenCalledWith('/usr/local/bin/ollama.tmp');
+  });
+
+  it('cleans up temp file when chmod fails', async () => {
+    const response = new PassThrough();
+    mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
+      const req = new EventEmitter();
+      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      setTimeout(() => response.end('binary-data'), 10);
+      return req;
+    });
+    const writeStream = new PassThrough();
+    mockCreateWriteStream.mockReturnValue(writeStream);
+    mockChmod.mockRejectedValueOnce(new Error('EPERM: operation not permitted'));
+
+    await expect(
+      downloadFile('https://example.com/ollama', '/usr/local/bin/ollama'),
+    ).rejects.toThrow('EPERM: operation not permitted');
+
+    expect(mockUnlink).toHaveBeenCalledWith('/usr/local/bin/ollama.tmp');
+    expect(mockRename).not.toHaveBeenCalled();
+  });
+
+  it('rejects with "Too many redirects" after exceeding MAX_REDIRECTS', async () => {
+    mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
+      const req = new EventEmitter();
+      const redirect = new PassThrough();
+      Object.assign(redirect, {
+        statusCode: 301,
+        headers: { location: 'https://example.com/ollama' },
+        resume: jest.fn(),
+      });
+      cb(redirect as unknown as IncomingMessage);
+      return req;
+    });
+    const writeStream = new PassThrough();
+    mockCreateWriteStream.mockReturnValue(writeStream);
+
+    await expect(
+      downloadFile('https://example.com/ollama', '/usr/local/bin/ollama'),
+    ).rejects.toThrow('Too many redirects');
+
+    expect(mockUnlink).toHaveBeenCalledWith('/usr/local/bin/ollama.tmp');
+  });
+
+  it('uses http.get for plain HTTP URLs', async () => {
+    const response = new PassThrough();
+    mockHttpGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
+      const req = new EventEmitter();
+      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      setTimeout(() => response.end('binary-data'), 10);
+      return req;
+    });
+    const writeStream = new PassThrough();
+    mockCreateWriteStream.mockReturnValue(writeStream);
+
+    await downloadFile('http://internal.example.com/ollama', '/usr/local/bin/ollama');
+
+    expect(mockHttpGet).toHaveBeenCalled();
+    expect(mockHttpsGet).not.toHaveBeenCalled();
+    expect(mockRename).toHaveBeenCalled();
+  });
+
+  it('cleans up temp file on network-level connection error', async () => {
+    mockHttpsGet.mockImplementation((_url: string, _cb: HttpsGetCb) => {
+      const req = new EventEmitter();
+      setTimeout(() => req.emit('error', new Error('ECONNREFUSED')), 10);
+      return req;
+    });
+    const writeStream = new PassThrough();
+    mockCreateWriteStream.mockReturnValue(writeStream);
+
+    await expect(
+      downloadFile('https://example.com/ollama', '/usr/local/bin/ollama'),
+    ).rejects.toThrow('ECONNREFUSED');
+
+    expect(mockUnlink).toHaveBeenCalledWith('/usr/local/bin/ollama.tmp');
+  });
+
+  it('cleans up temp file when write stream emits an error', async () => {
+    const response = new PassThrough();
+    mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
+      const req = new EventEmitter();
+      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      return req;
+    });
+    const writeStream = new PassThrough();
+    mockCreateWriteStream.mockReturnValue(writeStream);
+    setTimeout(() => writeStream.emit('error', new Error('ENOSPC: no space left on device')), 20);
+
+    await expect(
+      downloadFile('https://example.com/ollama', '/usr/local/bin/ollama'),
+    ).rejects.toThrow('ENOSPC: no space left on device');
 
     expect(mockUnlink).toHaveBeenCalledWith('/usr/local/bin/ollama.tmp');
   });

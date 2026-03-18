@@ -443,6 +443,131 @@ describe('ROK-882: Native Ollama Install', () => {
 
         expect(mockNative.install).not.toHaveBeenCalled();
       });
+
+      it('writes supervisor config and starts when binary exists but service not-found', async () => {
+        mockNative.isBinaryInstalled.mockReturnValue(true);
+        mockNative.getServiceStatus.mockResolvedValue('not-found');
+
+        await service.runSetup();
+
+        expect(mockNative.install).not.toHaveBeenCalled();
+        expect(mockNative.writeSupervisorConfig).toHaveBeenCalled();
+        expect(mockNative.startService).toHaveBeenCalled();
+      });
+
+      it('persists error when startService throws', async () => {
+        mockNative.startService.mockRejectedValue(
+          new Error('ERROR (abnormal termination)'),
+        );
+
+        await service.runSetup();
+
+        expect(mockSettings.set).toHaveBeenCalledWith(
+          AI_SETTING_KEYS.OLLAMA_SETUP_STEP,
+          'error',
+        );
+        expect(mockSettings.set).toHaveBeenCalledWith(
+          AI_SETTING_KEYS.OLLAMA_SETUP_ERROR,
+          'ERROR (abnormal termination)',
+        );
+      });
+
+      it('first step in startSetup is downloading_binary (not pulling_image) in native mode', async () => {
+        const result = await service.startSetup();
+
+        expect(result.success).toBe(true);
+        expect(mockSettings.set).toHaveBeenCalledWith(
+          AI_SETTING_KEYS.OLLAMA_SETUP_STEP,
+          'downloading_binary',
+        );
+        expect(mockSettings.set).not.toHaveBeenCalledWith(
+          AI_SETTING_KEYS.OLLAMA_SETUP_STEP,
+          'pulling_image',
+        );
+      });
+    });
+  });
+});
+
+describe('ROK-882: Docker available but allinone mode — native path wins', () => {
+  describe('OllamaSetupService — docker-available-but-allinone', () => {
+    let service: OllamaSetupService;
+    let mockSettings: Record<string, jest.Mock>;
+    let mockDocker: Record<string, jest.Mock>;
+    let mockModelService: Record<string, jest.Mock>;
+    let mockNative: Record<string, jest.Mock>;
+
+    beforeEach(async () => {
+      mockSettings = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn().mockResolvedValue(undefined),
+        delete: jest.fn().mockResolvedValue(undefined),
+      };
+      mockDocker = {
+        isDockerAvailable: jest.fn().mockResolvedValue(true),
+        getContainerStatus: jest.fn().mockResolvedValue('not-found'),
+        startContainer: jest.fn().mockResolvedValue(undefined),
+        stopContainer: jest.fn().mockResolvedValue(undefined),
+        getApiNetwork: jest.fn().mockResolvedValue(null),
+        getContainerUrl: jest.fn().mockReturnValue(AI_DEFAULTS.ollamaUrl),
+      };
+      mockModelService = {
+        pullModel: jest.fn().mockResolvedValue(undefined),
+      };
+      mockNative = {
+        isAllinoneMode: jest.fn().mockReturnValue(true),
+        getServiceStatus: jest.fn().mockResolvedValue('not-found'),
+        install: jest.fn().mockResolvedValue(undefined),
+        writeSupervisorConfig: jest.fn(),
+        startService: jest.fn().mockResolvedValue(undefined),
+        isBinaryInstalled: jest.fn().mockReturnValue(false),
+        getOllamaUrl: jest.fn().mockReturnValue('http://localhost:11434'),
+      };
+      mockFetchOllama.mockResolvedValue({ models: [] });
+
+      const module = await Test.createTestingModule({
+        providers: [
+          OllamaSetupService,
+          { provide: SettingsService, useValue: mockSettings },
+          { provide: OllamaDockerService, useValue: mockDocker },
+          { provide: OllamaModelService, useValue: mockModelService },
+          { provide: OllamaNativeService, useValue: mockNative },
+        ],
+      }).compile();
+
+      service = module.get(OllamaSetupService);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('uses native path when both Docker and allinone mode are active', async () => {
+      await service.runSetup();
+
+      expect(mockNative.startService).toHaveBeenCalled();
+      expect(mockDocker.startContainer).not.toHaveBeenCalled();
+    });
+
+    it('persists localhost URL (not docker container URL) when allinone wins', async () => {
+      mockDocker.getContainerUrl.mockReturnValue('http://raid-ledger-ollama:11434');
+
+      await service.runSetup();
+
+      expect(mockSettings.set).toHaveBeenCalledWith(
+        AI_SETTING_KEYS.OLLAMA_URL,
+        'http://localhost:11434',
+      );
+      expect(mockSettings.set).not.toHaveBeenCalledWith(
+        AI_SETTING_KEYS.OLLAMA_URL,
+        'http://raid-ledger-ollama:11434',
+      );
+    });
+
+    it('does not call docker startContainer when allinone wins', async () => {
+      await service.runSetup();
+
+      expect(mockDocker.startContainer).not.toHaveBeenCalled();
     });
   });
 });
