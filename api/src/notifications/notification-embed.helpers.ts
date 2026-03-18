@@ -206,6 +206,7 @@ export function buildExtraRows(
   return undefined;
 }
 
+/** Build reschedule confirm/tentative/decline row. */
 function buildRescheduleRow(eventId: string): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -223,6 +224,7 @@ function buildRescheduleRow(eventId: string): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
+/** Build signup/tentative/decline row for recruitment. */
 function buildSignupRow(eventId: string): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()

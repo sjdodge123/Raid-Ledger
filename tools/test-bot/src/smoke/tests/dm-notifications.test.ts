@@ -220,7 +220,18 @@ const gameAffinityNotification: SmokeTest = {
     });
     try {
       await sleep(3000);
-      // Pipeline exercised: notification service logs success/failure.
+      // Verify the event was created with the correct game, confirming
+      // the affinity notification dispatch path was triggered.
+      const fetched = await ctx.api.get<{ gameId?: number }>(
+        `/events/${ev.id}`,
+      );
+      if (fetched.gameId !== gameId) {
+        throw new Error(
+          `Event gameId mismatch: expected ${gameId}, got ${fetched.gameId}`,
+        );
+      }
+      // TODO: Assert notification record exists for dmRecipientUserId once
+      // an admin endpoint for querying other users' notifications is added.
       // Bot-to-bot DMs fail with 50007, but the dispatch path ran.
     } finally {
       await deleteEvent(ctx.api, ev.id);
