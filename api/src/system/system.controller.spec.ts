@@ -262,5 +262,48 @@ function describeSystemController() {
     });
   }
   describe('getStatus', () => describeGetStatus());
+
+  function describeGetBranding() {
+    it('should return branding data from settings service (ROK-877)', async () => {
+      (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
+        communityName: 'My Guild',
+        communityLogoPath: null,
+        communityAccentColor: '#10B981',
+      });
+
+      const result = await controller.getBranding();
+
+      expect(result).toEqual({
+        communityName: 'My Guild',
+        communityLogoUrl: null,
+        communityAccentColor: '#10B981',
+      });
+    });
+
+    it('should return null for communityLogoUrl when no logo path (ROK-877)', async () => {
+      (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
+        communityName: null,
+        communityLogoPath: null,
+        communityAccentColor: null,
+      });
+
+      const result = await controller.getBranding();
+
+      expect(result.communityLogoUrl).toBeNull();
+    });
+
+    it('should format logo URL as /uploads/branding/<basename> (ROK-877)', async () => {
+      (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
+        communityName: 'My Guild',
+        communityLogoPath: '/data/uploads/branding/logo.png',
+        communityAccentColor: null,
+      });
+
+      const result = await controller.getBranding();
+
+      expect(result.communityLogoUrl).toBe('/uploads/branding/logo.png');
+    });
+  }
+  describe('getBranding', () => describeGetBranding());
 }
 describe('SystemController', () => describeSystemController());

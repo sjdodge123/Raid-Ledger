@@ -87,6 +87,22 @@ export class SystemController {
     ]);
   }
 
+  /**
+   * Get public branding settings (ROK-877).
+   * Public endpoint — login page needs branding before auth.
+   */
+  @Get('branding')
+  async getBranding() {
+    const branding = await this.settingsService.getBranding();
+    return {
+      communityName: branding.communityName,
+      communityLogoUrl: branding.communityLogoPath
+        ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
+        : null,
+      communityAccentColor: branding.communityAccentColor,
+    };
+  }
+
   @Get('status')
   async getStatus(): Promise<SystemStatusDto> {
     const authAdapters =

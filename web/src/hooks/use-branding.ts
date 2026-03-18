@@ -9,11 +9,11 @@ interface BrandingData {
 }
 
 /**
- * Fetch branding settings from the admin branding endpoint (ROK-271).
+ * Fetch branding settings from the system branding endpoint (ROK-271, ROK-877).
  * This is a public endpoint - no auth required.
  */
 async function fetchBranding(): Promise<BrandingData> {
-    return fetchApi<BrandingData>('/admin/branding');
+    return fetchApi<BrandingData>('/system/branding');
 }
 
 /**
@@ -22,7 +22,7 @@ async function fetchBranding(): Promise<BrandingData> {
 function useBrandingMutations() {
     const queryClient = useQueryClient();
     const onBrandingSuccess = (data: BrandingData, msg: string) => {
-        queryClient.setQueryData(['admin', 'branding'], data);
+        queryClient.setQueryData(['system', 'branding'], data);
         void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
         toast.success(msg);
     };
@@ -55,7 +55,7 @@ function useBrandingMutations() {
 
 export function useBranding() {
     const brandingQuery = useQuery({
-        queryKey: ['admin', 'branding'],
+        queryKey: ['system', 'branding'],
         queryFn: fetchBranding,
         staleTime: 60_000,
     });
