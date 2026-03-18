@@ -4,6 +4,7 @@ import { z } from 'zod';
 import * as envCheck from './tools/env-check.js';
 import * as envCopy from './tools/env-copy.js';
 import * as serviceStatus from './tools/service-status.js';
+import * as storyStatus from './tools/story-status.js';
 
 const server = new McpServer({
   name: 'mcp-env',
@@ -42,6 +43,18 @@ server.tool(
   {},
   async () => {
     const result = await serviceStatus.execute();
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
+server.tool(
+  storyStatus.TOOL_NAME,
+  storyStatus.TOOL_DESCRIPTION,
+  { stories: z.array(z.string()).min(1) },
+  async (params) => {
+    const result = await storyStatus.execute(params);
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
