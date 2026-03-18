@@ -88,6 +88,9 @@ jobs:
       - name: Bootstrap admin account
         run: npx ts-node api/scripts/bootstrap-admin.ts
 
+      - name: Seed game registry
+        run: npm run db:seed:games -w api
+
       - name: Start API server
         run: node api/dist/src/main.js &
         env:
@@ -95,14 +98,14 @@ jobs:
 
       - name: Wait for API to be ready
         run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:3000/system/status > /dev/null 2>&1; then
-              echo "API is ready"
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+              echo "API is ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "API failed to start within 30s"
+          echo "API failed to start within 60s"
           exit 1
 
       - name: Configure and connect Discord bot
