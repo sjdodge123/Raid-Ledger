@@ -100,7 +100,16 @@ export async function waitForEmbedUpdate(
       updated: Message | PartialMessage,
     ) {
       if (settled || updated.channelId !== channelId) return;
-      if (!updated.author || updated.partial) return;
+      if (updated.partial) {
+        // Fetch full message for partials (edits often arrive partial)
+        void updated.fetch().then((full) => {
+          if (settled) return;
+          const simple = toSimpleMessage(full);
+          try { if (predicate(simple)) settle(simple); } catch { /* skip */ }
+        }).catch(() => { /* fetch failed — polling fallback will catch it */ });
+        return;
+      }
+      if (!updated.author) return;
       const simple = toSimpleMessage(updated as Message);
       try {
         if (predicate(simple)) settle(simple);
@@ -116,7 +125,8 @@ export async function waitForEmbedUpdate(
 
 /**
  * Internal polling fallback for waitForEmbedUpdate.
- * Polls at 2s intervals until deadline or until settle is called.
+ * Polls at fixed 3s intervals (no backoff) — edits can arrive
+ * at any time, so consistent polling density is important.
  */
 async function pollFallback(
   channelId: string,
@@ -124,7 +134,7 @@ async function pollFallback(
   deadline: number,
   settle: (msg: SimpleMessage) => void,
 ): Promise<void> {
-  let interval = DEFAULT_INTERVAL;
+  const interval = 3000;
   while (Date.now() < deadline) {
     const msgs = await readLastMessages(channelId, 50);
     const match = msgs.find(predicate);
@@ -135,7 +145,6 @@ async function pollFallback(
     const remaining = deadline - Date.now();
     if (remaining <= 0) return;
     await delay(Math.min(interval, remaining));
-    interval = Math.min(interval * 2, MAX_INTERVAL);
   }
 }
 

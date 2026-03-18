@@ -139,7 +139,8 @@ const embedSyncBatchFlush: SmokeTest = {
     const chId = ctx.defaultChannelId;
     const ev = await createEvent(ctx.api, 'flow-sync', mmoOverrides(ctx));
     try {
-      await waitForMessage(
+      // Use polling for initial embed (avoids waitForMessage race condition)
+      await pollForEmbed(
         chId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
