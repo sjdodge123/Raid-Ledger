@@ -20,7 +20,8 @@ import {
   DEBOUNCE_MS,
   buildDiscordMember,
   clearTimerMap,
-  resolveBinding,
+  resolveAllBindings,
+  trackChannelMember,
   type DiscordMemberInfo,
   type ResolvedBinding,
 } from './voice-state.helpers';
@@ -55,7 +56,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
   private cacheSweepTimer: ReturnType<typeof setInterval> | null = null;
   private channelBindingCache = new Map<
     string,
-    { cachedAt: number; value: ResolvedBinding | null }
+    { cachedAt: number; value: ResolvedBinding[] }
   >();
   private channelMembers = new Map<string, Set<string>>();
   private userChannelMap = new Map<string, string>();
@@ -247,21 +248,26 @@ export class VoiceStateListener implements OnApplicationShutdown {
     } catch (err) {
       this.logger.error(`Join tracking failed for ${dm.discordUserId}: ${err}`);
     }
-    const binding = await this.resolveBinding(chId);
-    if (!binding) return;
-    this.trackChannelMember(chId, dm.discordUserId);
-    if (binding.bindingPurpose === 'general-lobby') {
-      await this.dispatchLobbyJoin(chId, binding, dm, gm);
+    const bindings = await this.resolveAllBindings(chId);
+    if (bindings.length === 0) return;
+    trackChannelMember(this.channelMembers, chId, dm.discordUserId);
+    for (const b of bindings) {
+      await this.dispatchBindingJoin(chId, b, dm, gm);
+    }
+  }
+
+  private async dispatchBindingJoin(
+    chId: string,
+    b: ResolvedBinding,
+    dm: DiscordMemberInfo,
+    gm?: GuildMember,
+  ): Promise<void> {
+    if (b.bindingPurpose === 'general-lobby') {
+      await this.dispatchLobbyJoin(chId, b, dm, gm);
     } else {
-      await handleGameBindingJoin(this.deps, chId, binding, dm, {
+      await handleGameBindingJoin(this.deps, chId, b, dm, {
         scheduleSpawn: () =>
-          scheduleDelayedSpawn(
-            this.deps,
-            chId,
-            binding,
-            this.timers,
-            SPAWN_DELAY_MS,
-          ),
+          scheduleDelayedSpawn(this.deps, chId, b, this.timers, SPAWN_DELAY_MS),
         cancelSpawn: () => cancelPendingSpawn(this.timers, chId),
       });
     }
@@ -298,22 +304,17 @@ export class VoiceStateListener implements OnApplicationShutdown {
     await handleGeneralLobbyJoin(this.deps, chId, binding, dm, gm, fns);
   }
 
-  private trackChannelMember(channelId: string, userId: string): void {
-    let members = this.channelMembers.get(channelId);
-    if (!members) {
-      members = new Set();
-      this.channelMembers.set(channelId, members);
-    }
-    members.add(userId);
+  private async resolveBinding(ch: string): Promise<ResolvedBinding | null> {
+    return (await this.resolveAllBindings(ch))[0] ?? null;
   }
-
-  private async resolveBinding(
-    channelId: string,
-  ): Promise<ResolvedBinding | null> {
-    const d = {
-      clientService: this.clientService,
-      channelBindingsService: this.channelBindingsService,
-    };
-    return resolveBinding(d, channelId, this.channelBindingCache);
+  private resolveAllBindings(ch: string): Promise<ResolvedBinding[]> {
+    return resolveAllBindings(
+      {
+        clientService: this.clientService,
+        channelBindingsService: this.channelBindingsService,
+      },
+      ch,
+      this.channelBindingCache,
+    );
   }
 }

@@ -6,9 +6,13 @@ import { joinVoice, leaveVoice, getVoiceMembers } from '../../helpers/voice.js';
 import { waitForMessage } from '../../helpers/messages.js';
 import {
   createBinding,
+  createEvent,
   deleteBinding,
+  deleteEvent,
+  signup,
   pickChannel,
   sleep,
+  futureTime,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -131,6 +135,71 @@ const voiceMemberList: SmokeTest = {
   },
 };
 
+/**
+ * ROK-842: Voice attendance must match events via ALL bindings on a channel,
+ * not just the first. Regression test for the find() → filter() fix.
+ */
+const multiGameVoiceDetected: SmokeTest = {
+  name: 'Multi-game channel detects second binding game event',
+  category: 'voice',
+  async run(ctx) {
+    const vCh = pickChannel(ctx.voiceChannels, 0);
+    const gameA = 244; // Lost Ark
+    const gameB = 264; // Monster Hunter Rise
+    let bindA: string | undefined;
+    let bindB: string | undefined;
+    let eventId: number | undefined;
+    try {
+      // Create TWO game-voice-monitor bindings on the SAME voice channel
+      bindA = await createBinding(ctx.api, {
+        channelId: vCh.id,
+        channelType: 'voice',
+        purpose: 'game-voice-monitor',
+        gameId: gameA,
+        config: { minPlayers: 99 },
+      });
+      bindB = await createBinding(ctx.api, {
+        channelId: vCh.id,
+        channelType: 'voice',
+        purpose: 'game-voice-monitor',
+        gameId: gameB,
+        config: { minPlayers: 99 },
+      });
+      console.log(`  [voice] Two bindings on ${vCh.name}: gameA=${gameA}, gameB=${gameB}`);
+
+      // Create a LIVE event for gameB (the second binding's game)
+      const ev = await createEvent(ctx.api, 'multi-bind', {
+        gameId: gameB,
+        startTime: futureTime(-5), // started 5 min ago
+        endTime: futureTime(55),
+      });
+      eventId = ev.id;
+      await signup(ctx.api, ev.id);
+      await sleep(2000); // let binding cache expire
+
+      // Join voice and wait for pipeline to detect
+      await joinVoice(vCh.id);
+      await sleep(5000);
+
+      // Check voice roster — session should exist for gameB event
+      const roster = await ctx.api.get<{ participants: unknown[] }>(
+        `/events/${ev.id}/ad-hoc-roster`,
+      );
+      if (!roster.participants || roster.participants.length === 0) {
+        throw new Error(
+          `No voice participants for gameB event ${ev.id} — multi-binding detection failed`,
+        );
+      }
+    } finally {
+      leaveVoice();
+      await sleep(1000);
+      if (bindA) await deleteBinding(ctx.api, bindA);
+      if (bindB) await deleteBinding(ctx.api, bindB);
+      if (eventId) await deleteEvent(ctx.api, eventId);
+    }
+  },
+};
+
 // Ad-hoc spawn excluded — requires 15-minute SPAWN_DELAY_MS timer to fire.
 // Run with SMOKE_INCLUDE_SLOW=1 to include.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
@@ -140,4 +209,5 @@ export const voiceActivityTests: SmokeTest[] = [
   voiceLeaveRecorded,
   ...(includeSlow ? [adHocSpawn] : []),
   voiceMemberList,
+  multiGameVoiceDetected,
 ];

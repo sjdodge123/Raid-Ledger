@@ -46,6 +46,7 @@ export async function createBinding(
     channelId: string;
     channelType: 'text' | 'voice';
     purpose: string;
+    gameId?: number;
     config?: Record<string, unknown>;
   },
 ) {
@@ -55,6 +56,7 @@ export async function createBinding(
       channelId: opts.channelId,
       channelType: opts.channelType,
       bindingPurpose: opts.purpose,
+      gameId: opts.gameId,
       config: opts.config,
     },
   );

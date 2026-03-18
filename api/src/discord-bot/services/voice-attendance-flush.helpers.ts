@@ -11,7 +11,11 @@ import {
 } from './voice-attendance.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
-type Logger = { error: (msg: string) => void; debug: (msg: string) => void };
+type Logger = {
+  error: (msg: string, ...args: unknown[]) => void;
+  debug: (msg: string, ...args: unknown[]) => void;
+  warn: (msg: string, ...args: unknown[]) => void;
+};
 
 /** Flush a single in-memory session to the database. */
 export async function flushSingleSession(
@@ -83,6 +87,29 @@ export async function queryActiveEvents(
   return activeEvents.map((e) => ({ eventId: e.id, gameId: e.gameId }));
 }
 
+/** Query active events matching ANY of the given gameIds. */
+export async function queryActiveEventsMultiGame(
+  db: Db,
+  gameIds: number[],
+  now: Date,
+): Promise<Array<{ eventId: number; gameId: number | null }>> {
+  const conditions = [
+    eq(schema.events.isAdHoc, false),
+    sql`${schema.events.cancelledAt} IS NULL`,
+    sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
+    sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
+    sql`${schema.events.gameId} IN (${sql.join(
+      gameIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})`,
+  ];
+  const rows = await db
+    .select({ id: schema.events.id, gameId: schema.events.gameId })
+    .from(schema.events)
+    .where(and(...conditions));
+  return rows.map((e) => ({ eventId: e.id, gameId: e.gameId }));
+}
+
 /** Fetch ended events within lookback window. */
 export async function fetchEndedEvents(
   db: Db,
@@ -125,4 +152,111 @@ export async function fetchVoiceSessions(
     .select()
     .from(schema.eventVoiceSessions)
     .where(eq(schema.eventVoiceSessions.eventId, eventId));
+}
+
+/** Minimal binding shape for findActiveEventsForChannel. */
+interface BindingSlim {
+  channelId: string;
+  bindingPurpose: string;
+  gameId: number | null;
+}
+
+/** Resolve active events for a voice channel with diagnostic logging. */
+export async function findActiveEventsForChannel(
+  db: Db,
+  channelId: string,
+  bindings: BindingSlim[],
+  voiceBindingPurposes: readonly string[],
+  defaultVoiceChannelId: string | null,
+  logger: Logger,
+): Promise<Array<{ eventId: number; gameId: number | null }>> {
+  const now = new Date();
+  const matched = bindings.filter(
+    (b) =>
+      b.channelId === channelId &&
+      voiceBindingPurposes.includes(b.bindingPurpose),
+  );
+  if (matched.length > 0) {
+    return resolveMultiBindingEvents(db, matched, channelId, now, logger);
+  }
+  if (defaultVoiceChannelId && channelId === defaultVoiceChannelId) {
+    return resolveDefaultVoiceEvents(db, channelId, now, logger);
+  }
+  logUnrecognizedChannel(channelId, bindings, voiceBindingPurposes, logger);
+  return [];
+}
+
+/** Resolve events for ALL matched voice bindings (multi-game channels). */
+async function resolveMultiBindingEvents(
+  db: Db,
+  matched: BindingSlim[],
+  channelId: string,
+  now: Date,
+  logger: Logger,
+): Promise<Array<{ eventId: number; gameId: number | null }>> {
+  const gameIds = extractGameIds(matched);
+  logger.debug(
+    '[voice-pipe] findActive: %d binding(s) channelId=%s gameIds=%s',
+    matched.length,
+    channelId,
+    gameIds ? gameIds.join(',') : 'all',
+  );
+  const events = gameIds
+    ? await queryActiveEventsMultiGame(db, gameIds, now)
+    : await queryActiveEvents(db, null, now);
+  logger.debug(
+    '[voice-pipe] findActive: %d active event(s) for channelId=%s',
+    events.length,
+    channelId,
+  );
+  return events;
+}
+
+/** Extract unique gameIds from bindings; null means "all games". */
+function extractGameIds(bindings: BindingSlim[]): number[] | null {
+  const ids = new Set<number>();
+  for (const b of bindings) {
+    if (b.bindingPurpose !== 'game-voice-monitor' || b.gameId === null)
+      return null;
+    ids.add(b.gameId);
+  }
+  return [...ids];
+}
+
+/** Resolve events for the default voice channel. */
+async function resolveDefaultVoiceEvents(
+  db: Db,
+  channelId: string,
+  now: Date,
+  logger: Logger,
+): Promise<Array<{ eventId: number; gameId: number | null }>> {
+  logger.debug(
+    '[voice-pipe] findActive: default voice match channelId=%s',
+    channelId,
+  );
+  const events = await queryActiveEvents(db, null, now);
+  logger.debug(
+    '[voice-pipe] findActive: %d active event(s) for channelId=%s',
+    events.length,
+    channelId,
+  );
+  return events;
+}
+
+/** Log a warning when a channel is not recognized. */
+function logUnrecognizedChannel(
+  channelId: string,
+  bindings: BindingSlim[],
+  voiceBindingPurposes: readonly string[],
+  logger: Logger,
+): void {
+  const voiceBindingCount = bindings.filter((b) =>
+    voiceBindingPurposes.includes(b.bindingPurpose),
+  ).length;
+  logger.warn(
+    '[voice-pipe] findActive: unrecognized channel=%s, bindings=%d, voiceBindings=%d',
+    channelId,
+    bindings.length,
+    voiceBindingCount,
+  );
 }

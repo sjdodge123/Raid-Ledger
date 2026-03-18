@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { and, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -8,6 +8,7 @@ import { NotificationService } from './notification.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { SettingsService } from '../settings/settings.service';
 import { RoleGapAlertService } from './role-gap-alert.service';
+import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import {
   fetchSignupsByEvent,
   fetchUserMap,
@@ -64,6 +65,9 @@ export class EventReminderService {
     private readonly cronJobService: CronJobService,
     private readonly settingsService: SettingsService,
     private readonly roleGapAlertService: RoleGapAlertService,
+    @Optional()
+    @Inject(VoiceAttendanceService)
+    private readonly voiceAttendance: VoiceAttendanceService | null,
   ) {}
 
   @Cron('20 */1 * * * *', { name: 'EventReminderService_handleReminders' })
@@ -206,7 +210,9 @@ export class EventReminderService {
     const userIds = fetchCtx.signupsByEvent.get(event.id) ?? [];
     const eventCtx = await this.buildEventReminderContext(event, now);
     for (const userId of userIds) {
-      if (!fetchCtx.userMap.get(userId)) continue;
+      const user = fetchCtx.userMap.get(userId);
+      if (!user) continue;
+      if (this.isUserInVoice(event.id, user.discordId)) continue;
       await this.sendSingleUserReminder(
         event,
         userId,
@@ -217,6 +223,17 @@ export class EventReminderService {
         defaultTimezone,
       );
     }
+  }
+
+  /** Check if a user is currently in voice for the given event. */
+  private isUserInVoice(eventId: number, discordId: string | null): boolean {
+    if (!discordId || !this.voiceAttendance) return false;
+    const active = this.voiceAttendance.isUserActive(eventId, discordId);
+    if (active)
+      this.logger.debug(
+        `[voice-pipe] reminder suppressed: eventId=${eventId} discordId=${discordId}`,
+      );
+    return active;
   }
 
   /** Send a reminder to a single user. */
