@@ -10,6 +10,7 @@ import {
   deleteBinding,
   deleteEvent,
   signup,
+  signupAs,
   pickChannel,
   sleep,
   futureTime,
@@ -200,6 +201,73 @@ const multiGameVoiceDetected: SmokeTest = {
   },
 };
 
+/**
+ * ROK-852: Event metrics roster breakdown must show voice data from the
+ * companion bot's voice session.  The bot's Discord ID is linked to
+ * dmRecipientUserId during setup; signing that user up for the event lets
+ * us verify the full pipeline: voice join → DB flush → metrics endpoint →
+ * rosterBreakdown with populated voiceDurationSec.
+ *
+ * SLOW: waits ~35 s for the 30-second in-memory→DB flush interval.
+ */
+const metricsVoicePopulated: SmokeTest = {
+  name: 'Event metrics roster shows voice data (ROK-852)',
+  category: 'voice',
+  async run(ctx) {
+    await withVoiceBinding(ctx, 2, 'game-voice-monitor', async (vChId) => {
+      const ev = await createEvent(ctx.api, 'metrics-voice', {
+        gameId: 244, // Lost Ark
+        startTime: futureTime(-5), // live event (started 5 min ago)
+        endTime: futureTime(55),
+      });
+      try {
+        // Sign up the user whose Discord ID = test bot
+        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
+        await sleep(2000);
+
+        await joinVoice(vChId);
+        // Wait for the 30-second DB flush interval + buffer
+        console.log('  [voice] Waiting 35 s for voice session DB flush...');
+        await sleep(35_000);
+
+        type MetricsResponse = {
+          voiceSummary: { totalTracked: number } | null;
+          rosterBreakdown: Array<{
+            userId: number;
+            voiceDurationSec: number | null;
+            voiceClassification: string | null;
+          }>;
+        };
+        const metrics = await ctx.api.get<MetricsResponse>(
+          `/events/${ev.id}/metrics`,
+        );
+
+        if (!metrics.voiceSummary) {
+          throw new Error('voiceSummary is null — voice session not flushed');
+        }
+        if (metrics.voiceSummary.totalTracked < 1) {
+          throw new Error(
+            `totalTracked=${metrics.voiceSummary.totalTracked}, expected >= 1`,
+          );
+        }
+
+        const withVoice = metrics.rosterBreakdown.filter(
+          (r) => r.voiceDurationSec !== null && r.voiceDurationSec > 0,
+        );
+        if (withVoice.length === 0) {
+          throw new Error(
+            'No roster entries with voice data — userId fallback join failed',
+          );
+        }
+      } finally {
+        leaveVoice();
+        await sleep(1000);
+        await deleteEvent(ctx.api, ev.id);
+      }
+    });
+  },
+};
+
 // Ad-hoc spawn excluded — requires 15-minute SPAWN_DELAY_MS timer to fire.
 // Run with SMOKE_INCLUDE_SLOW=1 to include.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
@@ -207,7 +275,7 @@ const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 export const voiceActivityTests: SmokeTest[] = [
   voiceJoinDetected,
   voiceLeaveRecorded,
-  ...(includeSlow ? [adHocSpawn] : []),
+  ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
   voiceMemberList,
   multiGameVoiceDetected,
 ];
