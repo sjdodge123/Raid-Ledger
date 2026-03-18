@@ -222,4 +222,21 @@ pipeline:
       next_action: "Queued. Waiting for worktree creation in Step 2."
 ```
 
+---
+
+## 1g. Update Linear to "In Progress"
+
+**MANDATORY — do this NOW before proceeding to Step 2.**
+
+Move every story in the batch to "In Progress":
+
+```
+mcp__linear__save_issue({
+  issueId: "<linear_id>",
+  statusName: "In Progress"
+})
+```
+
+This ensures Linear reflects that work has started as soon as the batch is confirmed, not after validation in Step 3.
+
 Proceed to **Step 2**.
