@@ -10,7 +10,7 @@ function mockSettingsCore(
   values: Partial<Record<string, string>> = {},
 ): SettingsCore {
   return {
-    get: jest.fn(async (key: string) => values[key] ?? null),
+    get: jest.fn((key: string) => Promise.resolve(values[key] ?? null)),
     set: jest.fn(),
     exists: jest.fn(),
     delete: jest.fn(),
