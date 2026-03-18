@@ -174,6 +174,20 @@ export async function addGameInterest(
   return api.post('/admin/test/add-game-interest', { userId, gameId });
 }
 
+/** Trigger a departure grace expiry (0ms delay) — DEMO_MODE only. */
+export async function triggerDeparture(
+  api: ApiClient,
+  eventId: number,
+  signupId: number,
+  discordUserId: string,
+) {
+  return api.post('/admin/test/trigger-departure', {
+    eventId,
+    signupId,
+    discordUserId,
+  });
+}
+
 export async function deleteEvent(api: ApiClient, eventId: number) {
   return api.delete(`/events/${eventId}`).catch(() => {});
 }

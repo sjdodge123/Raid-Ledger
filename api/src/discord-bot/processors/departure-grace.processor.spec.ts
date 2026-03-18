@@ -47,6 +47,16 @@ const liveEvent = createMockEvent({
   title: 'Test Raid',
 });
 
+/** Event with a capacity limit — departure notifications should fire when full. */
+const fullEvent = createMockEvent({
+  id: 1,
+  isAdHoc: false,
+  cancelledAt: null,
+  creatorId: 99,
+  title: 'Test Raid',
+  maxAttendees: 5,
+});
+
 const activeSignup = createMockSignup({
   id: 10,
   eventId: 1,
@@ -291,9 +301,10 @@ describe('DepartureGraceProcessor — successful departure: status update', () =
 describe('DepartureGraceProcessor — successful departure: notifications', () => {
   beforeEach(() => {
     mockDb.limit
-      .mockResolvedValueOnce([liveEvent])
+      .mockResolvedValueOnce([fullEvent])
       .mockResolvedValueOnce([activeSignup])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 4 }]);
   });
 
   it('sends a slot_vacated notification to the event creator', async () => {
@@ -301,7 +312,7 @@ describe('DepartureGraceProcessor — successful departure: notifications', () =
 
     expect(mockNotificationService.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        userId: liveEvent.creatorId,
+        userId: fullEvent.creatorId,
         type: 'slot_vacated',
         title: 'Member Departed',
       }),
@@ -329,17 +340,87 @@ describe('DepartureGraceProcessor — successful departure: notifications', () =
   });
 
   it('does not send notification when event has no creatorId', async () => {
-    const eventWithNoCreator = createMockEvent({ id: 1, creatorId: null });
+    const eventWithNoCreator = createMockEvent({
+      id: 1,
+      creatorId: null,
+      maxAttendees: 5,
+    });
     mockDb.limit
       .mockReset()
       .mockResolvedValueOnce([eventWithNoCreator])
+      .mockResolvedValueOnce([activeSignup])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 4 }]);
+
+    await processor.process(makeJob(jobData));
+
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+    expect(mockEventEmitter.emit).toHaveBeenCalled();
+  });
+});
+
+// ─── Capacity check: suppress notifications when not full (ROK-851) ──────
+
+describe('DepartureGraceProcessor — capacity check: not full', () => {
+  it('does NOT send notifications when event was not full (below capacity)', async () => {
+    const eventWithCapacity = createMockEvent({
+      id: 1,
+      creatorId: 99,
+      maxAttendees: 10,
+    });
+    mockDb.limit
+      .mockResolvedValueOnce([eventWithCapacity])
+      .mockResolvedValueOnce([activeSignup])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 5 }]);
+
+    await processor.process(makeJob(jobData));
+
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+    expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    expect(mockEventEmitter.emit).toHaveBeenCalled();
+  });
+
+  it('does NOT send notifications for unlimited events (no capacity)', async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([liveEvent])
       .mockResolvedValueOnce([activeSignup])
       .mockResolvedValueOnce([]);
 
     await processor.process(makeJob(jobData));
 
     expect(mockNotificationService.create).not.toHaveBeenCalled();
+    expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
     expect(mockEventEmitter.emit).toHaveBeenCalled();
+  });
+
+  it('sends notifications when event was at capacity (full)', async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([fullEvent])
+      .mockResolvedValueOnce([activeSignup])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 4 }]);
+
+    await processor.process(makeJob(jobData));
+
+    expect(mockNotificationService.create).toHaveBeenCalled();
+  });
+
+  it('sends notifications when event had slotConfig at capacity', async () => {
+    const slotEvent = createMockEvent({
+      id: 1,
+      creatorId: 99,
+      slotConfig: { type: 'generic', player: 6 },
+    });
+    mockDb.limit
+      .mockResolvedValueOnce([slotEvent])
+      .mockResolvedValueOnce([activeSignup])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 5 }]);
+
+    await processor.process(makeJob(jobData));
+
+    expect(mockNotificationService.create).toHaveBeenCalled();
   });
 });
 
@@ -350,9 +431,10 @@ describe('DepartureGraceProcessor — successful departure: notifications', () =
  */
 function setupRosterMocks(assignment: Record<string, unknown>) {
   mockDb.limit
-    .mockResolvedValueOnce([liveEvent])
+    .mockResolvedValueOnce([fullEvent])
     .mockResolvedValueOnce([activeSignup])
-    .mockResolvedValueOnce([assignment]);
+    .mockResolvedValueOnce([assignment])
+    .mockResolvedValueOnce([{ count: 4 }]);
 
   let whereCallCount = 0;
   const originalWhere = mockDb.where;
@@ -397,9 +479,10 @@ describe('DepartureGraceProcessor — roster slot freeing', () => {
       eventId: 1,
     };
     mockDb.limit
-      .mockResolvedValueOnce([liveEvent])
+      .mockResolvedValueOnce([fullEvent])
       .mockResolvedValueOnce([activeSignup])
-      .mockResolvedValueOnce([assignment]);
+      .mockResolvedValueOnce([assignment])
+      .mockResolvedValueOnce([{ count: 4 }]);
 
     let whereCallCount = 0;
     const originalWhere = mockDb.where;
@@ -423,9 +506,10 @@ describe('DepartureGraceProcessor — roster slot freeing', () => {
 
 function setupWithRoster(assignment: Record<string, unknown>) {
   mockDb.limit
-    .mockResolvedValueOnce([liveEvent])
+    .mockResolvedValueOnce([fullEvent])
     .mockResolvedValueOnce([activeSignup])
-    .mockResolvedValueOnce([assignment]);
+    .mockResolvedValueOnce([assignment])
+    .mockResolvedValueOnce([{ count: 4 }]);
 
   let whereCallCount = 0;
   const originalWhere = mockDb.where;
@@ -570,9 +654,10 @@ describe('DepartureGraceProcessor — display name: from signup', () => {
       userId: null,
     });
     mockDb.limit
-      .mockResolvedValueOnce([liveEvent])
+      .mockResolvedValueOnce([fullEvent])
       .mockResolvedValueOnce([signupWithUsername])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 4 }]);
 
     await processor.process(makeJob(jobData));
 
@@ -594,9 +679,10 @@ describe('DepartureGraceProcessor — display name: fallbacks', () => {
       userId: 5,
     });
     mockDb.limit
-      .mockResolvedValueOnce([liveEvent])
+      .mockResolvedValueOnce([fullEvent])
       .mockResolvedValueOnce([signupWithoutDiscordName])
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 4 }])
       .mockResolvedValueOnce([{ username: 'RLUser' }]);
 
     await processor.process(makeJob(jobData));
@@ -618,9 +704,10 @@ describe('DepartureGraceProcessor — display name: fallbacks', () => {
       discordUserId: 'raw-discord-id-xyz',
     });
     mockDb.limit
-      .mockResolvedValueOnce([liveEvent])
+      .mockResolvedValueOnce([fullEvent])
       .mockResolvedValueOnce([anonymousSignup])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 4 }]);
 
     await processor.process(makeJob(jobData));
 
@@ -641,9 +728,10 @@ describe('DepartureGraceProcessor — display name: fallbacks', () => {
       discordUserId: null,
     });
     mockDb.limit
-      .mockResolvedValueOnce([liveEvent])
+      .mockResolvedValueOnce([fullEvent])
       .mockResolvedValueOnce([blankSignup])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 4 }]);
 
     await processor.process(makeJob(jobData));
 
@@ -660,9 +748,10 @@ describe('DepartureGraceProcessor — display name: fallbacks', () => {
 describe('DepartureGraceProcessor — notification payload URLs', () => {
   beforeEach(() => {
     mockDb.limit
-      .mockResolvedValueOnce([liveEvent])
+      .mockResolvedValueOnce([fullEvent])
       .mockResolvedValueOnce([activeSignup])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ count: 4 }]);
   });
 
   it('includes discordUrl in payload when available', async () => {
