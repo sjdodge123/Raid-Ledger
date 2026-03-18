@@ -368,8 +368,11 @@ describe('Ad-Hoc Events — multiple participants and cascade', () => {
 describe('Ad-Hoc Events — GET roster: empty', () => {
   it('should return empty roster for event with no participants', async () => {
     const event = await createAdHocEvent('Empty Quick Play');
+    const token = await ensureToken();
 
-    const res = await testApp.request.get(`/events/${event.id}/ad-hoc-roster`);
+    const res = await testApp.request
+      .get(`/events/${event.id}/ad-hoc-roster`)
+      .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.eventId).toBe(event.id);
@@ -383,6 +386,7 @@ describe('Ad-Hoc Events — GET roster: with participants', () => {
     const db = testApp.db;
     const now = new Date();
     const event = await createAdHocEvent('Roster Test Session');
+    const token = await ensureToken();
 
     await db.insert(schema.adHocParticipants).values([
       {
@@ -407,7 +411,9 @@ describe('Ad-Hoc Events — GET roster: with participants', () => {
       },
     ]);
 
-    const res = await testApp.request.get(`/events/${event.id}/ad-hoc-roster`);
+    const res = await testApp.request
+      .get(`/events/${event.id}/ad-hoc-roster`)
+      .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.eventId).toBe(event.id);
