@@ -5,6 +5,7 @@
 import {
   buildEventPushContent,
   buildCancelledPushContent,
+  buildCompletedPushContent,
   buildAdHocSpawnPushContent,
   buildAdHocCompletedPushContent,
 } from './push-content';
@@ -90,6 +91,46 @@ describe('buildCancelledPushContent', () => {
     const result = buildCancelledPushContent('Raid Night');
     expect(result).not.toMatch(/\*\*/);
     expect(result).not.toMatch(/~~/);
+  });
+});
+
+describe('buildCompletedPushContent', () => {
+  it('should include the title with completed prefix', () => {
+    const result = buildCompletedPushContent(baseEvent);
+    expect(result).toContain('Completed');
+    expect(result).toContain('Raid Night');
+  });
+
+  it('should include game name when present', () => {
+    const result = buildCompletedPushContent(baseEvent);
+    expect(result).toContain('Helldivers 2');
+  });
+
+  it('should omit game segment when no game is present', () => {
+    const noGame = { ...baseEvent, game: null };
+    const result = buildCompletedPushContent(noGame);
+    expect(result).not.toContain('Helldivers 2');
+    expect(result).toContain('Raid Night');
+  });
+
+  it('should not contain raw markdown', () => {
+    const result = buildCompletedPushContent(baseEvent);
+    expect(result).not.toMatch(/\*\*/);
+    expect(result).not.toMatch(/~~/);
+  });
+
+  it('should not contain raw Discord tokens', () => {
+    const result = buildCompletedPushContent(baseEvent);
+    expect(result).not.toMatch(/<#\d+>/);
+    expect(result).not.toMatch(/<@\d+>/);
+    expect(result).not.toMatch(/<t:\d+:\w>/);
+  });
+
+  it('should truncate long titles to keep within ~80 chars total', () => {
+    const longTitle = { ...baseEvent, title: 'A'.repeat(100) };
+    const result = buildCompletedPushContent(longTitle);
+    expect(result.length).toBeLessThanOrEqual(80);
+    expect(result).toContain('...');
   });
 });
 
