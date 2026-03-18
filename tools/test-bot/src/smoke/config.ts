@@ -16,9 +16,6 @@ export const SMOKE = {
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@local',
   adminPassword: process.env.ADMIN_PASSWORD ?? 'password',
   guildId: required('TEST_GUILD_ID'),
-  // 60s: polling with backoff exhausts unique intervals in ~14s, so 60s
-  // gives 5+ full cycles at the 8s cap — enough for slow embed edits
   timeoutMs: parseInt(process.env.SMOKE_TIMEOUT_MS ?? '60000', 10),
-  // 5 concurrent: keeps embed sync queue pressure manageable on Discord
   concurrency: parseInt(process.env.SMOKE_CONCURRENCY ?? '5', 10),
 };
