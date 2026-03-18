@@ -125,11 +125,14 @@ describe('IgdbController.batchPricing — valid IDs (ROK-800)', () => {
   });
 
   it('returns null for games without ITAD IDs', async () => {
-    // DB returns no itad IDs
+    // DB returns no itad IDs (first query), no cached pricing (second query)
     const db: Record<string, jest.Mock> = {
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockResolvedValue([{ id: 7, itadGameId: null }]),
+      where: jest
+        .fn()
+        .mockResolvedValueOnce([{ id: 7, itadGameId: null }])
+        .mockResolvedValueOnce([]),
     };
     const mockItad = { getOverviewBatch: jest.fn().mockResolvedValue([]) };
     const ctrl = await createController(buildMockService(db), mockItad);
@@ -140,10 +143,14 @@ describe('IgdbController.batchPricing — valid IDs (ROK-800)', () => {
   });
 
   it('returns pricing for games with ITAD IDs and overview data', async () => {
+    // First query: ID lookup, second query: no cached pricing
     const db: Record<string, jest.Mock> = {
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockResolvedValue([{ id: 42, itadGameId: 'itad-42' }]),
+      where: jest
+        .fn()
+        .mockResolvedValueOnce([{ id: 42, itadGameId: 'itad-42' }])
+        .mockResolvedValueOnce([]),
     };
     const overviewEntry = {
       id: 'itad-42',
