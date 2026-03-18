@@ -3,8 +3,7 @@
  * Each test picks its own voice channel and creates/cleans up bindings.
  */
 import { joinVoice, leaveVoice, getVoiceMembers } from '../../helpers/voice.js';
-import { waitForMessage } from '../../helpers/messages.js';
-import { pollForCondition } from '../../helpers/polling.js';
+import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
 import {
   createBinding,
   createEvent,
@@ -114,21 +113,20 @@ const adHocSpawn: SmokeTest = {
   category: 'voice',
   async run(ctx) {
     await withVoiceBinding(ctx, 2, 'general-lobby', async (vChId, tChId) => {
-      const embedPromise = waitForMessage(
-        tChId,
-        (msg) =>
-          msg.embeds.some(
-            (e) =>
-              e.title?.toLowerCase().includes('live') ||
-              e.description?.toLowerCase().includes('ad-hoc') ||
-              e.description?.toLowerCase().includes('ad hoc') ||
-              false,
-          ),
-        ctx.config.timeoutMs,
-      );
       await joinVoice(vChId);
       try {
-        const msg = await embedPromise;
+        const msg = await pollForEmbed(
+          tChId,
+          (m) =>
+            m.embeds.some(
+              (e) =>
+                e.title?.toLowerCase().includes('live') ||
+                e.description?.toLowerCase().includes('ad-hoc') ||
+                e.description?.toLowerCase().includes('ad hoc') ||
+                false,
+            ),
+          ctx.config.timeoutMs,
+        );
         if (msg.embeds.length === 0) throw new Error('No ad-hoc embed found');
       } finally {
         leaveVoice();

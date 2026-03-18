@@ -19,6 +19,8 @@ export interface PollOptions {
 
 const DEFAULT_INTERVAL = 2000;
 const MAX_INTERVAL = 8000;
+const POLL_FALLBACK_INTERVAL = 3000;
+const DEFAULT_FETCH_COUNT = 100;
 
 /**
  * Poll a channel for a message matching a predicate.
@@ -33,7 +35,7 @@ export async function pollForEmbed(
 ): Promise<SimpleMessage> {
   const interval = opts?.intervalMs ?? DEFAULT_INTERVAL;
   const useBackoff = opts?.backoff ?? true;
-  const fetchCount = opts?.fetchCount ?? 100;
+  const fetchCount = opts?.fetchCount ?? DEFAULT_FETCH_COUNT;
   const deadline = Date.now() + timeoutMs;
   let currentInterval = interval;
 
@@ -45,8 +47,7 @@ export async function pollForEmbed(
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
 
-    const waitTime = Math.min(currentInterval, remaining);
-    await delay(waitTime);
+    await delay(Math.min(currentInterval, remaining));
 
     if (useBackoff) {
       currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL);
@@ -94,57 +95,75 @@ export async function waitForEmbedUpdate(
       resolve(msg);
     };
 
-    // Strategy 1: Listen for real-time message edits
-    function onUpdate(
-      _old: Message | PartialMessage,
-      updated: Message | PartialMessage,
-    ) {
-      if (settled || updated.channelId !== channelId) return;
-      if (updated.partial) {
-        // Fetch full message for partials (edits often arrive partial)
-        void updated.fetch().then((full) => {
-          if (settled) return;
-          const simple = toSimpleMessage(full);
-          try { if (predicate(simple)) settle(simple); } catch { /* skip */ }
-        }).catch(() => { /* fetch failed — polling fallback will catch it */ });
-        return;
-      }
-      if (!updated.author) return;
-      const simple = toSimpleMessage(updated as Message);
-      try {
-        if (predicate(simple)) settle(simple);
-      } catch { /* predicate threw — not a match */ }
-    }
-
+    const onUpdate = buildUpdateHandler(channelId, predicate, settle, () => settled);
     client.on('messageUpdate', onUpdate);
 
-    // Strategy 2: Poll as fallback (catches edits before listener)
-    void pollFallback(channelId, predicate, deadline, settle);
+    // Poll as fallback (catches edits that arrived before listener)
+    void pollFallback(channelId, predicate, deadline, settle, () => settled);
   });
+}
+
+/** Build a messageUpdate handler that checks edits against a predicate. */
+function buildUpdateHandler(
+  channelId: string,
+  predicate: (msg: SimpleMessage) => boolean,
+  settle: (msg: SimpleMessage) => void,
+  isSettled: () => boolean,
+) {
+  return function onUpdate(
+    _old: Message | PartialMessage,
+    updated: Message | PartialMessage,
+  ) {
+    if (isSettled() || updated.channelId !== channelId) return;
+    if (updated.partial) {
+      void fetchAndCheck(updated, predicate, settle, isSettled);
+      return;
+    }
+    if (!updated.author) return;
+    const simple = toSimpleMessage(updated as Message);
+    try {
+      if (predicate(simple)) settle(simple);
+    } catch { /* predicate threw — not a match */ }
+  };
+}
+
+/** Fetch full message for partials and check against predicate. */
+function fetchAndCheck(
+  partial: Message | PartialMessage,
+  predicate: (msg: SimpleMessage) => boolean,
+  settle: (msg: SimpleMessage) => void,
+  isSettled: () => boolean,
+): void {
+  void partial.fetch().then((full) => {
+    if (isSettled()) return;
+    const simple = toSimpleMessage(full);
+    try { if (predicate(simple)) settle(simple); } catch { /* skip */ }
+  }).catch(() => { /* fetch failed — polling fallback will catch it */ });
 }
 
 /**
  * Internal polling fallback for waitForEmbedUpdate.
  * Polls at fixed 3s intervals (no backoff) — edits can arrive
  * at any time, so consistent polling density is important.
+ * Stops early when the promise has already settled.
  */
 async function pollFallback(
   channelId: string,
   predicate: (msg: SimpleMessage) => boolean,
   deadline: number,
   settle: (msg: SimpleMessage) => void,
+  isSettled: () => boolean,
 ): Promise<void> {
-  const interval = 3000;
-  while (Date.now() < deadline) {
-    const msgs = await readLastMessages(channelId, 100);
+  while (Date.now() < deadline && !isSettled()) {
+    const msgs = await readLastMessages(channelId, DEFAULT_FETCH_COUNT);
     const match = msgs.find(predicate);
     if (match) {
       settle(match);
       return;
     }
     const remaining = deadline - Date.now();
-    if (remaining <= 0) return;
-    await delay(Math.min(interval, remaining));
+    if (remaining <= 0 || isSettled()) return;
+    await delay(Math.min(POLL_FALLBACK_INTERVAL, remaining));
   }
 }
 
@@ -152,7 +171,7 @@ async function pollFallback(
  * Generic condition poller for non-embed use cases
  * (e.g., waiting for notification counts, API state changes).
  * Calls the async check function at intervals until it returns
- * a truthy value or the timeout expires.
+ * a non-null/non-undefined value or the timeout expires.
  */
 export async function pollForCondition<T>(
   check: () => Promise<T | null | undefined>,
@@ -166,7 +185,7 @@ export async function pollForCondition<T>(
 
   while (Date.now() < deadline) {
     const result = await check();
-    if (result) return result;
+    if (result != null) return result;
 
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
