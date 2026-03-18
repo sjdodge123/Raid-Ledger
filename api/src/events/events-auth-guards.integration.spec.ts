@@ -120,9 +120,7 @@ describe('GET /events/:id/ad-hoc-roster — auth guard (AC-2)', () => {
   it('rejects unauthenticated request with 401', async () => {
     const event = await createAdHocEvent();
 
-    const res = await testApp.request.get(
-      `/events/${event.id}/ad-hoc-roster`,
-    );
+    const res = await testApp.request.get(`/events/${event.id}/ad-hoc-roster`);
 
     expect(res.status).toBe(401);
   });
@@ -222,9 +220,7 @@ describe('Audit: other event endpoints retain their guards', () => {
   it('GET /events/:id/variant-context rejects unauthenticated requests with 401', async () => {
     const eventId = await createFutureEvent(testApp, adminToken);
 
-    const res = await testApp.request.get(
-      `/events/${eventId}/variant-context`,
-    );
+    const res = await testApp.request.get(`/events/${eventId}/variant-context`);
 
     expect(res.status).toBe(401);
   });
