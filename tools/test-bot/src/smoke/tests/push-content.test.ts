@@ -140,10 +140,11 @@ const cancelledEmbedHasContent: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
-      // Cancel edits are slow under parallel load (embed sync queue backlog)
+      // Poll for the cancel edit — match both event title and CANCELLED
       const found = await pollForEmbed(
         ctx.defaultChannelId,
-        (m) => m.embeds.some((e) => e.title?.includes('CANCELLED')),
+        (m) => m.embeds.some((e) =>
+          e.title?.includes('CANCELLED') && e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
         { intervalMs: 3000, backoff: false },
       );

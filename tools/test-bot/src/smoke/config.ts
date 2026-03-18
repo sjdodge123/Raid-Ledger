@@ -17,5 +17,5 @@ export const SMOKE = {
   adminPassword: process.env.ADMIN_PASSWORD ?? 'password',
   guildId: required('TEST_GUILD_ID'),
   timeoutMs: parseInt(process.env.SMOKE_TIMEOUT_MS ?? '60000', 10),
-  concurrency: parseInt(process.env.SMOKE_CONCURRENCY ?? '8', 10),
+  concurrency: parseInt(process.env.SMOKE_CONCURRENCY ?? '5', 10),
 };
