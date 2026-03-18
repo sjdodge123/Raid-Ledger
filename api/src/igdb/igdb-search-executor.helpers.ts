@@ -65,6 +65,7 @@ export async function executeSearch(
   const dbResult = await checkLocalDb(deps.db, dbFilters, query);
   if (dbResult) {
     await cacheToRedis(deps.redis, cacheKey, dbResult.games);
+    triggerRefresh(query, normalized, cacheKey);
     return dbResult;
   }
 
