@@ -252,21 +252,24 @@ export class VoiceStateListener implements OnApplicationShutdown {
     if (bindings.length === 0) return;
     trackChannelMember(this.channelMembers, chId, dm.discordUserId);
     for (const b of bindings) {
-      if (b.bindingPurpose === 'general-lobby') {
-        await this.dispatchLobbyJoin(chId, b, dm, gm);
-      } else {
-        await handleGameBindingJoin(this.deps, chId, b, dm, {
-          scheduleSpawn: () =>
-            scheduleDelayedSpawn(
-              this.deps,
-              chId,
-              b,
-              this.timers,
-              SPAWN_DELAY_MS,
-            ),
-          cancelSpawn: () => cancelPendingSpawn(this.timers, chId),
-        });
-      }
+      await this.dispatchBindingJoin(chId, b, dm, gm);
+    }
+  }
+
+  private async dispatchBindingJoin(
+    chId: string,
+    b: ResolvedBinding,
+    dm: DiscordMemberInfo,
+    gm?: GuildMember,
+  ): Promise<void> {
+    if (b.bindingPurpose === 'general-lobby') {
+      await this.dispatchLobbyJoin(chId, b, dm, gm);
+    } else {
+      await handleGameBindingJoin(this.deps, chId, b, dm, {
+        scheduleSpawn: () =>
+          scheduleDelayedSpawn(this.deps, chId, b, this.timers, SPAWN_DELAY_MS),
+        cancelSpawn: () => cancelPendingSpawn(this.timers, chId),
+      });
     }
   }
 
