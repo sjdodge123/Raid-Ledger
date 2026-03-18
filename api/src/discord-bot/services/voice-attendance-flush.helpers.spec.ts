@@ -375,8 +375,16 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
 
     it('multi-game channel queries ALL bindings, not just first', async () => {
       const bindings = [
-        { channelId: 'wow-ch', bindingPurpose: 'game-voice-monitor', gameId: 10 },
-        { channelId: 'wow-ch', bindingPurpose: 'game-voice-monitor', gameId: 20 },
+        {
+          channelId: 'wow-ch',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 10,
+        },
+        {
+          channelId: 'wow-ch',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 20,
+        },
       ];
       mockDb.where.mockResolvedValueOnce([
         { id: 1, gameId: 10 },
@@ -404,8 +412,16 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
 
     it('general-lobby binding among game bindings queries ALL events', async () => {
       const bindings = [
-        { channelId: 'shared-ch', bindingPurpose: 'game-voice-monitor', gameId: 5 },
-        { channelId: 'shared-ch', bindingPurpose: 'general-lobby', gameId: null },
+        {
+          channelId: 'shared-ch',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 5,
+        },
+        {
+          channelId: 'shared-ch',
+          bindingPurpose: 'general-lobby',
+          gameId: null,
+        },
       ];
       mockDb.where.mockResolvedValueOnce([
         { id: 1, gameId: 5 },

@@ -79,15 +79,18 @@ export function resolveVoiceChannel(
   return channel;
 }
 
+/** Cache shape for resolved bindings. */
+type BindingCacheEntry = { cachedAt: number; value: ResolvedBinding[] };
+
 /**
- * Resolve a channel ID to a binding (with caching).
+ * Resolve a channel ID to ALL matching bindings (with caching).
  * Matches 'game-voice-monitor' and 'general-lobby' binding purposes.
  */
-export async function resolveBinding(
+export async function resolveAllBindings(
   deps: VoiceStateDeps,
   channelId: string,
-  cache: Map<string, { cachedAt: number; value: ResolvedBinding | null }>,
-): Promise<ResolvedBinding | null> {
+  cache: Map<string, BindingCacheEntry>,
+): Promise<ResolvedBinding[]> {
   const cached = cache.get(channelId);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
     return cached.value;
@@ -95,27 +98,33 @@ export async function resolveBinding(
 
   const guildId = deps.clientService.getGuildId();
   if (!guildId) {
-    cache.set(channelId, { cachedAt: Date.now(), value: null });
-    return null;
+    cache.set(channelId, { cachedAt: Date.now(), value: [] });
+    return [];
   }
 
   const bindings =
     await deps.channelBindingsService.getBindingsWithGameNames(guildId);
-  const binding = bindings.find(
-    (b) =>
-      b.channelId === channelId &&
-      (b.bindingPurpose === 'game-voice-monitor' ||
-        b.bindingPurpose === 'general-lobby'),
-  );
+  const matched = bindings
+    .filter(
+      (b) =>
+        b.channelId === channelId &&
+        (b.bindingPurpose === 'game-voice-monitor' ||
+          b.bindingPurpose === 'general-lobby'),
+    )
+    .map(mapToResolvedBinding);
 
-  if (!binding) {
-    cache.set(channelId, { cachedAt: Date.now(), value: null });
-    return null;
-  }
+  cache.set(channelId, { cachedAt: Date.now(), value: matched });
+  return matched;
+}
 
-  const result = mapToResolvedBinding(binding);
-  cache.set(channelId, { cachedAt: Date.now(), value: result });
-  return result;
+/** Backward-compat: resolve first matching binding. */
+export async function resolveBinding(
+  deps: VoiceStateDeps,
+  channelId: string,
+  cache: Map<string, BindingCacheEntry>,
+): Promise<ResolvedBinding | null> {
+  const all = await resolveAllBindings(deps, channelId, cache);
+  return all[0] ?? null;
 }
 
 /** Map a raw binding record to ResolvedBinding. */
@@ -133,6 +142,20 @@ function mapToResolvedBinding(binding: {
     bindingPurpose: binding.bindingPurpose,
     config: binding.config as ResolvedBinding['config'],
   };
+}
+
+/** Add a user to a channel's member set. */
+export function trackChannelMember(
+  channelMembers: Map<string, Set<string>>,
+  channelId: string,
+  userId: string,
+): void {
+  let members = channelMembers.get(channelId);
+  if (!members) {
+    members = new Set();
+    channelMembers.set(channelId, members);
+  }
+  members.add(userId);
 }
 
 /** Clear all timers in a map. */

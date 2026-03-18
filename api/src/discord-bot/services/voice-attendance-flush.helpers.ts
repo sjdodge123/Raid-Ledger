@@ -98,7 +98,10 @@ export async function queryActiveEventsMultiGame(
     sql`${schema.events.cancelledAt} IS NULL`,
     sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
     sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
-    sql`${schema.events.gameId} IN (${sql.join(gameIds.map((id) => sql`${id}`), sql`, `)})`,
+    sql`${schema.events.gameId} IN (${sql.join(
+      gameIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})`,
   ];
   const rows = await db
     .select({ id: schema.events.id, gameId: schema.events.gameId })
