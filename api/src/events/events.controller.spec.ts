@@ -153,6 +153,11 @@ describe('EventsController', () => {
       findOne: jest.fn().mockResolvedValue(mockEvent),
       update: jest.fn().mockResolvedValue(mockEvent),
       delete: jest.fn().mockResolvedValue(undefined),
+      getAggregateGameTime: jest.fn().mockResolvedValue({
+        eventId: 1,
+        totalUsers: 0,
+        cells: [],
+      }),
     };
 
     mockSignupsService = {
@@ -377,6 +382,19 @@ describe('EventsController', () => {
 
       expect(result).toMatchObject({ id: expect.any(Number) });
       expect(mockEventsService.findOne).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('getAggregateGameTime (ROK-870)', () => {
+    it('should return aggregate game time data', async () => {
+      const result = await controller.getAggregateGameTime(1);
+
+      expect(result).toMatchObject({
+        eventId: expect.any(Number),
+        totalUsers: expect.any(Number),
+        cells: expect.any(Array),
+      });
+      expect(mockEventsService.getAggregateGameTime).toHaveBeenCalledWith(1);
     });
   });
 

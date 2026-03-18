@@ -227,10 +227,7 @@ describe('DiscordEventListener', () => {
 function eventCreatedTests() {
   it('should enqueue lifecycle job for events within lead-time window', async () => {
     await listener.handleEventCreated(mockPayload);
-    expect(eventLifecycleQueue.enqueue).toHaveBeenCalledWith(
-      42,
-      mockPayload,
-    );
+    expect(eventLifecycleQueue.enqueue).toHaveBeenCalledWith(42, mockPayload);
   });
 
   it('should enqueue lifecycle job regardless of bot connection state', async () => {

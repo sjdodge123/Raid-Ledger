@@ -136,6 +136,7 @@ export class EventsController {
   }
 
   @Get(':id/aggregate-game-time')
+  @UseGuards(AuthGuard('jwt'))
   async getAggregateGameTime(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<AggregateGameTimeResponse> {
