@@ -205,8 +205,7 @@ export class InviteService {
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (!user?.discordId) return;
-    const clientUrl =
-      (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
+    const clientUrl = await this.settingsService.getClientUrl();
     const message = [
       `You have joined **${eventTitle}**!`,
       `View the event: ${clientUrl}/events/${eventId}`,

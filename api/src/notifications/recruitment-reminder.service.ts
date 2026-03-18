@@ -160,9 +160,7 @@ export class RecruitmentReminderService {
   private async resolveRecruitmentContext(event: EligibleEvent) {
     const [defaultTimezone, clientUrl, voiceChannelId] = await Promise.all([
       this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
-      this.settingsService
-        .getClientUrl()
-        .then((u) => u ?? 'http://localhost:5173'),
+      this.settingsService.getClientUrl(),
       this.notificationService.resolveVoiceChannelForEvent(event.id),
     ]);
     const eventDate = new Date(event.startTime).toLocaleDateString('en-US', {
@@ -251,8 +249,7 @@ export class RecruitmentReminderService {
   private async postChannelBump(event: EligibleEvent): Promise<void> {
     if (this.shouldSkipBump(event)) return;
     try {
-      const clientUrl =
-        (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
+      const clientUrl = await this.settingsService.getClientUrl();
       const { embed, row } = this.buildBumpEmbed(event, clientUrl);
       const message = await this.discordBotClient.sendEmbed(
         event.channelId,

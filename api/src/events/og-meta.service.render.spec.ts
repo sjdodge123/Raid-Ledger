@@ -7,6 +7,7 @@ import {
   type OgMetaMocks,
 } from './og-meta.service.spec-helpers';
 import type { OgMetaService } from './og-meta.service';
+import { DEFAULT_CLIENT_URL } from '../settings/settings-bot.helpers';
 
 let service: OgMetaService;
 let mocks: OgMetaMocks;
@@ -123,12 +124,12 @@ async function testMetaRefreshRedirect() {
 }
 
 async function testLocalhostFallback() {
-  mocks.settingsService.getClientUrl.mockResolvedValue(null);
+  mocks.settingsService.getClientUrl.mockResolvedValue(DEFAULT_CLIENT_URL);
   mocks.inviteService.resolveInvite.mockResolvedValue(
     makeValidInvite({ game: null }),
   );
   const html = await service.renderInviteOgHtml('local-code');
-  expect(html).toContain('http://localhost:5173/i/local-code');
+  expect(html).toContain(`${DEFAULT_CLIENT_URL}/i/local-code`);
 }
 
 // ─── OG tag content tests ───────────────────────────────────────────────────
@@ -259,7 +260,7 @@ describe('OgMetaService — renderInviteOgHtml', () => {
   it('should escape HTML in event title', () => testXssEscapeTitle());
   it('should render without image when no cover art', () => testNoCoverArt());
   it('should include meta refresh redirect', () => testMetaRefreshRedirect());
-  it('should use localhost fallback when client URL is null', () =>
+  it('should use default client URL when no explicit URL is configured', () =>
     testLocalhostFallback());
 });
 

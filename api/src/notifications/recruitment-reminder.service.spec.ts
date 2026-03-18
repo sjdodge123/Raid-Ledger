@@ -4,6 +4,7 @@ import {
   createRecruitmentReminderTestModule,
   type RecruitmentReminderTestMocks,
 } from './recruitment-reminder.service.spec-helpers';
+import { DEFAULT_CLIENT_URL } from '../settings/settings-bot.helpers';
 
 // Mock discord.js — uses shared mock (includes Client + PermissionsBitField)
 jest.mock(
@@ -454,13 +455,15 @@ describe('RecruitmentReminderService', () => {
       );
     });
 
-    it('should fall back to http://localhost:5173 for clientUrl when settings returns null', async () => {
+    it('should use default client URL when settings returns the fallback', async () => {
       const event = makeEventRow({ id: 55 });
       mocks.mockDb.execute
         .mockResolvedValueOnce([event])
         .mockResolvedValueOnce([]);
 
-      mocks.mockSettingsService.getClientUrl.mockResolvedValue(null);
+      mocks.mockSettingsService.getClientUrl.mockResolvedValue(
+        DEFAULT_CLIENT_URL,
+      );
 
       await service.checkAndSendReminders();
 
@@ -473,7 +476,7 @@ describe('RecruitmentReminderService', () => {
       const signUpBtn = rowJson.components.find(
         (c: { label: string }) => c.label === 'View Event',
       );
-      expect(signUpBtn?.url).toContain('http://localhost:5173/events/55');
+      expect(signUpBtn?.url).toContain(`${DEFAULT_CLIENT_URL}/events/55`);
     });
 
     it('should skip channel bump when event is full (signupCount >= maxAttendees)', async () => {

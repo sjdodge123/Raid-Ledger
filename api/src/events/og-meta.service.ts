@@ -20,8 +20,7 @@ export class OgMetaService {
    * Called by nginx when a crawler user agent requests /i/:code.
    */
   async renderInviteOgHtml(code: string): Promise<string> {
-    const clientUrl =
-      (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
+    const clientUrl = await this.settingsService.getClientUrl();
     const canonicalUrl = `${clientUrl}/i/${encodeURIComponent(code)}`;
 
     const resolveData = await this.safeResolveInvite(code, canonicalUrl);

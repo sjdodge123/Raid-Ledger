@@ -5,6 +5,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { PugInviteService } from '../discord-bot/services/pug-invite.service';
 import { SettingsService } from '../settings/settings.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { DEFAULT_CLIENT_URL } from '../settings/settings-bot.helpers';
 
 /**
  * Helper to make a qualifying PUG row from the raw SQL query result shape.
@@ -363,11 +364,11 @@ describe('PostEventReminderService', () => {
       expect(mockClientService.sendEmbedDM).toHaveBeenCalled();
     });
 
-    it('should still send DM even when clientUrl is null', async () => {
+    it('should still send DM when clientUrl uses default fallback', async () => {
       const pug = makePugRow();
       mockDb.execute.mockResolvedValue([pug]);
       setupTrackingInsert(false);
-      mockSettingsService.getClientUrl.mockResolvedValue(null);
+      mockSettingsService.getClientUrl.mockResolvedValue(DEFAULT_CLIENT_URL);
 
       await service.handlePostEventReminders();
 
