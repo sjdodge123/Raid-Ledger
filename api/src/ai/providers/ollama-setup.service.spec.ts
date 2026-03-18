@@ -550,7 +550,9 @@ describe('ROK-882: Docker available but allinone mode — native path wins', () 
     });
 
     it('persists localhost URL (not docker container URL) when allinone wins', async () => {
-      mockDocker.getContainerUrl.mockReturnValue('http://raid-ledger-ollama:11434');
+      mockDocker.getContainerUrl.mockReturnValue(
+        'http://raid-ledger-ollama:11434',
+      );
 
       await service.runSetup();
 

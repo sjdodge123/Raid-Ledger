@@ -320,12 +320,15 @@ describe('AiProvidersController', () => {
     });
 
     it('configureProvider throws BadRequestException when body has no fields', async () => {
-      const provider = createMockProvider({ key: 'openai', requiresApiKey: true });
+      const provider = createMockProvider({
+        key: 'openai',
+        requiresApiKey: true,
+      });
       mockRegistry.resolve.mockReturnValue(provider);
 
-      await expect(
-        controller.configureProvider('openai', {}),
-      ).rejects.toThrow(BadRequestException);
+      await expect(controller.configureProvider('openai', {})).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('stopOllama returns success:true on successful native stop', async () => {
