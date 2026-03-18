@@ -4,6 +4,7 @@
  */
 import { joinVoice, leaveVoice, getVoiceMembers } from '../../helpers/voice.js';
 import { waitForMessage } from '../../helpers/messages.js';
+import { pollForCondition } from '../../helpers/polling.js';
 import {
   createBinding,
   createEvent,
@@ -62,10 +63,15 @@ const voiceJoinDetected: SmokeTest = {
     await withVoiceBinding(ctx, 0, 'game-voice-monitor', async (vChId) => {
       await joinVoice(vChId);
       try {
-        await sleep(3000);
-        const members = getVoiceMembers(vChId);
-        const self = members.find((m) => m.id === ctx.testBotDiscordId);
-        if (!self) throw new Error('Test bot not found in voice channel');
+        await pollForCondition(
+          async () => {
+            const members = getVoiceMembers(vChId);
+            const self = members.find((m) => m.id === ctx.testBotDiscordId);
+            return self ?? null;
+          },
+          ctx.config.timeoutMs,
+          { intervalMs: 1000 },
+        );
       } finally {
         leaveVoice();
         await sleep(1000);
@@ -80,12 +86,25 @@ const voiceLeaveRecorded: SmokeTest = {
   async run(ctx) {
     await withVoiceBinding(ctx, 1, 'game-voice-monitor', async (vChId) => {
       await joinVoice(vChId);
-      await sleep(5000);
+      // Wait until bot appears in voice, then leave
+      await pollForCondition(
+        async () => {
+          const m = getVoiceMembers(vChId);
+          return m.find((x) => x.id === ctx.testBotDiscordId) ?? null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 1000 },
+      );
       leaveVoice();
-      await sleep(3000);
-      const members = getVoiceMembers(vChId);
-      const self = members.find((m) => m.id === ctx.testBotDiscordId);
-      if (self) throw new Error('Bot still in voice channel after leave');
+      // Poll until bot disappears from voice channel
+      await pollForCondition(
+        async () => {
+          const m = getVoiceMembers(vChId);
+          return m.find((x) => x.id === ctx.testBotDiscordId) ? null : true;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 1000 },
+      );
     });
   },
 };
@@ -126,9 +145,14 @@ const voiceMemberList: SmokeTest = {
     const vCh = pickChannel(ctx.voiceChannels, 0);
     await joinVoice(vCh.id);
     try {
-      await sleep(2000);
-      const members = getVoiceMembers(vCh.id);
-      if (members.length === 0) throw new Error('Voice members list empty');
+      await pollForCondition(
+        async () => {
+          const members = getVoiceMembers(vCh.id);
+          return members.length > 0 ? members : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 1000 },
+      );
     } finally {
       leaveVoice();
       await sleep(1000);
@@ -185,19 +209,22 @@ const multiGameVoiceDetected: SmokeTest = {
       await signup(ctx.api, ev.id);
       await sleep(2000); // let binding cache expire
 
-      // Join voice and wait for pipeline to detect
+      // Join voice and poll until pipeline detects participants
       await joinVoice(vCh.id);
-      await sleep(5000);
-
-      // Check voice roster — session should exist for gameB event
-      const roster = await ctx.api.get<{ participants: unknown[] }>(
-        `/events/${ev.id}/ad-hoc-roster`,
-      );
-      if (!roster.participants || roster.participants.length === 0) {
+      await pollForCondition(
+        async () => {
+          const roster = await ctx.api.get<{ participants: unknown[] }>(
+            `/events/${ev.id}/ad-hoc-roster`,
+          ).catch(() => ({ participants: [] }));
+          return roster.participants?.length > 0 ? roster : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
         throw new Error(
           `No voice participants for gameB event ${ev.id} — multi-binding detection failed`,
         );
-      }
+      });
     } finally {
       leaveVoice();
       await sleep(1000);

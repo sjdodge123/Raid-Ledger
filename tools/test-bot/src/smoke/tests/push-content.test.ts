@@ -4,13 +4,13 @@
  * suitable for Discord mobile push notification previews.
  * Content must be free of raw Discord tokens and markdown.
  */
-import { waitForMessage, readLastMessages } from '../../helpers/messages.js';
+import { waitForMessage } from '../../helpers/messages.js';
+import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
 import {
   createEvent,
   signup,
   cancelEvent,
   deleteEvent,
-  sleep,
 } from '../fixtures.js';
 import {
   assertEmbedCount,
@@ -141,16 +141,11 @@ const cancelledEmbedHasContent: SmokeTest = {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
       // Poll for the edit — edited messages won't trigger waitForMessage
-      let found = null;
-      for (let attempt = 0; attempt < 6; attempt++) {
-        await sleep(3000);
-        const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-        found = msgs.find((m) =>
-          m.embeds.some((e) => e.title?.includes('CANCELLED')),
-        ) ?? null;
-        if (found) break;
-      }
-      if (!found) throw new Error('Cancelled embed not found after polling');
+      const found = await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes('CANCELLED')),
+        ctx.config.timeoutMs,
+      );
       assertHasContent(found.content);
       assertNoDiscordTokens(found.content);
       assertNoMarkdown(found.content);
@@ -168,12 +163,11 @@ const updatedEmbedKeepsContent: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx));
-      await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      const found = await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after signup');
       assertHasContent(found.content);
       assertNoDiscordTokens(found.content);
       assertNoMarkdown(found.content);

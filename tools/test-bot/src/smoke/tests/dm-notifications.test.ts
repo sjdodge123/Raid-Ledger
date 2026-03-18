@@ -8,6 +8,7 @@
  * The admin user triggers actions, demo users receive notifications.
  * Admin's own unread count is checked for self-affecting notifications.
  */
+import { pollForCondition } from '../../helpers/polling.js';
 import {
   createEvent,
   signupAs,
@@ -136,8 +137,12 @@ const departureNotifSuppressedNotFull: SmokeTest = {
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-1');
-      await sleep(5000);
-      const found = await hasSlotVacatedForEvent(ctx, ev.id);
+      // Poll briefly — expect NO notification to appear (negative check)
+      const found = await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        10_000,
+        { intervalMs: 2000 },
+      ).then(() => true).catch(() => false);
       if (found) {
         throw new Error(
           'slot_vacated notification was sent for a non-full event',
@@ -172,13 +177,16 @@ const departureNotifSentWhenFull: SmokeTest = {
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-2');
-      await sleep(5000);
-      const found = await hasSlotVacatedForEvent(ctx, ev.id);
-      if (!found) {
+      // Poll until slot_vacated notification appears
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
         throw new Error(
           'No slot_vacated notification for a full event — suppression too aggressive',
         );
-      }
+      });
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -274,16 +282,16 @@ const reminderNotification: SmokeTest = {
       reminder15min: true,
     });
     try {
-      let found = false;
-      for (let i = 0; i < 30; i++) {
-        await sleep(2000);
-        const after = await getUnreadCount(ctx);
-        if (after > before) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) throw new Error('No new reminder within 60s');
+      await pollForCondition(
+        async () => {
+          const after = await getUnreadCount(ctx);
+          return after > before ? true : null;
+        },
+        60_000,
+        { intervalMs: 2000, backoff: false },
+      ).catch(() => {
+        throw new Error('No new reminder within 60s');
+      });
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -308,17 +316,21 @@ const gameAffinityNotification: SmokeTest = {
       endTime: futureTime(120),
     });
     try {
-      await sleep(3000);
-      // Verify the event was created with the correct game, confirming
-      // the affinity notification dispatch path was triggered.
-      const fetched = await ctx.api.get<{ game?: { id: number } }>(
-        `/events/${ev.id}`,
-      );
-      if (fetched.game?.id !== gameId) {
+      // Poll until event has the correct game (confirms dispatch path ran)
+      await pollForCondition(
+        async () => {
+          const fetched = await ctx.api.get<{ game?: { id: number } }>(
+            `/events/${ev.id}`,
+          );
+          return fetched.game?.id === gameId ? true : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
         throw new Error(
-          `Event game.id mismatch: expected ${gameId}, got ${fetched.game?.id}`,
+          `Event game.id mismatch: expected ${gameId}`,
         );
-      }
+      });
       // TODO: Assert notification record exists for dmRecipientUserId once
       // an admin endpoint for querying other users' notifications is added.
       // Bot-to-bot DMs fail with 50007, but the dispatch path ran.
