@@ -18,8 +18,6 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 
 let testModule: TestingModule;
 let listener: DiscordEventListener;
-let embedPoster: jest.Mocked<EmbedPosterService>;
-let scheduledEventService: jest.Mocked<ScheduledEventService>;
 let eventLifecycleQueue: jest.Mocked<EventLifecycleQueueService>;
 
 const futureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
@@ -123,7 +121,6 @@ async function setupModule() {
 
   listener = testModule.get(DiscordEventListener);
   embedPoster = testModule.get(EmbedPosterService);
-  scheduledEventService = testModule.get(ScheduledEventService);
   eventLifecycleQueue = testModule.get(EventLifecycleQueueService);
 }
 
