@@ -443,7 +443,10 @@ describe('executeBulkPricingUpdate — COALESCE for lowest_* only', () => {
   it('calls db.execute with SQL containing COALESCE for lowest_price', async () => {
     const mockDb = createDrizzleMock();
     mockDb.execute.mockResolvedValueOnce([]);
-    const row = buildPricingRow(1, { itadLowestPrice: null, itadLowestCut: null });
+    const row = buildPricingRow(1, {
+      itadLowestPrice: null,
+      itadLowestCut: null,
+    });
     await executeBulkPricingUpdate(mockDb as never, [row]);
 
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
