@@ -34,6 +34,20 @@ export async function flushSingleSession(
   }
 }
 
+/** Build the conflict-update column set for voice session upserts. */
+function buildUpsertSet(
+  session: InMemorySession,
+  snapshot: ReturnType<typeof snapshotSessionForFlush>,
+) {
+  return {
+    userId: session.userId,
+    discordUsername: session.discordUsername,
+    lastLeaveAt: session.lastLeaveAt,
+    totalDurationSec: snapshot.totalDurationSec,
+    segments: snapshot.segments,
+  };
+}
+
 /** Upsert a voice session row into the database. */
 async function upsertSessionRow(
   db: Db,
@@ -57,13 +71,7 @@ async function upsertSessionRow(
         schema.eventVoiceSessions.eventId,
         schema.eventVoiceSessions.discordUserId,
       ],
-      set: {
-        userId: session.userId,
-        discordUsername: session.discordUsername,
-        lastLeaveAt: session.lastLeaveAt,
-        totalDurationSec: snapshot.totalDurationSec,
-        segments: snapshot.segments,
-      },
+      set: buildUpsertSet(session, snapshot),
     });
 }
 
