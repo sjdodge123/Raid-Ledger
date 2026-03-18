@@ -236,6 +236,28 @@ function report(results: TestResult[]): number {
   return fail;
 }
 
+/** Run tasks with a concurrency limit (simple semaphore). */
+async function runWithConcurrency<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  limit: number,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx]);
+    }
+  }
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 async function main(): Promise<void> {
   const ctx = await setup();
 
@@ -252,13 +274,16 @@ async function main(): Promise<void> {
   const voiceTests = allTests.filter((t) => t.category === 'voice');
   const parallelTests = allTests.filter((t) => t.category !== 'voice');
 
+  const concurrency = SMOKE.concurrency;
   console.log(
-    `=== Running ${parallelTests.length} tests in parallel` +
+    `=== Running ${parallelTests.length} tests (concurrency=${concurrency})` +
       `${voiceTests.length ? `, ${voiceTests.length} voice tests sequentially` : ''} ===\n`,
   );
 
-  const parallelResults = await Promise.all(
-    parallelTests.map((t) => runTest(t, ctx)),
+  const parallelResults = await runWithConcurrency(
+    parallelTests,
+    (t) => runTest(t, ctx),
+    concurrency,
   );
 
   const voiceResults: TestResult[] = [];

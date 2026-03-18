@@ -6,12 +6,11 @@
  *
  * Uses POST /admin/test/signup to create signups for demo users.
  */
-import { waitForMessage, readLastMessages } from '../../helpers/messages.js';
+import { pollForEmbed } from '../../helpers/polling.js';
 import {
   createEvent,
   signupAs,
   deleteEvent,
-  sleep,
 } from '../fixtures.js';
 import { assertEmbedHasField } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -26,7 +25,7 @@ const MMO_SLOTS = {
 };
 
 function embedInChannel(chId: string, title: string, timeoutMs: number) {
-  return waitForMessage(
+  return pollForEmbed(
     chId,
     (msg) => msg.embeds.some((e) => e.title?.includes(title)),
     timeoutMs,
@@ -52,11 +51,12 @@ const multiPreferredRoles: SmokeTest = {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       // Sign up with ['tank', 'healer'] — should get tank (first pref)
       await signupAs(ctx.api, ev.id, users[0], ['tank', 'healer']);
-      await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const embed = msgs
-        .flatMap((m) => m.embeds)
-        .find((e) => e.title?.includes(ev.title));
+      const found = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      const embed = found.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       // Roster is in the description, not fields — check for tank assignment
       const desc = embed.description ?? '';
@@ -91,20 +91,19 @@ const fullRosterFill: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
       await signupAs(ctx.api, ev.id, users[3], ['dps']);
       await signupAs(ctx.api, ev.id, users[4], ['dps']);
-      await sleep(8000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const embed = msgs
-        .flatMap((m) => m.embeds)
-        .find((e) => e.title?.includes(ev.title));
+      const rosterMsg = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => {
+          const e = m.embeds.find((x) => x.title?.includes(ev.title));
+          if (!e) return false;
+          const match = (e.description ?? '').match(/ROSTER:\s*(\d+)/);
+          return match ? parseInt(match[1], 10) >= 5 : false;
+        },
+        ctx.config.timeoutMs,
+      );
+      const embed = rosterMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       const desc = embed.description ?? '';
-      // Creator is auto-signed up, so 5 demo + 1 creator = 6 total.
-      // Verify all main slots are filled (count >= 5)
-      const rosterMatch = desc.match(/ROSTER:\s*(\d+)\/(\d+)/);
-      const filled = rosterMatch ? parseInt(rosterMatch[1], 10) : 0;
-      if (filled < 5) {
-        throw new Error(`Expected 5+ in roster, got ${filled}`);
-      }
       // Verify tank, healer, dps slots have players (contain <@ mentions)
       const tankSection = desc.split(/Tank/i)[1]?.split(/Heal/i)[0] ?? '';
       const healerSection = desc.split(/Heal/i)[1]?.split(/DPS/i)[0] ?? '';
@@ -146,11 +145,12 @@ const roleShiftChain: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[2], ['healer', 'dps']);
       // User 3 prefers tank and dps — should get tank
       await signupAs(ctx.api, ev.id, users[3], ['tank', 'dps']);
-      await sleep(8000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const embed = msgs
-        .flatMap((m) => m.embeds)
-        .find((e) => e.title?.includes(ev.title));
+      const shiftMsg = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      const embed = shiftMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       const desc = embed.description ?? '';
       // Verify tank and healer slots are filled (not just "—")
@@ -190,14 +190,19 @@ const tentativeDisplacement: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[4], ['dps'], {
         status: 'tentative',
       });
-      await sleep(4000);
       // User 5 signs up CONFIRMED for dps — tentative should be displaced
       await signupAs(ctx.api, ev.id, users[5], ['dps']);
-      await sleep(8000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const embed = msgs
-        .flatMap((m) => m.embeds)
-        .find((e) => e.title?.includes(ev.title));
+      const dispMsg = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => {
+          const e = m.embeds.find((x) => x.title?.includes(ev.title));
+          if (!e) return false;
+          const match = (e.description ?? '').match(/ROSTER:\s*(\d+)/);
+          return match ? parseInt(match[1], 10) >= 5 : false;
+        },
+        ctx.config.timeoutMs,
+      );
+      const embed = dispMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       const desc = embed.description ?? '';
       // Verify bench section exists with the displaced tentative player

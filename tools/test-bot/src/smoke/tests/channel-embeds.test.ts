@@ -5,7 +5,7 @@
  * When an MMO game + character are available, events use slot configs
  * and signups include character/role assignment.
  */
-import { waitForMessage, readLastMessages } from '../../helpers/messages.js';
+import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
 import {
   createEvent,
   signup,
@@ -13,7 +13,6 @@ import {
   cancelEvent,
   rescheduleEvent,
   deleteEvent,
-  sleep,
 } from '../fixtures.js';
 import { assertEmbedTitle, assertEmbedCount, assertHasButton } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -35,7 +34,7 @@ function mmoSignupOpts(ctx: TestContext, roles?: string[]) {
 }
 
 function embedInChannel(chId: string, title: string, timeoutMs: number) {
-  return waitForMessage(
+  return pollForEmbed(
     chId,
     (msg) => msg.embeds.some((e) => e.title?.includes(title)),
     timeoutMs,
@@ -65,12 +64,11 @@ const embedFilling: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['dps']));
-      await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after signup');
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -85,12 +83,11 @@ const embedTentative: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['healer']));
-      await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after tentative signup');
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -105,14 +102,17 @@ const embedCancelSignup: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['tank']));
-      await sleep(6000);
-      await cancelSignup(ctx.api, ev.id);
-      await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after cancel');
+      await cancelSignup(ctx.api, ev.id);
+      await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -127,12 +127,11 @@ const embedCancelled: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
-      await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes('CANCELLED')),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after cancellation');
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -147,12 +146,11 @@ const embedReschedule: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await rescheduleEvent(ctx.api, ev.id, 180);
-      await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after reschedule');
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }

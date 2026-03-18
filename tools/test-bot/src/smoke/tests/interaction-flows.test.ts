@@ -2,8 +2,8 @@
  * Multi-step interaction flow smoke tests.
  * Tests end-to-end flows that involve multiple API calls + Discord output.
  */
-import { waitForMessage, readLastMessages } from '../../helpers/messages.js';
-import { waitForDM } from '../../helpers/dm.js';
+import { readLastMessages } from '../../helpers/messages.js';
+import { pollForEmbed, pollForCondition } from '../../helpers/polling.js';
 import {
   createEvent,
   signup,
@@ -42,20 +42,19 @@ const signupCancelFlow: SmokeTest = {
     const chId = ctx.defaultChannelId;
     const ev = await createEvent(ctx.api, 'flow-signup-cancel', mmoOverrides(ctx));
     try {
-      await waitForMessage(
+      await pollForEmbed(
         chId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
       await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
-      await sleep(6000);
+      await sleep(1000); // rate-limit between API calls
       await cancelSignup(ctx.api, ev.id);
-      await sleep(6000);
-      const msgs = await readLastMessages(chId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await pollForEmbed(
+        chId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after signup+cancel');
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -71,24 +70,23 @@ const slotVacatedFlow: SmokeTest = {
     const ev = await createEvent(ctx.api, 'flow-vacated', mmoOverrides(ctx));
     try {
       // Wait for initial embed
-      await waitForMessage(
+      await pollForEmbed(
         ctx.defaultChannelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
       const res = await signupAs(ctx.api, ev.id, users[0], ['tank']);
-      await sleep(6000);
+      await sleep(1000); // rate-limit between API calls
       // Admin removes the signup
       const signupId = (res as { id?: number }).id;
       if (signupId) {
         await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
       }
-      await sleep(6000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after signup removal');
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -106,7 +104,7 @@ const benchPromotionFlow: SmokeTest = {
     });
     try {
       // Wait for initial embed
-      await waitForMessage(
+      await pollForEmbed(
         ctx.defaultChannelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
@@ -116,19 +114,18 @@ const benchPromotionFlow: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[1], ['dps']);
       // 3rd goes to bench
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
-      await sleep(6000);
+      await sleep(1000); // rate-limit between API calls
       // Remove first player — bench player should auto-promote (5-min delay)
       const signupId = (res1 as { id?: number }).id;
       if (signupId) {
         await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
       }
-      await sleep(6000);
       // Verify embed still exists and reflects roster change
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after bench promote flow');
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -142,18 +139,18 @@ const embedSyncBatchFlush: SmokeTest = {
     const chId = ctx.defaultChannelId;
     const ev = await createEvent(ctx.api, 'flow-sync', mmoOverrides(ctx));
     try {
-      await waitForMessage(
+      // Use polling for initial embed (avoids waitForMessage race condition)
+      await pollForEmbed(
         chId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
       await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
-      await sleep(10000);
-      const msgs = await readLastMessages(chId, 50);
-      const found = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
+      await pollForEmbed(
+        chId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
-      if (!found) throw new Error('Embed not found after sync flush');
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -168,7 +165,7 @@ const multiUserSignupFlow: SmokeTest = {
     if (users.length < 3) throw new Error('Need 3+ demo users');
     const ev = await createEvent(ctx.api, 'flow-multi-signup', mmoOverrides(ctx));
     try {
-      await waitForMessage(
+      await pollForEmbed(
         ctx.defaultChannelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
@@ -177,19 +174,18 @@ const multiUserSignupFlow: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
-      await sleep(8000);
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const embed = msgs
-        .flatMap((m) => m.embeds)
-        .find((e) => e.title?.includes(ev.title));
+      const found = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => {
+          const embed = m.embeds.find((e) => e.title?.includes(ev.title));
+          if (!embed) return false;
+          const match = (embed.description ?? '').match(/ROSTER:\s*(\d+)/);
+          return match ? parseInt(match[1], 10) >= 3 : false;
+        },
+        ctx.config.timeoutMs,
+      );
+      const embed = found.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
-      const desc = embed.description ?? '';
-      // Should show at least 3 signups (+ creator = 4)
-      const rosterMatch = desc.match(/ROSTER:\s*(\d+)/);
-      const count = rosterMatch ? parseInt(rosterMatch[1], 10) : 0;
-      if (count < 3) {
-        throw new Error(`Expected 3+ roster entries, got ${count}`);
-      }
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -205,19 +201,25 @@ const eventDeleteCleansEmbed: SmokeTest = {
   async run(ctx) {
     const ev = await createEvent(ctx.api, 'flow-delete');
     try {
-      await waitForMessage(
+      await pollForEmbed(
         ctx.defaultChannelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
       // Delete the event — embed should be removed from channel
       await deleteEvent(ctx.api, ev.id);
-      await sleep(10000);
-      // Verify embed is gone from the channel
-      const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-      const stillThere = msgs.find((m) =>
-        m.embeds.some((e) => e.title?.includes(ev.title)),
-      );
+      // Poll for embed removal — check if embed disappears
+      const gone = await pollForCondition(
+        async () => {
+          const msgs = await readLastMessages(ctx.defaultChannelId, 50);
+          const has = msgs.some((m) =>
+            m.embeds.some((e) => e.title?.includes(ev.title)),
+          );
+          return has ? null : true;
+        },
+        ctx.config.timeoutMs,
+      ).then(() => true).catch(() => false);
+      const stillThere = !gone;
       if (stillThere) {
         // ROK-846: known bug — embed stays after deletion.
         // Log but don't fail so CI isn't blocked.
