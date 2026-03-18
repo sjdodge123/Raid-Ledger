@@ -10,6 +10,7 @@ import { OpenAiProvider } from './providers/openai.provider';
 import { ClaudeProvider } from './providers/claude.provider';
 import { GoogleProvider } from './providers/google.provider';
 import { OllamaDockerService } from './providers/ollama-docker.service';
+import { OllamaNativeService } from './providers/ollama-native.service';
 import { OllamaModelService } from './providers/ollama-model.service';
 import { OllamaSetupService } from './providers/ollama-setup.service';
 import { LlmService } from './llm.service';
@@ -30,6 +31,7 @@ import { AI_MANIFEST } from './ai-manifest';
     ClaudeProvider,
     GoogleProvider,
     OllamaDockerService,
+    OllamaNativeService,
     OllamaModelService,
     OllamaSetupService,
     LlmService,

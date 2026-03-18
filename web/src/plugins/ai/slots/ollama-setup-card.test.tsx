@@ -87,6 +87,19 @@ describe('OllamaSetupCard', () => {
         expect(screen.getByText(/Self-hosted LLM inference via Docker/)).toBeInTheDocument();
     });
 
+    describe('ROK-882: downloading_binary step', () => {
+        it('AC10: shows "Downloading Ollama..." during downloading_binary step', () => {
+            const provider = createOllamaProvider({
+                setupInProgress: true,
+                setupStep: 'downloading_binary',
+            });
+
+            renderWithProviders(<OllamaSetupCard provider={provider} />);
+
+            expect(screen.getByText(/downloading ollama/i)).toBeInTheDocument();
+        });
+    });
+
     describe('Regression: ROK-840', () => {
         it('shows progress bar when setupInProgress from server (refresh scenario)', () => {
             const provider = createOllamaProvider({
