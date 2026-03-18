@@ -107,13 +107,23 @@ type RosterSignupInput = {
   discordUsername: string | null;
 };
 
+/** Resolve the voice session for a signup, trying discordUserId then userId. */
+function resolveVoiceSession(
+  s: RosterSignupInput,
+  voiceByDiscordId: Map<string, VoiceSession>,
+  voiceByUserId: Map<number, VoiceSession>,
+): VoiceSession | undefined {
+  if (s.discordUserId) return voiceByDiscordId.get(s.discordUserId);
+  if (s.userId) return voiceByUserId.get(s.userId);
+  return undefined;
+}
+
 function mapRosterSignup(
   s: RosterSignupInput,
   voiceByDiscordId: Map<string, VoiceSession>,
+  voiceByUserId: Map<number, VoiceSession>,
 ) {
-  const voiceSession = s.discordUserId
-    ? voiceByDiscordId.get(s.discordUserId)
-    : undefined;
+  const voiceSession = resolveVoiceSession(s, voiceByDiscordId, voiceByUserId);
   return {
     userId: s.userId ?? 0,
     username: s.username ?? s.discordUsername ?? 'Unknown',
@@ -134,7 +144,14 @@ export function buildRosterBreakdown(
   const voiceByDiscordId = new Map(
     voiceSessions.map((v) => [v.discordUserId, v]),
   );
-  return signups.map((s) => mapRosterSignup(s, voiceByDiscordId));
+  const voiceByUserId = new Map(
+    voiceSessions
+      .filter((v): v is VoiceSession & { userId: number } => v.userId !== null)
+      .map((v) => [v.userId, v]),
+  );
+  return signups.map((s) =>
+    mapRosterSignup(s, voiceByDiscordId, voiceByUserId),
+  );
 }
 
 export function buildAttendanceSummary(
