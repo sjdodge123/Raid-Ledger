@@ -128,4 +128,9 @@ export const CORE_JOB_METADATA: Record<
     description: 'Syncs ITAD pricing data for all linked games every 4 hours',
     category: 'Data Sync',
   },
+  ScheduledEventReconciliation_reconcileMissing: {
+    description:
+      'Creates missing Discord scheduled events for future events every 15 minutes',
+    category: 'Events',
+  },
 };
