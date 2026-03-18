@@ -311,12 +311,12 @@ const gameAffinityNotification: SmokeTest = {
       await sleep(3000);
       // Verify the event was created with the correct game, confirming
       // the affinity notification dispatch path was triggered.
-      const fetched = await ctx.api.get<{ gameId?: number }>(
+      const fetched = await ctx.api.get<{ game?: { id: number } }>(
         `/events/${ev.id}`,
       );
-      if (fetched.gameId !== gameId) {
+      if (fetched.game?.id !== gameId) {
         throw new Error(
-          `Event gameId mismatch: expected ${gameId}, got ${fetched.gameId}`,
+          `Event game.id mismatch: expected ${gameId}, got ${fetched.game?.id}`,
         );
       }
       // TODO: Assert notification record exists for dmRecipientUserId once
