@@ -106,9 +106,17 @@ export class AdHocNotificationService implements OnModuleDestroy {
     channelId: string,
     embedData: EmbedEventData,
   ): Promise<void> {
-    const { embed, row } = await this.buildEmbed(embedData, EMBED_STATES.LIVE);
+    const { embed, row, content } = await this.buildEmbed(
+      embedData,
+      EMBED_STATES.LIVE,
+    );
     try {
-      const message = await this.clientService.sendEmbed(channelId, embed, row);
+      const message = await this.clientService.sendEmbed(
+        channelId,
+        embed,
+        row,
+        content,
+      );
       if (message) {
         await this.trackSpawnMessage(eventId, channelId, message.id);
       } else {
@@ -244,13 +252,14 @@ export class AdHocNotificationService implements OnModuleDestroy {
     embedData: EmbedEventData,
     state: string,
   ): Promise<void> {
-    const { embed, row } = await this.buildEmbed(embedData, state);
+    const { embed, row, content } = await this.buildEmbed(embedData, state);
     try {
       await this.clientService.editEmbed(
         tracked.channelId,
         tracked.messageId,
         embed,
         row,
+        content,
       );
     } catch (err) {
       this.logger.error(`Failed to edit embed: ${err}`);

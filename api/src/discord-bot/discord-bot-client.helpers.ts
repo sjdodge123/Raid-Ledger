@@ -1,4 +1,9 @@
-import { Client, GatewayIntentBits, PermissionsBitField } from 'discord.js';
+import {
+  Client,
+  GatewayIntentBits,
+  PermissionsBitField,
+  type Guild,
+} from 'discord.js';
 
 export interface GuildInfo {
   name: string;
@@ -38,6 +43,17 @@ export const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
   { label: 'Create Events', flag: PermissionsBitField.Flags.CreateEvents },
   { label: 'Connect', flag: PermissionsBitField.Flags.Connect },
 ];
+
+/** Check bot permissions in the guild. */
+export function checkBotPermissions(
+  guild: Guild | null,
+): PermissionCheckResult[] {
+  const me = guild?.members.me;
+  return REQUIRED_PERMISSIONS.map((p) => ({
+    name: p.label,
+    granted: me ? me.permissions.has(p.flag) : false,
+  }));
+}
 
 /** Create a fresh Discord.js Client with all required intents. */
 export function createDiscordClient(): Client {

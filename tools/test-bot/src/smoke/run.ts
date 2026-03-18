@@ -18,6 +18,7 @@ import { dmNotificationTests } from './tests/dm-notifications.test.js';
 import { voiceActivityTests } from './tests/voice-activity.test.js';
 import { interactionFlowTests } from './tests/interaction-flows.test.js';
 import { rosterCalculationTests } from './tests/roster-calculation.test.js';
+import { pushContentTests } from './tests/push-content.test.js';
 
 /** Connect the companion bot and return its Discord user ID. */
 async function connectBot(): Promise<{ botDiscordId: string }> {
@@ -241,6 +242,7 @@ async function main(): Promise<void> {
   const filterCat = process.env.SMOKE_CATEGORY;
   const allTests: SmokeTest[] = [
     ...channelEmbedTests,
+    ...pushContentTests,
     ...rosterCalculationTests,
     ...dmNotificationTests,
     ...voiceActivityTests,

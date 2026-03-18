@@ -129,6 +129,7 @@ describe('AdHocNotificationService', () => {
         'notif-channel-1',
         expect.any(Object),
         undefined,
+        undefined,
       );
     });
 
@@ -152,6 +153,7 @@ describe('AdHocNotificationService', () => {
       expect(clientService.sendEmbed).toHaveBeenCalledWith(
         'default-channel',
         expect.any(Object),
+        undefined,
         undefined,
       );
     });
@@ -275,6 +277,7 @@ describe('AdHocNotificationService', () => {
         'complete-channel',
         'msg-1',
         expect.any(Object),
+        undefined,
         undefined,
       );
       expect(clientService.sendEmbed).not.toHaveBeenCalled();

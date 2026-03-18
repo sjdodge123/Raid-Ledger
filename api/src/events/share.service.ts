@@ -166,11 +166,12 @@ export class ShareService {
     const channel = await guild.channels.fetch(channelId);
     if (!channel || !channel.isTextBased() || channel.isDMBased()) return false;
 
-    const { embed, row } = this.embedFactory.buildEventEmbed(
+    const { embed, row, content } = this.embedFactory.buildEventEmbed(
       eventData,
       context,
     );
     const message = await channel.send({
+      ...(content ? { content } : {}),
       embeds: [embed],
       ...(row ? { components: [row] } : {}),
     });

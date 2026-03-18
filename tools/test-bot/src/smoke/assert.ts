@@ -59,3 +59,31 @@ export function assertEmbedCount(
     fail(`Expected at least ${min} embed(s), got ${embeds.length}`);
   }
 }
+
+/** Assert that a message has a non-empty text content field (for push notifications). */
+export function assertHasContent(content: string) {
+  if (!content || content.trim().length === 0) {
+    fail(`Expected non-empty message content, got: "${content}"`);
+  }
+}
+
+/** Assert that text does not contain raw Discord tokens. */
+export function assertNoDiscordTokens(text: string) {
+  const patterns = [
+    { pattern: /<#\d+>/, label: 'channel mention (<#...>)' },
+    { pattern: /<@!?\d+>/, label: 'user mention (<@...>)' },
+    { pattern: /<@&\d+>/, label: 'role mention (<@&...>)' },
+    { pattern: /<t:\d+(?::[a-zA-Z])?>/, label: 'timestamp token (<t:...>)' },
+  ];
+  for (const { pattern, label } of patterns) {
+    if (pattern.test(text)) {
+      fail(`Content contains raw ${label}: "${text}"`);
+    }
+  }
+}
+
+/** Assert that text does not contain raw markdown formatting. */
+export function assertNoMarkdown(text: string) {
+  if (/\*\*.+?\*\*/.test(text)) fail(`Content contains bold markdown: "${text}"`);
+  if (/~~.+?~~/.test(text)) fail(`Content contains strikethrough markdown: "${text}"`);
+}
