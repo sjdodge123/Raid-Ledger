@@ -1,5 +1,5 @@
 /**
- * Adversarial tests for ItadPriceSyncService (ROK-818).
+ * Adversarial tests for ItadPriceSyncService (ROK-818 / ROK-854).
  * Covers edge cases the dev's initial tests missed:
  * - buildUpdateData with null current / null lowest / both null
  * - onApplicationBootstrap setTimeout wiring
@@ -7,11 +7,15 @@
  * - Games not in the ITAD response map are skipped (stale cleanup handles them)
  * - Multiple chunk failures don't abort the entire sync
  * - Bulk update is called once per chunk via db.execute()
+ * - extractErrorDetail: pure function coverage for all input shapes (ROK-854)
+ * - executeBulkPricingUpdate: COALESCE applied to lowest_* only (ROK-854)
  */
 import { Test } from '@nestjs/testing';
 import {
   ItadPriceSyncService,
   buildUpdateData,
+  extractErrorDetail,
+  executeBulkPricingUpdate,
 } from './itad-price-sync.service';
 import { ItadPriceService } from './itad-price.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -314,5 +318,178 @@ describe('ItadPriceSyncService — adversarial', () => {
       jest.clearAllTimers();
       jest.useRealTimers();
     });
+  });
+});
+
+// ─── extractErrorDetail — pure function (ROK-854) ───────────────────────────
+
+describe('extractErrorDetail — pure function', () => {
+  it('returns the message when error has no cause', () => {
+    const err = new Error('simple failure');
+    const result = extractErrorDetail(err);
+    expect(result).toBe('simple failure');
+  });
+
+  it('extracts cause.message, code, detail, and hint from wrapped PG error', () => {
+    const cause = Object.assign(new Error('syntax error'), {
+      code: '42601',
+      detail: 'near position 10',
+      hint: 'Check your SQL',
+    });
+    const wrapper = Object.assign(new Error('Failed query: UPDATE ...'), {
+      cause,
+    });
+    const result = extractErrorDetail(wrapper);
+    expect(result).toContain('syntax error');
+    expect(result).toContain('code=42601');
+    expect(result).toContain('detail=near position 10');
+    expect(result).toContain('hint=Check your SQL');
+  });
+
+  it('omits absent fields — cause with code only', () => {
+    const cause = Object.assign(new Error('undefined column'), {
+      code: '42703',
+    });
+    const wrapper = Object.assign(new Error('Failed query: SELECT ...'), {
+      cause,
+    });
+    const result = extractErrorDetail(wrapper);
+    expect(result).toContain('code=42703');
+    expect(result).not.toContain('detail=');
+    expect(result).not.toContain('hint=');
+  });
+
+  it('omits absent fields — cause with detail only', () => {
+    const cause = Object.assign(new Error('constraint violation'), {
+      detail: 'Key (id)=(42) already exists.',
+    });
+    const wrapper = Object.assign(new Error('Failed query: INSERT ...'), {
+      cause,
+    });
+    const result = extractErrorDetail(wrapper);
+    expect(result).toContain('detail=Key (id)=(42) already exists.');
+    expect(result).not.toContain('code=');
+    expect(result).not.toContain('hint=');
+  });
+
+  it('handles non-Error thrown values (strings)', () => {
+    const result = extractErrorDetail('something went wrong');
+    expect(result).toBe('something went wrong');
+  });
+
+  it('handles non-Error thrown values (objects with toString)', () => {
+    const result = extractErrorDetail({ message: 'db down' });
+    // Non-Error: becomes String({ message: 'db down' }) = '[object Object]'
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('handles null thrown value', () => {
+    const result = extractErrorDetail(null);
+    expect(result).toBe('null');
+  });
+
+  it('handles undefined thrown value', () => {
+    const result = extractErrorDetail(undefined);
+    expect(result).toBe('undefined');
+  });
+
+  it('returns cause message when error itself has no message', () => {
+    const cause = Object.assign(new Error('real pg error'), {
+      code: '08006',
+    });
+    const wrapper = Object.assign(new Error('Failed query: raw sql'), {
+      cause,
+    });
+    const result = extractErrorDetail(wrapper);
+    // cause message takes precedence once .cause exists
+    expect(result).toContain('real pg error');
+    expect(result).toContain('code=08006');
+  });
+});
+
+// ─── executeBulkPricingUpdate — COALESCE assertion (ROK-854) ─────────────────
+
+/** Extract the SQL string text from a Drizzle sql`` tagged template object. */
+function extractSqlText(sqlArg: unknown): string {
+  if (sqlArg == null || typeof sqlArg !== 'object') return String(sqlArg);
+  const chunks =
+    (sqlArg as { queryChunks?: { value?: unknown[] }[] }).queryChunks ?? [];
+  return chunks
+    .map((c) => (Array.isArray(c.value) ? c.value.join('') : ''))
+    .join('');
+}
+
+const FIXED_DATE = new Date('2026-01-01T00:00:00Z');
+
+function buildPricingRow(
+  id: number,
+  overrides: Partial<Omit<ReturnType<typeof buildUpdateData>, never>> = {},
+) {
+  return {
+    id,
+    itadCurrentPrice: '9.99' as string | null,
+    itadCurrentCut: 50 as number | null,
+    itadCurrentShop: 'Steam' as string | null,
+    itadCurrentUrl: 'https://steam.com' as string | null,
+    itadLowestPrice: '4.99' as string | null,
+    itadLowestCut: 80 as number | null,
+    itadPriceUpdatedAt: FIXED_DATE,
+    ...overrides,
+  };
+}
+
+describe('executeBulkPricingUpdate — COALESCE for lowest_* only', () => {
+  it('calls db.execute with SQL containing COALESCE for lowest_price', async () => {
+    const mockDb = createDrizzleMock();
+    mockDb.execute.mockResolvedValueOnce([]);
+    const row = buildPricingRow(1, { itadLowestPrice: null, itadLowestCut: null });
+    await executeBulkPricingUpdate(mockDb as never, [row]);
+
+    expect(mockDb.execute).toHaveBeenCalledTimes(1);
+    const sqlStr = extractSqlText(mockDb.execute.mock.calls[0][0]);
+    expect(sqlStr).toContain('COALESCE');
+    expect(sqlStr).toContain('lowest_price');
+    expect(sqlStr).toContain('lowest_cut');
+  });
+
+  it('does NOT coalesce current_price — null clears the active deal', async () => {
+    const mockDb = createDrizzleMock();
+    mockDb.execute.mockResolvedValueOnce([]);
+    const row = buildPricingRow(2, {
+      itadCurrentPrice: null,
+      itadCurrentCut: null,
+      itadCurrentShop: null,
+      itadCurrentUrl: null,
+      itadLowestPrice: '4.99',
+      itadLowestCut: 80,
+    });
+    await executeBulkPricingUpdate(mockDb as never, [row]);
+
+    const sqlStr = extractSqlText(mockDb.execute.mock.calls[0][0]);
+    expect(sqlStr).toContain('current_price');
+    // COALESCE appears exactly twice: for lowest_price and lowest_cut
+    const coalesceCount = (sqlStr.match(/COALESCE/g) ?? []).length;
+    expect(coalesceCount).toBe(2);
+  });
+
+  it('processes multiple rows in a single execute call', async () => {
+    const mockDb = createDrizzleMock();
+    mockDb.execute.mockResolvedValueOnce([]);
+    const rows = [
+      buildPricingRow(1),
+      buildPricingRow(2, {
+        itadCurrentPrice: '19.99',
+        itadCurrentCut: 20,
+        itadCurrentShop: 'GOG',
+        itadCurrentUrl: 'https://gog.com',
+        itadLowestPrice: null,
+        itadLowestCut: null,
+      }),
+    ];
+    await executeBulkPricingUpdate(mockDb as never, rows);
+
+    // Only one DB round-trip for the entire batch
+    expect(mockDb.execute).toHaveBeenCalledTimes(1);
   });
 });

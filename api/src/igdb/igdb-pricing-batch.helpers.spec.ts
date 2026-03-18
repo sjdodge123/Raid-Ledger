@@ -294,6 +294,106 @@ describe('mapDbRowToPricing', () => {
   });
 });
 
+// ─── mapDbRowToPricing — adversarial edge cases (ROK-854) ────────────────────
+
+describe('mapDbRowToPricing — adversarial edge cases', () => {
+  it('maps a free game (price=0.00) without treating it as null', () => {
+    const result = mapDbRowToPricing({
+      itadCurrentPrice: '0.00',
+      itadCurrentCut: 0,
+      itadCurrentShop: 'itch.io',
+      itadCurrentUrl: 'https://itch.io/game/free-game',
+      itadLowestPrice: null,
+      itadLowestCut: null,
+    });
+
+    // A free game has a real current deal (price=0) — should NOT return null
+    expect(result).not.toBeNull();
+    expect(result!.currentBest).not.toBeNull();
+    expect(result!.currentBest!.price).toBe(0);
+    expect(result!.currentBest!.shop).toBe('itch.io');
+  });
+
+  it('uses "Unknown" shop default when itadCurrentShop is null', () => {
+    const result = mapDbRowToPricing({
+      itadCurrentPrice: '9.99',
+      itadCurrentCut: 50,
+      itadCurrentShop: null,
+      itadCurrentUrl: 'https://store.steampowered.com/app/1',
+      itadLowestPrice: null,
+      itadLowestCut: null,
+    });
+
+    expect(result!.currentBest!.shop).toBe('Unknown');
+  });
+
+  it('uses empty string url default when itadCurrentUrl is null', () => {
+    const result = mapDbRowToPricing({
+      itadCurrentPrice: '14.99',
+      itadCurrentCut: 25,
+      itadCurrentShop: 'Steam',
+      itadCurrentUrl: null,
+      itadLowestPrice: null,
+      itadLowestCut: null,
+    });
+
+    expect(result!.currentBest!.url).toBe('');
+  });
+
+  it('returns null for historyLow when itadLowestPrice is null', () => {
+    const result = mapDbRowToPricing({
+      itadCurrentPrice: '29.99',
+      itadCurrentCut: 40,
+      itadCurrentShop: 'GOG',
+      itadCurrentUrl: 'https://gog.com',
+      itadLowestPrice: null,
+      itadLowestCut: null,
+    });
+
+    expect(result!.historyLow).toBeNull();
+  });
+
+  it('always sets regularPrice to null (not stored in DB cache)', () => {
+    const result = mapDbRowToPricing({
+      itadCurrentPrice: '9.99',
+      itadCurrentCut: 75,
+      itadCurrentShop: 'Steam',
+      itadCurrentUrl: 'https://steam.com',
+      itadLowestPrice: '4.99',
+      itadLowestCut: 88,
+    });
+
+    expect(result!.currentBest!.regularPrice).toBeNull();
+  });
+
+  it('always sets historyLow.shop and historyLow.date to null (not in DB cache)', () => {
+    const result = mapDbRowToPricing({
+      itadCurrentPrice: null,
+      itadCurrentCut: null,
+      itadCurrentShop: null,
+      itadCurrentUrl: null,
+      itadLowestPrice: '2.49',
+      itadLowestCut: 92,
+    });
+
+    expect(result!.historyLow!.shop).toBeNull();
+    expect(result!.historyLow!.date).toBeNull();
+  });
+
+  it('uses discount=0 default when itadCurrentCut is null', () => {
+    const result = mapDbRowToPricing({
+      itadCurrentPrice: '9.99',
+      itadCurrentCut: null,
+      itadCurrentShop: 'Humble',
+      itadCurrentUrl: 'https://humble.com',
+      itadLowestPrice: null,
+      itadLowestCut: null,
+    });
+
+    expect(result!.currentBest!.discount).toBe(0);
+  });
+});
+
 // ─── fetchBatchGamePricing — DB cache path ──────────────────────────────────
 
 describe('fetchBatchGamePricing — DB cache path', () => {

@@ -119,3 +119,50 @@ describe('GamePricingSummary — price badge', () => {
         expect(screen.getByText('Best Price')).toBeInTheDocument();
     });
 });
+
+// ─── GamePricingSummary — DB-cache null fields (ROK-854) ─────────────────────
+
+describe('GamePricingSummary — DB-cache null fields (ROK-854)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('does not render regular price when regularPrice is null', () => {
+        render(<GamePricingSummary pricing={buildPricing({
+            currentBest: { shop: 'Steam', url: 'https://steam.com', price: 9.99, regularPrice: null, discount: 50 },
+        })} />);
+        // Current price renders
+        expect(screen.getByText('$9.99')).toBeInTheDocument();
+        // No struck-through regular price
+        expect(screen.queryByText(/\$59\.99/)).not.toBeInTheDocument();
+        // Discount badge still shows
+        expect(screen.getByText('-50%')).toBeInTheDocument();
+    });
+
+    it('does not render shop name when historyLow.shop is null', () => {
+        render(<GamePricingSummary pricing={buildPricing({
+            historyLow: { price: 4.99, shop: null, date: '2024-11-25T00:00:00Z' },
+        })} />);
+        expect(screen.getByText(/historical low/i)).toBeInTheDocument();
+        // Price is still shown
+        expect(screen.getByText('$4.99')).toBeInTheDocument();
+        // "at <shop>" fragment is absent
+        expect(screen.queryByText(/at /i)).not.toBeInTheDocument();
+    });
+
+    it('does not render date when historyLow.date is null', () => {
+        render(<GamePricingSummary pricing={buildPricing({
+            historyLow: { price: 4.99, shop: 'Steam', date: null },
+        })} />);
+        expect(screen.getByText(/historical low/i)).toBeInTheDocument();
+        // No date in parentheses
+        expect(screen.queryByText(/\(/)).not.toBeInTheDocument();
+    });
+
+    it('renders only the historical low price when both shop and date are null', () => {
+        render(<GamePricingSummary pricing={buildPricing({
+            historyLow: { price: 2.99, shop: null, date: null },
+        })} />);
+        expect(screen.getByText('$2.99')).toBeInTheDocument();
+        expect(screen.queryByText(/at /i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/\(/)).not.toBeInTheDocument();
+    });
+});
