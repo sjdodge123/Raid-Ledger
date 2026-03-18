@@ -224,6 +224,77 @@ describe('ItadPriceSyncService — adversarial', () => {
     });
   });
 
+  describe('processChunk — error detail logging', () => {
+    it('extracts Postgres error .cause details into log message', async () => {
+      mockDb.where.mockResolvedValueOnce([
+        { id: 1, itadGameId: 'game-uuid-1' },
+      ]);
+      const pgCause = Object.assign(new Error('column "x" does not exist'), {
+        code: '42703',
+        detail: 'Column missing',
+        hint: 'Check spelling',
+      });
+      const wrapperError = new Error('Failed query: UPDATE ...');
+      (wrapperError as any).cause = pgCause;
+      mockItadPriceService.getOverviewBatch.mockRejectedValueOnce(wrapperError);
+      mockDb.returning.mockResolvedValue([]);
+
+      const logSpy = jest.spyOn(service['logger'], 'error');
+
+      await service.syncPricing();
+
+      const logMsg = logSpy.mock.calls[0][0] as string;
+      expect(logMsg).toContain('code=42703');
+      expect(logMsg).toContain('detail=Column missing');
+      expect(logMsg).toContain('hint=Check spelling');
+    });
+  });
+
+  describe('processChunk — returns boolean for success tracking', () => {
+    it('syncPricing logs success and failure counts', async () => {
+      const games = Array.from({ length: 100 }, (_, i) => ({
+        id: i + 1,
+        itadGameId: `game-uuid-${i + 1}`,
+      }));
+      mockDb.where.mockResolvedValueOnce(games);
+      // First chunk succeeds (returns empty entries), second fails
+      mockItadPriceService.getOverviewBatch
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error('chunk 2 fail'));
+      mockDb.returning.mockResolvedValue([]);
+
+      const warnSpy = jest.spyOn(service['logger'], 'warn');
+
+      await service.syncPricing();
+
+      const warnMsg = warnSpy.mock.calls.find((c) =>
+        (c[0] as string).includes('chunks succeeded'),
+      );
+      expect(warnMsg).toBeDefined();
+      expect(warnMsg![0]).toContain('1 chunks succeeded');
+      expect(warnMsg![0]).toContain('1 failed');
+    });
+
+    it('logs at log level when all chunks succeed', async () => {
+      mockDb.where.mockResolvedValueOnce([
+        { id: 1, itadGameId: 'game-uuid-1' },
+      ]);
+      mockItadPriceService.getOverviewBatch.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValue([]);
+
+      const logSpy = jest.spyOn(service['logger'], 'log');
+
+      await service.syncPricing();
+
+      const completeMsg = logSpy.mock.calls.find((c) =>
+        (c[0] as string).includes('chunks succeeded'),
+      );
+      expect(completeMsg).toBeDefined();
+      expect(completeMsg![0]).toContain('1 chunks succeeded');
+      expect(completeMsg![0]).toContain('0 failed');
+    });
+  });
+
   describe('onApplicationBootstrap', () => {
     it('schedules the sync via setTimeout (does not call syncPricing immediately)', () => {
       jest.useFakeTimers();

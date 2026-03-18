@@ -2,7 +2,7 @@
  * ITAD pricing helpers for the IGDB controller (ROK-419).
  * Maps ITAD overview data to the ItadGamePricing contract schema.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, isNotNull, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadPriceService } from '../itad/itad-price.service';
@@ -46,7 +46,8 @@ async function lookupItadGameId(
 
 /**
  * Fetch and map pricing data for multiple games in one batch.
- * Returns a Record of gameId -> pricing or null.
+ * Uses DB cache for games with synced pricing (ROK-854), falls
+ * back to ITAD API for uncached games.
  */
 export async function fetchBatchGamePricing(
   db: PostgresJsDatabase<typeof schema>,
@@ -56,10 +57,30 @@ export async function fetchBatchGamePricing(
   if (gameIds.length === 0) return {};
 
   const idMap = await lookupBatchItadIds(db, gameIds);
-  const itadIds = Object.values(idMap).filter(Boolean) as string[];
-  const entries =
-    itadIds.length > 0 ? await itadPriceService.getOverviewBatch(itadIds) : [];
-  return buildBatchResult(gameIds, idMap, entries);
+  const cached = await lookupCachedPricing(db, gameIds);
+  const cachedIds = new Set(cached.map((r) => r.id));
+  const uncachedIds = gameIds.filter((id) => !cachedIds.has(id));
+  const uncachedItadIds = uncachedIds
+    .map((id) => idMap[id])
+    .filter(Boolean) as string[];
+
+  const apiEntries =
+    uncachedItadIds.length > 0
+      ? await itadPriceService.getOverviewBatch(uncachedItadIds)
+      : [];
+
+  return mergeBatchResults(gameIds, idMap, cached, apiEntries);
+}
+
+/** Shape of a cached pricing row from the DB. */
+interface DbPricingRow {
+  id: number;
+  itadCurrentPrice: string | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+  itadLowestPrice: string | null;
+  itadLowestCut: number | null;
 }
 
 /** Look up ITAD game IDs for multiple games in a single query. */
@@ -77,20 +98,111 @@ async function lookupBatchItadIds(
   return map;
 }
 
-/** Build the batch result mapping game IDs to pricing data. */
-function buildBatchResult(
+/** Query DB for games with cached ITAD pricing data (ROK-854). */
+async function lookupCachedPricing(
+  db: PostgresJsDatabase<typeof schema>,
+  gameIds: number[],
+): Promise<(DbPricingRow & { id: number })[]> {
+  return db
+    .select({
+      id: schema.games.id,
+      itadCurrentPrice: schema.games.itadCurrentPrice,
+      itadCurrentCut: schema.games.itadCurrentCut,
+      itadCurrentShop: schema.games.itadCurrentShop,
+      itadCurrentUrl: schema.games.itadCurrentUrl,
+      itadLowestPrice: schema.games.itadLowestPrice,
+      itadLowestCut: schema.games.itadLowestCut,
+    })
+    .from(schema.games)
+    .where(
+      and(
+        inArray(schema.games.id, gameIds),
+        isNotNull(schema.games.itadPriceUpdatedAt),
+      ),
+    );
+}
+
+/** Merge cached DB rows and ITAD API entries into a single result. */
+function mergeBatchResults(
   gameIds: number[],
   idMap: Record<number, string | null>,
-  entries: ItadOverviewGameEntry[],
+  cached: (DbPricingRow & { id: number })[],
+  apiEntries: ItadOverviewGameEntry[],
 ): Record<string, ItadGamePricingDto | null> {
-  const entryMap = new Map(entries.map((e) => [e.id, e]));
+  const cacheMap = new Map(cached.map((r) => [r.id, r]));
+  const entryMap = new Map(apiEntries.map((e) => [e.id, e]));
   const result: Record<string, ItadGamePricingDto | null> = {};
   for (const gid of gameIds) {
-    const itadId = idMap[gid];
-    const entry = itadId ? entryMap.get(itadId) : null;
-    result[String(gid)] = entry ? mapOverviewToPricing(entry) : null;
+    const cachedRow = cacheMap.get(gid);
+    if (cachedRow) {
+      result[String(gid)] = mapDbRowToPricing(cachedRow);
+    } else {
+      const itadId = idMap[gid];
+      const entry = itadId ? entryMap.get(itadId) : null;
+      result[String(gid)] = entry ? mapOverviewToPricing(entry) : null;
+    }
   }
   return result;
+}
+
+/**
+ * Map a DB row with cached pricing columns to ItadGamePricingDto.
+ * Fields not stored in DB cache (regularPrice, historyLow.shop,
+ * historyLow.date) are set to null (ROK-854).
+ */
+export function mapDbRowToPricing(row: {
+  itadCurrentPrice: string | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+  itadLowestPrice: string | null;
+  itadLowestCut: number | null;
+}): ItadGamePricingDto | null {
+  if (
+    !row.itadCurrentPrice &&
+    row.itadCurrentCut === null &&
+    !row.itadLowestPrice
+  ) {
+    return null;
+  }
+  const currentBest = buildCacheCurrent(row);
+  const historyLow = buildCacheHistoryLow(row);
+  const dealQuality = computeDealQuality(currentBest, historyLow);
+  const stores = currentBest ? [currentBest] : [];
+  return {
+    currentBest,
+    stores,
+    historyLow,
+    dealQuality,
+    currency: 'USD',
+    itadUrl: null,
+  };
+}
+
+/** Build currentBest from cached DB row. */
+function buildCacheCurrent(row: {
+  itadCurrentPrice: string | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+}): ItadGamePricingDto['currentBest'] {
+  if (row.itadCurrentPrice == null) return null;
+  return {
+    shop: row.itadCurrentShop ?? 'Unknown',
+    url: row.itadCurrentUrl ?? '',
+    price: parseFloat(row.itadCurrentPrice),
+    regularPrice: null,
+    discount: row.itadCurrentCut ?? 0,
+  };
+}
+
+/** Build historyLow from cached DB row. */
+function buildCacheHistoryLow(row: {
+  itadLowestPrice: string | null;
+  itadLowestCut: number | null;
+}): ItadGamePricingDto['historyLow'] {
+  if (row.itadLowestPrice == null) return null;
+  return { price: parseFloat(row.itadLowestPrice), shop: null, date: null };
 }
 
 /** Map an ITAD overview game entry to the contract pricing shape. */

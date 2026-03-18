@@ -17,9 +17,11 @@ export function GamePricingSummary({ pricing }: {
                 </span>
                 {currentBest.discount > 0 && (
                     <>
+                        {currentBest.regularPrice != null && (
                         <span className="text-sm text-muted line-through">
                             {formatPrice(currentBest.regularPrice, currency)}
                         </span>
+                        )}
                         <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded">
                             -{currentBest.discount}%
                         </span>
@@ -54,7 +56,8 @@ function HistoryRow({ historyLow, currency }: {
             </svg>
             <span>
                 Historical low: <span className="text-foreground font-medium">{formatPrice(historyLow.price, currency)}</span>
-                {' '}at {historyLow.shop} ({formatDate(historyLow.date)})
+                {historyLow.shop && <>{' '}at {historyLow.shop}</>}
+                {historyLow.date && <> ({formatDate(historyLow.date)})</>}
             </span>
         </div>
     );

@@ -57,7 +57,9 @@ type PricingRow = ItadPricingData & { id: number };
 
 /**
  * Execute a single UPDATE ... FROM VALUES for all matched games.
- * Follows the same pattern as steam-playtime.helpers.ts.
+ * Uses COALESCE for lowest_* columns so null API responses don't
+ * overwrite existing historical data. Current_* columns are NOT
+ * coalesced -- null means no active deal (ROK-854).
  */
 export async function executeBulkPricingUpdate(
   db: Db,
@@ -76,13 +78,40 @@ export async function executeBulkPricingUpdate(
       itad_current_cut = v.current_cut,
       itad_current_shop = v.current_shop,
       itad_current_url = v.current_url,
-      itad_lowest_price = v.lowest_price,
-      itad_lowest_cut = v.lowest_cut,
+      itad_lowest_price = COALESCE(v.lowest_price, g.itad_lowest_price),
+      itad_lowest_cut = COALESCE(v.lowest_cut, g.itad_lowest_cut),
       itad_price_updated_at = v.updated_at
     FROM (VALUES ${valuesList})
       AS v(id, current_price, current_cut, current_shop, current_url, lowest_price, lowest_cut, updated_at)
     WHERE g.id = v.id
   `);
+}
+
+/** Shape of postgres.js error properties we want to extract. */
+interface PgErrorLike {
+  message?: string;
+  code?: string;
+  detail?: string;
+  hint?: string;
+  cause?: PgErrorLike;
+}
+
+/**
+ * Extract Postgres error details from a Drizzle-wrapped error.
+ * Drizzle wraps PG errors so `err.message` is "Failed query: <SQL>".
+ * The real PG error is in `.cause` with code, detail, and hint.
+ */
+export function extractErrorDetail(err: unknown): string {
+  const raw = err instanceof Error ? err : { message: String(err) };
+  const pgError: PgErrorLike = (raw as PgErrorLike).cause ?? raw;
+  return [
+    pgError.message,
+    pgError.code ? `code=${pgError.code}` : null,
+    pgError.detail ? `detail=${pgError.detail}` : null,
+    pgError.hint ? `hint=${pgError.hint}` : null,
+  ]
+    .filter(Boolean)
+    .join(' | ');
 }
 
 @Injectable()
@@ -127,14 +156,18 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
     this.logger.log(`Syncing ITAD pricing for ${games.length} games`);
     const chunks = this.chunkArray(games, CHUNK_SIZE);
 
+    let succeeded = 0;
+    let failed = 0;
     for (const chunk of chunks) {
-      await this.processChunk(chunk);
+      const ok = await this.processChunk(chunk);
+      if (ok) succeeded++;
+      else failed++;
     }
     const cleared = await this.clearStalePricing();
     if (cleared > 0) {
       this.logger.log(`Cleared stale pricing for ${cleared} games`);
     }
-    this.logger.log('ITAD pricing sync complete');
+    this.logSyncSummary(succeeded, failed, games.length);
   }
 
   /** Query all games that have an itadGameId. */
@@ -154,17 +187,19 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
   /** Process a single chunk: fetch pricing and update DB rows. */
   private async processChunk(
     chunk: { id: number; itadGameId: string }[],
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const itadIds = chunk.map((g) => g.itadGameId);
       const entries = await this.itadPriceService.getOverviewBatch(itadIds);
       const entryMap = new Map(entries.map((e) => [e.id, e]));
 
       await this.updateGamesWithPricing(chunk, entryMap);
+      this.logger.debug(`Updated pricing for chunk of ${chunk.length} games`);
+      return true;
     } catch (err) {
-      this.logger.error(
-        `Failed to process ITAD pricing chunk: ${err instanceof Error ? err.message : err}`,
-      );
+      const detail = extractErrorDetail(err);
+      this.logger.error(`Failed to process ITAD pricing chunk: ${detail}`);
+      return false;
     }
   }
 
@@ -208,6 +243,20 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
       )
       .returning({ id: schema.games.id });
     return result.length;
+  }
+
+  /** Log sync completion summary at appropriate level. */
+  private logSyncSummary(
+    succeeded: number,
+    failed: number,
+    totalGames: number,
+  ): void {
+    const msg = `ITAD pricing sync complete: ${succeeded} chunks succeeded, ${failed} failed, ${totalGames} games total`;
+    if (failed > 0) {
+      this.logger.warn(msg);
+    } else {
+      this.logger.log(msg);
+    }
   }
 
   /** Split an array into chunks of the given size. */

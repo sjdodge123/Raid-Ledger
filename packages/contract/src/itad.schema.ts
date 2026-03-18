@@ -26,7 +26,7 @@ export const ItadStorePriceSchema = z.object({
   shop: z.string(),
   url: z.string(),
   price: z.number(),
-  regularPrice: z.number(),
+  regularPrice: z.number().nullable(),
   discount: z.number(),
 });
 
@@ -35,8 +35,8 @@ export type ItadStorePriceDto = z.infer<typeof ItadStorePriceSchema>;
 /** Historical low price entry */
 export const ItadHistoryLowSchema = z.object({
   price: z.number(),
-  shop: z.string(),
-  date: z.string(),
+  shop: z.string().nullable(),
+  date: z.string().nullable(),
 });
 
 export type ItadHistoryLowDto = z.infer<typeof ItadHistoryLowSchema>;
