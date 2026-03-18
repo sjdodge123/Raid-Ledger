@@ -2,7 +2,7 @@
  * Multi-step interaction flow smoke tests.
  * Tests end-to-end flows that involve multiple API calls + Discord output.
  */
-import { waitForMessage, readLastMessages } from '../../helpers/messages.js';
+import { readLastMessages } from '../../helpers/messages.js';
 import { pollForEmbed, pollForCondition } from '../../helpers/polling.js';
 import {
   createEvent,
@@ -42,7 +42,7 @@ const signupCancelFlow: SmokeTest = {
     const chId = ctx.defaultChannelId;
     const ev = await createEvent(ctx.api, 'flow-signup-cancel', mmoOverrides(ctx));
     try {
-      await waitForMessage(
+      await pollForEmbed(
         chId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
@@ -70,7 +70,7 @@ const slotVacatedFlow: SmokeTest = {
     const ev = await createEvent(ctx.api, 'flow-vacated', mmoOverrides(ctx));
     try {
       // Wait for initial embed
-      await waitForMessage(
+      await pollForEmbed(
         ctx.defaultChannelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
@@ -104,7 +104,7 @@ const benchPromotionFlow: SmokeTest = {
     });
     try {
       // Wait for initial embed
-      await waitForMessage(
+      await pollForEmbed(
         ctx.defaultChannelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
@@ -165,7 +165,7 @@ const multiUserSignupFlow: SmokeTest = {
     if (users.length < 3) throw new Error('Need 3+ demo users');
     const ev = await createEvent(ctx.api, 'flow-multi-signup', mmoOverrides(ctx));
     try {
-      await waitForMessage(
+      await pollForEmbed(
         ctx.defaultChannelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
@@ -201,7 +201,7 @@ const eventDeleteCleansEmbed: SmokeTest = {
   async run(ctx) {
     const ev = await createEvent(ctx.api, 'flow-delete');
     try {
-      await waitForMessage(
+      await pollForEmbed(
         ctx.defaultChannelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
