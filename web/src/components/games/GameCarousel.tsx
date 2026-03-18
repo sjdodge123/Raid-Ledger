@@ -59,7 +59,7 @@ export function GameCarousel({ category, games, pricingMap }: GameCarouselProps)
             <div className="relative">
                 {canScrollLeft && <ScrollArrow direction="left" onClick={() => scroll('left')} />}
                 <div ref={scrollRef} className="flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                    {games.map((game) => <div key={game.id} className="snap-start"><UnifiedGameCard variant="link" game={game} compact showRating showInfoBar pricing={pricingMap?.get(game.id) ?? null} /></div>)}
+                    {games.map((game) => <div key={game.id} className="min-w-[180px] flex-shrink-0 snap-start"><UnifiedGameCard variant="link" game={game} compact showRating showInfoBar pricing={pricingMap?.get(game.id) ?? null} /></div>)}
                 </div>
                 {canScrollRight && <ScrollArrow direction="right" onClick={() => scroll('right')} />}
             </div>
