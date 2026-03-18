@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useEventVariantContext } from '../../../hooks/use-events';
+import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
 
 interface CharacterCreateInlineImportProps {
     onSuccess?: (character?: import('@raid-ledger/contract').CharacterDto) => void;
@@ -10,25 +11,6 @@ interface CharacterCreateInlineImportProps {
     /** ROK-587: Event ID for variant context auto-population */
     eventId?: number;
 }
-
-const WOW_SLUGS = new Set([
-    'world-of-warcraft',
-    'world-of-warcraft-classic',
-    'world-of-warcraft-burning-crusade-classic-anniversary-edition',
-    'world-of-warcraft-burning-crusade-classic',
-    'world-of-warcraft-wrath-of-the-lich-king',
-]);
-
-function isWowSlug(slug: string): boolean {
-    return WOW_SLUGS.has(slug);
-}
-
-/** Classic variant game slugs that have a fixed variant (no selector needed). */
-const FIXED_VARIANT_MAP: Record<string, string> = {
-    'world-of-warcraft-burning-crusade-classic-anniversary-edition': 'classic_anniversary',
-    'world-of-warcraft-burning-crusade-classic': 'classic',
-    'world-of-warcraft-wrath-of-the-lich-king': 'classic',
-};
 
 const CLASSIC_VARIANTS = [
     { value: 'classic_anniversary', label: 'Classic Anniversary (TBC)' },
@@ -71,7 +53,7 @@ export function CharacterCreateInlineImport({
 }: CharacterCreateInlineImportProps) {
     const [mode, setMode] = useState<'manual' | 'import'>('import');
     const isClassic = !!gameSlug && gameSlug !== 'world-of-warcraft' && isWowSlug(gameSlug);
-    const fixedVariant = (gameSlug && FIXED_VARIANT_MAP[gameSlug]) ?? null;
+    const fixedVariant = (gameSlug && FIXED_CLASSIC_VARIANTS[gameSlug]) ?? null;
     const showSelector = isClassic && !fixedVariant;
     const { data: variantContext } = useEventVariantContext(eventId, showSelector && !!eventId);
     const [userVariant, setUserVariant] = useState<string | null>(null);

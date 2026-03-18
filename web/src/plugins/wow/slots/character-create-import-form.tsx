@@ -3,18 +3,7 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 import { useEventVariantContext } from '../../../hooks/use-events';
-
-const WOW_SLUGS = new Set([
-    'world-of-warcraft',
-    'world-of-warcraft-classic',
-    'world-of-warcraft-burning-crusade-classic-anniversary-edition',
-    'world-of-warcraft-burning-crusade-classic',
-    'world-of-warcraft-wrath-of-the-lich-king',
-]);
-
-function isWowSlug(slug: string): boolean {
-    return WOW_SLUGS.has(slug);
-}
+import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
 
 interface CharacterCreateImportFormProps {
     onClose: () => void;
@@ -26,13 +15,6 @@ interface CharacterCreateImportFormProps {
     /** ROK-587: Event ID for variant context auto-population */
     eventId?: number;
 }
-
-/** Classic variant game slugs that have a fixed variant (no selector needed). */
-const FIXED_CLASSIC_VARIANTS: Record<string, string> = {
-    'world-of-warcraft-burning-crusade-classic-anniversary-edition': 'classic_anniversary',
-    'world-of-warcraft-burning-crusade-classic': 'classic',
-    'world-of-warcraft-wrath-of-the-lich-king': 'classic',
-};
 
 /** Check if the slug is for any WoW Classic variant (including world-of-warcraft-classic). */
 function isClassicSlug(slug: string): boolean {
