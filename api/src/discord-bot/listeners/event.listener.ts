@@ -19,6 +19,7 @@ import {
   shouldPostEmbed,
   getLeadTimeFromRecurrence,
 } from '../utils/embed-lead-time';
+import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
 import {
   findEventMessages,
   findDiscordMessageRecord,
@@ -65,6 +66,7 @@ export class DiscordEventListener {
     @Optional()
     @Inject(GameAffinityNotificationService)
     private readonly gameAffinityNotificationService: GameAffinityNotificationService | null,
+    private readonly eventLifecycleQueue: EventLifecycleQueueService,
   ) {}
 
   private get deps(): EventListenerDeps {
@@ -84,11 +86,7 @@ export class DiscordEventListener {
       `handleEventCreated fired for event ${payload.eventId} (isAdHoc=${payload.isAdHoc})`,
     );
     if (payload.isAdHoc) return;
-    if (!this.clientService.isConnected()) return;
-    this.fireScheduledEventCreate(payload);
-    if (!this.isWithinLeadTime(payload)) return;
-    const posted = await this.postEmbed(payload);
-    await this.sendGameAffinityNotifications(payload, posted);
+    await this.eventLifecycleQueue.enqueue(payload.eventId, payload);
   }
 
   @OnEvent(APP_EVENT_EVENTS.UPDATED)

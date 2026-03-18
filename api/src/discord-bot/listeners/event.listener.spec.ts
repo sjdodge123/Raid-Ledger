@@ -9,6 +9,7 @@ import { ScheduledEventService } from '../services/scheduled-event.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EMBED_STATES } from '../discord-bot.constants';
+import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 
 let testModule: TestingModule;
@@ -16,6 +17,7 @@ let listener: DiscordEventListener;
 let clientService: jest.Mocked<DiscordBotClientService>;
 let embedFactory: jest.Mocked<DiscordEmbedFactory>;
 let embedPoster: jest.Mocked<EmbedPosterService>;
+let eventLifecycleQueue: jest.Mocked<EventLifecycleQueueService>;
 let mockDb: {
   insert: jest.Mock;
   select: jest.Mock;
@@ -125,6 +127,10 @@ function buildEventListenerProviders() {
       },
     },
     ...buildServiceProviders(),
+    {
+      provide: EventLifecycleQueueService,
+      useValue: { enqueue: jest.fn().mockResolvedValue(undefined) },
+    },
   ];
 }
 
@@ -146,6 +152,7 @@ async function setupEventListenerModule() {
   clientService = testModule.get(DiscordBotClientService);
   embedFactory = testModule.get(DiscordEmbedFactory);
   embedPoster = testModule.get(EmbedPosterService);
+  eventLifecycleQueue = testModule.get(EventLifecycleQueueService);
 }
 
 function createSelectChainWithRecord(record: object) {
@@ -218,24 +225,21 @@ describe('DiscordEventListener', () => {
 });
 
 function eventCreatedTests() {
-  it('should delegate to EmbedPosterService for events within lead-time window', async () => {
+  it('should enqueue lifecycle job for events within lead-time window', async () => {
     await listener.handleEventCreated(mockPayload);
-    expect(embedPoster.postEmbed).toHaveBeenCalledWith(
+    expect(eventLifecycleQueue.enqueue).toHaveBeenCalledWith(
       42,
-      mockPayload.event,
-      101,
-      undefined,
-      undefined,
+      mockPayload,
     );
   });
 
-  it('should skip posting when bot is not connected', async () => {
+  it('should enqueue lifecycle job regardless of bot connection state', async () => {
     clientService.isConnected.mockReturnValue(false);
     await listener.handleEventCreated(mockPayload);
-    expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+    expect(eventLifecycleQueue.enqueue).toHaveBeenCalledWith(42, mockPayload);
   });
 
-  it('should defer to scheduler when event is outside lead-time window', async () => {
+  it('should enqueue lifecycle job for events outside lead-time window', async () => {
     const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const farPayload: EventPayload = {
       ...mockPayload,
@@ -248,10 +252,10 @@ function eventCreatedTests() {
       },
     };
     await listener.handleEventCreated(farPayload);
-    expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+    expect(eventLifecycleQueue.enqueue).toHaveBeenCalledWith(42, farPayload);
   });
 
-  it('should defer recurring series events outside lead-time window', async () => {
+  it('should enqueue lifecycle job for recurring series events', async () => {
     const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const recurringPayload: EventPayload = {
       ...mockPayload,
@@ -265,7 +269,16 @@ function eventCreatedTests() {
       recurrenceRule: { frequency: 'weekly' },
     };
     await listener.handleEventCreated(recurringPayload);
-    expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+    expect(eventLifecycleQueue.enqueue).toHaveBeenCalledWith(
+      42,
+      recurringPayload,
+    );
+  });
+
+  it('should skip enqueue for ad-hoc events', async () => {
+    const adHocPayload: EventPayload = { ...mockPayload, isAdHoc: true };
+    await listener.handleEventCreated(adHocPayload);
+    expect(eventLifecycleQueue.enqueue).not.toHaveBeenCalled();
   });
 }
 
