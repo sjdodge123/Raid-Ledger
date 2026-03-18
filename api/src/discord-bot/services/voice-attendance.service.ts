@@ -38,7 +38,7 @@ import { ChannelResolverService } from './channel-resolver.service';
 
 const FLUSH_INTERVAL_MS = 30_000;
 const SNAPSHOT_WINDOW_MS = 120_000;
-const CLASSIFY_LOOKBACK_MS = 86_400_000;
+const CLASSIFY_LOOKBACK_MS = 7_200_000;
 const VOICE_BINDING_PURPOSES: readonly string[] & BindingPurpose[] = [
   'game-voice-monitor',
   'general-lobby',
@@ -54,6 +54,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   private classifyRunning = false;
   /** Track event IDs that have already been snapshotted (ROK-735). */
   private readonly snapshotted = new Set<number>();
+  /** Track event IDs that have already been classified (ROK-861). */
+  private readonly classified = new Set<number>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -251,24 +253,27 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   private async runClassification(): Promise<void | false> {
     const now = new Date();
-    const endedEvents = await flushH.fetchEndedEvents(
+    const all = await flushH.fetchEndedEvents(
       this.db,
       now,
       CLASSIFY_LOOKBACK_MS,
     );
-    if (endedEvents.length === 0) return false;
+    if (all.length === 0) return false;
+    const pending = all.filter((e) => !this.classified.has(e.id));
+    const skipped = all.length - pending.length;
+    if (skipped > 0)
+      this.logger.debug(`Skipped ${skipped} already-classified event(s)`);
+    if (pending.length === 0) return;
     const graceMs = (await this.getGraceMinutes()) * 60 * 1000;
     await this.flushToDb();
-    for (const event of endedEvents) {
+    for (const event of pending) {
       for (const [, s] of this.sessions) {
         if (s.eventId === event.id && s.isActive)
           this.handleLeave(event.id, s.discordUserId);
       }
     }
     await this.flushToDb();
-    for (const event of endedEvents) {
-      await this.classifySingleEvent(event, graceMs);
-    }
+    for (const event of pending) await this.classifySingleEvent(event, graceMs);
   }
 
   private async classifySingleEvent(
@@ -280,6 +285,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Classifying voice attendance for event ${event.id}`);
     await this.classifyEvent(event.id, event, graceMs);
     await this.autoPopulateAttendance(event.id);
+    this.classified.add(event.id);
     this.snapshotted.delete(event.id);
     for (const key of this.sessions.keys()) {
       if (key.startsWith(`${event.id}:`)) this.sessions.delete(key);
@@ -287,11 +293,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getVoiceSessions(eventId: number): Promise<VoiceSessionsResponseDto> {
-    const sessions = await flushH.fetchVoiceSessions(this.db, eventId);
-    return {
-      eventId,
-      sessions: sessions.map((s) => toVoiceSessionDto(s)),
-    };
+    const rows = await flushH.fetchVoiceSessions(this.db, eventId);
+    return { eventId, sessions: rows.map((s) => toVoiceSessionDto(s)) };
   }
 
   async getVoiceAttendanceSummary(

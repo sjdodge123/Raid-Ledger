@@ -222,8 +222,14 @@ const metricsVoicePopulated: SmokeTest = {
   category: 'voice',
   async run(ctx) {
     await withVoiceBinding(ctx, 2, 'game-voice-monitor', async (vChId) => {
+      const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+        '/admin/settings/games?limit=1',
+      );
+      const gameId = gamesRes.data[0]?.id;
+      if (!gameId) throw new Error('No games in DB for voice metrics test');
+
       const ev = await createEvent(ctx.api, 'metrics-voice', {
-        gameId: 244, // Lost Ark
+        gameId,
         startTime: futureTime(-5), // live event (started 5 min ago)
         endTime: futureTime(55),
       });
