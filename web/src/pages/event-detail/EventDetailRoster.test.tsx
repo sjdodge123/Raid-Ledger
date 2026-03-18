@@ -93,9 +93,8 @@ describe('EventDetailRoster — role preference icons', () => {
     });
 });
 
-describe('EventDetailRoster — adversarial edge cases', () => {
+describe('EventDetailRoster — rendering paths per signup group', () => {
     it('does not render role icons when preferredRoles is undefined (AC-4)', () => {
-        // Guard against API responses omitting the field entirely.
         const signup = createSignup({ preferredRoles: undefined as unknown as null });
         renderRoster(createRoster([signup]));
         expect(screen.queryByAltText('tank')).not.toBeInTheDocument();
@@ -104,8 +103,6 @@ describe('EventDetailRoster — adversarial edge cases', () => {
     });
 
     it('renders role icons through ConfirmedGroup path (non-anonymous confirmed signup)', () => {
-        // ConfirmedGroup renders its own inline div (not SignupEntry).
-        // This path must also pass preferredRoles to RolePreferenceBadges.
         const signup = createSignup({
             confirmationStatus: 'confirmed',
             preferredRoles: ['tank', 'dps'],
@@ -116,7 +113,6 @@ describe('EventDetailRoster — adversarial edge cases', () => {
     });
 
     it('renders role icons through TentativeGroup/SignupEntry path', () => {
-        // TentativeGroup delegates to SignupEntry, which calls RolePreferenceBadges.
         const signup = createSignup({
             status: 'tentative',
             preferredRoles: ['healer', 'dps'],
@@ -126,20 +122,17 @@ describe('EventDetailRoster — adversarial edge cases', () => {
         expect(screen.getByAltText('dps')).toBeInTheDocument();
     });
 
-    it('does NOT render role icons in the Pending group (SimpleSignupGroup has no RolePreferenceBadges)', () => {
-        // SimpleSignupGroup renders pending signups without role icons by design.
+    it('does NOT render role icons in the Pending group', () => {
         const signup = createSignup({
             status: 'signed_up',
             confirmationStatus: 'pending',
             preferredRoles: ['tank'],
         });
         renderRoster(createRoster([signup]));
-        // Pending group should show the player but NOT the role icon
         expect(screen.queryByAltText('tank')).not.toBeInTheDocument();
     });
 
     it('does NOT render role icons in the Departed group', () => {
-        // Departed signups go through SimpleSignupGroup which has no RolePreferenceBadges.
         const signup = createSignup({
             status: 'departed',
             preferredRoles: ['healer'],
@@ -147,9 +140,10 @@ describe('EventDetailRoster — adversarial edge cases', () => {
         renderRoster(createRoster([signup]));
         expect(screen.queryByAltText('healer')).not.toBeInTheDocument();
     });
+});
 
+describe('EventDetailRoster — boundary inputs & multiple signups', () => {
     it('renders correct count of role icons for duplicate roles', () => {
-        // Duplicate roles produce one icon per entry (key collision, but React still renders both).
         const signup = createSignup({ preferredRoles: ['dps', 'dps'] });
         renderRoster(createRoster([signup]));
         const icons = screen.getAllByAltText('dps');
@@ -157,7 +151,6 @@ describe('EventDetailRoster — adversarial edge cases', () => {
     });
 
     it('does not render an icon for an unrecognized role string', () => {
-        // getRoleIconUrl returns null for unknown roles; RoleIcon renders nothing.
         const signup = createSignup({ preferredRoles: ['support'] });
         renderRoster(createRoster([signup]));
         expect(screen.queryByAltText('support')).not.toBeInTheDocument();

@@ -158,6 +158,7 @@ export class DemoDataService {
       userByName,
       chResult.charByUserGame,
       gen.signups,
+      allGames,
     );
     await signupsH.installRosterAssignments(
       bi,

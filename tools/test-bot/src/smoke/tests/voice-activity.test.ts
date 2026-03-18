@@ -145,8 +145,15 @@ const multiGameVoiceDetected: SmokeTest = {
   category: 'voice',
   async run(ctx) {
     const vCh = pickChannel(ctx.voiceChannels, 0);
-    const gameA = 1; // World of Warcraft (from seed-games.ts)
-    const gameB = 4; // Valheim (from seed-games.ts)
+    // Fetch live game IDs from API to avoid hardcoding seed data IDs
+    const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+      '/admin/settings/games?limit=2',
+    );
+    const gameIds = gamesRes.data.map((g) => g.id);
+    if (gameIds.length < 2) {
+      throw new Error('Need at least 2 games in DB for multi-binding test');
+    }
+    const [gameA, gameB] = gameIds;
     let bindA: string | undefined;
     let bindB: string | undefined;
     let eventId: number | undefined;

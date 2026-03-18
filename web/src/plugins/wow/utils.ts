@@ -10,6 +10,13 @@ const SLUG_VARIANT_MAP: Record<string, string> = {
 /** All recognized WoW game slugs (retail + all classic variants). */
 export const WOW_SLUGS: ReadonlySet<string> = new Set(Object.keys(SLUG_VARIANT_MAP));
 
+/** Classic variant game slugs that have a fixed variant (no selector needed). */
+export const FIXED_CLASSIC_VARIANTS: Readonly<Record<string, string>> = {
+    'world-of-warcraft-burning-crusade-classic-anniversary-edition': 'classic_anniversary',
+    'world-of-warcraft-burning-crusade-classic': 'classic',
+    'world-of-warcraft-wrath-of-the-lich-king': 'classic',
+};
+
 /** Check if a game slug belongs to any WoW game entry. */
 export function isWowSlug(slug: string): boolean {
     return WOW_SLUGS.has(slug);

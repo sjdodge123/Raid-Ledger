@@ -117,7 +117,13 @@ export async function resolveAllBindings(
   return matched;
 }
 
-/** Backward-compat: resolve first matching binding. */
+/**
+ * Backward-compat: resolve first matching binding.
+ * NOTE: Only used by VoiceStateListener.resolveBinding() for the onPresenceUpdate
+ * path. Returns only the first binding, so multi-binding channels will only see
+ * one game. If the presence-update path ever needs multi-binding support, this
+ * shim must be replaced with resolveAllBindings usage.
+ */
 export async function resolveBinding(
   deps: VoiceStateDeps,
   channelId: string,

@@ -75,8 +75,8 @@ function PlayerNameLink({ player }: { player: RosterAssignmentResponse }) {
 function FlexibilityBadges({ preferredRoles }: { preferredRoles: string[] }) {
     return (
         <span className="flex shrink-0 items-center gap-0.5" title={`Prefers: ${preferredRoles.map(formatRole).join(', ')}`}>
-            {preferredRoles.map((r) => (
-                <span key={r} className="inline-flex items-center"><RoleIcon role={r} size="w-5 h-5" /></span>
+            {preferredRoles.map((r, i) => (
+                <span key={`${r}-${i}`} className="inline-flex items-center"><RoleIcon role={r} size="w-5 h-5" /></span>
             ))}
         </span>
     );

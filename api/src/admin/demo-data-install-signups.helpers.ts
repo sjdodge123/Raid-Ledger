@@ -91,17 +91,21 @@ export async function installSignups(
   userByName: Map<string, typeof schema.users.$inferSelect>,
   charByUserGame: Map<string, string>,
   generatedSignups: ReturnType<typeof generateSignups>,
+  allGames: (typeof schema.games.$inferSelect)[],
 ) {
+  const mmoGameIds = buildMmoGameIdSet(allGames);
   const origSignupValues = buildOrigSignupValues(
     origEvents,
     allUsers,
     charByUserGame,
+    mmoGameIds,
   );
   const genSignupValues = buildGenSignupValues(
     genEvents,
     userByName,
     charByUserGame,
     generatedSignups,
+    mmoGameIds,
   );
   const uniqueSignups = dedupeByKey(
     [...origSignupValues, ...genSignupValues],
@@ -120,6 +124,7 @@ function buildSignupValue(
   eventId: number,
   userId: number,
   characterId: string | null,
+  isMMO: boolean,
 ): Record<string, unknown> {
   const isConfirmed = !!characterId;
   return {
@@ -127,7 +132,7 @@ function buildSignupValue(
     userId,
     characterId,
     confirmationStatus: isConfirmed ? 'confirmed' : 'pending',
-    preferredRoles: isConfirmed ? randomPreferredRoles(rng) : null,
+    preferredRoles: isConfirmed && isMMO ? randomPreferredRoles(rng) : null,
   };
 }
 
@@ -136,10 +141,12 @@ function buildOrigSignupValues(
   origEvents: (typeof schema.events.$inferSelect)[],
   allUsers: (typeof schema.users.$inferSelect)[],
   charByUserGame: Map<string, string>,
+  mmoGameIds: Set<number>,
 ): Record<string, unknown>[] {
   const values: Record<string, unknown>[] = [];
   for (const event of origEvents) {
     const eventRng = createRng(event.id);
+    const isMMO = event.gameId ? mmoGameIds.has(event.gameId) : false;
     const numSignups = 3 + Math.floor(eventRng() * 3);
     const gamers = allUsers.slice(1);
     const shuffled = [...gamers];
@@ -150,7 +157,7 @@ function buildOrigSignupValues(
     for (const user of shuffled.slice(0, numSignups)) {
       const charKey = event.gameId ? `${user.id}:${event.gameId}` : null;
       const charId = charKey ? (charByUserGame.get(charKey) ?? null) : null;
-      values.push(buildSignupValue(eventRng, event.id, user.id, charId));
+      values.push(buildSignupValue(eventRng, event.id, user.id, charId, isMMO));
     }
   }
   return values;
@@ -162,6 +169,7 @@ function buildGenSignupValues(
   userByName: Map<string, typeof schema.users.$inferSelect>,
   charByUserGame: Map<string, string>,
   generatedSignups: ReturnType<typeof generateSignups>,
+  mmoGameIds: Set<number>,
 ): Record<string, unknown>[] {
   const rng = createRng(0xbeef);
   const values: Record<string, unknown>[] = [];
@@ -169,9 +177,10 @@ function buildGenSignupValues(
     const event = genEvents[signup.eventIdx];
     const user = userByName.get(signup.username);
     if (!event || !user) continue;
+    const isMMO = event.gameId ? mmoGameIds.has(event.gameId) : false;
     const charKey = event.gameId ? `${user.id}:${event.gameId}` : null;
     const charId = charKey ? (charByUserGame.get(charKey) ?? null) : null;
-    values.push(buildSignupValue(rng, event.id, user.id, charId));
+    values.push(buildSignupValue(rng, event.id, user.id, charId, isMMO));
   }
   return values;
 }

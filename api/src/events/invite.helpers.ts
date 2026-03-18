@@ -6,6 +6,7 @@ import {
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 
 type SlotRow = typeof schema.pugSlots.$inferSelect;
 type EventRow = typeof schema.events.$inferSelect;
@@ -66,14 +67,6 @@ async function findGameRow(
   return row ?? null;
 }
 
-const BLIZZARD_SLUGS = [
-  'world-of-warcraft',
-  'world-of-warcraft-classic',
-  'world-of-warcraft-burning-crusade-classic-anniversary-edition',
-  'world-of-warcraft-burning-crusade-classic',
-  'world-of-warcraft-wrath-of-the-lich-king',
-];
-
 export async function resolveGameInfo(
   db: PostgresJsDatabase<typeof schema>,
   event: EventRow,
@@ -82,7 +75,7 @@ export async function resolveGameInfo(
   if (!event.gameId) return null;
   const gameRow = await findGameRow(db, event.gameId);
   if (!gameRow) return null;
-  const isBlizzardGame = BLIZZARD_SLUGS.includes(gameRow.slug);
+  const isBlizzardGame = ALL_WOW_GAME_SLUGS.includes(gameRow.slug);
   const hints = isBlizzardGame
     ? await resolveBlizzardHints(db, event.gameId, slotCreatedBy)
     : { inviterRealm: null, gameVariant: null };
