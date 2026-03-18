@@ -110,6 +110,30 @@ export async function getRecurrenceGroupId(
   return row?.recurrenceGroupId;
 }
 
+/** Resolve voice channel for scheduled event creation (ROK-860 extraction). */
+export async function resolveVoiceForCreate(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  gameId: number | null | undefined,
+  override: string | null | undefined,
+  channelResolver: {
+    resolveVoiceChannelForScheduledEvent(
+      gameId?: number | null,
+      recurrenceGroupId?: string | null,
+    ): Promise<string | null>;
+  },
+): Promise<string | null> {
+  const rgId = await getRecurrenceGroupId(db, eventId);
+  return (
+    override ??
+    (await channelResolver.resolveVoiceChannelForScheduledEvent(
+      gameId,
+      rgId,
+    )) ??
+    null
+  );
+}
+
 /** Reconciliation candidate shape (ROK-755). */
 export interface ReconciliationCandidate {
   id: number;
