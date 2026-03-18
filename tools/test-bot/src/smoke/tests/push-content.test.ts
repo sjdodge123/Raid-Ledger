@@ -140,11 +140,12 @@ const cancelledEmbedHasContent: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
-      // Cancel edits are slow under parallel load — use 90s timeout
-      const found = await waitForEmbedUpdate(
+      // Cancel edits are slow under parallel load (embed sync queue backlog)
+      const found = await pollForEmbed(
         ctx.defaultChannelId,
         (m) => m.embeds.some((e) => e.title?.includes('CANCELLED')),
-        90_000,
+        ctx.config.timeoutMs,
+        { intervalMs: 3000, backoff: false },
       );
       assertHasContent(found.content);
       assertNoDiscordTokens(found.content);

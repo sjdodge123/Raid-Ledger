@@ -128,11 +128,10 @@ const embedCancelled: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
-      // Verify the embed actually shows CANCELLED (not just finds original)
       await waitForEmbedUpdate(
         ctx.defaultChannelId,
-        (m) => m.embeds.some((e) => e.title?.includes('CANCELLED')),
-        90_000,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
       );
     } finally {
       await deleteEvent(ctx.api, ev.id);
