@@ -20,8 +20,9 @@ export function applySubscribedGameEmbed(
     const dur = computeDurationSuffix(payload.startTime, payload.endTime);
     lines.push(`📆 <t:${unix}:f> (<t:${unix}:R>)${dur}`);
   }
-  if (payload.voiceChannelId)
+  if (payload.voiceChannelId) {
     lines.push(`🔊 <#${toStr(payload.voiceChannelId)}>`);
+  }
   if (lines.length > 0) embed.setDescription(lines.join('\n'));
   if (typeof payload.gameCoverUrl === 'string' && payload.gameCoverUrl)
     embed.setThumbnail(payload.gameCoverUrl);
