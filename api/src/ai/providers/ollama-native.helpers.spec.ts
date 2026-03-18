@@ -36,7 +36,11 @@ describe('downloadFile', () => {
     const response = new PassThrough();
     mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
       const req = new EventEmitter();
-      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      cb(
+        Object.assign(response, {
+          statusCode: 200,
+        }) as unknown as IncomingMessage,
+      );
       setTimeout(() => response.end('binary-data'), 10);
       return req;
     });
@@ -71,7 +75,11 @@ describe('downloadFile', () => {
         cb(redirect as unknown as IncomingMessage);
       } else {
         const response = new PassThrough();
-        cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+        cb(
+          Object.assign(response, {
+            statusCode: 200,
+          }) as unknown as IncomingMessage,
+        );
         setTimeout(() => response.end('binary-data'), 10);
       }
       return req;
@@ -109,7 +117,11 @@ describe('downloadFile', () => {
     const response = new PassThrough();
     mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
       const req = new EventEmitter();
-      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      cb(
+        Object.assign(response, {
+          statusCode: 200,
+        }) as unknown as IncomingMessage,
+      );
       setTimeout(() => response.end('binary-data'), 10);
       return req;
     });
@@ -128,13 +140,19 @@ describe('downloadFile', () => {
     const response = new PassThrough();
     mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
       const req = new EventEmitter();
-      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      cb(
+        Object.assign(response, {
+          statusCode: 200,
+        }) as unknown as IncomingMessage,
+      );
       setTimeout(() => response.end('binary-data'), 10);
       return req;
     });
     const writeStream = new PassThrough();
     mockCreateWriteStream.mockReturnValue(writeStream);
-    mockChmod.mockRejectedValueOnce(new Error('EPERM: operation not permitted'));
+    mockChmod.mockRejectedValueOnce(
+      new Error('EPERM: operation not permitted'),
+    );
 
     await expect(
       downloadFile('https://example.com/ollama', '/usr/local/bin/ollama'),
@@ -170,14 +188,21 @@ describe('downloadFile', () => {
     const response = new PassThrough();
     mockHttpGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
       const req = new EventEmitter();
-      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      cb(
+        Object.assign(response, {
+          statusCode: 200,
+        }) as unknown as IncomingMessage,
+      );
       setTimeout(() => response.end('binary-data'), 10);
       return req;
     });
     const writeStream = new PassThrough();
     mockCreateWriteStream.mockReturnValue(writeStream);
 
-    await downloadFile('http://internal.example.com/ollama', '/usr/local/bin/ollama');
+    await downloadFile(
+      'http://internal.example.com/ollama',
+      '/usr/local/bin/ollama',
+    );
 
     expect(mockHttpGet).toHaveBeenCalled();
     expect(mockHttpsGet).not.toHaveBeenCalled();
@@ -185,7 +210,7 @@ describe('downloadFile', () => {
   });
 
   it('cleans up temp file on network-level connection error', async () => {
-    mockHttpsGet.mockImplementation((_url: string, _cb: HttpsGetCb) => {
+    mockHttpsGet.mockImplementation(() => {
       const req = new EventEmitter();
       setTimeout(() => req.emit('error', new Error('ECONNREFUSED')), 10);
       return req;
@@ -204,12 +229,20 @@ describe('downloadFile', () => {
     const response = new PassThrough();
     mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
       const req = new EventEmitter();
-      cb(Object.assign(response, { statusCode: 200 }) as IncomingMessage);
+      cb(
+        Object.assign(response, {
+          statusCode: 200,
+        }) as unknown as IncomingMessage,
+      );
       return req;
     });
     const writeStream = new PassThrough();
     mockCreateWriteStream.mockReturnValue(writeStream);
-    setTimeout(() => writeStream.emit('error', new Error('ENOSPC: no space left on device')), 20);
+    setTimeout(
+      () =>
+        writeStream.emit('error', new Error('ENOSPC: no space left on device')),
+      20,
+    );
 
     await expect(
       downloadFile('https://example.com/ollama', '/usr/local/bin/ollama'),

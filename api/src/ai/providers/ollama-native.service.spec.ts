@@ -266,7 +266,7 @@ describe('OllamaNativeService', () => {
   });
 
   describe('adversarial: allinone mode is determined once at construction', () => {
-    it('caches allinone mode from constructor — cannot change at runtime', async () => {
+    it('caches allinone mode from constructor — cannot change at runtime', () => {
       // Service was constructed with existsSync returning true (allinone)
       expect(service.isAllinoneMode()).toBe(true);
 
