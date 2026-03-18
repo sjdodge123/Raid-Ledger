@@ -14,6 +14,7 @@ import {
   DEPARTURE_PROMOTE_BUTTON_IDS,
   EMBED_COLORS,
 } from '../discord-bot.constants';
+import { computeSlotCapacity } from '../../events/signups-signup.helpers';
 
 /** Bundled dependencies passed from the processor. */
 export interface DepartureGraceDeps {
@@ -96,6 +97,44 @@ export async function verifySignupActive(
     return null;
   }
   return signup;
+}
+
+/**
+ * Determine if the event was at capacity before the departure.
+ * Since the departure already happened (status set to 'departed'),
+ * we count current active signups and add 1 for the just-departed user.
+ * Returns false (suppress notifications) if event was not full or has no capacity limit.
+ */
+export async function wasEventFullBeforeDeparture(
+  db: PostgresJsDatabase<typeof schema>,
+  event: typeof schema.events.$inferSelect,
+): Promise<boolean> {
+  const capacity = resolveEventCapacity(event);
+  if (capacity === null) return false;
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, event.id),
+        notInArray(schema.eventSignups.status, [
+          'departed',
+          'declined',
+          'roached_out',
+        ]),
+      ),
+    )
+    .limit(1);
+  return Number(count) + 1 >= capacity;
+}
+
+/** Resolve the total non-bench capacity for an event. */
+function resolveEventCapacity(
+  event: typeof schema.events.$inferSelect,
+): number | null {
+  const slotConfig = event.slotConfig as Record<string, unknown> | null;
+  if (slotConfig) return computeSlotCapacity(slotConfig);
+  return event.maxAttendees ?? null;
 }
 
 /**

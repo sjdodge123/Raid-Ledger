@@ -22,6 +22,7 @@ import {
   moveToBench,
   notifyOrganizer,
   sendCreatorPromoteDM,
+  wasEventFullBeforeDeparture,
 } from './departure-grace.helpers';
 
 /**
@@ -108,12 +109,14 @@ export class DepartureGraceProcessor extends WorkerHost {
       .where(eq(schema.eventSignups.id, signup.id));
 
     const assignment = await moveToBench(d.db, signup.id, eventId, d.logger);
-    const displayName = await this.resolveDisplayName(signup);
+    const wasFull = await wasEventFullBeforeDeparture(d.db, event);
 
-    await notifyOrganizer(d, event, eventId, displayName);
-
-    if (assignment && assignment.role && assignment.role !== 'bench') {
-      await sendCreatorPromoteDM(d, event, displayName, assignment);
+    if (wasFull) {
+      const displayName = await this.resolveDisplayName(signup);
+      await notifyOrganizer(d, event, eventId, displayName);
+      if (assignment && assignment.role && assignment.role !== 'bench') {
+        await sendCreatorPromoteDM(d, event, displayName, assignment);
+      }
     }
 
     this.eventEmitter.emit(SIGNUP_EVENTS.UPDATED, {
