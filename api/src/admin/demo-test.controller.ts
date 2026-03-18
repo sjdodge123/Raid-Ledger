@@ -36,6 +36,12 @@ const AddGameInterestSchema = z.object({
   gameId: z.number().int().positive(),
 });
 
+const TriggerDepartureSchema = z.object({
+  eventId: z.number().int().positive(),
+  signupId: z.number().int().positive(),
+  discordUserId: z.string().min(1),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 const CreateTestSignupSchema = z.object({
@@ -107,6 +113,21 @@ export class DemoTestController {
     await this.demoTestService.addGameInterestForTest(
       parsed.userId,
       parsed.gameId,
+    );
+    return { success: true };
+  }
+
+  /** Enqueue a departure grace job with 0 delay — DEMO_MODE only (smoke tests). */
+  @Post('trigger-departure')
+  @HttpCode(HttpStatus.OK)
+  async triggerDepartureForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(TriggerDepartureSchema, body);
+    await this.demoTestService.triggerDepartureForTest(
+      parsed.eventId,
+      parsed.signupId,
+      parsed.discordUserId,
     );
     return { success: true };
   }

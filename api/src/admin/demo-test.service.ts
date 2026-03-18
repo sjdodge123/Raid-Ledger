@@ -10,6 +10,7 @@ import type { CreateSignupDto, SignupResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
 import { SignupsService } from '../events/signups.service';
+import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -93,6 +94,19 @@ export class DemoTestService {
       await this.overrideSignupStatus(result.id, dto.status);
     }
     return result;
+  }
+
+  /** Enqueue a departure grace job with 0ms delay — DEMO_MODE only. */
+  async triggerDepartureForTest(
+    eventId: number,
+    signupId: number,
+    discordUserId: string,
+  ): Promise<void> {
+    await this.assertDemoMode();
+    const queueSvc = this.moduleRef.get(DepartureGraceQueueService, {
+      strict: false,
+    });
+    await queueSvc.enqueue({ eventId, signupId, discordUserId }, 0);
   }
 
   /** Directly update a signup's status in the DB. */

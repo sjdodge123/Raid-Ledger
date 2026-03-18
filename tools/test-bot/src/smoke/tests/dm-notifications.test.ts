@@ -16,6 +16,7 @@ import {
   rescheduleEvent,
   deleteEvent,
   addGameInterest,
+  triggerDeparture,
   futureTime,
   sleep,
 } from '../fixtures.js';
@@ -90,6 +91,94 @@ const slotVacatedNotification: SmokeTest = {
       await sleep(1000);
       // slot_vacated notification is buffered 3 min — just verify the
       // removal succeeded (the notification buffer is tested in unit tests)
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+/**
+ * Check if a slot_vacated notification exists for a specific event.
+ * Uses GET /notifications (paginated) since there's no unread-only endpoint.
+ */
+async function hasSlotVacatedForEvent(
+  ctx: TestContext,
+  eventId: number,
+): Promise<boolean> {
+  type NotifDto = { type: string; payload?: { eventId?: number } };
+  const res = await ctx.api
+    .get<NotifDto[]>('/notifications?limit=50')
+    .catch(() => [] as NotifDto[]);
+  const list = Array.isArray(res) ? res : [];
+  return list.some(
+    (n) => n.type === 'slot_vacated' && n.payload?.eventId === eventId,
+  );
+}
+
+// ── ROK-851: Departure notification suppression ──
+
+const departureNotifSuppressedNotFull: SmokeTest = {
+  name: 'Departure notification suppressed when event not full (ROK-851)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 2) throw new Error('Need 2+ demo users');
+    // LIVE event with capacity 10, only 2 signups → not full
+    const ev = await createEvent(ctx.api, 'depart-notfull', {
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      maxAttendees: 10,
+    });
+    try {
+      const res = await signupAs(ctx.api, ev.id, users[0], ['dps']);
+      await signupAs(ctx.api, ev.id, users[1], ['dps']);
+      await sleep(1000);
+      const signupId = (res as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-1');
+      await sleep(5000);
+      const found = await hasSlotVacatedForEvent(ctx, ev.id);
+      if (found) {
+        throw new Error(
+          'slot_vacated notification was sent for a non-full event',
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const departureNotifSentWhenFull: SmokeTest = {
+  name: 'Departure notification sent when event was full (ROK-851)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 5) throw new Error('Need 5+ demo users');
+    // LIVE event with capacity 5 (tank:1, healer:1, dps:3), 5 signups → full
+    const ev = await createEvent(ctx.api, 'depart-full', {
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      const res = await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await signupAs(ctx.api, ev.id, users[3], ['dps']);
+      await signupAs(ctx.api, ev.id, users[4], ['dps']);
+      await sleep(1000);
+      const signupId = (res as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-2');
+      await sleep(5000);
+      const found = await hasSlotVacatedForEvent(ctx, ev.id);
+      if (!found) {
+        throw new Error(
+          'No slot_vacated notification for a full event — suppression too aggressive',
+        );
+      }
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -263,6 +352,8 @@ export const dmNotificationTests: SmokeTest[] = [
   cancellationNotification,
   rescheduleNotification,
   slotVacatedNotification,
+  departureNotifSuppressedNotFull,
+  departureNotifSentWhenFull,
   tentativeDisplacedNotification,
   rosterReassignmentNotification,
   pugInviteNotification,
