@@ -78,7 +78,7 @@ describe('PlayerCard — FlexibilityBadges', () => {
     });
 });
 
-describe('PlayerCard — FlexibilityBadges adversarial edge cases', () => {
+describe('PlayerCard — FlexibilityBadges boundary inputs', () => {
     it('does not render role icons when preferredRoles is undefined (AC-4)', () => {
         // The field is typed as string[] | null, but undefined is a runtime possibility
         // from API responses that omit the field entirely.
@@ -89,19 +89,14 @@ describe('PlayerCard — FlexibilityBadges adversarial edge cases', () => {
         expect(screen.queryByAltText('dps')).not.toBeInTheDocument();
     });
 
-    it('renders only one icon for duplicate roles without key collision', () => {
-        // React uses key={r} — duplicate keys cause silent rendering issues.
-        // The component renders an icon per entry, so two 'tank' entries produces two imgs
-        // but with duplicate keys. We assert both images appear and there are no console errors.
+    it('renders two icons for duplicate roles without key collision', () => {
         const player = createMockPlayer({ preferredRoles: ['tank', 'tank'] });
         renderCard({ player });
-        // Both images are in the DOM (React does not deduplicate on key collision)
         const icons = screen.getAllByAltText('tank');
         expect(icons).toHaveLength(2);
     });
 
     it('does not render a role icon for an unrecognized role string', () => {
-        // getRoleIconUrl returns null for unknown roles; RoleIcon returns null.
         const player = createMockPlayer({ preferredRoles: ['support'] });
         renderCard({ player });
         expect(screen.queryByAltText('support')).not.toBeInTheDocument();
@@ -114,10 +109,21 @@ describe('PlayerCard — FlexibilityBadges adversarial edge cases', () => {
         expect(screen.queryByAltText('support')).not.toBeInTheDocument();
     });
 
+    it('role icons render correctly for each known role in isolation', () => {
+        const roles = ['tank', 'healer', 'dps'] as const;
+        for (const role of roles) {
+            const player = createMockPlayer({ preferredRoles: [role] });
+            const { unmount } = renderCard({ player });
+            expect(screen.getByAltText(role)).toBeInTheDocument();
+            unmount();
+        }
+    });
+});
+
+describe('PlayerCard — FlexibilityBadges tooltip & coexistence', () => {
     it('FlexibilityBadges tooltip text lists formatted role names for single role (AC-1)', () => {
         const player = createMockPlayer({ preferredRoles: ['tank'] });
         const { container } = renderCard({ player });
-        // The span wrapping the icons has a title attribute built with formatRole()
         const badge = container.querySelector('[title^="Prefers:"]');
         expect(badge).toBeInTheDocument();
         expect(badge).toHaveAttribute('title', `Prefers: ${formatRole('tank')}`);
@@ -146,19 +152,7 @@ describe('PlayerCard — FlexibilityBadges adversarial edge cases', () => {
             preferredRoles: ['healer'],
         });
         renderCard({ player });
-        // Tentative hourglass emoji badge
         expect(screen.getByTitle('Tentative \u2014 may not attend')).toBeInTheDocument();
-        // Role icon still renders
         expect(screen.getByAltText('healer')).toBeInTheDocument();
-    });
-
-    it('role icons render correctly for each known role in isolation', () => {
-        const roles = ['tank', 'healer', 'dps'] as const;
-        for (const role of roles) {
-            const player = createMockPlayer({ preferredRoles: [role] });
-            const { unmount } = renderCard({ player });
-            expect(screen.getByAltText(role)).toBeInTheDocument();
-            unmount();
-        }
     });
 });

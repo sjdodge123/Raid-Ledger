@@ -49,8 +49,8 @@ function RolePreferenceBadges({ roles }: { roles?: string[] | null }) {
     if (!roles || roles.length === 0) return null;
     return (
         <span className="flex shrink-0 items-center gap-0.5">
-            {roles.map((r) => (
-                <RoleIcon key={r} role={r} size="w-4 h-4" />
+            {roles.map((r, i) => (
+                <RoleIcon key={`${r}-${i}`} role={r} size="w-4 h-4" />
             ))}
         </span>
     );
