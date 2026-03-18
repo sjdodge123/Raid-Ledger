@@ -87,19 +87,19 @@ function describeGamesIGDB() {
     });
 
     it('should exclude banned games from search results', async () => {
-      await insertTestGame(testApp, 'Normal Game', { igdbId: 3001 });
-      await insertTestGame(testApp, 'Banned Game', {
+      await insertTestGame(testApp, 'Normal Zephyr', { igdbId: 3001 });
+      await insertTestGame(testApp, 'Banned Zephyr', {
         igdbId: 3002,
         banned: true,
       });
 
-      const res = await testApp.request.get('/games/search?q=Game');
+      const res = await testApp.request.get('/games/search?q=Zephyr');
 
       expect(res.status).toBe(200);
       const games = (res.body as { data: Array<{ name: string }> }).data;
       const names = games.map((g) => g.name);
-      expect(names).toContain('Normal Game');
-      expect(names).not.toContain('Banned Game');
+      expect(names).toContain('Normal Zephyr');
+      expect(names).not.toContain('Banned Zephyr');
     });
 
     it('should return 400 for empty query', async () => {

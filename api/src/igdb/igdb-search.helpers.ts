@@ -84,8 +84,10 @@ export async function checkLocalDb(
     .where(and(...dbFilters))
     .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
-  if (cachedGames.length >= IGDB_CONFIG.SEARCH_LIMIT) {
-    logger.debug(`Database cache hit (full page) for query: ${query}`);
+  if (cachedGames.length > 0) {
+    logger.debug(
+      `Database cache hit (${cachedGames.length} games) for query: ${query}`,
+    );
     return {
       games: cachedGames.map((g) => mapDbRowToDetail(g)),
       cached: true,

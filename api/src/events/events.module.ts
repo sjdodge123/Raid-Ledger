@@ -24,6 +24,7 @@ import { InviteController } from './invite.controller';
 import { TemplatesController } from './templates.controller';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
+import { ActiveEventCacheService } from './active-event-cache.service';
 import { AvailabilityModule } from '../availability/availability.module';
 import { NotificationModule } from '../notifications/notification.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
@@ -38,7 +39,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
 @Module({
   imports: [
     AvailabilityModule,
-    NotificationModule,
+    forwardRef(() => NotificationModule),
     SettingsModule,
     forwardRef(() => DiscordBotModule),
     BullModule.registerQueue({ name: BENCH_PROMOTION_QUEUE }),
@@ -80,6 +81,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
     EventPlansProcessor,
     AdHocEventsGateway,
     AnalyticsService,
+    ActiveEventCacheService,
   ],
   exports: [
     EventsService,
@@ -89,6 +91,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
     InviteService,
     AdHocEventsGateway,
     BenchPromotionService,
+    ActiveEventCacheService,
   ],
 })
 export class EventsModule {}

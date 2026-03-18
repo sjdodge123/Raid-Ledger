@@ -23,6 +23,14 @@ export function buildCancelledPushContent(title: string): string {
 }
 
 /**
+ * Build a plaintext push notification preview for a completed scheduled event.
+ */
+export function buildCompletedPushContent(event: EmbedEventData): string {
+  const titleWithGame = buildTitleWithGame(event.title, event.game?.name);
+  return truncateToFit(`\u2705 ${titleWithGame} -- Completed`, MAX_LENGTH);
+}
+
+/**
  * Build a plaintext push notification preview for an ad-hoc spawn embed.
  */
 export function buildAdHocSpawnPushContent(

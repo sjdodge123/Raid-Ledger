@@ -7,6 +7,7 @@ import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { ActiveEventCacheService } from '../events/active-event-cache.service';
 import {
   PRESENCE_THRESHOLD_SEC,
   PHASE1_OFFSET_MS,
@@ -35,6 +36,7 @@ export class LiveNoShowService {
     @Optional()
     @Inject(VoiceAttendanceService)
     private readonly voiceAttendance: VoiceAttendanceService | null,
+    @Optional() private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   /** Cron: runs every 60 seconds at second 40. */
@@ -44,6 +46,11 @@ export class LiveNoShowService {
       'LiveNoShowService_checkNoShows',
       async () => {
         if (!this.voiceAttendance) return false;
+        if (
+          this.eventCache &&
+          this.eventCache.getActiveEvents(new Date()).length === 0
+        )
+          return false;
         const now = new Date();
         const liveEvents = await findLiveEventsInNoShowWindow(this.db, now);
         if (liveEvents.length === 0) return false;

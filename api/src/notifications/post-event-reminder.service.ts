@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -9,6 +9,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { PugInviteService } from '../discord-bot/services/pug-invite.service';
 import { SettingsService } from '../settings/settings.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { ActiveEventCacheService } from '../events/active-event-cache.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 
 /**
@@ -30,6 +31,7 @@ export class PostEventReminderService {
     private readonly pugInviteService: PugInviteService,
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
+    @Optional() private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   /**
@@ -49,6 +51,14 @@ export class PostEventReminderService {
   /** Core logic for post-event PUG reminder processing. */
   private async processPostEventReminders(): Promise<void | false> {
     if (!this.clientService.isConnected()) return false;
+    const POST_EVENT_WINDOW_MS = 16 * 60 * 1000;
+    if (this.eventCache) {
+      const recent = this.eventCache.getRecentlyEndedEvents(
+        new Date(),
+        POST_EVENT_WINDOW_MS,
+      );
+      if (recent.length === 0) return false;
+    }
     this.logger.debug('Running post-event PUG reminder check...');
 
     const qualifyingPugs = await this.findQualifyingPugs();
