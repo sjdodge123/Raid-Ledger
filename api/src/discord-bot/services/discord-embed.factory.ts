@@ -18,6 +18,7 @@ import { formatDurationMs } from '../utils/format-duration';
 import {
   buildEventPushContent,
   buildCancelledPushContent,
+  buildCompletedPushContent,
   buildAdHocSpawnPushContent,
   buildAdHocCompletedPushContent,
 } from '../utils/push-content';
@@ -96,7 +97,7 @@ export class DiscordEmbedFactory {
   ): EmbedResult {
     const state = options?.state ?? EMBED_STATES.POSTED;
     const buttons = options?.buttons ?? 'signup';
-    const content = buildEventPushContent(event);
+    const content = this.buildPushContentForState(event, state);
     const color = this.getColorForState(state);
     const embed = this.createBaseEmbed(event, context, color);
     if (state === EMBED_STATES.CANCELLED || state === EMBED_STATES.COMPLETED) {
@@ -226,6 +227,20 @@ export class DiscordEmbedFactory {
   }
 
   // ─── Private helpers ──────────────────────────────────────
+
+  /** Select the correct push content format based on embed state. */
+  private buildPushContentForState(
+    event: EmbedEventData,
+    state: EmbedState,
+  ): string {
+    if (state === EMBED_STATES.CANCELLED) {
+      return buildCancelledPushContent(event.title);
+    }
+    if (state === EMBED_STATES.COMPLETED) {
+      return buildCompletedPushContent(event);
+    }
+    return buildEventPushContent(event);
+  }
 
   private getColorForState(state: EmbedState): number {
     switch (state) {

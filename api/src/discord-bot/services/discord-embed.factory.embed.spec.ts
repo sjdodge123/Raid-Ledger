@@ -352,6 +352,54 @@ describe('buildEventEmbed — state colors', () => {
   });
 });
 
+describe('buildEventEmbed — state-aware push content (ROK-866)', () => {
+  let factory: DiscordEmbedFactory;
+
+  beforeEach(() => {
+    factory = createFactory();
+  });
+
+  it('should use event push content for posted state', () => {
+    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+      state: EMBED_STATES.POSTED,
+    });
+    expect(content).toContain('Mythic Raid Night');
+    expect(content).toContain('signed up');
+  });
+
+  it('should use cancelled push content when state is CANCELLED', () => {
+    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+      state: EMBED_STATES.CANCELLED,
+    });
+    expect(content).toContain('Cancelled');
+    expect(content).toContain('Mythic Raid Night');
+    expect(content).not.toContain('signed up');
+  });
+
+  it('should use completed push content when state is COMPLETED', () => {
+    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+      state: EMBED_STATES.COMPLETED,
+    });
+    expect(content).toContain('Completed');
+    expect(content).toContain('Mythic Raid Night');
+    expect(content).not.toContain('signed up');
+  });
+
+  it('should use event push content for filling state', () => {
+    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+      state: EMBED_STATES.FILLING,
+    });
+    expect(content).toContain('signed up');
+  });
+
+  it('should use event push content for live state', () => {
+    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+      state: EMBED_STATES.LIVE,
+    });
+    expect(content).toContain('signed up');
+  });
+});
+
 describe('buildEventCancelled', () => {
   let factory: DiscordEmbedFactory;
 
