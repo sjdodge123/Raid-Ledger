@@ -322,7 +322,7 @@ export class SettingsService implements OnModuleInit {
     await this.set(SETTING_KEYS.DEFAULT_TIMEZONE, timezone);
   }
 
-  async getClientUrl(): Promise<string | null> {
+  async getClientUrl(): Promise<string> {
     return _getClientUrl(this);
   }
 

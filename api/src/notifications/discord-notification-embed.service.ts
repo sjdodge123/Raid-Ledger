@@ -170,9 +170,7 @@ export class DiscordNotificationEmbedService {
 
   /** Resolve the client URL from settings with fallback (ROK-408). */
   private async resolveClientUrl(): Promise<string> {
-    return (
-      (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173'
-    );
+    return this.settingsService.getClientUrl();
   }
 
   /** Resolve the timestamp for the embed footer (ROK-545, ROK-760). */

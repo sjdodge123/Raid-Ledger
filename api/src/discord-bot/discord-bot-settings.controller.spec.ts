@@ -636,7 +636,9 @@ describe('DiscordBotSettingsController — sendTestMessage: execution', () => {
       communityLogoPath: null,
       communityAccentColor: null,
     });
-    jest.spyOn(settingsService, 'getClientUrl').mockResolvedValue(null);
+    jest
+      .spyOn(settingsService, 'getClientUrl')
+      .mockResolvedValue('http://localhost:5173');
     jest
       .spyOn(discordBotClientService, 'sendEmbed')
       .mockRejectedValue(new Error('Channel not found'));

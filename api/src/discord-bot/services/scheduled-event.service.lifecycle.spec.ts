@@ -6,6 +6,7 @@ import {
   baseEventData,
   type ScheduledEventMocks,
 } from './scheduled-event.service.spec-helpers';
+import { DEFAULT_CLIENT_URL } from '../../settings/settings-bot.helpers';
 
 describe('completeScheduledEvent — status transitions', () => {
   let mocks: ScheduledEventMocks;
@@ -199,13 +200,14 @@ describe('description building', () => {
     expect(editArg.description).toContain('Event —');
   });
 
-  it('omits view link when clientUrl is null', async () => {
-    mocks.settingsService.getClientUrl.mockResolvedValue(null);
+  it('includes view link with default URL when no explicit client URL is set', async () => {
+    mocks.settingsService.getClientUrl.mockResolvedValue(DEFAULT_CLIENT_URL);
     await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
     const editArg = mocks.mockGuild.scheduledEvents.create.mock.calls[0][0] as {
       description: string;
     };
-    expect(editArg.description).not.toContain('View event');
+    expect(editArg.description).toContain('View event');
+    expect(editArg.description).toContain(`${DEFAULT_CLIENT_URL}/events/42`);
   });
 
   it('truncates long descriptions to 1000 characters', async () => {

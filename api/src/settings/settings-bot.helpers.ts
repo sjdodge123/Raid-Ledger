@@ -10,6 +10,9 @@ import type {
   DiscordBotConfig,
 } from './settings.types';
 
+/** Default client URL used when no explicit value is configured. */
+export const DEFAULT_CLIENT_URL = 'http://localhost:5173';
+
 /** Thin wrapper around SettingsService core methods. */
 export interface SettingsCore {
   get(key: SettingKey): Promise<string | null>;
@@ -135,7 +138,7 @@ export async function getDiscordBotConfig(
 }
 
 /** Get client URL with fallback chain. */
-export async function getClientUrl(svc: SettingsCore): Promise<string | null> {
+export async function getClientUrl(svc: SettingsCore): Promise<string> {
   const explicit = await svc.get(SETTING_KEYS.CLIENT_URL);
   if (explicit) return explicit;
   if (process.env.CLIENT_URL) return process.env.CLIENT_URL;
@@ -147,7 +150,7 @@ export async function getClientUrl(svc: SettingsCore): Promise<string | null> {
       /* invalid URL */
     }
   }
-  return null;
+  return DEFAULT_CLIENT_URL;
 }
 
 /** Set Discord bot token and enabled keys. */
