@@ -116,6 +116,17 @@ export async function recoverFromVoiceChannels(
   return recovered;
 }
 
+/** Resolve guild from client service for recovery. Returns null if unavailable. */
+export function resolveGuildForRecovery(
+  getClient: () => unknown,
+  getGuildId: () => string | null,
+  guildsCache: { get: (id: string) => Guild | undefined },
+): Guild | null {
+  const client = getClient();
+  const guildId = client ? getGuildId() : null;
+  return (guildId ? guildsCache.get(guildId) : undefined) ?? null;
+}
+
 /** Restore an existing session into the in-memory map. */
 export function restoreExistingSession(
   sessions: Map<string, InMemorySession>,

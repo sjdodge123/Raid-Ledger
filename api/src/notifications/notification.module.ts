@@ -16,6 +16,7 @@ import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
+import { EventsModule } from '../events/events.module';
 import { SettingsModule } from '../settings/settings.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { SettingsModule } from '../settings/settings.module';
     DrizzleModule,
     CronJobModule,
     forwardRef(() => DiscordBotModule),
+    forwardRef(() => EventsModule),
     SettingsModule,
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],

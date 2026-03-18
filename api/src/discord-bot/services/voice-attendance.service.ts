@@ -4,6 +4,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -13,6 +14,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
+import { ActiveEventCacheService } from '../../events/active-event-cache.service';
 import type {
   VoiceSessionsResponseDto,
   VoiceAttendanceSummaryDto,
@@ -65,6 +67,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly clientService: DiscordBotClientService,
     private readonly channelResolver: ChannelResolverService,
+    @Optional() private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   onModuleInit(): void {
@@ -77,10 +80,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy(): void {
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
+    if (this.flushTimer) clearInterval(this.flushTimer);
+    this.flushTimer = null;
     this.flushToDb().catch((e) =>
       this.logger.error(`Final flush failed: ${e}`),
     );
@@ -141,13 +142,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   async flushToDb(): Promise<void> {
-    const dirty = [...this.sessions.values()].filter(
-      (s) => s.dirty || s.isActive,
-    );
-    if (dirty.length === 0) return;
-    for (const s of dirty)
-      await flushH.flushSingleSession(this.db, s, this.logger);
-    this.logger.debug(`Flushed ${dirty.length} voice session(s) to DB`);
+    await flushH.flushDirtySessions(this.db, this.sessions, this.logger);
   }
 
   async classifyEvent(
@@ -191,6 +186,11 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   })
   async snapshotRecentlyStartedEvents(): Promise<void> {
     if (!this.clientService.isConnected()) return;
+    if (
+      this.eventCache &&
+      this.eventCache.getActiveEvents(new Date()).length === 0
+    )
+      return;
     await this.cronJobService.executeWithTracking(
       'VoiceAttendanceService_snapshotOnEventStart',
       () =>
@@ -217,7 +217,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     );
     if (!channel || channel.members.size === 0) return 0;
     const members = snapshotH.extractVoiceMembers(channel);
-    for (const m of members) {
+    for (const m of members)
       this.handleJoin(
         eventId,
         m.discordUserId,
@@ -225,7 +225,6 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         null,
         m.avatarHash,
       );
-    }
     return members.length;
   }
 
@@ -253,6 +252,11 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   private async runClassification(): Promise<void | false> {
     const now = new Date();
+    if (
+      this.eventCache?.getRecentlyEndedEvents(now, CLASSIFY_LOOKBACK_MS)
+        .length === 0
+    )
+      return false;
     const all = await flushH.fetchEndedEvents(
       this.db,
       now,
@@ -273,22 +277,17 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       }
     }
     await this.flushToDb();
-    for (const event of pending) await this.classifySingleEvent(event, graceMs);
-  }
-
-  private async classifySingleEvent(
-    event: typeof schema.events.$inferSelect,
-    graceMs: number,
-  ): Promise<void> {
-    await yieldToEventLoop();
-    if (!(await classifyH.shouldClassifyEvent(this.db, event.id))) return;
-    this.logger.log(`Classifying voice attendance for event ${event.id}`);
-    await this.classifyEvent(event.id, event, graceMs);
-    await this.autoPopulateAttendance(event.id);
-    this.classified.add(event.id);
-    this.snapshotted.delete(event.id);
-    for (const key of this.sessions.keys()) {
-      if (key.startsWith(`${event.id}:`)) this.sessions.delete(key);
+    for (const event of pending) {
+      await yieldToEventLoop();
+      if (!(await classifyH.shouldClassifyEvent(this.db, event.id))) continue;
+      this.logger.log(`Classifying voice attendance for event ${event.id}`);
+      await this.classifyEvent(event.id, event, graceMs);
+      await this.autoPopulateAttendance(event.id);
+      this.classified.add(event.id);
+      this.snapshotted.delete(event.id);
+      for (const key of this.sessions.keys()) {
+        if (key.startsWith(`${event.id}:`)) this.sessions.delete(key);
+      }
     }
   }
 

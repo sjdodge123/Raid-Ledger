@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -7,6 +7,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { ActiveEventCacheService } from '../../events/active-event-cache.service';
 import {
   buildDescriptionText,
   formatApiError,
@@ -20,7 +21,7 @@ import {
   getEventWithOverride,
   saveScheduledEventId,
   clearScheduledEventId,
-  getRecurrenceGroupId,
+  resolveVoiceForCreate,
   type ScheduledEventRecord,
 } from './scheduled-event.db-helpers';
 import {
@@ -51,6 +52,7 @@ export class ScheduledEventService {
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
+    @Optional() private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   /** Cron: auto-start Discord Scheduled Events whose start time has passed. */
@@ -69,10 +71,13 @@ export class ScheduledEventService {
     if (!this.clientService.isConnected()) return false;
     const guild = this.clientService.getGuild();
     if (!guild) return false;
-
+    if (
+      this.eventCache &&
+      this.eventCache.getActiveEvents(new Date()).length === 0
+    )
+      return false;
     const candidates = await findStartCandidates(this.db);
     if (candidates.length === 0) return false;
-
     for (const c of candidates) {
       const result = await tryStartEvent(guild, c);
       if (result.cleared) await clearScheduledEventId(this.db, c.id);
@@ -81,8 +86,8 @@ export class ScheduledEventService {
     }
   }
 
-  /** Cron: auto-complete Discord Scheduled Events past their end time (ROK-717). */
-  @Cron('18,48 * * * * *', {
+  /** Cron: auto-complete Discord Scheduled Events past end time (ROK-717, ROK-860). */
+  @Cron('0 */5 * * * *', {
     name: 'ScheduledEventService_completeScheduledEvents',
   })
   async handleCompleteScheduledEvents(): Promise<void> {
@@ -97,11 +102,16 @@ export class ScheduledEventService {
     if (!this.clientService.isConnected()) return false;
     const guild = this.clientService.getGuild();
     if (!guild) return false;
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+    if (
+      this.eventCache &&
+      this.eventCache.getRecentlyEndedEvents(new Date(), TWO_HOURS_MS)
+        .length === 0
+    )
+      return false;
     const candidates = await findCompletionCandidates(this.db);
     if (candidates.length === 0) return false;
-    for (const c of candidates) {
-      await this.completeScheduledEvent(c.id);
-    }
+    for (const c of candidates) await this.completeScheduledEvent(c.id);
   }
 
   /** Create a Discord Scheduled Event. */
@@ -260,10 +270,12 @@ export class ScheduledEventService {
     gameId?: number | null,
     voiceChannelOverride?: string | null,
   ): Promise<void> {
-    const vc = await this.resolveVoiceChannel(
+    const vc = await resolveVoiceForCreate(
+      this.db,
       eventId,
       gameId,
       voiceChannelOverride,
+      this.channelResolver,
     );
     if (!vc) {
       this.logger.warn(
@@ -310,22 +322,6 @@ export class ScheduledEventService {
         event.notificationChannelOverride,
       );
     }
-  }
-
-  private async resolveVoiceChannel(
-    id: number,
-    gameId?: number | null,
-    override?: string | null,
-  ): Promise<string | null> {
-    const rgId = await getRecurrenceGroupId(this.db, id);
-    return (
-      override ??
-      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-        gameId,
-        rgId,
-      )) ??
-      null
-    );
   }
 
   private async buildDescription(

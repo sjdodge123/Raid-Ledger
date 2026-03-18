@@ -2,7 +2,7 @@
  * Event reminder query helpers.
  * Extracted from event-reminder.service.ts for file size compliance (ROK-711).
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
@@ -167,4 +167,32 @@ export function buildReminderStrings(input: {
     messageText: buildReminderMessage(input.title, timeStr, input.minutesUntil),
     titleTimeLabel: buildTitleTimeLabel(input.minutesUntil),
   };
+}
+
+/** Fetch candidate events in the upcoming 24h window (ROK-860 extraction). */
+export async function fetchCandidateEvents(
+  db: PostgresJsDatabase<typeof schema>,
+  now: Date,
+) {
+  const lowerBound = new Date(now.getTime() - 90_000);
+  const upperBound = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  return db
+    .select({
+      id: schema.events.id,
+      title: schema.events.title,
+      duration: schema.events.duration,
+      gameId: schema.events.gameId,
+      reminder15min: schema.events.reminder15min,
+      reminder1hour: schema.events.reminder1hour,
+      reminder24hour: schema.events.reminder24hour,
+      cancelledAt: schema.events.cancelledAt,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        isNull(schema.events.cancelledAt),
+        sql`lower(${schema.events.duration}) >= ${lowerBound.toISOString()}::timestamptz`,
+        sql`lower(${schema.events.duration}) <= ${upperBound.toISOString()}::timestamptz`,
+      ),
+    );
 }
