@@ -13,12 +13,14 @@ import { ChannelResolverService } from '../services/channel-resolver.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 
 let testModule: TestingModule;
 let listener: DiscordEventListener;
 let embedPoster: jest.Mocked<EmbedPosterService>;
 let scheduledEventService: jest.Mocked<ScheduledEventService>;
+let eventLifecycleQueue: jest.Mocked<EventLifecycleQueueService>;
 
 const futureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
 const futureEndDate = new Date(futureDate.getTime() + 3 * 60 * 60 * 1000);
@@ -112,12 +114,17 @@ async function setupModule() {
           updateDescription: jest.fn().mockResolvedValue(undefined),
         },
       },
+      {
+        provide: EventLifecycleQueueService,
+        useValue: { enqueue: jest.fn().mockResolvedValue(undefined) },
+      },
     ],
   }).compile();
 
   listener = testModule.get(DiscordEventListener);
   embedPoster = testModule.get(EmbedPosterService);
   scheduledEventService = testModule.get(ScheduledEventService);
+  eventLifecycleQueue = testModule.get(EventLifecycleQueueService);
 }
 
 describe('ROK-755: scheduled events decoupled from embed lead-time', () => {
@@ -129,7 +136,7 @@ describe('ROK-755: scheduled events decoupled from embed lead-time', () => {
     await testModule.close();
   });
 
-  it('creates scheduled event for recurring event outside lead-time (no embed)', async () => {
+  it('enqueues lifecycle job for recurring event outside lead-time', async () => {
     const payload: EventPayload = {
       eventId: 99,
       event: {
@@ -145,17 +152,10 @@ describe('ROK-755: scheduled events decoupled from embed lead-time', () => {
       recurrenceRule: { frequency: 'weekly' },
     };
     await listener.handleEventCreated(payload);
-    expect(scheduledEventService.createScheduledEvent).toHaveBeenCalledWith(
-      99,
-      payload.event,
-      1,
-      undefined,
-      undefined,
-    );
-    expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+    expect(eventLifecycleQueue.enqueue).toHaveBeenCalledWith(99, payload);
   });
 
-  it('creates both scheduled event and embed for event within lead-time', async () => {
+  it('enqueues lifecycle job for event within lead-time', async () => {
     const payload: EventPayload = {
       eventId: 100,
       event: {
@@ -170,14 +170,7 @@ describe('ROK-755: scheduled events decoupled from embed lead-time', () => {
       gameId: 1,
     };
     await listener.handleEventCreated(payload);
-    expect(scheduledEventService.createScheduledEvent).toHaveBeenCalledWith(
-      100,
-      payload.event,
-      1,
-      undefined,
-      undefined,
-    );
-    expect(embedPoster.postEmbed).toHaveBeenCalled();
+    expect(eventLifecycleQueue.enqueue).toHaveBeenCalledWith(100, payload);
   });
 
   it('skips both scheduled event and embed for ad-hoc events', async () => {
@@ -195,7 +188,6 @@ describe('ROK-755: scheduled events decoupled from embed lead-time', () => {
       isAdHoc: true,
     };
     await listener.handleEventCreated(payload);
-    expect(scheduledEventService.createScheduledEvent).not.toHaveBeenCalled();
-    expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+    expect(eventLifecycleQueue.enqueue).not.toHaveBeenCalled();
   });
 });

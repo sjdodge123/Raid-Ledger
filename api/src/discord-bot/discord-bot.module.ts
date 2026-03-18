@@ -44,9 +44,14 @@ import {
   DepartureGraceQueueService,
   DEPARTURE_GRACE_QUEUE,
 } from './queues/departure-grace.queue';
+import {
+  EventLifecycleQueueService,
+  EVENT_LIFECYCLE_QUEUE,
+} from './queues/event-lifecycle.queue';
 import { EmbedSyncProcessor } from './processors/embed-sync.processor';
 import { AdHocGracePeriodProcessor } from './processors/ad-hoc-grace-period.processor';
 import { DepartureGraceProcessor } from './processors/departure-grace.processor';
+import { EventLifecycleProcessor } from './processors/event-lifecycle.processor';
 import { DepartureGraceService } from './services/departure-grace.service';
 import { RegisterCommandsService } from './commands/register-commands';
 import { EventCreateCommand } from './commands/event-create.command';
@@ -81,6 +86,7 @@ import { PlayingCommand } from './commands/playing.command';
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),
+    BullModule.registerQueue({ name: EVENT_LIFECYCLE_QUEUE }),
   ],
   controllers: [
     DiscordBotSettingsController,
@@ -107,6 +113,8 @@ import { PlayingCommand } from './commands/playing.command';
     AdHocGracePeriodProcessor,
     DepartureGraceQueueService,
     DepartureGraceProcessor,
+    EventLifecycleQueueService,
+    EventLifecycleProcessor,
     DepartureGraceService,
     InteractionListener,
     SignupInteractionListener,
