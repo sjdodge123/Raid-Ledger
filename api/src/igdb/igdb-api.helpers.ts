@@ -93,6 +93,7 @@ export async function fetchFromIgdb(
       'Content-Type': 'text/plain',
     },
     body,
+    signal: AbortSignal.timeout(IGDB_CONFIG.IGDB_API_TIMEOUT_MS),
   });
 
   if (!response.ok) {
