@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -10,6 +10,7 @@ import { ScheduledEventService } from './scheduled-event.service';
 import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { ActiveEventCacheService } from '../../events/active-event-cache.service';
 
 /** Look-ahead window: find events ending within the next 5 minutes (ms). */
 const WINDOW_AHEAD_MS = 5 * 60 * 1000;
@@ -44,6 +45,7 @@ export class EventAutoExtendService {
     private readonly adHocNotificationService: AdHocNotificationService,
     private readonly adHocGateway: AdHocEventsGateway,
     private readonly cronJobService: CronJobService,
+    @Optional() private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   @Cron('0 */1 * * * *', {
@@ -62,6 +64,15 @@ export class EventAutoExtendService {
     if (!enabled) {
       this.logger.debug('Auto-extend is disabled, skipping');
       return false;
+    }
+    if (this.eventCache) {
+      const now = new Date();
+      const active = this.eventCache.getActiveEvents(now);
+      const recent = this.eventCache.getRecentlyEndedEvents(
+        now,
+        WINDOW_BEHIND_MS,
+      );
+      if (active.length === 0 && recent.length === 0) return false;
     }
     const config = await this.loadExtendConfig();
     const now = new Date();
@@ -151,6 +162,12 @@ export class EventAutoExtendService {
       .update(schema.events)
       .set({ extendedUntil: newEnd, updatedAt: new Date() })
       .where(eq(schema.events.id, c.id));
+    this.eventCache?.invalidate(c.id);
+    this.eventCache
+      ?.refresh()
+      .catch((e) =>
+        this.logger.warn(`Cache refresh after extend failed: ${e}`),
+      );
     this.logger.log(
       `Extended event ${c.id} until ${newEnd.toISOString()} (${activeCount} voice members)`,
     );

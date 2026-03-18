@@ -87,7 +87,7 @@ export const CORE_JOB_METADATA: Record<
   },
   ScheduledEventService_completeScheduledEvents: {
     description:
-      'Auto-completes Discord scheduled events past their end time every 30 seconds',
+      'Auto-completes Discord scheduled events past their end time every 5 minutes',
     category: 'Events',
   },
   EventAutoExtendService_checkExtensions: {

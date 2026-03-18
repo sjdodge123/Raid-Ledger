@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { and, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -9,11 +8,13 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import { SettingsService } from '../settings/settings.service';
 import { RoleGapAlertService } from './role-gap-alert.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
+import { ActiveEventCacheService } from '../events/active-event-cache.service';
 import {
   fetchSignupsByEvent,
   fetchUserMap,
   fetchCharactersByUser,
   fetchUserTimezones,
+  fetchCandidateEvents,
   buildCharDisplay,
   buildReminderPayload,
   buildReminderStrings,
@@ -68,6 +69,7 @@ export class EventReminderService {
     @Optional()
     @Inject(VoiceAttendanceService)
     private readonly voiceAttendance: VoiceAttendanceService | null,
+    @Optional() private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   @Cron('20 */1 * * * *', { name: 'EventReminderService_handleReminders' })
@@ -82,7 +84,12 @@ export class EventReminderService {
   private async processReminderWindows(): Promise<void | false> {
     this.logger.debug('Running event reminder check...');
     const now = new Date();
-    const candidateEvents = await this.fetchCandidateEvents(now);
+    if (
+      this.eventCache?.hasRelevantEvents(now, 90_000, 24 * 60 * 60 * 1000) ===
+      false
+    )
+      return false;
+    const candidateEvents = await fetchCandidateEvents(this.db, now);
     const defaultTimezone =
       (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
 
@@ -108,31 +115,6 @@ export class EventReminderService {
     }
     await this.roleGapAlertService.checkRoleGaps(now, defaultTimezone);
     if (!didWork) return false;
-  }
-
-  /** Fetch candidate events in the upcoming 24h window. */
-  private async fetchCandidateEvents(now: Date) {
-    const lowerBound = new Date(now.getTime() - 90_000);
-    const upperBound = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    return this.db
-      .select({
-        id: schema.events.id,
-        title: schema.events.title,
-        duration: schema.events.duration,
-        gameId: schema.events.gameId,
-        reminder15min: schema.events.reminder15min,
-        reminder1hour: schema.events.reminder1hour,
-        reminder24hour: schema.events.reminder24hour,
-        cancelledAt: schema.events.cancelledAt,
-      })
-      .from(schema.events)
-      .where(
-        and(
-          isNull(schema.events.cancelledAt),
-          sql`lower(${schema.events.duration}) >= ${lowerBound.toISOString()}::timestamptz`,
-          sql`lower(${schema.events.duration}) <= ${upperBound.toISOString()}::timestamptz`,
-        ),
-      );
   }
 
   /** Fetch all user data needed for sending reminders. */

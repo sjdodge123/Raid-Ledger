@@ -118,6 +118,18 @@ export async function queryActiveEventsMultiGame(
   return rows.map((e) => ({ eventId: e.id, gameId: e.gameId }));
 }
 
+/** Flush all dirty/active sessions to the DB. */
+export async function flushDirtySessions(
+  db: Db,
+  sessions: Map<string, InMemorySession>,
+  logger: Logger,
+): Promise<void> {
+  const dirty = [...sessions.values()].filter((s) => s.dirty || s.isActive);
+  if (dirty.length === 0) return;
+  for (const s of dirty) await flushSingleSession(db, s, logger);
+  logger.debug(`Flushed ${dirty.length} voice session(s) to DB`);
+}
+
 /** Fetch ended events within lookback window. */
 export async function fetchEndedEvents(
   db: Db,
