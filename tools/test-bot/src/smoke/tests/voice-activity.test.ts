@@ -144,8 +144,8 @@ const multiGameVoiceDetected: SmokeTest = {
   category: 'voice',
   async run(ctx) {
     const vCh = pickChannel(ctx.voiceChannels, 0);
-    const gameA = 244; // Lost Ark
-    const gameB = 264; // Monster Hunter Rise
+    const gameA = 1; // World of Warcraft (from seed-games.ts)
+    const gameB = 4; // Valheim (from seed-games.ts)
     let bindA: string | undefined;
     let bindB: string | undefined;
     let eventId: number | undefined;

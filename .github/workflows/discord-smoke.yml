@@ -88,6 +88,9 @@ jobs:
       - name: Bootstrap admin account
         run: npx ts-node api/scripts/bootstrap-admin.ts
 
+      - name: Seed game registry
+        run: npm run db:seed:games -w api
+
       - name: Start API server
         run: node api/dist/src/main.js &
         env:
