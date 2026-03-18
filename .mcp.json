@@ -8,6 +8,11 @@
       "command": "npx",
       "args": ["tsx", "src/index.ts"],
       "cwd": "tools/mcp-discord"
+    },
+    "mcp-env": {
+      "command": "npx",
+      "args": ["tsx", "src/index.ts"],
+      "cwd": "tools/mcp-env"
     }
   }
 }
