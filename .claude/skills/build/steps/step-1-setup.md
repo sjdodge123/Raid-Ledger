@@ -27,16 +27,50 @@ git worktree remove <path> --force  # only if confirmed no in-flight work
 
 ## 1b. Check for In-Flight State
 
-Check if `planning-artifacts/build-state.yaml` exists:
+Scan existing worktrees for state files from previous builds:
 
-- **If it exists:** Read it. Check `pipeline.next_action`. You may be resuming in-flight work.
+```bash
+for wt in ../Raid-Ledger--rok-*; do
+  [ -f "$wt/build-state.yaml" ] && echo "$wt: $(grep 'current_step' "$wt/build-state.yaml")"
+done
+```
+
+- **If no state files found:** Fresh build. Continue to 1c.
+- **If a state file exists for the requested story:** Read it, then **reconcile against origin before trusting any status.**
+
+### Origin Reconciliation (MANDATORY before resuming)
+
+The state file may be stale from a previous session that shipped stories. Always verify:
+
+```bash
+git fetch origin
+
+# For each story in the state file, check if its branch was merged to main:
+git branch -r --merged origin/main | grep rok-<num>
+```
+
+**For each story**, apply this logic in order:
+
+1. **Branch merged to main?** (`git branch -r --merged origin/main | grep rok-<num>`)
+   - Yes → story is **done**. Update state: `status: "done"`, all gates → `PASS`. Skip it entirely.
+2. **Branch exists on origin but not merged?** (`git ls-remote --heads origin rok-<num>`)
+   - Yes → check for an existing PR: `gh pr list --head rok-<num>-<short-name> --json state,url`
+     - PR merged → story is **done**
+     - PR open → resume from Step 5 (ship)
+     - No PR → resume from Step 3 (validate)
+3. **Branch does NOT exist on origin?**
+   - Check worktree for commits → resume from where the state file says
+
+After reconciliation, update the state file with corrected statuses, then:
+  - If all stories are `done` → clean up worktree and start fresh
   - If ANY story has `requirements_gathered: false` → resume Step 1e (requirements interview) for those stories only. Read existing spec files in `planning-artifacts/specs/` for stories already interviewed.
   - If stories are in `dev_active` or `testing` → skip to Step 2 (check agent status)
   - If stories are in `ready_for_validate` → skip to Step 3
   - If stories are in `waiting_for_operator` → skip to Step 4
   - If stories are in `ready_to_ship` → skip to Step 5
-  - If all stories are `done` → archive and start fresh
-- **If it doesn't exist:** Fresh build. Continue to 1c.
+  - Present a reconciled summary showing which stories were already shipped vs still in-flight
+
+**IMPORTANT:** Only claim state files for stories YOU are building. If you find state files for OTHER stories, leave them alone — another session may be working on them.
 
 ---
 
@@ -198,7 +232,9 @@ Estimated agents: 2 dev (opus) + 2 test (sonnet) + 2 reviewer (sonnet)
 
 ## 1g. Initialize State File
 
-Create `planning-artifacts/build-state.yaml`:
+**Note:** The state file will be written to the worktree AFTER it's created in Step 2a. Prepare the state content now, write it after worktree creation.
+
+State file path: `<worktree>/build-state.yaml` (e.g., `../Raid-Ledger--rok-XXX/build-state.yaml`):
 
 ```yaml
 pipeline:
@@ -229,5 +265,22 @@ pipeline:
       next_action: "Queued. Waiting for worktree creation in Step 2."
       agent_history: []
 ```
+
+---
+
+## 1h. Update Linear to "In Progress"
+
+**MANDATORY — do this NOW before proceeding to Step 2.**
+
+Move every story in the batch to "In Progress":
+
+```
+mcp__linear__save_issue({
+  issueId: "<linear_id>",
+  statusName: "In Progress"
+})
+```
+
+This ensures Linear reflects that work has started as soon as the batch is confirmed, not after CI/deploy in Step 3.
 
 Proceed to **Step 2**.

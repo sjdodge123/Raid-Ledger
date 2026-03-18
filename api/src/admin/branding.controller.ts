@@ -1,6 +1,5 @@
 import {
   Controller,
-  Get,
   Patch,
   Post,
   Body,
@@ -94,12 +93,8 @@ export class BrandingController {
 
   constructor(private readonly settingsService: SettingsService) {}
 
-  /**
-   * Get current branding settings.
-   * Public endpoint - login page needs branding before auth.
-   */
-  @Get()
-  async getBranding() {
+  /** Format branding settings for API responses. */
+  private async formatBranding() {
     const branding = await this.settingsService.getBranding();
     return {
       communityName: branding.communityName,
@@ -138,7 +133,7 @@ export class BrandingController {
     }
 
     this.logger.log('Branding settings updated');
-    return this.getBranding();
+    return this.formatBranding();
   }
 
   /** Upload community logo. Admin-only endpoint with magic byte validation. */
@@ -151,7 +146,7 @@ export class BrandingController {
     this.removeOldLogos(file.filename);
     await this.settingsService.setCommunityLogoPath(file.path);
     this.logger.log(`Community logo uploaded: ${file.filename}`);
-    return this.getBranding();
+    return this.formatBranding();
   }
 
   /** Validate that the file's magic bytes match its declared MIME type. */

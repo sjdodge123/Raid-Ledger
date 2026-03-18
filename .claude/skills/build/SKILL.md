@@ -6,7 +6,9 @@ argument-hint: "[ROK-XXX | rework | all]"
 
 # Build — Lean Parallel Pipeline
 
-Pulls dispatchable stories from Linear, profiles them, spawns dev agents in worktrees, validates, reviews, and ships. **Zero long-lived agents** — all state lives in `planning-artifacts/build-state.yaml` + this file (always injected).
+Pulls dispatchable stories from Linear, profiles them, spawns dev agents in worktrees, validates, reviews, and ships. **Zero long-lived agents** — all state lives in `<worktree>/build-state.yaml` + this file (always injected).
+
+**State file location:** The state file lives **inside the story's worktree** (e.g., `../Raid-Ledger--rok-XXX/build-state.yaml`), NOT in `planning-artifacts/`. This prevents concurrent `/build` sessions from colliding — each pipeline run's state is isolated to its own worktree. Enriched specs still go to `planning-artifacts/specs/` (shared, read-only after writing).
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
@@ -17,7 +19,7 @@ Pulls dispatchable stories from Linear, profiles them, spawns dev agents in work
 
 After any context compaction, execute this immediately:
 
-1. **Read `planning-artifacts/build-state.yaml`** — contains full pipeline state
+1. **Read your state file** — `<worktree>/build-state.yaml` contains full pipeline state
 2. **Read `pipeline.next_action`** — tells you exactly what to do next
 3. **Check per-story fields** — `requirements_gathered`, `next_action`, `status`
 4. **If any story has `requirements_gathered: false`** — resume requirements interview (Step 1e) for those stories only. Read existing specs from `planning-artifacts/specs/` for completed stories.
@@ -50,11 +52,12 @@ Apply this directly when assessing stories:
 
 ```
 Requirements Interview (plan mode, if spec incomplete) → Enriched spec on disk
+  → Linear "In Progress" (Step 1h — immediately after batch confirmed)
   → Dev completes → Test Agent (if standard/full) → CI passes → Push branch
   → Deploy locally → Linear "In Review" → Update state → FULL STOP
   → Wait for operator to test and update Linear
   → Commit operator changes (MANDATORY before review)
-  → Operator moves to "Code Review" or "Changes Requested"
+  → Operator approves → Linear "Code Review" (Step 4a — Lead updates, not operator)
     → Changes Requested: re-spawn dev, loop back
     → Code Review: spawn Reviewer
   → Optional: Architect final check (if needs_architect, SEQUENTIAL)
@@ -141,7 +144,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 
 | Step | File | Description |
 |------|------|-------------|
-| 1 | `steps/step-1-setup.md` | Cleanup, fetch stories, profile, **requirements interview (plan mode)**, present batch, init state |
+| 1 | `steps/step-1-setup.md` | Cleanup, fetch stories, profile, **requirements interview (plan mode)**, present batch, init state, **Linear → "In Progress"** |
 | 2 | `steps/step-2-implement.md` | Create worktrees, optional planner/architect, spawn devs + test agents |
 | 3 | `steps/step-3-validate.md` | CI, push, deploy, Linear "In Review", FULL STOP for operator |
 | 4 | `steps/step-4-review.md` | Poll Linear, handle rework/approval, reviewer + architect + smoke |

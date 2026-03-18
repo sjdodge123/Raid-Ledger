@@ -89,7 +89,7 @@ mcp__linear__save_issue({
 
 ## 3e. Update State and FULL STOP
 
-Update `build-state.yaml`:
+Update `<worktree>/build-state.yaml`:
 
 ```yaml
 pipeline:

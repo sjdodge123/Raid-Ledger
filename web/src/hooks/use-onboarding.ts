@@ -41,7 +41,7 @@ function useOnboardingCoreMutations() {
     onSuccess: () => {
       toast.success('Community settings saved');
       void queryClient.invalidateQueries({ queryKey: OB_STATUS_KEY });
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'branding'] });
+      void queryClient.invalidateQueries({ queryKey: ['system', 'branding'] });
       void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
     },
     onError: (err: Error) => { toast.error(err.message || 'Failed to save community settings'); },

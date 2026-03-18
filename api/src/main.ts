@@ -11,52 +11,16 @@ import * as path from 'path';
 import { AppModule } from './app.module';
 import { SentryExceptionFilter } from './sentry/sentry-exception.filter';
 import { ThrottlerExceptionFilter } from './throttler/throttler-exception.filter';
+import {
+  validateCorsConfig,
+  buildCorsOriginFn,
+  buildHelmetOptions,
+} from './main.helpers';
 
 function getLogLevels(): LogLevel[] {
   return process.env.DEBUG === 'true'
     ? ['error', 'warn', 'log', 'debug', 'verbose']
     : ['error', 'warn', 'log'];
-}
-
-function validateCorsConfig(isProduction: boolean, corsOrigin?: string): void {
-  if (isProduction && !corsOrigin) {
-    throw new Error(
-      'CORS_ORIGIN environment variable must be set in production',
-    );
-  }
-  if (isProduction && corsOrigin === '*') {
-    throw new Error(
-      'CORS_ORIGIN=* is not allowed in production. Set a specific origin.',
-    );
-  }
-}
-
-function buildCorsOriginFn(
-  isProduction: boolean,
-  corsOrigin: string | undefined,
-  isAutoOrigin: boolean,
-): (
-  origin: string | undefined,
-  cb: (err: Error | null, allow?: boolean) => void,
-) => void {
-  return (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (isAutoOrigin) return callback(null, true);
-    if (corsOrigin === '*') return callback(null, true);
-    const allowedOrigins: string[] = [corsOrigin].filter(Boolean) as string[];
-    if (!isProduction) {
-      allowedOrigins.push(
-        'http://localhost',
-        'http://localhost:80',
-        'http://localhost:5173',
-        'http://localhost:5174',
-      );
-    }
-    callback(
-      allowedOrigins.includes(origin) ? null : new Error('Not allowed by CORS'),
-      allowedOrigins.includes(origin),
-    );
-  };
 }
 
 function installAutoClientUrlDetection(app: NestExpressApplication): void {
@@ -109,8 +73,8 @@ async function bootstrap() {
     logger: getLogLevels(),
     rawBody: false,
   });
-  app.useBodyParser('json', { limit: '8mb' });
-  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+  app.useBodyParser('json', { limit: '2mb' });
+  app.use(helmet(buildHelmetOptions()));
   app.use(compression({ threshold: 1024 }));
   const isProduction = process.env.NODE_ENV === 'production';
   const corsOrigin = process.env.CORS_ORIGIN;

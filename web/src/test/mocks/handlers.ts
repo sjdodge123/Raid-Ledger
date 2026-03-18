@@ -64,11 +64,11 @@ export const handlers = [
         HttpResponse.json({ slots: [], events: [], weekStart: null }),
     ),
 
-    // Settings — branding (public)
-    http.get(`${API_BASE}/settings/branding`, () =>
+    // System — branding (public, ROK-877)
+    http.get(`${API_BASE}/system/branding`, () =>
         HttpResponse.json({
             communityName: 'Test Community',
-            communityLogoPath: null,
+            communityLogoUrl: null,
             communityAccentColor: null,
         }),
     ),

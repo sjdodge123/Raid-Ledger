@@ -175,10 +175,7 @@ mcp__linear__save_issue({
 
 ---
 
-Archive the state file:
-```bash
-mv planning-artifacts/build-state.yaml planning-artifacts/build-state-batch-<N>.yaml
-```
+The state file lives in the worktree and is cleaned up automatically when the worktree is removed (step 5e).
 
 Clean up team artifacts:
 ```bash
