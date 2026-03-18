@@ -15,8 +15,8 @@ import {
   friendlyDiscordErrorMessage,
 } from './discord-bot.constants';
 import {
-  REQUIRED_PERMISSIONS,
   createDiscordClient,
+  checkBotPermissions,
   type GuildInfo,
   type PermissionCheckResult,
 } from './discord-bot-client.helpers';
@@ -165,17 +165,15 @@ export class DiscordBotClientService {
     channelId: string,
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
+    content?: string,
   ): Promise<Message> {
     const channel = await this.fetchTextChannel(channelId);
     const start = isPerfEnabled() ? performance.now() : 0;
-
-    const payload: {
-      embeds: EmbedBuilder[];
-      components?: ActionRowBuilder<ButtonBuilder>[];
-    } = { embeds: [embed] };
-    if (row) payload.components = [row];
-
-    const result = await channel.send(payload);
+    const result = await channel.send({
+      ...(content ? { content } : {}),
+      embeds: [embed],
+      ...(row ? { components: [row] } : {}),
+    });
     if (start) {
       perfLog('DISCORD', 'sendEmbed', performance.now() - start, {
         channelId,
@@ -190,12 +188,14 @@ export class DiscordBotClientService {
     messageId: string,
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
+    content?: string,
   ): Promise<Message> {
     const channel = await this.fetchTextChannel(channelId);
     const start = isPerfEnabled() ? performance.now() : 0;
 
     const message = await channel.messages.fetch(messageId);
     const result = await message.edit({
+      ...(content ? { content } : {}),
       embeds: [embed],
       components: row ? [row] : [],
     });
@@ -264,12 +264,7 @@ export class DiscordBotClientService {
 
   /** Check bot permissions in the guild. */
   checkPermissions(): PermissionCheckResult[] {
-    const guild = this.getGuild();
-    const me = guild?.members.me;
-    return REQUIRED_PERMISSIONS.map((p) => ({
-      name: p.label,
-      granted: me ? me.permissions.has(p.flag) : false,
-    }));
+    return checkBotPermissions(this.getGuild());
   }
 
   // ─── Private helpers ──────────────────────────────────────

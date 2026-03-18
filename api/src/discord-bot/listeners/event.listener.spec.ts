@@ -314,6 +314,7 @@ function eventUpdatedTests() {
       'msg-456',
       mockEmbed,
       mockRow,
+      undefined,
     );
   });
 }
@@ -333,6 +334,8 @@ function eventCancelledTests() {
       'channel-789',
       'msg-456',
       mockEmbed,
+      undefined,
+      undefined,
     );
   });
 }

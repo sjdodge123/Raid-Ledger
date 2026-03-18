@@ -227,6 +227,7 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
         'override-channel-777',
         expect.anything(),
         expect.anything(),
+        undefined,
       );
     });
   });
@@ -308,6 +309,7 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
         'override-channel-888',
         expect.anything(),
         expect.anything(),
+        undefined,
       );
     });
   });

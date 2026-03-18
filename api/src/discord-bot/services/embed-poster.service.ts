@@ -139,13 +139,20 @@ export class EmbedPosterService {
     const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
     await this.applyVoiceChannel(enrichedEvent, opts);
     const context = await this.buildContext();
-    const { embed, row } = this.embedFactory.buildEventEmbed(
+    const { embed, row, content } = this.embedFactory.buildEventEmbed(
       enrichedEvent,
       context,
     );
     if (existing)
-      return this.editExistingEmbed(eventId, existing, embed, row, opts);
-    return this.postNewEmbed(eventId, channelId, guildId, embed, row);
+      return this.editExistingEmbed(
+        eventId,
+        existing,
+        embed,
+        row,
+        opts,
+        content,
+      );
+    return this.postNewEmbed(eventId, channelId, guildId, embed, row, content);
   }
 
   private async applyVoiceChannel(
@@ -167,8 +174,14 @@ export class EmbedPosterService {
     guildId: string,
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
+    content?: string,
   ): Promise<boolean> {
-    const message = await this.clientService.sendEmbed(channelId, embed, row);
+    const message = await this.clientService.sendEmbed(
+      channelId,
+      embed,
+      row,
+      content,
+    );
     await this.db.insert(schema.discordEventMessages).values({
       eventId,
       guildId,
@@ -186,6 +199,7 @@ export class EmbedPosterService {
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
     opts?: ChannelOpts,
+    content?: string,
   ): Promise<boolean> {
     try {
       await this.clientService.editEmbed(
@@ -193,6 +207,7 @@ export class EmbedPosterService {
         record.messageId,
         embed,
         row,
+        content,
       );
       this.logger.log(
         `Edited existing embed for event ${eventId} (msg: ${record.messageId})`,
@@ -206,7 +221,14 @@ export class EmbedPosterService {
         );
         return false;
       }
-      return this.replaceDeletedEmbed(eventId, record.id, embed, row, opts);
+      return this.replaceDeletedEmbed(
+        eventId,
+        record.id,
+        embed,
+        row,
+        opts,
+        content,
+      );
     }
   }
 
@@ -216,6 +238,7 @@ export class EmbedPosterService {
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
     opts?: ChannelOpts,
+    content?: string,
   ): Promise<boolean> {
     this.logger.warn(
       `Existing embed for event ${eventId} was deleted, posting replacement`,
@@ -228,7 +251,12 @@ export class EmbedPosterService {
       opts?.notificationChannelOverride,
     );
     if (!channelId) return false;
-    const message = await this.clientService.sendEmbed(channelId, embed, row);
+    const message = await this.clientService.sendEmbed(
+      channelId,
+      embed,
+      row,
+      content,
+    );
     await this.db
       .update(schema.discordEventMessages)
       .set({ channelId, messageId: message.id, updatedAt: new Date() })

@@ -115,7 +115,7 @@ export class EmbedSyncProcessor extends WorkerHost {
   ): Promise<void> {
     const previousState = record.embedState as EmbedState;
     const context = await this.buildContext();
-    const { embed, row } = this.embedFactory.buildEventUpdate(
+    const { embed, row, content } = this.embedFactory.buildEventUpdate(
       eventData,
       context,
       newState,
@@ -125,6 +125,7 @@ export class EmbedSyncProcessor extends WorkerHost {
       record.messageId,
       embed,
       row,
+      content,
     );
     await this.persistState(record.id, newState);
     await this.maybeDeleteBumpMessage(record, newState, eventId);

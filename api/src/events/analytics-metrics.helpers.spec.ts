@@ -247,7 +247,10 @@ describe('buildRosterBreakdown', () => {
     testPreferDiscordUserIdWhenBothPresent,
   );
 
-  it('returns empty array when signups array is empty', testEmptySignupsReturnsEmptyArray);
+  it(
+    'returns empty array when signups array is empty',
+    testEmptySignupsReturnsEmptyArray,
+  );
 
   it(
     'returns null voice data for all signups when voiceSessions is empty',
@@ -272,10 +275,7 @@ describe('buildAttendanceSummary', () => {
   );
 
   it('returns zero attendanceRate when no signups are marked', () => {
-    const signups = [
-      { attendanceStatus: null },
-      { attendanceStatus: null },
-    ];
+    const signups = [{ attendanceStatus: null }, { attendanceStatus: null }];
 
     const result = buildAttendanceSummary(signups);
 

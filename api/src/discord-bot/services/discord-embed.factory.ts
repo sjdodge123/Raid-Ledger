@@ -1,16 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import {
   EMBED_COLORS,
   EMBED_STATES,
   type EmbedState,
-  SIGNUP_BUTTON_IDS,
 } from '../discord-bot.constants';
+import { buildSignupButtons } from './discord-embed-buttons.helpers';
 import { DiscordEmojiService } from './discord-emoji.service';
 import {
   buildRosterLine,
@@ -20,6 +15,12 @@ import {
 } from './discord-embed.helpers';
 import { createInviteEmbed } from './discord-embed-invite.helpers';
 import { formatDurationMs } from '../utils/format-duration';
+import {
+  buildEventPushContent,
+  buildCancelledPushContent,
+  buildAdHocSpawnPushContent,
+  buildAdHocCompletedPushContent,
+} from '../utils/push-content';
 
 /** Minimal event data needed to build an embed. */
 export interface EmbedEventData {
@@ -73,6 +74,13 @@ export interface BuildEventEmbedOptions {
   buttons?: EmbedButtonMode;
 }
 
+/** Standard return type for all embed factory methods. */
+export interface EmbedResult {
+  embed: EmbedBuilder;
+  row?: ActionRowBuilder<ButtonBuilder>;
+  content?: string;
+}
+
 /**
  * Factory service that constructs Discord.js EmbedBuilder instances.
  */
@@ -85,32 +93,37 @@ export class DiscordEmbedFactory {
     event: EmbedEventData,
     context: EmbedContext,
     options?: BuildEventEmbedOptions,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+  ): EmbedResult {
     const state = options?.state ?? EMBED_STATES.POSTED;
     const buttons = options?.buttons ?? 'signup';
-
+    const content = buildEventPushContent(event);
     const color = this.getColorForState(state);
     const embed = this.createBaseEmbed(event, context, color);
-
     if (state === EMBED_STATES.CANCELLED || state === EMBED_STATES.COMPLETED) {
-      return { embed };
+      return { embed, content };
     }
-
-    return this.attachButtons(embed, event.id, context.clientUrl, buttons);
+    const base = this.attachButtons(
+      embed,
+      event.id,
+      context.clientUrl,
+      buttons,
+    );
+    return { ...base, content };
   }
 
   /** Build a cancelled event embed. */
   buildEventCancelled(
     event: EmbedEventData,
     context: EmbedContext,
-  ): { embed: EmbedBuilder } {
+  ): EmbedResult {
     const embed = new EmbedBuilder()
       .setColor(EMBED_COLORS.ERROR)
       .setTitle(`~~${event.title}~~ — CANCELLED`)
       .setDescription('This event has been cancelled.')
       .setFooter({ text: `${context.communityName || 'Raid Ledger'}` })
       .setTimestamp();
-    return { embed };
+    const content = buildCancelledPushContent(event.title);
+    return { embed, content };
   }
 
   /** Build an event invite DM embed (ROK-380). */
@@ -118,7 +131,7 @@ export class DiscordEmbedFactory {
     event: EmbedEventData,
     context: EmbedContext,
     inviterUsername: string,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+  ): EmbedResult {
     const embed = createInviteEmbed(event, context, inviterUsername);
     const row = buildViewButton(event.id, context.clientUrl);
     return row ? { embed, row } : { embed };
@@ -128,7 +141,7 @@ export class DiscordEmbedFactory {
   buildEventAnnouncement(
     event: EmbedEventData,
     context: EmbedContext,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+  ): EmbedResult {
     return this.buildEventEmbed(event, context, {
       state: EMBED_STATES.POSTED,
       buttons: 'signup',
@@ -140,19 +153,16 @@ export class DiscordEmbedFactory {
     event: EmbedEventData,
     context: EmbedContext,
     state: EmbedState,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+  ): EmbedResult {
     return this.buildEventEmbed(event, context, { state, buttons: 'signup' });
   }
 
   /** Build an ad-hoc spawn embed. */
   buildAdHocSpawnEmbed(
     event: { id: number; title: string; gameName?: string },
-    participants: Array<{
-      discordUserId: string;
-      discordUsername: string;
-    }>,
+    participants: Array<{ discordUserId: string; discordUsername: string }>,
     context: EmbedContext,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+  ): EmbedResult {
     const embed = new EmbedBuilder()
       .setColor(EMBED_COLORS.LIVE_EVENT)
       .setTitle(`\uD83C\uDFAE ${event.title}`)
@@ -167,9 +177,9 @@ export class DiscordEmbedFactory {
       })
       .setTimestamp()
       .setFooter({ text: context.communityName ?? 'Raid Ledger' });
-
+    const content = buildAdHocSpawnPushContent(event, participants.length);
     const row = buildViewButton(event.id, context.clientUrl);
-    return row ? { embed, row } : { embed };
+    return row ? { embed, row, content } : { embed, content };
   }
 
   /** Build an ad-hoc update embed. */
@@ -181,8 +191,13 @@ export class DiscordEmbedFactory {
       isActive: boolean;
     }>,
     context: EmbedContext,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    return buildAdHocUpdateEmbedHelper(event, participants, context);
+  ): EmbedResult {
+    const activeCount = participants.filter((p) => p.isActive).length;
+    const content = buildAdHocSpawnPushContent(event, activeCount);
+    return {
+      ...buildAdHocUpdateEmbedHelper(event, participants, context),
+      content,
+    };
   }
 
   /** Build an ad-hoc completed embed. */
@@ -200,8 +215,14 @@ export class DiscordEmbedFactory {
       totalDurationSeconds: number | null;
     }>,
     context: EmbedContext,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    return buildAdHocCompletedEmbedHelper(event, participants, context);
+  ): EmbedResult {
+    const ms =
+      new Date(event.endTime).getTime() - new Date(event.startTime).getTime();
+    const content = buildAdHocCompletedPushContent(event, formatDurationMs(ms));
+    return {
+      ...buildAdHocCompletedEmbedHelper(event, participants, context),
+      content,
+    };
   }
 
   // ─── Private helpers ──────────────────────────────────────
@@ -231,28 +252,22 @@ export class DiscordEmbedFactory {
     color: number,
   ): EmbedBuilder {
     const { timeDisplay, durationStr } = this.formatTiming(event);
-
     const embed = new EmbedBuilder()
       .setAuthor({ name: 'Raid Ledger' })
       .setTitle(`\uD83D\uDCC5 ${event.title}`)
       .setColor(color);
-
     const clientUrl = context.clientUrl || process.env.CLIENT_URL;
     if (clientUrl) embed.setURL(`${clientUrl}/events/${event.id}`);
-
     const bodyLines = this.buildBodyLines(event, timeDisplay, durationStr);
-
     const roster = buildRosterLine(event, this.emojiService);
     if (roster) {
       bodyLines.push('');
       bodyLines.push(roster);
     }
-
     embed.setDescription(bodyLines.join('\n'));
     if (event.game?.coverUrl) embed.setThumbnail(event.game.coverUrl);
     embed.setFooter({ text: context.communityName || 'Raid Ledger' });
     embed.setTimestamp();
-
     return embed;
   }
 
@@ -278,9 +293,8 @@ export class DiscordEmbedFactory {
     const lines: string[] = [];
     if (event.game?.name) lines.push(`\uD83C\uDFAE **${event.game.name}**`);
     lines.push(`\uD83D\uDCC6 ${timeDisplay} (${durationStr})`);
-    if (event.voiceChannelId) {
+    if (event.voiceChannelId)
       lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
-    }
     return lines;
   }
 
@@ -291,50 +305,12 @@ export class DiscordEmbedFactory {
     buttons?: EmbedButtonMode,
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
     if (buttons === 'none') return { embed };
-
-    if (buttons === 'signup') {
-      const row = this.buildSignupButtons(eventId, clientUrl);
-      return { embed, row };
-    }
-
+    if (buttons === 'signup')
+      return { embed, row: buildSignupButtons(eventId, clientUrl) };
     if (buttons === 'view') {
       const row = buildViewButton(eventId, clientUrl);
       return row ? { embed, row } : { embed };
     }
-
-    // Custom ActionRowBuilder
     return { embed, row: buttons };
-  }
-
-  private buildSignupButtons(
-    eventId: number,
-    clientUrl?: string | null,
-  ): ActionRowBuilder<ButtonBuilder> {
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${SIGNUP_BUTTON_IDS.SIGNUP}:${eventId}`)
-        .setLabel('Sign Up')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`${SIGNUP_BUTTON_IDS.TENTATIVE}:${eventId}`)
-        .setLabel('Tentative')
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`${SIGNUP_BUTTON_IDS.DECLINE}:${eventId}`)
-        .setLabel('Decline')
-        .setStyle(ButtonStyle.Danger),
-    );
-
-    const baseUrl = clientUrl || process.env.CLIENT_URL;
-    if (baseUrl) {
-      row.addComponents(
-        new ButtonBuilder()
-          .setLabel('View Event')
-          .setStyle(ButtonStyle.Link)
-          .setURL(`${baseUrl}/events/${eventId}`),
-      );
-    }
-
-    return row;
   }
 }

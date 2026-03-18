@@ -69,14 +69,19 @@ export async function updateEmbedRecord(
   state: (typeof EMBED_STATES)[keyof typeof EMBED_STATES],
   eventId: number,
 ): Promise<void> {
-  const { embed, row } = deps.embedFactory.buildEventEmbed(eventData, context, {
-    state,
-  });
+  const { embed, row, content } = deps.embedFactory.buildEventEmbed(
+    eventData,
+    context,
+    {
+      state,
+    },
+  );
   await deps.clientService.editEmbed(
     record.channelId,
     record.messageId,
     embed,
     row,
+    content,
   );
   await deps.db
     .update(schema.discordEventMessages)
@@ -123,8 +128,17 @@ export async function cancelEmbedRecord(
   context: EmbedContext,
   eventId: number,
 ): Promise<void> {
-  const { embed } = deps.embedFactory.buildEventCancelled(event, context);
-  await deps.clientService.editEmbed(record.channelId, record.messageId, embed);
+  const { embed, content } = deps.embedFactory.buildEventCancelled(
+    event,
+    context,
+  );
+  await deps.clientService.editEmbed(
+    record.channelId,
+    record.messageId,
+    embed,
+    undefined,
+    content,
+  );
   await deps.db
     .update(schema.discordEventMessages)
     .set({ embedState: EMBED_STATES.CANCELLED, updatedAt: new Date() })
@@ -185,14 +199,19 @@ async function updateSingleEmbedState(
   newState: (typeof EMBED_STATES)[keyof typeof EMBED_STATES],
   eventId: number,
 ): Promise<void> {
-  const { embed, row } = deps.embedFactory.buildEventEmbed(event, context, {
-    state: newState,
-  });
+  const { embed, row, content } = deps.embedFactory.buildEventEmbed(
+    event,
+    context,
+    {
+      state: newState,
+    },
+  );
   await deps.clientService.editEmbed(
     record.channelId,
     record.messageId,
     embed,
     row,
+    content,
   );
   await deps.db
     .update(schema.discordEventMessages)
