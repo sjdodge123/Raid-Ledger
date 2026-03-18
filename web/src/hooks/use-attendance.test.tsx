@@ -33,7 +33,6 @@ function createTestHarness() {
         },
     });
 
-    // Seed caches so invalidation calls can be observed
     queryClient.setQueryData([...ATTENDANCE_KEY], { attended: 0, noShow: 0, excused: 0 });
     queryClient.setQueryData([...ROSTER_KEY], { signups: [] });
     queryClient.setQueryData([...METRICS_KEY], { rosterBreakdown: [] });
@@ -56,101 +55,72 @@ function getInvalidateCalls(
     );
 }
 
+async function mutateAndAssert(
+    key: readonly unknown[],
+    expectedCount: number,
+    opts?: { reject?: boolean; signupId?: number; status?: string },
+) {
+    const { invalidateSpy, wrapper } = createTestHarness();
+    const status = opts?.status ?? 'attended';
+
+    if (opts?.reject) {
+        mockRecordAttendance.mockRejectedValue(new Error('network error'));
+    } else {
+        mockRecordAttendance.mockResolvedValue({ id: 1, attendanceStatus: status });
+    }
+
+    const { result } = renderHook(() => useRecordAttendance(EVENT_ID), { wrapper });
+
+    await act(async () => {
+        if (opts?.reject) {
+            await result.current.mutate({ signupId: opts.signupId ?? 99, attendanceStatus: status });
+        } else {
+            await result.current.mutateAsync({ signupId: opts?.signupId ?? 10, attendanceStatus: status });
+        }
+    });
+
+    const calls = getInvalidateCalls(invalidateSpy, [...key]);
+    expect(calls).toHaveLength(expectedCount);
+    return invalidateSpy;
+}
+
 // --- Tests ---
 
+async function testInvalidatesMetrics() {
+    await mutateAndAssert(METRICS_KEY, 1);
+}
+
+async function testInvalidatesAttendance() {
+    await mutateAndAssert(ATTENDANCE_KEY, 1, { status: 'no_show', signupId: 5 });
+}
+
+async function testInvalidatesRoster() {
+    await mutateAndAssert(ROSTER_KEY, 1, { status: 'excused', signupId: 7 });
+}
+
+async function testInvalidatesAllThreeKeys() {
+    const spy = await mutateAndAssert(METRICS_KEY, 1, { signupId: 20 });
+    expect(getInvalidateCalls(spy, [...ATTENDANCE_KEY])).toHaveLength(1);
+    expect(getInvalidateCalls(spy, [...ROSTER_KEY])).toHaveLength(1);
+}
+
+async function testNoInvalidateOnFailure() {
+    await mutateAndAssert(METRICS_KEY, 0, { reject: true });
+}
+
+async function testScopedToCorrectEventId() {
+    const spy = await mutateAndAssert(METRICS_KEY, 1);
+    const wrongKey = ['events', EVENT_ID + 1, 'metrics'] as const;
+    expect(getInvalidateCalls(spy, [...wrongKey])).toHaveLength(0);
+}
+
 describe('useRecordAttendance — onSuccess cache invalidation (ROK-852)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
+    beforeEach(() => { vi.clearAllMocks(); });
 
-    it('invalidates the metrics query key after recording attendance', async () => {
-        const { invalidateSpy, wrapper } = createTestHarness();
-        mockRecordAttendance.mockResolvedValue({ id: 1, attendanceStatus: 'attended' });
-
-        const { result } = renderHook(() => useRecordAttendance(EVENT_ID), { wrapper });
-
-        await act(async () => {
-            await result.current.mutateAsync({ signupId: 10, attendanceStatus: 'attended' });
-        });
-
-        const metricsCalls = getInvalidateCalls(invalidateSpy, [...METRICS_KEY]);
-        expect(metricsCalls).toHaveLength(1);
-    });
-
-    it('invalidates the attendance query key after recording attendance', async () => {
-        const { invalidateSpy, wrapper } = createTestHarness();
-        mockRecordAttendance.mockResolvedValue({ id: 1, attendanceStatus: 'no_show' });
-
-        const { result } = renderHook(() => useRecordAttendance(EVENT_ID), { wrapper });
-
-        await act(async () => {
-            await result.current.mutateAsync({ signupId: 5, attendanceStatus: 'no_show' });
-        });
-
-        const attendanceCalls = getInvalidateCalls(invalidateSpy, [...ATTENDANCE_KEY]);
-        expect(attendanceCalls).toHaveLength(1);
-    });
-
-    it('invalidates the roster query key after recording attendance', async () => {
-        const { invalidateSpy, wrapper } = createTestHarness();
-        mockRecordAttendance.mockResolvedValue({ id: 1, attendanceStatus: 'excused' });
-
-        const { result } = renderHook(() => useRecordAttendance(EVENT_ID), { wrapper });
-
-        await act(async () => {
-            await result.current.mutateAsync({ signupId: 7, attendanceStatus: 'excused' });
-        });
-
-        const rosterCalls = getInvalidateCalls(invalidateSpy, [...ROSTER_KEY]);
-        expect(rosterCalls).toHaveLength(1);
-    });
-
-    it('invalidates all three query keys in a single mutation success', async () => {
-        const { invalidateSpy, wrapper } = createTestHarness();
-        mockRecordAttendance.mockResolvedValue({ id: 1, attendanceStatus: 'attended' });
-
-        const { result } = renderHook(() => useRecordAttendance(EVENT_ID), { wrapper });
-
-        await act(async () => {
-            await result.current.mutateAsync({ signupId: 20, attendanceStatus: 'attended' });
-        });
-
-        const metricsCalls = getInvalidateCalls(invalidateSpy, [...METRICS_KEY]);
-        const attendanceCalls = getInvalidateCalls(invalidateSpy, [...ATTENDANCE_KEY]);
-        const rosterCalls = getInvalidateCalls(invalidateSpy, [...ROSTER_KEY]);
-
-        expect(metricsCalls).toHaveLength(1);
-        expect(attendanceCalls).toHaveLength(1);
-        expect(rosterCalls).toHaveLength(1);
-    });
-
-    it('does not invalidate metrics when the mutation fails', async () => {
-        const { invalidateSpy, wrapper } = createTestHarness();
-        mockRecordAttendance.mockRejectedValue(new Error('network error'));
-
-        const { result } = renderHook(() => useRecordAttendance(EVENT_ID), { wrapper });
-
-        await act(async () => {
-            await result.current.mutate({ signupId: 99, attendanceStatus: 'attended' });
-        });
-
-        const metricsCalls = getInvalidateCalls(invalidateSpy, [...METRICS_KEY]);
-        expect(metricsCalls).toHaveLength(0);
-    });
-
-    it('scopes invalidation to the correct eventId, not other events', async () => {
-        const { invalidateSpy, wrapper } = createTestHarness();
-        mockRecordAttendance.mockResolvedValue({ id: 1, attendanceStatus: 'attended' });
-
-        const { result } = renderHook(() => useRecordAttendance(EVENT_ID), { wrapper });
-
-        await act(async () => {
-            await result.current.mutateAsync({ signupId: 10, attendanceStatus: 'attended' });
-        });
-
-        // The metrics key for a different event should NOT be invalidated
-        const wrongMetricsKey = ['events', EVENT_ID + 1, 'metrics'] as const;
-        const wrongCalls = getInvalidateCalls(invalidateSpy, [...wrongMetricsKey]);
-        expect(wrongCalls).toHaveLength(0);
-    });
+    it('invalidates the metrics query key after recording attendance', testInvalidatesMetrics);
+    it('invalidates the attendance query key after recording attendance', testInvalidatesAttendance);
+    it('invalidates the roster query key after recording attendance', testInvalidatesRoster);
+    it('invalidates all three query keys in a single mutation success', testInvalidatesAllThreeKeys);
+    it('does not invalidate metrics when the mutation fails', testNoInvalidateOnFailure);
+    it('scopes invalidation to the correct eventId, not other events', testScopedToCorrectEventId);
 });
