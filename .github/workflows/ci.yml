@@ -241,14 +241,14 @@ jobs:
 
       - name: Wait for API to be ready
         run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:3000/system/status > /dev/null 2>&1; then
-              echo "API is ready"
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+              echo "API is ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "API failed to start within 30s"
+          echo "API failed to start within 60s"
           exit 1
 
       - name: Start web preview server
@@ -257,14 +257,14 @@ jobs:
 
       - name: Wait for web server to be ready
         run: |
-          for i in $(seq 1 15); do
+          for i in $(seq 1 30); do
             if curl -sf http://localhost:5173 > /dev/null 2>&1; then
-              echo "Web server is ready"
+              echo "Web server is ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "Web server failed to start within 15s"
+          echo "Web server failed to start within 30s"
           exit 1
 
       - name: Run Playwright smoke tests

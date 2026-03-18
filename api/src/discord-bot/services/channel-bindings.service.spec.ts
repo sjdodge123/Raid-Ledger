@@ -5,14 +5,11 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 // ─── Mock DB chain ──────────────────────────────────────────────────────────
 
 function buildMockDb() {
-  const mockReturning = jest.fn();
-  const mockOnConflictDoUpdate = jest
+  const mockInsertReturning = jest.fn();
+  const mockInsertValues = jest
     .fn()
-    .mockReturnValue({ returning: mockReturning });
-  const mockValues = jest
-    .fn()
-    .mockReturnValue({ onConflictDoUpdate: mockOnConflictDoUpdate });
-  const mockInsert = jest.fn().mockReturnValue({ values: mockValues });
+    .mockReturnValue({ returning: mockInsertReturning });
+  const mockInsert = jest.fn().mockReturnValue({ values: mockInsertValues });
   const mockDeleteReturning = jest.fn();
   const mockDeleteWhere = jest
     .fn()
@@ -22,19 +19,27 @@ function buildMockDb() {
   const mockSelectWhere = jest.fn().mockReturnValue({ limit: mockSelectLimit });
   const mockSelectFrom = jest.fn().mockReturnValue({ where: mockSelectWhere });
   const mockSelect = jest.fn().mockReturnValue({ from: mockSelectFrom });
+  const mockUpdateReturning = jest.fn();
+  const mockUpdateWhere = jest
+    .fn()
+    .mockReturnValue({ returning: mockUpdateReturning });
+  const mockUpdateSet = jest.fn().mockReturnValue({ where: mockUpdateWhere });
+  const mockUpdate = jest.fn().mockReturnValue({ set: mockUpdateSet });
 
   return {
     mockDb: {
       insert: mockInsert,
       delete: mockDelete,
       select: mockSelect,
-      update: jest.fn(),
+      update: mockUpdate,
     },
-    mockReturning,
+    mockInsertReturning,
     mockInsert,
     mockDeleteReturning,
     mockSelect,
     mockSelectFrom,
+    mockSelectLimit,
+    mockUpdateReturning,
   };
 }
 
@@ -84,7 +89,9 @@ describe('ChannelBindingsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      mocks.mockReturning.mockResolvedValue([mockBinding]);
+      // select finds no existing binding → insert path
+      mocks.mockSelectLimit.mockResolvedValueOnce([]);
+      mocks.mockInsertReturning.mockResolvedValue([mockBinding]);
       const result = await service.bind(
         'guild-123',
         'channel-456',

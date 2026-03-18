@@ -96,8 +96,53 @@ export class ChannelBindingsService {
     return deleted.map((d) => d.channelId).filter((id) => id !== channelId);
   }
 
-  /** Insert or update the channel binding row. */
+  /**
+   * Find an existing binding matching (guild, channel, series, game).
+   * Handles NULL comparisons explicitly (PostgreSQL NULL != NULL).
+   */
+  private async findExistingBinding(
+    opts: UpsertBindingOpts,
+  ): Promise<{ id: string } | undefined> {
+    const conditions = [
+      eq(schema.channelBindings.guildId, opts.guildId),
+      eq(schema.channelBindings.channelId, opts.channelId),
+      opts.recurrenceGroupId
+        ? eq(schema.channelBindings.recurrenceGroupId, opts.recurrenceGroupId)
+        : sql`${schema.channelBindings.recurrenceGroupId} IS NULL`,
+      opts.gameId != null
+        ? eq(schema.channelBindings.gameId, opts.gameId)
+        : sql`${schema.channelBindings.gameId} IS NULL`,
+    ];
+    const [existing] = await this.db
+      .select({ id: schema.channelBindings.id })
+      .from(schema.channelBindings)
+      .where(and(...conditions))
+      .limit(1);
+    return existing;
+  }
+
+  /**
+   * Insert or update a channel binding row.
+   * Uses manual SELECT → INSERT/UPDATE instead of ON CONFLICT because the
+   * unique index includes nullable columns where NULL != NULL in PostgreSQL.
+   * Matches on (guild, channel, series, game) to support multiple
+   * game-specific bindings per channel (ROK-842).
+   */
   private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
+    const existing = await this.findExistingBinding(opts);
+    if (existing) {
+      const [result] = await this.db
+        .update(schema.channelBindings)
+        .set({
+          channelType: opts.channelType,
+          bindingPurpose: opts.bindingPurpose,
+          config: opts.config ?? {},
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.channelBindings.id, existing.id))
+        .returning();
+      return result as BindingRecord;
+    }
     const [result] = await this.db
       .insert(schema.channelBindings)
       .values({
@@ -108,20 +153,6 @@ export class ChannelBindingsService {
         gameId: opts.gameId,
         recurrenceGroupId: opts.recurrenceGroupId ?? null,
         config: opts.config ?? {},
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.channelBindings.guildId,
-          schema.channelBindings.channelId,
-          schema.channelBindings.recurrenceGroupId,
-        ],
-        set: {
-          channelType: opts.channelType,
-          bindingPurpose: opts.bindingPurpose,
-          gameId: opts.gameId,
-          config: opts.config ?? {},
-          updatedAt: new Date(),
-        },
       })
       .returning();
     return result as BindingRecord;
@@ -184,27 +215,24 @@ export class ChannelBindingsService {
   async getBindingsWithGameNames(
     guildId: string,
   ): Promise<(BindingRecord & { gameName: string | null })[]> {
+    const b = schema.channelBindings;
     const rows = await this.db
       .select({
-        id: schema.channelBindings.id,
-        guildId: schema.channelBindings.guildId,
-        channelId: schema.channelBindings.channelId,
-        channelType: schema.channelBindings.channelType,
-        bindingPurpose: schema.channelBindings.bindingPurpose,
-        gameId: schema.channelBindings.gameId,
-        recurrenceGroupId: schema.channelBindings.recurrenceGroupId,
-        config: schema.channelBindings.config,
-        createdAt: schema.channelBindings.createdAt,
-        updatedAt: schema.channelBindings.updatedAt,
+        id: b.id,
+        guildId: b.guildId,
+        channelId: b.channelId,
+        channelType: b.channelType,
+        bindingPurpose: b.bindingPurpose,
+        gameId: b.gameId,
+        recurrenceGroupId: b.recurrenceGroupId,
+        config: b.config,
+        createdAt: b.createdAt,
+        updatedAt: b.updatedAt,
         gameName: schema.games.name,
       })
-      .from(schema.channelBindings)
-      .leftJoin(
-        schema.games,
-        eq(schema.channelBindings.gameId, schema.games.id),
-      )
-      .where(eq(schema.channelBindings.guildId, guildId));
-
+      .from(b)
+      .leftJoin(schema.games, eq(b.gameId, schema.games.id))
+      .where(eq(b.guildId, guildId));
     return rows as (BindingRecord & { gameName: string | null })[];
   }
 
@@ -221,102 +249,70 @@ export class ChannelBindingsService {
     return (row as BindingRecord) ?? null;
   }
 
-  /**
-   * Get the channel binding for a specific game in a guild.
-   * Used for event routing: game-specific binding takes priority over default channel.
-   */
+  /** Shared single-channel lookup by arbitrary conditions. */
+  private async findChannel(
+    ...conditions: ReturnType<typeof eq>[]
+  ): Promise<string | null> {
+    const cb = schema.channelBindings;
+    const [row] = await this.db
+      .select({ channelId: cb.channelId })
+      .from(cb)
+      .where(and(...conditions))
+      .limit(1);
+    return row?.channelId ?? null;
+  }
+
+  /** Game-specific text binding (event routing). */
   async getChannelForGame(
     guildId: string,
     gameId: number,
   ): Promise<string | null> {
-    const [row] = await this.db
-      .select({ channelId: schema.channelBindings.channelId })
-      .from(schema.channelBindings)
-      .where(
-        and(
-          eq(schema.channelBindings.guildId, guildId),
-          eq(schema.channelBindings.gameId, gameId),
-          eq(schema.channelBindings.bindingPurpose, 'game-announcements'),
-        ),
-      )
-      .limit(1);
-
-    return row?.channelId ?? null;
+    const cb = schema.channelBindings;
+    return this.findChannel(
+      eq(cb.guildId, guildId),
+      eq(cb.gameId, gameId),
+      eq(cb.bindingPurpose, 'game-announcements'),
+    );
   }
 
-  /**
-   * Get the channel binding for a specific recurrence group (event series) in a guild.
-   * ROK-435: Series-specific binding takes priority over game-specific binding.
-   */
+  /** Series-specific text binding — priority over game-specific (ROK-435). */
   async getChannelForSeries(
     guildId: string,
     recurrenceGroupId: string,
   ): Promise<string | null> {
-    const [row] = await this.db
-      .select({ channelId: schema.channelBindings.channelId })
-      .from(schema.channelBindings)
-      .where(
-        and(
-          eq(schema.channelBindings.guildId, guildId),
-          eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
-          eq(schema.channelBindings.bindingPurpose, 'game-announcements'),
-        ),
-      )
-      .limit(1);
-
-    return row?.channelId ?? null;
+    const cb = schema.channelBindings;
+    return this.findChannel(
+      eq(cb.guildId, guildId),
+      eq(cb.recurrenceGroupId, recurrenceGroupId),
+      eq(cb.bindingPurpose, 'game-announcements'),
+    );
   }
 
-  /**
-   * Get the voice channel binding for a specific game in a guild.
-   * Used for invite DMs to show the correct voice channel to join.
-   * Returns only the game-specific voice binding; callers fall back to
-   * the app-setting default voice channel themselves (ROK-592).
-   */
+  /** Game-specific voice binding — callers fall back to app-setting default (ROK-592). */
   async getVoiceChannelForGame(
     guildId: string,
     gameId?: number | null,
   ): Promise<string | null> {
     if (!gameId) return null;
-
-    const [gameRow] = await this.db
-      .select({ channelId: schema.channelBindings.channelId })
-      .from(schema.channelBindings)
-      .where(
-        and(
-          eq(schema.channelBindings.guildId, guildId),
-          eq(schema.channelBindings.gameId, gameId),
-          eq(schema.channelBindings.bindingPurpose, 'game-voice-monitor'),
-        ),
-      )
-      .limit(1);
-
-    return gameRow?.channelId ?? null;
+    const cb = schema.channelBindings;
+    return this.findChannel(
+      eq(cb.guildId, guildId),
+      eq(cb.gameId, gameId),
+      eq(cb.bindingPurpose, 'game-voice-monitor'),
+    );
   }
 
-  /**
-   * Get the voice channel binding for a specific event series in a guild.
-   * ROK-599: Series-specific voice binding takes priority over game-specific binding.
-   * Filters by channelType (not bindingPurpose) because series bindings may be
-   * stored as 'general-lobby' when no game is specified (ROK-429).
-   */
+  /** Series voice binding — filters by channelType since series may be 'general-lobby' (ROK-599). */
   async getVoiceChannelForSeries(
     guildId: string,
     recurrenceGroupId: string,
   ): Promise<string | null> {
-    const [row] = await this.db
-      .select({ channelId: schema.channelBindings.channelId })
-      .from(schema.channelBindings)
-      .where(
-        and(
-          eq(schema.channelBindings.guildId, guildId),
-          eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
-          eq(schema.channelBindings.channelType, 'voice'),
-        ),
-      )
-      .limit(1);
-
-    return row?.channelId ?? null;
+    const cb = schema.channelBindings;
+    return this.findChannel(
+      eq(cb.guildId, guildId),
+      eq(cb.recurrenceGroupId, recurrenceGroupId),
+      eq(cb.channelType, 'voice'),
+    );
   }
 
   /**
@@ -329,24 +325,16 @@ export class ChannelBindingsService {
   ): Promise<BindingRecord | null> {
     const existing = await this.getBindingById(id);
     if (!existing) return null;
-
-    const mergedConfig = { ...(existing.config ?? {}), ...config };
-
     const updateSet: Partial<typeof schema.channelBindings.$inferInsert> = {
-      config: mergedConfig,
+      config: { ...(existing.config ?? {}), ...config },
       updatedAt: new Date(),
+      ...(bindingPurpose && { bindingPurpose }),
     };
-
-    if (bindingPurpose) {
-      updateSet.bindingPurpose = bindingPurpose;
-    }
-
     const [result] = await this.db
       .update(schema.channelBindings)
       .set(updateSet)
       .where(eq(schema.channelBindings.id, id))
       .returning();
-
     return (result as BindingRecord) ?? null;
   }
 
