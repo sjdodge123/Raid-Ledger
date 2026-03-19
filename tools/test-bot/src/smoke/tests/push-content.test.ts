@@ -178,23 +178,54 @@ const updatedEmbedKeepsContent: SmokeTest = {
   },
 };
 
+/** Format a date in a given timezone the same way push-content does. */
+function formatInTimezone(isoString: string, tz: string): string {
+  return new Date(isoString).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: tz,
+  });
+}
+
 const contentTimeMatchesEmbed: SmokeTest = {
-  name: 'Push content time matches embed body timezone (ROK-918)',
+  name: 'Push content time uses guild timezone, not UTC (ROK-918)',
   category: 'embed',
   async run(ctx) {
+    // Fetch guild timezone from settings
+    const tzRes = await ctx.api
+      .get<{ timezone: string | null }>('/admin/settings/timezone');
+    const guildTz = tzRes.timezone;
+    if (!guildTz) {
+      throw new Error(
+        'Guild timezone is not configured — cannot verify timezone correctness',
+      );
+    }
+    // Create event at a known time — use the event's actual startTime
     const ev = await createEvent(ctx.api, 'push-tz', mmoOverrides(ctx));
     try {
-      const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      const msg = await embedInChannel(
+        ctx.defaultChannelId, ev.title, ctx.config.timeoutMs,
+      );
       assertHasContent(msg.content);
-      // Extract the date from content (e.g., "Mar 16, 6:00 PM")
-      // The embed body uses Discord's <t:epoch:f> which auto-localizes,
-      // while push content must use the guild timezone. Just verify:
-      // 1. Content has a month abbreviation (not raw epoch)
-      // 2. Content does NOT contain a bare UTC time when guild has a timezone
-      const monthPattern = /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/;
-      if (!monthPattern.test(msg.content)) {
+      // Format startTime in guild timezone and in UTC
+      const startTime = (ev.startTime as string) ?? '';
+      const guildFormatted = formatInTimezone(startTime, guildTz);
+      const utcFormatted = formatInTimezone(startTime, 'UTC');
+      // Push content must contain the guild-timezone-formatted date
+      if (!msg.content.includes(guildFormatted)) {
         throw new Error(
-          `Expected push content to contain a month abbreviation, got: "${msg.content}"`,
+          `Push content missing guild-tz date "${guildFormatted}"` +
+          ` (UTC would be "${utcFormatted}"). Got: "${msg.content}"`,
+        );
+      }
+      // If UTC and guild differ, confirm UTC version is NOT present
+      if (guildFormatted !== utcFormatted && msg.content.includes(utcFormatted)) {
+        throw new Error(
+          `Push content contains UTC date "${utcFormatted}" instead of ` +
+          `guild-tz date "${guildFormatted}". Got: "${msg.content}"`,
         );
       }
     } finally {

@@ -360,8 +360,36 @@ const welcomeDmNotification: SmokeTest = {
 // Slow tests gated behind SMOKE_INCLUDE_SLOW=1
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 
+/**
+ * Replicate the DM processor's stripDiscordMarkup + buildPlaintextContent
+ * to verify what the actual DM push content would look like (ROK-918).
+ * Bot-to-bot DMs fail (50007), so we test the transformation on raw data.
+ */
+function simulatePlaintextContent(title: string, message: string): string {
+  const formatEpoch = (epoch: number): string => {
+    const d = new Date(epoch * 1000);
+    return d.toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true,
+    });
+  };
+  const raw = `${title}\n${message}`;
+  return raw
+    .replace(/<t:(\d+)(?::[a-zA-Z])?>/g, (_, epoch) =>
+      formatEpoch(Number(epoch)),
+    )
+    .replace(/<#\d+>/g, '#channel')
+    .replace(/<@&\d+>/g, '@role')
+    .replace(/<@!?\d+>/g, '@user')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/\(\s*\)/g, '')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
 const rescheduleDmHasDate: SmokeTest = {
-  name: 'Reschedule DM includes new date/time, not empty parens (ROK-918)',
+  name: 'Reschedule DM plaintext includes new date, not empty parens (ROK-918)',
   category: 'dm',
   async run(ctx) {
     const ev = await createEvent(ctx.api, 'dm-resched-date', mmoOverrides(ctx));
@@ -388,8 +416,8 @@ const rescheduleDmHasDate: SmokeTest = {
       ).catch(() => {
         throw new Error('No reschedule notification within timeout');
       });
-      // Fetch the latest notification and verify it contains a date, not "()"
-      type NotifDto = { type: string; message?: string };
+      // Fetch the latest notification
+      type NotifDto = { type: string; title?: string; message?: string };
       const notifs = await ctx.api
         .get<NotifDto[]>('/notifications?limit=5')
         .catch(() => [] as NotifDto[]);
@@ -398,23 +426,24 @@ const rescheduleDmHasDate: SmokeTest = {
       if (!reschedNotif?.message) {
         throw new Error('Could not find event_rescheduled notification');
       }
-      if (reschedNotif.message.includes('()')) {
+      // Simulate the DM processor's plaintext conversion
+      const plaintext = simulatePlaintextContent(
+        reschedNotif.title ?? '', reschedNotif.message,
+      );
+      // Verify plaintext does NOT contain empty parens (the ROK-918 bug)
+      if (plaintext.includes('()')) {
         throw new Error(
-          `Reschedule DM contains empty parens: "${reschedNotif.message}"`,
+          `Plaintext DM contains empty parens "()" — ` +
+          `stripDiscordMarkup bug. Plaintext: "${plaintext}"`,
         );
       }
-      // Verify the message includes a month name (formatted date)
+      // Verify plaintext includes a formatted date (month abbreviation)
       const monthPattern = /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/;
-      if (!monthPattern.test(reschedNotif.message)) {
-        // Note: the raw message uses Discord timestamps <t:epoch:f> which
-        // won't contain a month — that's expected. The plaintext conversion
-        // in the DM processor handles that. This check validates the raw
-        // notification contains timestamp tokens (not empty).
-        if (!/<t:\d+/.test(reschedNotif.message)) {
-          throw new Error(
-            `Reschedule DM missing date: "${reschedNotif.message}"`,
-          );
-        }
+      if (!monthPattern.test(plaintext)) {
+        throw new Error(
+          `Plaintext DM missing formatted date. ` +
+          `Raw message: "${reschedNotif.message}" → Plaintext: "${plaintext}"`,
+        );
       }
     } finally {
       await deleteEvent(ctx.api, ev.id);

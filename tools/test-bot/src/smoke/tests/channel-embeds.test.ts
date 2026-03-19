@@ -175,13 +175,30 @@ const nonMmoNoWowAvatars: SmokeTest = {
   name: 'Non-MMO event roster does not show WoW character avatars (ROK-918)',
   category: 'embed',
   async run(ctx) {
-    // Create a generic event with NO game (or a non-MMO game)
+    // Find a non-MMO game (hasRoles=false) so the gameId-based filter runs.
+    // Using gameId: null would skip the filter entirely (original behavior).
+    type GameRow = { id: number; name: string; hasRoles: boolean };
+    const configuredGames = await ctx.api
+      .get<{ data: GameRow[] }>('/games/configured')
+      .then((r) => (Array.isArray(r.data) ? r.data : (r as unknown as GameRow[])))
+      .catch(() => [] as GameRow[]);
+    const nonMmoGame = configuredGames.find(
+      (g) => !g.hasRoles && g.id !== ctx.mmoGameId,
+    );
+    if (!nonMmoGame) {
+      throw new Error(
+        'No non-MMO game found in configured games — cannot verify class filtering',
+      );
+    }
+    // Create event with the non-MMO gameId so the game filter is exercised
     const ev = await createEvent(ctx.api, 'embed-nowow', {
+      gameId: nonMmoGame.id,
       maxAttendees: 10,
     });
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
-      await signup(ctx.api, ev.id, {});
+      // Sign up with MMO character (which has a WoW class)
+      await signup(ctx.api, ev.id, mmoSignupOpts(ctx));
       const found = await waitForEmbedUpdate(
         ctx.defaultChannelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
@@ -189,11 +206,11 @@ const nonMmoNoWowAvatars: SmokeTest = {
       );
       const desc = found.embeds[0]?.description ?? '';
       // WoW class emojis use custom emoji format: <:ClassName:id>
-      // A non-game event should NOT have any class emojis in its roster
+      // A non-MMO-game event should NOT show WoW class emojis
       const wowClassPattern = /<:(?:Warrior|Mage|Rogue|Priest|Paladin|Druid|Shaman|Hunter|Warlock|Monk|DemonHunter|DeathKnight|Evoker):/i;
       if (wowClassPattern.test(desc)) {
         throw new Error(
-          `Non-game event embed contains WoW class emoji: "${desc.slice(0, 200)}"`,
+          `Non-MMO game event embed contains WoW class emoji: "${desc.slice(0, 200)}"`,
         );
       }
     } finally {
