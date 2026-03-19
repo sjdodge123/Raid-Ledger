@@ -124,9 +124,7 @@ describe('buildEventPushContent', () => {
 
   it('should throw or not silently produce wrong output for invalid timezone', () => {
     // Invalid timezone throws a RangeError in V8/Node.js Intl
-    expect(() =>
-      buildEventPushContent(baseEvent, 'Not/ATimezone'),
-    ).toThrow();
+    expect(() => buildEventPushContent(baseEvent, 'Not/ATimezone')).toThrow();
   });
 
   it('should show correct time for Tokyo timezone (UTC+9, no DST)', () => {

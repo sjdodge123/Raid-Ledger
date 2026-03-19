@@ -422,14 +422,14 @@ describe('buildEventEmbed — timezone threading (ROK-918)', () => {
   it('should produce different push content time when timezone shifts the hour', () => {
     // Use two explicit timezones that always differ regardless of test machine locale:
     // UTC vs Asia/Tokyo (+9h): same epoch shows different hours guaranteed
-    const withUtc = factory.buildEventEmbed(
-      baseEvent,
-      { ...baseContext, timezone: 'UTC' },
-    ).content;
-    const withTokyo = factory.buildEventEmbed(
-      baseEvent,
-      { ...baseContext, timezone: 'Asia/Tokyo' },
-    ).content;
+    const withUtc = factory.buildEventEmbed(baseEvent, {
+      ...baseContext,
+      timezone: 'UTC',
+    }).content;
+    const withTokyo = factory.buildEventEmbed(baseEvent, {
+      ...baseContext,
+      timezone: 'Asia/Tokyo',
+    }).content;
     // 2026-02-20T20:00:00Z = 8:00 PM UTC vs 5:00 AM (+1 day) Tokyo — always different
     expect(withUtc).not.toBe(withTokyo);
   });
@@ -480,14 +480,14 @@ describe('buildEventEmbed — timezone threading (ROK-918)', () => {
   });
 
   it('should produce same output whether timezone is null or undefined in context', () => {
-    const withNull = factory.buildEventEmbed(
-      baseEvent,
-      { ...baseContext, timezone: null },
-    ).content;
-    const withUndefined = factory.buildEventEmbed(
-      baseEvent,
-      { communityName: baseContext.communityName, clientUrl: baseContext.clientUrl },
-    ).content;
+    const withNull = factory.buildEventEmbed(baseEvent, {
+      ...baseContext,
+      timezone: null,
+    }).content;
+    const withUndefined = factory.buildEventEmbed(baseEvent, {
+      communityName: baseContext.communityName,
+      clientUrl: baseContext.clientUrl,
+    }).content;
     expect(withNull).toBe(withUndefined);
   });
 });
