@@ -266,6 +266,7 @@ test.describe('Regression: ROK-886 — event detail mobile layout', () => {
     test('action buttons use overflow menu on mobile viewport', async ({ browser }) => {
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },
+            storageState: 'scripts/.auth/admin.json',
         });
         const page = await context.newPage();
 
