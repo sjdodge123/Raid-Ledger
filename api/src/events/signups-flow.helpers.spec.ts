@@ -484,4 +484,193 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
       expect(mockTx.delete).not.toHaveBeenCalled();
     });
   });
+
+  describe('ROK-868: character update on duplicate signup', () => {
+    /** Set up a duplicate signup scenario with the given existing and dto character IDs. */
+    function setupDuplicateWithCharacter(
+      existingCharId: string | null,
+      dtoCharId: string | undefined,
+    ) {
+      const mockTx = createMockTx();
+      const deps = createMockDeps();
+      const eventRow = createMmoEventRow({
+        slotConfig: null,
+        maxAttendees: 10,
+      });
+      const existingSignup = createSignupRow({
+        id: 40,
+        status: 'signed_up',
+        characterId: existingCharId,
+        confirmationStatus: existingCharId ? 'confirmed' : 'pending',
+      });
+
+      const dto = dtoCharId ? { characterId: dtoCharId } : {};
+
+      // Insert returns empty (duplicate)
+      mockTx.insert.mockImplementationOnce(() => ({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      }));
+
+      const characterRow = dtoCharId
+        ? {
+            id: dtoCharId,
+            name: 'TestChar',
+            class: 'Warrior',
+            spec: 'Arms',
+            role: 'dps',
+            roleOverride: null,
+            isMain: true,
+            itemLevel: 500,
+            level: 80,
+            avatarUrl: null,
+            race: 'Human',
+            faction: 'alliance',
+            userId: 1,
+            gameId: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }
+        : null;
+
+      mockTx.select
+        // checkAutoBench: no slotConfig, uses maxAttendees path
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            innerJoin: jest.fn().mockReturnValue({
+              where: jest.fn().mockResolvedValue([{ count: 0 }]),
+            }),
+          }),
+        })
+        // fetchExistingSignup
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([existingSignup]),
+            }),
+          }),
+        })
+        // ensureAssignment: check existing roster assignment (has one)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+            }),
+          }),
+        })
+        // getCharacterById (if characterId present)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue(characterRow ? [characterRow] : []),
+            }),
+          }),
+        });
+
+      return { mockTx, deps, eventRow, dto, existingSignup };
+    }
+
+    it('updates characterId when dto provides one and existing has none', async () => {
+      const { mockTx, deps, eventRow, dto } = setupDuplicateWithCharacter(
+        null,
+        'char-abc',
+      );
+
+      const params: SignupTxParams = {
+        tx: mockTx as unknown as SignupTxParams['tx'],
+        eventRow,
+        eventId: 1,
+        userId: 1,
+        dto,
+        user: undefined,
+      };
+
+      await signupTxBody(deps, params);
+
+      // Should have called update.set with the new characterId
+      const charUpdates = mockTx.setCalls.filter(
+        (call) => 'characterId' in call,
+      );
+      expect(charUpdates.length).toBeGreaterThan(0);
+      expect(charUpdates[0].characterId).toBe('char-abc');
+      expect(charUpdates[0].confirmationStatus).toBe('confirmed');
+    });
+
+    it('updates characterId when dto provides different character', async () => {
+      const { mockTx, deps, eventRow, dto } = setupDuplicateWithCharacter(
+        'char-old',
+        'char-new',
+      );
+
+      const params: SignupTxParams = {
+        tx: mockTx as unknown as SignupTxParams['tx'],
+        eventRow,
+        eventId: 1,
+        userId: 1,
+        dto,
+        user: undefined,
+      };
+
+      await signupTxBody(deps, params);
+
+      const charUpdates = mockTx.setCalls.filter(
+        (call) => 'characterId' in call,
+      );
+      expect(charUpdates.length).toBeGreaterThan(0);
+      expect(charUpdates[0].characterId).toBe('char-new');
+    });
+
+    it('does NOT clear characterId when dto has no characterId', async () => {
+      const { mockTx, deps, eventRow, dto } = setupDuplicateWithCharacter(
+        'char-existing',
+        undefined,
+      );
+
+      const params: SignupTxParams = {
+        tx: mockTx as unknown as SignupTxParams['tx'],
+        eventRow,
+        eventId: 1,
+        userId: 1,
+        dto,
+        user: undefined,
+      };
+
+      await signupTxBody(deps, params);
+
+      // No update should contain characterId
+      const charUpdates = mockTx.setCalls.filter(
+        (call) => 'characterId' in call,
+      );
+      expect(charUpdates).toHaveLength(0);
+    });
+
+    it('does NOT update when dto characterId matches existing', async () => {
+      const { mockTx, deps, eventRow, dto } = setupDuplicateWithCharacter(
+        'char-same',
+        'char-same',
+      );
+
+      const params: SignupTxParams = {
+        tx: mockTx as unknown as SignupTxParams['tx'],
+        eventRow,
+        eventId: 1,
+        userId: 1,
+        dto,
+        user: undefined,
+      };
+
+      await signupTxBody(deps, params);
+
+      // No character update should happen since they match
+      const charUpdates = mockTx.setCalls.filter(
+        (call) => 'characterId' in call,
+      );
+      expect(charUpdates).toHaveLength(0);
+    });
+  });
 });

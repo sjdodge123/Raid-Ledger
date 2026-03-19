@@ -8,7 +8,7 @@
  *   npx playwright test                              # auto-starts dev server
  *   BASE_URL=http://localhost:5173 npx playwright test  # against running server
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // Auth
@@ -569,6 +569,85 @@ test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
             expect(r).toBeGreaterThan(180);
             expect(g).toBeGreaterThan(180);
             expect(b).toBeGreaterThan(180);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: ROK-868 — character info on duplicate web signup
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-868 — character info on duplicate signup', () => {
+    const API_BASE = process.env.API_URL || 'http://localhost:3000';
+
+    async function getAdminToken(): Promise<string> {
+        const res = await fetch(`${API_BASE}/auth/local`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'admin@local', password: process.env.ADMIN_PASSWORD || 'password' }),
+        });
+        const { access_token } = (await res.json()) as { access_token: string };
+        return access_token;
+    }
+
+    async function apiGet(token: string, path: string) {
+        const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+        return res.json();
+    }
+
+    async function apiPost(token: string, path: string, body: Record<string, unknown>) {
+        const res = await fetch(`${API_BASE}${path}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body),
+        });
+        return res.json();
+    }
+
+    async function apiDelete(token: string, path: string) {
+        await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    test('character data appears in event detail after duplicate signup with character', async ({ page }) => {
+        const token = await getAdminToken();
+
+        // Find admin's first character
+        const chars = (await apiGet(token, '/users/me/characters')) as { data: Array<{ id: string; name: string; gameId: number }> };
+        if (!chars.data?.length) {
+            test.skip(true, 'Admin has no characters — cannot test duplicate signup with character');
+            return;
+        }
+        const char = chars.data[0];
+
+        // Create event with the character's game — admin auto-signs up WITHOUT character
+        const futureStart = new Date(Date.now() + 86_400_000).toISOString();
+        const futureEnd = new Date(Date.now() + 90_000_000).toISOString();
+        const event = (await apiPost(token, '/events', {
+            title: 'PW-868 Character Test',
+            gameId: char.gameId,
+            startTime: futureStart,
+            endTime: futureEnd,
+            maxAttendees: 10,
+        })) as { id: number };
+
+        try {
+            // Re-signup with character (triggers duplicate signup path — the ROK-868 fix)
+            await apiPost(token, `/events/${event.id}/signup`, {
+                characterId: char.id,
+                preferredRoles: ['dps'],
+            });
+
+            // Navigate to event detail and verify character info renders
+            await page.goto(`/events/${event.id}`);
+            await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+            // PlayerCharacterInfo renders "CharName • ClassName" inside a <p>
+            await expect(page.getByText(char.name).first()).toBeVisible({ timeout: 10_000 });
+
+            // FlexibilityBadges renders a span with title="Prefers: Dps" containing role icons
+            await expect(page.locator('[title="Prefers: Dps"]').first()).toBeVisible({ timeout: 5_000 });
+        } finally {
+            await apiDelete(token, `/events/${event.id}`);
         }
     });
 });
