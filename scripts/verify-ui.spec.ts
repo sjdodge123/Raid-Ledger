@@ -641,9 +641,11 @@ test.describe('Regression: ROK-868 — character info on duplicate signup', () =
             await page.goto(`/events/${event.id}`);
             await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-            // PlayerCharacterInfo renders "CharName • ClassName" inside a <p> with class text-muted
-            // The character name should appear somewhere on the page
+            // PlayerCharacterInfo renders "CharName • ClassName" inside a <p>
             await expect(page.getByText(char.name).first()).toBeVisible({ timeout: 10_000 });
+
+            // FlexibilityBadges renders a span with title="Prefers: Dps" containing role icons
+            await expect(page.locator('[title="Prefers: Dps"]').first()).toBeVisible({ timeout: 5_000 });
         } finally {
             await apiDelete(token, `/events/${event.id}`);
         }
