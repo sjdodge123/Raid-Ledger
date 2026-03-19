@@ -71,7 +71,7 @@ interface ItemComparisonProps {
  * ROK-246: Dungeon Companion — Quest Suggestions UI
  */
 function computeDelta(rewardItemLevel: number | null, equippedItemLevel: number): { deltaClass: string; deltaText: string } {
-    const delta = rewardItemLevel ? rewardItemLevel - equippedItemLevel : null;
+    const delta = rewardItemLevel && equippedItemLevel ? rewardItemLevel - equippedItemLevel : null;
     if (delta === null) return { deltaClass: 'item-comparison__delta--neutral', deltaText: '' };
     if (delta > 0) return { deltaClass: 'item-comparison__delta--upgrade', deltaText: `▲ +${delta} iLvl` };
     if (delta < 0) return { deltaClass: 'item-comparison__delta--downgrade', deltaText: `▼ ${delta} iLvl` };

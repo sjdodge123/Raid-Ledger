@@ -83,7 +83,9 @@ function logEquipmentSample(
   if (result.items.length === 0) return;
   const sample = result.items
     .slice(0, 3)
-    .map((i) => `${i.name}: quality=${i.quality}, iLvl=${i.itemLevel}`);
+    .map(
+      (i) => `${i.name}: quality=${i.quality}, iLvl=${i.itemLevel || 'N/A'}`,
+    );
   logger.log(
     `Equipment for ${charName}: ${result.items.length} items. Sample: [${sample.join('; ')}]`,
   );
