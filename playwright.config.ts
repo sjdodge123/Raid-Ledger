@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 
 /**
- * Playwright configuration for UI smoke tests (ROK-653)
+ * Playwright configuration for UI smoke tests (ROK-653, ROK-913)
  *
  * Usage:
  *   npx playwright test                    # Run all tests
@@ -14,8 +14,8 @@ import path from 'path';
  *   - Web running on :5173 (auto-started locally via webServer below)
  */
 export default defineConfig({
-    testDir: './scripts',
-    testMatch: /verify-ui\.spec\.ts$/,
+    testDir: './scripts/smoke',
+    testMatch: /\.smoke\.spec\.ts$/,
 
     /* Global setup: authenticate admin and save storageState */
     globalSetup: path.resolve('scripts/playwright-global-setup.ts'),
@@ -57,11 +57,15 @@ export default defineConfig({
         timeout: 120_000,
     },
 
-    /* Configure projects for major browsers */
+    /* Configure projects for desktop and mobile viewports */
     projects: [
         {
-            name: 'chromium',
+            name: 'desktop',
             use: { ...devices['Desktop Chrome'] },
+        },
+        {
+            name: 'mobile',
+            use: { ...devices['Pixel 5'] },
         },
     ],
 });

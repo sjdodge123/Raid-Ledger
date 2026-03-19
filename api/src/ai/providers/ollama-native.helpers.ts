@@ -15,24 +15,6 @@ const MAX_REDIRECTS = 5;
 const DOWNLOAD_TIMEOUT_MS = 300_000;
 
 /**
- * Download a file from a URL to a destination path.
- * Follows redirects, writes to a temp file, then atomically renames.
- * @param url - The URL to download from
- * @param dest - Final destination path
- */
-export async function downloadFile(url: string, dest: string): Promise<void> {
-  const tmpPath = `${dest}.tmp`;
-  try {
-    await downloadToFile(url, tmpPath);
-    await chmod(tmpPath, 0o755);
-    await rename(tmpPath, dest);
-  } catch (err) {
-    await unlink(tmpPath).catch(() => {});
-    throw err;
-  }
-}
-
-/**
  * Download a .tar.zst archive, extract the ollama binary, and place it at dest.
  * Cleans up temp files (archive + extract dir) on both success and failure.
  * @param url - URL to the .tar.zst archive

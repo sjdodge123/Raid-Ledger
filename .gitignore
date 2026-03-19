@@ -33,7 +33,7 @@ scripts/*
 !scripts/deploy_dev.sh
 !scripts/fix-migration-order.sh
 !scripts/setup-branch-protection.sh
-!scripts/verify-ui.spec.ts
+!scripts/smoke/
 !scripts/playwright-global-setup.ts
 !scripts/launch-discord.sh
 !/api/scripts/

@@ -191,30 +191,13 @@ export function buildCompositeSlots(
     const dayDate = new Date(weekStart);
     dayDate.setDate(dayDate.getDate() + s.dayOfWeek);
     const dateStr = dayDate.toISOString().split('T')[0];
-    const status = resolveSlotStatus(
-      dateStr,
-      s.hour,
-      `${s.dayOfWeek}:${s.hour}`,
-      absenceDates,
-      overrideMap,
-      committedSet,
-    );
-    return {
-      dayOfWeek: s.dayOfWeek,
-      hour: s.hour,
-      status,
-      fromTemplate: true,
-    };
+    const status = resolveSlotStatus(dateStr, s.hour, `${s.dayOfWeek}:${s.hour}`, absenceDates, overrideMap, committedSet);
+    return { dayOfWeek: s.dayOfWeek, hour: s.hour, status, fromTemplate: true };
   });
   for (const key of committedSet) {
     if (!templateSet.has(key)) {
       const [day, hour] = key.split(':').map(Number);
-      slots.push({
-        dayOfWeek: day,
-        hour,
-        status: 'committed',
-        fromTemplate: false,
-      });
+      slots.push({ dayOfWeek: day, hour, status: 'committed', fromTemplate: false });
     }
   }
   return slots;
@@ -249,37 +232,11 @@ export function assembleCompositeView(
   tzOffset: number,
 ): CompositeViewResult {
   const templateSet = new Set(remapped.map((s) => `${s.dayOfWeek}:${s.hour}`));
-  const committedSet = buildCommittedSet(
-    signedUpEvents,
-    weekStart,
-    weekEnd,
-    tzOffset,
-  );
+  const committedSet = buildCommittedSet(signedUpEvents, weekStart, weekEnd, tzOffset);
   const absenceDates = buildAbsenceDateSet(absenceRows);
   const overrideMap = new Map<string, string>();
-  for (const o of overrideRows)
-    overrideMap.set(`${o.date}:${o.hour}`, o.status);
-
-  const slots = buildCompositeSlots(
-    remapped,
-    templateSet,
-    committedSet,
-    absenceDates,
-    overrideMap,
-    weekStart,
-  );
-  const events = buildEventBlocks(
-    signedUpEvents,
-    weekStart,
-    weekEnd,
-    tzOffset,
-    signupsMap,
-  );
-  return {
-    slots,
-    events,
-    weekStart: weekStart.toISOString(),
-    overrides: overrideRows,
-    absences: absenceRows,
-  };
+  for (const o of overrideRows) overrideMap.set(`${o.date}:${o.hour}`, o.status);
+  const slots = buildCompositeSlots(remapped, templateSet, committedSet, absenceDates, overrideMap, weekStart);
+  const events = buildEventBlocks(signedUpEvents, weekStart, weekEnd, tzOffset, signupsMap);
+  return { slots, events, weekStart: weekStart.toISOString(), overrides: overrideRows, absences: absenceRows };
 }

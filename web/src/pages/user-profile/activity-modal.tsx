@@ -48,46 +48,19 @@ export function ActivityContent({
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-16 bg-overlay rounded-lg animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-  if (entries.length === 0)
-    return <p className="text-muted text-sm">No activity tracked yet.</p>;
-
+  if (isLoading) return (
+    <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-16 bg-overlay rounded-lg animate-pulse" />)}</div>
+  );
+  if (entries.length === 0) return <p className="text-muted text-sm">No activity tracked yet.</p>;
   const visible = entries.slice(0, ACTIVITY_INLINE_LIMIT);
   const hasMore = entries.length > ACTIVITY_INLINE_LIMIT;
-
   return (
     <>
       <div className="flex flex-col gap-2">
-        {visible.map((entry) => (
-          <ActivityEntryCard key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />
-        ))}
+        {visible.map((e) => <ActivityEntryCard key={e.gameId} entry={e} pricing={pricingMap.get(e.gameId)} />)}
       </div>
-      {hasMore && (
-        <button
-          onClick={() => setModalOpen(true)}
-          className="mt-2 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
-        >
-          Show All ({entries.length})
-        </button>
-      )}
-      {hasMore && (
-        <ActivityModal
-          entries={entries}
-          isOpen={modalOpen}
-          onClose={() => { setModalOpen(false); setSearch(""); }}
-          search={search}
-          setSearch={setSearch}
-          pricingMap={pricingMap}
-        />
-      )}
+      {hasMore && <button onClick={() => setModalOpen(true)} className="mt-2 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">Show All ({entries.length})</button>}
+      {hasMore && <ActivityModal entries={entries} isOpen={modalOpen} onClose={() => { setModalOpen(false); setSearch(""); }} search={search} setSearch={setSearch} pricingMap={pricingMap} />}
     </>
   );
 }

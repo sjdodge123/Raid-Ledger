@@ -83,14 +83,7 @@ export class UsersController {
     const playtimeMin = parsePlaytimeMin(playtimeMinStr);
     const playHistory = parsePlayHistory(playHistoryStr);
     const result = await this.usersService.findAll(
-      page,
-      limit,
-      search || undefined,
-      gameId,
-      sources,
-      playtimeMin,
-      playHistory,
-      role || undefined,
+      page, limit, search || undefined, gameId, sources, playtimeMin, playHistory, role || undefined,
     );
     return {
       data: result.data,

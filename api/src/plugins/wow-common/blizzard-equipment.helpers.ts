@@ -133,22 +133,11 @@ export async function fetchCharacterEquipment(
   logger: Logger,
 ): Promise<BlizzardCharacterEquipment | null> {
   try {
-    const raw = await fetchRawEquipment(
-      name,
-      realm,
-      region,
-      apiNamespacePrefix,
-      token,
-      logger,
-    );
+    const raw = await fetchRawEquipment(name, realm, region, apiNamespacePrefix, token, logger);
     if (!raw) return null;
     const iconUrls = await fetchItemIconUrls(raw.data, raw.token);
     const result = buildEquipmentResult(
-      raw.data as {
-        equipped_item_level?: number;
-        equipped_items?: Record<string, unknown>[];
-      },
-      iconUrls,
+      raw.data as { equipped_item_level?: number; equipped_items?: Record<string, unknown>[] }, iconUrls,
     );
     logEquipmentSample(raw.charName, result, logger);
     return result;

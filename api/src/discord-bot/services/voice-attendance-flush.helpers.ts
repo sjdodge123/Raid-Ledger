@@ -8,6 +8,8 @@ import * as schema from '../../drizzle/schema';
 import {
   type InMemorySession,
   snapshotSessionForFlush,
+  toVoiceSessionDto,
+  buildAttendanceSummary,
 } from './voice-attendance.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -279,4 +281,24 @@ function logUnrecognizedChannel(
     bindings.length,
     voiceBindingCount,
   );
+}
+
+/** Build a VoiceSessionsResponseDto from DB rows. */
+export async function buildVoiceSessionsResponse(
+  db: Db,
+  eventId: number,
+): Promise<{
+  eventId: number;
+  sessions: ReturnType<typeof toVoiceSessionDto>[];
+}> {
+  const rows = await fetchVoiceSessions(db, eventId);
+  return { eventId, sessions: rows.map((s) => toVoiceSessionDto(s)) };
+}
+
+/** Fetch sessions and build an attendance summary. */
+export async function buildAttendanceSummaryFromDb(
+  db: Db,
+  eventId: number,
+): Promise<ReturnType<typeof buildAttendanceSummary>> {
+  return buildAttendanceSummary(eventId, await fetchVoiceSessions(db, eventId));
 }

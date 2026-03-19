@@ -36,36 +36,15 @@ export class SignupsRosterService {
   ) {}
 
   async cancel(eventId: number, userId: number): Promise<void> {
-    const signup = await cancelH.findActiveSignupForCancel(
-      this.db,
-      eventId,
-      userId,
-    );
+    const signup = await cancelH.findActiveSignupForCancel(this.db, eventId, userId);
     const cancelInfo = await cancelH.resolveCancelStatus(this.db, eventId);
-    const assignment = await cancelH.findAssignmentForSignup(
-      this.db,
-      signup.id,
-    );
-    const notifyData = assignment
-      ? await cancelH.gatherCancelNotifyData(this.db, eventId, userId)
-      : null;
+    const assignment = await cancelH.findAssignmentForSignup(this.db, signup.id);
+    const notifyData = assignment ? await cancelH.gatherCancelNotifyData(this.db, eventId, userId) : null;
     await cancelH.executeCancelSignup(
-      this.db,
-      signup.id,
-      assignment,
-      cancelInfo.cancelStatus,
-      cancelInfo.isGracefulDecline,
-      cancelInfo.now,
+      this.db, signup.id, assignment, cancelInfo.cancelStatus, cancelInfo.isGracefulDecline, cancelInfo.now,
     );
-    this.logger.log(
-      `User ${userId} canceled signup for event ${eventId} (${cancelInfo.cancelStatus})`,
-    );
-    this.emit(SIGNUP_EVENTS.DELETED, {
-      eventId,
-      userId,
-      signupId: signup.id,
-      action: 'signup_cancelled',
-    });
+    this.logger.log(`User ${userId} canceled signup for event ${eventId} (${cancelInfo.cancelStatus})`);
+    this.emit(SIGNUP_EVENTS.DELETED, { eventId, userId, signupId: signup.id, action: 'signup_cancelled' });
     if (notifyData && assignment) {
       this.bufferLeave(eventId, userId, assignment, notifyData);
       await this.triggerBackfill(eventId, assignment);
@@ -79,35 +58,14 @@ export class SignupsRosterService {
       eventId: number,
     ) => Promise<RosterWithAssignments>,
   ): Promise<RosterWithAssignments> {
-    const { signup, assignment } = await rosterOpsH.findUserAssignment(
-      this.db,
-      eventId,
-      userId,
-    );
-    const notifyData = await cancelH.gatherCancelNotifyData(
-      this.db,
-      eventId,
-      userId,
-    );
-    await this.db
-      .delete(schema.rosterAssignments)
-      .where(eq(schema.rosterAssignments.id, assignment.id));
-    this.logger.log(
-      `User ${userId} self-unassigned from ${assignment.role} slot for event ${eventId}`,
-    );
-    this.emit(SIGNUP_EVENTS.UPDATED, {
-      eventId,
-      userId,
-      signupId: signup.id,
-      action: 'self_unassigned',
-    });
+    const { signup, assignment } = await rosterOpsH.findUserAssignment(this.db, eventId, userId);
+    const notifyData = await cancelH.gatherCancelNotifyData(this.db, eventId, userId);
+    await this.db.delete(schema.rosterAssignments).where(eq(schema.rosterAssignments.id, assignment.id));
+    this.logger.log(`User ${userId} self-unassigned from ${assignment.role} slot for event ${eventId}`);
+    this.emit(SIGNUP_EVENTS.UPDATED, { eventId, userId, signupId: signup.id, action: 'self_unassigned' });
     this.bufferLeave(eventId, userId, assignment, notifyData);
     if (assignment.role && assignment.role !== 'bench')
-      await this.scheduleBackfill(
-        eventId,
-        assignment.role,
-        assignment.position,
-      );
+      await this.scheduleBackfill(eventId, assignment.role, assignment.position);
     return getRosterWithAssignments(eventId);
   }
 
@@ -118,40 +76,19 @@ export class SignupsRosterService {
     isAdmin: boolean,
   ): Promise<void> {
     const { event, signup, assignment } = await rosterOpsH.adminRemoveCore(
-      this.db,
-      eventId,
-      signupId,
-      requesterId,
-      isAdmin,
-      this.logger,
+      this.db, eventId, signupId, requesterId, isAdmin, this.logger,
     );
-    this.emit(SIGNUP_EVENTS.DELETED, {
-      eventId,
-      userId: signup.userId,
-      signupId: signup.id,
-      action: 'admin_removed',
-    });
+    this.emit(SIGNUP_EVENTS.DELETED, { eventId, userId: signup.userId, signupId: signup.id, action: 'admin_removed' });
     if (signup.userId)
       await rosterOpsH.notifyRemovedUser(
-        this.notificationService,
-        signup.userId,
-        eventId,
-        event.title,
+        this.notificationService, signup.userId, eventId, event.title,
         (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
       );
     if (assignment?.role && assignment.role !== 'bench') {
-      await this.scheduleBackfill(
-        eventId,
-        assignment.role,
-        assignment.position,
-      );
-      this.allocationService
-        .reslotTentativePlayer(eventId, assignment.role, assignment.position)
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `ROK-459: Failed tentative reslot (admin remove): ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        });
+      await this.scheduleBackfill(eventId, assignment.role, assignment.position);
+      this.allocationService.reslotTentativePlayer(eventId, assignment.role, assignment.position).catch((err: unknown) => {
+        this.logger.warn(`ROK-459: Failed tentative reslot (admin remove): ${err instanceof Error ? err.message : 'Unknown error'}`);
+      });
     }
   }
 
@@ -187,30 +124,12 @@ export class SignupsRosterService {
     isAdmin: boolean,
     dto: UpdateRosterDto,
   ) {
-    const event = await cancelH.verifyAdminPermission(
-      this.db,
-      eventId,
-      userId,
-      isAdmin,
-      'update roster',
-    );
+    const event = await cancelH.verifyAdminPermission(this.db, eventId, userId, isAdmin, 'update roster');
     return this.db.transaction(async (tx) => {
-      const signupByUserId = await notifH.validateRosterAssignments(
-        tx,
-        eventId,
-        dto.assignments,
-      );
+      const signupByUserId = await notifH.validateRosterAssignments(tx, eventId, dto.assignments);
       const oldRoleBySignupId = await notifH.captureOldAssignments(tx, eventId);
-      await notifH.replaceRosterAssignments(
-        tx,
-        eventId,
-        dto.assignments,
-        signupByUserId,
-        this.benchPromotionService,
-      );
-      this.logger.log(
-        `Roster updated for event ${eventId}: ${dto.assignments.length} assignments`,
-      );
+      await notifH.replaceRosterAssignments(tx, eventId, dto.assignments, signupByUserId, this.benchPromotionService);
+      this.logger.log(`Roster updated for event ${eventId}: ${dto.assignments.length} assignments`);
       return { event, signupByUserId, oldRoleBySignupId };
     });
   }

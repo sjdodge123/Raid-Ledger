@@ -150,30 +150,17 @@ export async function claimPugSlotsInDb(
   inviteCode?: string,
 ): Promise<number> {
   const conditions = [
-    and(
-      eq(tables.pugSlots.discordUserId, discordUserId),
-      isNull(tables.pugSlots.claimedByUserId),
-    ),
+    and(eq(tables.pugSlots.discordUserId, discordUserId), isNull(tables.pugSlots.claimedByUserId)),
   ];
-
   if (inviteCode) {
     conditions.push(
-      and(
-        eq(tables.pugSlots.inviteCode, inviteCode),
-        isNull(tables.pugSlots.claimedByUserId),
-      ),
+      and(eq(tables.pugSlots.inviteCode, inviteCode), isNull(tables.pugSlots.claimedByUserId)),
     );
   }
-
   const result = await db
     .update(tables.pugSlots)
-    .set({
-      claimedByUserId: userId,
-      status: 'claimed',
-      updatedAt: new Date(),
-    })
+    .set({ claimedByUserId: userId, status: 'claimed', updatedAt: new Date() })
     .where(or(...conditions))
     .returning();
-
   return result.length;
 }

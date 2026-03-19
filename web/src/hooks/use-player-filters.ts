@@ -87,32 +87,18 @@ export function usePlayerFilters(): UsePlayerFiltersResult {
     const setFilter = useCallback(<K extends keyof PlayerFilters>(key: K, value: PlayerFilters[K]) => {
         setSearchParams((prev) => {
             const next = new URLSearchParams(prev);
-            next.delete('source'); // remove legacy singular param
-            if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
-                next.delete(key);
-            } else if (Array.isArray(value)) {
-                next.set(key, value.join(','));
-            } else {
-                next.set(key, String(value));
-            }
+            next.delete('source');
+            if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) next.delete(key);
+            else if (Array.isArray(value)) next.set(key, value.join(','));
+            else next.set(key, String(value));
             return next;
         }, { replace: true });
     }, [setSearchParams]);
-
-    const clearAll = useCallback(() => {
-        setSearchParams({}, { replace: true });
-    }, [setSearchParams]);
-
-    const toggleOpen = useCallback(() => {
-        setIsOpen((prev) => !prev);
-    }, []);
-
+    const clearAll = useCallback(() => setSearchParams({}, { replace: true }), [setSearchParams]);
+    const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
     const apiParams = useMemo((): PlayerApiParams => ({
-        gameId: filters.gameId,
-        sources: filters.sources?.join(',') || (filters.gameId ? ALL_SOURCES : undefined),
-        playHistory: filters.playHistory,
-        playtimeMin: filters.playtimeMin,
-        role: filters.role,
+        gameId: filters.gameId, sources: filters.sources?.join(',') || (filters.gameId ? ALL_SOURCES : undefined),
+        playHistory: filters.playHistory, playtimeMin: filters.playtimeMin, role: filters.role,
     }), [filters]);
 
     return { filters, setFilter, clearAll, activeFilterCount, apiParams, isOpen, toggleOpen };

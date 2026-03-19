@@ -123,33 +123,13 @@ export class ScheduledEventService {
     voiceChannelOverride?: string | null,
   ): Promise<void> {
     try {
-      const skip = getCreateSkipReason(
-        eventId,
-        eventData.startTime,
-        isAdHoc,
-        this.clientService.isConnected(),
-      );
-      if (skip) {
-        this.logger.warn(skip);
-        return;
-      }
+      const skip = getCreateSkipReason(eventId, eventData.startTime, isAdHoc, this.clientService.isConnected());
+      if (skip) { this.logger.warn(skip); return; }
       const existing = await getScheduledEventId(this.db, eventId);
-      if (existing) {
-        this.logger.warn(`Skip SE ${eventId}: already exists`);
-        return;
-      }
+      if (existing) { this.logger.warn(`Skip SE ${eventId}: already exists`); return; }
       const guild = this.clientService.getGuild();
-      if (!guild) {
-        this.logger.warn(`Skip SE ${eventId}: no guild`);
-        return;
-      }
-      await this.doCreate(
-        guild,
-        eventId,
-        eventData,
-        gameId,
-        voiceChannelOverride,
-      );
+      if (!guild) { this.logger.warn(`Skip SE ${eventId}: no guild`); return; }
+      await this.doCreate(guild, eventId, eventData, gameId, voiceChannelOverride);
     } catch (error) {
       this.logger.error(formatApiError('create', eventId, error));
     }
@@ -296,31 +276,13 @@ export class ScheduledEventService {
     gameId?: number | null,
   ): Promise<void> {
     const desc = await this.buildDescription(eventId, eventData);
-    const vc = await resolveVoiceForEdit(
-      guild,
-      event,
-      gameId,
-      this.channelResolver,
-    );
+    const vc = await resolveVoiceForEdit(guild, event, gameId, this.channelResolver);
     try {
-      await tryEditFullEvent(
-        guild,
-        eventId,
-        event.discordScheduledEventId!,
-        eventData,
-        desc,
-        vc,
-      );
+      await tryEditFullEvent(guild, eventId, event.discordScheduledEventId!, eventData, desc, vc);
     } catch (err) {
       if (!isUnknownEventError(err)) throw err;
       await clearScheduledEventId(this.db, eventId);
-      await this.createScheduledEvent(
-        eventId,
-        eventData,
-        gameId,
-        false,
-        event.notificationChannelOverride,
-      );
+      await this.createScheduledEvent(eventId, eventData, gameId, false, event.notificationChannelOverride);
     }
   }
 

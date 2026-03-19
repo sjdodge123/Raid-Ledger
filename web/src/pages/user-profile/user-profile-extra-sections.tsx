@@ -48,31 +48,15 @@ export function SteamLibrarySection({
     <div className="user-profile-section">
       <div className="flex items-center gap-2 mb-3">
         <SteamIcon className="w-5 h-5 text-muted" />
-        <h2 className="user-profile-section-title mb-0">
-          Steam Library
-          {total > 0 ? ` (${total})` : ""}
-        </h2>
+        <h2 className="user-profile-section-title mb-0">Steam Library{total > 0 ? ` (${total})` : ""}</h2>
       </div>
       <div className="flex flex-col gap-2">
-        {items.map((entry) => (
-          <SteamLibraryItem key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />
-        ))}
+        {items.map((entry) => <SteamLibraryItem key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />)}
       </div>
       {total > 10 && (
-        <button
-          onClick={() => setShowModal(true)}
-          className="mt-3 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
-        >
-          Show All ({total})
-        </button>
+        <button onClick={() => setShowModal(true)} className="mt-3 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">Show All ({total})</button>
       )}
-      <SteamLibraryModal
-        userId={userId}
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        total={total}
-        pricingMap={pricingMap}
-      />
+      <SteamLibraryModal userId={userId} isOpen={showModal} onClose={() => setShowModal(false)} total={total} pricingMap={pricingMap} />
     </div>
   );
 }
@@ -90,27 +74,15 @@ function GuestProfileHeader({
   return (
     <div className="user-profile-header">
       {avatarUrl ? (
-        <img
-          src={avatarUrl}
-          alt={username}
-          className="user-profile-avatar"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
+        <img src={avatarUrl} alt={username} className="user-profile-avatar"
+          onError={(e) => { e.currentTarget.style.display = "none"; }} />
       ) : (
-        <div className="user-profile-avatar user-profile-avatar--initials">
-          {username.charAt(0).toUpperCase()}
-        </div>
+        <div className="user-profile-avatar user-profile-avatar--initials">{username.charAt(0).toUpperCase()}</div>
       )}
       <div className="user-profile-info">
         <h1 className="user-profile-name">{username}</h1>
-        <p className="user-profile-meta">
-          {username} is not currently a member of {communityName}
-        </p>
-        <p className="user-profile-guest-note">
-          This player was added as a guest via Discord
-        </p>
+        <p className="user-profile-meta">{username} is not currently a member of {communityName}</p>
+        <p className="user-profile-guest-note">This player was added as a guest via Discord</p>
       </div>
     </div>
   );

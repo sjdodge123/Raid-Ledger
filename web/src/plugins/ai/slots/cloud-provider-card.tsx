@@ -122,20 +122,13 @@ export function CloudProviderCard({ provider }: CloudProviderCardProps) {
 
     const handleSave = async () => {
         if (!apiKey) { toast.error('API key is required'); return; }
-        try {
-            await configure.mutateAsync({ key: provider.key, apiKey });
-            toast.success(`${provider.displayName} configured`);
-            setApiKey('');
-        } catch { toast.error('Failed to save configuration'); }
+        try { await configure.mutateAsync({ key: provider.key, apiKey }); toast.success(`${provider.displayName} configured`); setApiKey(''); }
+        catch { toast.error('Failed to save configuration'); }
     };
-
     const handleActivate = async () => {
-        try {
-            await activate.mutateAsync(provider.key);
-            toast.success(`${provider.displayName} set as active provider`);
-        } catch { toast.error('Failed to activate provider'); }
+        try { await activate.mutateAsync(provider.key); toast.success(`${provider.displayName} set as active provider`); }
+        catch { toast.error('Failed to activate provider'); }
     };
-
     return (
         <div className="bg-surface/30 border border-edge rounded-lg p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -145,11 +138,9 @@ export function CloudProviderCard({ provider }: CloudProviderCardProps) {
             <ProviderError error={provider.error} />
             <Instructions providerKey={provider.key} />
             <ApiKeyInput value={apiKey} onChange={setApiKey} show={showKey} onToggle={() => setShowKey((v) => !v)} />
-            <CardActions
-                onSave={handleSave} onActivate={handleActivate}
+            <CardActions onSave={handleSave} onActivate={handleActivate}
                 savePending={configure.isPending} activePending={activate.isPending}
-                isActive={provider.active} isConfigured={provider.configured}
-            />
+                isActive={provider.active} isConfigured={provider.configured} />
         </div>
     );
 }

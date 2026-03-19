@@ -128,25 +128,13 @@ export async function fetchSteamWishlist(
   schemaRef: typeof schema,
 ): Promise<{ data: SteamWishlistEntryDto[]; total: number }> {
   const offset = (page - 1) * limit;
-  const whereClause = and(
-    eq(schemaRef.gameInterests.userId, userId),
-    eq(schemaRef.gameInterests.source, 'steam_wishlist'),
-  );
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schemaRef.gameInterests)
-    .where(whereClause);
+  const whereClause = and(eq(schemaRef.gameInterests.userId, userId), eq(schemaRef.gameInterests.source, 'steam_wishlist'));
+  const [countResult] = await db.select({ count: sql<number>`count(*)::int` }).from(schemaRef.gameInterests).where(whereClause);
   const rows = await db
-    .select(WISHLIST_COLUMNS(schemaRef))
-    .from(schemaRef.gameInterests)
-    .innerJoin(
-      schemaRef.games,
-      eq(schemaRef.gameInterests.gameId, schemaRef.games.id),
-    )
-    .where(whereClause)
-    .orderBy(desc(schemaRef.gameInterests.createdAt))
-    .limit(limit)
-    .offset(offset);
+    .select(WISHLIST_COLUMNS(schemaRef)).from(schemaRef.gameInterests)
+    .innerJoin(schemaRef.games, eq(schemaRef.gameInterests.gameId, schemaRef.games.id))
+    .where(whereClause).orderBy(desc(schemaRef.gameInterests.createdAt))
+    .limit(limit).offset(offset);
   return {
     data: mapWishlistRows(rows),
     total: Number(countResult.count),

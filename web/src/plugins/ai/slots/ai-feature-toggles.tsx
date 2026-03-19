@@ -16,27 +16,15 @@ function FeatureToggle({
     disabled: boolean;
     onChange: (v: boolean) => void;
 }) {
+    const btnCls = `relative w-11 h-6 rounded-full transition-colors ${enabled ? 'bg-purple-600' : 'bg-overlay'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`;
     return (
         <div className="flex items-center justify-between py-2">
             <div>
                 <p className="text-sm font-medium text-foreground">{label}</p>
                 <p className="text-xs text-muted">{description}</p>
             </div>
-            <button
-                type="button"
-                role="switch"
-                aria-checked={enabled}
-                disabled={disabled}
-                onClick={() => onChange(!enabled)}
-                className={`relative w-11 h-6 rounded-full transition-colors ${
-                    enabled ? 'bg-purple-600' : 'bg-overlay'
-                } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-            >
-                <span
-                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-foreground transition-transform ${
-                        enabled ? 'translate-x-5' : ''
-                    }`}
-                />
+            <button type="button" role="switch" aria-checked={enabled} disabled={disabled} onClick={() => onChange(!enabled)} className={btnCls}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-foreground transition-transform ${enabled ? 'translate-x-5' : ''}`} />
             </button>
         </div>
     );

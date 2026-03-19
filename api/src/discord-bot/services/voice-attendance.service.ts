@@ -23,8 +23,6 @@ import type {
 } from '@raid-ledger/contract';
 import {
   type InMemorySession,
-  toVoiceSessionDto,
-  buildAttendanceSummary,
   buildActiveRoster,
   yieldToEventLoop,
   rejoinSession,
@@ -38,14 +36,13 @@ import * as flushH from './voice-attendance-flush.helpers';
 import * as snapshotH from './voice-attendance-snapshot.helpers';
 import { ChannelResolverService } from './channel-resolver.service';
 
-const FLUSH_INTERVAL_MS = 30_000;
-const SNAPSHOT_WINDOW_MS = 120_000;
-const CLASSIFY_LOOKBACK_MS = 7_200_000;
+const FLUSH_INTERVAL_MS = 30_000,
+  SNAPSHOT_WINDOW_MS = 120_000,
+  CLASSIFY_LOOKBACK_MS = 7_200_000;
 const VOICE_BINDING_PURPOSES: readonly string[] & BindingPurpose[] = [
   'game-voice-monitor',
   'general-lobby',
 ];
-
 export { classifyVoiceSession } from './voice-attendance.helpers';
 
 @Injectable()
@@ -270,13 +267,18 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     if (pending.length === 0) return;
     const graceMs = (await this.getGraceMinutes()) * 60 * 1000;
     await this.flushToDb();
-    for (const event of pending) {
-      for (const [, s] of this.sessions) {
-        if (s.eventId === event.id && s.isActive)
-          this.handleLeave(event.id, s.discordUserId);
-      }
-    }
+    for (const ev of pending)
+      for (const [, s] of this.sessions)
+        if (s.eventId === ev.id && s.isActive)
+          this.handleLeave(ev.id, s.discordUserId);
     await this.flushToDb();
+    await this.classifyPendingEvents(pending, graceMs);
+  }
+
+  private async classifyPendingEvents(
+    pending: (typeof schema.events.$inferSelect)[],
+    graceMs: number,
+  ): Promise<void> {
     for (const event of pending) {
       await yieldToEventLoop();
       if (!(await classifyH.shouldClassifyEvent(this.db, event.id))) continue;
@@ -285,22 +287,19 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       await this.autoPopulateAttendance(event.id);
       this.classified.add(event.id);
       this.snapshotted.delete(event.id);
-      for (const key of this.sessions.keys()) {
+      for (const key of this.sessions.keys())
         if (key.startsWith(`${event.id}:`)) this.sessions.delete(key);
-      }
     }
   }
 
   async getVoiceSessions(eventId: number): Promise<VoiceSessionsResponseDto> {
-    const rows = await flushH.fetchVoiceSessions(this.db, eventId);
-    return { eventId, sessions: rows.map((s) => toVoiceSessionDto(s)) };
+    return flushH.buildVoiceSessionsResponse(this.db, eventId);
   }
 
   async getVoiceAttendanceSummary(
     eventId: number,
   ): Promise<VoiceAttendanceSummaryDto> {
-    const sessions = await flushH.fetchVoiceSessions(this.db, eventId);
-    return buildAttendanceSummary(eventId, sessions);
+    return flushH.buildAttendanceSummaryFromDb(this.db, eventId);
   }
 
   getActiveRoster(eventId: number): AdHocRosterResponseDto {
@@ -318,9 +317,10 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async getGraceMinutes(): Promise<number> {
-    const val = await this.settingsService.get(
-      schema.SETTING_KEYS.VOICE_ATTENDANCE_GRACE_MINUTES,
+    return parseGraceMinutes(
+      await this.settingsService.get(
+        schema.SETTING_KEYS.VOICE_ATTENDANCE_GRACE_MINUTES,
+      ),
     );
-    return parseGraceMinutes(val);
   }
 }

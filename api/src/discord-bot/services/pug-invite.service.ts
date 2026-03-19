@@ -75,23 +75,11 @@ export class PugInviteService {
     if (member) {
       const slot = await handleMemberFound(this.db, pugSlotId, member);
       if (!slot) return;
-      await this.sendPugInviteDm(
-        pugSlotId,
-        member.id,
-        eventId,
-        slot.role,
-        event,
-      );
+      await this.sendPugInviteDm(pugSlotId, member.id, eventId, slot.role, event);
     } else {
       const inviteUrl = await this.generateServerInvite(eventId);
       await handleMemberNotFound(
-        this.db,
-        pugSlotId,
-        discordUsername,
-        inviteUrl,
-        creatorUserId,
-        this.clientService,
-        this.logger,
+        this.db, pugSlotId, discordUsername, inviteUrl, creatorUserId, this.clientService, this.logger,
       );
     }
   }

@@ -202,33 +202,15 @@ export class EmbedPosterService {
     content?: string,
   ): Promise<boolean> {
     try {
-      await this.clientService.editEmbed(
-        record.channelId,
-        record.messageId,
-        embed,
-        row,
-        content,
-      );
-      this.logger.log(
-        `Edited existing embed for event ${eventId} (msg: ${record.messageId})`,
-      );
+      await this.clientService.editEmbed(record.channelId, record.messageId, embed, row, content);
+      this.logger.log(`Edited existing embed for event ${eventId} (msg: ${record.messageId})`);
       return true;
     } catch (editError) {
       if (!isUnknownMessageError(editError)) {
-        this.logger.error(
-          `Failed to edit embed for event ${eventId}:`,
-          editError,
-        );
+        this.logger.error(`Failed to edit embed for event ${eventId}:`, editError);
         return false;
       }
-      return this.replaceDeletedEmbed(
-        eventId,
-        record.id,
-        embed,
-        row,
-        opts,
-        content,
-      );
+      return this.replaceDeletedEmbed(eventId, record.id, embed, row, opts, content);
     }
   }
 
@@ -240,30 +222,19 @@ export class EmbedPosterService {
     opts?: ChannelOpts,
     content?: string,
   ): Promise<boolean> {
-    this.logger.warn(
-      `Existing embed for event ${eventId} was deleted, posting replacement`,
-    );
+    this.logger.warn(`Existing embed for event ${eventId} was deleted, posting replacement`);
     const guildId = this.clientService.getGuildId();
     if (!guildId) return false;
     const channelId = await this.channelResolver.resolveChannelForEvent(
-      opts?.gameId,
-      opts?.recurrenceGroupId,
-      opts?.notificationChannelOverride,
+      opts?.gameId, opts?.recurrenceGroupId, opts?.notificationChannelOverride,
     );
     if (!channelId) return false;
-    const message = await this.clientService.sendEmbed(
-      channelId,
-      embed,
-      row,
-      content,
-    );
+    const message = await this.clientService.sendEmbed(channelId, embed, row, content);
     await this.db
       .update(schema.discordEventMessages)
       .set({ channelId, messageId: message.id, updatedAt: new Date() })
       .where(eq(schema.discordEventMessages.id, recordId));
-    this.logger.log(
-      `Posted replacement embed for event ${eventId} (msg: ${message.id})`,
-    );
+    this.logger.log(`Posted replacement embed for event ${eventId} (msg: ${message.id})`);
     return true;
   }
 }

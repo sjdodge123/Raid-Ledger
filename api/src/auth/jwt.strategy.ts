@@ -29,36 +29,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     const cached = getCachedAuthUser(payload.sub);
     if (cached) {
-      return {
-        id: payload.sub,
-        username: payload.username,
-        role: cached.role,
-        discordId: cached.discordId,
-        impersonatedBy: payload.impersonatedBy || null,
-      };
+      return buildAuthResult(payload, cached.role, cached.discordId);
     }
-
     const [user] = await this.db
       .select({ role: schema.users.role, discordId: schema.users.discordId })
       .from(schema.users)
       .where(eq(schema.users.id, payload.sub))
       .limit(1);
-
-    if (!user) {
-      throw new UnauthorizedException('User no longer exists');
-    }
-
-    setCachedAuthUser(payload.sub, {
-      role: user.role,
-      discordId: user.discordId,
-    });
-
-    return {
-      id: payload.sub,
-      username: payload.username,
-      role: user.role,
-      discordId: user.discordId,
-      impersonatedBy: payload.impersonatedBy || null,
-    };
+    if (!user) throw new UnauthorizedException('User no longer exists');
+    setCachedAuthUser(payload.sub, { role: user.role, discordId: user.discordId });
+    return buildAuthResult(payload, user.role, user.discordId);
   }
+}
+
+function buildAuthResult(payload: JwtPayload, role: string, discordId: string | null) {
+  return {
+    id: payload.sub, username: payload.username, role, discordId,
+    impersonatedBy: payload.impersonatedBy || null,
+  };
 }
