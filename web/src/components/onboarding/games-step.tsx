@@ -77,18 +77,8 @@ function GameSearchInput({
 }) {
     return (
         <div className="relative max-w-md mx-auto">
-            <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dim"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-            >
-                <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
                 type="text"
@@ -112,20 +102,9 @@ function GenreChips({
         `px-3 py-2.5 min-h-[44px] rounded-full text-xs font-medium transition-colors ${active ? 'bg-emerald-600 text-white' : 'bg-panel text-muted hover:bg-overlay'}`;
     return (
         <div className="flex flex-wrap gap-2 justify-center">
-            <button
-                onClick={() => onSelect(null)}
-                className={chipCls(selectedGenre === null)}
-            >
-                All
-            </button>
+            <button onClick={() => onSelect(null)} className={chipCls(selectedGenre === null)}>All</button>
             {GENRE_CHIPS.map((g) => (
-                <button
-                    key={g.id}
-                    onClick={() =>
-                        onSelect(selectedGenre === g.id ? null : g.id)
-                    }
-                    className={chipCls(selectedGenre === g.id)}
-                >
+                <button key={g.id} onClick={() => onSelect(selectedGenre === g.id ? null : g.id)} className={chipCls(selectedGenre === g.id)}>
                     {g.label}
                 </button>
             ))}
@@ -172,51 +151,35 @@ export function GamesStep() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
     const [snapshot, setSnapshot] = useState<GameDetailDto[] | null>(null);
-    const { data: discoverData, isLoading: discoverLoading } =
-        useGamesDiscover();
-    const { data: searchData, isLoading: searchLoading } = useGameSearch(
-        searchQuery,
-        searchQuery.length >= 2,
-    );
+    const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
+    const { data: searchData, isLoading: searchLoading } = useGameSearch(searchQuery, searchQuery.length >= 2);
     const isSearching = searchQuery.length >= 2;
-    const allGames = useMemo(
-        () => snapshot ?? flattenDiscoverGames(discoverData?.rows),
-        [discoverData, snapshot],
-    );
+    const allGames = useMemo(() => snapshot ?? flattenDiscoverGames(discoverData?.rows), [discoverData, snapshot]);
     if (allGames.length > 0 && !snapshot) setSnapshot(allGames);
     const filteredGames = useMemo(
-        () =>
-            selectedGenre
-                ? allGames.filter((g) => g.genres.includes(selectedGenre))
-                : allGames,
+        () => selectedGenre ? allGames.filter((g) => g.genres.includes(selectedGenre)) : allGames,
         [allGames, selectedGenre],
     );
-    const displayGames = isSearching
-        ? (searchData?.data ?? [])
-        : filteredGames;
-    const displayGameIds = useMemo(
-        () => displayGames.slice(0, 24).map((g) => g.id),
-        [displayGames],
-    );
-
+    const displayGames = isSearching ? (searchData?.data ?? []) : filteredGames;
+    const displayGameIds = useMemo(() => displayGames.slice(0, 24).map((g) => g.id), [displayGames]);
     return (
         <div className="space-y-5">
             <GamesStepHeader />
             <GameSearchInput value={searchQuery} onChange={setSearchQuery} />
-            {!isSearching && (
-                <GenreChips
-                    selectedGenre={selectedGenre}
-                    onSelect={setSelectedGenre}
-                />
-            )}
+            {!isSearching && <GenreChips selectedGenre={selectedGenre} onSelect={setSelectedGenre} />}
             <GamesStepGrid
-                discoverLoading={discoverLoading}
-                searchLoading={searchLoading}
-                isSearching={isSearching}
-                displayGames={displayGames}
-                displayGameIds={displayGameIds}
-                searchSource={searchData?.meta?.source}
+                discoverLoading={discoverLoading} searchLoading={searchLoading} isSearching={isSearching}
+                displayGames={displayGames} displayGameIds={displayGameIds} searchSource={searchData?.meta?.source}
             />
+        </div>
+    );
+}
+
+function GamesStepLoading() {
+    return (
+        <div className="text-center py-8">
+            <div className="w-8 h-8 mx-auto mb-2 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-dim text-sm">Loading games...</p>
         </div>
     );
 }
@@ -236,32 +199,15 @@ function GamesStepGrid({
     displayGameIds: number[];
     searchSource?: string;
 }) {
-    if ((discoverLoading || searchLoading) && displayGames.length === 0) {
-        return (
-            <div className="text-center py-8">
-                <div className="w-8 h-8 mx-auto mb-2 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-dim text-sm">Loading games...</p>
-            </div>
-        );
-    }
-    if (displayGames.length === 0) {
-        return (
-            <div className="text-center py-8">
-                <p className="text-dim text-sm">
-                    {isSearching
-                        ? 'No games found. Try a different search.'
-                        : 'No games available.'}
-                </p>
-            </div>
-        );
-    }
+    if ((discoverLoading || searchLoading) && displayGames.length === 0) return <GamesStepLoading />;
+    if (displayGames.length === 0) return (
+        <div className="text-center py-8"><p className="text-dim text-sm">{isSearching ? 'No games found. Try a different search.' : 'No games available.'}</p></div>
+    );
     return (
         <WantToPlayProvider gameIds={displayGameIds}>
             {isSearching && searchSource === 'local' && <LocalSearchBanner />}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {displayGames.slice(0, 24).map((game) => (
-                    <OnboardingCardWrapper key={game.id} game={game} />
-                ))}
+                {displayGames.slice(0, 24).map((game) => <OnboardingCardWrapper key={game.id} game={game} />)}
             </div>
         </WantToPlayProvider>
     );

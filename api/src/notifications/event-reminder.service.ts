@@ -90,9 +90,7 @@ export class EventReminderService {
     )
       return false;
     const candidateEvents = await fetchCandidateEvents(this.db, now);
-    const defaultTimezone =
-      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-
+    const defaultTimezone = (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
     let didWork = false;
     for (const window of REMINDER_WINDOWS) {
       const eventsInWindow = candidateEvents.filter((event) => {
@@ -102,16 +100,8 @@ export class EventReminderService {
       });
       if (eventsInWindow.length === 0) continue;
       didWork = true;
-      this.logger.debug(
-        `${window.type}: ${eventsInWindow.length} events in window`,
-      );
-      await this.sendRemindersForWindow(
-        eventsInWindow,
-        window.type,
-        window.label,
-        now,
-        defaultTimezone,
-      );
+      this.logger.debug(`${window.type}: ${eventsInWindow.length} events in window`);
+      await this.sendRemindersForWindow(eventsInWindow, window.type, window.label, now, defaultTimezone);
     }
     await this.roleGapAlertService.checkRoleGaps(now, defaultTimezone);
     if (!didWork) return false;

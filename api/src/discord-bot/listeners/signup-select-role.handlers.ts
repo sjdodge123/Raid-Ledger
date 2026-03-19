@@ -79,27 +79,13 @@ export async function handleLinkedRoleSelect(
     await replyNoLinkedAccount(interaction);
     return;
   }
-  const opts = buildRoleSignupOptions(
-    roleCtx.selectedRoles,
-    roleCtx.primaryRole,
-  );
+  const opts = buildRoleSignupOptions(roleCtx.selectedRoles, roleCtx.primaryRole);
   const assignedSlot = await signupWithCharacter(
-    deps,
-    a.eventId,
-    linkedUser.id,
-    characterId,
-    opts,
-    signupStatus,
+    deps, a.eventId, linkedUser.id, characterId, opts, signupStatus,
   );
   await confirmCharRoleSignup(
-    interaction,
-    a.eventId,
-    deps,
-    linkedUser.id,
-    characterId,
-    roleCtx.rolesLabel,
-    signupStatus,
-    assignedSlot,
+    interaction, a.eventId, deps, linkedUser.id,
+    characterId, roleCtx.rolesLabel, signupStatus, assignedSlot,
   );
 }
 

@@ -151,18 +151,8 @@ export class SignupsAllocationService {
     if (!na || na.role === 'bench')
       return promoH.handleFailedPromotion(tx, eventId, signupId, na, username);
     const after = await promoH.snapshotNonBenchAssignments(tx, eventId);
-    const chainMoves = await promoH.detectChainMoves(
-      tx,
-      before,
-      after,
-      signupId,
-    );
-    const warnings = buildPromotionWarnings(
-      username,
-      signup.preferredRoles,
-      na.role,
-      chainMoves,
-    );
+    const chainMoves = await promoH.detectChainMoves(tx, before, after, signupId);
+    const warnings = buildPromotionWarnings(username, signup.preferredRoles, na.role, chainMoves);
     return {
       role: na.role ?? 'bench',
       position: na.position,
@@ -177,46 +167,20 @@ export class SignupsAllocationService {
   private async executeDisplacement(
     p: ExecuteDisplacementParams,
   ): Promise<boolean> {
-    const rearrangedToRole = await tentH.tryRearrangeVictim(
-      {
-        tx: p.tx,
-        victim: p.victim,
-        displacedRole: p.role,
-        currentAssignments: p.currentAssignments,
-        roleCapacity: p.roleCapacity,
-        occupiedPositions: p.occupiedPositions,
-        findPos: p.findPos,
-        signupById: p.signupById,
-      },
-      this.logger,
-    );
+    const rearrangedToRole = await tentH.tryRearrangeVictim({
+      tx: p.tx, victim: p.victim, displacedRole: p.role,
+      currentAssignments: p.currentAssignments, roleCapacity: p.roleCapacity,
+      occupiedPositions: p.occupiedPositions, findPos: p.findPos, signupById: p.signupById,
+    }, this.logger);
     if (!rearrangedToRole)
-      await tentH.removeVictimAssignment(
-        p.tx,
-        p.victim,
-        p.role,
-        p.occupiedPositions,
-        this.logger,
-      );
+      await tentH.removeVictimAssignment(p.tx, p.victim, p.role, p.occupiedPositions, this.logger);
     const pos = rearrangedToRole ? p.findPos(p.role) : p.victim.position;
-    await allocH.insertAndConfirmSlot(
-      p.tx,
-      p.eventId,
-      p.newSignupId,
-      p.role,
-      pos,
-    );
+    await allocH.insertAndConfirmSlot(p.tx, p.eventId, p.newSignupId, p.role, pos);
     p.occupiedPositions[p.role]?.add(pos);
-    this.logger.log(
-      `ROK-459: Auto-allocated confirmed signup ${p.newSignupId} to ${p.role} slot ${pos} (tentative displacement)`,
-    );
+    this.logger.log(`ROK-459: Auto-allocated confirmed signup ${p.newSignupId} to ${p.role} slot ${pos} (tentative displacement)`);
     await this.benchPromotionService.cancelPromotion(p.eventId, p.role, pos);
     this.fireDisplacedNotification({
-      tx: p.tx,
-      eventId: p.eventId,
-      victimSignupId: p.victim.signupId,
-      role: p.role,
-      rearrangedToRole,
+      tx: p.tx, eventId: p.eventId, victimSignupId: p.victim.signupId, role: p.role, rearrangedToRole,
     });
     return true;
   }

@@ -51,14 +51,8 @@ export function AiPluginContent({ pluginSlug }: { pluginSlug?: string }) {
     const isLoading = statusLoading || providersLoading;
 
     return (
-        <IntegrationCard
-            title="AI Features"
-            description="Multi-provider LLM inference"
-            pluginBadge={getPluginBadge('ai')}
-            icon={<AiIcon />}
-            isConfigured={available}
-            isLoading={isLoading}
-        >
+        <IntegrationCard title="AI Features" description="Multi-provider LLM inference"
+            pluginBadge={getPluginBadge('ai')} icon={<AiIcon />} isConfigured={available} isLoading={isLoading}>
             <div className="space-y-6">
                 {providers && providers.length > 0 && (
                     <>
@@ -84,14 +78,10 @@ function TestChatSection() {
 
     const handleTest = async () => {
         setResult(null);
-        try {
-            const res = await testChat.mutateAsync();
-            setResult(res);
-        } catch {
-            setResult({ success: false, response: 'Request failed', latencyMs: 0 });
-        }
+        try { const res = await testChat.mutateAsync(); setResult(res); }
+        catch { setResult({ success: false, response: 'Request failed', latencyMs: 0 }); }
     };
-
+    const resCls = result?.success ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300' : 'bg-red-500/5 border-red-500/20 text-red-300';
     return (
         <div className="space-y-2">
             <h3 className="text-sm font-medium text-secondary">Test LLM</h3>
@@ -100,21 +90,9 @@ function TestChatSection() {
                     className="py-2 px-4 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 text-foreground font-semibold rounded-lg transition-colors text-sm">
                     {testChat.isPending ? 'Testing...' : 'Send Test Message'}
                 </button>
-                {result && (
-                    <span className={`text-xs ${result.success ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {result.latencyMs > 0 ? `${result.latencyMs}ms` : ''}
-                    </span>
-                )}
+                {result && <span className={`text-xs ${result.success ? 'text-emerald-400' : 'text-red-400'}`}>{result.latencyMs > 0 ? `${result.latencyMs}ms` : ''}</span>}
             </div>
-            {result && (
-                <div className={`text-sm p-3 rounded-lg border ${
-                    result.success
-                        ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300'
-                        : 'bg-red-500/5 border-red-500/20 text-red-300'
-                }`}>
-                    {result.response}
-                </div>
-            )}
+            {result && <div className={`text-sm p-3 rounded-lg border ${resCls}`}>{result.response}</div>}
         </div>
     );
 }

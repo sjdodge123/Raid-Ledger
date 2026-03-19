@@ -270,13 +270,17 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     if (pending.length === 0) return;
     const graceMs = (await this.getGraceMinutes()) * 60 * 1000;
     await this.flushToDb();
-    for (const event of pending) {
-      for (const [, s] of this.sessions) {
-        if (s.eventId === event.id && s.isActive)
-          this.handleLeave(event.id, s.discordUserId);
-      }
-    }
+    for (const ev of pending)
+      for (const [, s] of this.sessions)
+        if (s.eventId === ev.id && s.isActive) this.handleLeave(ev.id, s.discordUserId);
     await this.flushToDb();
+    await this.classifyPendingEvents(pending, graceMs);
+  }
+
+  private async classifyPendingEvents(
+    pending: typeof schema.events.$inferSelect[],
+    graceMs: number,
+  ): Promise<void> {
     for (const event of pending) {
       await yieldToEventLoop();
       if (!(await classifyH.shouldClassifyEvent(this.db, event.id))) continue;
@@ -285,9 +289,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       await this.autoPopulateAttendance(event.id);
       this.classified.add(event.id);
       this.snapshotted.delete(event.id);
-      for (const key of this.sessions.keys()) {
+      for (const key of this.sessions.keys())
         if (key.startsWith(`${event.id}:`)) this.sessions.delete(key);
-      }
     }
   }
 

@@ -86,29 +86,17 @@ export async function recoverFromVoiceChannels(
   db: Db,
   sessions: Map<string, InMemorySession>,
   findActiveEvents: (chId: string) => Promise<Array<{ eventId: number }>>,
-  handleJoin: (
-    eId: number,
-    mId: string,
-    name: string,
-    avatar: string | null,
-  ) => void,
+  handleJoin: (eId: number, mId: string, name: string, avatar: string | null) => void,
 ): Promise<number> {
   const voiceChannels = guild.channels.cache.filter((ch) => ch.isVoiceBased());
   let recovered = 0;
-  for (const [channelId, channel] of voiceChannels) {
+  for (const [, channel] of voiceChannels) {
     if (!channel.isVoiceBased() || channel.members.size === 0) continue;
-    const activeEvents = await findActiveEvents(channelId);
+    const activeEvents = await findActiveEvents(channel.id);
     if (activeEvents.length === 0) continue;
     for (const { eventId } of activeEvents) {
       for (const [memberId, guildMember] of channel.members) {
-        await recoverMember(
-          db,
-          sessions,
-          eventId,
-          memberId,
-          guildMember,
-          handleJoin,
-        );
+        await recoverMember(db, sessions, eventId, memberId, guildMember, handleJoin);
         recovered++;
       }
     }

@@ -64,9 +64,7 @@ export class SystemController {
       demoMode,
       activePlugins: [...this.pluginRegistry.getActiveSlugsSync()],
       communityName: branding.communityName ?? undefined,
-      communityLogoUrl: branding.communityLogoPath
-        ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
-        : undefined,
+      communityLogoUrl: branding.communityLogoPath ? `/uploads/branding/${path.basename(branding.communityLogoPath)}` : undefined,
       communityAccentColor: branding.communityAccentColor ?? undefined,
       onboardingCompleted: onboardingCompletedRaw === 'true',
       authProviders: this.buildAuthProviders(adapterEntries, adapterConfigured),

@@ -76,29 +76,16 @@ function HeartedGamesSection({
   if (items.length === 0 && !isLoading) return null;
   return (
     <div className="user-profile-section">
-      <h2 className="user-profile-section-title">
-        Interested In{total > 0 ? ` (${total})` : ""}
-      </h2>
+      <h2 className="user-profile-section-title">Interested In{total > 0 ? ` (${total})` : ""}</h2>
       <div className="flex flex-col gap-2">
-        {items.map((game) => (
-          <HeartedGameCard key={game.id} game={game} pricing={pricingMap.get(game.id)} />
-        ))}
+        {items.map((game) => <HeartedGameCard key={game.id} game={game} pricing={pricingMap.get(game.id)} />)}
       </div>
       {total > 10 && (
-        <button
-          onClick={() => setShowModal(true)}
-          className="mt-3 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
-        >
+        <button onClick={() => setShowModal(true)} className="mt-3 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
           Show All ({total})
         </button>
       )}
-      <HeartedGamesModal
-        userId={userId}
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        total={total}
-        pricingMap={pricingMap}
-      />
+      <HeartedGamesModal userId={userId} isOpen={showModal} onClose={() => setShowModal(false)} total={total} pricingMap={pricingMap} />
     </div>
   );
 }
@@ -132,26 +119,16 @@ function ProfileContent({
   isOwnProfile: boolean;
   games: { id: number; name: string }[];
 }): JSX.Element {
-  const memberSince = formatDistanceToNow(new Date(profile.createdAt), {
-    addSuffix: true,
-  });
+  const memberSince = formatDistanceToNow(new Date(profile.createdAt), { addSuffix: true });
   const profileAvatar = resolveAvatar(toAvatarUser(profile));
   const pricingMap = useProfilePricing(numericId);
   return (
     <div className="user-profile-page">
       <div className="user-profile-card">
-        <ProfileHeader
-          profile={profile}
-          profileAvatar={profileAvatar}
-          memberSince={memberSince}
-        />
-        {numericId && (
-          <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} pricingMap={pricingMap} />
-        )}
+        <ProfileHeader profile={profile} profileAvatar={profileAvatar} memberSince={memberSince} />
+        {numericId && <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} pricingMap={pricingMap} />}
         {numericId && <UserEventSignups userId={numericId} />}
-        {profile.characters.length > 0 && (
-          <GroupedCharacters characters={profile.characters} games={games} />
-        )}
+        {profile.characters.length > 0 && <GroupedCharacters characters={profile.characters} games={games} />}
         {numericId && <HeartedGamesSection userId={numericId} pricingMap={pricingMap} />}
         {numericId && <SteamLibrarySection userId={numericId} pricingMap={pricingMap} />}
         {numericId && <SteamWishlistSection userId={numericId} pricingMap={pricingMap} />}
@@ -211,18 +188,10 @@ function ProfileHeader({
   return (
     <div className="user-profile-header">
       {profileAvatar.url ? (
-        <img
-          src={profileAvatar.url}
-          alt={profile.username}
-          className="user-profile-avatar"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
+        <img src={profileAvatar.url} alt={profile.username} className="user-profile-avatar"
+          onError={(e) => { e.currentTarget.style.display = "none"; }} />
       ) : (
-        <div className="user-profile-avatar user-profile-avatar--initials">
-          {profile.username.charAt(0).toUpperCase()}
-        </div>
+        <div className="user-profile-avatar user-profile-avatar--initials">{profile.username.charAt(0).toUpperCase()}</div>
       )}
       <div className="user-profile-info">
         <h1 className="user-profile-name">{profile.username}</h1>

@@ -94,28 +94,36 @@ export async function installSignups(
   allGames: (typeof schema.games.$inferSelect)[],
 ) {
   const mmoGameIds = buildMmoGameIdSet(allGames);
-  const origSignupValues = buildOrigSignupValues(
-    origEvents,
-    allUsers,
-    charByUserGame,
-    mmoGameIds,
-  );
-  const genSignupValues = buildGenSignupValues(
-    genEvents,
-    userByName,
-    charByUserGame,
-    generatedSignups,
-    mmoGameIds,
-  );
-  const uniqueSignups = dedupeByKey(
-    [...origSignupValues, ...genSignupValues],
-    (s) => `${String(s.eventId)}:${String(s.userId)}`,
+  const uniqueSignups = buildUniqueSignups(
+    origEvents, genEvents, allUsers, userByName,
+    charByUserGame, generatedSignups, mmoGameIds,
   );
   const createdSignups = (await batchInsertReturning(
     schema.eventSignups,
     uniqueSignups,
   )) as (typeof schema.eventSignups.$inferSelect)[];
   return { createdSignups, uniqueSignups };
+}
+
+function buildUniqueSignups(
+  origEvents: (typeof schema.events.$inferSelect)[],
+  genEvents: (typeof schema.events.$inferSelect)[],
+  allUsers: (typeof schema.users.$inferSelect)[],
+  userByName: Map<string, typeof schema.users.$inferSelect>,
+  charByUserGame: Map<string, string>,
+  generatedSignups: ReturnType<typeof generateSignups>,
+  mmoGameIds: Set<number>,
+): Record<string, unknown>[] {
+  const origSignupValues = buildOrigSignupValues(
+    origEvents, allUsers, charByUserGame, mmoGameIds,
+  );
+  const genSignupValues = buildGenSignupValues(
+    genEvents, userByName, charByUserGame, generatedSignups, mmoGameIds,
+  );
+  return dedupeByKey(
+    [...origSignupValues, ...genSignupValues],
+    (s) => `${String(s.eventId)}:${String(s.userId)}`,
+  );
 }
 
 /** Build a single signup value with optional preferredRoles. */

@@ -163,26 +163,14 @@ export class EventAutoExtendService {
       .set({ extendedUntil: newEnd, updatedAt: new Date() })
       .where(eq(schema.events.id, c.id));
     this.eventCache?.invalidate(c.id);
-    this.eventCache
-      ?.refresh()
-      .catch((e) =>
-        this.logger.warn(`Cache refresh after extend failed: ${e}`),
-      );
-    this.logger.log(
-      `Extended event ${c.id} until ${newEnd.toISOString()} (${activeCount} voice members)`,
-    );
+    this.eventCache?.refresh().catch((e) => this.logger.warn(`Cache refresh after extend failed: ${e}`));
+    this.logger.log(`Extended event ${c.id} until ${newEnd.toISOString()} (${activeCount} voice members)`);
     this.adHocGateway.emitEndTimeExtended(c.id, newEnd.toISOString());
-    if (c.isAdHoc && c.channelBindingId) {
-      this.adHocNotificationService.queueUpdate(c.id, c.channelBindingId);
-    }
+    if (c.isAdHoc && c.channelBindingId) this.adHocNotificationService.queueUpdate(c.id, c.channelBindingId);
     if (c.discordScheduledEventId) {
-      this.scheduledEventService
-        .updateEndTime(c.id, newEnd)
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `Failed to update scheduled event end time for ${c.id}: ${err instanceof Error ? err.message : 'Unknown'}`,
-          );
-        });
+      this.scheduledEventService.updateEndTime(c.id, newEnd).catch((err: unknown) => {
+        this.logger.warn(`Failed to update scheduled event end time for ${c.id}: ${err instanceof Error ? err.message : 'Unknown'}`);
+      });
     }
   }
 }

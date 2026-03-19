@@ -21,6 +21,46 @@ const STEP_LABELS: Record<string, { label: string; pct: number }> = {
 };
 const DEFAULT_STEP = { label: 'Setting up...', pct: 10 };
 
+function useOllamaHandlers(
+    setup: ReturnType<typeof useOllamaSetup>, stop: ReturnType<typeof useOllamaStop>,
+    activate: ReturnType<typeof useActivateProvider>,
+    setLocalSetup: (v: boolean) => void, qc: ReturnType<typeof useQueryClient>,
+) {
+    const handleSetup = async () => {
+        setLocalSetup(true);
+        try { const r = await setup.mutateAsync(); if (r && !r.success) { setLocalSetup(false); toast.error(r.message || 'Ollama setup failed'); } }
+        catch { setLocalSetup(false); toast.error('Failed to start Ollama setup'); }
+    };
+    const handleStop = async () => {
+        try { await stop.mutateAsync(); toast.success('Ollama stopped'); void qc.invalidateQueries({ queryKey: ['admin', 'ai'] }); }
+        catch { toast.error('Failed to stop Ollama'); }
+    };
+    const handleActivate = async () => {
+        try { await activate.mutateAsync('ollama'); toast.success('Ollama set as active provider'); }
+        catch { toast.error('Failed to activate Ollama'); }
+    };
+    return { handleSetup, handleStop, handleActivate };
+}
+
+function useOllamaPolling(
+    setting: boolean, localSetup: boolean,
+    setLocalSetup: (v: boolean) => void, qc: ReturnType<typeof useQueryClient>,
+) {
+    useEffect(() => {
+        if (!setting) return;
+        const pollTimer = setInterval(async () => {
+            await qc.invalidateQueries({ queryKey: ['admin', 'ai', 'providers'] });
+            const providers = qc.getQueryData<AiProviderInfoDto[]>(['admin', 'ai', 'providers']);
+            const ollama = providers?.find((p) => p.key === 'ollama');
+            if (!ollama) return;
+            if (ollama.available) { setLocalSetup(false); toast.success('Ollama is ready'); }
+            else if (ollama.setupStep === 'error') { setLocalSetup(false); toast.error(ollama.error || 'Ollama setup failed'); }
+            else if (!ollama.setupInProgress && localSetup) setLocalSetup(false);
+        }, 5000);
+        return () => { clearInterval(pollTimer); };
+    }, [setting, localSetup, qc, setLocalSetup]);
+}
+
 /**
  * Card for Ollama with Docker container management.
  * Shows setup progress, status, and action buttons.
@@ -33,56 +73,8 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
     const [localSetup, setLocalSetup] = useState(false);
     const setting = localSetup || (provider.setupInProgress ?? false);
 
-    useEffect(() => {
-        if (!setting) return;
-        const pollTimer = setInterval(async () => {
-            await qc.invalidateQueries({ queryKey: ['admin', 'ai', 'providers'] });
-            const providers = qc.getQueryData<AiProviderInfoDto[]>(['admin', 'ai', 'providers']);
-            const ollama = providers?.find((p) => p.key === 'ollama');
-            if (!ollama) return;
-            if (ollama.available) {
-                setLocalSetup(false);
-                toast.success('Ollama is ready');
-            } else if (ollama.setupStep === 'error') {
-                setLocalSetup(false);
-                toast.error(ollama.error || 'Ollama setup failed');
-            } else if (!ollama.setupInProgress && localSetup) {
-                // Server says setup is not running but we think it is — clear local state
-                setLocalSetup(false);
-            }
-        }, 5000);
-        return () => { clearInterval(pollTimer); };
-    }, [setting, localSetup, qc]);
-
-    const handleSetup = async () => {
-        setLocalSetup(true);
-        try {
-            const result = await setup.mutateAsync();
-            if (result && !result.success) {
-                setLocalSetup(false);
-                toast.error(result.message || 'Ollama setup failed');
-            }
-        } catch {
-            setLocalSetup(false);
-            toast.error('Failed to start Ollama setup');
-        }
-    };
-
-    const handleStop = async () => {
-        try {
-            await stop.mutateAsync();
-            toast.success('Ollama stopped');
-            void qc.invalidateQueries({ queryKey: ['admin', 'ai'] });
-        } catch { toast.error('Failed to stop Ollama'); }
-    };
-
-    const handleActivate = async () => {
-        try {
-            await activate.mutateAsync('ollama');
-            toast.success('Ollama set as active provider');
-        } catch { toast.error('Failed to activate Ollama'); }
-    };
-
+    useOllamaPolling(setting, localSetup, setLocalSetup, qc);
+    const { handleSetup, handleStop, handleActivate } = useOllamaHandlers(setup, stop, activate, setLocalSetup, qc);
     return (
         <div className="bg-surface/30 border border-edge rounded-lg p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -92,13 +84,9 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
             <p className="text-xs text-muted">Self-hosted LLM inference via Docker</p>
             {!setting && !provider.available && <OllamaInstructions />}
             {setting && <SetupProgress step={provider.setupStep} />}
-            {!setting && (
-                <OllamaActions
-                    provider={provider}
-                    onSetup={handleSetup} onStop={handleStop} onActivate={handleActivate}
-                    stopPending={stop.isPending} activatePending={activate.isPending}
-                />
-            )}
+            {!setting && <OllamaActions provider={provider}
+                onSetup={handleSetup} onStop={handleStop} onActivate={handleActivate}
+                stopPending={stop.isPending} activatePending={activate.isPending} />}
         </div>
     );
 }
@@ -123,31 +111,16 @@ function OllamaActions({ provider, onSetup, onStop, onActivate, stopPending, act
 }) {
     const hasContainer = provider.setupStep === 'container_exists';
     const needsSetup = !provider.available && !hasContainer;
+    const btnBase = 'py-2 px-4 font-semibold rounded-lg transition-colors text-sm';
     return (
         <div className="flex flex-wrap gap-2">
-            {needsSetup && (
-                <button type="button" onClick={onSetup}
-                    className="py-2 px-4 bg-purple-600 hover:bg-purple-500 text-foreground font-semibold rounded-lg transition-colors text-sm">
-                    Setup Ollama
-                </button>
-            )}
-            {hasContainer && !provider.available && (
-                <button type="button" onClick={onSetup}
-                    className="py-2 px-4 bg-blue-600 hover:bg-blue-500 text-foreground font-semibold rounded-lg transition-colors text-sm">
-                    Start Ollama
-                </button>
-            )}
+            {needsSetup && <button type="button" onClick={onSetup} className={`${btnBase} bg-purple-600 hover:bg-purple-500 text-foreground`}>Setup Ollama</button>}
+            {hasContainer && !provider.available && <button type="button" onClick={onSetup} className={`${btnBase} bg-blue-600 hover:bg-blue-500 text-foreground`}>Start Ollama</button>}
             {provider.available && (
-                <button type="button" onClick={onStop} disabled={stopPending}
-                    className="py-2 px-4 bg-red-600/20 hover:bg-red-600/30 text-red-400 font-semibold rounded-lg transition-colors text-sm border border-red-600/50">
-                    {stopPending ? 'Stopping...' : 'Stop'}
-                </button>
+                <button type="button" onClick={onStop} disabled={stopPending} className={`${btnBase} bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/50`}>{stopPending ? 'Stopping...' : 'Stop'}</button>
             )}
             {provider.available && !provider.active && (
-                <button type="button" onClick={onActivate} disabled={activatePending}
-                    className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors text-sm">
-                    {activatePending ? 'Activating...' : 'Set as Active'}
-                </button>
+                <button type="button" onClick={onActivate} disabled={activatePending} className={`${btnBase} bg-emerald-600 hover:bg-emerald-500 text-foreground`}>{activatePending ? 'Activating...' : 'Set as Active'}</button>
             )}
         </div>
     );

@@ -73,42 +73,18 @@ async function handleRoleSelectMenu(
   characterId?: string,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  try {
-    await interaction.deferUpdate();
-  } catch {
-    // Interaction expired — user took too long, skip silently
-    return;
-  }
+  try { await interaction.deferUpdate(); } catch { return; }
   const roleCtx = parseRoleValues(interaction);
-
   try {
     if (characterId) {
-      await handleLinkedRoleSelect({
-        interaction,
-        eventId,
-        deps,
-        characterId,
-        roleCtx,
-        signupStatus,
-      });
+      await handleLinkedRoleSelect({ interaction, eventId, deps, characterId, roleCtx, signupStatus });
     } else {
-      await handleUnlinkedRoleSelect(
-        interaction,
-        eventId,
-        deps,
-        roleCtx,
-        signupStatus,
-      );
+      await handleUnlinkedRoleSelect(interaction, eventId, deps, roleCtx, signupStatus);
     }
   } catch (error) {
-    deps.logger.error(
-      `Error handling role select for event ${eventId}:`,
-      error,
-    );
+    deps.logger.error(`Error handling role select for event ${eventId}:`, error);
     await safeEditReply(
-      interaction,
-      { content: 'Something went wrong. Please try again.', components: [] },
-      deps.logger,
+      interaction, { content: 'Something went wrong. Please try again.', components: [] }, deps.logger,
     );
   }
 }

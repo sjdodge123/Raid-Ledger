@@ -131,17 +131,29 @@ async function deleteDemoUserData(
   db: Db,
   demoUserIds: number[],
 ): Promise<void> {
-  const demoEvents = await db
-    .select({ id: schema.events.id })
-    .from(schema.events)
-    .where(inArray(schema.events.creatorId, demoUserIds));
-  const demoEventIds = demoEvents.map((e) => e.id);
+  const demoEventIds = await fetchDemoEventIds(db, demoUserIds);
   if (demoEventIds.length > 0) {
     await db
       .update(schema.availability)
       .set({ sourceEventId: null })
       .where(inArray(schema.availability.sourceEventId, demoEventIds));
   }
+  await deleteDemoUserDependents(db, demoUserIds, demoEventIds);
+}
+
+async function fetchDemoEventIds(db: Db, demoUserIds: number[]) {
+  const demoEvents = await db
+    .select({ id: schema.events.id })
+    .from(schema.events)
+    .where(inArray(schema.events.creatorId, demoUserIds));
+  return demoEvents.map((e) => e.id);
+}
+
+async function deleteDemoUserDependents(
+  db: Db,
+  demoUserIds: number[],
+  demoEventIds: number[],
+): Promise<void> {
   await db
     .delete(schema.availability)
     .where(inArray(schema.availability.userId, demoUserIds));
