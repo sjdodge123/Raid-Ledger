@@ -58,7 +58,8 @@ RUN apk add --no-cache \
   bash \
   su-exec \
   gettext \
-  logrotate
+  logrotate \
+  zstd
 
 # Create app user and directories
 # Add app user to redis group so API can access Redis Unix socket (ROK-840)

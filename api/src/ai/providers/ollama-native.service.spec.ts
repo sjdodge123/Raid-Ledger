@@ -6,11 +6,11 @@ import * as childProcess from 'child_process';
 jest.mock('fs');
 jest.mock('child_process');
 jest.mock('./ollama-native.helpers', () => ({
-  downloadFile: jest.fn().mockResolvedValue(undefined),
+  downloadAndExtractBinary: jest.fn().mockResolvedValue(undefined),
 }));
 
-import { downloadFile } from './ollama-native.helpers';
-const mockDownloadFile = downloadFile as jest.Mock;
+import { downloadAndExtractBinary } from './ollama-native.helpers';
+const mockDownloadAndExtract = downloadAndExtractBinary as jest.Mock;
 
 const mockExistsSync = fs.existsSync as jest.Mock;
 const mockExecFile = childProcess.execFile as unknown as jest.Mock;
@@ -174,19 +174,56 @@ describe('OllamaNativeService', () => {
   });
 
   describe('install', () => {
-    it('downloads binary to /usr/local/bin/ollama', async () => {
+    it('downloads and extracts binary to /usr/local/bin/ollama', async () => {
       await service.install();
 
-      expect(mockDownloadFile).toHaveBeenCalledWith(
-        expect.stringContaining('ollama-linux-amd64'),
+      expect(mockDownloadAndExtract).toHaveBeenCalledWith(
+        expect.stringContaining('ollama-linux-amd64.tar.zst'),
         '/usr/local/bin/ollama',
       );
     });
 
+    it('uses the .tar.zst archive URL — not the raw binary URL', async () => {
+      await service.install();
+
+      const [url] = mockDownloadAndExtract.mock.calls[0] as [string, string];
+      expect(url).toMatch(/\.tar\.zst$/);
+      expect(url).not.toMatch(/ollama-linux-amd64$/);
+    });
+
+    it('targets the GitHub latest release download URL', async () => {
+      await service.install();
+
+      const [url] = mockDownloadAndExtract.mock.calls[0] as [string, string];
+      expect(url).toContain(
+        'github.com/ollama/ollama/releases/latest/download',
+      );
+    });
+
     it('throws when download fails', async () => {
-      mockDownloadFile.mockRejectedValueOnce(new Error('Network error'));
+      mockDownloadAndExtract.mockRejectedValueOnce(new Error('Network error'));
 
       await expect(service.install()).rejects.toThrow('Network error');
+    });
+
+    it('throws when extraction fails (zstd not installed)', async () => {
+      mockDownloadAndExtract.mockRejectedValueOnce(
+        new Error('tar: zstd: No such file or directory'),
+      );
+
+      await expect(service.install()).rejects.toThrow(
+        'tar: zstd: No such file or directory',
+      );
+    });
+
+    it('throws when binary not found in archive', async () => {
+      mockDownloadAndExtract.mockRejectedValueOnce(
+        new Error('bin/ollama not found in archive'),
+      );
+
+      await expect(service.install()).rejects.toThrow(
+        'bin/ollama not found in archive',
+      );
     });
   });
 
