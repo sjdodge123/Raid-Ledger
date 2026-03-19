@@ -360,10 +360,11 @@ describe('buildEventEmbed — state-aware push content (ROK-866)', () => {
   });
 
   it('should use event push content for posted state', () => {
-    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+    const shortEvent = { ...baseEvent, title: 'Raid', game: null };
+    const { content } = factory.buildEventEmbed(shortEvent, baseContext, {
       state: EMBED_STATES.POSTED,
     });
-    expect(content).toContain('Mythic Raid Night');
+    expect(content).toContain('Raid');
     expect(content).toContain('signed up');
   });
 
@@ -386,17 +387,111 @@ describe('buildEventEmbed — state-aware push content (ROK-866)', () => {
   });
 
   it('should use event push content for filling state', () => {
-    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+    const shortEvent = { ...baseEvent, title: 'Raid', game: null };
+    const { content } = factory.buildEventEmbed(shortEvent, baseContext, {
       state: EMBED_STATES.FILLING,
     });
     expect(content).toContain('signed up');
   });
 
   it('should use event push content for live state', () => {
-    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+    const shortEvent = { ...baseEvent, title: 'Raid', game: null };
+    const { content } = factory.buildEventEmbed(shortEvent, baseContext, {
       state: EMBED_STATES.LIVE,
     });
     expect(content).toContain('signed up');
+  });
+});
+
+describe('buildEventEmbed — timezone threading (ROK-918)', () => {
+  let factory: DiscordEmbedFactory;
+
+  beforeEach(() => {
+    factory = createFactory();
+  });
+
+  it('should thread context.timezone into push content for posted state', () => {
+    // baseEvent startTime: 2026-02-20T20:00:00Z = Feb 20, 3:00 PM in America/New_York
+    const { content } = factory.buildEventEmbed(
+      baseEvent,
+      { ...baseContext, timezone: 'America/New_York' },
+      { state: EMBED_STATES.POSTED },
+    );
+    expect(content).toContain('Feb 20');
+    expect(content).toContain('3:00');
+    expect(content).toContain('PM');
+  });
+
+  it('should produce different push content time when timezone shifts the hour', () => {
+    // Use two explicit timezones that always differ regardless of test machine locale:
+    // UTC vs Asia/Tokyo (+9h): same epoch shows different hours guaranteed
+    const withUtc = factory.buildEventEmbed(baseEvent, {
+      ...baseContext,
+      timezone: 'UTC',
+    }).content;
+    const withTokyo = factory.buildEventEmbed(baseEvent, {
+      ...baseContext,
+      timezone: 'Asia/Tokyo',
+    }).content;
+    // 2026-02-20T20:00:00Z = 8:00 PM UTC vs 5:00 AM (+1 day) Tokyo — always different
+    expect(withUtc).not.toBe(withTokyo);
+  });
+
+  it('should NOT use timezone for CANCELLED state push content', () => {
+    // Cancelled content is just "Cancelled: <title>" — no date, so timezone is irrelevant
+    const { content } = factory.buildEventEmbed(
+      baseEvent,
+      { ...baseContext, timezone: 'America/New_York' },
+      { state: EMBED_STATES.CANCELLED },
+    );
+    expect(content).toContain('Cancelled');
+    expect(content).toContain('Mythic Raid Night');
+    expect(content).not.toContain('signed up');
+    expect(content).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('should NOT use timezone for COMPLETED state push content', () => {
+    // Completed content is "<title> -- Completed" — no date, timezone is irrelevant
+    const { content } = factory.buildEventEmbed(
+      baseEvent,
+      { ...baseContext, timezone: 'Asia/Tokyo' },
+      { state: EMBED_STATES.COMPLETED },
+    );
+    expect(content).toContain('Completed');
+    expect(content).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('should use timezone for IMMINENT state push content', () => {
+    const { content } = factory.buildEventEmbed(
+      baseEvent,
+      { ...baseContext, timezone: 'UTC' },
+      { state: EMBED_STATES.IMMINENT },
+    );
+    // UTC: 2026-02-20T20:00:00Z = 8:00 PM UTC
+    expect(content).toContain('8:00');
+    expect(content).toContain('PM');
+  });
+
+  it('should use timezone for FULL state push content', () => {
+    const fullEvent = { ...baseEvent, title: 'Raid', game: null, signupCount: 20, maxAttendees: 20 };
+    const { content } = factory.buildEventEmbed(
+      fullEvent,
+      { ...baseContext, timezone: 'UTC' },
+      { state: EMBED_STATES.FULL },
+    );
+    expect(content).toContain('signed up');
+  });
+
+  it('should produce same output whether timezone is null or undefined in context', () => {
+    const withNull = factory.buildEventEmbed(baseEvent, {
+      ...baseContext,
+      timezone: null,
+    }).content;
+    const withUndefined = factory.buildEventEmbed(baseEvent, {
+      communityName: baseContext.communityName,
+      clientUrl: baseContext.clientUrl,
+    }).content;
+    expect(withNull).toBe(withUndefined);
   });
 });
 

@@ -38,7 +38,7 @@ export async function buildEventData(
   event: typeof schema.events.$inferSelect,
   channelResolver: ChannelResolverService,
 ): Promise<EmbedEventData> {
-  const signupMentions = await queryActiveSignups(db, event.id);
+  const signupMentions = await queryActiveSignups(db, event.id, event.gameId);
   const roleCounts = await queryRoleCounts(db, event.id);
 
   const eventData = assembleEventData(event, signupMentions, roleCounts);
@@ -53,8 +53,9 @@ export async function buildEventData(
 async function queryActiveSignups(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
+  gameId?: number | null,
 ): Promise<EmbedEventData['signupMentions']> {
-  const signupRows = await querySignupRows(db, eventId);
+  const signupRows = await querySignupRows(db, eventId, gameId);
   return signupRows
     .filter((r) => !isExcludedStatus(r.status))
     .filter((r) => r.discordId !== null || r.username !== null)
@@ -79,16 +80,32 @@ export function resolveCharacterClass(row: {
   return null;
 }
 
-/** Subquery: resolve main character class for a user (ROK-824 fallback). */
-const mainCharClassSubquery = sql<string | null>`(
-  SELECT c2.class FROM characters c2
-  WHERE c2.user_id = ${schema.eventSignups.userId}
-    AND c2.is_main = true
-  LIMIT 1
-)`;
+/** Subquery: resolve main character class for a user, optionally filtered by game (ROK-824, ROK-918). */
+function mainCharClassSubquery(gameId?: number | null) {
+  if (gameId) {
+    return sql<string | null>`(
+      SELECT c2.class FROM characters c2
+      WHERE c2.user_id = ${schema.eventSignups.userId}
+        AND c2.is_main = true
+        AND c2.game_id = ${gameId}
+      LIMIT 1
+    )`;
+  }
+  return sql<string | null>`(
+    SELECT c2.class FROM characters c2
+    WHERE c2.user_id = ${schema.eventSignups.userId}
+      AND c2.is_main = true
+    LIMIT 1
+  )`;
+}
 
-/** Build the column selection for signup row queries. */
-function signupRowColumns() {
+/** Build the column selection for signup row queries (ROK-918: game-filtered classes). */
+function signupRowColumns(gameId?: number | null) {
+  const charClass = gameId
+    ? sql<
+        string | null
+      >`CASE WHEN ${schema.characters.gameId} = ${gameId} THEN ${schema.characters.class} ELSE NULL END`
+    : schema.characters.class;
   return {
     discordId: sql<
       string | null
@@ -98,8 +115,8 @@ function signupRowColumns() {
     role: schema.rosterAssignments.role,
     status: schema.eventSignups.status,
     preferredRoles: schema.eventSignups.preferredRoles,
-    characterClass: schema.characters.class,
-    mainCharacterClass: mainCharClassSubquery,
+    characterClass: charClass,
+    mainCharacterClass: mainCharClassSubquery(gameId),
   };
 }
 
@@ -107,9 +124,10 @@ function signupRowColumns() {
 async function querySignupRows(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
+  gameId?: number | null,
 ) {
   return db
-    .select(signupRowColumns())
+    .select(signupRowColumns(gameId))
     .from(schema.eventSignups)
     .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
     .leftJoin(

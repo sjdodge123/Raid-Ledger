@@ -178,6 +178,63 @@ const updatedEmbedKeepsContent: SmokeTest = {
   },
 };
 
+/** Format a date in a given timezone the same way push-content does. */
+function formatInTimezone(isoString: string, tz: string): string {
+  return new Date(isoString).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: tz,
+    timeZoneName: 'short',
+  });
+}
+
+const contentTimeMatchesEmbed: SmokeTest = {
+  name: 'Push content time uses guild timezone, not UTC (ROK-918)',
+  category: 'embed',
+  async run(ctx) {
+    // Fetch guild timezone from settings
+    const tzRes = await ctx.api
+      .get<{ timezone: string | null }>('/admin/settings/timezone');
+    const guildTz = tzRes.timezone;
+    if (!guildTz) {
+      throw new Error(
+        'Guild timezone is not configured — cannot verify timezone correctness',
+      );
+    }
+    // Create event at a known time — use the event's actual startTime
+    const ev = await createEvent(ctx.api, 'push-tz', mmoOverrides(ctx));
+    try {
+      const msg = await embedInChannel(
+        ctx.defaultChannelId, ev.title, ctx.config.timeoutMs,
+      );
+      assertHasContent(msg.content);
+      // Format startTime in guild timezone and in UTC
+      const startTime = (ev.startTime as string) ?? '';
+      const guildFormatted = formatInTimezone(startTime, guildTz);
+      const utcFormatted = formatInTimezone(startTime, 'UTC');
+      // Push content must contain the guild-timezone-formatted date
+      if (!msg.content.includes(guildFormatted)) {
+        throw new Error(
+          `Push content missing guild-tz date "${guildFormatted}"` +
+          ` (UTC would be "${utcFormatted}"). Got: "${msg.content}"`,
+        );
+      }
+      // If UTC and guild differ, confirm UTC version is NOT present
+      if (guildFormatted !== utcFormatted && msg.content.includes(utcFormatted)) {
+        throw new Error(
+          `Push content contains UTC date "${utcFormatted}" instead of ` +
+          `guild-tz date "${guildFormatted}". Got: "${msg.content}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 export const pushContentTests: SmokeTest[] = [
   eventEmbedHasContent,
   contentHasNoDiscordTokens,
@@ -186,4 +243,5 @@ export const pushContentTests: SmokeTest[] = [
   contentIncludesSignupCount,
   cancelledEmbedHasContent,
   updatedEmbedKeepsContent,
+  contentTimeMatchesEmbed,
 ];

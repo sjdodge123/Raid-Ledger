@@ -78,6 +78,64 @@ describe('buildEventPushContent', () => {
     const result = buildEventPushContent(baseEvent);
     expect(result).not.toContain('\n');
   });
+
+  it('should use the provided timezone for date formatting (ROK-918)', () => {
+    // Event at 2026-03-16T22:00:00Z = Mar 16, 6:00 PM in America/New_York (EDT)
+    const result = buildEventPushContent(baseEvent, 'America/New_York');
+    expect(result).toContain('Mar 16');
+    expect(result).toContain('6:00');
+    expect(result).toContain('PM');
+    expect(result).toContain('EDT');
+  });
+
+  it('should format with explicit UTC timezone (ROK-918)', () => {
+    const result = buildEventPushContent(baseEvent, 'UTC');
+    // 2026-03-16T22:00:00Z in UTC = 10:00 PM UTC
+    expect(result).toContain('10:00');
+    expect(result).toContain('PM');
+    expect(result).toContain('UTC');
+  });
+
+  it('should behave identically when timezone is null (backward compat)', () => {
+    const withNull = buildEventPushContent(baseEvent, null);
+    const withUndefined = buildEventPushContent(baseEvent);
+    expect(withNull).toBe(withUndefined);
+  });
+
+  it('should behave identically when timezone is undefined (backward compat)', () => {
+    const withUndefined = buildEventPushContent(baseEvent, undefined);
+    const withNoArg = buildEventPushContent(baseEvent);
+    expect(withUndefined).toBe(withNoArg);
+  });
+
+  it('should change the displayed DATE when timezone crosses midnight (ROK-918)', () => {
+    // 2026-03-17T05:00:00Z = Mar 17, 1:00 AM UTC, but Mar 16, 10:00 PM Pacific
+    const crossMidnightEvent = {
+      ...baseEvent,
+      startTime: '2026-03-17T05:00:00.000Z',
+    };
+    const withPacific = buildEventPushContent(
+      crossMidnightEvent,
+      'America/Los_Angeles',
+    );
+    const withoutTz = buildEventPushContent(crossMidnightEvent);
+    expect(withPacific).toContain('Mar 16');
+    expect(withoutTz).toContain('Mar 17');
+    expect(withPacific).not.toBe(withoutTz);
+  });
+
+  it('should throw or not silently produce wrong output for invalid timezone', () => {
+    // Invalid timezone throws a RangeError in V8/Node.js Intl
+    expect(() => buildEventPushContent(baseEvent, 'Not/ATimezone')).toThrow();
+  });
+
+  it('should show correct time for Tokyo timezone (UTC+9, no DST)', () => {
+    // 2026-03-16T22:00:00Z = 2026-03-17T07:00:00 in Tokyo
+    const result = buildEventPushContent(baseEvent, 'Asia/Tokyo');
+    expect(result).toContain('Mar 17');
+    expect(result).toContain('7:00');
+    expect(result).toContain('AM');
+  });
 });
 
 describe('buildCancelledPushContent', () => {

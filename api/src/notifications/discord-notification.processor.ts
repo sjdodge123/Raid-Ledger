@@ -123,11 +123,27 @@ function sanitizeValue(value: unknown): string {
 /** Strip Discord markup, markdown formatting, and collapse whitespace. */
 function stripDiscordMarkup(text: string): string {
   return text
-    .replace(/<t:\d+(?::[a-zA-Z])?>/g, '')
+    .replace(/<t:(\d+)(?::[a-zA-Z])?>/g, (_, epoch) =>
+      formatEpoch(Number(epoch)),
+    )
     .replace(/<#\d+>/g, '#channel')
     .replace(/<@&\d+>/g, '@role')
     .replace(/<@!?\d+>/g, '@user')
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
+    .replace(/\(\s*\)/g, '')
     .replace(/ {2,}/g, ' ');
+}
+
+/** Format a Unix epoch (seconds) into a short, human-readable date string. */
+function formatEpoch(epoch: number): string {
+  const d = new Date(epoch * 1000);
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  });
 }
