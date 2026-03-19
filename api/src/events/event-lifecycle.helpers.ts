@@ -52,7 +52,7 @@ export async function deleteEvent(
 ): Promise<void> {
   const existing = await findExistingOrThrow(db, id);
   assertOwnerOrAdmin(existing, userId, isAdmin, 'delete');
-  eventEmitter.emit(APP_EVENT_EVENTS.DELETED, { eventId: id });
+  await eventEmitter.emitAsync(APP_EVENT_EVENTS.DELETED, { eventId: id });
   await db.delete(schema.events).where(eq(schema.events.id, id));
 }
 
