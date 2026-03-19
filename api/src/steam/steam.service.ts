@@ -15,6 +15,7 @@ import {
 } from './steam-playtime.helpers';
 import {
   discoverGameViaItad,
+  extractPgErrorDetail,
   type DiscoveryDeps,
 } from './steam-itad-discovery.helpers';
 import type { SteamSyncResultDto } from '@raid-ledger/contract';
@@ -103,8 +104,12 @@ export class SteamService {
         const result = await discoverGameViaItad(game.appid, deps);
         if (result) discovered++;
       } catch (err) {
+        const pg = extractPgErrorDetail(err);
+        const pgInfo = pg
+          ? ` [PG ${pg.code}: ${pg.detail} (${pg.constraint})]`
+          : '';
         this.logger.warn(
-          `ITAD discovery failed for appid ${game.appid}: ${err}`,
+          `ITAD discovery failed for appid ${game.appid}: ${err}${pgInfo}`,
         );
       }
     }

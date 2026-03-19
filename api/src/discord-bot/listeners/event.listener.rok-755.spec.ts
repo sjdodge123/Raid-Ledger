@@ -120,7 +120,6 @@ async function setupModule() {
   }).compile();
 
   listener = testModule.get(DiscordEventListener);
-  embedPoster = testModule.get(EmbedPosterService);
   eventLifecycleQueue = testModule.get(EventLifecycleQueueService);
 }
 
