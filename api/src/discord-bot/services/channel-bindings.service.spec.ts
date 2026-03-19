@@ -130,6 +130,47 @@ describe('ChannelBindingsService', () => {
     });
   });
 
+  describe('gameExists', () => {
+    function mockSelectChain(resolvedRows: any[]) {
+      const limitMock = jest.fn().mockResolvedValue(resolvedRows);
+      const whereMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const fromMock = jest.fn().mockReturnValue({ where: whereMock });
+      mocks.mockSelect.mockReturnValueOnce({ from: fromMock });
+    }
+
+    it('should return true when the game exists', async () => {
+      mockSelectChain([{ id: 42 }]);
+      const result = await service.gameExists(42);
+      expect(result).toBe(true);
+    });
+
+    it('should return false when the game does not exist', async () => {
+      mockSelectChain([]);
+      const result = await service.gameExists(99999);
+      expect(result).toBe(false);
+    });
+
+    it('should return false when gameId is 0 and no row found', async () => {
+      // gameId=0 is falsy but must still be queried — !!undefined is false
+      mockSelectChain([]);
+      const result = await service.gameExists(0);
+      expect(result).toBe(false);
+    });
+
+    it('should return true when gameId is 0 and a row is found', async () => {
+      // Verifies !!row coercion works correctly when a row is present
+      mockSelectChain([{ id: 0 }]);
+      const result = await service.gameExists(0);
+      expect(result).toBe(true);
+    });
+
+    it('should return a boolean (not a row object or undefined)', async () => {
+      mockSelectChain([{ id: 5 }]);
+      const result = await service.gameExists(5);
+      expect(typeof result).toBe('boolean');
+    });
+  });
+
   describe('getChannelForGame', () => {
     function mockSelectChain(resolvedRows: any[]) {
       const limitMock = jest.fn().mockResolvedValue(resolvedRows);

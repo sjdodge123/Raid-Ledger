@@ -37,6 +37,7 @@ function buildModule() {
           bind: jest.fn(),
           unbind: jest.fn().mockResolvedValue(true),
           updateConfig: jest.fn(),
+          gameExists: jest.fn().mockResolvedValue(true),
         },
       },
       {
@@ -223,6 +224,145 @@ describe('ChannelBindingsController — createBinding: validation', () => {
         bindingPurpose: 'unknown-purpose',
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should throw NotFoundException when gameId does not exist', async () => {
+    bindingsService.gameExists.mockResolvedValue(false);
+
+    await expect(
+      controller.createBinding({
+        channelId: 'ch-1',
+        channelType: 'text',
+        bindingPurpose: 'game-announcements',
+        gameId: 99999,
+      }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('should not call gameExists when gameId is not provided', async () => {
+    const created = makeBinding();
+    bindingsService.bind.mockResolvedValue({
+      binding: created,
+      replacedChannelIds: [],
+    });
+
+    await controller.createBinding({
+      channelId: 'ch-1',
+      channelType: 'text',
+      bindingPurpose: 'game-announcements',
+    });
+
+    expect(bindingsService.gameExists).not.toHaveBeenCalled();
+  });
+
+  it('should not call gameExists when gameId is explicitly null', async () => {
+    const created = makeBinding();
+    bindingsService.bind.mockResolvedValue({
+      binding: created,
+      replacedChannelIds: [],
+    });
+
+    await controller.createBinding({
+      channelId: 'ch-1',
+      channelType: 'text',
+      bindingPurpose: 'game-announcements',
+      gameId: null,
+    });
+
+    expect(bindingsService.gameExists).not.toHaveBeenCalled();
+  });
+
+  it('should call gameExists when gameId is 0 (falsy but non-null)', async () => {
+    bindingsService.gameExists.mockResolvedValue(false);
+
+    await expect(
+      controller.createBinding({
+        channelId: 'ch-1',
+        channelType: 'text',
+        bindingPurpose: 'game-announcements',
+        gameId: 0,
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(bindingsService.gameExists).toHaveBeenCalledWith(0);
+  });
+
+  it('should proceed to bind when gameId is 0 and game exists', async () => {
+    bindingsService.gameExists.mockResolvedValue(true);
+    const created = makeBinding({ gameId: 0 });
+    bindingsService.bind.mockResolvedValue({
+      binding: created,
+      replacedChannelIds: [],
+    });
+
+    await controller.createBinding({
+      channelId: 'ch-1',
+      channelType: 'text',
+      bindingPurpose: 'game-announcements',
+      gameId: 0,
+    });
+
+    expect(bindingsService.bind).toHaveBeenCalledWith(
+      expect.any(String),
+      'ch-1',
+      'text',
+      'game-announcements',
+      0,
+      undefined,
+    );
+  });
+
+  it('should throw NotFoundException with message "Game not found" for invalid gameId', async () => {
+    bindingsService.gameExists.mockResolvedValue(false);
+
+    const error = await controller
+      .createBinding({
+        channelId: 'ch-1',
+        channelType: 'text',
+        bindingPurpose: 'game-announcements',
+        gameId: 99999,
+      })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundException);
+    expect((error as NotFoundException).message).toBe('Game not found');
+  });
+
+  it('should call gameExists with the exact gameId from the request', async () => {
+    bindingsService.gameExists.mockResolvedValue(true);
+    const created = makeBinding({ gameId: 7 });
+    bindingsService.bind.mockResolvedValue({
+      binding: created,
+      replacedChannelIds: [],
+    });
+
+    await controller.createBinding({
+      channelId: 'ch-1',
+      channelType: 'text',
+      bindingPurpose: 'game-announcements',
+      gameId: 7,
+    });
+
+    expect(bindingsService.gameExists).toHaveBeenCalledWith(7);
+    expect(bindingsService.gameExists).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not swallow NotFoundException — it propagates through the catch block', async () => {
+    bindingsService.gameExists.mockResolvedValue(false);
+
+    // The catch block has `if (error instanceof NotFoundException) throw error`
+    // This test verifies NotFoundException is NOT converted to BadRequestException
+    const error = await controller
+      .createBinding({
+        channelId: 'ch-1',
+        channelType: 'text',
+        bindingPurpose: 'game-announcements',
+        gameId: 42,
+      })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundException);
+    expect(error).not.toBeInstanceOf(BadRequestException);
   });
 });
 

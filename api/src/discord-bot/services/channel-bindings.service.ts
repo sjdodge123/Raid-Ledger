@@ -339,6 +339,18 @@ export class ChannelBindingsService {
   }
 
   /**
+   * Check whether a game with the given ID exists in the games table.
+   */
+  async gameExists(gameId: number): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(eq(schema.games.id, gameId))
+      .limit(1);
+    return !!row;
+  }
+
+  /**
    * Smart behavior detection based on channel type and binding context.
    * Text channels default to game-announcements.
    * Voice channels: game-voice-monitor if a game is specified, general-lobby if not.
