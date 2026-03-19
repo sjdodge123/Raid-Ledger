@@ -263,7 +263,9 @@ export async function buildRosterWithAssignments(
     fetchSignupsWithAssignments(db, eventId),
   ]);
   const event = eventResult[0];
-  if (!event) throw new NotFoundException(`Event with ID ${eventId} not found`);
+  if (!event) {
+    return { eventId, pool: [], assignments: [], slots: undefined };
+  }
   const { pool, assigned } = partitionAssignments(rows);
   const slots = await resolveSlotConfig(db, event, assigned);
   return { eventId, pool, assignments: assigned, slots };
