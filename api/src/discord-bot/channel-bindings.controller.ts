@@ -79,6 +79,12 @@ export class ChannelBindingsController {
     }
     try {
       const dto = CreateChannelBindingSchema.parse(body);
+      if (dto.gameId != null) {
+        const exists = await this.channelBindingsService.gameExists(dto.gameId);
+        if (!exists) {
+          throw new NotFoundException('Game not found');
+        }
+      }
       const { binding: result } = await this.channelBindingsService.bind(
         guildId,
         dto.channelId,
@@ -89,6 +95,7 @@ export class ChannelBindingsController {
       );
       return { data: toBindingDto(result) };
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       handleValidationError(error);
     }
   }

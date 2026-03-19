@@ -37,6 +37,7 @@ function buildModule() {
           bind: jest.fn(),
           unbind: jest.fn().mockResolvedValue(true),
           updateConfig: jest.fn(),
+          gameExists: jest.fn().mockResolvedValue(true),
         },
       },
       {
@@ -223,6 +224,35 @@ describe('ChannelBindingsController — createBinding: validation', () => {
         bindingPurpose: 'unknown-purpose',
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('should throw NotFoundException when gameId does not exist', async () => {
+    bindingsService.gameExists.mockResolvedValue(false);
+
+    await expect(
+      controller.createBinding({
+        channelId: 'ch-1',
+        channelType: 'text',
+        bindingPurpose: 'game-announcements',
+        gameId: 99999,
+      }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('should not call gameExists when gameId is not provided', async () => {
+    const created = makeBinding();
+    bindingsService.bind.mockResolvedValue({
+      binding: created,
+      replacedChannelIds: [],
+    });
+
+    await controller.createBinding({
+      channelId: 'ch-1',
+      channelType: 'text',
+      bindingPurpose: 'game-announcements',
+    });
+
+    expect(bindingsService.gameExists).not.toHaveBeenCalled();
   });
 });
 

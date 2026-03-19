@@ -130,6 +130,27 @@ describe('ChannelBindingsService', () => {
     });
   });
 
+  describe('gameExists', () => {
+    function mockSelectChain(resolvedRows: any[]) {
+      const limitMock = jest.fn().mockResolvedValue(resolvedRows);
+      const whereMock = jest.fn().mockReturnValue({ limit: limitMock });
+      const fromMock = jest.fn().mockReturnValue({ where: whereMock });
+      mocks.mockSelect.mockReturnValueOnce({ from: fromMock });
+    }
+
+    it('should return true when the game exists', async () => {
+      mockSelectChain([{ id: 42 }]);
+      const result = await service.gameExists(42);
+      expect(result).toBe(true);
+    });
+
+    it('should return false when the game does not exist', async () => {
+      mockSelectChain([]);
+      const result = await service.gameExists(99999);
+      expect(result).toBe(false);
+    });
+  });
+
   describe('getChannelForGame', () => {
     function mockSelectChain(resolvedRows: any[]) {
       const limitMock = jest.fn().mockResolvedValue(resolvedRows);
