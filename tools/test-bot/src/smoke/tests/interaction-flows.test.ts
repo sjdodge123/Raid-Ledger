@@ -205,20 +205,25 @@ const eventDeleteCleansEmbed: SmokeTest = {
       );
       // Delete the event — embed should be removed from channel
       await deleteEvent(ctx.api, ev.id);
-      // Poll for embed removal — check if embed disappears
-      const gone = await pollForCondition(
-        async () => {
-          const msgs = await readLastMessages(ctx.defaultChannelId, 50);
-          const has = msgs.some((m) =>
-            m.embeds.some((e) => e.title?.includes(ev.title)),
-          );
-          return has ? null : true;
-        },
-        ctx.config.timeoutMs,
-      ).then(() => true).catch(() => false);
-      const stillThere = !gone;
-      if (stillThere) {
-        throw new Error('Embed still present after event deletion');
+      // Poll for embed removal — let network/unexpected errors propagate naturally.
+      // Only catch the specific timeout error to produce a clear assertion message.
+      try {
+        await pollForCondition(
+          async () => {
+            const msgs = await readLastMessages(ctx.defaultChannelId, 50);
+            const has = msgs.some((m) =>
+              m.embeds.some((e) => e.title?.includes(ev.title)),
+            );
+            return has ? null : true;
+          },
+          ctx.config.timeoutMs,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('pollForCondition timed out')) {
+          throw new Error('Embed still present after event deletion');
+        }
+        throw err; // re-throw network/unexpected errors as-is
       }
     } finally {
       // Already deleted above
