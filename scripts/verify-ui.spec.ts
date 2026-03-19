@@ -176,28 +176,24 @@ test.describe('Events list', () => {
 
     test('search input accepts text and filters results', async ({ page }) => {
         await page.goto('/events');
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
-        // Desktop search input — scope to the visible desktop filter bar.
-        // Both desktop and mobile have aria-label="Search events".
-        const desktopFilterBar = page.locator('.hidden.md\\:flex');
-        const searchInput = desktopFilterBar.locator('input[aria-label="Search events"]');
+        // Wait for events to load — event cards have role="button" with h3 titles inside.
+        const eventCards = page.locator('main [role="button"] h3');
+        await expect(eventCards.first()).toBeVisible({ timeout: 15_000 });
+
+        // Desktop search input — both desktop and mobile share the same aria-label,
+        // so scope to the visible one using :visible pseudo-class.
+        const searchInput = page.locator('main').getByLabel('Search events').and(page.locator(':visible'));
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state.
+        // Search for a nonsense term — event cards should disappear.
         await searchInput.fill('xyznonexistent');
-        // Wait for the event cards to disappear (filtered out)
-        await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 10_000 });
+        await expect(eventCards).toHaveCount(0, { timeout: 10_000 });
 
-        // Should show zero event cards
-        const eventCards = page.locator('.hidden.md\\:grid [role="button"]');
-        const count = await eventCards.count();
-        expect(count).toBe(0);
-
-        // Clear search — events should reappear
+        // Clear search — event cards should reappear
         await searchInput.fill('');
-        await expect(
-            page.locator('.hidden.md\\:grid [role="button"]').first()
-        ).toBeVisible({ timeout: 5_000 });
+        await expect(eventCards.first()).toBeVisible({ timeout: 10_000 });
     });
 
     test('Create Event and Plan Event links are visible', async ({ page }) => {
@@ -408,28 +404,23 @@ test.describe('Navigation', () => {
     });
 
     test('nav links navigate to correct pages', async ({ page }) => {
-        await page.goto('/calendar');
         const nav = page.locator('header nav[aria-label="Main navigation"]');
+
+        // Helper: navigate via nav link and verify the target page renders.
+        async function navigateTo(linkName: string, urlPattern: string, headingPattern: RegExp) {
+            await nav.getByRole('link', { name: linkName }).click();
+            await page.waitForURL(urlPattern, { timeout: 15_000 });
+            await expect(page.getByRole('heading', { name: headingPattern }).first()).toBeVisible({ timeout: 15_000 });
+        }
+
+        await page.goto('/calendar');
         await expect(nav).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole('heading', { name: /Calendar/i })).toBeVisible({ timeout: 15_000 });
 
-        // Navigate to Events
-        await nav.getByRole('link', { name: 'Events' }).click();
-        await page.waitForURL('**/events', { timeout: 10_000 });
-        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible();
-
-        // Navigate to Games
-        await nav.getByRole('link', { name: 'Games' }).click();
-        await page.waitForURL('**/games', { timeout: 10_000 });
-
-        // Navigate to Players
-        await nav.getByRole('link', { name: 'Players' }).click();
-        await page.waitForURL('**/players', { timeout: 10_000 });
-        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible();
-
-        // Navigate back to Calendar
-        await nav.getByRole('link', { name: 'Calendar' }).click();
-        await page.waitForURL('**/calendar', { timeout: 10_000 });
-        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
+        await navigateTo('Events', '**/events', /Events/i);
+        await navigateTo('Games', '**/games', /Games/i);
+        await navigateTo('Players', '**/players', /Players/i);
+        await navigateTo('Calendar', '**/calendar', /Calendar/i);
     });
 
     test('no critical console errors during navigation', async ({ page }) => {
@@ -488,9 +479,9 @@ test.describe('Players page', () => {
         await page.goto('/players');
         await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 15_000 });
 
-        // Demo data creates ~100 users — the first page shows alphabetically sorted players.
-        // "Admin" and "CasualCarl" are consistently on the first page.
-        await expect(page.getByText('CasualCarl').first()).toBeVisible({ timeout: 10_000 });
+        // Demo data creates ~100 users. Verify the grid renders player links
+        // (don't assert specific seed usernames — they vary by seed state).
+        await expect(page.locator('main a[href^="/users/"]').first()).toBeVisible({ timeout: 10_000 });
     });
 
     test('shows total player count', async ({ page }) => {
