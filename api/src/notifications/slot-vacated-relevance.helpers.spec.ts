@@ -29,6 +29,26 @@ describe('resolveEventCapacity', () => {
     const event = { slotConfig: null, maxAttendees: null };
     expect(resolveEventCapacity(event as never)).toBeNull();
   });
+
+  // ── Adversarial: zero maxAttendees ───────────────────────────────────────
+
+  it('returns 0 when maxAttendees is 0 (not null)', () => {
+    // 0 is a valid numeric value — should NOT be treated as null
+    const event = { slotConfig: null, maxAttendees: 0 };
+    expect(resolveEventCapacity(event as never)).toBe(0);
+  });
+
+  // ── Adversarial: unknown slotConfig type ────────────────────────────────
+
+  it('returns null when slotConfig type is unrecognised', () => {
+    // computeSlotCapacity returns null for unknown types — resolveEventCapacity
+    // should propagate that null rather than falling back to maxAttendees
+    const event = {
+      slotConfig: { type: 'future-type', slots: 8 },
+      maxAttendees: 10,
+    };
+    expect(resolveEventCapacity(event as never)).toBeNull();
+  });
 });
 
 describe('isSlotVacatedRelevant', () => {
@@ -114,5 +134,52 @@ describe('isSlotVacatedRelevant', () => {
       maxAttendees: null,
     };
     expect(isSlotVacatedRelevant(event as never, 'player', 5)).toBe(false);
+  });
+
+  // ── Adversarial: MMO bench role ─────────────────────────────────────────
+
+  it('returns false for MMO bench departure (bench is never relevant)', () => {
+    const event = {
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0 },
+      maxAttendees: null,
+    };
+    expect(isSlotVacatedRelevant(event as never, 'bench', 0)).toBe(false);
+  });
+
+  // ── Adversarial: over-capacity before departure ─────────────────────────
+
+  it('returns true for generic event over-capacity before departure', () => {
+    // Capacity is 5, but 5 active signups remain after departure (was 6 — over-full)
+    // activeSignupCount=5, +1=6 >= 5 => relevant
+    const event = {
+      slotConfig: { type: 'generic', player: 5 },
+      maxAttendees: null,
+    };
+    expect(isSlotVacatedRelevant(event as never, 'player', 5)).toBe(true);
+  });
+
+  it('returns true for maxAttendees event over-capacity before departure', () => {
+    // Over-full: capacity=5, 5 active remain, 5+1=6 >= 5 => relevant
+    const event = { slotConfig: null, maxAttendees: 5 };
+    expect(isSlotVacatedRelevant(event as never, 'player', 5)).toBe(true);
+  });
+
+  // ── Adversarial: capacity of 1 (single-slot event) ──────────────────────
+
+  it('returns true for single-slot event where the only player departed', () => {
+    // capacity=1, activeSignupCount=0, 0+1=1 >= 1 => relevant
+    const event = { slotConfig: null, maxAttendees: 1 };
+    expect(isSlotVacatedRelevant(event as never, 'player', 0)).toBe(true);
+  });
+
+  // ── Adversarial: just below capacity ────────────────────────────────────
+
+  it('returns false for generic event one slot below capacity before departure', () => {
+    // capacity=10, activeSignupCount=8, 8+1=9 < 10 => not relevant
+    const event = {
+      slotConfig: { type: 'generic', player: 10 },
+      maxAttendees: null,
+    };
+    expect(isSlotVacatedRelevant(event as never, 'player', 8)).toBe(false);
   });
 });

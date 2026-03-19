@@ -13,7 +13,10 @@
  * AC4 — "Full" = active signup count + 1 (the departed member) >= capacity
  * AC5 — Events with no capacity limit (unlimited) never trigger notifications
  */
-import { wasEventFullBeforeDeparture } from './departure-grace.helpers';
+import {
+  wasEventFullBeforeDeparture,
+  isDepartureRelevant,
+} from './departure-grace.helpers';
 import {
   createDrizzleMock,
   type MockDb,
@@ -316,6 +319,148 @@ describe('wasEventFullBeforeDeparture — count coercion from DB string', () => 
     const result = await wasEventFullBeforeDeparture(
       mockDb as never,
       event as never,
+    );
+
+    expect(result).toBe(false);
+  });
+});
+
+// ─── isDepartureRelevant: adversarial edge cases (ROK-919) ───────────────
+
+describe('isDepartureRelevant — bench role always suppressed', () => {
+  it('returns false when vacatedRole is "bench" (bench departures never notify)', async () => {
+    const event = createMockEvent({ maxAttendees: 10 });
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      'bench',
+    );
+
+    expect(result).toBe(false);
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('isDepartureRelevant — null vacatedRole falls back to capacity', () => {
+  it('returns true for null role when event was at capacity', async () => {
+    // No roster assignment → falls back to wasEventFullBeforeDeparture
+    // capacity=5, count=4, 4+1=5 >= 5 => true
+    const event = createMockEvent({ maxAttendees: 5 });
+    mockDb.limit.mockResolvedValueOnce([{ count: 4 }]);
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      null,
+    );
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false for null role when event was not at capacity', async () => {
+    // capacity=10, count=3, 3+1=4 < 10 => false
+    const event = createMockEvent({ maxAttendees: 10 });
+    mockDb.limit.mockResolvedValueOnce([{ count: 3 }]);
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      null,
+    );
+
+    expect(result).toBe(false);
+  });
+
+  it('returns false for null role when event has no capacity limit', async () => {
+    const event = createMockEvent({ maxAttendees: null, slotConfig: null });
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      null,
+    );
+
+    expect(result).toBe(false);
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('isDepartureRelevant — MMO role-based filter', () => {
+  it('returns true for MMO healer departure without DB count query', async () => {
+    const event = createMockEvent({
+      slotConfig: { type: 'mmo', tank: 1, healer: 2, dps: 5, flex: 2 },
+    });
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      'healer',
+    );
+
+    expect(result).toBe(true);
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it('returns false for MMO flex departure (flex is not a critical role)', async () => {
+    const event = createMockEvent({
+      slotConfig: { type: 'mmo', tank: 1, healer: 2, dps: 5, flex: 2 },
+    });
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      'flex',
+    );
+
+    expect(result).toBe(false);
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it('returns false for MMO dps departure regardless of capacity', async () => {
+    const event = createMockEvent({
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0 },
+    });
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      'dps',
+    );
+
+    expect(result).toBe(false);
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('isDepartureRelevant — non-MMO role uses capacity fallback', () => {
+  it('returns true for "dps" role on full generic event', async () => {
+    // For non-MMO events, role name is irrelevant — capacity rules apply
+    // capacity=5 (generic player), count=4, 4+1=5 >= 5 => true
+    const event = createMockEvent({
+      slotConfig: { type: 'generic', player: 5 },
+    });
+    mockDb.limit.mockResolvedValueOnce([{ count: 4 }]);
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      'dps',
+    );
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false for "dps" role on non-full generic event', async () => {
+    const event = createMockEvent({
+      slotConfig: { type: 'generic', player: 10 },
+    });
+    mockDb.limit.mockResolvedValueOnce([{ count: 3 }]);
+
+    const result = await isDepartureRelevant(
+      mockDb as never,
+      event as never,
+      'dps',
     );
 
     expect(result).toBe(false);
