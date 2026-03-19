@@ -15,6 +15,7 @@ import {
   EMBED_COLORS,
 } from '../discord-bot.constants';
 import { computeSlotCapacity } from '../../events/signups-signup.helpers';
+import { isSlotVacatedRelevant } from '../../notifications/slot-vacated-relevance.helpers';
 
 /** Bundled dependencies passed from the processor. */
 export interface DepartureGraceDeps {
@@ -126,6 +127,26 @@ export async function wasEventFullBeforeDeparture(
     )
     .limit(1);
   return Number(count) + 1 >= capacity;
+}
+
+/**
+ * Check if a voice departure is relevant enough to notify the organizer (ROK-919).
+ * Uses the shared relevance helper that applies MMO role + capacity rules.
+ * Falls back to capacity-only check when no roster assignment exists.
+ */
+export async function isDepartureRelevant(
+  db: PostgresJsDatabase<typeof schema>,
+  event: typeof schema.events.$inferSelect,
+  vacatedRole: string | null,
+): Promise<boolean> {
+  if (vacatedRole === 'bench') return false;
+  // No assignment or non-MMO: fall back to capacity check
+  if (!vacatedRole) return wasEventFullBeforeDeparture(db, event);
+  const slotConfig = event.slotConfig as Record<string, unknown> | null;
+  if (slotConfig?.type === 'mmo') {
+    return isSlotVacatedRelevant(event, vacatedRole, 0);
+  }
+  return wasEventFullBeforeDeparture(db, event);
 }
 
 /** Resolve the total non-bench capacity for an event. */

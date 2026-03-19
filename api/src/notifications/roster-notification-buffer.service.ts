@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql, notInArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
+import { isSlotVacatedRelevant } from './slot-vacated-relevance.helpers';
 
 /** Grace period before flushing a buffered roster notification (ms). */
 export const ROSTER_NOTIFY_GRACE_MS = 3 * 60 * 1000; // 3 minutes
@@ -124,13 +125,39 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
 
     const { action } = entry;
     const currentAssignment = await this.lookupCurrentAssignment(action);
-    const payload = await this.buildFlushPayload(action);
 
     if (currentAssignment.length === 0) {
-      await this.notifyPlayerLeft(action, payload);
+      await this.flushPlayerLeft(action);
     } else {
+      const payload = await this.buildFlushPayload(action);
       await this.handleRoleChange(action, currentAssignment[0].role, payload);
     }
+  }
+
+  /** Flush a "player left" action with relevance check (ROK-919). */
+  private async flushPlayerLeft(action: BufferedRosterAction): Promise<void> {
+    const relevant = await this.checkRelevance(action);
+    if (!relevant) {
+      this.logger.debug(
+        `Suppressed slot_vacated: not relevant (${action.vacatedRole} for event ${action.eventId})`,
+      );
+      return;
+    }
+    const payload = await this.buildFlushPayload(action);
+    await this.notifyPlayerLeft(action, payload);
+  }
+
+  /** Check whether the departure is relevant enough to notify (ROK-919). */
+  private async checkRelevance(action: BufferedRosterAction): Promise<boolean> {
+    const event = await this.lookupEvent(action.eventId);
+    if (!event) return false;
+    // MMO role check is synchronous — skip count query when possible
+    const slotConfig = event.slotConfig as Record<string, unknown> | null;
+    if (slotConfig?.type === 'mmo') {
+      return isSlotVacatedRelevant(event, action.vacatedRole, 0);
+    }
+    const count = await this.countActiveSignups(action.eventId);
+    return isSlotVacatedRelevant(event, action.vacatedRole, count);
   }
 
   /** Look up the user's current roster assignment for this event. */
@@ -149,6 +176,38 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
         ),
       )
       .limit(1);
+  }
+
+  /** Look up the event row for relevance checking. */
+  private async lookupEvent(eventId: number) {
+    const [event] = await this.db
+      .select({
+        slotConfig: schema.events.slotConfig,
+        maxAttendees: schema.events.maxAttendees,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    return event ?? null;
+  }
+
+  /** Count active signups for the event (excludes departed/declined/roached). */
+  private async countActiveSignups(eventId: number): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          notInArray(schema.eventSignups.status, [
+            'departed',
+            'declined',
+            'roached_out',
+          ]),
+        ),
+      )
+      .limit(1);
+    return Number(row?.count ?? 0);
   }
 
   /** Build the notification payload with Discord embed URL and voice channel. */

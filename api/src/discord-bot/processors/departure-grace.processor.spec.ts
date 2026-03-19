@@ -804,3 +804,84 @@ describe('DepartureGraceProcessor — notification payload URLs', () => {
     expect(payload).not.toHaveProperty('voiceChannelId');
   });
 });
+
+// ─── ROK-919: MMO role-based relevance filter ──────────────────────────────
+
+describe('DepartureGraceProcessor — MMO relevance filter (ROK-919)', () => {
+  it('suppresses notification for DPS departure from full MMO event', async () => {
+    const mmoFullEvent = createMockEvent({
+      id: 1,
+      creatorId: 99,
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0 },
+    });
+    const dpsAssignment = {
+      id: 55,
+      role: 'dps',
+      position: 2,
+      signupId: 10,
+      eventId: 1,
+    };
+    mockDb.limit
+      .mockResolvedValueOnce([mmoFullEvent])
+      .mockResolvedValueOnce([activeSignup])
+      .mockResolvedValueOnce([dpsAssignment]);
+
+    let whereCallCount = 0;
+    const originalWhere = mockDb.where;
+    mockDb.where = jest.fn().mockImplementation(function (this: unknown) {
+      whereCallCount++;
+      if (whereCallCount === 5) {
+        return Promise.resolve([]);
+      }
+      return originalWhere.call(this) as unknown;
+    });
+
+    await processor.process(makeJob(jobData));
+
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+    expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    expect(mockEventEmitter.emit).toHaveBeenCalled();
+  });
+
+  it('sends notification for tank departure from full MMO event', async () => {
+    const mmoFullEvent = createMockEvent({
+      id: 1,
+      creatorId: 99,
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0 },
+    });
+    const tankAssignment = {
+      id: 55,
+      role: 'tank',
+      position: 1,
+      signupId: 10,
+      eventId: 1,
+    };
+    mockDb.limit
+      .mockResolvedValueOnce([mmoFullEvent])
+      .mockResolvedValueOnce([activeSignup])
+      .mockResolvedValueOnce([tankAssignment]);
+
+    let whereCallCount = 0;
+    const originalWhere = mockDb.where;
+    mockDb.where = jest.fn().mockImplementation(function (this: unknown) {
+      whereCallCount++;
+      if (whereCallCount === 5) {
+        return Promise.resolve([]);
+      }
+      return originalWhere.call(this) as unknown;
+    });
+
+    mockDb.limit
+      .mockResolvedValueOnce([{ id: 88 }])
+      .mockResolvedValueOnce([{ discordId: 'creator-discord-123' }]);
+
+    await processor.process(makeJob(jobData));
+
+    expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 99,
+        type: 'slot_vacated',
+      }),
+    );
+  });
+});
