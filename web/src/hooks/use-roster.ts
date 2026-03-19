@@ -14,6 +14,7 @@ export function useRoster(eventId: number) {
     return useQuery<RosterWithAssignments>({
         queryKey: ['events', eventId, 'roster', 'assignments'],
         queryFn: () => getRosterWithAssignments(eventId),
+        enabled: eventId > 0,
     });
 }
 
