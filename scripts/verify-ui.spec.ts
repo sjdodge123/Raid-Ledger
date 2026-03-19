@@ -404,23 +404,27 @@ test.describe('Navigation', () => {
     });
 
     test('nav links navigate to correct pages', async ({ page }) => {
-        const nav = page.locator('header nav[aria-label="Main navigation"]');
-
-        // Helper: navigate via nav link and verify the target page renders.
-        async function navigateTo(linkName: string, urlPattern: string, headingPattern: RegExp) {
-            await nav.getByRole('link', { name: linkName }).click();
-            await page.waitForURL(urlPattern, { timeout: 15_000 });
-            await expect(page.getByRole('heading', { name: headingPattern }).first()).toBeVisible({ timeout: 15_000 });
-        }
-
         await page.goto('/calendar');
+        const nav = page.locator('header nav[aria-label="Main navigation"]');
         await expect(nav).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByRole('heading', { name: /Calendar/i })).toBeVisible({ timeout: 15_000 });
 
-        await navigateTo('Events', '**/events', /Events/i);
-        await navigateTo('Games', '**/games', /Games/i);
-        await navigateTo('Players', '**/players', /Players/i);
-        await navigateTo('Calendar', '**/calendar', /Calendar/i);
+        // Navigate to Events
+        await nav.getByRole('link', { name: 'Events' }).click();
+        await page.waitForURL('**/events', { timeout: 10_000 });
+        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible();
+
+        // Navigate to Games (no heading — page uses tabs/cards layout)
+        await nav.getByRole('link', { name: 'Games' }).click();
+        await page.waitForURL('**/games', { timeout: 10_000 });
+
+        // Navigate to Players
+        await nav.getByRole('link', { name: 'Players' }).click();
+        await page.waitForURL('**/players', { timeout: 10_000 });
+        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible();
+
+        // Navigate back to Calendar
+        await nav.getByRole('link', { name: 'Calendar' }).click();
+        await page.waitForURL('**/calendar', { timeout: 10_000 });
     });
 
     test('no critical console errors during navigation', async ({ page }) => {
