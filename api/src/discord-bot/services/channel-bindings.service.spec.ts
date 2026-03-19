@@ -149,6 +149,26 @@ describe('ChannelBindingsService', () => {
       const result = await service.gameExists(99999);
       expect(result).toBe(false);
     });
+
+    it('should return false when gameId is 0 and no row found', async () => {
+      // gameId=0 is falsy but must still be queried — !!undefined is false
+      mockSelectChain([]);
+      const result = await service.gameExists(0);
+      expect(result).toBe(false);
+    });
+
+    it('should return true when gameId is 0 and a row is found', async () => {
+      // Verifies !!row coercion works correctly when a row is present
+      mockSelectChain([{ id: 0 }]);
+      const result = await service.gameExists(0);
+      expect(result).toBe(true);
+    });
+
+    it('should return a boolean (not a row object or undefined)', async () => {
+      mockSelectChain([{ id: 5 }]);
+      const result = await service.gameExists(5);
+      expect(typeof result).toBe('boolean');
+    });
   });
 
   describe('getChannelForGame', () => {
