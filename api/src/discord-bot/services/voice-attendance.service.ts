@@ -122,15 +122,11 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   ): Promise<Array<{ eventId: number; gameId: number | null }>> {
     const guildId = this.clientService.getGuildId();
     if (!guildId) {
-      this.logger.warn(
-        '[voice-pipe] findActive: no guildId, channelId=%s',
-        channelId,
-      );
+      this.logger.warn('[voice-pipe] findActive: no guildId, channelId=%s', channelId);
       return [];
     }
     const bindings = await this.channelBindingsService.getBindings(guildId);
-    const defaultVoice =
-      await this.settingsService.getDiscordBotDefaultVoiceChannel();
+    const defaultVoice = await this.settingsService.getDiscordBotDefaultVoiceChannel();
     return flushH.findActiveEventsForChannel(
       this.db,
       channelId,
