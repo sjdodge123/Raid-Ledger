@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { EventDetailTopbar } from './EventDetailSubComponents';
+import { EventDetailTopbar, MoreActionsMenu } from './EventDetailSubComponents';
 
 const defaultProps = {
     fromCalendar: false,
@@ -128,5 +128,75 @@ describe('Regression: ROK-761 — back button mobile touch target', () => {
         renderTopbar({ fromCalendar: false });
         const backBtn = screen.getByRole('button', { name: 'Go back' });
         expect(backBtn).toHaveTextContent('\u2190 Back');
+    });
+});
+
+describe('ROK-886: MoreActionsMenu — overflow menu', () => {
+    const menuProps = {
+        onReschedule: vi.fn(),
+        onCancel: vi.fn(),
+        onDelete: vi.fn(),
+    };
+
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('renders a button with aria-label "More actions"', () => {
+        render(<MoreActionsMenu {...menuProps} />);
+        expect(screen.getByRole('button', { name: 'More actions' })).toBeInTheDocument();
+    });
+
+    it('dropdown is hidden by default', () => {
+        render(<MoreActionsMenu {...menuProps} />);
+        expect(screen.queryByRole('button', { name: 'Reschedule' })).not.toBeInTheDocument();
+    });
+
+    it('opens dropdown with all items when clicked', async () => {
+        const user = userEvent.setup();
+        render(<MoreActionsMenu {...menuProps} />);
+        await user.click(screen.getByRole('button', { name: 'More actions' }));
+        expect(screen.getByRole('button', { name: 'Reschedule' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Cancel Event' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Delete Event' })).toBeInTheDocument();
+    });
+
+    it('calls onReschedule and closes menu when Reschedule is clicked', async () => {
+        const user = userEvent.setup();
+        render(<MoreActionsMenu {...menuProps} />);
+        await user.click(screen.getByRole('button', { name: 'More actions' }));
+        await user.click(screen.getByRole('button', { name: 'Reschedule' }));
+        expect(menuProps.onReschedule).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('button', { name: 'Reschedule' })).not.toBeInTheDocument();
+    });
+
+    it('calls onCancel and closes menu when Cancel Event is clicked', async () => {
+        const user = userEvent.setup();
+        render(<MoreActionsMenu {...menuProps} />);
+        await user.click(screen.getByRole('button', { name: 'More actions' }));
+        await user.click(screen.getByRole('button', { name: 'Cancel Event' }));
+        expect(menuProps.onCancel).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('button', { name: 'Cancel Event' })).not.toBeInTheDocument();
+    });
+
+    it('calls onDelete and closes menu when Delete Event is clicked', async () => {
+        const user = userEvent.setup();
+        render(<MoreActionsMenu {...menuProps} />);
+        await user.click(screen.getByRole('button', { name: 'More actions' }));
+        await user.click(screen.getByRole('button', { name: 'Delete Event' }));
+        expect(menuProps.onDelete).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('button', { name: 'Delete Event' })).not.toBeInTheDocument();
+    });
+});
+
+describe('ROK-886: TopbarManagerButtons — mobile overflow menu present', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('renders a "More actions" button for mobile overflow', () => {
+        renderTopbar();
+        expect(screen.getByRole('button', { name: 'More actions' })).toBeInTheDocument();
+    });
+
+    it('mobile layout shows Edit button (shortened label)', () => {
+        renderTopbar();
+        expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     });
 });

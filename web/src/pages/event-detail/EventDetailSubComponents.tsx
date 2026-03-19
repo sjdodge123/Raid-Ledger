@@ -2,7 +2,7 @@
  * Sub-components for the Event Detail page.
  * Extracted from event-detail-page.tsx for file size compliance (ROK-719).
  */
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import type { EventResponseDto, EventRosterDto } from '@raid-ledger/contract';
 import { AttendeeAvatars } from '../../components/calendar/AttendeeAvatars';
@@ -107,18 +107,50 @@ export function EventDetailTopbar({ fromCalendar, navState, hasHistory, isAuthen
     );
 }
 
-/** Manager action buttons for event topbar. */
+/** Three-dot overflow menu for secondary/destructive actions on mobile (ROK-886). */
+export function MoreActionsMenu({ onReschedule, onCancel, onDelete }: {
+    onReschedule: () => void; onCancel: () => void; onDelete: () => void;
+}): JSX.Element {
+    const [open, setOpen] = useState(false);
+    const act = (handler: () => void) => { setOpen(false); handler(); };
+    return (
+        <div className="relative">
+            <button onClick={() => setOpen(!open)} className="btn btn-secondary btn-sm flex items-center justify-center" aria-label="More actions">
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
+            </button>
+            {open && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-edge bg-surface shadow-lg">
+                        <button onClick={() => act(onReschedule)} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors rounded-t-lg">Reschedule</button>
+                        <button onClick={() => act(onCancel)} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors">Cancel Event</button>
+                        <button onClick={() => act(onDelete)} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors rounded-b-lg">Delete Event</button>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+/** Manager action buttons for event topbar — desktop inline, mobile overflow (ROK-886). */
 function TopbarManagerButtons({ onInvite, onReschedule, onEdit, onCancel, onDelete }: {
     onInvite: () => void; onReschedule: () => void; onEdit: () => void; onCancel: () => void; onDelete: () => void;
 }) {
     return (
-        <div className="grid grid-cols-2 gap-2 sm:flex">
-            <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
-            <button onClick={onReschedule} className="btn btn-secondary btn-sm">Reschedule</button>
-            <button onClick={onEdit} className="btn btn-secondary btn-sm">Edit Event</button>
-            <button onClick={onDelete} className="btn btn-danger btn-sm">Delete Event</button>
-            <button onClick={onCancel} className="btn btn-danger btn-sm">Cancel Event</button>
-        </div>
+        <>
+            <div className="hidden sm:flex gap-2">
+                <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
+                <button onClick={onReschedule} className="btn btn-secondary btn-sm">Reschedule</button>
+                <button onClick={onEdit} className="btn btn-secondary btn-sm">Edit Event</button>
+                <button onClick={onDelete} className="btn btn-danger btn-sm">Delete Event</button>
+                <button onClick={onCancel} className="btn btn-danger btn-sm">Cancel Event</button>
+            </div>
+            <div className="flex sm:hidden gap-2">
+                <button onClick={onInvite} className="btn btn-primary btn-sm">Invite</button>
+                <button onClick={onEdit} className="btn btn-secondary btn-sm">Edit</button>
+                <MoreActionsMenu onReschedule={onReschedule} onCancel={onCancel} onDelete={onDelete} />
+            </div>
+        </>
     );
 }
 
