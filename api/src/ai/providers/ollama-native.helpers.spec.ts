@@ -430,7 +430,8 @@ describe('downloadAndExtractBinary', () => {
   });
 
   it('error message includes the URL when HTTP 404 occurs', async () => {
-    const archiveUrl = 'https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst';
+    const archiveUrl =
+      'https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst';
     mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
       const req = new EventEmitter();
       const response = new PassThrough();
@@ -465,7 +466,9 @@ describe('downloadAndExtractBinary', () => {
 
   it('does not attempt to rm extractDir when mkdtemp fails', async () => {
     mockSuccessfulDownload();
-    mockMkdtemp.mockRejectedValueOnce(new Error('ENOSPC: no space left on device'));
+    mockMkdtemp.mockRejectedValueOnce(
+      new Error('ENOSPC: no space left on device'),
+    );
 
     await expect(
       downloadAndExtractBinary(
@@ -485,7 +488,9 @@ describe('downloadAndExtractBinary', () => {
   it('cleans up and propagates error when chmod on extracted binary fails', async () => {
     mockSuccessfulDownload();
     mockTarSuccess();
-    mockChmod.mockRejectedValueOnce(new Error('EPERM: operation not permitted'));
+    mockChmod.mockRejectedValueOnce(
+      new Error('EPERM: operation not permitted'),
+    );
 
     await expect(
       downloadAndExtractBinary(
@@ -543,7 +548,9 @@ describe('downloadAndExtractBinary', () => {
   it('does not propagate cleanup errors — unlink failure is swallowed', async () => {
     mockSuccessfulDownload();
     mockTarSuccess();
-    mockUnlink.mockRejectedValueOnce(new Error('ENOENT: no such file or directory'));
+    mockUnlink.mockRejectedValueOnce(
+      new Error('ENOENT: no such file or directory'),
+    );
 
     // The main operation should succeed despite unlink failing in finally
     await expect(

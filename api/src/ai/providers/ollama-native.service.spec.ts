@@ -195,7 +195,9 @@ describe('OllamaNativeService', () => {
       await service.install();
 
       const [url] = mockDownloadAndExtract.mock.calls[0] as [string, string];
-      expect(url).toContain('github.com/ollama/ollama/releases/latest/download');
+      expect(url).toContain(
+        'github.com/ollama/ollama/releases/latest/download',
+      );
     });
 
     it('throws when download fails', async () => {
