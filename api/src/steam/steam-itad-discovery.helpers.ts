@@ -92,7 +92,8 @@ async function upsertGame(
   });
 
   if (bySlug) {
-    // Don't merge if existing game already has a different Steam app ID
+    // Slug taken by a different Steam game — skip itadGameId merge and create
+    // a new row via insertWithSlugRetry (which suffixes slug + nulls unique fields).
     if (bySlug.steamAppId && bySlug.steamAppId !== row.steamAppId) {
       return insertWithSlugRetry(db, row);
     }

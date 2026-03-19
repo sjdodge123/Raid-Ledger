@@ -33,10 +33,7 @@ const ITAD_GAME_A: ItadGame = {
   mature: false,
 };
 
-function buildDeps(
-  testApp: TestApp,
-  itadGame: ItadGame | null,
-): DiscoveryDeps {
+function buildDeps(testApp: TestApp, itadGame: ItadGame | null): DiscoveryDeps {
   return {
     db: testApp.db,
     lookupBySteamAppId: jest.fn().mockResolvedValue(itadGame),
@@ -141,12 +138,9 @@ function describeItadDiscoveryIntegration() {
 
     const deps = buildDeps(testApp, ITAD_GAME_A);
 
-    // Slug check finds Game A (different steamAppId) → goes to insert
-    // Insert would collide on itadGameId with Game B
-    // But the itadGameId check should catch this first
-    // Actually: slug match → different steamAppId → insertWithSlugRetry
-    // The insert with original slug collides (slug taken by Game A)
-    // Retry: suffixed slug + nulled itadGameId → succeeds
+    // Slug match (Game A) has different steamAppId → skips itadGameId merge,
+    // goes straight to insertWithSlugRetry. First insert collides on slug,
+    // retry uses suffixed slug + nulled itadGameId/igdbId → succeeds.
     const result = await discoverGameViaItad(44444, deps);
 
     expect(result).not.toBeNull();
