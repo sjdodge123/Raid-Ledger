@@ -183,10 +183,45 @@ describe('OllamaNativeService', () => {
       );
     });
 
+    it('uses the .tar.zst archive URL — not the raw binary URL', async () => {
+      await service.install();
+
+      const [url] = mockDownloadAndExtract.mock.calls[0] as [string, string];
+      expect(url).toMatch(/\.tar\.zst$/);
+      expect(url).not.toMatch(/ollama-linux-amd64$/);
+    });
+
+    it('targets the GitHub latest release download URL', async () => {
+      await service.install();
+
+      const [url] = mockDownloadAndExtract.mock.calls[0] as [string, string];
+      expect(url).toContain('github.com/ollama/ollama/releases/latest/download');
+    });
+
     it('throws when download fails', async () => {
       mockDownloadAndExtract.mockRejectedValueOnce(new Error('Network error'));
 
       await expect(service.install()).rejects.toThrow('Network error');
+    });
+
+    it('throws when extraction fails (zstd not installed)', async () => {
+      mockDownloadAndExtract.mockRejectedValueOnce(
+        new Error('tar: zstd: No such file or directory'),
+      );
+
+      await expect(service.install()).rejects.toThrow(
+        'tar: zstd: No such file or directory',
+      );
+    });
+
+    it('throws when binary not found in archive', async () => {
+      mockDownloadAndExtract.mockRejectedValueOnce(
+        new Error('bin/ollama not found in archive'),
+      );
+
+      await expect(service.install()).rejects.toThrow(
+        'bin/ollama not found in archive',
+      );
     });
   });
 

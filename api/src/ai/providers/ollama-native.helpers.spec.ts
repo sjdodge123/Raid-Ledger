@@ -428,4 +428,129 @@ describe('downloadAndExtractBinary', () => {
       '/usr/local/bin/ollama.tar.zst.tmp',
     );
   });
+
+  it('error message includes the URL when HTTP 404 occurs', async () => {
+    const archiveUrl = 'https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst';
+    mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
+      const req = new EventEmitter();
+      const response = new PassThrough();
+      Object.assign(response, { statusCode: 404, resume: jest.fn() });
+      cb(response as unknown as IncomingMessage);
+      return req;
+    });
+    const writeStream = new PassThrough();
+    mockCreateWriteStream.mockReturnValue(writeStream);
+
+    await expect(
+      downloadAndExtractBinary(archiveUrl, '/usr/local/bin/ollama'),
+    ).rejects.toThrow(`Download failed: HTTP 404 from ${archiveUrl}`);
+  });
+
+  it('error message includes URL for HTTP 403 forbidden', async () => {
+    const archiveUrl = 'https://example.com/ollama.tar.zst';
+    mockHttpsGet.mockImplementation((_url: string, cb: HttpsGetCb) => {
+      const req = new EventEmitter();
+      const response = new PassThrough();
+      Object.assign(response, { statusCode: 403, resume: jest.fn() });
+      cb(response as unknown as IncomingMessage);
+      return req;
+    });
+    const writeStream = new PassThrough();
+    mockCreateWriteStream.mockReturnValue(writeStream);
+
+    await expect(
+      downloadAndExtractBinary(archiveUrl, '/usr/local/bin/ollama'),
+    ).rejects.toThrow(`Download failed: HTTP 403 from ${archiveUrl}`);
+  });
+
+  it('does not attempt to rm extractDir when mkdtemp fails', async () => {
+    mockSuccessfulDownload();
+    mockMkdtemp.mockRejectedValueOnce(new Error('ENOSPC: no space left on device'));
+
+    await expect(
+      downloadAndExtractBinary(
+        'https://example.com/ollama.tar.zst',
+        '/usr/local/bin/ollama',
+      ),
+    ).rejects.toThrow('ENOSPC: no space left on device');
+
+    // Archive is still cleaned up
+    expect(mockUnlink).toHaveBeenCalledWith(
+      '/usr/local/bin/ollama.tar.zst.tmp',
+    );
+    // extractDir was never set, so rm should not be called
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it('cleans up and propagates error when chmod on extracted binary fails', async () => {
+    mockSuccessfulDownload();
+    mockTarSuccess();
+    mockChmod.mockRejectedValueOnce(new Error('EPERM: operation not permitted'));
+
+    await expect(
+      downloadAndExtractBinary(
+        'https://example.com/ollama.tar.zst',
+        '/usr/local/bin/ollama',
+      ),
+    ).rejects.toThrow('EPERM: operation not permitted');
+
+    expect(mockUnlink).toHaveBeenCalledWith(
+      '/usr/local/bin/ollama.tar.zst.tmp',
+    );
+    expect(mockRm).toHaveBeenCalledWith('/tmp/ollama-abc123', {
+      recursive: true,
+      force: true,
+    });
+    // Rename must not be called when chmod failed
+    expect(mockRename).not.toHaveBeenCalled();
+  });
+
+  it('cleans up and propagates error when rename fails after chmod', async () => {
+    mockSuccessfulDownload();
+    mockTarSuccess();
+    mockRename.mockRejectedValueOnce(new Error('EXDEV: cross-device link'));
+
+    await expect(
+      downloadAndExtractBinary(
+        'https://example.com/ollama.tar.zst',
+        '/usr/local/bin/ollama',
+      ),
+    ).rejects.toThrow('EXDEV: cross-device link');
+
+    expect(mockUnlink).toHaveBeenCalledWith(
+      '/usr/local/bin/ollama.tar.zst.tmp',
+    );
+    expect(mockRm).toHaveBeenCalledWith('/tmp/ollama-abc123', {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  it('does not propagate cleanup errors — rm failure is swallowed', async () => {
+    mockSuccessfulDownload();
+    mockTarSuccess();
+    mockRm.mockRejectedValueOnce(new Error('EBUSY: resource busy or locked'));
+
+    // The main operation should succeed despite rm failing in finally
+    await expect(
+      downloadAndExtractBinary(
+        'https://example.com/ollama.tar.zst',
+        '/usr/local/bin/ollama',
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('does not propagate cleanup errors — unlink failure is swallowed', async () => {
+    mockSuccessfulDownload();
+    mockTarSuccess();
+    mockUnlink.mockRejectedValueOnce(new Error('ENOENT: no such file or directory'));
+
+    // The main operation should succeed despite unlink failing in finally
+    await expect(
+      downloadAndExtractBinary(
+        'https://example.com/ollama.tar.zst',
+        '/usr/local/bin/ollama',
+      ),
+    ).resolves.toBeUndefined();
+  });
 });
