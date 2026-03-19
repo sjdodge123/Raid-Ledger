@@ -1,5 +1,9 @@
 import { createWriteStream } from 'fs';
-import { rename, unlink, chmod } from 'fs/promises';
+import { rename, unlink, chmod, mkdtemp, rm } from 'fs/promises';
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { execFile } from 'child_process';
 import { get as httpGet } from 'http';
 import { get as httpsGet } from 'https';
 import type { IncomingMessage } from 'http';
@@ -26,6 +30,51 @@ export async function downloadFile(url: string, dest: string): Promise<void> {
     await unlink(tmpPath).catch(() => {});
     throw err;
   }
+}
+
+/**
+ * Download a .tar.zst archive, extract the ollama binary, and place it at dest.
+ * Cleans up temp files (archive + extract dir) on both success and failure.
+ * @param url - URL to the .tar.zst archive
+ * @param dest - Final binary destination path (e.g. /usr/local/bin/ollama)
+ */
+export async function downloadAndExtractBinary(
+  url: string,
+  dest: string,
+): Promise<void> {
+  const archivePath = `${dest}.tar.zst.tmp`;
+  let extractDir: string | undefined;
+  try {
+    await downloadToFile(url, archivePath);
+    extractDir = await mkdtemp(join(tmpdir(), 'ollama-'));
+    await extractTarZst(archivePath, extractDir);
+    const binaryPath = join(extractDir, 'bin', 'ollama');
+    if (!existsSync(binaryPath)) {
+      throw new Error('bin/ollama not found in archive');
+    }
+    await chmod(binaryPath, 0o755);
+    await rename(binaryPath, dest);
+  } finally {
+    await unlink(archivePath).catch(() => {});
+    if (extractDir) {
+      await rm(extractDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+}
+
+/** Extract a .tar.zst archive to a directory using tar CLI. */
+function extractTarZst(archive: string, dest: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'tar',
+      ['--zstd', '-xf', archive, '-C', dest],
+      { timeout: DOWNLOAD_TIMEOUT_MS },
+      (err) => {
+        if (err) reject(new Error(err.message));
+        else resolve();
+      },
+    );
+  });
 }
 
 /**
@@ -81,7 +130,7 @@ function followRedirects(
     }
     if (status < 200 || status >= 300) {
       res.resume();
-      cb(new Error(`Download failed: HTTP ${status}`));
+      cb(new Error(`Download failed: HTTP ${status} from ${url}`));
       return;
     }
     cb(null, res);

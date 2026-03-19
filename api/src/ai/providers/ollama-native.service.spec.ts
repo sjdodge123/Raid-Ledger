@@ -6,11 +6,11 @@ import * as childProcess from 'child_process';
 jest.mock('fs');
 jest.mock('child_process');
 jest.mock('./ollama-native.helpers', () => ({
-  downloadFile: jest.fn().mockResolvedValue(undefined),
+  downloadAndExtractBinary: jest.fn().mockResolvedValue(undefined),
 }));
 
-import { downloadFile } from './ollama-native.helpers';
-const mockDownloadFile = downloadFile as jest.Mock;
+import { downloadAndExtractBinary } from './ollama-native.helpers';
+const mockDownloadAndExtract = downloadAndExtractBinary as jest.Mock;
 
 const mockExistsSync = fs.existsSync as jest.Mock;
 const mockExecFile = childProcess.execFile as unknown as jest.Mock;
@@ -174,17 +174,17 @@ describe('OllamaNativeService', () => {
   });
 
   describe('install', () => {
-    it('downloads binary to /usr/local/bin/ollama', async () => {
+    it('downloads and extracts binary to /usr/local/bin/ollama', async () => {
       await service.install();
 
-      expect(mockDownloadFile).toHaveBeenCalledWith(
-        expect.stringContaining('ollama-linux-amd64'),
+      expect(mockDownloadAndExtract).toHaveBeenCalledWith(
+        expect.stringContaining('ollama-linux-amd64.tar.zst'),
         '/usr/local/bin/ollama',
       );
     });
 
     it('throws when download fails', async () => {
-      mockDownloadFile.mockRejectedValueOnce(new Error('Network error'));
+      mockDownloadAndExtract.mockRejectedValueOnce(new Error('Network error'));
 
       await expect(service.install()).rejects.toThrow('Network error');
     });
