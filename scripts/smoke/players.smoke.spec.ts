@@ -8,9 +8,11 @@ test.describe('Players page', () => {
         await page.goto('/players');
         await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 15_000 });
 
-        // Demo data creates ~100 users — the first page shows alphabetically sorted players.
-        // "Admin" and "CasualCarl" are consistently on the first page.
-        await expect(page.getByText('CasualCarl').first()).toBeVisible({ timeout: 10_000 });
+        // Demo data creates ~100 users — the default view shows "New Members" sorted by join date.
+        // Verify at least one player link is visible (any seeded user).
+        await expect(page.getByRole('heading', { name: 'New Members' })).toBeVisible({ timeout: 10_000 });
+        const playerLinks = page.locator('a[href*="/users/"]');
+        await expect(playerLinks.first()).toBeVisible({ timeout: 10_000 });
     });
 
     test('shows total player count', async ({ page }) => {

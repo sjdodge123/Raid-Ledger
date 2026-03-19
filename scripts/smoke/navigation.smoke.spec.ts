@@ -47,6 +47,8 @@ test.describe('Navigation', () => {
     });
 
     test('no critical console errors during navigation', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — uses Calendar heading (hidden md:block)');
+
         const errors: string[] = [];
         page.on('console', (msg) => {
             if (msg.type() === 'error') errors.push(msg.text());

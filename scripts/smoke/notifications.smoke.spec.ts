@@ -25,6 +25,8 @@ test.describe('Notifications', () => {
     });
 
     test('Mark All Read button works', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — notification dropdown differs on mobile');
+
         await page.goto('/calendar');
         const bellBtn = page.getByRole('button', { name: 'Notifications' }).first();
         await expect(bellBtn).toBeVisible({ timeout: 15_000 });

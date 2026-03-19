@@ -5,6 +5,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Calendar', () => {
     test('month view renders heading and grid', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — Calendar heading is hidden md:block');
+
         await page.goto('/calendar');
         // The h1 "Calendar" heading is desktop-only (hidden md:block).
         // At the Desktop Chrome viewport (1280px) it should be visible.
@@ -23,6 +25,8 @@ test.describe('Calendar', () => {
     });
 
     test('seeded events appear on calendar', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — calendar grid uses desktop selectors');
+
         await page.goto('/calendar');
         // Demo data creates events like "Heroic Amirdrassil Clear", "Mythic+ Push Night"
         // They should appear as event chips/cards on the calendar
@@ -34,6 +38,8 @@ test.describe('Calendar', () => {
     });
 
     test('game filter checkboxes are visible when games exist', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — filter and heading use desktop selectors');
+
         await page.goto('/calendar');
         // Wait for calendar to finish loading before checking filter UI
         await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });

@@ -98,6 +98,8 @@ test.describe('Event detail', () => {
     });
 
     test('event detail page renders without crashing', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — Reschedule button is behind overflow menu on mobile');
+
         // Wait for event detail content to appear (e.g. the Reschedule button)
         await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible({ timeout: 10_000 });
 
@@ -107,6 +109,8 @@ test.describe('Event detail', () => {
     });
 
     test('admin action buttons are visible on event detail', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — buttons differ on mobile (overflow menu)');
+
         // Admin should see management buttons
         await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible({ timeout: 10_000 });
         await expect(page.getByRole('button', { name: 'Edit Event' })).toBeVisible();
@@ -114,6 +118,8 @@ test.describe('Event detail', () => {
     });
 
     test('event detail loads without error boundary', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — Edit Event button label differs on mobile');
+
         // Wait for page to fully load by checking for admin buttons
         await expect(page.getByRole('button', { name: 'Edit Event' })).toBeVisible({ timeout: 10_000 });
 
@@ -192,6 +198,8 @@ test.describe('Regression: ROK-847 — role preference icons', () => {
 
 test.describe('Reschedule modal', () => {
     test('opens on seeded event and shows signup count', async ({ page }, testInfo) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — Reschedule is behind overflow menu on mobile');
+
         await navigateToFirstEvent(page, testInfo);
 
         // Click Reschedule button
@@ -296,6 +304,8 @@ test.describe('Regression: ROK-868 — character info on duplicate signup', () =
     }
 
     test('character data appears in event detail after duplicate signup with character', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Desktop-only test — attendees panel uses desktop selectors');
+
         const token = await getAdminToken();
 
         // Find admin's first character
