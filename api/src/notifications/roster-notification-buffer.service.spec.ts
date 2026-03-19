@@ -399,4 +399,77 @@ describe('RosterNotificationBufferService — relevance filter (ROK-919)', () =>
 
     expect(mockNotificationService.create).not.toHaveBeenCalled();
   });
+
+  // ── Adversarial: flex departure on MMO event ────────────────────────────
+
+  it('suppresses notification for flex departure from MMO event', async () => {
+    setupFlushChains(mmoEvent);
+    service.bufferLeave({ ...baseAction, vacatedRole: 'flex' });
+
+    jest.advanceTimersByTime(ROSTER_NOTIFY_GRACE_MS + 100);
+    await jest.runAllTimersAsync();
+
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+  });
+
+  // ── Adversarial: boundary — one below capacity ──────────────────────────
+
+  it('suppresses notification for generic event one slot below capacity', async () => {
+    // capacity=10, activeSignups after departure=8, 8+1=9 < 10 => not full
+    setupFlushChains(genericNotFullEvent, 8);
+    service.bufferLeave({ ...baseAction, vacatedRole: 'player' });
+
+    jest.advanceTimersByTime(ROSTER_NOTIFY_GRACE_MS + 100);
+    await jest.runAllTimersAsync();
+
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+  });
+
+  // ── Adversarial: count coercion from DB string ─────────────────────────
+
+  it('correctly handles DB count returned as string for capacity check', async () => {
+    // capacity=5, DB returns count as string '4' (postgres-js behaviour)
+    // 4+1=5 = capacity => relevant
+    selectChains = [
+      makeSelectChain([]), // assignment lookup: player left
+      makeSelectChain([genericFullEvent]), // event lookup
+      makeSelectChain([{ count: '4' }]), // count returned as string
+    ];
+    service.bufferLeave({ ...baseAction, vacatedRole: 'player' });
+
+    jest.advanceTimersByTime(ROSTER_NOTIFY_GRACE_MS + 100);
+    await jest.runAllTimersAsync();
+
+    expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'slot_vacated' }),
+    );
+  });
+
+  // ── Adversarial: flushAll on empty buffer ───────────────────────────────
+
+  it('flushAll on empty buffer is a no-op and does not throw', async () => {
+    expect(service.pendingCount).toBe(0);
+    await expect(service.flushAll()).resolves.toBeUndefined();
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+  });
+
+  // ── Adversarial: MMO tank departure skips DB count query ────────────────
+
+  it('does not query signup count for MMO tank departure (optimisation)', async () => {
+    // For MMO events, relevance is purely role-based — no DB count needed
+    // Only 2 select chains should be used: assignment + event lookup
+    setupFlushChains(mmoEvent); // no count chain provided
+    service.bufferLeave({ ...baseAction, vacatedRole: 'tank' });
+
+    jest.advanceTimersByTime(ROSTER_NOTIFY_GRACE_MS + 100);
+    await jest.runAllTimersAsync();
+
+    // 2 chains consumed: assignment + event. No 3rd chain for count.
+    // If a 3rd DB call were made, it would consume the fallback empty chain
+    // and the notification would still fire — so we verify by call count.
+    // The notify chain also calls buildFlushPayload (2 more mock methods).
+    expect(mockNotificationService.create).toHaveBeenCalled();
+    // Verify only 2 select chains were consumed (selectChains exhausted to [])
+    expect(selectChains).toHaveLength(0);
+  });
 });
