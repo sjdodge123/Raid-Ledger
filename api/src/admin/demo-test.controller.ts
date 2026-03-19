@@ -42,6 +42,11 @@ const TriggerDepartureSchema = z.object({
   discordUserId: z.string().min(1),
 });
 
+const CancelSignupSchema = z.object({
+  eventId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 const CreateTestSignupSchema = z.object({
@@ -130,6 +135,31 @@ export class DemoTestController {
       parsed.discordUserId,
     );
     return { success: true };
+  }
+
+  /** Cancel a user's signup (triggers bufferLeave) — DEMO_MODE only. */
+  @Post('cancel-signup')
+  @HttpCode(HttpStatus.OK)
+  async cancelSignupForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(CancelSignupSchema, body);
+    await this.demoTestService.cancelSignupForTest(
+      parsed.eventId,
+      parsed.userId,
+    );
+    return { success: true };
+  }
+
+  /** Flush the roster notification buffer immediately — DEMO_MODE only. */
+  @Post('flush-notification-buffer')
+  @HttpCode(HttpStatus.OK)
+  async flushNotificationBufferForTest(): Promise<{
+    success: boolean;
+    flushed: number;
+  }> {
+    const flushed = await this.demoTestService.flushNotificationBufferForTest();
+    return { success: true, flushed };
   }
 
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */

@@ -10,7 +10,9 @@ import type { CreateSignupDto, SignupResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
 import { SignupsService } from '../events/signups.service';
+import { SignupsRosterService } from '../events/signups-roster.service';
 import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -107,6 +109,24 @@ export class DemoTestService {
       strict: false,
     });
     await queueSvc.enqueue({ eventId, signupId, discordUserId }, 0);
+  }
+
+  /** Cancel a signup as if the user did it — triggers bufferLeave. */
+  async cancelSignupForTest(eventId: number, userId: number): Promise<void> {
+    await this.assertDemoMode();
+    const svc = this.moduleRef.get(SignupsRosterService, { strict: false });
+    await svc.cancel(eventId, userId);
+  }
+
+  /** Flush the roster notification buffer and return pending count. */
+  async flushNotificationBufferForTest(): Promise<number> {
+    await this.assertDemoMode();
+    const buf = this.moduleRef.get(RosterNotificationBufferService, {
+      strict: false,
+    });
+    const count = buf.pendingCount;
+    await buf.flushAll();
+    return count;
   }
 
   /** Directly update a signup's status in the DB. */

@@ -14,10 +14,12 @@ import {
   signupAs,
   cancelEvent,
   cancelSignup,
+  cancelSignupAs,
   rescheduleEvent,
   deleteEvent,
   addGameInterest,
   triggerDeparture,
+  flushNotificationBuffer,
   futureTime,
   sleep,
 } from '../fixtures.js';
@@ -601,6 +603,113 @@ const departureNotifSuppressedGenericNotFull: SmokeTest = {
   },
 };
 
+// ── ROK-919: Signup cancellation path (buffer + flush) ──
+
+const cancelSuppressedGenericNotFull: SmokeTest = {
+  name: 'Cancel from non-full generic event suppressed via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 2) throw new Error('Need 2+ demo users');
+    // Future generic event with capacity 10, only 2 signups → NOT full
+    const ev = await createEvent(ctx.api, 'cancel-gen-notfull', {
+      slotConfig: { type: 'generic', player: 10 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['player']);
+      await signupAs(ctx.api, ev.id, users[1], ['player']);
+      await sleep(1000);
+      // Cancel user's signup (triggers bufferLeave → 3 min timer)
+      await cancelSignupAs(ctx.api, ev.id, users[0]);
+      // Immediately flush the buffer (bypasses 3-min wait)
+      await flushNotificationBuffer(ctx.api);
+      await sleep(1000);
+      // Verify NO slot_vacated notification (event was NOT full)
+      const found = await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        8_000,
+        { intervalMs: 2000 },
+      ).then(() => true).catch(() => false);
+      if (found) {
+        throw new Error(
+          'slot_vacated sent after cancel from non-full generic event — the Palworld bug is back',
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const cancelSuppressedDpsMmo: SmokeTest = {
+  name: 'Cancel DPS from MMO event suppressed via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 3) throw new Error('Need 3+ demo users');
+    // Future MMO event, sign up tank + healer + dps
+    const ev = await createEvent(ctx.api, 'cancel-dps-mmo', {
+      ...mmoOverrides(ctx),
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await sleep(1000);
+      // Cancel the DPS signup (not a critical role)
+      await cancelSignupAs(ctx.api, ev.id, users[2]);
+      await flushNotificationBuffer(ctx.api);
+      await sleep(1000);
+      const found = await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        8_000,
+        { intervalMs: 2000 },
+      ).then(() => true).catch(() => false);
+      if (found) {
+        throw new Error(
+          'slot_vacated sent after DPS cancel from MMO event — role filter not applied on cancel path',
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const cancelFiredTankMmo: SmokeTest = {
+  name: 'Cancel Tank from MMO event sends notification via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 3) throw new Error('Need 3+ demo users');
+    // Future MMO event, sign up tank + healer + dps
+    const ev = await createEvent(ctx.api, 'cancel-tank-mmo', {
+      ...mmoOverrides(ctx),
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await sleep(1000);
+      // Cancel the TANK signup (critical role — should notify)
+      await cancelSignupAs(ctx.api, ev.id, users[0]);
+      await flushNotificationBuffer(ctx.api);
+      // Poll for slot_vacated notification (should appear)
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          'No slot_vacated after tank cancel — critical role notification broken',
+        );
+      });
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 export const dmNotificationTests: SmokeTest[] = [
   cancellationNotification,
   rescheduleNotification,
@@ -617,5 +726,8 @@ export const dmNotificationTests: SmokeTest[] = [
   departureNotifSentHealerMmo,
   departureNotifSentGenericFull,
   departureNotifSuppressedGenericNotFull,
+  cancelSuppressedGenericNotFull,
+  cancelSuppressedDpsMmo,
+  cancelFiredTankMmo,
   ...(includeSlow ? [reminderNotification] : []),
 ];
