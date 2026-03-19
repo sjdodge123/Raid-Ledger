@@ -271,8 +271,8 @@ test.describe('Regression: ROK-886 — event detail mobile layout', () => {
         const page = await context.newPage();
 
         await page.goto('/events');
-        // On mobile, the desktop grid is hidden. Use mobile event cards.
-        const eventCard = page.locator('[role="button"]').first();
+        // On mobile, use mobile event cards (desktop grid is hidden)
+        const eventCard = page.locator('[data-testid="mobile-event-card"]').first();
         await expect(eventCard).toBeVisible({ timeout: 10_000 });
         await eventCard.click();
         await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
