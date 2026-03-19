@@ -187,6 +187,7 @@ function formatInTimezone(isoString: string, tz: string): string {
     minute: '2-digit',
     hour12: true,
     timeZone: tz,
+    timeZoneName: 'short',
   });
 }
 

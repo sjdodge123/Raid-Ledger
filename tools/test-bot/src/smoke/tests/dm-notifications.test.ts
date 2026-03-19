@@ -371,6 +371,7 @@ function simulatePlaintextContent(title: string, message: string): string {
     return d.toLocaleDateString('en-US', {
       month: 'short', day: 'numeric',
       hour: 'numeric', minute: '2-digit', hour12: true,
+      timeZoneName: 'short',
     });
   };
   const raw = `${title}\n${message}`;

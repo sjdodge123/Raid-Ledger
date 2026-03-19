@@ -360,10 +360,11 @@ describe('buildEventEmbed — state-aware push content (ROK-866)', () => {
   });
 
   it('should use event push content for posted state', () => {
-    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+    const shortEvent = { ...baseEvent, title: 'Raid', game: null };
+    const { content } = factory.buildEventEmbed(shortEvent, baseContext, {
       state: EMBED_STATES.POSTED,
     });
-    expect(content).toContain('Mythic Raid Night');
+    expect(content).toContain('Raid');
     expect(content).toContain('signed up');
   });
 
@@ -386,14 +387,16 @@ describe('buildEventEmbed — state-aware push content (ROK-866)', () => {
   });
 
   it('should use event push content for filling state', () => {
-    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+    const shortEvent = { ...baseEvent, title: 'Raid', game: null };
+    const { content } = factory.buildEventEmbed(shortEvent, baseContext, {
       state: EMBED_STATES.FILLING,
     });
     expect(content).toContain('signed up');
   });
 
   it('should use event push content for live state', () => {
-    const { content } = factory.buildEventEmbed(baseEvent, baseContext, {
+    const shortEvent = { ...baseEvent, title: 'Raid', game: null };
+    const { content } = factory.buildEventEmbed(shortEvent, baseContext, {
       state: EMBED_STATES.LIVE,
     });
     expect(content).toContain('signed up');
@@ -470,7 +473,7 @@ describe('buildEventEmbed — timezone threading (ROK-918)', () => {
   });
 
   it('should use timezone for FULL state push content', () => {
-    const fullEvent = { ...baseEvent, signupCount: 20, maxAttendees: 20 };
+    const fullEvent = { ...baseEvent, title: 'Raid', game: null, signupCount: 20, maxAttendees: 20 };
     const { content } = factory.buildEventEmbed(
       fullEvent,
       { ...baseContext, timezone: 'UTC' },

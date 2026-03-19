@@ -85,13 +85,15 @@ describe('buildEventPushContent', () => {
     expect(result).toContain('Mar 16');
     expect(result).toContain('6:00');
     expect(result).toContain('PM');
+    expect(result).toContain('EDT');
   });
 
   it('should format with explicit UTC timezone (ROK-918)', () => {
     const result = buildEventPushContent(baseEvent, 'UTC');
-    // 2026-03-16T22:00:00Z in UTC = 10:00 PM
+    // 2026-03-16T22:00:00Z in UTC = 10:00 PM UTC
     expect(result).toContain('10:00');
     expect(result).toContain('PM');
+    expect(result).toContain('UTC');
   });
 
   it('should behave identically when timezone is null (backward compat)', () => {

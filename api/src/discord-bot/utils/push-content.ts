@@ -70,7 +70,7 @@ function formatSignupCount(count: number, max?: number | null): string {
   return max ? `${count}/${max} signed up` : `${count} signed up`;
 }
 
-/** Format a date as short locale string (e.g. "Mar 16, 10:00 PM"). */
+/** Format a date as short locale string (e.g. "Mar 16, 10:00 PM EDT"). */
 function formatShortDate(isoString: string, timezone?: string | null): string {
   const d = new Date(isoString);
   const opts: Intl.DateTimeFormatOptions = {
@@ -79,6 +79,7 @@ function formatShortDate(isoString: string, timezone?: string | null): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    timeZoneName: 'short',
   };
   if (timezone) opts.timeZone = timezone;
   return d.toLocaleDateString('en-US', opts);
