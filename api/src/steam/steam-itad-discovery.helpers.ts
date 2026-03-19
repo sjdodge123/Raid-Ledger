@@ -51,7 +51,7 @@ function buildItadGameRow(
     name: itadGame.title,
     slug: itadGame.slug,
     steamAppId,
-    itadGameId: itadGame.id,
+    itadGameId: itadGame.id || null,
     coverUrl: itadGame.assets?.boxart ?? null,
     hidden: false,
     banned: false,

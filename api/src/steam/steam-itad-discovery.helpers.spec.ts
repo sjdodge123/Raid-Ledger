@@ -447,7 +447,7 @@ describe('discoverGameViaItad', () => {
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
-    it('skips itadGameId lookup when itadGameId is null', async () => {
+    it('skips itadGameId lookup and normalizes empty string to null', async () => {
       const mockDb = buildMockDb();
       mockDb.query.games.findFirst
         .mockResolvedValueOnce(undefined) // isBannedBySlug
@@ -468,6 +468,10 @@ describe('discoverGameViaItad', () => {
       expect(result?.gameId).toBe(300);
       // Only 2 findFirst calls (isBannedBySlug + slug check), no itadGameId lookup
       expect(mockDb.query.games.findFirst).toHaveBeenCalledTimes(2);
+      // Empty string normalized to null — prevents unique constraint on empty string
+      expect(mockDb.insertValues).toHaveBeenCalledWith(
+        expect.objectContaining({ itadGameId: null }),
+      );
     });
   });
 
