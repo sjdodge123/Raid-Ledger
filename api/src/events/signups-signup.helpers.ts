@@ -224,3 +224,22 @@ export async function syncConfirmationStatus(tx: Tx, signup: SignupRow) {
     .limit(1);
   if (refreshed) signup.confirmationStatus = refreshed.confirmationStatus;
 }
+
+/**
+ * Update characterId and confirmationStatus on an existing signup
+ * when the DTO provides a different character than what's already stored.
+ * Prevents silent discard of character selection on duplicate web signups (ROK-868).
+ */
+export async function updateCharacterIfNeeded(
+  tx: Tx,
+  existing: SignupRow,
+  dto: CreateSignupDto | undefined,
+): Promise<void> {
+  if (!dto?.characterId || dto.characterId === existing.characterId) return;
+  await tx
+    .update(schema.eventSignups)
+    .set({ characterId: dto.characterId, confirmationStatus: 'confirmed' })
+    .where(eq(schema.eventSignups.id, existing.id));
+  existing.characterId = dto.characterId;
+  existing.confirmationStatus = 'confirmed';
+}

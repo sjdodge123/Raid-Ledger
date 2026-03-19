@@ -70,6 +70,7 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
   const { tx, eventRow, eventId, userId, dto, user } = p;
   const existing = await signupH.fetchExistingSignup(tx, eventId, userId);
   await signupH.reactivateIfCancelled(tx, existing, dto, p.hasCharacter);
+  await signupH.updateCharacterIfNeeded(tx, existing, dto);
   const rolesChanged = await signupH.updatePreferredRolesIfNeeded(
     tx,
     existing,

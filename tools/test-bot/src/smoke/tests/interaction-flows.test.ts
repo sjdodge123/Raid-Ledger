@@ -231,6 +231,51 @@ const eventDeleteCleansEmbed: SmokeTest = {
   },
 };
 
+/**
+ * ROK-868: Verify character data persists on duplicate web signup.
+ * When the event creator (auto-signed-up without character) signs up again
+ * via web with a character selected, the character info must appear in
+ * the signup response and the roster endpoint.
+ */
+const characterOnDuplicateSignup: SmokeTest = {
+  name: 'ROK-868: character data preserved on duplicate web signup',
+  category: 'flow',
+  async run(ctx) {
+    if (!ctx.testCharId || !ctx.mmoGameId) {
+      throw new Error('Need MMO game + character for this test');
+    }
+    const ev = await createEvent(ctx.api, 'flow-char-dup', {
+      gameId: ctx.mmoGameId,
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 },
+    });
+    try {
+      await pollForEmbed(
+        ctx.defaultChannelId,
+        (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      // Re-signup (duplicate path) with character + preferred role
+      const role = ctx.testCharRole ?? 'dps';
+      const res = await signup(ctx.api, ev.id, {
+        characterId: ctx.testCharId,
+        preferredRoles: [role],
+      }) as { character?: { id?: string; name?: string } | null };
+      if (!res.character || !res.character.id) {
+        throw new Error(
+          `Expected character data in signup response, got: ${JSON.stringify(res.character)}`,
+        );
+      }
+      if (res.character.id !== ctx.testCharId) {
+        throw new Error(
+          `Expected characterId=${ctx.testCharId}, got ${res.character.id}`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 export const interactionFlowTests: SmokeTest[] = [
   botConnectivityCheck,
   signupCancelFlow,
@@ -239,4 +284,5 @@ export const interactionFlowTests: SmokeTest[] = [
   embedSyncBatchFlush,
   multiUserSignupFlow,
   eventDeleteCleansEmbed,
+  characterOnDuplicateSignup,
 ];
