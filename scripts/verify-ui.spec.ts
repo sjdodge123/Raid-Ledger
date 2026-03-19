@@ -259,6 +259,40 @@ test.describe('Event detail', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Regression: ROK-886 — event detail mobile action button layout
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-886 — event detail mobile layout', () => {
+    test('action buttons use overflow menu on mobile viewport', async ({ browser }) => {
+        const context = await browser.newContext({
+            viewport: { width: 375, height: 812 },
+            storageState: 'scripts/.auth/admin.json',
+        });
+        const page = await context.newPage();
+
+        await page.goto('/events');
+        // On mobile, use mobile event cards (desktop grid is hidden)
+        const eventCard = page.locator('[data-testid="mobile-event-card"]').first();
+        await expect(eventCard).toBeVisible({ timeout: 10_000 });
+        await eventCard.click();
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+
+        // Invite and "More actions" visible; Reschedule hidden (in overflow)
+        await expect(page.getByRole('button', { name: 'Invite' })).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByRole('button', { name: 'More actions' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Reschedule' })).not.toBeVisible();
+
+        // Open overflow menu
+        await page.getByRole('button', { name: 'More actions' }).click();
+        await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Cancel Event' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Delete Event' })).toBeVisible();
+
+        await context.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Regression: ROK-847 — role preference icons on event detail
 // ---------------------------------------------------------------------------
 
