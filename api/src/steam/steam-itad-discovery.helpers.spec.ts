@@ -1,6 +1,7 @@
 import {
   discoverGameViaItad,
   isFullGame,
+  extractPgErrorDetail,
   type DiscoveryDeps,
 } from './steam-itad-discovery.helpers';
 import type { ItadGame } from '../itad/itad.constants';
@@ -425,6 +426,51 @@ describe('discoverGameViaItad', () => {
     });
   });
 
+  describe('itadGameId collision (ROK-855)', () => {
+    it('updates existing game when itadGameId matches but slug does not', async () => {
+      const mockDb = buildMockDb();
+      mockDb.query.games.findFirst
+        .mockResolvedValueOnce(undefined) // isBannedBySlug
+        .mockResolvedValueOnce(undefined) // upsertGame slug check — no match
+        .mockResolvedValueOnce({ id: 200, steamAppId: null }); // itadGameId lookup — match found
+
+      const deps = buildDeps({
+        db: mockDb.asDeps,
+        lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
+      });
+
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(result?.gameId).toBe(200);
+      // Should update, not insert
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it('skips itadGameId lookup when itadGameId is null', async () => {
+      const mockDb = buildMockDb();
+      mockDb.query.games.findFirst
+        .mockResolvedValueOnce(undefined) // isBannedBySlug
+        .mockResolvedValueOnce(undefined); // upsertGame slug check — no match
+      mockDb.insertReturning.mockResolvedValue([{ id: 300 }]);
+
+      const noItadIdGame: ItadGame = {
+        ...FAKE_ITAD_GAME,
+        id: '', // empty = no ITAD game ID
+      };
+      const deps = buildDeps({
+        db: mockDb.asDeps,
+        lookupBySteamAppId: jest.fn().mockResolvedValue(noItadIdGame),
+      });
+
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(result?.gameId).toBe(300);
+      // Only 2 findFirst calls (isBannedBySlug + slug check), no itadGameId lookup
+      expect(mockDb.query.games.findFirst).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('slug collision retry', () => {
     it('retries insert with appended steamAppId on unique violation', async () => {
       const mockDb = buildMockDb();
@@ -456,6 +502,58 @@ describe('discoverGameViaItad', () => {
       );
     });
 
+    it('clears itadGameId and igdbId on retry to prevent cascading unique violations', async () => {
+      const mockDb = buildMockDb();
+      mockDb.query.games.findFirst
+        .mockResolvedValueOnce(undefined) // isBannedBySlug
+        .mockResolvedValueOnce(undefined); // upsertGame slug check
+
+      enrichFromIgdb.mockResolvedValue({
+        igdbId: 119133,
+        name: 'Elden Ring',
+        slug: 'elden-ring',
+        coverUrl:
+          'https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg',
+        summary: 'An action RPG',
+        rating: 92.5,
+        aggregatedRating: 95.0,
+        genres: [12, 31],
+        themes: [1],
+        gameModes: [1, 2],
+        platforms: [6, 167],
+        screenshots: [],
+        videos: [],
+        firstReleaseDate: new Date('2022-02-25'),
+        steamAppId: STEAM_APP_ID,
+      });
+
+      // First insert throws unique violation
+      const uniqueError = new Error('unique violation');
+      (uniqueError as unknown as { code: string }).code = '23505';
+      mockDb.insertReturning
+        .mockRejectedValueOnce(uniqueError)
+        .mockResolvedValueOnce([{ id: 102 }]);
+
+      const queryIgdb = jest.fn() as (body: string) => Promise<IgdbApiGame[]>;
+      const deps = buildDeps({
+        db: mockDb.asDeps,
+        lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
+        queryIgdb,
+      });
+
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(result?.gameId).toBe(102);
+      // Retry row should null out itadGameId and igdbId
+      expect(mockDb.insertValues).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          slug: `elden-ring-${STEAM_APP_ID}`,
+          itadGameId: null,
+          igdbId: null,
+        }),
+      );
+    });
+
     it('throws non-unique-violation errors', async () => {
       const mockDb = buildMockDb();
       mockDb.query.games.findFirst
@@ -474,5 +572,49 @@ describe('discoverGameViaItad', () => {
         'connection lost',
       );
     });
+  });
+});
+
+describe('extractPgErrorDetail', () => {
+  it('extracts code, detail, and constraint from a PG error', () => {
+    const err = Object.assign(new Error('unique violation'), {
+      code: '23505',
+      detail: 'Key (itad_game_id)=(abc) already exists.',
+      constraint: 'games_itad_game_id_unique',
+    });
+
+    expect(extractPgErrorDetail(err)).toEqual({
+      code: '23505',
+      detail: 'Key (itad_game_id)=(abc) already exists.',
+      constraint: 'games_itad_game_id_unique',
+    });
+  });
+
+  it('extracts PG fields from nested cause', () => {
+    const cause = Object.assign(new Error('pg error'), {
+      code: '23505',
+      detail: 'Key (slug)=(elden-ring) already exists.',
+      constraint: 'games_slug_unique',
+    });
+    const wrapper = new Error('query failed');
+    (wrapper as unknown as { cause: Error }).cause = cause;
+
+    const result = extractPgErrorDetail(wrapper);
+
+    expect(result).toEqual({
+      code: '23505',
+      detail: 'Key (slug)=(elden-ring) already exists.',
+      constraint: 'games_slug_unique',
+    });
+  });
+
+  it('returns null for errors without PG fields', () => {
+    expect(extractPgErrorDetail(new Error('generic'))).toBeNull();
+  });
+
+  it('returns null for non-object values', () => {
+    expect(extractPgErrorDetail('string error')).toBeNull();
+    expect(extractPgErrorDetail(null)).toBeNull();
+    expect(extractPgErrorDetail(undefined)).toBeNull();
   });
 });

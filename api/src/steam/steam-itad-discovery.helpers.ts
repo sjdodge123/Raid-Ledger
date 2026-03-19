@@ -81,35 +81,64 @@ function mergeIgdbEnrichment(
   };
 }
 
-/** Try to merge with an existing game by slug, or insert a new row. */
+/** Try to merge with an existing game by slug or itadGameId, or insert a new row. */
 async function upsertGame(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
 ): Promise<{ id: number }[]> {
-  const existing = await db.query.games.findFirst({
+  const bySlug = await db.query.games.findFirst({
     where: eq(schema.games.slug, row.slug ?? ''),
     columns: { id: true, steamAppId: true },
   });
 
-  if (existing) {
+  if (bySlug) {
     // Don't merge if existing game already has a different Steam app ID
-    if (existing.steamAppId && existing.steamAppId !== row.steamAppId) {
+    if (bySlug.steamAppId && bySlug.steamAppId !== row.steamAppId) {
       return insertWithSlugRetry(db, row);
     }
-    await db
-      .update(schema.games)
-      .set({
-        steamAppId: row.steamAppId,
-        itadGameId: row.itadGameId,
-        coverUrl: row.coverUrl ?? undefined,
-        hidden: row.hidden,
-      })
-      .where(eq(schema.games.id, existing.id));
-    logger.debug(`Merged ITAD data into existing game ${existing.id}`);
-    return [{ id: existing.id }];
+    return mergeIntoExisting(db, bySlug.id, row);
+  }
+
+  // Check for itadGameId collision before inserting
+  const byItad = row.itadGameId
+    ? await findByItadGameId(db, row.itadGameId)
+    : null;
+  if (byItad) {
+    return mergeIntoExisting(db, byItad.id, row);
   }
 
   return insertWithSlugRetry(db, row);
+}
+
+/** Find a game by its ITAD game ID. */
+async function findByItadGameId(
+  db: PostgresJsDatabase<typeof schema>,
+  itadGameId: string,
+): Promise<{ id: number } | null> {
+  const found = await db.query.games.findFirst({
+    where: eq(schema.games.itadGameId, itadGameId),
+    columns: { id: true },
+  });
+  return found ?? null;
+}
+
+/** Merge discovery data into an existing game row. */
+async function mergeIntoExisting(
+  db: PostgresJsDatabase<typeof schema>,
+  existingId: number,
+  row: GameInsertRow,
+): Promise<{ id: number }[]> {
+  await db
+    .update(schema.games)
+    .set({
+      steamAppId: row.steamAppId,
+      itadGameId: row.itadGameId,
+      coverUrl: row.coverUrl ?? undefined,
+      hidden: row.hidden,
+    })
+    .where(eq(schema.games.id, existingId));
+  logger.debug(`Merged ITAD data into existing game ${existingId}`);
+  return [{ id: existingId }];
 }
 
 /** Insert a new game row, retrying with appended Steam app ID on slug collision. */
@@ -127,6 +156,8 @@ async function insertWithSlugRetry(
       const retryRow = {
         ...row,
         slug: `${row.slug}-${row.steamAppId}`,
+        itadGameId: null,
+        igdbId: null,
       };
       return db
         .insert(schema.games)
@@ -144,6 +175,31 @@ function isUniqueViolation(err: unknown): boolean {
   if ('cause' in err)
     return isUniqueViolation((err as { cause: unknown }).cause);
   return false;
+}
+
+/** PG error fields extracted from a postgres.js error or its cause chain. */
+export interface PgErrorDetail {
+  code: string;
+  detail: string;
+  constraint: string;
+}
+
+/**
+ * Walk an error/cause chain and extract PG error fields if present.
+ * postgres.js puts code/detail/constraint on the error or its cause.
+ */
+export function extractPgErrorDetail(err: unknown): PgErrorDetail | null {
+  if (typeof err !== 'object' || err === null) return null;
+  const obj = err as Record<string, unknown>;
+  if (typeof obj.code === 'string' && typeof obj.detail === 'string') {
+    return {
+      code: obj.code,
+      detail: obj.detail,
+      constraint: typeof obj.constraint === 'string' ? obj.constraint : '',
+    };
+  }
+  if ('cause' in obj) return extractPgErrorDetail(obj.cause);
+  return null;
 }
 
 /** Apply the adult content filter and set hidden flag if needed. */
