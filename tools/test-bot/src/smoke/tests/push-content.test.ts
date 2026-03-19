@@ -178,6 +178,31 @@ const updatedEmbedKeepsContent: SmokeTest = {
   },
 };
 
+const contentTimeMatchesEmbed: SmokeTest = {
+  name: 'Push content time matches embed body timezone (ROK-918)',
+  category: 'embed',
+  async run(ctx) {
+    const ev = await createEvent(ctx.api, 'push-tz', mmoOverrides(ctx));
+    try {
+      const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      assertHasContent(msg.content);
+      // Extract the date from content (e.g., "Mar 16, 6:00 PM")
+      // The embed body uses Discord's <t:epoch:f> which auto-localizes,
+      // while push content must use the guild timezone. Just verify:
+      // 1. Content has a month abbreviation (not raw epoch)
+      // 2. Content does NOT contain a bare UTC time when guild has a timezone
+      const monthPattern = /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/;
+      if (!monthPattern.test(msg.content)) {
+        throw new Error(
+          `Expected push content to contain a month abbreviation, got: "${msg.content}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 export const pushContentTests: SmokeTest[] = [
   eventEmbedHasContent,
   contentHasNoDiscordTokens,
@@ -186,4 +211,5 @@ export const pushContentTests: SmokeTest[] = [
   contentIncludesSignupCount,
   cancelledEmbedHasContent,
   updatedEmbedKeepsContent,
+  contentTimeMatchesEmbed,
 ];

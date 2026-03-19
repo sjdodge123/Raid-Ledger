@@ -78,6 +78,21 @@ describe('buildEventPushContent', () => {
     const result = buildEventPushContent(baseEvent);
     expect(result).not.toContain('\n');
   });
+
+  it('should use the provided timezone for date formatting (ROK-918)', () => {
+    // Event at 2026-03-16T22:00:00Z = Mar 16, 6:00 PM in America/New_York (EDT)
+    const result = buildEventPushContent(baseEvent, 'America/New_York');
+    expect(result).toContain('Mar 16');
+    expect(result).toContain('6:00');
+    expect(result).toContain('PM');
+  });
+
+  it('should format with explicit UTC timezone (ROK-918)', () => {
+    const result = buildEventPushContent(baseEvent, 'UTC');
+    // 2026-03-16T22:00:00Z in UTC = 10:00 PM
+    expect(result).toContain('10:00');
+    expect(result).toContain('PM');
+  });
 });
 
 describe('buildCancelledPushContent', () => {

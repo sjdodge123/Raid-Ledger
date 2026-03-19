@@ -360,6 +360,68 @@ const welcomeDmNotification: SmokeTest = {
 // Slow tests gated behind SMOKE_INCLUDE_SLOW=1
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 
+const rescheduleDmHasDate: SmokeTest = {
+  name: 'Reschedule DM includes new date/time, not empty parens (ROK-918)',
+  category: 'dm',
+  async run(ctx) {
+    const ev = await createEvent(ctx.api, 'dm-resched-date', mmoOverrides(ctx));
+    try {
+      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['dps']);
+      await sleep(1000);
+      // Remember unread count before reschedule
+      const before = await ctx.api
+        .get<{ data: unknown[] }>('/notifications/unread')
+        .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
+        .catch(() => 0);
+      await rescheduleEvent(ctx.api, ev.id, 300);
+      // Poll until a new notification appears
+      await pollForCondition(
+        async () => {
+          const after = await ctx.api
+            .get<{ data: unknown[] }>('/notifications/unread')
+            .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
+            .catch(() => 0);
+          return after > before ? true : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error('No reschedule notification within timeout');
+      });
+      // Fetch the latest notification and verify it contains a date, not "()"
+      type NotifDto = { type: string; message?: string };
+      const notifs = await ctx.api
+        .get<NotifDto[]>('/notifications?limit=5')
+        .catch(() => [] as NotifDto[]);
+      const list = Array.isArray(notifs) ? notifs : [];
+      const reschedNotif = list.find((n) => n.type === 'event_rescheduled');
+      if (!reschedNotif?.message) {
+        throw new Error('Could not find event_rescheduled notification');
+      }
+      if (reschedNotif.message.includes('()')) {
+        throw new Error(
+          `Reschedule DM contains empty parens: "${reschedNotif.message}"`,
+        );
+      }
+      // Verify the message includes a month name (formatted date)
+      const monthPattern = /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/;
+      if (!monthPattern.test(reschedNotif.message)) {
+        // Note: the raw message uses Discord timestamps <t:epoch:f> which
+        // won't contain a month — that's expected. The plaintext conversion
+        // in the DM processor handles that. This check validates the raw
+        // notification contains timestamp tokens (not empty).
+        if (!/<t:\d+/.test(reschedNotif.message)) {
+          throw new Error(
+            `Reschedule DM missing date: "${reschedNotif.message}"`,
+          );
+        }
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 export const dmNotificationTests: SmokeTest[] = [
   cancellationNotification,
   rescheduleNotification,
@@ -371,5 +433,6 @@ export const dmNotificationTests: SmokeTest[] = [
   pugInviteNotification,
   gameAffinityNotification,
   welcomeDmNotification,
+  rescheduleDmHasDate,
   ...(includeSlow ? [reminderNotification] : []),
 ];

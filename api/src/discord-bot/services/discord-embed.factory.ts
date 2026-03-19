@@ -97,7 +97,11 @@ export class DiscordEmbedFactory {
   ): EmbedResult {
     const state = options?.state ?? EMBED_STATES.POSTED;
     const buttons = options?.buttons ?? 'signup';
-    const content = this.buildPushContentForState(event, state);
+    const content = this.buildPushContentForState(
+      event,
+      state,
+      context.timezone,
+    );
     const color = this.getColorForState(state);
     const embed = this.createBaseEmbed(event, context, color);
     if (state === EMBED_STATES.CANCELLED || state === EMBED_STATES.COMPLETED) {
@@ -232,6 +236,7 @@ export class DiscordEmbedFactory {
   private buildPushContentForState(
     event: EmbedEventData,
     state: EmbedState,
+    timezone?: string | null,
   ): string {
     if (state === EMBED_STATES.CANCELLED) {
       return buildCancelledPushContent(event.title);
@@ -239,7 +244,7 @@ export class DiscordEmbedFactory {
     if (state === EMBED_STATES.COMPLETED) {
       return buildCompletedPushContent(event);
     }
-    return buildEventPushContent(event);
+    return buildEventPushContent(event, timezone);
   }
 
   private getColorForState(state: EmbedState): number {

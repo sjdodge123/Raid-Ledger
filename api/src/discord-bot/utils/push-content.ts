@@ -7,8 +7,11 @@ const MAX_LENGTH = 80;
  * Build a plaintext push notification preview for a scheduled event embed.
  * No Discord tokens, no markdown -- just a clean, human-readable summary.
  */
-export function buildEventPushContent(event: EmbedEventData): string {
-  const date = formatShortDate(event.startTime);
+export function buildEventPushContent(
+  event: EmbedEventData,
+  timezone?: string | null,
+): string {
+  const date = formatShortDate(event.startTime, timezone);
   const signup = formatSignupCount(event.signupCount, event.maxAttendees);
   const suffix = ` | ${date} | ${signup}`;
   const titleWithGame = buildTitleWithGame(event.title, event.game?.name);
@@ -68,15 +71,17 @@ function formatSignupCount(count: number, max?: number | null): string {
 }
 
 /** Format a date as short locale string (e.g. "Mar 16, 10:00 PM"). */
-function formatShortDate(isoString: string): string {
+function formatShortDate(isoString: string, timezone?: string | null): string {
   const d = new Date(isoString);
-  return d.toLocaleDateString('en-US', {
+  const opts: Intl.DateTimeFormatOptions = {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  });
+  };
+  if (timezone) opts.timeZone = timezone;
+  return d.toLocaleDateString('en-US', opts);
 }
 
 /** Truncate a string to max length, adding "..." if needed. */

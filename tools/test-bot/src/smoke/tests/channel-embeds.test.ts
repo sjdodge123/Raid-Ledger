@@ -171,6 +171,37 @@ const embedHasButtons: SmokeTest = {
   },
 };
 
+const nonMmoNoWowAvatars: SmokeTest = {
+  name: 'Non-MMO event roster does not show WoW character avatars (ROK-918)',
+  category: 'embed',
+  async run(ctx) {
+    // Create a generic event with NO game (or a non-MMO game)
+    const ev = await createEvent(ctx.api, 'embed-nowow', {
+      maxAttendees: 10,
+    });
+    try {
+      await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      await signup(ctx.api, ev.id, {});
+      const found = await waitForEmbedUpdate(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      const desc = found.embeds[0]?.description ?? '';
+      // WoW class emojis use custom emoji format: <:ClassName:id>
+      // A non-game event should NOT have any class emojis in its roster
+      const wowClassPattern = /<:(?:Warrior|Mage|Rogue|Priest|Paladin|Druid|Shaman|Hunter|Warlock|Monk|DemonHunter|DeathKnight|Evoker):/i;
+      if (wowClassPattern.test(desc)) {
+        throw new Error(
+          `Non-game event embed contains WoW class emoji: "${desc.slice(0, 200)}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 export const channelEmbedTests: SmokeTest[] = [
   eventEmbedPosted,
   embedFilling,
@@ -179,4 +210,5 @@ export const channelEmbedTests: SmokeTest[] = [
   embedCancelled,
   embedReschedule,
   embedHasButtons,
+  nonMmoNoWowAvatars,
 ];
