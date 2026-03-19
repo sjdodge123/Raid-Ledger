@@ -554,5 +554,46 @@ describe('buildPlaintextContent', () => {
       const result = buildPlaintextContent('Title', 'Moved to (tomorrow)');
       expect(result).toContain('(tomorrow)');
     });
+
+    it('replaces both timestamps so neither raw token remains', () => {
+      // Both <t:EPOCH:f> and <t:EPOCH:R> must be replaced — not just one
+      const epoch = Math.floor(
+        new Date('2026-06-15T18:00:00Z').getTime() / 1000,
+      );
+      const message = `Starts <t:${epoch}:f> (in <t:${epoch}:R>)`;
+      const result = buildPlaintextContent('Update', message);
+      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
+    });
+
+    it('handles parentheses with only whitespace as empty (collapses them)', () => {
+      const result = buildPlaintextContent('Title', 'Event at (   )');
+      expect(result).not.toMatch(/\(\s*\)/);
+    });
+
+    it('formats epoch=0 without crashing (Unix epoch)', () => {
+      const result = buildPlaintextContent('Title', 'Since <t:0:f>');
+      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
+      expect(typeof result).toBe('string');
+    });
+
+    it('produces correct date for a known epoch value', () => {
+      // 1700000000 seconds = Wed Nov 14, 2023
+      const result = buildPlaintextContent(
+        'Reminder',
+        'Event at <t:1700000000:f>',
+      );
+      expect(result).toContain('Nov 14');
+    });
+
+    it('still strips bold and channel after timestamps are replaced', () => {
+      const epoch = Math.floor(
+        new Date('2026-05-01T12:00:00Z').getTime() / 1000,
+      );
+      const message = `**Bold text** in <#999888777666555444> at <t:${epoch}:f>`;
+      const result = buildPlaintextContent('Title', message);
+      expect(result).not.toContain('**');
+      expect(result).not.toMatch(/<#\d+>/);
+      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
+    });
   });
 });

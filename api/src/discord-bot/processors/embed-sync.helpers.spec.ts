@@ -68,6 +68,51 @@ describe('resolveCharacterClass', () => {
     });
     expect(result).toBeNull();
   });
+
+  it('falls back to main char when characterClass is null due to game filter (non-WoW event, ROK-918)', () => {
+    // In ROK-918, the CASE WHEN in signupRowColumns filters out character class
+    // if the character belongs to a different game. The result is characterClass=null
+    // but mainCharacterClass may still be set (from the game-filtered subquery).
+    // resolveCharacterClass should use mainCharacterClass as the fallback.
+    const result = helpers.resolveCharacterClass({
+      characterClass: null, // CASE WHEN filtered out because wrong gameId
+      userId: 10,
+      mainCharacterClass: 'Mage', // main char IS for this game
+    });
+    expect(result).toBe('Mage');
+  });
+
+  it('returns null when game filter eliminates both class and no main char for game', () => {
+    // Non-WoW event: user has WoW chars but not for this game → both null
+    const result = helpers.resolveCharacterClass({
+      characterClass: null,
+      userId: 10,
+      mainCharacterClass: null, // no main char for this gameId either
+    });
+    expect(result).toBeNull();
+  });
+
+  it('does not use mainCharacterClass when direct characterClass is an empty string', () => {
+    // Empty string is falsy — should fall through to mainCharacterClass fallback
+    // This tests the truthiness check on characterClass
+    const result = helpers.resolveCharacterClass({
+      characterClass: '',
+      userId: 10,
+      mainCharacterClass: 'Priest',
+    });
+    // Empty string is falsy, so falls back to mainCharacterClass
+    expect(result).toBe('Priest');
+  });
+
+  it('returns characterClass when it has a value, regardless of mainCharacterClass', () => {
+    // Explicit: direct character takes priority even if main char is different game
+    const result = helpers.resolveCharacterClass({
+      characterClass: 'Death Knight',
+      userId: 5,
+      mainCharacterClass: 'Paladin',
+    });
+    expect(result).toBe('Death Knight');
+  });
 });
 
 // ─── computeEmbedState ───────────────────────────────────────────────────
