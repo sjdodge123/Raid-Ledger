@@ -66,7 +66,10 @@ async function setupEach() {
       },
       {
         provide: EventEmitter2,
-        useValue: { emit: jest.fn(), emitAsync: jest.fn().mockResolvedValue([]) },
+        useValue: {
+          emit: jest.fn(),
+          emitAsync: jest.fn().mockResolvedValue([]),
+        },
       },
     ],
   }).compile();

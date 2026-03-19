@@ -60,11 +60,25 @@ function makeSignupRow(
       roachedOutAt: null,
     },
     users: userId
-      ? { id: userId, username: 'testuser', discordId: 'disc-1', avatar: null, customAvatarUrl: null }
+      ? {
+          id: userId,
+          username: 'testuser',
+          discordId: 'disc-1',
+          avatar: null,
+          customAvatarUrl: null,
+        }
       : null,
     characters: null,
     roster_assignments: assignment
-      ? { id: 1, signupId, eventId: 5, role: 'player', position: 1, isOverride: 0, ...assignment }
+      ? {
+          id: 1,
+          signupId,
+          eventId: 5,
+          role: 'player',
+          position: 1,
+          isOverride: 0,
+          ...assignment,
+        }
       : null,
   };
 }
@@ -125,7 +139,12 @@ describe('buildRosterWithAssignments (ROK-914)', () => {
 
     const result = await buildRosterWithAssignments(db, 7);
 
-    expect(result.slots).toMatchObject({ tank: 2, healer: 4, dps: 10, bench: 2 });
+    expect(result.slots).toMatchObject({
+      tank: 2,
+      healer: 4,
+      dps: 10,
+      bench: 2,
+    });
   });
 
   it('populates pool with unassigned signups when event exists', async () => {
