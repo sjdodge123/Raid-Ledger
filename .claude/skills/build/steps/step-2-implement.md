@@ -22,6 +22,15 @@ cd ../Raid-Ledger--rok-<num> && ./scripts/deploy_dev.sh --ci --rebuild && cd -
 
 **DO NOT manually copy .env files, run npm install, or npm audit fix.** The deploy script handles all of this. See CLAUDE.md "Local Dev Environment" for details.
 
+After worktree creation, verify env files are present:
+```
+mcp__mcp-env__env_check()
+```
+If any .env files are missing (common for `tools/test-bot/.env`), copy them:
+```
+mcp__mcp-env__env_copy({ file: "tools/test-bot/.env" })
+```
+
 Update state for each story: `status: "worktree_ready"`
 
 ---

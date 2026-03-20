@@ -7,6 +7,31 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - **Project context:** `project-context.md` — architecture, stack, conventions
 - **Testing guide:** `TESTING.md` — patterns, anti-patterns, coverage thresholds, exemplary files
 
+## MCP Tools (registered in `.mcp.json`)
+
+Three custom MCP servers provide tools for environment management, story tracking, and Discord testing. **Use these instead of manual shell commands.**
+
+### `mcp-env` — Environment & Story Status (`tools/mcp-env/`)
+| Tool | Use When |
+|------|----------|
+| `mcp__mcp-env__env_check` | Check .env files: existence, missing vars, worktree status. Use BEFORE `deploy_dev.sh` or when builds fail due to missing env vars. |
+| `mcp__mcp-env__env_copy` | Copy .env files from main repo to worktree. Use when setting up worktrees. |
+| `mcp__mcp-env__env_service_status` | Check Docker containers, ports, API health. Use to verify local dev environment is running. |
+| `mcp__mcp-env__story_status` | Check delivery status of stories (git branches + PRs). Use when resuming in-flight work to reconcile state against origin. |
+
+### `mcp-discord` — Discord UI Testing (`tools/mcp-discord/`)
+| Tool | Use When |
+|------|----------|
+| `mcp__mcp-discord__discord_screenshot` | Take a screenshot of Discord. Use for visual debugging. |
+| `mcp__mcp-discord__discord_read_messages` | Read messages from a Discord channel. |
+| `mcp__mcp-discord__discord_verify_embed` | Verify embed content in a channel. |
+| `mcp__mcp-discord__discord_navigate_channel` | Navigate to a specific channel. |
+| `mcp__mcp-discord__discord_click_button` | Click a button on a Discord message. |
+| `mcp__mcp-discord__discord_check_voice_members` | Check voice channel members. |
+| `mcp__mcp-discord__discord_check_notification` | Check DM notifications. |
+
+**Note:** `mcp-discord` requires Discord running with CDP (`./scripts/launch-discord.sh`). Local dev only.
+
 ## Pull Requests
 
 - **Always enable auto-merge (squash)** after creating or pushing to a PR: `gh pr merge <branch> --auto --squash`

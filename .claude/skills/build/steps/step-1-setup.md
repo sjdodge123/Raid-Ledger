@@ -40,26 +40,24 @@ done
 
 ### Origin Reconciliation (MANDATORY before resuming)
 
-The state file may be stale from a previous session that shipped stories. Always verify:
+The state file may be stale from a previous session that shipped stories. **Use the `mcp__mcp-env__story_status` MCP tool** to check all stories at once:
+
+```
+mcp__mcp-env__story_status({ stories: ["ROK-XXX", "ROK-YYY"] })
+```
+
+This returns structured JSON with `verdict` per story: `done`, `in_flight`, or `not_started`. Use the verdicts to update state:
+
+- `done` → story is shipped. Update state: `status: "done"`, all gates → `PASS`. Skip it.
+- `in_flight` → branch on origin, check PR state in the response to determine resume point.
+- `not_started` → resume from where the state file says.
+
+**If `mcp__mcp-env__story_status` is unavailable**, fall back to manual git checks:
 
 ```bash
 git fetch origin
-
-# For each story in the state file, check if its branch was merged to main:
 git branch -r --merged origin/main | grep rok-<num>
 ```
-
-**For each story**, apply this logic in order:
-
-1. **Branch merged to main?** (`git branch -r --merged origin/main | grep rok-<num>`)
-   - Yes → story is **done**. Update state: `status: "done"`, all gates → `PASS`. Skip it entirely.
-2. **Branch exists on origin but not merged?** (`git ls-remote --heads origin rok-<num>`)
-   - Yes → check for an existing PR: `gh pr list --head rok-<num>-<short-name> --json state,url`
-     - PR merged → story is **done**
-     - PR open → resume from Step 5 (ship)
-     - No PR → resume from Step 3 (validate)
-3. **Branch does NOT exist on origin?**
-   - Check worktree for commits → resume from where the state file says
 
 After reconciliation, update the state file with corrected statuses, then:
   - If all stories are `done` → clean up worktree and start fresh
