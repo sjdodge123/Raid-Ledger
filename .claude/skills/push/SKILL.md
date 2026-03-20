@@ -27,6 +27,47 @@ echo "Branch: $BRANCH"
 
 ---
 
+## Step 1.5: Scope Detection — Determine Which Checks to Run
+
+Analyze the diff against main to decide which CI steps are relevant:
+
+```bash
+git diff --name-only origin/main
+```
+
+Evaluate the changed files and classify the changeset:
+
+| Files Changed | Checks Needed |
+|---------------|---------------|
+| **Only** `.claude/skills/`, `.md` files, `docs/` | **None** — skip to Step 9 (push) |
+| **Only** `web/src/` (no api, no contract) | Web only: build contract + web, typecheck web, lint web, test web, Playwright |
+| **Only** `api/src/` (no web, no contract) | API only: build contract + api, typecheck api, lint api, test api |
+| **Only** `packages/contract/` | Contract + both: build all, typecheck all, lint all, test all |
+| **Only** test files (`*.spec.ts`, `*.test.tsx`) | Tests only: run tests for affected workspace(s), skip build/lint |
+| **Only** config/tooling (`.eslintrc`, `tsconfig`, `package.json`, CI workflows) | Full CI — config changes can break anything |
+| **Mixed** (api + web, or contract + anything) | Full CI |
+
+**Present your assessment** before running checks:
+
+```
+## Scope Assessment
+Changed files: 3
+- api/src/events/signups.service.ts
+- api/src/events/signups.service.spec.ts
+- web/src/pages/event-detail/EventDetailRoster.tsx
+
+Classification: Mixed (api + web)
+Checks to run: Full CI (build all, typecheck all, lint all, test all, Playwright)
+```
+
+**Rules:**
+- When in doubt, run MORE checks, not fewer
+- Contract changes always trigger full CI
+- If a `.spec.ts` file changed, always run that workspace's tests even if only tests changed
+- Never skip checks for files you're unsure about
+
+---
+
 ## Step 2: Check for Uncommitted Changes
 
 ```bash
@@ -52,13 +93,24 @@ git fetch origin main && git rebase origin/main
 
 ---
 
-## Step 4: Build (all workspaces)
+## Steps 4–8: CI Checks (scoped by Step 1.5)
 
-Build order matters — contract first, then api and web:
+**Only run the checks identified in your scope assessment.** Skip steps that don't apply.
+
+If Step 1.5 determined "docs-only" → skip ALL of steps 4–8, jump to Step 9.
+
+### Step 4: Build (affected workspaces)
+
+Build order matters — contract first, then downstream:
 
 ```bash
+# Always build contract if ANY code changed (it's fast)
 npm run build -w packages/contract
+
+# Only if api files changed:
 npm run build -w api
+
+# Only if web files changed:
 npm run build -w web
 ```
 
@@ -66,10 +118,13 @@ npm run build -w web
 
 ---
 
-## Step 5: TypeScript (all workspaces)
+### Step 5: TypeScript (affected workspaces)
 
 ```bash
+# Only if api files changed:
 npx tsc --noEmit -p api/tsconfig.json
+
+# Only if web files changed:
 npx tsc --noEmit -p web/tsconfig.json
 ```
 
@@ -77,10 +132,13 @@ npx tsc --noEmit -p web/tsconfig.json
 
 ---
 
-## Step 6: Lint (all workspaces)
+### Step 6: Lint (affected workspaces)
 
 ```bash
+# Only if api files changed:
 npm run lint -w api
+
+# Only if web files changed:
 npm run lint -w web
 ```
 
@@ -88,20 +146,25 @@ npm run lint -w web
 
 ---
 
-## Step 7: Tests (all workspaces)
+### Step 7: Tests (affected workspaces)
 
 ```bash
+# Only if api files changed:
 npm run test -w api
+
+# Only if web files changed:
 npm run test -w web
 ```
 
 **STOP** and fix any test failures before continuing. **NEVER dismiss failures as "pre-existing"** — investigate and fix them, or create a Linear story with root cause.
 
+**If only test files changed** (e.g., fixing a flaky test), you can skip build/typecheck/lint and just run the tests.
+
 ---
 
-## Step 8: Playwright Smoke Tests (if UI changes)
+### Step 8: Playwright Smoke Tests (if UI changes)
 
-If the branch touches any files in `web/src/`:
+Only if `web/src/` files changed:
 
 ```bash
 npx playwright test
@@ -191,19 +254,20 @@ gh pr merge $(git branch --show-current) --auto --squash
 
 ## Step 12: Report
 
-Print a summary:
+Print a summary showing which checks ran and which were skipped (with reason):
 
 ```
 ## Push Complete
 
-| Check | Result |
-|-------|--------|
-| Build | ✓ |
-| TypeScript | ✓ |
-| Lint | ✓ |
-| Tests (api) | ✓ <count> passed |
-| Tests (web) | ✓ <count> passed |
-| Playwright | ✓ / skipped |
-| Push | ✓ origin/<branch> |
-| PR | #<number> / existing |
+| Check | Result | Reason |
+|-------|--------|--------|
+| Scope | docs-only / api-only / web-only / full | <file count> files changed |
+| Build | ✓ / skipped | <reason if skipped> |
+| TypeScript | ✓ / skipped | <reason if skipped> |
+| Lint | ✓ / skipped | <reason if skipped> |
+| Tests (api) | ✓ <count> passed / skipped | <reason if skipped> |
+| Tests (web) | ✓ <count> passed / skipped | <reason if skipped> |
+| Playwright | ✓ / skipped | <reason if skipped> |
+| Push | ✓ origin/<branch> | |
+| PR | #<number> / existing / skipped | |
 ```
