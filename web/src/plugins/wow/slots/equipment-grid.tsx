@@ -4,6 +4,7 @@ import type { JSX } from 'react';
  * Renders WoW character equipment in a paperdoll-style layout.
  */
 import { useState } from 'react';
+import { useMediaQuery } from '../../../hooks/use-media-query';
 import { isWowheadLoaded } from '../hooks/use-wowhead-tooltips';
 import { ItemFallbackTooltip } from '../components/item-fallback-tooltip';
 import { getWowheadItemUrl, getWowheadItemData } from '../lib/wowhead-urls';
@@ -45,6 +46,7 @@ export function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: {
     gameVariant: string | null; onItemClick?: () => void;
 }) {
     const [showFallback, setShowFallback] = useState(false);
+    const isMobile = useMediaQuery('(max-width: 768px)');
     if (!item) return <EmptySlot slotName={slotName} />;
 
     const qualityClass = QUALITY_COLORS[item.quality.toUpperCase()] ?? 'text-gray-300';
@@ -54,8 +56,8 @@ export function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: {
         <div className="relative flex items-center gap-3 p-2 rounded bg-overlay border border-edge min-h-[52px] cursor-pointer hover:bg-overlay/80 transition-colors"
             onClick={onItemClick} onMouseEnter={() => setShowFallback(true)} onMouseLeave={() => setShowFallback(false)}>
             <SlotIcon item={item} iconBorderClass={iconBorderClass} />
-            <SlotItemDetails item={item} qualityClass={qualityClass} gameVariant={gameVariant} />
-            {showFallback && !isWowheadLoaded() && <ItemFallbackTooltip item={item} />}
+            <SlotItemDetails item={item} qualityClass={qualityClass} gameVariant={gameVariant} isMobile={isMobile} />
+            {showFallback && !isMobile && !isWowheadLoaded() && <ItemFallbackTooltip item={item} />}
         </div>
     );
 }
@@ -73,12 +75,13 @@ function SlotSockets({ sockets }: { sockets: EquipmentItemDto['sockets'] }) {
 }
 
 /** Item name, slot label, subclass, enchantments and sockets */
-function SlotItemDetails({ item, qualityClass, gameVariant }: {
-    item: EquipmentItemDto; qualityClass: string; gameVariant: string | null;
+function SlotItemDetails({ item, qualityClass, gameVariant, isMobile }: {
+    item: EquipmentItemDto; qualityClass: string; gameVariant: string | null; isMobile: boolean;
 }) {
     return (
         <div className="min-w-0 flex-1">
-            <a href={getWowheadItemUrl(item.itemId, gameVariant)} data-wowhead={getWowheadItemData(item.itemId, gameVariant)}
+            <a href={getWowheadItemUrl(item.itemId, gameVariant)}
+                data-wowhead={isMobile ? undefined : getWowheadItemData(item.itemId, gameVariant)}
                 target="_blank" rel="noopener noreferrer" className={`text-sm font-medium truncate block ${qualityClass} hover:underline`}
                 onClick={(e) => e.preventDefault()}>{item.name}</a>
             <div className="flex items-center gap-2 text-xs text-muted">

@@ -18,9 +18,16 @@ export function isWowheadLoaded(): boolean {
 /**
  * Refresh Wowhead tooltip links whenever dependencies change.
  * Call after rendering any elements with data-wowhead attributes.
+ *
+ * ROK-921: Skips refreshLinks() on mobile viewports — tooltips are
+ * suppressed via CSS and data-wowhead stripping; calling refreshLinks
+ * would still attach hover/touch handlers via href URL matching.
  */
 export function useWowheadTooltips(deps: unknown[] = []) {
     useEffect(() => {
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        if (isMobile) return;
+
         // Small delay to let DOM render, then refresh
         const timer = setTimeout(() => {
             if (isWowheadLoaded()) {

@@ -145,3 +145,15 @@
 .wow-item-card .iconsmall {
     display: none !important;
 }
+
+/*
+ * ROK-921: Suppress Wowhead tooltip popups on mobile.
+ * The Wowhead script attaches tooltips via both data-wowhead attributes AND
+ * href URL pattern matching on <a> tags. Stripping data-wowhead alone is
+ * insufficient — the CSS rule below hides the tooltip container on mobile.
+ */
+@media (max-width: 768px) {
+    .wowhead-tooltip {
+        display: none !important;
+    }
+}
