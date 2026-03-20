@@ -637,9 +637,10 @@ const cancelSuppressedDpsMmo: SmokeTest = {
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
     if (users.length < 3) throw new Error('Need 3+ demo users');
-    // Future MMO event, sign up tank + healer + dps
+    // Future MMO event — always pass slotConfig explicitly for CI
     const ev = await createEvent(ctx.api, 'cancel-dps-mmo', {
-      ...mmoOverrides(ctx),
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
     });
     try {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
@@ -672,9 +673,11 @@ const cancelFiredTankMmo: SmokeTest = {
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
     if (users.length < 3) throw new Error('Need 3+ demo users');
-    // Future MMO event, sign up tank + healer + dps
+    // Future MMO event — always pass slotConfig so roster assignments work
+    // even in CI where mmoGameId may not exist
     const ev = await createEvent(ctx.api, 'cancel-tank-mmo', {
-      ...mmoOverrides(ctx),
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
     });
     try {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
