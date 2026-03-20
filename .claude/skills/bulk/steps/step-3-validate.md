@@ -155,9 +155,13 @@ Update state: `gates.smoke: PASS` (or `FAIL`)
 
 ## 3i. Push Batch Branch
 
-```bash
-git push -u origin batch/YYYY-MM-DD
+**Use the `/push` skill** — NEVER use raw `git push`. The skill runs full local CI before pushing.
+
 ```
+/push --skip-pr
+```
+
+The `--skip-pr` flag skips PR creation — the PR is created in Step 4.
 
 ---
 
