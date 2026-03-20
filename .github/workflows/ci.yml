@@ -9,8 +9,69 @@ on:
       - main
 
 jobs:
+  # ─── Scope Detection ──────────────────────────────────────────────
+  # Determines which jobs need to run based on changed files.
+  # All downstream jobs check these outputs before starting.
+  detect-changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      contract: ${{ steps.filter.outputs.contract }}
+      smoke_tests: ${{ steps.filter.outputs.smoke_tests }}
+      container: ${{ steps.filter.outputs.container }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'api/src/**'
+              - 'web/src/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig*.json'
+              - '.eslintrc*'
+              - 'vitest.config.*'
+              - 'playwright.config.*'
+            api:
+              - 'api/src/**'
+              - 'api/jest*.config.*'
+              - 'packages/contract/**'
+            web:
+              - 'web/src/**'
+              - 'web/vitest.config.*'
+              - 'packages/contract/**'
+            contract:
+              - 'packages/contract/**'
+            smoke_tests:
+              - 'web/src/**'
+              - 'scripts/smoke/**'
+              - 'playwright.config.*'
+              - 'packages/contract/**'
+            container:
+              - 'Dockerfile*'
+              - 'api/Dockerfile'
+              - 'api/scripts/docker-entrypoint.sh'
+              - 'nginx/**'
+              - '.github/workflows/ci.yml'
+              - 'api/src/ai/providers/ollama-docker*'
+              - 'api/src/ai/providers/ollama-setup*'
+
+  # ─── Lint + Build ──────────────────────────────────────────────────
+  # Skipped for docs/skills-only PRs (no code changes)
   lint:
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.code == 'true'
 
     steps:
       - name: Checkout code
@@ -44,9 +105,13 @@ jobs:
       - name: Lint
         run: npm run lint --workspaces
 
+  # ─── Unit Tests ────────────────────────────────────────────────────
   unit-tests:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [detect-changes, lint]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.code == 'true'
 
     steps:
       - name: Checkout code
@@ -78,9 +143,13 @@ jobs:
         run: npx vitest run --coverage
         working-directory: web
 
+  # ─── Integration Tests (sharded) ───────────────────────────────────
   integration-test-shard:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [detect-changes, lint]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.api == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -146,19 +215,29 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    needs: integration-test-shard
+    needs: [detect-changes, integration-test-shard]
     if: always()
     steps:
       - name: Check shard results
         run: |
-          if [ "${{ needs.integration-test-shard.result }}" != "success" ]; then
+          RESULT="${{ needs.integration-test-shard.result }}"
+          if [ "$RESULT" = "skipped" ]; then
+            echo "Integration tests skipped (no API changes)"
+            exit 0
+          fi
+          if [ "$RESULT" != "success" ]; then
             echo "Integration test shards failed"
             exit 1
           fi
 
+  # ─── Playwright Smoke Tests ────────────────────────────────────────
+  # Only runs when web/UI files or Playwright config changed
   smoke-tests:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [detect-changes, lint]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.smoke_tests == 'true'
 
     services:
       postgres:
@@ -278,33 +357,13 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  # Container startup validation — runs on PRs that touch Docker, entrypoint, or CI workflow files
-  # Builds the allinone image and verifies the API starts and responds to health checks
-  detect-container-changes:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.filter.outputs.container }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Check for container-related changes
-        uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            container:
-              - 'Dockerfile*'
-              - 'api/Dockerfile'
-              - 'api/scripts/docker-entrypoint.sh'
-              - 'nginx/**'
-              - '.github/workflows/ci.yml'
-              - 'api/src/ai/providers/ollama-docker*'
-              - 'api/src/ai/providers/ollama-setup*'
-
+  # ─── Container Startup Validation ──────────────────────────────────
+  # Only runs on PRs that touch Docker, entrypoint, nginx, or CI files
   container-startup:
-    needs: detect-container-changes
-    if: needs.detect-container-changes.outputs.should_run == 'true'
+    needs: detect-changes
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.detect-changes.outputs.container == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -365,7 +424,7 @@ jobs:
           docker stop rl-ci-test 2>/dev/null || true
           docker rm rl-ci-test 2>/dev/null || true
 
-  # Docker image build — only on main after all tests pass
+  # ─── Docker Image Build (main only) ───────────────────────────────
   docker-build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [unit-tests, integration-tests, smoke-tests]
