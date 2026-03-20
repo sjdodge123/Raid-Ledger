@@ -14,7 +14,7 @@ import {
   DEPARTURE_PROMOTE_BUTTON_IDS,
   EMBED_COLORS,
 } from '../discord-bot.constants';
-import { computeSlotCapacity } from '../../events/signups-signup.helpers';
+import { resolveEventCapacity } from '../../events/signups-signup.helpers';
 import { isSlotVacatedRelevant } from '../../notifications/slot-vacated-relevance.helpers';
 
 /** Bundled dependencies passed from the processor. */
@@ -147,15 +147,6 @@ export async function isDepartureRelevant(
     return isSlotVacatedRelevant(event, vacatedRole, 0);
   }
   return wasEventFullBeforeDeparture(db, event);
-}
-
-/** Resolve the total non-bench capacity for an event. */
-function resolveEventCapacity(
-  event: typeof schema.events.$inferSelect,
-): number | null {
-  const slotConfig = event.slotConfig as Record<string, unknown> | null;
-  if (slotConfig) return computeSlotCapacity(slotConfig);
-  return event.maxAttendees ?? null;
 }
 
 /**

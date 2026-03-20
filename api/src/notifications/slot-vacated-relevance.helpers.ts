@@ -5,24 +5,17 @@
  * Shared by: signup cancellation path (roster-notification-buffer) and
  * voice departure path (departure-grace processor).
  */
-import { computeSlotCapacity } from '../events/signups-signup.helpers';
+import { resolveEventCapacity } from '../events/signups-signup.helpers';
 import type * as schema from '../drizzle/schema';
+
+// Re-export so existing consumers (e.g. tests) can still import from here
+export { resolveEventCapacity };
 
 /** Minimal event shape needed for relevance checks. */
 type EventLike = Pick<
   typeof schema.events.$inferSelect,
   'slotConfig' | 'maxAttendees'
 >;
-
-/**
- * Resolve the total non-bench capacity for an event.
- * Extracted so both relevance check and departure-grace can share it.
- */
-export function resolveEventCapacity(event: EventLike): number | null {
-  const slotConfig = event.slotConfig as Record<string, unknown> | null;
-  if (slotConfig) return computeSlotCapacity(slotConfig);
-  return event.maxAttendees ?? null;
-}
 
 /**
  * Check whether a slot departure is relevant enough to notify the organizer.
