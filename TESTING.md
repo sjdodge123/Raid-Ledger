@@ -384,26 +384,84 @@ render(<MyComponent featureEnabled={true} />);
 
 ## Smoke Tests (Playwright)
 
-Smoke tests live in `scripts/verify-ui.spec.ts` and run in CI via the `smoke-tests` job with `DEMO_MODE=true`.
+Playwright smoke tests verify end-to-end UI flows in a real browser against a running dev server with demo data. They run in CI via the `smoke-tests` job with `DEMO_MODE=true`.
 
-### Adding a new smoke test
+### Directory structure
 
-1. Add the test to the appropriate `test.describe` block in `scripts/verify-ui.spec.ts`
-2. Use demo-mode persona login when authentication is needed:
-   ```ts
-   await page.goto('/login');
-   const adminBtn = page.getByRole('button', { name: /admin/i });
-   await adminBtn.click();
-   await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10_000 });
-   ```
+Tests are split per feature in `scripts/smoke/`:
+
+```
+scripts/
+├── playwright-global-setup.ts        # Authenticates admin, seeds demo data, saves storageState
+├── smoke/
+│   ├── helpers.ts                    # Shared navigation + viewport helpers
+│   ├── auth.smoke.spec.ts            # Login, credentials, unauthenticated guard
+│   ├── calendar.smoke.spec.ts        # Calendar views
+│   ├── characters.smoke.spec.ts      # Character management
+│   ├── events.smoke.spec.ts          # Event list, detail, reschedule, regressions
+│   ├── games.smoke.spec.ts           # Game library
+│   ├── navigation.smoke.spec.ts      # Sidebar, routing, responsive nav
+│   ├── notifications.smoke.spec.ts   # Notification center
+│   └── players.smoke.spec.ts         # Player profiles
+```
+
+**File naming convention:** `<feature>.smoke.spec.ts` — Playwright picks up files matching `*.smoke.spec.ts` in `scripts/smoke/` (configured in `playwright.config.ts`).
+
+### Playwright projects
+
+Two viewport projects run every test file:
+
+| Project | Device Profile | Purpose |
+|---------|---------------|---------|
+| `desktop` | `Desktop Chrome` | Standard desktop viewport |
+| `mobile` | `Pixel 5` | Mobile responsive layout testing |
+
+Tests that only apply to one viewport should skip the other:
+
+```ts
+test('desktop grid renders event cards', async ({ page }) => {
+    test.skip(test.info().project.name === 'mobile', 'Desktop-only test — uses desktop grid selectors');
+    // ...
+});
+```
+
+### Authentication
+
+Global setup (`scripts/playwright-global-setup.ts`) runs before all tests:
+
+1. Authenticates `admin@local` via `POST /auth/local`
+2. Seeds demo data via `POST /admin/settings/demo/install` (idempotent)
+3. Saves `storageState` to `scripts/.auth/admin.json`
+
+All tests inherit this authenticated state automatically. For tests that need an unauthenticated context:
+
+```ts
+test('redirects to login when unauthenticated', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: undefined });
+    const page = await context.newPage();
+    // ... test unauthenticated behavior ...
+    await context.close();
+});
+```
+
+### Writing a Playwright smoke test
+
+1. Create a new file `scripts/smoke/<feature>.smoke.spec.ts` (or add to an existing file if the feature fits)
+2. Import from `@playwright/test` and use shared helpers from `./helpers`
 3. Keep tests resilient — use `isVisible().catch(() => false)` guards for optional UI elements
 4. Test for absence of errors rather than exact content: `expect(page.locator('body')).not.toHaveText(/something went wrong/i)`
+5. Use `test.skip()` with a descriptive reason for viewport-specific tests
+6. Clean up resources in `finally` blocks when tests create data via API
 
 ### Running locally
 
 ```bash
-npx playwright test                           # auto-starts dev server on :5173
-BASE_URL=http://localhost:80 npx playwright test  # against Docker
+npx playwright test                               # All tests — auto-starts dev server on :5173
+npx playwright test --project=desktop              # Desktop viewport only
+npx playwright test --project=mobile               # Mobile viewport only
+npx playwright test scripts/smoke/events.smoke.spec.ts  # Single file
+npx playwright test --ui                           # Interactive UI mode
+BASE_URL=http://localhost:80 npx playwright test   # Against Docker
 ```
 
 ## Smoke Test Authoring Standards (Discord Companion Bot)
@@ -476,6 +534,221 @@ cd tools/test-bot && npm run lint:no-sleep
 
 This script (`tools/test-bot/scripts/no-sleep-lint.sh`) scans all smoke test files for `sleep()` calls and fails if any are found.
 
+## Discord Smoke Tests (Companion Bot)
+
+The Discord companion bot runs 53 smoke tests that validate real Discord behavior end-to-end — embed posting, roster calculations, DM notifications, interaction flows, and voice activity. These extend the authoring standards above with operational details.
+
+### Directory structure
+
+```
+tools/test-bot/src/smoke/
+├── api.ts               # HTTP client for API calls
+├── assert.ts            # Assertion helpers (assertEmbedTitle, assertHasButton, etc.)
+├── config.ts            # Smoke config from env vars (API_URL, guild ID, timeouts)
+├── fixtures.ts          # Test fixtures (createEvent, signup, awaitProcessing, etc.)
+├── run.ts               # Test runner — connects bot, discovers channels, runs all suites
+├── types.ts             # SmokeTest and TestContext type definitions
+└── tests/
+    ├── channel-embeds.test.ts      # Embed lifecycle: post, update, cancel, reschedule
+    ├── roster-calculation.test.ts  # Slot allocation, MMO roles, bench promotion
+    ├── dm-notifications.test.ts    # DM delivery for signups, reminders, roster changes
+    ├── interaction-flows.test.ts   # Multi-step flows: signup→cancel, vacate→promote
+    ├── voice-activity.test.ts      # Voice join/leave, attendance tracking, session flush
+    └── push-content.test.ts        # Push notification content validation
+```
+
+### Test categories
+
+| Category | File | Tests | What it validates |
+|----------|------|-------|-------------------|
+| Channel embeds | `channel-embeds.test.ts` | 8 | Embed posted, FILLING status, tentative, cancel signup, event cancel, reschedule, buttons, non-MMO avatar filtering |
+| Roster calculation | `roster-calculation.test.ts` | 4 | Slot allocation, MMO role assignment, bench overflow, promotion |
+| DM notifications | `dm-notifications.test.ts` | 18+1 slow | Signup confirmation, roster assignment, event cancellation, reminders |
+| Interaction flows | `interaction-flows.test.ts` | 8 | Bot connectivity, signup→cancel, slot vacate, bench promote, embed sync, multi-user, event delete cleanup, duplicate signup character data |
+| Voice activity | `voice-activity.test.ts` | 4+2 slow | Voice join/leave tracking, attendance session management |
+| Push content | `push-content.test.ts` | 8 | Push notification payload validation |
+
+### Test anatomy
+
+Each smoke test implements the `SmokeTest` interface:
+
+```ts
+const myTest: SmokeTest = {
+  name: 'Descriptive test name',
+  category: 'embed',  // Used for reporting/filtering
+  async run(ctx: TestContext) {
+    const ev = await createEvent(ctx.api, 'unique-tag', { /* overrides */ });
+    try {
+      // Wait for embed to appear in Discord channel
+      const msg = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        ctx.config.timeoutMs,
+      );
+      // Assert on the embed content
+      assertEmbedTitle(msg.embeds[0], /expected pattern/);
+    } finally {
+      await deleteEvent(ctx.api, ev.id);  // Always clean up
+    }
+  },
+};
+```
+
+### Setup and running
+
+1. Configure `tools/test-bot/.env` with bot token and guild ID
+2. Ensure the API is running with `DEMO_MODE=true` and the Discord bot is connected
+3. Run:
+
+```bash
+cd tools/test-bot && npm run smoke       # Full suite
+cd tools/test-bot && npm run lint:no-sleep  # Verify no sleep() calls before pushing
+```
+
+### Files that trigger smoke test review
+
+When any of these files change, Discord smoke tests should be run and reviewed. See `CLAUDE.md` for the quick-reference trigger file list.
+
+- `api/src/discord-bot/**` — bot listeners, embed factory, channel bindings, voice state
+- `api/src/notifications/**` — notification dispatch, DM embeds, reminder services
+- `api/src/events/signups*` — signup creation, auto-allocation, roster assignment
+- `api/src/events/event-lifecycle*` — cancel, reschedule, delete flows
+- `tools/test-bot/src/smoke/**` — the smoke tests themselves
+
+## TDD Workflow
+
+Raid Ledger follows a test-driven development (TDD) workflow where the test agent writes failing tests first, and the dev agent builds code to make them pass. This ensures every feature ships with coverage and that specs are validated before implementation begins.
+
+### When to write tests first
+
+| Scenario | Write test first? | Rationale |
+|----------|--------------------|-----------|
+| New feature with clear AC | Yes | Spec is well-defined — translate AC into assertions |
+| Bug fix with reproduction steps | Yes | Write a failing test that reproduces the bug, then fix it |
+| Refactoring existing code | Yes (if missing) | Add coverage for current behavior before restructuring |
+| Exploratory spike | No | Spike first, add tests when the approach solidifies |
+| Docs-only / config changes | No | No runtime behavior to test |
+
+### The TDD flow
+
+1. **Test agent reads the spec** — acceptance criteria, architect guidance, and any linked issues
+2. **Test agent writes failing tests** — one or more tests per AC, committed to the feature branch
+3. **Dev agent pulls the failing tests** — builds the implementation to make them pass
+4. **Dev agent runs all tests** — confirms the new tests pass and no existing tests regress
+5. **Both verify** — the test agent may add edge-case tests after the initial implementation
+
+### Test type mapping
+
+Every feature or fix requires an end-to-end test. The type depends on what changed:
+
+| Change type | Test type | Location | Example |
+|-------------|-----------|----------|---------|
+| UI feature / page | Playwright smoke test | `scripts/smoke/<feature>.smoke.spec.ts` | New page renders, form submits, responsive layout works |
+| Discord bot / notification | Companion bot smoke test | `tools/test-bot/src/smoke/tests/` | Embed posts correctly, DM delivered, roster updates reflected |
+| API endpoint / service | Integration test | `api/src/**/*.integration.spec.ts` | CRUD persists, JOINs work, auth enforced |
+| Pure logic / utility | Unit test | `api/src/**/*.spec.ts` or `web/src/**/*.test.ts` | Function produces correct output for all edge cases |
+
+### Writing a failing test from a spec
+
+Start from the acceptance criteria and work backwards:
+
+```ts
+// AC: "Reschedule modal shows player availability count"
+test('reschedule modal shows signup count', async ({ page }) => {
+    await navigateToFirstEvent(page, testInfo);
+    await page.getByRole('button', { name: 'Reschedule' }).click();
+    // This assertion will FAIL until the feature is implemented
+    await expect(page.getByText(/player availability/i)).toBeVisible({ timeout: 5_000 });
+});
+```
+
+For backend features, write the integration test against the expected API contract:
+
+```ts
+// AC: "PATCH /events/:id/reschedule returns new start time"
+it('returns updated start time after reschedule', async () => {
+    const res = await testApp.request
+        .patch(`/events/${eventId}/reschedule`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ startTime: newTime, endTime: newEndTime });
+    expect(res.status).toBe(200);
+    expect(new Date(res.body.startTime).getTime()).toBe(newTime.getTime());
+});
+```
+
+## E2E Test Requirements
+
+Every feature and bug fix must include an end-to-end test. This is not optional — untested code does not ship.
+
+### What qualifies as an e2e test
+
+| Change type | Required test | What it proves |
+|-------------|--------------|----------------|
+| UI changes | Playwright smoke test (both `desktop` and `mobile` projects) | Page renders, interactions work, responsive layout correct |
+| Discord bot / notification changes | Companion bot smoke test | Real Discord messages sent, embeds correct, DMs delivered |
+| API-only changes | Integration test (Jest, real DB via Testcontainers) | Full request→response cycle works with real persistence |
+| Pure logic | Unit test | All edge cases covered, transformations correct |
+
+### Coverage must be meaningful
+
+A test that only checks "no crash" is insufficient. Tests must verify the **behavioral outcome** described in the acceptance criteria:
+
+```ts
+// Insufficient — only proves the page loads
+await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+
+// Sufficient — proves the feature works
+await expect(page.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible();
+await expect(page.getByText(/player availability/i)).toBeVisible();
+```
+
+### When multiple test types apply
+
+Some features span multiple layers. In those cases, write tests at each relevant level:
+
+- A Discord embed feature needs both a **companion bot smoke test** (embed content) and a **unit test** (embed builder logic)
+- A new API endpoint needs both an **integration test** (persistence + auth) and a **Playwright smoke test** if it has a UI
+
+## Test Failure Rules
+
+Test failures are treated as blocking issues. No exceptions.
+
+### NEVER dismiss failures as "pre-existing"
+
+Every test failure encountered during development must be investigated. If the failure is genuinely unrelated to the current change:
+
+1. Identify the root cause
+2. Fix it in the current PR if the fix is small
+3. If the fix is non-trivial, create a Linear story with the root cause and a reproduction path — do NOT just skip the test
+
+### NEVER skip or weaken assertions to make CI pass
+
+```ts
+// NEVER DO THIS — weakening an assertion to avoid a failure
+test.skip('embed shows roster count');  // "Skipping flaky test"
+
+// NEVER DO THIS — loosening the assertion
+expect(rosterCount).toBeGreaterThanOrEqual(0);  // Was: expect(rosterCount).toBe(3)
+```
+
+If a test is failing, the correct response is one of:
+- **Fix the code** — the test caught a real bug
+- **Fix the test infrastructure** — a helper or mock is misconfigured
+- **Update the test** — the behavior intentionally changed (document why in the commit message)
+
+### Every failure gets investigated
+
+When a test fails in CI or locally:
+
+1. **Read the full error** — stack trace, assertion diff, screenshot (Playwright)
+2. **Reproduce locally** — run the specific test in isolation
+3. **Identify root cause** — is it a code bug, test bug, or environment issue?
+4. **Fix or track** — fix in-PR or create a Linear story with root cause analysis
+
+### No `sleep()` in smoke tests
+
+This rule is critical for reliability. See the "Smoke Test Authoring Standards" section above for deterministic wait helpers. The `lint:no-sleep` script enforces this automatically.
+
 ## Exemplary Reference Files
 
 These files demonstrate best testing practices — use them as templates:
@@ -497,3 +770,13 @@ These files demonstrate best testing practices — use them as templates:
 | `components/events/event-card.test.tsx` | Factory pattern, behavioral assertions, fake timers |
 | `components/ui/modal.test.tsx` | Focus trap, ESC key, backdrop click, vitest-axe |
 | `lib/avatar.test.ts` | Pure function, URL construction edge cases |
+
+### Playwright Smoke Tests
+| File | Pattern |
+|------|---------|
+| `scripts/smoke/events.smoke.spec.ts` | Desktop/mobile viewport skipping, navigateToFirstEvent helper, API-driven test data with `finally` cleanup, regression test blocks |
+
+### Discord Smoke Tests
+| File | Pattern |
+|------|---------|
+| `tools/test-bot/src/smoke/tests/channel-embeds.test.ts` | SmokeTest interface, pollForEmbed + waitForEmbedUpdate, `finally` cleanup with deleteEvent, MMO-aware overrides, assertEmbedTitle/assertHasButton assertions |
