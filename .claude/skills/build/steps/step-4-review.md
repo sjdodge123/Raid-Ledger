@@ -114,9 +114,10 @@ npx playwright test
 Update state: `gates.smoke_test: PASS` (or `FAIL`)
 
 If smoke tests fail:
-- Diagnose the failure
+- Diagnose the failure — read the error, check if it's timing-related (`sleep()` usage)
 - If it's a regression from this story → fix or re-spawn dev
-- If it's a pre-existing issue → note it, proceed if unrelated
+- If it's a test infrastructure issue (flaky timing, missing wait) → fix the test, don't skip it
+- **NEVER dismiss as "pre-existing" and proceed** — investigate and fix, or create a Linear story with root cause
 
 ---
 

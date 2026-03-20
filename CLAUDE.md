@@ -56,6 +56,17 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - **Read `TESTING.md` before writing or modifying any test file.**
 - Shared test infra: `api/src/common/testing/` (drizzle-mock, factories), `web/src/test/` (MSW handlers, render helpers, factories)
 
+### Test Failure Rules (STRICT — applies to ALL agents)
+
+- **NEVER dismiss test failures as "pre-existing" or "unrelated to this change."** Every test failure must be investigated and either fixed or tracked in a Linear story with root cause.
+- **NEVER use `sleep()` in smoke tests.** Use deterministic wait helpers (`waitForEmbedUpdate`, `pollForCondition`, etc.).
+- **NEVER skip or weaken a test assertion to make CI pass.** Fix the code or fix the test infrastructure.
+- **Every feature/fix MUST include an end-to-end test:**
+  - UI changes → Playwright smoke test (desktop + mobile)
+  - Discord bot/notification changes → Discord companion bot smoke test
+  - API-only changes → Integration test (Jest, real DB)
+  - Pure logic → Unit test
+
 ## Discord Testing (tools/)
 
 Two tools exist for testing Discord bot functionality. **Use these when testing any Discord-related feature** (events, attendance, notifications, embeds, voice).

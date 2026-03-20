@@ -254,9 +254,11 @@ pipeline:
       needs_architect: false
       requirements_gathered: true  # false if interview was interrupted
       spec_file: "planning-artifacts/specs/ROK-XXX.md"  # null if spec was already complete
+      e2e_test_type: "playwright"  # playwright | discord_smoke | integration | unit
+      e2e_test_file: null          # filled by test agent in Step 2d
       gates:
+        e2e_test_first: PENDING
         dev: PENDING
-        test_agent: PENDING
         ci: PENDING
         operator: PENDING
         reviewer: PENDING

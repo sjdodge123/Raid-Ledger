@@ -90,7 +90,7 @@ Impact assessment:
 
 Recommended action:
 - Re-spawn dev to fix issues 1-2
-- Issue 3: Check if this exists on main — if so, it's pre-existing and shouldn't block this PR
+- Issue 3: Critical — investigate root cause, fix the test or the code. Create a Linear story if out of scope.
 ```
 
 ---
@@ -98,7 +98,7 @@ Recommended action:
 ## Rules
 
 1. **Run EVERYTHING.** Don't skip test suites to save time. You are the last safety net.
-2. **Distinguish regressions from pre-existing issues.** If a test fails on the feature branch, check if it also fails on main. Pre-existing failures shouldn't block the PR.
+2. **Never dismiss failures as "pre-existing."** Investigate every failure — fix the test infrastructure (e.g., replace `sleep()` with polling), fix the code, or create a Linear story with root cause. Do NOT skip and proceed.
 3. **Be thorough but fast.** Run tests in parallel where possible.
 4. **Report specific failures.** Test name, file, expected vs actual, and your assessment of whether it's caused by this story's changes.
 5. **Even `testing_level: light` stories go through smoke testing.** This gate is never skipped — it's the regression safety net for all stories.
