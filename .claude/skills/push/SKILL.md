@@ -12,7 +12,7 @@ argument-hint: "[--skip-pr]"
 
 **References:** Read `CLAUDE.md` for project conventions and `TESTING.md` for test failure rules before proceeding. Test failures are NEVER dismissed as "pre-existing."
 
-Execute every step in order. Do NOT skip steps. If any step fails, STOP and fix before continuing.
+Execute every step in order. If any step fails, STOP and fix before continuing.
 
 ---
 
