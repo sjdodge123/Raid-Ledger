@@ -84,6 +84,81 @@ test.describe('Events list', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Events List — mobile
+// ---------------------------------------------------------------------------
+
+test.describe('Events list — mobile', () => {
+    test('page renders heading and event cards', async ({ page }) => {
+        test.skip(test.info().project.name === 'desktop', 'Mobile-only test — uses mobile card selectors');
+
+        await page.goto('/events');
+        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
+        // Mobile event cards use data-testid="mobile-event-card" (button elements)
+        await expect(
+            page.locator('[data-testid="mobile-event-card"]').first()
+        ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('tab navigation works (Upcoming/Past/My Events/Plans)', async ({ page }) => {
+        test.skip(test.info().project.name === 'desktop', 'Mobile-only test — uses mobile toolbar selectors');
+
+        await page.goto('/events');
+
+        // Mobile tabs live inside a toolbar with aria-label "Events filters"
+        const mobileToolbar = page.getByRole('toolbar', { name: 'Events filters' });
+        await expect(mobileToolbar).toBeVisible({ timeout: 10_000 });
+
+        const upcomingTab = mobileToolbar.getByRole('button', { name: 'Upcoming' });
+        const pastTab = mobileToolbar.getByRole('button', { name: 'Past' });
+        const mineTab = mobileToolbar.getByRole('button', { name: 'My Events' });
+        const plansTab = mobileToolbar.getByRole('button', { name: 'Plans' });
+
+        await expect(upcomingTab).toBeVisible();
+        await expect(pastTab).toBeVisible();
+        await expect(mineTab).toBeVisible();
+        await expect(plansTab).toBeVisible();
+
+        // Click Past tab
+        await pastTab.click();
+        await expect(page.getByRole('heading', { name: /Past Events/i })).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('search input accepts text and filters results', async ({ page }) => {
+        test.skip(test.info().project.name === 'desktop', 'Mobile-only test — uses mobile toolbar selectors');
+
+        await page.goto('/events');
+
+        // Mobile search input is inside the toolbar
+        const searchInput = page.getByRole('textbox', { name: 'Search events' });
+        await expect(searchInput).toBeVisible({ timeout: 10_000 });
+
+        // Search for a nonsense term — should show empty state
+        await searchInput.fill('xyznonexistent');
+        // Wait for the mobile event cards to disappear (filtered out)
+        await expect(page.locator('[data-testid="mobile-event-card"]').first()).not.toBeVisible({ timeout: 10_000 });
+
+        // Should show zero mobile event cards
+        const eventCards = page.locator('[data-testid="mobile-event-card"]');
+        const count = await eventCards.count();
+        expect(count).toBe(0);
+
+        // Clear search — events should reappear
+        await searchInput.fill('');
+        await expect(
+            page.locator('[data-testid="mobile-event-card"]').first()
+        ).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('Create Event and Plan Event links are visible', async ({ page }) => {
+        test.skip(test.info().project.name === 'desktop', 'Mobile-only test — verifies mobile action links');
+
+        await page.goto('/events');
+        await expect(page.getByRole('link', { name: 'Create Event' })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole('link', { name: 'Plan Event' })).toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Event Detail
 // ---------------------------------------------------------------------------
 
