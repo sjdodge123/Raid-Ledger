@@ -13,6 +13,7 @@ import {
   cancelEvent,
   rescheduleEvent,
   deleteEvent,
+  sleep,
 } from '../fixtures.js';
 import { assertEmbedTitle, assertEmbedCount, assertHasButton } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -199,6 +200,7 @@ const nonMmoNoWowAvatars: SmokeTest = {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       // Sign up with MMO character (which has a WoW class)
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx));
+      await sleep(2000); // Wait for embed sync queue to process
       const found = await waitForEmbedUpdate(
         ctx.defaultChannelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),

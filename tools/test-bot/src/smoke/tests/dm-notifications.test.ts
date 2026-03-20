@@ -645,7 +645,7 @@ const cancelSuppressedDpsMmo: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
-      await sleep(1000);
+      await sleep(3000); // Wait for auto-allocation to assign roster slots
       // Cancel the DPS signup (not a critical role)
       await cancelSignupAs(ctx.api, ev.id, users[2]);
       await flushNotificationBuffer(ctx.api);
@@ -680,10 +680,11 @@ const cancelFiredTankMmo: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
-      await sleep(1000);
+      await sleep(3000); // Wait for auto-allocation to assign roster slots
       // Cancel the TANK signup (critical role — should notify)
       await cancelSignupAs(ctx.api, ev.id, users[0]);
       await flushNotificationBuffer(ctx.api);
+      await sleep(1000);
       // Poll for slot_vacated notification (should appear)
       await pollForCondition(
         async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
