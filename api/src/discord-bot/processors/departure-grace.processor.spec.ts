@@ -85,11 +85,13 @@ beforeEach(() => {
   mockEventEmitter = { emit: jest.fn() };
 
   processor = new DepartureGraceProcessor(
+    {} as never,
     mockDb as never,
     mockVoiceAttendanceService as unknown as VoiceAttendanceService,
     mockNotificationService as unknown as NotificationService,
     mockClientService as unknown as DiscordBotClientService,
     mockEventEmitter as unknown as EventEmitter2,
+    { register: jest.fn() } as never,
   );
 });
 

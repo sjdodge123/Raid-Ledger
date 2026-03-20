@@ -1,7 +1,8 @@
-import { Inject, Logger } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Job } from 'bullmq';
+import { Job, Queue } from 'bullmq';
+import { QueueHealthService } from '../../queue/queue-health.service';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -38,18 +39,28 @@ import {
  * 7. Emit events for Discord embed + WebSocket sync
  */
 @Processor(DEPARTURE_GRACE_QUEUE)
-export class DepartureGraceProcessor extends WorkerHost {
+export class DepartureGraceProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(DepartureGraceProcessor.name);
 
   constructor(
+    @InjectQueue(DEPARTURE_GRACE_QUEUE)
+    private readonly queue: Queue,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly voiceAttendanceService: VoiceAttendanceService,
     private readonly notificationService: NotificationService,
     private readonly clientService: DiscordBotClientService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly queueHealth: QueueHealthService,
   ) {
     super();
+  }
+
+  onModuleInit() {
+    this.queueHealth.register(this.queue);
   }
 
   /** Bundled dependencies for extracted helper functions. */

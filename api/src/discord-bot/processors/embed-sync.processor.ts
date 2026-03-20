@@ -1,6 +1,7 @@
-import { Inject, Logger } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job, Queue } from 'bullmq';
+import { QueueHealthService } from '../../queue/queue-health.service';
 import { isPerfEnabled, perfLog } from '../../common/perf-logger';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -34,10 +35,15 @@ import {
  * Retries up to 3 times with exponential backoff.
  */
 @Processor(EMBED_SYNC_QUEUE)
-export class EmbedSyncProcessor extends WorkerHost {
+export class EmbedSyncProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(EmbedSyncProcessor.name);
 
   constructor(
+    @InjectQueue(EMBED_SYNC_QUEUE)
+    private readonly queue: Queue,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
@@ -45,8 +51,13 @@ export class EmbedSyncProcessor extends WorkerHost {
     private readonly settingsService: SettingsService,
     private readonly scheduledEventService: ScheduledEventService,
     private readonly channelResolver: ChannelResolverService,
+    private readonly queueHealth: QueueHealthService,
   ) {
     super();
+  }
+
+  onModuleInit() {
+    this.queueHealth.register(this.queue);
   }
 
   async process(job: Job<EmbedSyncJobData>): Promise<void> {

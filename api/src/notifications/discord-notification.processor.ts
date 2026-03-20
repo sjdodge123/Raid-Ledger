@@ -1,6 +1,7 @@
-import { Logger } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Logger, type OnModuleInit } from '@nestjs/common';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job, Queue } from 'bullmq';
+import { QueueHealthService } from '../queue/queue-health.service';
 import { isPerfEnabled, perfLog } from '../common/perf-logger';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
@@ -18,16 +19,26 @@ import type { NotificationType } from '../drizzle/schema/notification-preference
  * Retries up to 3 times with exponential backoff.
  */
 @Processor(DISCORD_NOTIFICATION_QUEUE)
-export class DiscordNotificationProcessor extends WorkerHost {
+export class DiscordNotificationProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(DiscordNotificationProcessor.name);
 
   constructor(
+    @InjectQueue(DISCORD_NOTIFICATION_QUEUE)
+    private readonly queue: Queue,
     private readonly clientService: DiscordBotClientService,
     private readonly embedService: DiscordNotificationEmbedService,
     private readonly discordNotificationService: DiscordNotificationService,
     private readonly settingsService: SettingsService,
+    private readonly queueHealth: QueueHealthService,
   ) {
     super();
+  }
+
+  onModuleInit() {
+    this.queueHealth.register(this.queue);
   }
 
   async process(job: Job<DiscordNotificationJobData>): Promise<void> {
