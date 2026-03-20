@@ -466,6 +466,16 @@ Available helpers:
 - Clean up in `finally` blocks — delete events, bindings, and other test data
 - Never depend on state from a previous test
 
+### Rule 6: Lint before pushing
+
+Run the no-sleep lint to catch accidental `sleep()` regressions:
+
+```bash
+cd tools/test-bot && npm run lint:no-sleep
+```
+
+This script (`tools/test-bot/scripts/no-sleep-lint.sh`) scans all smoke test files for `sleep()` calls and fails if any are found.
+
 ## Exemplary Reference Files
 
 These files demonstrate best testing practices — use them as templates:

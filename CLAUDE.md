@@ -113,6 +113,7 @@ A discord.js v14 bot for **API-level testing** — CI-compatible, stable, uses o
   - Messages: `readLastMessages(channelId, count)`, `waitForMessage(channelId, predicate, timeout)`, `readDMs(count)`
   - Voice: `joinVoice(channelId)`, `leaveVoice()`, `moveToChannel(channelId)`, `getVoiceMembers(channelId)`
   - Interactions: `clickButton()`, `selectDropdownOption()` (limited — bots can't click other bots' buttons via Discord API)
+  - **Deterministic polling** (replaces `sleep()`): `pollForEmbed(channelId, predicate, timeout)`, `waitForEmbedUpdate(channelId, predicate, timeout)`, `waitForDM(userId, predicate, timeout)`, `pollForCondition(check, timeout)` — see `tools/test-bot/src/helpers/polling.ts`
 - **Key limitation:** Bots cannot interact with other bots' message components. Test button/interaction handlers directly in NestJS integration tests instead.
 
 ### MCP Discord Tools (`tools/mcp-discord/`)
@@ -133,6 +134,16 @@ Playwright-over-CDP tools for **UI-level verification** — local dev only, requ
 2. If a test fails due to intentional behavior change, update the test to match the new behavior — do NOT delete or weaken the assertion
 3. If adding new Discord functionality, add a corresponding smoke test
 4. Never modify a smoke test just to make CI pass — investigate why it broke first
+5. Run the no-sleep lint before pushing: `npm run lint:no-sleep` (from `tools/test-bot/`)
+
+**Deterministic test framework:** All smoke tests use deterministic wait helpers instead of `sleep()`. See TESTING.md "Smoke Test Authoring Standards" for the full helper reference.
+
+**Test-only API endpoints** (`/admin/test/*`, DEMO_MODE only): Used by smoke test fixtures for operations that require server-side coordination. Key endpoints:
+- `POST /admin/test/await-processing` — drain all BullMQ queues before asserting
+- `POST /admin/test/flush-embed-queue` — drain embed sync queue
+- `POST /admin/test/flush-notification-buffer` — flush buffered notifications
+- `POST /admin/test/flush-voice-sessions` — flush in-memory voice sessions to DB
+- See `api/src/admin/demo-test.controller.ts` for the full list
 
 **Test categories:** channel embeds (7), roster calculation (4), DM notifications (7+1 slow), interaction flows (7), voice (3+1 slow)
 
@@ -141,7 +152,9 @@ Playwright-over-CDP tools for **UI-level verification** — local dev only, requ
 - `api/src/notifications/**` — notification dispatch, DM embeds, reminder services
 - `api/src/events/signups*` — signup creation, auto-allocation, roster assignment
 - `api/src/events/event-lifecycle*` — cancel, reschedule, delete flows
+- `api/src/admin/demo-test*` — test-only API endpoints used by smoke tests
 - `tools/test-bot/src/smoke/**` — the tests themselves
+- `tools/test-bot/src/helpers/polling.ts` — deterministic wait helpers
 
 ### When to use which tool
 
