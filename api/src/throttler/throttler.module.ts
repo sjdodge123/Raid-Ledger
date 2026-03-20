@@ -12,7 +12,9 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
           {
             name: 'default',
             ttl: 60_000,
-            limit: config.get<number>('THROTTLE_DEFAULT_LIMIT', 60),
+            limit: config.get('DEMO_MODE') === 'true'
+              ? 10_000
+              : config.get<number>('THROTTLE_DEFAULT_LIMIT', 60),
           },
         ],
       }),

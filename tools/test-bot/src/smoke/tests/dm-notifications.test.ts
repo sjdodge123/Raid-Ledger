@@ -11,6 +11,7 @@
 import { pollForCondition } from '../../helpers/polling.js';
 import {
   createEvent,
+  signup,
   signupAs,
   cancelEvent,
   cancelSignup,
@@ -20,6 +21,7 @@ import {
   addGameInterest,
   triggerDeparture,
   flushNotificationBuffer,
+  getNotificationsFor,
   futureTime,
   sleep,
 } from '../fixtures.js';
@@ -395,52 +397,40 @@ const rescheduleDmHasDate: SmokeTest = {
   name: 'Reschedule DM plaintext includes new date, not empty parens (ROK-918)',
   category: 'dm',
   async run(ctx) {
+    const recipientId = ctx.dmRecipientUserId;
     const ev = await createEvent(ctx.api, 'dm-resched-date', mmoOverrides(ctx));
     try {
-      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['dps']);
+      // Sign up a demo user (NOT admin) — admin is excluded as rescheduler
+      await signupAs(ctx.api, ev.id, recipientId, ['dps']);
       await sleep(1000);
-      // Remember unread count before reschedule
-      const before = await ctx.api
-        .get<{ data: unknown[] }>('/notifications/unread')
-        .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
-        .catch(() => 0);
       await rescheduleEvent(ctx.api, ev.id, 300);
-      // Poll until a new notification appears
-      await pollForCondition(
+      // Poll until the demo user gets the reschedule notification
+      type NotifDto = { type: string; title?: string; message?: string };
+      const reschedNotif = await pollForCondition(
         async () => {
-          const after = await ctx.api
-            .get<{ data: unknown[] }>('/notifications/unread')
-            .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
-            .catch(() => 0);
-          return after > before ? true : null;
+          const notifs = await getNotificationsFor(
+            ctx.api, recipientId, 'event_rescheduled', 5,
+          ) as NotifDto[];
+          const list = Array.isArray(notifs) ? notifs : [];
+          return list.find((n) => n.type === 'event_rescheduled') ?? null;
         },
         ctx.config.timeoutMs,
         { intervalMs: 2000 },
       ).catch(() => {
-        throw new Error('No reschedule notification within timeout');
+        throw new Error('No reschedule notification for demo user within timeout');
       });
-      // Fetch the latest notification
-      type NotifDto = { type: string; title?: string; message?: string };
-      const notifs = await ctx.api
-        .get<NotifDto[]>('/notifications?limit=5')
-        .catch(() => [] as NotifDto[]);
-      const list = Array.isArray(notifs) ? notifs : [];
-      const reschedNotif = list.find((n) => n.type === 'event_rescheduled');
       if (!reschedNotif?.message) {
-        throw new Error('Could not find event_rescheduled notification');
+        throw new Error('Reschedule notification has no message');
       }
-      // Simulate the DM processor's plaintext conversion
       const plaintext = simulatePlaintextContent(
         reschedNotif.title ?? '', reschedNotif.message,
       );
-      // Verify plaintext does NOT contain empty parens (the ROK-918 bug)
       if (plaintext.includes('()')) {
         throw new Error(
           `Plaintext DM contains empty parens "()" — ` +
           `stripDiscordMarkup bug. Plaintext: "${plaintext}"`,
         );
       }
-      // Verify plaintext includes a formatted date (month abbreviation)
       const monthPattern = /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/;
       if (!monthPattern.test(plaintext)) {
         throw new Error(

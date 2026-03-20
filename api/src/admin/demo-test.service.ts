@@ -1,7 +1,7 @@
 import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { NOTIFICATION_TYPES } from '../drizzle/schema/notification-preferences';
 import type { ChannelPrefs } from '../drizzle/schema/notification-preferences';
@@ -109,6 +109,25 @@ export class DemoTestService {
       strict: false,
     });
     await queueSvc.enqueue({ eventId, signupId, discordUserId }, 0);
+  }
+
+  /** Query a user's notifications — DEMO_MODE only (smoke tests). */
+  async getNotificationsForTest(
+    userId: number,
+    type?: string,
+    limit = 20,
+  ): Promise<typeof schema.notifications.$inferSelect[]> {
+    await this.assertDemoMode();
+    const conditions = [eq(schema.notifications.userId, userId)];
+    if (type) {
+      conditions.push(sql`${schema.notifications.type} = ${type}`);
+    }
+    return this.db
+      .select()
+      .from(schema.notifications)
+      .where(and(...conditions))
+      .orderBy(sql`${schema.notifications.createdAt} DESC`)
+      .limit(limit);
   }
 
   /** Cancel a signup as if the user did it — triggers bufferLeave. */

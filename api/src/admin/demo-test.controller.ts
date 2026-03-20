@@ -1,13 +1,16 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
@@ -62,6 +65,7 @@ const CreateTestSignupSchema = z.object({
  * All endpoints require admin auth and DEMO_MODE to be enabled.
  */
 @Controller('admin/test')
+@SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class DemoTestController {
   constructor(private readonly demoTestService: DemoTestService) {}
@@ -149,6 +153,22 @@ export class DemoTestController {
       parsed.userId,
     );
     return { success: true };
+  }
+
+  /** Query a user's notifications — DEMO_MODE only (smoke tests). */
+  @Get('notifications')
+  async getNotificationsForTest(
+    @Query('userId') userId: string,
+    @Query('type') type?: string,
+    @Query('limit') limit?: string,
+  ): Promise<unknown[]> {
+    const uid = parseInt(userId, 10);
+    if (!uid || uid <= 0) throw new BadRequestException('userId required');
+    return this.demoTestService.getNotificationsForTest(
+      uid,
+      type,
+      parseInt(limit ?? '20', 10),
+    );
   }
 
   /** Flush the roster notification buffer immediately — DEMO_MODE only. */

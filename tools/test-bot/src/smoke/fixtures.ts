@@ -88,7 +88,7 @@ export async function rescheduleEvent(
   eventId: number,
   minutesFromNow: number,
 ) {
-  return api.patch(`/events/${eventId}`, {
+  return api.patch(`/events/${eventId}/reschedule`, {
     startTime: futureTime(minutesFromNow),
     endTime: futureTime(minutesFromNow + 60),
   });
@@ -203,6 +203,20 @@ export async function cancelSignupAs(
   userId: number,
 ) {
   return api.post('/admin/test/cancel-signup', { eventId, userId });
+}
+
+/** Query a user's notifications — DEMO_MODE only (smoke tests). */
+export async function getNotificationsFor(
+  api: ApiClient,
+  userId: number,
+  type?: string,
+  limit = 20,
+) {
+  const params = new URLSearchParams({ userId: String(userId), limit: String(limit) });
+  if (type) params.set('type', type);
+  return api.get<{ type: string; payload?: Record<string, unknown> }[]>(
+    `/admin/test/notifications?${params}`,
+  );
 }
 
 /** Flush the roster notification buffer immediately — DEMO_MODE only. */

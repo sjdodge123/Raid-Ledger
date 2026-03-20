@@ -204,8 +204,8 @@ const contentTimeMatchesEmbed: SmokeTest = {
         'Guild timezone is not configured — cannot verify timezone correctness',
       );
     }
-    // Create event at a known time — use the event's actual startTime
-    const ev = await createEvent(ctx.api, 'push-tz', mmoOverrides(ctx));
+    // Use a short tag + no game so title+date fit within 80-char push content limit
+    const ev = await createEvent(ctx.api, 'tz', { maxAttendees: 5 });
     try {
       const msg = await embedInChannel(
         ctx.defaultChannelId, ev.title, ctx.config.timeoutMs,
