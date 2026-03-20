@@ -13,10 +13,7 @@ import { SignupsService } from '../events/signups.service';
 import { CharactersService } from '../characters/characters.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: { id: number; username: string; role: UserRole };
-}
+import type { AuthenticatedRequest } from './types';
 
 function describeAuthControllerRedeemIntent() {
   let controller: AuthController;
@@ -56,6 +53,8 @@ function describeAuthControllerRedeemIntent() {
     id: 1,
     username: 'testuser',
     role: 'member' as UserRole,
+    discordId: null,
+    impersonatedBy: null,
   };
 
   const mockRequest: AuthenticatedRequest = {

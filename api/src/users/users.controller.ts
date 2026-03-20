@@ -33,7 +33,6 @@ import type {
   UserHeartedGamesResponseDto,
   SteamLibraryResponseDto,
   SteamWishlistResponseDto,
-  UserRole,
 } from '@raid-ledger/contract';
 import {
   UpdateUserRoleSchema,
@@ -49,10 +48,7 @@ import {
   resolveSources,
   buildPaginatedMeta,
 } from './users-controller.helpers';
-
-interface AuthenticatedRequest {
-  user: { id: number; role: UserRole; impersonatedBy?: number | null };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 /** Controller for public and admin user endpoints. */
 @Controller('users')
@@ -83,7 +79,14 @@ export class UsersController {
     const playtimeMin = parsePlaytimeMin(playtimeMinStr);
     const playHistory = parsePlayHistory(playHistoryStr);
     const result = await this.usersService.findAll(
-      page, limit, search || undefined, gameId, sources, playtimeMin, playHistory, role || undefined,
+      page,
+      limit,
+      search || undefined,
+      gameId,
+      sources,
+      playtimeMin,
+      playHistory,
+      role || undefined,
     );
     return {
       data: result.data,

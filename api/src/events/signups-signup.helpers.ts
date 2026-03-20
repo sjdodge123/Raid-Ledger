@@ -42,7 +42,7 @@ export async function checkAutoBench(
   dto?: CreateSignupDto,
 ): Promise<boolean> {
   if (dto?.slotRole === 'bench') return false;
-  const capacity = resolveRosterCapacity(eventRow);
+  const capacity = resolveEventCapacity(eventRow);
   if (capacity === null) return false;
   const [{ count }] = await tx
     .select({ count: sql<number>`count(*)` })
@@ -60,11 +60,17 @@ export async function checkAutoBench(
   return Number(count) >= capacity;
 }
 
-/** Resolve the total non-bench roster capacity for an event. */
-function resolveRosterCapacity(eventRow: EventRow): number | null {
-  const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
+/**
+ * Resolve the total non-bench capacity for an event.
+ * Prefers slotConfig (MMO/generic) over maxAttendees.
+ * Shared by: signup flow (auto-bench), notification relevance, departure-grace.
+ */
+export function resolveEventCapacity(
+  event: Pick<EventRow, 'slotConfig' | 'maxAttendees'>,
+): number | null {
+  const slotConfig = event.slotConfig as Record<string, unknown> | null;
   if (slotConfig) return computeSlotCapacity(slotConfig);
-  return eventRow.maxAttendees ?? null;
+  return event.maxAttendees ?? null;
 }
 
 export async function insertSignupRow(

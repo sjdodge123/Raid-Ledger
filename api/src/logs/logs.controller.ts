@@ -14,10 +14,7 @@ import { AdminGuard } from '../auth/admin.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { LogsService } from './logs.service';
 import type { LogService } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: { id: number; username: string };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 @Controller('admin/logs')
 @UseGuards(AuthGuard('jwt'), AdminGuard)

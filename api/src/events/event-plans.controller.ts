@@ -23,14 +23,7 @@ import {
 import { EventPlansService } from './event-plans.service';
 import { type ZodType, type ZodTypeDef, ZodError } from 'zod';
 
-import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: {
-    id: number;
-    role: UserRole;
-  };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 /**
  * Parse data with a Zod schema, converting ZodError to BadRequestException.

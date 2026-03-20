@@ -37,7 +37,8 @@ Check the status and route accordingly:
    git status
    # If there are changes:
    git commit -m "test: operator testing changes (ROK-XXX)"
-   git push origin rok-<num>-<short-name>
+   # Use /push skill (runs full CI + push). Skip PR — already exists.
+   /push --skip-pr
    ```
 2. Update state: `gates.operator: PASS`, `status: "reviewing"`
 3. Update Linear to "Code Review":

@@ -6,13 +6,7 @@ import {
   QueueHealthService,
   QueueHealthStatus,
 } from '../queue/queue-health.service';
-import type { Request } from 'express';
-
-import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest extends Request {
-  user: { id: number; username: string; role: UserRole };
-}
+import type { AuthenticatedExpressRequest } from '../auth/types';
 
 @RateLimit('admin')
 @Controller('admin')
@@ -21,7 +15,7 @@ export class AdminController {
   constructor(private readonly queueHealth: QueueHealthService) {}
 
   @Get('check')
-  checkAccess(@Req() req: AuthenticatedRequest) {
+  checkAccess(@Req() req: AuthenticatedExpressRequest) {
     return {
       message: 'Admin access granted',
       user: req.user,

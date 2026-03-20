@@ -19,11 +19,8 @@ import {
   PugSlotResponseDto,
   PugSlotListResponseDto,
 } from '@raid-ledger/contract';
+import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
-
-interface AuthenticatedRequest {
-  user: { id: number; role: import('@raid-ledger/contract').UserRole };
-}
 
 @Controller('events')
 export class EventsPugsController {

@@ -22,14 +22,17 @@ import { CharactersService } from '../characters/characters.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: { id: number; username: string; role: UserRole };
-}
+import type { AuthenticatedRequest } from './types';
 
 function buildMockRequest(userId = 1): AuthenticatedRequest {
   return {
-    user: { id: userId, username: 'testuser', role: 'member' as UserRole },
+    user: {
+      id: userId,
+      username: 'testuser',
+      role: 'member' as UserRole,
+      discordId: null,
+      impersonatedBy: null,
+    },
   };
 }
 

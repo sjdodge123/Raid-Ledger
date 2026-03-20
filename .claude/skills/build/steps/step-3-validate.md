@@ -39,9 +39,13 @@ Update state: `gates.ci: PASS` (or `FAIL`)
 
 ## 3b. Push Branch
 
-```bash
-cd $WORKTREE && git push -u origin rok-<num>-<short-name>
+**Use the `/push` skill** — it runs full local CI (build, typecheck, lint, tests) before pushing. NEVER use raw `git push`.
+
 ```
+/push --skip-pr
+```
+
+The `--skip-pr` flag skips PR creation — the PR is created later in Step 5. The `/push` skill handles rebase onto main, all checks, and the actual push.
 
 ---
 

@@ -39,23 +39,23 @@ Check if `planning-artifacts/fix-batch-state.yaml` exists:
 
 ### Origin Reconciliation (MANDATORY before resuming)
 
-The state file may be stale from a previous session that shipped stories. Always verify:
+The state file may be stale from a previous session that shipped stories. **Use the `mcp__mcp-env__story_status` MCP tool** to check all stories at once:
 
-```bash
-git fetch origin
-
-# For each story in the state file, check if its branch was merged to main:
-git branch -r --merged origin/main | grep rok-<num>
-
-# Also check the batch branch itself:
-git branch -r --merged origin/main | grep fix/batch-
+```
+mcp__mcp-env__story_status({ stories: ["ROK-XXX", "ROK-YYY"] })
 ```
 
-**For each story**, apply this logic in order:
+This returns `verdict` per story: `done`, `in_flight`, or `not_started`.
 
-1. **Branch merged to main?** (`git branch -r --merged origin/main | grep rok-<num>`)
-   - Yes → story is **done**. Update state: `status: "done"`. Skip it entirely.
-2. **Branch exists on origin but not merged?** (`git ls-remote --heads origin rok-<num>`)
+Also check the batch branch: `git branch -r --merged origin/main | grep fix/batch-`
+
+**If the batch branch itself is merged to main:** the entire batch is done. Archive and start fresh.
+
+Use the verdicts to update state:
+
+1. `done` → story is shipped. Update state: `status: "done"`. Skip it.
+2. `in_flight` → branch on origin. Check PR state:
+   - `gh pr list --head rok-<num>-<short-name> --json state,url`
    - Yes → check for an existing PR: `gh pr list --head rok-<num>-<short-name> --json state,url`
      - PR merged → story is **done**
      - PR open → resume from ship step

@@ -1,6 +1,7 @@
 You are a dev teammate working on the Raid Ledger project.
 Your worktree is at <WORKTREE_PATH>.
 Read <WORKTREE_PATH>/CLAUDE.md for project conventions.
+Read <WORKTREE_PATH>/TESTING.md for testing patterns, anti-patterns, and TDD workflow.
 
 ## Task: <ROK-XXX> — <TITLE>
 

@@ -35,7 +35,6 @@ import {
   GameTimeAbsenceInputSchema,
   UpdateUserProfileSchema,
   CheckDisplayNameQuerySchema,
-  type UserRole,
   type DiscordMembershipResponseDto,
 } from '@raid-ledger/contract';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
@@ -48,10 +47,7 @@ import {
   checkGuildMembership,
   validateAndDeleteAccount,
 } from './users-me-discord.helpers';
-
-interface AuthenticatedRequest {
-  user: { id: number; role: UserRole; impersonatedBy?: number | null };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 /** Controller for /users/me/* (current user) and /users/check-display-name. */
 @Controller('users')

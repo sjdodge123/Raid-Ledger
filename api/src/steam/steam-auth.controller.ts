@@ -26,10 +26,7 @@ import {
 import type { SteamLinkStatusDto } from '@raid-ledger/contract';
 import * as crypto from 'crypto';
 import type { Response, Request } from 'express';
-
-interface AuthenticatedRequest extends Request {
-  user: { id: number };
-}
+import type { AuthenticatedExpressRequest } from '../auth/types';
 
 /**
  * Steam Auth Controller (ROK-417)
@@ -244,7 +241,7 @@ export class SteamAuthController {
   @Get('status')
   @UseGuards(AuthGuard('jwt'))
   async steamStatus(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: AuthenticatedExpressRequest,
   ): Promise<SteamLinkStatusDto> {
     const user = await this.usersService.findById(req.user.id);
     if (!user?.steamId) {
@@ -273,7 +270,7 @@ export class SteamAuthController {
   @RateLimit('auth')
   @Post('sync')
   @UseGuards(AuthGuard('jwt'))
-  async syncLibrary(@Req() req: AuthenticatedRequest) {
+  async syncLibrary(@Req() req: AuthenticatedExpressRequest) {
     try {
       const result = await this.steamService.syncLibrary(req.user.id);
       return {
@@ -294,7 +291,7 @@ export class SteamAuthController {
   @RateLimit('auth')
   @Post('sync-wishlist')
   @UseGuards(AuthGuard('jwt'))
-  async syncWishlist(@Req() req: AuthenticatedRequest) {
+  async syncWishlist(@Req() req: AuthenticatedExpressRequest) {
     const result = await this.steamWishlistService.syncWishlist(req.user.id);
     return {
       success: true,
@@ -310,7 +307,7 @@ export class SteamAuthController {
   @Delete('link')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(204)
-  async unlinkSteam(@Req() req: AuthenticatedRequest) {
+  async unlinkSteam(@Req() req: AuthenticatedExpressRequest) {
     await this.usersService.unlinkSteam(req.user.id);
     this.logger.log(`Steam account unlinked for user ${req.user.id}`);
   }

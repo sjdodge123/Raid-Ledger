@@ -34,11 +34,8 @@ import {
   ShareEventResponseDto,
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
+import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
-
-interface AuthenticatedRequest {
-  user: { id: number; role: UserRole };
-}
 
 /**
  * Core event CRUD controller.

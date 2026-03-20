@@ -4,35 +4,27 @@
 
 ---
 
-## 5a. Rebase onto Main
+## 5a. Rebase, CI, Push, and Create PR
 
-For each story at `ready_to_ship`:
+**Use the `/push` skill** — it handles rebase onto main, full local CI (build + typecheck + lint + tests + Playwright), push, and PR creation in one step.
 
-```bash
-cd <worktree_path>
-git fetch origin main
-git rebase origin/main
+```
+/push
 ```
 
-If there are conflicts:
-1. Resolve them
-2. `git rebase --continue`
-3. Re-run quick CI to ensure nothing broke:
-   ```bash
-   npx tsc --noEmit -p api/tsconfig.json
-   npx tsc --noEmit -p web/tsconfig.json
-   npm run test -w api -- --passWithNoTests
-   npm run test -w web
-   ```
+The `/push` skill will:
+1. Rebase onto `origin/main` (resolves conflicts if needed)
+2. Run full CI: build all workspaces, typecheck, lint, tests
+3. Run Playwright smoke tests (if UI changes)
+4. Push to origin
+5. Create the PR with test plan checklist
 
-Push the rebased branch:
+If `/push` fails at any step, fix the issue before retrying. Do NOT bypass with raw `git push`.
+
+After `/push` completes, verify the PR was created:
 ```bash
-git push --force-with-lease origin rok-<num>-<short-name>
+gh pr list --head $(git branch --show-current) --json number,url
 ```
-
----
-
-## 5b. Create PR
 
 ```bash
 gh pr create \

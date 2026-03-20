@@ -3,10 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventPlansController } from './event-plans.controller';
 import { EventPlansService } from './event-plans.service';
 import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: { id: number; role: UserRole };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 const PLAN_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const CREATOR_ID = 1;
