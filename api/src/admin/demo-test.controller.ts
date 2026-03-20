@@ -1,13 +1,16 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
@@ -42,6 +45,11 @@ const TriggerDepartureSchema = z.object({
   discordUserId: z.string().min(1),
 });
 
+const CancelSignupSchema = z.object({
+  eventId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 const CreateTestSignupSchema = z.object({
@@ -57,6 +65,7 @@ const CreateTestSignupSchema = z.object({
  * All endpoints require admin auth and DEMO_MODE to be enabled.
  */
 @Controller('admin/test')
+@SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class DemoTestController {
   constructor(private readonly demoTestService: DemoTestService) {}
@@ -130,6 +139,47 @@ export class DemoTestController {
       parsed.discordUserId,
     );
     return { success: true };
+  }
+
+  /** Cancel a user's signup (triggers bufferLeave) — DEMO_MODE only. */
+  @Post('cancel-signup')
+  @HttpCode(HttpStatus.OK)
+  async cancelSignupForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(CancelSignupSchema, body);
+    await this.demoTestService.cancelSignupForTest(
+      parsed.eventId,
+      parsed.userId,
+    );
+    return { success: true };
+  }
+
+  /** Query a user's notifications — DEMO_MODE only (smoke tests). */
+  @Get('notifications')
+  async getNotificationsForTest(
+    @Query('userId') userId: string,
+    @Query('type') type?: string,
+    @Query('limit') limit?: string,
+  ): Promise<unknown[]> {
+    const uid = parseInt(userId, 10);
+    if (!uid || uid <= 0) throw new BadRequestException('userId required');
+    return this.demoTestService.getNotificationsForTest(
+      uid,
+      type,
+      parseInt(limit ?? '20', 10),
+    );
+  }
+
+  /** Flush the roster notification buffer immediately — DEMO_MODE only. */
+  @Post('flush-notification-buffer')
+  @HttpCode(HttpStatus.OK)
+  async flushNotificationBufferForTest(): Promise<{
+    success: boolean;
+    flushed: number;
+  }> {
+    const flushed = await this.demoTestService.flushNotificationBufferForTest();
+    return { success: true, flushed };
   }
 
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */

@@ -88,7 +88,7 @@ export async function rescheduleEvent(
   eventId: number,
   minutesFromNow: number,
 ) {
-  return api.patch(`/events/${eventId}`, {
+  return api.patch(`/events/${eventId}/reschedule`, {
     startTime: futureTime(minutesFromNow),
     endTime: futureTime(minutesFromNow + 60),
   });
@@ -194,6 +194,37 @@ export async function deleteEvent(api: ApiClient, eventId: number) {
 
 export async function deleteBinding(api: ApiClient, bindingId: string) {
   return api.delete(`/admin/discord/bindings/${bindingId}`).catch(() => {});
+}
+
+/** Cancel a user's signup (triggers bufferLeave path) — DEMO_MODE only. */
+export async function cancelSignupAs(
+  api: ApiClient,
+  eventId: number,
+  userId: number,
+) {
+  return api.post('/admin/test/cancel-signup', { eventId, userId });
+}
+
+/** Query a user's notifications — DEMO_MODE only (smoke tests). */
+export async function getNotificationsFor(
+  api: ApiClient,
+  userId: number,
+  type?: string,
+  limit = 20,
+) {
+  const params = new URLSearchParams({ userId: String(userId), limit: String(limit) });
+  if (type) params.set('type', type);
+  return api.get<{ type: string; payload?: Record<string, unknown> }[]>(
+    `/admin/test/notifications?${params}`,
+  );
+}
+
+/** Flush the roster notification buffer immediately — DEMO_MODE only. */
+export async function flushNotificationBuffer(api: ApiClient) {
+  return api.post<{ flushed: number }>(
+    '/admin/test/flush-notification-buffer',
+    {},
+  );
 }
 
 export function sleep(ms: number) {

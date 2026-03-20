@@ -1,7 +1,7 @@
 import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { NOTIFICATION_TYPES } from '../drizzle/schema/notification-preferences';
 import type { ChannelPrefs } from '../drizzle/schema/notification-preferences';
@@ -10,7 +10,9 @@ import type { CreateSignupDto, SignupResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
 import { SignupsService } from '../events/signups.service';
+import { SignupsRosterService } from '../events/signups-roster.service';
 import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -107,6 +109,43 @@ export class DemoTestService {
       strict: false,
     });
     await queueSvc.enqueue({ eventId, signupId, discordUserId }, 0);
+  }
+
+  /** Query a user's notifications — DEMO_MODE only (smoke tests). */
+  async getNotificationsForTest(
+    userId: number,
+    type?: string,
+    limit = 20,
+  ): Promise<typeof schema.notifications.$inferSelect[]> {
+    await this.assertDemoMode();
+    const conditions = [eq(schema.notifications.userId, userId)];
+    if (type) {
+      conditions.push(sql`${schema.notifications.type} = ${type}`);
+    }
+    return this.db
+      .select()
+      .from(schema.notifications)
+      .where(and(...conditions))
+      .orderBy(sql`${schema.notifications.createdAt} DESC`)
+      .limit(limit);
+  }
+
+  /** Cancel a signup as if the user did it — triggers bufferLeave. */
+  async cancelSignupForTest(eventId: number, userId: number): Promise<void> {
+    await this.assertDemoMode();
+    const svc = this.moduleRef.get(SignupsRosterService, { strict: false });
+    await svc.cancel(eventId, userId);
+  }
+
+  /** Flush the roster notification buffer and return pending count. */
+  async flushNotificationBufferForTest(): Promise<number> {
+    await this.assertDemoMode();
+    const buf = this.moduleRef.get(RosterNotificationBufferService, {
+      strict: false,
+    });
+    const count = buf.pendingCount;
+    await buf.flushAll();
+    return count;
   }
 
   /** Directly update a signup's status in the DB. */

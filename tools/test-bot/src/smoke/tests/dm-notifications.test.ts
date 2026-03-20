@@ -11,13 +11,17 @@
 import { pollForCondition } from '../../helpers/polling.js';
 import {
   createEvent,
+  signup,
   signupAs,
   cancelEvent,
   cancelSignup,
+  cancelSignupAs,
   rescheduleEvent,
   deleteEvent,
   addGameInterest,
   triggerDeparture,
+  flushNotificationBuffer,
+  getNotificationsFor,
   futureTime,
   sleep,
 } from '../fixtures.js';
@@ -393,52 +397,40 @@ const rescheduleDmHasDate: SmokeTest = {
   name: 'Reschedule DM plaintext includes new date, not empty parens (ROK-918)',
   category: 'dm',
   async run(ctx) {
+    const recipientId = ctx.dmRecipientUserId;
     const ev = await createEvent(ctx.api, 'dm-resched-date', mmoOverrides(ctx));
     try {
-      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['dps']);
+      // Sign up a demo user (NOT admin) — admin is excluded as rescheduler
+      await signupAs(ctx.api, ev.id, recipientId, ['dps']);
       await sleep(1000);
-      // Remember unread count before reschedule
-      const before = await ctx.api
-        .get<{ data: unknown[] }>('/notifications/unread')
-        .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
-        .catch(() => 0);
       await rescheduleEvent(ctx.api, ev.id, 300);
-      // Poll until a new notification appears
-      await pollForCondition(
+      // Poll until the demo user gets the reschedule notification
+      type NotifDto = { type: string; title?: string; message?: string };
+      const reschedNotif = await pollForCondition(
         async () => {
-          const after = await ctx.api
-            .get<{ data: unknown[] }>('/notifications/unread')
-            .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
-            .catch(() => 0);
-          return after > before ? true : null;
+          const notifs = await getNotificationsFor(
+            ctx.api, recipientId, 'event_rescheduled', 5,
+          ) as NotifDto[];
+          const list = Array.isArray(notifs) ? notifs : [];
+          return list.find((n) => n.type === 'event_rescheduled') ?? null;
         },
         ctx.config.timeoutMs,
         { intervalMs: 2000 },
       ).catch(() => {
-        throw new Error('No reschedule notification within timeout');
+        throw new Error('No reschedule notification for demo user within timeout');
       });
-      // Fetch the latest notification
-      type NotifDto = { type: string; title?: string; message?: string };
-      const notifs = await ctx.api
-        .get<NotifDto[]>('/notifications?limit=5')
-        .catch(() => [] as NotifDto[]);
-      const list = Array.isArray(notifs) ? notifs : [];
-      const reschedNotif = list.find((n) => n.type === 'event_rescheduled');
       if (!reschedNotif?.message) {
-        throw new Error('Could not find event_rescheduled notification');
+        throw new Error('Reschedule notification has no message');
       }
-      // Simulate the DM processor's plaintext conversion
       const plaintext = simulatePlaintextContent(
         reschedNotif.title ?? '', reschedNotif.message,
       );
-      // Verify plaintext does NOT contain empty parens (the ROK-918 bug)
       if (plaintext.includes('()')) {
         throw new Error(
           `Plaintext DM contains empty parens "()" — ` +
           `stripDiscordMarkup bug. Plaintext: "${plaintext}"`,
         );
       }
-      // Verify plaintext includes a formatted date (month abbreviation)
       const monthPattern = /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/;
       if (!monthPattern.test(plaintext)) {
         throw new Error(
@@ -446,6 +438,262 @@ const rescheduleDmHasDate: SmokeTest = {
           `Raw message: "${reschedNotif.message}" → Plaintext: "${plaintext}"`,
         );
       }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+// ── ROK-919: Slot vacated relevance filter ──
+
+const departureNotifSuppressedDpsFull: SmokeTest = {
+  name: 'DPS departure from full MMO event suppressed (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 5) throw new Error('Need 5+ demo users');
+    // LIVE full MMO event: tank:1, healer:1, dps:3 = 5 total
+    const ev = await createEvent(ctx.api, 'depart-dps-mmo', {
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      const dpsRes = await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await signupAs(ctx.api, ev.id, users[3], ['dps']);
+      await signupAs(ctx.api, ev.id, users[4], ['dps']);
+      await sleep(1000);
+      const signupId = (dpsRes as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      // Depart a DPS — should NOT trigger notification (DPS is not critical)
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-dps-depart');
+      const found = await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        10_000,
+        { intervalMs: 2000 },
+      ).then(() => true).catch(() => false);
+      if (found) {
+        throw new Error(
+          'slot_vacated notification sent for DPS departure — role filter not applied',
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const departureNotifSentHealerMmo: SmokeTest = {
+  name: 'Healer departure from MMO event sends notification (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 3) throw new Error('Need 3+ demo users');
+    // LIVE MMO event, NOT full (3/5) — healer should still trigger
+    const ev = await createEvent(ctx.api, 'depart-healer-mmo', {
+      ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      const healRes = await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await sleep(1000);
+      const signupId = (healRes as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      // Depart healer — should trigger even though event is NOT full
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-heal-depart');
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          'No slot_vacated for healer departure — critical role filter broken',
+        );
+      });
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const departureNotifSentGenericFull: SmokeTest = {
+  name: 'Departure from full generic event sends notification (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 3) throw new Error('Need 3+ demo users');
+    // LIVE generic event at capacity (3/3)
+    const ev = await createEvent(ctx.api, 'depart-generic-full', {
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'generic', player: 3 },
+    });
+    try {
+      const res = await signupAs(ctx.api, ev.id, users[0], ['player']);
+      await signupAs(ctx.api, ev.id, users[1], ['player']);
+      await signupAs(ctx.api, ev.id, users[2], ['player']);
+      await sleep(1000);
+      const signupId = (res as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-gen-depart');
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          'No slot_vacated for departure from full generic event',
+        );
+      });
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const departureNotifSuppressedGenericNotFull: SmokeTest = {
+  name: 'Departure from non-full generic event suppressed (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 2) throw new Error('Need 2+ demo users');
+    // LIVE generic event NOT full (2/10)
+    const ev = await createEvent(ctx.api, 'depart-generic-notfull', {
+      startTime: futureTime(-5),
+      endTime: futureTime(55),
+      slotConfig: { type: 'generic', player: 10 },
+    });
+    try {
+      const res = await signupAs(ctx.api, ev.id, users[0], ['player']);
+      await signupAs(ctx.api, ev.id, users[1], ['player']);
+      await sleep(1000);
+      const signupId = (res as { id?: number }).id;
+      if (!signupId) throw new Error('No signup ID returned');
+      await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-gen-notfull');
+      const found = await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        10_000,
+        { intervalMs: 2000 },
+      ).then(() => true).catch(() => false);
+      if (found) {
+        throw new Error(
+          'slot_vacated sent for departure from non-full generic event',
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+// ── ROK-919: Signup cancellation path (buffer + flush) ──
+
+const cancelSuppressedGenericNotFull: SmokeTest = {
+  name: 'Cancel from non-full generic event suppressed via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 2) throw new Error('Need 2+ demo users');
+    // Future generic event with capacity 10, only 2 signups → NOT full
+    const ev = await createEvent(ctx.api, 'cancel-gen-notfull', {
+      slotConfig: { type: 'generic', player: 10 },
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['player']);
+      await signupAs(ctx.api, ev.id, users[1], ['player']);
+      await sleep(1000);
+      // Cancel user's signup (triggers bufferLeave → 3 min timer)
+      await cancelSignupAs(ctx.api, ev.id, users[0]);
+      // Immediately flush the buffer (bypasses 3-min wait)
+      await flushNotificationBuffer(ctx.api);
+      await sleep(1000);
+      // Verify NO slot_vacated notification (event was NOT full)
+      const found = await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        8_000,
+        { intervalMs: 2000 },
+      ).then(() => true).catch(() => false);
+      if (found) {
+        throw new Error(
+          'slot_vacated sent after cancel from non-full generic event — the Palworld bug is back',
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const cancelSuppressedDpsMmo: SmokeTest = {
+  name: 'Cancel DPS from MMO event suppressed via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 3) throw new Error('Need 3+ demo users');
+    // Future MMO event, sign up tank + healer + dps
+    const ev = await createEvent(ctx.api, 'cancel-dps-mmo', {
+      ...mmoOverrides(ctx),
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await sleep(1000);
+      // Cancel the DPS signup (not a critical role)
+      await cancelSignupAs(ctx.api, ev.id, users[2]);
+      await flushNotificationBuffer(ctx.api);
+      await sleep(1000);
+      const found = await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        8_000,
+        { intervalMs: 2000 },
+      ).then(() => true).catch(() => false);
+      if (found) {
+        throw new Error(
+          'slot_vacated sent after DPS cancel from MMO event — role filter not applied on cancel path',
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+const cancelFiredTankMmo: SmokeTest = {
+  name: 'Cancel Tank from MMO event sends notification via buffer (ROK-919)',
+  category: 'dm',
+  async run(ctx) {
+    const users = ctx.demoUserIds ?? [];
+    if (users.length < 3) throw new Error('Need 3+ demo users');
+    // Future MMO event, sign up tank + healer + dps
+    const ev = await createEvent(ctx.api, 'cancel-tank-mmo', {
+      ...mmoOverrides(ctx),
+    });
+    try {
+      await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await signupAs(ctx.api, ev.id, users[1], ['healer']);
+      await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await sleep(1000);
+      // Cancel the TANK signup (critical role — should notify)
+      await cancelSignupAs(ctx.api, ev.id, users[0]);
+      await flushNotificationBuffer(ctx.api);
+      // Poll for slot_vacated notification (should appear)
+      await pollForCondition(
+        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          'No slot_vacated after tank cancel — critical role notification broken',
+        );
+      });
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -464,5 +712,12 @@ export const dmNotificationTests: SmokeTest[] = [
   gameAffinityNotification,
   welcomeDmNotification,
   rescheduleDmHasDate,
+  departureNotifSuppressedDpsFull,
+  departureNotifSentHealerMmo,
+  departureNotifSentGenericFull,
+  departureNotifSuppressedGenericNotFull,
+  cancelSuppressedGenericNotFull,
+  cancelSuppressedDpsMmo,
+  cancelFiredTankMmo,
   ...(includeSlow ? [reminderNotification] : []),
 ];
