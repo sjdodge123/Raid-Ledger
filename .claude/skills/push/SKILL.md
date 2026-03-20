@@ -10,6 +10,8 @@ argument-hint: "[--skip-pr]"
 
 **This skill should be used by ALL other skills (/build, /bulk, /fix-batch) when pushing to origin.** Never use raw `git push` — always invoke `/push`.
 
+**References:** Read `CLAUDE.md` for project conventions and `TESTING.md` for test failure rules before proceeding. Test failures are NEVER dismissed as "pre-existing."
+
 Execute every step in order. Do NOT skip steps. If any step fails, STOP and fix before continuing.
 
 ---
