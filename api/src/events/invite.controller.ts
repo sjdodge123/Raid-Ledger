@@ -13,10 +13,7 @@ import { InviteService } from './invite.service';
 import { OgMetaService } from './og-meta.service';
 import { InviteCodeClaimSchema } from '@raid-ledger/contract';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: { id: number };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 /**
  * Public + authenticated routes for magic invite links (ROK-263).

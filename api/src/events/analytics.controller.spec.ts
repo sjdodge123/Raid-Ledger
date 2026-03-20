@@ -1,16 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, BadRequestException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
-import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: { id: number; role: UserRole };
-}
-
-const makeReq = (role: UserRole): AuthenticatedRequest => ({
-  user: { id: 1, role },
-});
+import { OperatorGuard } from '../auth/operator.guard';
+import { AuthGuard } from '@nestjs/passport';
 
 const mockAttendanceTrends = {
   period: '30d' as const,
@@ -67,48 +60,40 @@ async function setupEach() {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [AnalyticsController],
     providers: [{ provide: AnalyticsService, useValue: mockService }],
-  }).compile();
+  })
+    .overrideGuard(AuthGuard('jwt'))
+    .useValue({ canActivate: () => true })
+    .overrideGuard(OperatorGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
 
   controller = module.get<AnalyticsController>(AnalyticsController);
 }
 
-async function testTrendsForbiddenForMember() {
-  await expect(
-    controller.getAttendanceTrends({}, makeReq('member')),
-  ).rejects.toThrow(ForbiddenException);
-}
-
-async function testTrendsAllowsOperator() {
-  const result = await controller.getAttendanceTrends({}, makeReq('operator'));
-  expect(result).toEqual(mockAttendanceTrends);
-}
-
-async function testTrendsAllowsAdmin() {
-  const result = await controller.getAttendanceTrends({}, makeReq('admin'));
-  expect(result).toEqual(mockAttendanceTrends);
+function verifyGuardsApplied() {
+  const guards = Reflect.getMetadata('__guards__', AnalyticsController);
+  expect(guards).toBeDefined();
+  expect(guards.length).toBe(2);
 }
 
 async function testTrendsDefaultsPeriod() {
-  await controller.getAttendanceTrends({}, makeReq('operator'));
+  await controller.getAttendanceTrends({});
   expect(mockService.getAttendanceTrends).toHaveBeenCalledWith('30d');
 }
 
 async function testTrendsPasses90d() {
-  await controller.getAttendanceTrends({ period: '90d' }, makeReq('operator'));
+  await controller.getAttendanceTrends({ period: '90d' });
   expect(mockService.getAttendanceTrends).toHaveBeenCalledWith('90d');
 }
 
 async function testTrendsInvalidPeriod() {
   await expect(
-    controller.getAttendanceTrends({ period: 'invalid' }, makeReq('operator')),
+    controller.getAttendanceTrends({ period: 'invalid' }),
   ).rejects.toThrow(BadRequestException);
 }
 
 async function testTrendsReturnsData() {
-  const result = await controller.getAttendanceTrends(
-    { period: '30d' },
-    makeReq('admin'),
-  );
+  const result = await controller.getAttendanceTrends({ period: '30d' });
   expect(result).toMatchObject({
     period: '30d',
     dataPoints: expect.any(Array),
@@ -116,107 +101,60 @@ async function testTrendsReturnsData() {
   });
 }
 
-async function testReliabilityForbiddenForMember() {
-  await expect(
-    controller.getUserReliability({}, makeReq('member')),
-  ).rejects.toThrow(ForbiddenException);
-}
-
-async function testReliabilityAllowsOperator() {
-  const result = await controller.getUserReliability({}, makeReq('operator'));
-  expect(result).toEqual(mockUserReliability);
-}
-
-async function testReliabilityAllowsAdmin() {
-  const result = await controller.getUserReliability({}, makeReq('admin'));
-  expect(result).toEqual(mockUserReliability);
-}
-
 async function testReliabilityDefaults() {
-  await controller.getUserReliability({}, makeReq('operator'));
+  await controller.getUserReliability({});
   expect(mockService.getUserReliability).toHaveBeenCalledWith(20, 0);
 }
 
 async function testReliabilityPassesParams() {
-  await controller.getUserReliability(
-    { limit: '10', offset: '50' },
-    makeReq('operator'),
-  );
+  await controller.getUserReliability({ limit: '10', offset: '50' });
   expect(mockService.getUserReliability).toHaveBeenCalledWith(10, 50);
 }
 
 async function testReliabilityLimitExceeds100() {
-  await expect(
-    controller.getUserReliability({ limit: '200' }, makeReq('operator')),
-  ).rejects.toThrow(BadRequestException);
+  await expect(controller.getUserReliability({ limit: '200' })).rejects.toThrow(
+    BadRequestException,
+  );
 }
 
 async function testReliabilityNegativeOffset() {
-  await expect(
-    controller.getUserReliability({ offset: '-1' }, makeReq('operator')),
-  ).rejects.toThrow(BadRequestException);
+  await expect(controller.getUserReliability({ offset: '-1' })).rejects.toThrow(
+    BadRequestException,
+  );
 }
 
 async function testReliabilityNonNumericLimit() {
-  await expect(
-    controller.getUserReliability({ limit: 'abc' }, makeReq('operator')),
-  ).rejects.toThrow(BadRequestException);
+  await expect(controller.getUserReliability({ limit: 'abc' })).rejects.toThrow(
+    BadRequestException,
+  );
 }
 
 async function testReliabilityReturnsData() {
-  const result = await controller.getUserReliability({}, makeReq('admin'));
+  const result = await controller.getUserReliability({});
   expect(result).toMatchObject({
     users: expect.any(Array),
     totalUsers: expect.any(Number),
   });
 }
 
-async function testGameForbiddenForMember() {
-  await expect(controller.getGameAttendance(makeReq('member'))).rejects.toThrow(
-    ForbiddenException,
-  );
-}
-
-async function testGameAllowsOperator() {
-  const result = await controller.getGameAttendance(makeReq('operator'));
-  expect(result).toEqual(mockGameAttendance);
-}
-
-async function testGameAllowsAdmin() {
-  const result = await controller.getGameAttendance(makeReq('admin'));
-  expect(result).toEqual(mockGameAttendance);
-}
-
 async function testGameCallsService() {
-  await controller.getGameAttendance(makeReq('operator'));
+  await controller.getGameAttendance();
   expect(mockService.getGameAttendance).toHaveBeenCalledTimes(1);
 }
 
 async function testGameReturnsData() {
-  const result = await controller.getGameAttendance(makeReq('admin'));
+  const result = await controller.getGameAttendance();
   expect(result).toMatchObject({ games: expect.any(Array) });
-}
-
-async function testRoleEnforcement() {
-  const memberReq = makeReq('member');
-  await expect(controller.getAttendanceTrends({}, memberReq)).rejects.toThrow(
-    ForbiddenException,
-  );
-  await expect(controller.getUserReliability({}, memberReq)).rejects.toThrow(
-    ForbiddenException,
-  );
-  await expect(controller.getGameAttendance(memberReq)).rejects.toThrow(
-    ForbiddenException,
-  );
 }
 
 beforeEach(() => setupEach());
 
+describe('AnalyticsController — guard metadata', () => {
+  it('has AuthGuard(jwt) and OperatorGuard at class level', () =>
+    verifyGuardsApplied());
+});
+
 describe('AnalyticsController — getAttendanceTrends', () => {
-  it('throws ForbiddenException for member', () =>
-    testTrendsForbiddenForMember());
-  it('allows operator role', () => testTrendsAllowsOperator());
-  it('allows admin role', () => testTrendsAllowsAdmin());
   it('defaults to 30d period', () => testTrendsDefaultsPeriod());
   it('passes 90d period to service', () => testTrendsPasses90d());
   it('throws BadRequestException for invalid period', () =>
@@ -225,10 +163,6 @@ describe('AnalyticsController — getAttendanceTrends', () => {
 });
 
 describe('AnalyticsController — getUserReliability', () => {
-  it('throws ForbiddenException for member', () =>
-    testReliabilityForbiddenForMember());
-  it('allows operator role', () => testReliabilityAllowsOperator());
-  it('allows admin role', () => testReliabilityAllowsAdmin());
   it('defaults to limit=20, offset=0', () => testReliabilityDefaults());
   it('passes limit and offset from query', () => testReliabilityPassesParams());
   it('throws for limit exceeding 100', () => testReliabilityLimitExceeds100());
@@ -238,15 +172,6 @@ describe('AnalyticsController — getUserReliability', () => {
 });
 
 describe('AnalyticsController — getGameAttendance', () => {
-  it('throws ForbiddenException for member', () =>
-    testGameForbiddenForMember());
-  it('allows operator role', () => testGameAllowsOperator());
-  it('allows admin role', () => testGameAllowsAdmin());
   it('calls service without parameters', () => testGameCallsService());
   it('returns data from service', () => testGameReturnsData());
-});
-
-describe('AnalyticsController — role enforcement', () => {
-  it('rejects all endpoints for member consistently', () =>
-    testRoleEnforcement());
 });

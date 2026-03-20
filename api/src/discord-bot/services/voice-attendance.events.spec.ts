@@ -411,9 +411,27 @@ describe('EventsController — voice endpoint authorization', () => {
 
   const creatorId = 1;
   const otherUserId = 2;
-  const adminUser = { id: 3, role: 'admin' as UserRole };
-  const operatorUser = { id: 4, role: 'operator' as UserRole };
-  const memberUser = { id: otherUserId, role: 'member' as UserRole };
+  const adminUser = {
+    id: 3,
+    role: 'admin' as UserRole,
+    username: 'admin',
+    discordId: null,
+    impersonatedBy: null,
+  };
+  const operatorUser = {
+    id: 4,
+    role: 'operator' as UserRole,
+    username: 'operator',
+    discordId: null,
+    impersonatedBy: null,
+  };
+  const memberUser = {
+    id: otherUserId,
+    role: 'member' as UserRole,
+    username: 'member',
+    discordId: null,
+    impersonatedBy: null,
+  };
 
   const mockEvent = {
     id: 10,
@@ -500,7 +518,13 @@ describe('EventsController — voice endpoint authorization', () => {
   describe('GET :id/voice-sessions', () => {
     it('allows event creator to view voice sessions', async () => {
       const result = await controller.getVoiceSessions(10, {
-        user: { id: creatorId, role: 'member' },
+        user: {
+          id: creatorId,
+          role: 'member' as UserRole,
+          username: 'creator',
+          discordId: null,
+          impersonatedBy: null,
+        },
       });
 
       expect(result).toMatchObject({ eventId: 10 });
@@ -541,7 +565,13 @@ describe('EventsController — voice endpoint authorization', () => {
   describe('GET :id/voice-attendance', () => {
     it('allows event creator to view voice attendance', async () => {
       const result = await controller.getVoiceAttendance(10, {
-        user: { id: creatorId, role: 'member' },
+        user: {
+          id: creatorId,
+          role: 'member' as UserRole,
+          username: 'creator',
+          discordId: null,
+          impersonatedBy: null,
+        },
       });
 
       expect(result).toMatchObject({ eventId: 10 });
@@ -594,7 +624,13 @@ describe('EventsController — voice endpoint authorization', () => {
       });
 
       const result = await controller.getVoiceAttendance(10, {
-        user: { id: creatorId, role: 'member' },
+        user: {
+          id: creatorId,
+          role: 'member' as UserRole,
+          username: 'creator',
+          discordId: null,
+          impersonatedBy: null,
+        },
       });
 
       expect(result).toMatchObject({
@@ -619,7 +655,13 @@ describe('EventsController — voice endpoint authorization', () => {
       );
 
       const result = await controller.getEventMetrics(10, {
-        user: { id: creatorId, role: 'member' },
+        user: {
+          id: creatorId,
+          role: 'member' as UserRole,
+          username: 'creator',
+          discordId: null,
+          impersonatedBy: null,
+        },
       });
 
       expect(result).toMatchObject({ eventId: 10 });

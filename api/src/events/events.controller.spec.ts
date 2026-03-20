@@ -16,10 +16,7 @@ import { ChannelResolverService } from '../discord-bot/services/channel-resolver
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
 import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: { id: number; role: UserRole };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 describe('EventsController', () => {
   let controller: EventsController;

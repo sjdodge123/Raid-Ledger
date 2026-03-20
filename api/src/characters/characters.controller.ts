@@ -9,7 +9,6 @@ import {
   Query,
   UseGuards,
   Request,
-  BadRequestException,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -23,33 +22,12 @@ import {
   CharacterDto,
   CharacterListResponseDto,
 } from '@raid-ledger/contract';
-import { ZodError } from 'zod';
 import {
   RequirePlugin,
   PluginActiveGuard,
 } from '../plugins/plugin-host/plugin-active.guard';
-
-import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest {
-  user: {
-    id: number;
-    role: UserRole;
-  };
-}
-
-/**
- * Handle Zod validation errors by converting to BadRequestException.
- */
-function handleValidationError(error: unknown): never {
-  if (error instanceof ZodError) {
-    throw new BadRequestException({
-      message: 'Validation failed',
-      errors: error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
-    });
-  }
-  throw error;
-}
+import type { AuthenticatedRequest } from '../auth/types';
+import { handleValidationError } from '../common/validation.util';
 
 /**
  * Controller for character management (ROK-130).

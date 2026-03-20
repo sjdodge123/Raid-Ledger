@@ -24,16 +24,7 @@ import type Redis from 'ioredis';
 import { RedeemIntentSchema } from '@raid-ledger/contract';
 import type { RedeemIntentResponseDto } from '@raid-ledger/contract';
 
-import type { UserRole } from '@raid-ledger/contract';
-
-interface RequestWithUser extends Request {
-  user: {
-    id: number;
-    username: string;
-    role: UserRole;
-    impersonatedBy?: number | null;
-  };
-}
+import type { AuthenticatedExpressRequest } from './types';
 
 @Controller('auth')
 export class AuthController {
@@ -77,7 +68,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
-  async getProfile(@Req() req: RequestWithUser) {
+  async getProfile(@Req() req: AuthenticatedExpressRequest) {
     const [user, avatarPref] = await Promise.all([
       this.usersService.findById(req.user.id),
       this.preferencesService.getUserPreference(
@@ -145,7 +136,7 @@ export class AuthController {
   @Post('redeem-intent')
   @UseGuards(AuthGuard('jwt'))
   async redeemIntent(
-    @Req() req: RequestWithUser,
+    @Req() req: AuthenticatedExpressRequest,
     @Body() body: unknown,
   ): Promise<RedeemIntentResponseDto> {
     const dto = RedeemIntentSchema.parse(body);

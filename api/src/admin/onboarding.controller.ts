@@ -34,14 +34,8 @@ import {
   UpdateStepSchema,
 } from '@raid-ledger/contract';
 import type { UpdateStepDto } from '@raid-ledger/contract';
-import { Request } from 'express';
 import { Req } from '@nestjs/common';
-
-import type { UserRole } from '@raid-ledger/contract';
-
-interface AuthenticatedRequest extends Request {
-  user: { id: number; username: string; role: UserRole };
-}
+import type { AuthenticatedExpressRequest } from '../auth/types';
 
 /**
  * Admin Onboarding Wizard Controller (ROK-204)
@@ -177,7 +171,7 @@ export class OnboardingController {
   @HttpCode(HttpStatus.OK)
   async changePassword(
     @Body() body: ChangePasswordDto,
-    @Req() req: AuthenticatedRequest,
+    @Req() req: AuthenticatedExpressRequest,
   ): Promise<{ success: boolean; message: string }> {
     const parsed = ChangePasswordSchema.safeParse(body);
     if (!parsed.success) {

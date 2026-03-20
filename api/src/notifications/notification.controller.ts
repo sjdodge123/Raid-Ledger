@@ -17,10 +17,7 @@ import {
   type UpdatePreferencesInput,
 } from './notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
-
-interface AuthenticatedRequest {
-  user: { id: number; discordId?: string };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 /**
  * Controller for user notifications (ROK-197).

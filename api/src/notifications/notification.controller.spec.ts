@@ -3,9 +3,7 @@ import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
-interface AuthenticatedRequest {
-  user: { id: number; discordId?: string };
-}
+import type { AuthenticatedRequest } from '../auth/types';
 
 describe('NotificationController — getChannelAvailability (ROK-180 AC-7)', () => {
   let controller: NotificationController;
@@ -48,7 +46,7 @@ describe('NotificationController — getChannelAvailability (ROK-180 AC-7)', () 
     it('should return discord available when user has discordId and bot is connected', () => {
       const req = {
         user: { id: 1, discordId: '123456789' },
-      } as AuthenticatedRequest;
+      } as unknown as AuthenticatedRequest;
 
       const result = controller.getChannelAvailability(req);
 
@@ -58,7 +56,7 @@ describe('NotificationController — getChannelAvailability (ROK-180 AC-7)', () 
     it('should return discord unavailable when user has no discordId', () => {
       const req = {
         user: { id: 1, discordId: undefined },
-      } as AuthenticatedRequest;
+      } as unknown as AuthenticatedRequest;
 
       const result = controller.getChannelAvailability(req);
 
@@ -72,7 +70,7 @@ describe('NotificationController — getChannelAvailability (ROK-180 AC-7)', () 
       mockBotClientService.isConnected.mockReturnValueOnce(false);
       const req = {
         user: { id: 1, discordId: '123456789' },
-      } as AuthenticatedRequest;
+      } as unknown as AuthenticatedRequest;
 
       const result = controller.getChannelAvailability(req);
 
@@ -83,7 +81,7 @@ describe('NotificationController — getChannelAvailability (ROK-180 AC-7)', () 
     it('should not include reason when discord is available', () => {
       const req = {
         user: { id: 1, discordId: '123456789' },
-      } as AuthenticatedRequest;
+      } as unknown as AuthenticatedRequest;
 
       const result = controller.getChannelAvailability(req);
 
@@ -94,7 +92,7 @@ describe('NotificationController — getChannelAvailability (ROK-180 AC-7)', () 
       mockBotClientService.isConnected.mockReturnValue(false);
       const req = {
         user: { id: 2, discordId: undefined },
-      } as AuthenticatedRequest;
+      } as unknown as AuthenticatedRequest;
 
       const result = controller.getChannelAvailability(req);
 

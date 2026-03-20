@@ -9,7 +9,6 @@ import {
   Query,
   UseGuards,
   Request,
-  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AvailabilityService } from './availability.service';
@@ -18,25 +17,8 @@ import {
   UpdateAvailabilityDtoSchema,
   AvailabilityQuerySchema,
 } from '@raid-ledger/contract';
-import { ZodError } from 'zod';
-
-interface AuthenticatedRequest {
-  user: { id: number; discordId?: string };
-}
-
-/**
- * Handle Zod validation errors by converting to BadRequestException.
- */
-function handleValidationError(error: unknown): never {
-  if (error instanceof Error && error.name === 'ZodError') {
-    const zodError = error as ZodError;
-    throw new BadRequestException({
-      message: 'Validation failed',
-      errors: zodError.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
-    });
-  }
-  throw error;
-}
+import type { AuthenticatedRequest } from '../auth/types';
+import { handleValidationError } from '../common/validation.util';
 
 /**
  * Controller for user availability management (ROK-112).
