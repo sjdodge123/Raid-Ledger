@@ -11,10 +11,8 @@
 import { pollForCondition } from '../../helpers/polling.js';
 import {
   createEvent,
-  signup,
   signupAs,
   cancelEvent,
-  cancelSignup,
   cancelSignupAs,
   rescheduleEvent,
   deleteEvent,
@@ -23,7 +21,7 @@ import {
   flushNotificationBuffer,
   getNotificationsFor,
   futureTime,
-  sleep,
+  awaitProcessing,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -51,7 +49,7 @@ const cancellationNotification: SmokeTest = {
     const ev = await createEvent(ctx.api, 'dm-cancel', mmoOverrides(ctx));
     try {
       await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['dps']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       await cancelEvent(ctx.api, ev.id);
       // event_cancelled notification created for signed-up demo user
     } finally {
@@ -67,7 +65,7 @@ const rescheduleNotification: SmokeTest = {
     const ev = await createEvent(ctx.api, 'dm-resched', mmoOverrides(ctx));
     try {
       await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, ['healer']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       await rescheduleEvent(ctx.api, ev.id, 240);
       // event_rescheduled notification created
     } finally {
@@ -87,13 +85,13 @@ const slotVacatedNotification: SmokeTest = {
     try {
       const res1 = await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['dps']);
-      await sleep(2000);
+      await awaitProcessing(ctx.api);
       // Remove the first signup — should trigger slot_vacated to creator
       const signupId = (res1 as { id?: number }).id;
       if (signupId) {
         await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
       }
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       // slot_vacated notification is buffered 3 min — just verify the
       // removal succeeded (the notification buffer is tested in unit tests)
     } finally {
@@ -137,7 +135,7 @@ const departureNotifSuppressedNotFull: SmokeTest = {
     try {
       const res = await signupAs(ctx.api, ev.id, users[0], ['dps']);
       await signupAs(ctx.api, ev.id, users[1], ['dps']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-1');
@@ -177,7 +175,7 @@ const departureNotifSentWhenFull: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
       await signupAs(ctx.api, ev.id, users[3], ['dps']);
       await signupAs(ctx.api, ev.id, users[4], ['dps']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-2');
@@ -216,10 +214,10 @@ const tentativeDisplacedNotification: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[4], ['dps'], {
         status: 'tentative',
       });
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       // 6th confirmed signup should displace tentative
       await signupAs(ctx.api, ev.id, users[5], ['dps']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       // tentative_displaced notification triggered for users[4]
     } finally {
       await deleteEvent(ctx.api, ev.id);
@@ -237,14 +235,14 @@ const rosterReassignmentNotification: SmokeTest = {
     try {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['dps']);
-      await sleep(2000);
+      await awaitProcessing(ctx.api);
       // Reassign user from tank to healer
       await ctx.api.patch(`/events/${ev.id}/roster`, {
         assignments: [
           { userId: users[0], slot: 'healer', position: 1 },
         ],
       });
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       // roster_reassigned notification buffered for creator
     } finally {
       await deleteEvent(ctx.api, ev.id);
@@ -265,7 +263,7 @@ const pugInviteNotification: SmokeTest = {
           role: 'healer',
         })
         .catch(() => {});
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       // PUG invite DM sent to the target user (or queued if not found)
     } finally {
       await deleteEvent(ctx.api, ev.id);
@@ -312,7 +310,7 @@ const gameAffinityNotification: SmokeTest = {
       return;
     }
     await addGameInterest(ctx.api, ctx.dmRecipientUserId, gameId);
-    await sleep(500);
+    await awaitProcessing(ctx.api);
     // Create event within lead-time window (admin is creator → excluded)
     const ev = await createEvent(ctx.api, 'dm-affinity', {
       gameId,
@@ -355,7 +353,7 @@ const welcomeDmNotification: SmokeTest = {
       .post('/admin/test/enable-discord-notifications', {
         userId: ctx.dmRecipientUserId,
       });
-    await sleep(1000);
+    await awaitProcessing(ctx.api);
     // Welcome DM was attempted (may fail with 50007 for bot users,
     // but the dispatch path was exercised)
   },
@@ -402,7 +400,7 @@ const rescheduleDmHasDate: SmokeTest = {
     try {
       // Sign up a demo user (NOT admin) — admin is excluded as rescheduler
       await signupAs(ctx.api, ev.id, recipientId, ['dps']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       await rescheduleEvent(ctx.api, ev.id, 300);
       // Poll until the demo user gets the reschedule notification
       type NotifDto = { type: string; title?: string; message?: string };
@@ -465,7 +463,7 @@ const departureNotifSuppressedDpsFull: SmokeTest = {
       const dpsRes = await signupAs(ctx.api, ev.id, users[2], ['dps']);
       await signupAs(ctx.api, ev.id, users[3], ['dps']);
       await signupAs(ctx.api, ev.id, users[4], ['dps']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       const signupId = (dpsRes as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       // Depart a DPS — should NOT trigger notification (DPS is not critical)
@@ -503,7 +501,7 @@ const departureNotifSentHealerMmo: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       const healRes = await signupAs(ctx.api, ev.id, users[1], ['healer']);
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       const signupId = (healRes as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       // Depart healer — should trigger even though event is NOT full
@@ -539,7 +537,7 @@ const departureNotifSentGenericFull: SmokeTest = {
       const res = await signupAs(ctx.api, ev.id, users[0], ['player']);
       await signupAs(ctx.api, ev.id, users[1], ['player']);
       await signupAs(ctx.api, ev.id, users[2], ['player']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-gen-depart');
@@ -573,7 +571,7 @@ const departureNotifSuppressedGenericNotFull: SmokeTest = {
     try {
       const res = await signupAs(ctx.api, ev.id, users[0], ['player']);
       await signupAs(ctx.api, ev.id, users[1], ['player']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-gen-notfull');
@@ -608,12 +606,12 @@ const cancelSuppressedGenericNotFull: SmokeTest = {
     try {
       await signupAs(ctx.api, ev.id, users[0], ['player']);
       await signupAs(ctx.api, ev.id, users[1], ['player']);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       // Cancel user's signup (triggers bufferLeave → 3 min timer)
       await cancelSignupAs(ctx.api, ev.id, users[0]);
       // Immediately flush the buffer (bypasses 3-min wait)
       await flushNotificationBuffer(ctx.api);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       // Verify NO slot_vacated notification (event was NOT full)
       const found = await pollForCondition(
         async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
@@ -646,11 +644,11 @@ const cancelSuppressedDpsMmo: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
-      await sleep(3000); // Wait for auto-allocation to assign roster slots
+      await awaitProcessing(ctx.api);
       // Cancel the DPS signup (not a critical role)
       await cancelSignupAs(ctx.api, ev.id, users[2]);
       await flushNotificationBuffer(ctx.api);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       const found = await pollForCondition(
         async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
         8_000,
@@ -683,11 +681,11 @@ const cancelFiredTankMmo: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
-      await sleep(3000); // Wait for auto-allocation to assign roster slots
+      await awaitProcessing(ctx.api);
       // Cancel the TANK signup (critical role — should notify)
       await cancelSignupAs(ctx.api, ev.id, users[0]);
       await flushNotificationBuffer(ctx.api);
-      await sleep(1000);
+      await awaitProcessing(ctx.api);
       // Poll for slot_vacated notification (should appear)
       await pollForCondition(
         async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,

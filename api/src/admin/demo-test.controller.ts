@@ -50,6 +50,10 @@ const CancelSignupSchema = z.object({
   userId: z.number().int().positive(),
 });
 
+const AwaitProcessingSchema = z.object({
+  timeoutMs: z.number().int().positive().max(60_000).optional(),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 const CreateTestSignupSchema = z.object({
@@ -180,6 +184,33 @@ export class DemoTestController {
   }> {
     const flushed = await this.demoTestService.flushNotificationBufferForTest();
     return { success: true, flushed };
+  }
+
+  /** Flush voice attendance sessions to the DB — DEMO_MODE only. */
+  @Post('flush-voice-sessions')
+  @HttpCode(HttpStatus.OK)
+  async flushVoiceSessionsForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.flushVoiceSessionsForTest();
+  }
+
+  /** Drain the embed sync BullMQ queue — DEMO_MODE only. */
+  @Post('flush-embed-queue')
+  @HttpCode(HttpStatus.OK)
+  async flushEmbedQueueForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.flushEmbedQueueForTest();
+  }
+
+  /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
+  @Post('await-processing')
+  @HttpCode(HttpStatus.OK)
+  async awaitProcessingForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(AwaitProcessingSchema, body ?? {});
+    await this.demoTestService.awaitProcessingForTest(
+      parsed.timeoutMs ?? 30_000,
+    );
+    return { success: true };
   }
 
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */

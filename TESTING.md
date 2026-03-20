@@ -406,6 +406,66 @@ npx playwright test                           # auto-starts dev server on :5173
 BASE_URL=http://localhost:80 npx playwright test  # against Docker
 ```
 
+## Smoke Test Authoring Standards (Discord Companion Bot)
+
+Discord smoke tests live in `tools/test-bot/src/smoke/tests/`. These rules ensure reliability and eliminate flaky timing issues.
+
+### Rule 1: No `sleep()` calls
+
+**Never** use `sleep()`, `setTimeout`, or fixed delays. Use deterministic wait helpers instead:
+
+```ts
+// BAD — flaky, wastes CI time
+await sleep(2000);
+
+// GOOD — drains all BullMQ queues before continuing
+await awaitProcessing(ctx.api);
+
+// GOOD — polls until a condition is met
+await pollForCondition(
+  async () => {
+    const result = await ctx.api.get(`/some-endpoint`);
+    return result.ready ? result : null;
+  },
+  ctx.config.timeoutMs,
+  { intervalMs: 2000 },
+);
+```
+
+### Rule 2: Every async side-effect needs a deterministic wait
+
+After any action that triggers background processing (signups, cancellations, reschedules, roster changes), call `awaitProcessing(ctx.api)` before asserting on the result. This drains all BullMQ queues server-side.
+
+### Rule 3: New wait helpers go in shared modules
+
+- **API-triggered waits** (queue drains, DB flushes): `tools/test-bot/src/smoke/fixtures.ts`
+- **Polling helpers** (channel messages, DMs, conditions): `tools/test-bot/src/helpers/polling.ts`
+
+Available helpers:
+
+| Helper | Location | Purpose |
+|--------|----------|---------|
+| `awaitProcessing(api)` | `fixtures.ts` | Drain all BullMQ queues |
+| `flushVoiceSessions(api)` | `fixtures.ts` | Flush in-memory voice sessions to DB |
+| `flushEmbedQueue(api)` | `fixtures.ts` | Drain embed sync queue |
+| `flushNotificationBuffer(api)` | `fixtures.ts` | Flush buffered notifications |
+| `pollForCondition(check, timeout)` | `polling.ts` | Generic condition poller with backoff |
+| `pollForEmbed(channelId, predicate, timeout)` | `polling.ts` | Poll channel for matching message |
+| `waitForEmbedUpdate(channelId, predicate, timeout)` | `polling.ts` | Event listener + poll fallback for edits |
+| `waitForDM(userId, predicate, timeout)` | `polling.ts` | Poll DM channel for matching message |
+
+### Rule 4: Timeouts are generous
+
+- Default timeout: 10s for most operations
+- Slow operations (reminders, cron-triggered): 30-60s
+- Use `ctx.config.timeoutMs` for standard timeouts, override with a literal for known-slow paths
+
+### Rule 5: Tests must be idempotent
+
+- Create unique resources per test (use `createEvent(api, 'tag')` which generates UIDs)
+- Clean up in `finally` blocks — delete events, bindings, and other test data
+- Never depend on state from a previous test
+
 ## Exemplary Reference Files
 
 These files demonstrate best testing practices — use them as templates:

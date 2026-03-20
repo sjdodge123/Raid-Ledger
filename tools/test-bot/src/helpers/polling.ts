@@ -5,7 +5,7 @@
  */
 import { type Message, type PartialMessage } from 'discord.js';
 import { getClient } from '../client.js';
-import { readLastMessages, toSimpleMessage, type SimpleMessage } from './messages.js';
+import { readDMs, readLastMessages, toSimpleMessage, type SimpleMessage } from './messages.js';
 
 /** Options for pollForEmbed. */
 export interface PollOptions {
@@ -198,6 +198,45 @@ export async function pollForCondition<T>(
   }
 
   throw new Error(`pollForCondition timed out after ${timeoutMs}ms`);
+}
+
+/**
+ * Poll for a DM matching a predicate.
+ * Uses readDMs() with exponential backoff to find a matching message
+ * in the bot's DM channel with a specific user.
+ *
+ * @param userId - The Discord user ID whose DM channel to read.
+ * @param predicate - Return true for the message you're looking for.
+ * @param timeoutMs - Maximum wait time (default 10_000).
+ * @param opts - Optional interval override.
+ * @returns The first matching SimpleMessage.
+ * @throws On timeout if no matching DM is found.
+ */
+export async function waitForDM(
+  userId: string,
+  predicate: (msg: SimpleMessage) => boolean,
+  timeoutMs = 10_000,
+  opts?: { intervalMs?: number },
+): Promise<SimpleMessage> {
+  const interval = opts?.intervalMs ?? DEFAULT_INTERVAL;
+  const deadline = Date.now() + timeoutMs;
+  let currentInterval = interval;
+
+  while (Date.now() < deadline) {
+    const msgs = await readDMs(userId);
+    const match = msgs.find(predicate);
+    if (match) return match;
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+
+    await delay(Math.min(currentInterval, remaining));
+    currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL);
+  }
+
+  throw new Error(
+    `waitForDM timed out after ${timeoutMs}ms for user ${userId}`,
+  );
 }
 
 /** Simple delay helper. */

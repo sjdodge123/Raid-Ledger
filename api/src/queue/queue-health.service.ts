@@ -22,6 +22,7 @@ export class QueueHealthService {
     this.queues.set(queue.name, queue);
   }
 
+  /** Collect job counts for all registered queues. */
   async getHealthStatus(): Promise<QueueHealthStatus[]> {
     const results: QueueHealthStatus[] = [];
 
@@ -44,5 +45,37 @@ export class QueueHealthService {
     }
 
     return results;
+  }
+
+  /** Drain (remove waiting jobs from) all registered queues. */
+  async drainAll(): Promise<void> {
+    for (const [, queue] of this.queues) {
+      await queue.drain();
+    }
+  }
+
+  /**
+   * Poll all registered queues until none have waiting or active jobs.
+   * Throws if the timeout expires before all queues are idle.
+   */
+  async awaitDrained(timeoutMs = 30_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    const pollInterval = 500;
+
+    while (Date.now() < deadline) {
+      const statuses = await this.getHealthStatus();
+      const busy = statuses.some((s) => s.waiting > 0 || s.active > 0);
+      if (!busy) return;
+
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await new Promise((r) =>
+        setTimeout(r, Math.min(pollInterval, remaining)),
+      );
+    }
+
+    throw new Error(
+      `awaitDrained timed out after ${timeoutMs}ms — queues still have pending jobs`,
+    );
   }
 }

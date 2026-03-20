@@ -13,7 +13,7 @@ import {
   cancelEvent,
   rescheduleEvent,
   deleteEvent,
-  sleep,
+  awaitProcessing,
 } from '../fixtures.js';
 import { assertEmbedTitle, assertEmbedCount, assertHasButton } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -237,7 +237,7 @@ const nonMmoNoWowAvatars: SmokeTest = {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       // Sign up with MMO character (which has a WoW class)
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx));
-      await sleep(5000); // Wait for embed sync queue to process in CI
+      await awaitProcessing(ctx.api);
       // Re-poll for the embed (don't depend on catching the edit event)
       const found = await pollForEmbed(
         ctx.defaultChannelId,

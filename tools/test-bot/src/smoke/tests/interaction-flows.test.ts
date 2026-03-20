@@ -10,7 +10,6 @@ import {
   signupAs,
   cancelSignup,
   deleteEvent,
-  sleep,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -48,7 +47,6 @@ const signupCancelFlow: SmokeTest = {
         ctx.config.timeoutMs,
       );
       await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
-      await sleep(1000); // rate-limit between API calls
       await cancelSignup(ctx.api, ev.id);
       await pollForEmbed(
         chId,
@@ -76,7 +74,6 @@ const slotVacatedFlow: SmokeTest = {
         ctx.config.timeoutMs,
       );
       const res = await signupAs(ctx.api, ev.id, users[0], ['tank']);
-      await sleep(1000); // rate-limit between API calls
       // Admin removes the signup
       const signupId = (res as { id?: number }).id;
       if (signupId) {
@@ -114,7 +111,6 @@ const benchPromotionFlow: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[1], ['dps']);
       // 3rd goes to bench
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
-      await sleep(1000); // rate-limit between API calls
       // Remove first player — bench player should auto-promote (5-min delay)
       const signupId = (res1 as { id?: number }).id;
       if (signupId) {
