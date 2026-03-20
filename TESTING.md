@@ -536,7 +536,7 @@ This script (`tools/test-bot/scripts/no-sleep-lint.sh`) scans all smoke test fil
 
 ## Discord Smoke Tests (Companion Bot)
 
-The Discord companion bot runs 28+ smoke tests that validate real Discord behavior end-to-end — embed posting, roster calculations, DM notifications, interaction flows, and voice activity. These extend the authoring standards above with operational details.
+The Discord companion bot runs 53 smoke tests that validate real Discord behavior end-to-end — embed posting, roster calculations, DM notifications, interaction flows, and voice activity. These extend the authoring standards above with operational details.
 
 ### Directory structure
 
@@ -563,10 +563,10 @@ tools/test-bot/src/smoke/
 |----------|------|-------|-------------------|
 | Channel embeds | `channel-embeds.test.ts` | 8 | Embed posted, FILLING status, tentative, cancel signup, event cancel, reschedule, buttons, non-MMO avatar filtering |
 | Roster calculation | `roster-calculation.test.ts` | 4 | Slot allocation, MMO role assignment, bench overflow, promotion |
-| DM notifications | `dm-notifications.test.ts` | 7+1 slow | Signup confirmation, roster assignment, event cancellation, reminders |
+| DM notifications | `dm-notifications.test.ts` | 18+1 slow | Signup confirmation, roster assignment, event cancellation, reminders |
 | Interaction flows | `interaction-flows.test.ts` | 8 | Bot connectivity, signup→cancel, slot vacate, bench promote, embed sync, multi-user, event delete cleanup, duplicate signup character data |
-| Voice activity | `voice-activity.test.ts` | 3+1 slow | Voice join/leave tracking, attendance session management |
-| Push content | `push-content.test.ts` | varies | Push notification payload validation |
+| Voice activity | `voice-activity.test.ts` | 4+2 slow | Voice join/leave tracking, attendance session management |
+| Push content | `push-content.test.ts` | 8 | Push notification payload validation |
 
 ### Test anatomy
 
