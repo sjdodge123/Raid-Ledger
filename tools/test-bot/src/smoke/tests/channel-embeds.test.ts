@@ -67,7 +67,12 @@ const embedFilling: SmokeTest = {
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['dps']));
       await waitForEmbedUpdate(
         ctx.defaultChannelId,
-        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        (m) =>
+          m.embeds.some(
+            (e) =>
+              e.title?.includes(ev.title) &&
+              e.description?.includes('ROSTER:'),
+          ),
         ctx.config.timeoutMs,
       );
     } finally {
@@ -86,7 +91,12 @@ const embedTentative: SmokeTest = {
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['healer']));
       await waitForEmbedUpdate(
         ctx.defaultChannelId,
-        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        (m) =>
+          m.embeds.some(
+            (e) =>
+              e.title?.includes(ev.title) &&
+              e.description?.includes('ROSTER:'),
+          ),
         ctx.config.timeoutMs,
       );
     } finally {
@@ -103,15 +113,29 @@ const embedCancelSignup: SmokeTest = {
     try {
       await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['tank']));
+      // Wait for embed to show the signup in the roster
       await waitForEmbedUpdate(
         ctx.defaultChannelId,
-        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        (m) =>
+          m.embeds.some(
+            (e) =>
+              e.title?.includes(ev.title) &&
+              e.description?.includes('ROSTER:'),
+          ),
         ctx.config.timeoutMs,
       );
       await cancelSignup(ctx.api, ev.id);
+      // After cancel, roster count drops to 0: MMO shows "ROSTER: 0/",
+      // non-MMO removes the roster section entirely
       await waitForEmbedUpdate(
         ctx.defaultChannelId,
-        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        (m) =>
+          m.embeds.some(
+            (e) =>
+              e.title?.includes(ev.title) &&
+              (!e.description?.includes('ROSTER:') ||
+                e.description.includes('ROSTER: 0/')),
+          ),
         ctx.config.timeoutMs,
       );
     } finally {
@@ -145,11 +169,25 @@ const embedReschedule: SmokeTest = {
   async run(ctx) {
     const ev = await createEvent(ctx.api, 'embed-resched', mmoOverrides(ctx));
     try {
-      await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      const original = await embedInChannel(
+        ctx.defaultChannelId,
+        ev.title,
+        ctx.config.timeoutMs,
+      );
+      // Capture the original timestamp from the embed description
+      const originalDesc = original.embeds[0]?.description ?? '';
+      const originalTs = originalDesc.match(/<t:(\d+):f>/)?.[1] ?? '';
       await rescheduleEvent(ctx.api, ev.id, 180);
+      // Wait for the embed timestamp to change from the original
       await waitForEmbedUpdate(
         ctx.defaultChannelId,
-        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        (m) =>
+          m.embeds.some(
+            (e) =>
+              e.title?.includes(ev.title) &&
+              !!e.description?.includes('<t:') &&
+              !e.description.includes(`<t:${originalTs}:f>`),
+          ),
         ctx.config.timeoutMs,
       );
     } finally {
