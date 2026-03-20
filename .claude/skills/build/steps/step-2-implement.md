@@ -15,13 +15,12 @@ git branch rok-<num>-<short-name> origin/main
 # Create worktree
 git worktree add ../Raid-Ledger--rok-<num> rok-<num>-<short-name>
 
-# Install dependencies
-cd ../Raid-Ledger--rok-<num> && npm install && cd -
-
-# Viability check — ensure the worktree builds clean
-npx tsc --noEmit -p ../Raid-Ledger--rok-<num>/api/tsconfig.json
-npx tsc --noEmit -p ../Raid-Ledger--rok-<num>/web/tsconfig.json
+# Setup worktree — copies .env files, installs deps, builds contract
+# The deploy script is worktree-aware and handles everything automatically
+cd ../Raid-Ledger--rok-<num> && ./scripts/deploy_dev.sh --ci --rebuild && cd -
 ```
+
+**DO NOT manually copy .env files, run npm install, or npm audit fix.** The deploy script handles all of this. See CLAUDE.md "Local Dev Environment" for details.
 
 Update state for each story: `status: "worktree_ready"`
 
