@@ -206,6 +206,64 @@ test.describe('Event detail', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Event Detail — Mobile
+// ---------------------------------------------------------------------------
+
+test.describe('Event detail — mobile', () => {
+    test.beforeEach(async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name === 'desktop', 'Mobile-only test');
+        await navigateToFirstEvent(page, testInfo);
+    });
+
+    test('navigate to seeded event and verify content', async ({ page }) => {
+        // Event heading should be visible
+        await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 10_000 });
+        // No error boundary
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+    });
+
+    test('event detail page renders without crashing', async ({ page }) => {
+        // On mobile, the "Edit" button is directly visible (Reschedule is in overflow)
+        // Use exact match to avoid matching event cards with "Edition" in their name
+        await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+    });
+
+    test('admin action buttons are visible on mobile', async ({ page }) => {
+        // Mobile shows Invite, Edit, and More actions directly
+        await expect(page.getByRole('button', { name: 'Invite' })).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'More actions' })).toBeVisible();
+        // Reschedule is hidden behind overflow menu (not directly visible)
+        await expect(page.getByRole('button', { name: 'Reschedule' })).not.toBeVisible();
+    });
+
+    test('event detail loads without error boundary', async ({ page }) => {
+        // Wait for page to fully load by checking for the Edit button
+        // Use exact match to avoid matching event cards with "Edition" in their name
+        await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible({ timeout: 10_000 });
+        // Attendees heading confirms full page render
+        await expect(page.getByRole('heading', { name: /Attendees/i })).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+    });
+
+    test('reschedule modal opens from overflow menu and shows signup count', async ({ page }) => {
+        // Open overflow menu
+        await expect(page.getByRole('button', { name: 'More actions' })).toBeVisible({ timeout: 10_000 });
+        await page.getByRole('button', { name: 'More actions' }).click();
+
+        // Click Reschedule in the overflow menu
+        const rescheduleBtn = page.getByRole('button', { name: 'Reschedule' });
+        await expect(rescheduleBtn).toBeVisible({ timeout: 5_000 });
+        await rescheduleBtn.click();
+
+        // Modal should open with heading and show player availability
+        await expect(page.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByText(/player availability/i)).toBeVisible({ timeout: 5_000 });
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Regression: ROK-886 — event detail mobile action button layout
 // ---------------------------------------------------------------------------
 
