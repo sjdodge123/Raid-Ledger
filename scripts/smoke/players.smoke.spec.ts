@@ -1,5 +1,10 @@
 /**
  * Players page smoke tests — heading, player list, total count.
+ *
+ * Mobile parity: all selectors are viewport-agnostic (ARIA roles, text
+ * matchers, href attribute selectors) so these tests run on both the
+ * desktop and mobile Playwright projects without skips.  Verified at
+ * 375×812 via MCP exploration (ROK-892).
  */
 import { test, expect } from '@playwright/test';
 
