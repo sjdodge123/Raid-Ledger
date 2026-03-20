@@ -227,6 +227,22 @@ export async function flushNotificationBuffer(api: ApiClient) {
   );
 }
 
-export function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
+/** Flush voice attendance sessions to the DB — DEMO_MODE only. */
+export async function flushVoiceSessions(
+  api: ApiClient,
+): Promise<void> {
+  await api.post('/admin/test/flush-voice-sessions', {});
+}
+
+/** Drain the embed sync BullMQ queue — DEMO_MODE only. */
+export async function flushEmbedQueue(api: ApiClient): Promise<void> {
+  await api.post('/admin/test/flush-embed-queue', {});
+}
+
+/** Wait for all BullMQ queues to finish processing — DEMO_MODE only. */
+export async function awaitProcessing(
+  api: ApiClient,
+  timeoutMs = 10_000,
+): Promise<void> {
+  await api.post('/admin/test/await-processing', { timeoutMs });
 }

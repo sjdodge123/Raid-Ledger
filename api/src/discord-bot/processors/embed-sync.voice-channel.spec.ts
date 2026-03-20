@@ -2,6 +2,7 @@
  * Tests that EmbedSyncProcessor resolves and passes voiceChannelId to embeds (ROK-507).
  */
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
 import { EmbedSyncProcessor } from './embed-sync.processor';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
@@ -10,6 +11,8 @@ import { ChannelResolverService } from '../services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EMBED_STATES } from '../discord-bot.constants';
+import { EMBED_SYNC_QUEUE } from '../queues/embed-sync.queue';
+import { QueueHealthService } from '../../queue/queue-health.service';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import type { Job } from 'bullmq';
 import type { EmbedSyncJobData } from '../queues/embed-sync.queue';
@@ -89,6 +92,14 @@ beforeEach(async () => {
     providers: [
       EmbedSyncProcessor,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: getQueueToken(EMBED_SYNC_QUEUE),
+        useValue: {
+          drain: jest.fn(),
+          getJobCounts: jest.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+        },
+      },
+      { provide: QueueHealthService, useValue: { register: jest.fn() } },
       {
         provide: DiscordBotClientService,
         useValue: {

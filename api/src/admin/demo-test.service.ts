@@ -13,6 +13,8 @@ import { SignupsService } from '../events/signups.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
 import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
+import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
+import { QueueHealthService } from '../queue/queue-health.service';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -116,7 +118,7 @@ export class DemoTestService {
     userId: number,
     type?: string,
     limit = 20,
-  ): Promise<typeof schema.notifications.$inferSelect[]> {
+  ): Promise<(typeof schema.notifications.$inferSelect)[]> {
     await this.assertDemoMode();
     const conditions = [eq(schema.notifications.userId, userId)];
     if (type) {
@@ -146,6 +148,31 @@ export class DemoTestService {
     const count = buf.pendingCount;
     await buf.flushAll();
     return count;
+  }
+
+  /** Flush voice attendance sessions to DB — DEMO_MODE only. */
+  async flushVoiceSessionsForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const svc = this.moduleRef.get(VoiceAttendanceService, {
+      strict: false,
+    });
+    await svc.flushToDb();
+    return { success: true };
+  }
+
+  /** Drain the embed sync BullMQ queue — DEMO_MODE only. */
+  async flushEmbedQueueForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const qhs = this.moduleRef.get(QueueHealthService, { strict: false });
+    await qhs.drainAll();
+    return { success: true };
+  }
+
+  /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
+  async awaitProcessingForTest(timeoutMs = 30_000): Promise<void> {
+    await this.assertDemoMode();
+    const qhs = this.moduleRef.get(QueueHealthService, { strict: false });
+    await qhs.awaitDrained(timeoutMs);
   }
 
   /** Directly update a signup's status in the DB. */

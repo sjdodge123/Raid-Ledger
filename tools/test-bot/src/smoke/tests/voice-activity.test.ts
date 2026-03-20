@@ -12,8 +12,9 @@ import {
   signup,
   signupAs,
   pickChannel,
-  sleep,
   futureTime,
+  awaitProcessing,
+  flushVoiceSessions,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -45,8 +46,8 @@ async function withVoiceBinding(
       purpose: 'game-announcements',
     });
   } catch { /* may already exist */ }
-  // Allow binding cache to expire before voice join
-  await sleep(2000);
+  // Ensure binding creation is fully processed before voice join
+  await awaitProcessing(ctx.api);
   try {
     await fn(vCh.id, tCh.id);
   } finally {
@@ -73,7 +74,6 @@ const voiceJoinDetected: SmokeTest = {
         );
       } finally {
         leaveVoice();
-        await sleep(1000);
       }
     });
   },
@@ -130,7 +130,6 @@ const adHocSpawn: SmokeTest = {
         if (msg.embeds.length === 0) throw new Error('No ad-hoc embed found');
       } finally {
         leaveVoice();
-        await sleep(2000);
       }
     });
   },
@@ -153,7 +152,6 @@ const voiceMemberList: SmokeTest = {
       );
     } finally {
       leaveVoice();
-      await sleep(1000);
     }
   },
 };
@@ -205,7 +203,6 @@ const multiGameVoiceDetected: SmokeTest = {
       });
       eventId = ev.id;
       await signup(ctx.api, ev.id);
-      await sleep(2000); // let binding cache expire
 
       // Join voice and poll until pipeline detects participants
       await joinVoice(vCh.id);
@@ -225,7 +222,6 @@ const multiGameVoiceDetected: SmokeTest = {
       });
     } finally {
       leaveVoice();
-      await sleep(1000);
       if (bindA) await deleteBinding(ctx.api, bindA);
       if (bindB) await deleteBinding(ctx.api, bindB);
       if (eventId) await deleteEvent(ctx.api, eventId);
@@ -261,12 +257,10 @@ const metricsVoicePopulated: SmokeTest = {
       try {
         // Sign up the user whose Discord ID = test bot
         await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
-        await sleep(2000);
 
         await joinVoice(vChId);
-        // Wait for the 30-second DB flush interval + buffer
-        console.log('  [voice] Waiting 35 s for voice session DB flush...');
-        await sleep(35_000);
+        // Flush in-memory voice sessions to DB deterministically
+        await flushVoiceSessions(ctx.api);
 
         type MetricsResponse = {
           voiceSummary: { totalTracked: number } | null;
@@ -299,7 +293,6 @@ const metricsVoicePopulated: SmokeTest = {
         }
       } finally {
         leaveVoice();
-        await sleep(1000);
         await deleteEvent(ctx.api, ev.id);
       }
     });

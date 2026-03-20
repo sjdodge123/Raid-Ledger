@@ -1,6 +1,7 @@
-import { Logger } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Logger, type OnModuleInit } from '@nestjs/common';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job, Queue } from 'bullmq';
+import { QueueHealthService } from '../../queue/queue-health.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import {
   AD_HOC_GRACE_QUEUE,
@@ -15,11 +16,23 @@ import {
  * Follows the EmbedSyncProcessor pattern.
  */
 @Processor(AD_HOC_GRACE_QUEUE)
-export class AdHocGracePeriodProcessor extends WorkerHost {
+export class AdHocGracePeriodProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(AdHocGracePeriodProcessor.name);
 
-  constructor(private readonly adHocEventService: AdHocEventService) {
+  constructor(
+    @InjectQueue(AD_HOC_GRACE_QUEUE)
+    private readonly queue: Queue,
+    private readonly adHocEventService: AdHocEventService,
+    private readonly queueHealth: QueueHealthService,
+  ) {
     super();
+  }
+
+  onModuleInit() {
+    this.queueHealth.register(this.queue);
   }
 
   async process(job: Job<AdHocGracePeriodJobData>): Promise<void> {

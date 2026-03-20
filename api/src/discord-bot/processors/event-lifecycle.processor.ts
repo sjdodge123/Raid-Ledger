@@ -1,6 +1,7 @@
-import { Inject, Logger, Optional } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Inject, Logger, Optional, type OnModuleInit } from '@nestjs/common';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job, Queue } from 'bullmq';
+import { QueueHealthService } from '../../queue/queue-health.service';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { isPerfEnabled, perfLog } from '../../common/perf-logger';
@@ -31,10 +32,15 @@ const STANDALONE_LEAD_TIME_MS = 6 * 24 * 60 * 60 * 1000;
  * Retries up to 3 times with exponential backoff.
  */
 @Processor(EVENT_LIFECYCLE_QUEUE)
-export class EventLifecycleProcessor extends WorkerHost {
+export class EventLifecycleProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(EventLifecycleProcessor.name);
 
   constructor(
+    @InjectQueue(EVENT_LIFECYCLE_QUEUE)
+    private readonly queue: Queue,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
@@ -44,8 +50,13 @@ export class EventLifecycleProcessor extends WorkerHost {
     @Optional()
     @Inject(GameAffinityNotificationService)
     private readonly gameAffinityService: GameAffinityNotificationService | null,
+    private readonly queueHealth: QueueHealthService,
   ) {
     super();
+  }
+
+  onModuleInit() {
+    this.queueHealth.register(this.queue);
   }
 
   async process(job: Job<EventLifecycleJobData>): Promise<void> {

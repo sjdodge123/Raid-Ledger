@@ -14,7 +14,9 @@ describe('AdHocGracePeriodProcessor', () => {
     };
 
     processor = new AdHocGracePeriodProcessor(
+      {} as never,
       mockAdHocEventService as unknown as AdHocEventService,
+      { register: jest.fn() } as never,
     );
   });
 

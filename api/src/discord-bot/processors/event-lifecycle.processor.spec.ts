@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
 import { EventLifecycleProcessor } from './event-lifecycle.processor';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
@@ -6,6 +7,8 @@ import { ScheduledEventService } from '../services/scheduled-event.service';
 import { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { EVENT_LIFECYCLE_QUEUE } from '../queues/event-lifecycle.queue';
+import { QueueHealthService } from '../../queue/queue-health.service';
 import type { Job } from 'bullmq';
 import type { EventLifecycleJobData } from '../queues/event-lifecycle.queue';
 import type { EventPayload } from '../listeners/event.listener';
@@ -53,6 +56,14 @@ function buildProviders(mockDb: Record<string, jest.Mock>) {
   return [
     EventLifecycleProcessor,
     { provide: DrizzleAsyncProvider, useValue: mockDb },
+    {
+      provide: getQueueToken(EVENT_LIFECYCLE_QUEUE),
+      useValue: {
+        drain: jest.fn(),
+        getJobCounts: jest.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+      },
+    },
+    { provide: QueueHealthService, useValue: { register: jest.fn() } },
     {
       provide: DiscordBotClientService,
       useValue: {

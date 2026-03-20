@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
 import { EventPlansProcessor } from './event-plans.processor';
-import { EventPlansService } from './event-plans.service';
+import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
+import { QueueHealthService } from '../queue/queue-health.service';
 import type { Job } from 'bullmq';
 import type { PollClosedJobData } from './event-plans.service';
 
@@ -27,6 +29,14 @@ async function setupEach() {
     providers: [
       EventPlansProcessor,
       { provide: EventPlansService, useValue: mockService },
+      {
+        provide: getQueueToken(EVENT_PLANS_QUEUE),
+        useValue: {
+          drain: jest.fn(),
+          getJobCounts: jest.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+        },
+      },
+      { provide: QueueHealthService, useValue: { register: jest.fn() } },
     ],
   }).compile();
 

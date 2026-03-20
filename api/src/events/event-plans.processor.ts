@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job, Queue } from 'bullmq';
+import { QueueHealthService } from '../queue/queue-health.service';
 import { isPerfEnabled, perfLog } from '../common/perf-logger';
 import {
   EventPlansService,
@@ -15,11 +16,23 @@ import {
  */
 @Processor(EVENT_PLANS_QUEUE)
 @Injectable()
-export class EventPlansProcessor extends WorkerHost {
+export class EventPlansProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(EventPlansProcessor.name);
 
-  constructor(private readonly eventPlansService: EventPlansService) {
+  constructor(
+    @InjectQueue(EVENT_PLANS_QUEUE)
+    private readonly queue: Queue,
+    private readonly eventPlansService: EventPlansService,
+    private readonly queueHealth: QueueHealthService,
+  ) {
     super();
+  }
+
+  onModuleInit() {
+    this.queueHealth.register(this.queue);
   }
 
   async process(job: Job<PollClosedJobData>): Promise<void> {

@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { QueueHealthService } from '../queue/queue-health.service';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Queue, Job } from 'bullmq';
@@ -113,16 +114,26 @@ export class BenchPromotionService {
  * before moving the longest-waiting bench player into it.
  */
 @Processor(BENCH_PROMOTION_QUEUE)
-export class BenchPromotionProcessor extends WorkerHost {
+export class BenchPromotionProcessor
+  extends WorkerHost
+  implements OnModuleInit
+{
   private readonly logger = new Logger(BenchPromotionProcessor.name);
 
   constructor(
+    @InjectQueue(BENCH_PROMOTION_QUEUE)
+    private readonly queue: Queue,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private notificationService: NotificationService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly queueHealth: QueueHealthService,
   ) {
     super();
+  }
+
+  onModuleInit() {
+    this.queueHealth.register(this.queue);
   }
 
   async process(job: Job<BenchPromotionJobData>): Promise<void> {

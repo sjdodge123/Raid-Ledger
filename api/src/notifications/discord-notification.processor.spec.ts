@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
 import {
   DiscordNotificationProcessor,
   buildPlaintextContent,
@@ -7,6 +8,8 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { DiscordNotificationService } from './discord-notification.service';
 import { SettingsService } from '../settings/settings.service';
+import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
+import { QueueHealthService } from '../queue/queue-health.service';
 import type { Job } from 'bullmq';
 import type { DiscordNotificationJobData } from './discord-notification.constants';
 
@@ -73,6 +76,14 @@ describe('DiscordNotificationProcessor', () => {
           useValue: mockDiscordNotificationService,
         },
         { provide: SettingsService, useValue: mockSettingsService },
+        {
+          provide: getQueueToken(DISCORD_NOTIFICATION_QUEUE),
+          useValue: {
+            drain: jest.fn(),
+            getJobCounts: jest.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+          },
+        },
+        { provide: QueueHealthService, useValue: { register: jest.fn() } },
       ],
     }).compile();
 
