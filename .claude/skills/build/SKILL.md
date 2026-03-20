@@ -33,11 +33,17 @@ No agents to respawn. No pings to send. The state file IS the recovery mechanism
 
 Apply this directly when assessing stories:
 
-| Scope | Criteria | Testing | Gates |
-|-------|----------|---------|-------|
+| Scope | Criteria | E2E Test Type | Gates |
+|-------|----------|---------------|-------|
 | **light** | Config, copy, style-only, docs | Lint + type check only | dev → ci → operator → smoke |
-| **standard** | Single-module feature, bug fix, straightforward | Unit tests required | dev → test_agent → ci → operator → reviewer → smoke |
-| **full** | Cross-module, migrations, contract changes, complex | Full test suite + planner + architect | dev → test_agent → ci → operator → reviewer → architect_final → smoke |
+| **standard** | Single-module feature, bug fix, straightforward | Playwright/Discord smoke (TDD) | e2e_test_first → dev → ci → operator → reviewer → smoke |
+| **full** | Cross-module, migrations, contract changes, complex | Full test suite (TDD) + planner + architect | e2e_test_first → dev → ci → operator → reviewer → architect_final → smoke |
+
+**E2E test type by area touched:**
+- UI changes → Playwright smoke test (desktop + mobile viewports)
+- Discord bot/notification changes → Discord companion bot smoke test
+- API-only, no UI/Discord → Integration test (Jest, real DB)
+- Pure logic only → Unit test
 
 **Scope decision rules:**
 - Touches `packages/contract` → full
@@ -53,7 +59,9 @@ Apply this directly when assessing stories:
 ```
 Requirements Interview (plan mode, if spec incomplete) → Enriched spec on disk
   → Linear "In Progress" (Step 1h — immediately after batch confirmed)
-  → Dev completes → Test Agent (if standard/full) → CI passes → Push branch
+  → E2E Test Agent writes FAILING test first (Step 2d — TDD)
+  → Dev builds to make the test pass (Step 2e)
+  → CI passes → Push branch
   → Deploy locally → Linear "In Review" → Update state → FULL STOP
   → Wait for operator to test and update Linear
   → Commit operator changes (MANDATORY before review)
@@ -66,14 +74,15 @@ Requirements Interview (plan mode, if spec incomplete) → Enriched spec on disk
   → Linear "Done"
 ```
 
-**Seven gates before PR:**
+**Eight gates before PR:**
 1. **Requirements** — spec completeness interview in plan mode (skipped if spec already complete)
-2. **Test Agent** — unit tests (skipped for light)
-3. **CI** — build + type check + lint + tests
-4. **Operator** — manual testing approval via Linear
-5. **Reviewer** — code review after operator approves
-6. **Architect final** — alignment check (only if `needs_architect`)
-7. **Smoke test** — Lead runs full suite (NEVER skipped)
+2. **E2E Test First (TDD)** — test agent writes failing Playwright/Discord/integration test BEFORE dev starts (skipped for light)
+3. **Dev** — implements feature to make the failing test pass
+4. **CI** — build + type check + lint + tests
+5. **Operator** — manual testing approval via Linear
+6. **Reviewer** — code review after operator approves
+7. **Architect final** — alignment check (only if `needs_architect`)
+8. **Smoke test** — Lead runs full suite (NEVER skipped)
 
 ---
 
@@ -156,8 +165,8 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 
 | Agent | Template | When | Model | Lifetime |
 |-------|----------|------|-------|----------|
-| Dev | `templates/dev.md` | Step 2 (new work + rework) | opus | Per-story |
-| Test Agent | `templates/test-agent.md` | Step 2 (after dev completes) | sonnet | Per-story |
+| E2E Test Agent | `templates/test-agent.md` | Step 2d (BEFORE dev — writes failing test) | sonnet | Per-story |
+| Dev | `templates/dev.md` | Step 2e (builds to make test pass) | opus | Per-story |
 | Reviewer | `templates/reviewer.md` | Step 4 (after operator approves) | sonnet | Per-story |
 | Architect | `templates/architect.md` | Step 2 pre-dev / Step 4 post-review (one-shot) | opus | One-shot |
 | Planner | `templates/planner.md` | Step 2 pre-dev (full scope only, one-shot) | opus | One-shot |
