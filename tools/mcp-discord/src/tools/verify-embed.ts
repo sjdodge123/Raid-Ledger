@@ -25,7 +25,7 @@ interface EmbedData {
 export async function execute(params: {
   messageIndex?: number;
 }): Promise<{ embed: EmbedData | null; screenshot: string }> {
-  const page = getPage();
+  const page = await getPage();
   const index = params.messageIndex ?? 0;
 
   const embed = await page.evaluate((idx: number) => {

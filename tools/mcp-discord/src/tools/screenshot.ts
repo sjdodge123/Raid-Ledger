@@ -21,7 +21,7 @@ export async function execute(params: {
   selector?: string;
   fullPage?: boolean;
 }): Promise<{ base64: string }> {
-  const page = getPage();
+  const page = await getPage();
 
   let screenshot: Buffer;
   if (params.selector) {

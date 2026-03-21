@@ -41,9 +41,12 @@ export async function connectCDP(): Promise<Page> {
   return page;
 }
 
-export function getPage(): Page {
-  if (!page) throw new Error('Not connected — call connectCDP() first');
-  return page;
+export async function getPage(): Promise<Page> {
+  if (!page) {
+    console.error('[mcp-discord] No CDP connection — attempting lazy reconnect...');
+    await connectCDP();
+  }
+  return page!;
 }
 
 export async function disconnectCDP(): Promise<void> {

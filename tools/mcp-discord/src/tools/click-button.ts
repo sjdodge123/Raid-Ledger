@@ -23,7 +23,7 @@ export async function execute(params: {
   buttonLabel: string;
   messageIndex?: number;
 }): Promise<{ success: boolean; error?: string }> {
-  const page = getPage();
+  const page = await getPage();
 
   try {
     // Find buttons with matching text, searching from bottom of chat
