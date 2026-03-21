@@ -55,8 +55,6 @@ import {
   type SearchPipelineParams,
 } from './igdb-search-pipeline.helpers';
 
-export type { SearchResult } from './igdb.constants';
-
 @Injectable()
 export class IgdbService {
   private readonly logger = new Logger(IgdbService.name);
@@ -158,10 +156,6 @@ export class IgdbService {
   private normalizeQuery(q: string): string {
     return stripSearchPunctuation(q).toLowerCase().trim();
   }
-  private getCacheKey(q: string): string {
-    return `igdb:search:${this.normalizeQuery(q)}`;
-  }
-
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && this.tokenExpiry && new Date() < this.tokenExpiry)
       return this.accessToken;
@@ -194,7 +188,7 @@ export class IgdbService {
       getAdultFilter: () => this.isAdultFilterEnabled(),
       upsertGames: (g) => this.upsertGamesFromApi(g),
       normalizeQuery: (q) => this.normalizeQuery(q),
-      getCacheKey: (q) => this.getCacheKey(q),
+      getCacheKey: (q) => `igdb:search:${this.normalizeQuery(q)}`,
       queryIgdb: (body) => this.queryIgdb(body),
     };
   }
@@ -276,9 +270,15 @@ export class IgdbService {
   async getGameNowPlaying(gameId: number) {
     return queryNowPlaying(this.db, gameId);
   }
-  get redisClient() { return this.redis; }
-  get config() { return IGDB_CONFIG; }
-  get database() { return this.db; }
+  get redisClient() {
+    return this.redis;
+  }
+  get config() {
+    return IGDB_CONFIG;
+  }
+  get database() {
+    return this.db;
+  }
 
   async isAdultFilterEnabled(): Promise<boolean> {
     return (

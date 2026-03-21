@@ -147,7 +147,7 @@ async function updateGameWithItadData(
     .set({
       itadGameId: itadGame.id,
       itadBoxartUrl: itadGame.assets?.boxart ?? null,
-      itadTags: (itadGame as ItadGame & { tags?: string[] }).tags ?? [],
+      itadTags: [],
     })
     .where(eq(schema.games.id, gameId));
 }

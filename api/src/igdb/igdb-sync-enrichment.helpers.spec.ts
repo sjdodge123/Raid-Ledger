@@ -18,7 +18,9 @@ import type { ItadGame } from '../itad/itad.constants';
  * Uses manual chaining mocks to avoid coupling to flat-mock terminal methods,
  * since the query terminates at .where() (not .limit() or .returning()).
  */
-function createEnrichMockDb(gamesWithSteamId: { id: number; steamAppId: number }[]) {
+function createEnrichMockDb(
+  gamesWithSteamId: { id: number; steamAppId: number }[],
+) {
   const updateWhere = jest.fn().mockResolvedValue(undefined);
   const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
   const update = jest.fn().mockReturnValue({ set: updateSet });
@@ -67,7 +69,10 @@ describe('enrichSyncedGamesWithItad', () => {
       const mockDb = createEnrichMockDb([]);
       const mockLookup = jest.fn();
 
-      const result = await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+      const result = await enrichSyncedGamesWithItad(
+        mockDb as never,
+        mockLookup,
+      );
 
       expect(mockLookup).not.toHaveBeenCalled();
       expect(result).toBe(0);
@@ -84,7 +89,10 @@ describe('enrichSyncedGamesWithItad', () => {
       });
       const mockLookup = jest.fn().mockResolvedValue(itadGame);
 
-      const result = await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+      const result = await enrichSyncedGamesWithItad(
+        mockDb as never,
+        mockLookup,
+      );
 
       expect(result).toBe(1);
       expect(mockDb.update).toHaveBeenCalledTimes(1);
@@ -110,7 +118,10 @@ describe('enrichSyncedGamesWithItad', () => {
         .mockResolvedValueOnce(makeItadGame({ id: 'uuid-222' }))
         .mockResolvedValueOnce(makeItadGame({ id: 'uuid-333' }));
 
-      const result = await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+      const result = await enrichSyncedGamesWithItad(
+        mockDb as never,
+        mockLookup,
+      );
 
       expect(result).toBe(3);
       expect(mockDb.update).toHaveBeenCalledTimes(3);
@@ -123,7 +134,10 @@ describe('enrichSyncedGamesWithItad', () => {
       const mockDb = createEnrichMockDb(games);
       const mockLookup = jest.fn().mockResolvedValue(null);
 
-      const result = await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+      const result = await enrichSyncedGamesWithItad(
+        mockDb as never,
+        mockLookup,
+      );
 
       expect(result).toBe(0);
       expect(mockDb.update).not.toHaveBeenCalled();
@@ -142,7 +156,10 @@ describe('enrichSyncedGamesWithItad', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(makeItadGame({ id: 'uuid-300' }));
 
-      const result = await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+      const result = await enrichSyncedGamesWithItad(
+        mockDb as never,
+        mockLookup,
+      );
 
       expect(result).toBe(2);
       expect(mockDb.update).toHaveBeenCalledTimes(2);
@@ -163,7 +180,10 @@ describe('enrichSyncedGamesWithItad', () => {
         .mockRejectedValueOnce(new Error('ITAD API timeout'))
         .mockResolvedValueOnce(makeItadGame({ id: 'uuid-30' }));
 
-      const result = await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+      const result = await enrichSyncedGamesWithItad(
+        mockDb as never,
+        mockLookup,
+      );
 
       // Should not throw — continues past the failure
       expect(result).toBe(2);
@@ -194,7 +214,10 @@ describe('enrichSyncedGamesWithItad', () => {
       const itadGame = makeItadGame({ assets: undefined });
       const mockLookup = jest.fn().mockResolvedValue(itadGame);
 
-      const result = await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+      const result = await enrichSyncedGamesWithItad(
+        mockDb as never,
+        mockLookup,
+      );
 
       expect(result).toBe(1);
       expect(mockDb.updateSet).toHaveBeenCalledWith(
