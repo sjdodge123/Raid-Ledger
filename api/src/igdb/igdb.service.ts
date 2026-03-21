@@ -46,6 +46,7 @@ import {
   clearDiscoveryCache,
   buildAdultThemeFilter,
   executeIgdbQuery,
+  enrichSyncedGamesWithItad,
 } from './igdb-helpers.barrel';
 import { sortByRelevance } from './igdb-search-sort.helpers';
 import {
@@ -53,8 +54,6 @@ import {
   startSearchRefresh,
   type SearchPipelineParams,
 } from './igdb-search-pipeline.helpers';
-
-export type { SearchResult } from './igdb.constants';
 
 @Injectable()
 export class IgdbService {
@@ -131,8 +130,11 @@ export class IgdbService {
         themeFilter,
       );
       const backfilled = await backfillMissingCovers(this.db, queryFn);
+      const enriched = await enrichSyncedGamesWithItad(this.db, (id) =>
+        this.itadService.lookupBySteamAppId(id),
+      );
       await clearDiscoveryCache(this.redis);
-      return { refreshed, discovered, backfilled };
+      return { refreshed, discovered, backfilled, enriched };
     } finally {
       this._syncInProgress = false;
     }
@@ -154,10 +156,6 @@ export class IgdbService {
   private normalizeQuery(q: string): string {
     return stripSearchPunctuation(q).toLowerCase().trim();
   }
-  private getCacheKey(q: string): string {
-    return `igdb:search:${this.normalizeQuery(q)}`;
-  }
-
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && this.tokenExpiry && new Date() < this.tokenExpiry)
       return this.accessToken;
@@ -190,7 +188,7 @@ export class IgdbService {
       getAdultFilter: () => this.isAdultFilterEnabled(),
       upsertGames: (g) => this.upsertGamesFromApi(g),
       normalizeQuery: (q) => this.normalizeQuery(q),
-      getCacheKey: (q) => this.getCacheKey(q),
+      getCacheKey: (q) => `igdb:search:${this.normalizeQuery(q)}`,
       queryIgdb: (body) => this.queryIgdb(body),
     };
   }

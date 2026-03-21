@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
 import * as schema from '../drizzle/schema';
@@ -10,6 +10,7 @@ import {
 } from './igdb.constants';
 import { delay } from './igdb-api.helpers';
 import { upsertGamesFromApi } from './igdb-upsert.helpers';
+import type { ItadGame } from '../itad/itad.constants';
 
 const logger = new Logger('IgdbSyncHelpers');
 
@@ -101,4 +102,52 @@ export function buildAdultThemeFilter(adultFilterEnabled: boolean): string {
   return adultFilterEnabled
     ? ` & themes != (${ADULT_THEME_IDS.join(',')})`
     : '';
+}
+
+/**
+ * Enrich games that have a Steam App ID with ITAD metadata.
+ * Re-enriches ALL games every sync (no skip for already-enriched).
+ * @param db - Database connection
+ * @param lookupBySteamAppId - Function to look up ITAD game by Steam App ID
+ * @returns Number of successfully enriched games
+ */
+export async function enrichSyncedGamesWithItad(
+  db: PostgresJsDatabase<typeof schema>,
+  lookupBySteamAppId: (appId: number) => Promise<ItadGame | null>,
+): Promise<number> {
+  const games = await db
+    .select({ id: schema.games.id, steamAppId: schema.games.steamAppId })
+    .from(schema.games)
+    .where(isNotNull(schema.games.steamAppId));
+
+  if (games.length === 0) return 0;
+
+  let enriched = 0;
+  for (const game of games) {
+    try {
+      const itadGame = await lookupBySteamAppId(game.steamAppId!);
+      if (!itadGame) continue;
+      await updateGameWithItadData(db, game.id, itadGame);
+      enriched++;
+    } catch (err) {
+      logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);
+    }
+  }
+  return enriched;
+}
+
+/** Persist ITAD metadata to a game row. */
+async function updateGameWithItadData(
+  db: PostgresJsDatabase<typeof schema>,
+  gameId: number,
+  itadGame: ItadGame,
+): Promise<void> {
+  await db
+    .update(schema.games)
+    .set({
+      itadGameId: itadGame.id,
+      itadBoxartUrl: itadGame.assets?.boxart ?? null,
+      itadTags: [],
+    })
+    .where(eq(schema.games.id, gameId));
 }
