@@ -28,7 +28,7 @@ export async function execute(params: {
     return { success: false, url: '', error: 'Invalid guild or channel ID — must be a Discord snowflake (17-20 digit number)' };
   }
 
-  const page = getPage();
+  const page = await getPage();
   const url = `https://discord.com/channels/${params.guildId}/${params.channelId}`;
 
   // Discord is a SPA — we need to use the internal router.

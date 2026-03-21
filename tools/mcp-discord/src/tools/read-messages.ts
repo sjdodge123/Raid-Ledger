@@ -25,7 +25,7 @@ interface ScrapedMessage {
 export async function execute(params: {
   count?: number;
 }): Promise<{ messages: ScrapedMessage[] }> {
-  const page = getPage();
+  const page = await getPage();
   const limit = params.count ?? 10;
 
   // Discord's message list uses role="list" with role="listitem" children.

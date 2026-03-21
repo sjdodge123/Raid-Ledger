@@ -16,7 +16,7 @@ export const TOOL_SCHEMA = {
 export async function execute(params: {
   channelName?: string;
 }): Promise<{ members: string[]; channelName: string | null }> {
-  const page = getPage();
+  const page = await getPage();
 
   const result = await page.evaluate((targetChannel: string | undefined) => {
     // Voice channels in the sidebar show connected users beneath them

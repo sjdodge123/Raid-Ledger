@@ -25,7 +25,7 @@ interface NotificationResult {
 export async function execute(params: {
   contains: string;
 }): Promise<NotificationResult> {
-  const page = getPage();
+  const page = await getPage();
 
   // Navigate to DMs by clicking the DM icon in the sidebar
   const dmButton = page.locator(

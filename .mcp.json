@@ -5,13 +5,13 @@
       "args": ["@playwright/mcp@0.0.41", "--headless"]
     },
     "mcp-discord": {
-      "command": "npx",
-      "args": ["tsx", "src/index.ts"],
+      "command": "./node_modules/.bin/tsx",
+      "args": ["src/index.ts"],
       "cwd": "tools/mcp-discord"
     },
     "mcp-env": {
-      "command": "npx",
-      "args": ["tsx", "src/index.ts"],
+      "command": "./node_modules/.bin/tsx",
+      "args": ["src/index.ts"],
       "cwd": "tools/mcp-env"
     }
   }

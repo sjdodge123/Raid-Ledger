@@ -69,11 +69,21 @@ async function main(): Promise<void> {
   await server.connect(transport);
   console.error('[mcp-env] MCP server running on stdio');
 
-  process.on('SIGINT', async () => {
+  const shutdown = async () => {
     await server.close();
     process.exit(0);
-  });
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
+
+// Prevent unhandled errors from crashing the server
+process.on('uncaughtException', (err) => {
+  console.error('[mcp-env] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[mcp-env] Unhandled rejection:', err);
+});
 
 main().catch((err: unknown) => {
   console.error('[mcp-env] Fatal:', err);

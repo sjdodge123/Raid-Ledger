@@ -112,27 +112,36 @@ server.tool(
 // --- Server lifecycle ---
 
 async function main() {
-  // Attempt CDP connection on startup
-  try {
-    await connectCDP();
-  } catch (err) {
-    console.error(
-      '[mcp-discord] WARNING: CDP connection failed at startup. ' +
-        'Tools will fail until Discord is launched with --remote-debugging-port=9222.\n' +
-        `Error: ${err}`,
-    );
-  }
-
+  // Connect MCP transport FIRST so Claude Code handshake succeeds immediately
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[mcp-discord] MCP server running on stdio');
 
-  process.on('SIGINT', async () => {
+  // Attempt CDP connection in background — don't block the MCP handshake
+  connectCDP().catch((err) => {
+    console.error(
+      '[mcp-discord] WARNING: CDP connection failed at startup. ' +
+        'Tools will attempt lazy reconnection when called.\n' +
+        `Error: ${err}`,
+    );
+  });
+
+  const shutdown = async () => {
     await server.close();
     await disconnectCDP();
     process.exit(0);
-  });
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
+
+// Prevent unhandled errors from crashing the server
+process.on('uncaughtException', (err) => {
+  console.error('[mcp-discord] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[mcp-discord] Unhandled rejection:', err);
+});
 
 main().catch((err) => {
   console.error('[mcp-discord] Fatal:', err);

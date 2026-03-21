@@ -27,7 +27,7 @@ async function main() {
   console.log('\n2. Connecting via Playwright connectOverCDP...');
   try {
     await connectCDP();
-    const page = getPage();
+    const page = await getPage();
     console.log('  OK: Connected to page:', page.url());
 
     // Step 3: Take a screenshot
