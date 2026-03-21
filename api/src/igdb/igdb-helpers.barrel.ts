@@ -35,6 +35,7 @@ export {
   discoverPopularGames,
   clearDiscoveryCache,
   buildAdultThemeFilter,
+  enrichSyncedGamesWithItad,
 } from './igdb-sync.helpers';
 export { executeIgdbQuery } from './igdb-query.helpers';
 export {

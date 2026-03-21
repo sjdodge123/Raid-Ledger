@@ -46,6 +46,7 @@ import {
   clearDiscoveryCache,
   buildAdultThemeFilter,
   executeIgdbQuery,
+  enrichSyncedGamesWithItad,
 } from './igdb-helpers.barrel';
 import { sortByRelevance } from './igdb-search-sort.helpers';
 import {
@@ -131,8 +132,11 @@ export class IgdbService {
         themeFilter,
       );
       const backfilled = await backfillMissingCovers(this.db, queryFn);
+      const enriched = await enrichSyncedGamesWithItad(this.db, (id) =>
+        this.itadService.lookupBySteamAppId(id),
+      );
       await clearDiscoveryCache(this.redis);
-      return { refreshed, discovered, backfilled };
+      return { refreshed, discovered, backfilled, enriched };
     } finally {
       this._syncInProgress = false;
     }
