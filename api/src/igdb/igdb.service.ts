@@ -276,15 +276,9 @@ export class IgdbService {
   async getGameNowPlaying(gameId: number) {
     return queryNowPlaying(this.db, gameId);
   }
-  get redisClient() {
-    return this.redis;
-  }
-  get config() {
-    return IGDB_CONFIG;
-  }
-  get database() {
-    return this.db;
-  }
+  get redisClient() { return this.redis; }
+  get config() { return IGDB_CONFIG; }
+  get database() { return this.db; }
 
   async isAdultFilterEnabled(): Promise<boolean> {
     return (
