@@ -5,7 +5,9 @@
   "description": "MCP server for Discord Electron/browser automation via CDP",
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
     "probe": "tsx src/probe-cdp.ts"
   },
   "dependencies": {

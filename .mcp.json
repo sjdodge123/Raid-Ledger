@@ -2,17 +2,26 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp@0.0.41", "--headless"]
-    },
-    "mcp-discord": {
-      "command": "./node_modules/.bin/tsx",
-      "args": ["src/index.ts"],
-      "cwd": "tools/mcp-discord"
+      "args": [
+        "@playwright/mcp@0.0.41",
+        "--headless"
+      ]
     },
     "mcp-env": {
-      "command": "./node_modules/.bin/tsx",
-      "args": ["src/index.ts"],
-      "cwd": "tools/mcp-env"
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "tools/mcp-env/dist/index.js"
+      ],
+      "env": {}
+    },
+    "mcp-discord": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "tools/mcp-discord/dist/index.js"
+      ],
+      "env": {}
     }
   }
 }

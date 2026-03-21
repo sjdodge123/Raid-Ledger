@@ -5,7 +5,9 @@
   "description": "MCP server for project environment discovery (env files, services, worktrees)",
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
