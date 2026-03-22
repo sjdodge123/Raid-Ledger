@@ -5,9 +5,6 @@
  * Gated behind DISCORD_CDP=true in the test runner.
  */
 
-// Playwright is imported dynamically since it's not a direct dependency
-// of test-bot. It's available from the root workspace.
-
 interface DiscordPageResult {
   browser: unknown;
   page: unknown;
@@ -34,29 +31,40 @@ export async function connectDiscordCDP(): Promise<DiscordPageResult> {
   return { browser, page };
 }
 
-/** Read the last ephemeral message content from the Discord chat. */
+/** Navigate to a specific text channel in a guild. */
+export async function navigateToChannel(
+  page: import('playwright').Page,
+  guildId: string,
+  channelId: string,
+): Promise<void> {
+  const url = `https://discord.com/channels/${guildId}/${channelId}`;
+  await page.evaluate((targetUrl) => {
+    window.location.href = targetUrl;
+  }, url);
+  await page.waitForTimeout(3000);
+}
+
+/** Count ephemeral messages by counting "Dismiss message" links. */
+async function countEphemeralMessages(
+  page: import('playwright').Page,
+): Promise<number> {
+  return page.locator('text=Dismiss message').count();
+}
+
+/** Wait for a new ephemeral message to appear after a command. */
 export async function readEphemeralResponse(
   page: import('playwright').Page,
-  timeoutMs = 10_000,
+  timeoutMs = 15_000,
+  prevCount = 0,
 ): Promise<{ content: string; hasEmbed: boolean; embedTitle: string | null }> {
-  // Wait for a message to appear using fallback selectors
-  const selectors = [
-    '[id^="chat-messages-"]',
-    '[class*="messageListItem"]',
-    '[role="listitem"]',
-  ];
-  let found = false;
-  for (const sel of selectors) {
-    try {
-      await page.waitForSelector(sel, { timeout: timeoutMs });
-      found = true;
-      break;
-    } catch {
-      continue;
-    }
+  const deadline = Date.now() + timeoutMs;
+  // Poll until a new ephemeral message appears
+  while (Date.now() < deadline) {
+    const currentCount = await countEphemeralMessages(page);
+    if (currentCount > prevCount) break;
+    await page.waitForTimeout(500);
   }
-  if (!found) throw new Error('No messages appeared in Discord UI');
-
+  // Read the last message in the chat
   return page.evaluate(() => {
     let msgEls = document.querySelectorAll('[id^="chat-messages-"]');
     if (msgEls.length === 0)
@@ -80,12 +88,25 @@ export async function readEphemeralResponse(
   });
 }
 
+/** Dismiss all ephemeral messages to clear the chat for the next command. */
+export async function dismissEphemeralMessages(
+  page: import('playwright').Page,
+): Promise<void> {
+  // Click all "Dismiss message" links
+  const links = page.locator('text=Dismiss message');
+  const count = await links.count();
+  for (let i = count - 1; i >= 0; i--) {
+    await links.nth(i).click().catch(() => {});
+    await page.waitForTimeout(300);
+  }
+}
+
 /** Type a slash command into Discord's chat input. */
 export async function typeSlashCommand(
   page: import('playwright').Page,
   commandName: string,
-  _options?: Record<string, string>,
-): Promise<void> {
+): Promise<{ prevEphemeralCount: number }> {
+  const prevCount = await countEphemeralMessages(page);
   // Focus the chat input using fallback selectors
   const inputSelectors = [
     '[role="textbox"][data-slate-editor="true"]',
@@ -96,12 +117,18 @@ export async function typeSlashCommand(
     const el = page.locator(sel).first();
     if (await el.isVisible().catch(() => false)) {
       await el.click();
+      // Clear any leftover text
+      await page.keyboard.press('Control+A');
+      await page.keyboard.press('Backspace');
+      await page.waitForTimeout(200);
+      // Type the slash command
       await page.keyboard.type(`/${commandName}`, { delay: 50 });
-      // Wait for Discord autocomplete to appear, then press Enter
-      await page.waitForTimeout(1000);
+      // Wait for Discord autocomplete to appear
+      await page.waitForTimeout(1500);
+      // Press Enter to select the autocomplete option and submit
       await page.keyboard.press('Enter');
       await page.waitForTimeout(500);
-      return;
+      return { prevEphemeralCount: prevCount };
     }
   }
   throw new Error('Could not find Discord chat input');

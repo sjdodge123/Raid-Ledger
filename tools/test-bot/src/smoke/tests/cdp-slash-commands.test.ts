@@ -7,7 +7,8 @@
  * Gated behind DISCORD_CDP=true environment variable.
  * Requires Discord launched with: ./scripts/launch-discord.sh
  */
-import type { SmokeTest } from '../types.js';
+import type { SmokeTest, TestContext } from '../types.js';
+import { SMOKE } from '../config.js';
 
 // ---------------------------------------------------------------------------
 // Gate — only run when DISCORD_CDP=true
@@ -16,100 +17,78 @@ import type { SmokeTest } from '../types.js';
 function buildCdpTests(): SmokeTest[] {
   if (!process.env.DISCORD_CDP) return [];
 
-  // Dynamic imports since playwright is not a direct dependency
+  /** Shared CDP page — connect once, navigate to channel, reuse. */
+  let cachedPage: import('playwright').Page | null = null;
+
+  async function getPage(ctx: TestContext): Promise<import('playwright').Page> {
+    if (cachedPage) return cachedPage;
+    const { connectDiscordCDP, navigateToChannel, dismissEphemeralMessages } =
+      await import('../cdp/discord-page.js');
+    const { page } = await connectDiscordCDP();
+    const p = page as import('playwright').Page;
+    await navigateToChannel(p, SMOKE.guildId, ctx.defaultChannelId);
+    // Wait for channel to fully settle before first command
+    await p.waitForTimeout(2000);
+    // Clear any leftover ephemeral messages from previous runs
+    await dismissEphemeralMessages(p);
+    await p.waitForTimeout(1000);
+    cachedPage = p;
+    return p;
+  }
+
+  async function runCommand(
+    ctx: TestContext,
+    commandName: string,
+    label: string,
+  ): Promise<void> {
+    const p = await getPage(ctx);
+    const { typeSlashCommand, readEphemeralResponse, dismissEphemeralMessages } =
+      await import('../cdp/discord-page.js');
+    const { prevEphemeralCount } = await typeSlashCommand(p, commandName);
+    const response = await readEphemeralResponse(p, 15_000, prevEphemeralCount);
+    if (!response.content && !response.hasEmbed) {
+      throw new Error(
+        `CDP ${label}: expected content or embed in Discord UI, got nothing`,
+      );
+    }
+    // Dismiss the ephemeral message to keep the chat clean for the next test
+    await dismissEphemeralMessages(p);
+  }
+
   const tests: SmokeTest[] = [
-    // Test 1: /help renders an embed in Discord UI
     {
-      name: 'CDP: /help renders embed in Discord',
+      name: 'CDP: /help renders in Discord',
       category: 'cdp-command',
-      async run() {
-        const { connectDiscordCDP, typeSlashCommand, readEphemeralResponse } =
-          await import('../cdp/discord-page.js');
-        const { page } = await connectDiscordCDP();
-        const p = page as import('playwright').Page;
-        await typeSlashCommand(p, 'help');
-        const response = await readEphemeralResponse(p, 15_000);
-        if (!response.hasEmbed) {
-          throw new Error(
-            'CDP /help: expected embed in Discord UI, none found',
-          );
-        }
+      async run(ctx) {
+        await runCommand(ctx, 'help', '/help');
       },
     },
-
-    // Test 2: /events renders in Discord UI
     {
-      name: 'CDP: /events renders response in Discord',
+      name: 'CDP: /events renders in Discord',
       category: 'cdp-command',
-      async run() {
-        const { connectDiscordCDP, typeSlashCommand, readEphemeralResponse } =
-          await import('../cdp/discord-page.js');
-        const { page } = await connectDiscordCDP();
-        const p = page as import('playwright').Page;
-        await typeSlashCommand(p, 'events');
-        const response = await readEphemeralResponse(p, 15_000);
-        if (!response.content && !response.hasEmbed) {
-          throw new Error(
-            'CDP /events: expected content or embed, got nothing',
-          );
-        }
+      async run(ctx) {
+        await runCommand(ctx, 'events', '/events');
       },
     },
-
-    // Test 3: /event create renders confirmation
     {
-      name: 'CDP: /event create renders confirmation',
+      name: 'CDP: /bindings renders in Discord',
       category: 'cdp-command',
-      async run() {
-        const { connectDiscordCDP, typeSlashCommand, readEphemeralResponse } =
-          await import('../cdp/discord-page.js');
-        const { page } = await connectDiscordCDP();
-        const p = page as import('playwright').Page;
-        await typeSlashCommand(p, 'event create');
-        const response = await readEphemeralResponse(p, 15_000);
-        if (!response.content && !response.hasEmbed) {
-          throw new Error(
-            'CDP /event create: expected response, got nothing',
-          );
-        }
+      async run(ctx) {
+        await runCommand(ctx, 'bindings', '/bindings');
       },
     },
-
-    // Test 4: /bind renders response
     {
-      name: 'CDP: /bind renders response in Discord',
+      name: 'CDP: /playing renders in Discord',
       category: 'cdp-command',
-      async run() {
-        const { connectDiscordCDP, typeSlashCommand, readEphemeralResponse } =
-          await import('../cdp/discord-page.js');
-        const { page } = await connectDiscordCDP();
-        const p = page as import('playwright').Page;
-        await typeSlashCommand(p, 'bind');
-        const response = await readEphemeralResponse(p, 15_000);
-        if (!response.content && !response.hasEmbed) {
-          throw new Error(
-            'CDP /bind: expected response, got nothing',
-          );
-        }
+      async run(ctx) {
+        await runCommand(ctx, 'playing', '/playing');
       },
     },
-
-    // Test 5: /playing renders response
     {
-      name: 'CDP: /playing renders response in Discord',
+      name: 'CDP: /roster renders in Discord',
       category: 'cdp-command',
-      async run() {
-        const { connectDiscordCDP, typeSlashCommand, readEphemeralResponse } =
-          await import('../cdp/discord-page.js');
-        const { page } = await connectDiscordCDP();
-        const p = page as import('playwright').Page;
-        await typeSlashCommand(p, 'playing');
-        const response = await readEphemeralResponse(p, 15_000);
-        if (!response.content && !response.hasEmbed) {
-          throw new Error(
-            'CDP /playing: expected response, got nothing',
-          );
-        }
+      async run(ctx) {
+        await runCommand(ctx, 'roster', '/roster');
       },
     },
   ];

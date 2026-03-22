@@ -275,13 +275,15 @@ async function main(): Promise<void> {
     ...cdpSlashCommandTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 
-  const voiceTests = allTests.filter((t) => t.category === 'voice');
-  const parallelTests = allTests.filter((t) => t.category !== 'voice');
+  // Voice and CDP tests must run sequentially (shared resources)
+  const sequentialCats = new Set(['voice', 'cdp-command']);
+  const sequentialTests = allTests.filter((t) => sequentialCats.has(t.category));
+  const parallelTests = allTests.filter((t) => !sequentialCats.has(t.category));
 
   const concurrency = SMOKE.concurrency;
   console.log(
     `=== Running ${parallelTests.length} tests (concurrency=${concurrency})` +
-      `${voiceTests.length ? `, ${voiceTests.length} voice tests sequentially` : ''} ===\n`,
+      `${sequentialTests.length ? `, ${sequentialTests.length} sequential tests (voice/cdp)` : ''} ===\n`,
   );
 
   const parallelResults = await runWithConcurrency(
@@ -290,12 +292,12 @@ async function main(): Promise<void> {
     concurrency,
   );
 
-  const voiceResults: TestResult[] = [];
-  for (const t of voiceTests) {
-    voiceResults.push(await runTest(t, ctx));
+  const sequentialResults: TestResult[] = [];
+  for (const t of sequentialTests) {
+    sequentialResults.push(await runTest(t, ctx));
   }
 
-  const results = [...parallelResults, ...voiceResults];
+  const results = [...parallelResults, ...sequentialResults];
   const failCount = report(results);
 
   console.log('\n=== Teardown ===');
