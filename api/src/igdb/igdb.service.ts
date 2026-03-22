@@ -130,8 +130,10 @@ export class IgdbService {
         themeFilter,
       );
       const backfilled = await backfillMissingCovers(this.db, queryFn);
-      const enriched = await enrichSyncedGamesWithItad(this.db, (id) =>
-        this.itadService.lookupBySteamAppId(id),
+      const enriched = await enrichSyncedGamesWithItad(
+        this.db,
+        (id) => this.itadService.lookupBySteamAppId(id),
+        (itadId) => this.itadService.getGameInfo(itadId),
       );
       await clearDiscoveryCache(this.redis);
       return { refreshed, discovered, backfilled, enriched };
