@@ -60,6 +60,7 @@ function buildItadInsertValues(game: GameDetailDto) {
     itadGameId: game.itadGameId,
     itadBoxartUrl: game.itadBoxartUrl,
     itadTags: game.itadTags,
+    earlyAccess: game.earlyAccess ?? false,
   };
 }
 
@@ -90,6 +91,7 @@ function buildItadUpdateSet(game: GameDetailDto) {
     itadGameId: game.itadGameId,
     itadBoxartUrl: game.itadBoxartUrl,
     itadTags: game.itadTags,
+    earlyAccess: game.earlyAccess ?? false,
     cachedAt: new Date(),
   };
 }

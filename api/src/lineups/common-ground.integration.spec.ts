@@ -137,8 +137,15 @@ function describeCommonGround() {
     it('returns games with ownerCount and wishlistCount when building lineup exists', async () => {
       await createBuildingLineup();
 
-      const game = await insertGame({ name: 'Shared Game', slug: 'shared-game' });
-      await addGameInterest(testApp.seed.adminUser.id, game.id, 'steam_library');
+      const game = await insertGame({
+        name: 'Shared Game',
+        slug: 'shared-game',
+      });
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        game.id,
+        'steam_library',
+      );
 
       // Add a second user who also owns the game
       const { userId: memberId } = await loginAsMember();
@@ -166,11 +173,18 @@ function describeCommonGround() {
     it('returns separate wishlistCount for steam_wishlist source', async () => {
       await createBuildingLineup();
 
-      const game = await insertGame({ name: 'Wishlist Game', slug: 'wishlist-game' });
+      const game = await insertGame({
+        name: 'Wishlist Game',
+        slug: 'wishlist-game',
+      });
       const { userId: memberId } = await loginAsMember();
 
       // Admin owns it, member has it wishlisted
-      await addGameInterest(testApp.seed.adminUser.id, game.id, 'steam_library');
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        game.id,
+        'steam_library',
+      );
       await addGameInterest(memberId, game.id, 'steam_wishlist');
 
       const res = await testApp.request
@@ -179,11 +193,13 @@ function describeCommonGround() {
         .query({ minOwners: 1 });
 
       expect(res.status).toBe(200);
-      const found = (res.body.data as Array<{
-        gameId: number;
-        ownerCount: number;
-        wishlistCount: number;
-      }>).find((g) => g.gameId === game.id);
+      const found = (
+        res.body.data as Array<{
+          gameId: number;
+          ownerCount: number;
+          wishlistCount: number;
+        }>
+      ).find((g) => g.gameId === game.id);
 
       expect(found).toBeDefined();
       expect(found!.ownerCount).toBe(1);
@@ -350,7 +366,10 @@ function describeCommonGround() {
       const lineupId = await createBuildingLineup();
       const { userId: memberId } = await loginAsMember();
 
-      const game = await insertGame({ name: 'Already Nominated', slug: 'already-nominated' });
+      const game = await insertGame({
+        name: 'Already Nominated',
+        slug: 'already-nominated',
+      });
       await addGameInterest(
         testApp.seed.adminUser.id,
         game.id,
@@ -394,14 +413,28 @@ function describeCommonGround() {
         .returning();
 
       // High score: 3 owners, no sale → (3*10) - 2 = 28
-      const highScoreGame = await insertGame({ name: 'High Score', slug: 'high-score' });
-      await addGameInterest(testApp.seed.adminUser.id, highScoreGame.id, 'steam_library');
+      const highScoreGame = await insertGame({
+        name: 'High Score',
+        slug: 'high-score',
+      });
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        highScoreGame.id,
+        'steam_library',
+      );
       await addGameInterest(user2.id, highScoreGame.id, 'steam_library');
       await addGameInterest(user3.id, highScoreGame.id, 'steam_library');
 
       // Low score: 2 owners, no sale → (2*10) - 2 = 18
-      const lowScoreGame = await insertGame({ name: 'Low Score', slug: 'low-score' });
-      await addGameInterest(testApp.seed.adminUser.id, lowScoreGame.id, 'steam_library');
+      const lowScoreGame = await insertGame({
+        name: 'Low Score',
+        slug: 'low-score',
+      });
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        lowScoreGame.id,
+        'steam_library',
+      );
       await addGameInterest(user2.id, lowScoreGame.id, 'steam_library');
 
       const res = await testApp.request
@@ -431,7 +464,11 @@ function describeCommonGround() {
         itadCurrentCut: 50,
         itadCurrentPrice: '4.99',
       });
-      await addGameInterest(testApp.seed.adminUser.id, saleGame.id, 'steam_library');
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        saleGame.id,
+        'steam_library',
+      );
       await addGameInterest(memberId, saleGame.id, 'steam_library');
 
       // Game at full price → ownerScore - FULL_PRICE_PENALTY
@@ -440,7 +477,11 @@ function describeCommonGround() {
         slug: 'full-price',
         itadCurrentCut: 0,
       });
-      await addGameInterest(testApp.seed.adminUser.id, fullPriceGame.id, 'steam_library');
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        fullPriceGame.id,
+        'steam_library',
+      );
       await addGameInterest(memberId, fullPriceGame.id, 'steam_library');
 
       const res = await testApp.request

@@ -8,9 +8,12 @@ import {
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  CommonGroundQueryDto,
+  CommonGroundResponseDto,
   CreateLineupDto,
   LineupDetailResponseDto,
   LineupEntryResponseDto,
+  NominateGameDto,
   UpdateLineupStatusDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -24,8 +27,19 @@ import {
   countDistinctVoters,
   findUserById,
   findGameName,
+  findBuildingLineup,
+  findNominatedGameIds,
+  countLineupEntries,
   VALID_TRANSITIONS,
 } from './lineups-query.helpers';
+import {
+  queryCommonGround,
+  mapCommonGroundRow,
+} from './common-ground-query.helpers';
+import {
+  SCORING_WEIGHTS,
+  MAX_LINEUP_ENTRIES,
+} from './common-ground-scoring.constants';
 
 @Injectable()
 export class LineupsService {
@@ -104,6 +118,90 @@ export class LineupsService {
       .where(eq(schema.communityLineups.id, id));
 
     return this.buildDetailResponse(id);
+  }
+
+  /** Get Common Ground games — ownership overlap. */
+  async getCommonGround(
+    filters: CommonGroundQueryDto,
+  ): Promise<CommonGroundResponseDto> {
+    const [lineup] = await findBuildingLineup(this.db);
+    if (!lineup) {
+      throw new NotFoundException('No active lineup in building status');
+    }
+
+    const nominated = await findNominatedGameIds(this.db, lineup.id);
+    const rows = await queryCommonGround(this.db, filters, nominated);
+    const scored = rows.map(mapCommonGroundRow);
+    scored.sort((a, b) => b.score - a.score);
+
+    return {
+      data: scored,
+      meta: {
+        total: scored.length,
+        appliedWeights: { ...SCORING_WEIGHTS },
+        activeLineupId: lineup.id,
+        nominatedCount: nominated.length,
+        maxNominations: MAX_LINEUP_ENTRIES,
+      },
+    };
+  }
+
+  /** Nominate a game into a lineup. */
+  async nominate(
+    lineupId: number,
+    dto: NominateGameDto,
+    userId: number,
+  ): Promise<LineupDetailResponseDto> {
+    const [lineup] = await findLineupById(this.db, lineupId);
+    if (!lineup) throw new NotFoundException('Lineup not found');
+
+    if (lineup.status !== 'building') {
+      throw new BadRequestException('Lineup is not in building status');
+    }
+
+    await this.validateNominationCap(lineupId);
+    await this.validateGameExists(dto.gameId);
+
+    try {
+      await this.db.insert(schema.communityLineupEntries).values({
+        lineupId,
+        gameId: dto.gameId,
+        nominatedBy: userId,
+        note: dto.note ?? null,
+      });
+    } catch (err: unknown) {
+      if (this.isUniqueViolation(err)) {
+        throw new ConflictException('Game already nominated in this lineup');
+      }
+      throw err;
+    }
+
+    return this.buildDetailResponse(lineupId);
+  }
+
+  /** Enforce the 20-entry cap for a lineup. */
+  private async validateNominationCap(lineupId: number): Promise<void> {
+    const [result] = await countLineupEntries(this.db, lineupId);
+    if (result && result.count >= MAX_LINEUP_ENTRIES) {
+      throw new BadRequestException('Lineup has reached the 20-entry cap');
+    }
+  }
+
+  /** Validate that a game exists in the database. */
+  private async validateGameExists(gameId: number): Promise<void> {
+    const [game] = await findGameName(this.db, gameId);
+    if (!game) throw new NotFoundException('Game not found');
+  }
+
+  /** Check if a DB error is a unique constraint violation. */
+  private isUniqueViolation(err: unknown): boolean {
+    if (typeof err !== 'object' || err === null) return false;
+    const e = err as Record<string, unknown>;
+    if (e.code === '23505') return true;
+    if (e.cause && typeof e.cause === 'object') {
+      return (e.cause as Record<string, unknown>).code === '23505';
+    }
+    return false;
   }
 
   /** Validate a status transition is legal. */

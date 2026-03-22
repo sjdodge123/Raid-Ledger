@@ -129,8 +129,8 @@ export async function enrichSyncedGamesWithItad(
     try {
       const itadGame = await lookupBySteamAppId(game.steamAppId!);
       if (!itadGame) continue;
-      const tags = await fetchTagsGracefully(getGameInfo, itadGame.id);
-      await updateGameWithItadData(db, game.id, itadGame, tags);
+      const info = await fetchInfoGracefully(getGameInfo, itadGame.id);
+      await updateGameWithItadData(db, game.id, itadGame, info);
       enriched++;
     } catch (err) {
       logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);
@@ -139,16 +139,22 @@ export async function enrichSyncedGamesWithItad(
   return enriched;
 }
 
-/** Fetch tags via getGameInfo, returning empty array on failure. */
-async function fetchTagsGracefully(
+/** Info extracted from ITAD getGameInfo endpoint. */
+interface ItadEnrichInfo {
+  tags: string[];
+  earlyAccess: boolean;
+}
+
+/** Fetch tags and earlyAccess via getGameInfo, with safe defaults on failure. */
+async function fetchInfoGracefully(
   getGameInfo: (itadId: string) => Promise<ItadGameInfo | null>,
   itadId: string,
-): Promise<string[]> {
+): Promise<ItadEnrichInfo> {
   try {
     const info = await getGameInfo(itadId);
-    return info?.tags ?? [];
+    return { tags: info?.tags ?? [], earlyAccess: info?.earlyAccess ?? false };
   } catch {
-    return [];
+    return { tags: [], earlyAccess: false };
   }
 }
 
@@ -157,14 +163,15 @@ async function updateGameWithItadData(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
   itadGame: ItadGame,
-  tags: string[],
+  info: ItadEnrichInfo,
 ): Promise<void> {
   await db
     .update(schema.games)
     .set({
       itadGameId: itadGame.id,
       itadBoxartUrl: itadGame.assets?.boxart ?? null,
-      itadTags: tags,
+      itadTags: info.tags,
+      earlyAccess: info.earlyAccess,
     })
     .where(eq(schema.games.id, gameId));
 }

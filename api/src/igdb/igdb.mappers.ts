@@ -155,6 +155,7 @@ export function mapDbRowToDetail(
     playerCount: g.playerCount as { min: number; max: number } | null,
     twitchGameId: g.twitchGameId,
     crossplay: g.crossplay ?? null,
+    earlyAccess: g.earlyAccess ?? false,
     ...mapItadPricing(g),
   };
 }

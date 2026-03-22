@@ -90,3 +90,63 @@ export const LineupSummaryResponseSchema = z.object({
 });
 
 export type LineupSummaryResponseDto = z.infer<typeof LineupSummaryResponseSchema>;
+
+// ============================================================
+// Common Ground Schemas (ROK-934)
+// ============================================================
+
+/** Query params for the Common Ground endpoint. */
+export const CommonGroundQuerySchema = z.object({
+    minOwners: z.coerce.number().int().min(0).max(15).default(2),
+    maxPlayers: z.coerce.number().int().positive().optional(),
+    genre: z.string().optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(50),
+});
+
+export type CommonGroundQueryDto = z.infer<typeof CommonGroundQuerySchema>;
+
+/** Body for nominating a game into a lineup. */
+export const NominateGameSchema = z.object({
+    gameId: z.number().int().positive(),
+    note: z.string().max(200).optional(),
+});
+
+export type NominateGameDto = z.infer<typeof NominateGameSchema>;
+
+/** A single game in the Common Ground response. */
+export const CommonGroundGameSchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    slug: z.string(),
+    coverUrl: z.string().nullable(),
+    ownerCount: z.number(),
+    wishlistCount: z.number(),
+    nonOwnerPrice: z.number().nullable(),
+    itadCurrentCut: z.number().nullable(),
+    itadCurrentShop: z.string().nullable(),
+    itadCurrentUrl: z.string().nullable(),
+    earlyAccess: z.boolean(),
+    itadTags: z.array(z.string()),
+    playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),
+    score: z.number(),
+});
+
+export type CommonGroundGameDto = z.infer<typeof CommonGroundGameSchema>;
+
+/** Full Common Ground response with metadata. */
+export const CommonGroundResponseSchema = z.object({
+    data: z.array(CommonGroundGameSchema),
+    meta: z.object({
+        total: z.number(),
+        appliedWeights: z.object({
+            ownerWeight: z.number(),
+            saleBonus: z.number(),
+            fullPricePenalty: z.number(),
+        }),
+        activeLineupId: z.number(),
+        nominatedCount: z.number(),
+        maxNominations: z.number(),
+    }),
+});
+
+export type CommonGroundResponseDto = z.infer<typeof CommonGroundResponseSchema>;

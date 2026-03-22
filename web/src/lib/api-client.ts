@@ -163,3 +163,11 @@ export {
     getGameAttendance,
     getEventMetrics,
 } from './api/analytics-api';
+
+// Lineups (ROK-934)
+export type { CommonGroundParams } from './api/lineups-api';
+export {
+    getActiveLineup,
+    getCommonGround,
+    nominateGame,
+} from './api/lineups-api';

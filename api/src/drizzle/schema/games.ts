@@ -96,6 +96,8 @@ export const games = pgTable('games', {
   itadLowestCut: integer('itad_lowest_cut'),
   /** Last successful ITAD pricing sync */
   itadPriceUpdatedAt: timestamp('itad_price_updated_at'),
+  /** ROK-934: Whether this game is in early access (from ITAD) */
+  earlyAccess: boolean('early_access').default(false).notNull(),
 });
 
 /**

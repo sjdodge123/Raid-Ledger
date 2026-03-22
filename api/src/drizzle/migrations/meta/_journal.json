@@ -694,6 +694,13 @@
       "when": 1774215274577,
       "tag": "0098_community_lineups",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1774222075319,
+      "tag": "0099_cold_maximus",
+      "breakpoints": true
     }
   ]
 }

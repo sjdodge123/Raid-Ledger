@@ -12,11 +12,11 @@ const NOW = new Date('2026-03-22T20:00:00Z');
 const mockLineup = {
   id: 1,
   status: 'building',
-  targetDate: null,
-  decidedGameId: null,
-  linkedEventId: null,
+  targetDate: null as Date | null,
+  decidedGameId: null as number | null,
+  linkedEventId: null as number | null,
   createdBy: 10,
-  votingDeadline: null,
+  votingDeadline: null as Date | null,
   createdAt: NOW,
   updatedAt: NOW,
 };

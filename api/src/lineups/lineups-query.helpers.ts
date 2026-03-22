@@ -126,3 +126,37 @@ export const VALID_TRANSITIONS: Record<LineupStatus, LineupStatus | null> = {
   decided: 'archived',
   archived: null,
 };
+
+/** Count entries in a lineup (for cap enforcement). */
+export function countLineupEntries(
+  db: PostgresJsDatabase<typeof schema>,
+  lineupId: number,
+) {
+  return db
+    .select({
+      count: sql<number>`count(*)::int`.as('count'),
+    })
+    .from(schema.communityLineupEntries)
+    .where(eq(schema.communityLineupEntries.lineupId, lineupId));
+}
+
+/** Get game IDs already nominated in a lineup. */
+export async function findNominatedGameIds(
+  db: PostgresJsDatabase<typeof schema>,
+  lineupId: number,
+): Promise<number[]> {
+  const rows = await db
+    .select({ gameId: schema.communityLineupEntries.gameId })
+    .from(schema.communityLineupEntries)
+    .where(eq(schema.communityLineupEntries.lineupId, lineupId));
+  return rows.map((r) => r.gameId);
+}
+
+/** Find an active lineup specifically in building status. */
+export function findBuildingLineup(db: PostgresJsDatabase<typeof schema>) {
+  return db
+    .select({ id: schema.communityLineups.id })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.status, 'building'))
+    .limit(1);
+}

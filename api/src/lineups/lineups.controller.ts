@@ -5,6 +5,7 @@ import {
   Patch,
   Param,
   Body,
+  Query,
   UseGuards,
   Req,
   HttpCode,
@@ -18,7 +19,10 @@ import { Roles } from '../auth/roles.decorator';
 import {
   CreateLineupSchema,
   UpdateLineupStatusSchema,
+  CommonGroundQuerySchema,
+  NominateGameSchema,
   type LineupDetailResponseDto,
+  type CommonGroundResponseDto,
 } from '@raid-ledger/contract';
 import { LineupsService } from './lineups.service';
 
@@ -53,12 +57,39 @@ export class LineupsController {
     return this.lineupsService.findActive();
   }
 
+  /** GET /lineups/common-ground — ownership overlap query. */
+  @Get('common-ground')
+  async getCommonGround(
+    @Query() query: Record<string, string>,
+  ): Promise<CommonGroundResponseDto> {
+    const parsed = CommonGroundQuerySchema.safeParse(query);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.lineupsService.getCommonGround(parsed.data);
+  }
+
   /** GET /lineups/:id — lineup detail by ID. */
   @Get(':id')
   async getById(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<LineupDetailResponseDto> {
     return this.lineupsService.findById(id);
+  }
+
+  /** POST /lineups/:id/nominate — add a game to a lineup. */
+  @Post(':id/nominate')
+  @HttpCode(HttpStatus.CREATED)
+  async nominate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<LineupDetailResponseDto> {
+    const parsed = NominateGameSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.lineupsService.nominate(id, parsed.data, req.user.id);
   }
 
   /** PATCH /lineups/:id/status — transition status (operator/admin). */
