@@ -127,7 +127,7 @@ Playwright-over-CDP tools for **UI-level verification** — local dev only, requ
 
 ### Discord Smoke Tests (MANDATORY)
 
-**28 smoke tests** validate real Discord behavior end-to-end: `cd tools/test-bot && npm run smoke`
+Smoke tests in `tools/test-bot/src/smoke/tests/` validate real Discord behavior end-to-end: `cd tools/test-bot && npm run smoke`
 
 **When modifying Discord bot code, you MUST:**
 1. Run the smoke tests locally before pushing
@@ -145,7 +145,7 @@ Playwright-over-CDP tools for **UI-level verification** — local dev only, requ
 - `POST /admin/test/flush-voice-sessions` — flush in-memory voice sessions to DB
 - See `api/src/admin/demo-test.controller.ts` for the full list
 
-**Test categories:** channel embeds (7), roster calculation (4), DM notifications (7+1 slow), interaction flows (7), voice (3+1 slow)
+**Test categories** map to files in `tools/test-bot/src/smoke/tests/*.test.ts` — see file names for current coverage areas.
 
 **Files that trigger smoke test review:**
 - `api/src/discord-bot/**` — bot listeners, embed factory, channel bindings, voice state
