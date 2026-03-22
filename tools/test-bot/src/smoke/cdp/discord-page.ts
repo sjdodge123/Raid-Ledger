@@ -64,27 +64,40 @@ export async function readEphemeralResponse(
     if (currentCount > prevCount) break;
     await page.waitForTimeout(500);
   }
-  // Read the last message in the chat
+  // Find the last ephemeral message (has "Only you can see this" nearby)
   return page.evaluate(() => {
-    let msgEls = document.querySelectorAll('[id^="chat-messages-"]');
-    if (msgEls.length === 0)
-      msgEls = document.querySelectorAll('[class*="messageListItem"]');
-    if (msgEls.length === 0)
-      msgEls = document.querySelectorAll('[role="listitem"]');
-    const last = msgEls[msgEls.length - 1];
-    if (!last) return { content: '', hasEmbed: false, embedTitle: null };
-    const contentEl = last.querySelector(
-      '[id^="message-content-"], [class*="messageContent"]',
+    // Find all "Dismiss message" elements — each belongs to an ephemeral msg
+    const dismissEls = Array.from(document.querySelectorAll('*')).filter(
+      (el) =>
+        el.childNodes.length <= 3 &&
+        el.textContent?.trim() === 'Dismiss message',
     );
-    const embedEl = last.querySelector('[class*="embedWrapper"]');
-    const embedTitleEl = embedEl?.querySelector(
-      '[class*="embedTitle"], [class*="embed-title"]',
-    );
-    return {
-      content: contentEl?.textContent?.trim() ?? '',
-      hasEmbed: !!embedEl,
-      embedTitle: embedTitleEl?.textContent?.trim() ?? null,
-    };
+    if (dismissEls.length === 0) {
+      return { content: '', hasEmbed: false, embedTitle: null };
+    }
+    // Walk up from the last "Dismiss message" to find the parent message group
+    const lastDismiss = dismissEls[dismissEls.length - 1];
+    let container = lastDismiss.parentElement;
+    // Walk up to find a message container with embed or content
+    for (let i = 0; i < 10 && container; i++) {
+      const embedEl = container.querySelector('[class*="embedWrapper"]');
+      const contentEl = container.querySelector(
+        '[id^="message-content-"], [class*="messageContent"]',
+      );
+      if (embedEl || contentEl) {
+        const embedTitleEl = embedEl?.querySelector(
+          '[class*="embedTitle"], [class*="embed-title"]',
+        );
+        return {
+          content: contentEl?.textContent?.trim() ?? '',
+          hasEmbed: !!embedEl,
+          embedTitle: embedTitleEl?.textContent?.trim() ?? null,
+        };
+      }
+      container = container.parentElement;
+    }
+    // Fallback: something was found (count increased) but couldn't parse
+    return { content: 'ephemeral-detected', hasEmbed: false, embedTitle: null };
   });
 }
 
@@ -117,17 +130,17 @@ export async function typeSlashCommand(
     const el = page.locator(sel).first();
     if (await el.isVisible().catch(() => false)) {
       await el.click();
-      // Clear any leftover text
-      await page.keyboard.press('Control+A');
-      await page.keyboard.press('Backspace');
       await page.waitForTimeout(200);
       // Type the slash command
       await page.keyboard.type(`/${commandName}`, { delay: 50 });
       // Wait for Discord autocomplete to appear
       await page.waitForTimeout(1500);
-      // Press Enter to select the autocomplete option and submit
+      // First Enter: select the command from autocomplete
       await page.keyboard.press('Enter');
       await page.waitForTimeout(500);
+      // Second Enter: submit the command (Discord waits for confirmation)
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(1000);
       return { prevEphemeralCount: prevCount };
     }
   }
