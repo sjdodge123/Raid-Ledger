@@ -10,7 +10,7 @@ import {
 } from './igdb.constants';
 import { delay } from './igdb-api.helpers';
 import { upsertGamesFromApi } from './igdb-upsert.helpers';
-import type { ItadGame } from '../itad/itad.constants';
+import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
 
 const logger = new Logger('IgdbSyncHelpers');
 
@@ -109,11 +109,13 @@ export function buildAdultThemeFilter(adultFilterEnabled: boolean): string {
  * Re-enriches ALL games every sync (no skip for already-enriched).
  * @param db - Database connection
  * @param lookupBySteamAppId - Function to look up ITAD game by Steam App ID
+ * @param getGameInfo - Function to fetch full game info (including tags) by ITAD ID
  * @returns Number of successfully enriched games
  */
 export async function enrichSyncedGamesWithItad(
   db: PostgresJsDatabase<typeof schema>,
   lookupBySteamAppId: (appId: number) => Promise<ItadGame | null>,
+  getGameInfo: (itadId: string) => Promise<ItadGameInfo | null>,
 ): Promise<number> {
   const games = await db
     .select({ id: schema.games.id, steamAppId: schema.games.steamAppId })
@@ -127,7 +129,8 @@ export async function enrichSyncedGamesWithItad(
     try {
       const itadGame = await lookupBySteamAppId(game.steamAppId!);
       if (!itadGame) continue;
-      await updateGameWithItadData(db, game.id, itadGame);
+      const tags = await fetchTagsGracefully(getGameInfo, itadGame.id);
+      await updateGameWithItadData(db, game.id, itadGame, tags);
       enriched++;
     } catch (err) {
       logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);
@@ -136,18 +139,32 @@ export async function enrichSyncedGamesWithItad(
   return enriched;
 }
 
+/** Fetch tags via getGameInfo, returning empty array on failure. */
+async function fetchTagsGracefully(
+  getGameInfo: (itadId: string) => Promise<ItadGameInfo | null>,
+  itadId: string,
+): Promise<string[]> {
+  try {
+    const info = await getGameInfo(itadId);
+    return info?.tags ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /** Persist ITAD metadata to a game row. */
 async function updateGameWithItadData(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
   itadGame: ItadGame,
+  tags: string[],
 ): Promise<void> {
   await db
     .update(schema.games)
     .set({
       itadGameId: itadGame.id,
       itadBoxartUrl: itadGame.assets?.boxart ?? null,
-      itadTags: [],
+      itadTags: tags,
     })
     .where(eq(schema.games.id, gameId));
 }
