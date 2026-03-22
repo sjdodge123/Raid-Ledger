@@ -1,11 +1,8 @@
 /**
- * Failing tests for enrichSyncedGamesWithItad() (ROK-926).
+ * Tests for enrichSyncedGamesWithItad() (ROK-926, ROK-927).
  *
- * This function does NOT exist yet — these tests are written in TDD mode
- * to define the expected contract before implementation begins.
- *
- * Expected function signature:
- *   enrichSyncedGamesWithItad(db, lookupBySteamAppId) => Promise<number>
+ * Validates ITAD enrichment during IGDB sync: lookup, DB update,
+ * tag population via getGameInfo, and error handling.
  */
 import { enrichSyncedGamesWithItad } from './igdb-sync.helpers';
 import type { ItadGame } from '../itad/itad.constants';
@@ -44,206 +41,308 @@ function makeItadGame(overrides: Partial<ItadGame> = {}): ItadGame {
   };
 }
 
-describe('enrichSyncedGamesWithItad', () => {
-  afterEach(() => {
-    jest.clearAllMocks();
+afterEach(() => {
+  jest.clearAllMocks();
+});
+
+describe('AC: queries games with non-null steamAppId and calls lookupBySteamAppId for each', () => {
+  it('calls lookupBySteamAppId once per game with a steamAppId', async () => {
+    const games = [
+      { id: 1, steamAppId: 292030 },
+      { id: 2, steamAppId: 578080 },
+    ];
+    const mockDb = createEnrichMockDb(games);
+    const mockLookup = jest.fn().mockResolvedValue(null);
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
+
+    await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
+
+    expect(mockLookup).toHaveBeenCalledTimes(2);
+    expect(mockLookup).toHaveBeenCalledWith(292030);
+    expect(mockLookup).toHaveBeenCalledWith(578080);
   });
 
-  describe('AC: queries games with non-null steamAppId and calls lookupBySteamAppId for each', () => {
-    it('calls lookupBySteamAppId once per game with a steamAppId', async () => {
-      const games = [
-        { id: 1, steamAppId: 292030 },
-        { id: 2, steamAppId: 578080 },
-      ];
-      const mockDb = createEnrichMockDb(games);
-      const mockLookup = jest.fn().mockResolvedValue(null);
+  it('returns 0 and makes no lookups when no games have steamAppId', async () => {
+    const mockDb = createEnrichMockDb([]);
+    const mockLookup = jest.fn();
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-      await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+    const result = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      expect(mockLookup).toHaveBeenCalledTimes(2);
-      expect(mockLookup).toHaveBeenCalledWith(292030);
-      expect(mockLookup).toHaveBeenCalledWith(578080);
+    expect(mockLookup).not.toHaveBeenCalled();
+    expect(result).toBe(0);
+  });
+});
+
+describe('AC: games with successful ITAD lookups get itadGameId, itadBoxartUrl, itadTags updated', () => {
+  it('updates DB with itadGameId, itadBoxartUrl, itadTags when lookup succeeds', async () => {
+    const games = [{ id: 10, steamAppId: 292030 }];
+    const mockDb = createEnrichMockDb(games);
+    const itadGame = makeItadGame({
+      id: 'itad-uuid-valheim',
+      assets: { boxart: 'https://cdn.itad.com/valheim.jpg' },
     });
+    const mockLookup = jest.fn().mockResolvedValue(itadGame);
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-    it('returns 0 and makes no lookups when no games have steamAppId', async () => {
-      const mockDb = createEnrichMockDb([]);
-      const mockLookup = jest.fn();
+    const result = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      const result = await enrichSyncedGamesWithItad(
-        mockDb as never,
-        mockLookup,
-      );
-
-      expect(mockLookup).not.toHaveBeenCalled();
-      expect(result).toBe(0);
-    });
+    expect(result).toBe(1);
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itadGameId: 'itad-uuid-valheim',
+        itadBoxartUrl: 'https://cdn.itad.com/valheim.jpg',
+        itadTags: expect.any(Array),
+      }),
+    );
   });
 
-  describe('AC: games with successful ITAD lookups get itadGameId, itadBoxartUrl, itadTags updated', () => {
-    it('updates DB with itadGameId, itadBoxartUrl, itadTags when lookup succeeds', async () => {
-      const games = [{ id: 10, steamAppId: 292030 }];
-      const mockDb = createEnrichMockDb(games);
-      const itadGame = makeItadGame({
-        id: 'itad-uuid-valheim',
-        assets: { boxart: 'https://cdn.itad.com/valheim.jpg' },
-      });
-      const mockLookup = jest.fn().mockResolvedValue(itadGame);
+  it('returns count equal to the number of successfully enriched games', async () => {
+    const games = [
+      { id: 11, steamAppId: 111 },
+      { id: 12, steamAppId: 222 },
+      { id: 13, steamAppId: 333 },
+    ];
+    const mockDb = createEnrichMockDb(games);
+    const mockLookup = jest
+      .fn()
+      .mockResolvedValueOnce(makeItadGame({ id: 'uuid-111' }))
+      .mockResolvedValueOnce(makeItadGame({ id: 'uuid-222' }))
+      .mockResolvedValueOnce(makeItadGame({ id: 'uuid-333' }));
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-      const result = await enrichSyncedGamesWithItad(
-        mockDb as never,
-        mockLookup,
-      );
+    const result = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      expect(result).toBe(1);
-      expect(mockDb.update).toHaveBeenCalledTimes(1);
-      expect(mockDb.updateSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          itadGameId: 'itad-uuid-valheim',
-          itadBoxartUrl: 'https://cdn.itad.com/valheim.jpg',
-          itadTags: expect.any(Array),
-        }),
-      );
-    });
+    expect(result).toBe(3);
+    expect(mockDb.update).toHaveBeenCalledTimes(3);
+  });
+});
 
-    it('returns count equal to the number of successfully enriched games', async () => {
-      const games = [
-        { id: 11, steamAppId: 111 },
-        { id: 12, steamAppId: 222 },
-        { id: 13, steamAppId: 333 },
-      ];
-      const mockDb = createEnrichMockDb(games);
-      const mockLookup = jest
-        .fn()
-        .mockResolvedValueOnce(makeItadGame({ id: 'uuid-111' }))
-        .mockResolvedValueOnce(makeItadGame({ id: 'uuid-222' }))
-        .mockResolvedValueOnce(makeItadGame({ id: 'uuid-333' }));
+describe('AC: games where ITAD returns null are skipped (no DB update)', () => {
+  it('skips DB update when lookupBySteamAppId returns null', async () => {
+    const games = [{ id: 20, steamAppId: 999 }];
+    const mockDb = createEnrichMockDb(games);
+    const mockLookup = jest.fn().mockResolvedValue(null);
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-      const result = await enrichSyncedGamesWithItad(
-        mockDb as never,
-        mockLookup,
-      );
+    const result = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      expect(result).toBe(3);
-      expect(mockDb.update).toHaveBeenCalledTimes(3);
-    });
+    expect(result).toBe(0);
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 
-  describe('AC: games where ITAD returns null are skipped (no DB update)', () => {
-    it('skips DB update when lookupBySteamAppId returns null', async () => {
-      const games = [{ id: 20, steamAppId: 999 }];
-      const mockDb = createEnrichMockDb(games);
-      const mockLookup = jest.fn().mockResolvedValue(null);
+  it('only updates games where lookup succeeded in a mixed batch', async () => {
+    const games = [
+      { id: 21, steamAppId: 100 }, // will succeed
+      { id: 22, steamAppId: 200 }, // will return null
+      { id: 23, steamAppId: 300 }, // will succeed
+    ];
+    const mockDb = createEnrichMockDb(games);
+    const mockLookup = jest
+      .fn()
+      .mockResolvedValueOnce(makeItadGame({ id: 'uuid-100' }))
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(makeItadGame({ id: 'uuid-300' }));
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-      const result = await enrichSyncedGamesWithItad(
-        mockDb as never,
-        mockLookup,
-      );
+    const result = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      expect(result).toBe(0);
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
+    expect(result).toBe(2);
+    expect(mockDb.update).toHaveBeenCalledTimes(2);
+  });
+});
 
-    it('only updates games where lookup succeeded in a mixed batch', async () => {
-      const games = [
-        { id: 21, steamAppId: 100 }, // will succeed
-        { id: 22, steamAppId: 200 }, // will return null
-        { id: 23, steamAppId: 300 }, // will succeed
-      ];
-      const mockDb = createEnrichMockDb(games);
-      const mockLookup = jest
-        .fn()
-        .mockResolvedValueOnce(makeItadGame({ id: 'uuid-100' }))
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(makeItadGame({ id: 'uuid-300' }));
+describe('AC: individual lookup failures are caught and logged — batch continues', () => {
+  it('continues processing remaining games when one lookup throws', async () => {
+    const games = [
+      { id: 30, steamAppId: 10 },
+      { id: 31, steamAppId: 20 },
+      { id: 32, steamAppId: 30 },
+    ];
+    const mockDb = createEnrichMockDb(games);
+    const mockLookup = jest
+      .fn()
+      .mockResolvedValueOnce(makeItadGame({ id: 'uuid-10' }))
+      .mockRejectedValueOnce(new Error('ITAD API timeout'))
+      .mockResolvedValueOnce(makeItadGame({ id: 'uuid-30' }));
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-      const result = await enrichSyncedGamesWithItad(
-        mockDb as never,
-        mockLookup,
-      );
+    const result = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      expect(result).toBe(2);
-      expect(mockDb.update).toHaveBeenCalledTimes(2);
-    });
+    // Should not throw — continues past the failure
+    expect(result).toBe(2);
+    expect(mockDb.update).toHaveBeenCalledTimes(2);
   });
 
-  describe('AC: individual lookup failures are caught and logged — batch continues', () => {
-    it('continues processing remaining games when one lookup throws', async () => {
-      const games = [
-        { id: 30, steamAppId: 10 },
-        { id: 31, steamAppId: 20 },
-        { id: 32, steamAppId: 30 },
-      ];
-      const mockDb = createEnrichMockDb(games);
-      const mockLookup = jest
-        .fn()
-        .mockResolvedValueOnce(makeItadGame({ id: 'uuid-10' }))
-        .mockRejectedValueOnce(new Error('ITAD API timeout'))
-        .mockResolvedValueOnce(makeItadGame({ id: 'uuid-30' }));
+  it('does not throw when all lookups fail', async () => {
+    const games = [
+      { id: 40, steamAppId: 777 },
+      { id: 41, steamAppId: 888 },
+    ];
+    const mockDb = createEnrichMockDb(games);
+    const mockLookup = jest.fn().mockRejectedValue(new Error('Network error'));
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-      const result = await enrichSyncedGamesWithItad(
-        mockDb as never,
-        mockLookup,
-      );
+    await expect(
+      enrichSyncedGamesWithItad(mockDb as never, mockLookup, mockGetGameInfo),
+    ).resolves.toBe(0);
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+});
 
-      // Should not throw — continues past the failure
-      expect(result).toBe(2);
-      expect(mockDb.update).toHaveBeenCalledTimes(2);
-    });
+describe('edge cases', () => {
+  it('handles a game with no boxart asset gracefully', async () => {
+    const games = [{ id: 50, steamAppId: 456 }];
+    const mockDb = createEnrichMockDb(games);
+    const itadGame = makeItadGame({ assets: undefined });
+    const mockLookup = jest.fn().mockResolvedValue(itadGame);
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-    it('does not throw when all lookups fail', async () => {
-      const games = [
-        { id: 40, steamAppId: 777 },
-        { id: 41, steamAppId: 888 },
-      ];
-      const mockDb = createEnrichMockDb(games);
-      const mockLookup = jest
-        .fn()
-        .mockRejectedValue(new Error('Network error'));
+    const result = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      await expect(
-        enrichSyncedGamesWithItad(mockDb as never, mockLookup),
-      ).resolves.toBe(0);
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
+    expect(result).toBe(1);
+    expect(mockDb.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itadGameId: itadGame.id,
+        itadBoxartUrl: null,
+      }),
+    );
   });
 
-  describe('edge cases', () => {
-    it('handles a game with no boxart asset gracefully', async () => {
-      const games = [{ id: 50, steamAppId: 456 }];
-      const mockDb = createEnrichMockDb(games);
-      const itadGame = makeItadGame({ assets: undefined });
-      const mockLookup = jest.fn().mockResolvedValue(itadGame);
+  it('re-enriches all games every run (no skip for already-enriched)', async () => {
+    // Games that already have itadGameId are still processed — no early-exit
+    const games = [
+      { id: 60, steamAppId: 500 },
+      { id: 61, steamAppId: 501 },
+    ];
+    const mockDb = createEnrichMockDb(games);
+    const mockLookup = jest
+      .fn()
+      .mockResolvedValue(makeItadGame({ id: 'uuid-new' }));
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 
-      const result = await enrichSyncedGamesWithItad(
-        mockDb as never,
-        mockLookup,
-      );
+    await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      expect(result).toBe(1);
-      expect(mockDb.updateSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          itadGameId: itadGame.id,
-          itadBoxartUrl: null,
-        }),
-      );
+    // Both games looked up and updated regardless of prior enrichment state
+    expect(mockLookup).toHaveBeenCalledTimes(2);
+    expect(mockDb.update).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AC: itadTags populated when getGameInfo returns tags', () => {
+  it('populates itadTags from getGameInfo tags', async () => {
+    const games = [{ id: 70, steamAppId: 600 }];
+    const mockDb = createEnrichMockDb(games);
+    const itadGame = makeItadGame({ id: 'uuid-tagged' });
+    const mockLookup = jest.fn().mockResolvedValue(itadGame);
+    const mockGetGameInfo = jest.fn().mockResolvedValue({
+      id: 'uuid-tagged',
+      slug: 'valheim',
+      title: 'Valheim',
+      type: 'game',
+      mature: false,
+      tags: ['rpg', 'indie'],
     });
 
-    it('re-enriches all games every run (no skip for already-enriched)', async () => {
-      // Games that already have itadGameId are still processed — no early-exit
-      const games = [
-        { id: 60, steamAppId: 500 },
-        { id: 61, steamAppId: 501 },
-      ];
-      const mockDb = createEnrichMockDb(games);
-      const mockLookup = jest
-        .fn()
-        .mockResolvedValue(makeItadGame({ id: 'uuid-new' }));
+    await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
 
-      await enrichSyncedGamesWithItad(mockDb as never, mockLookup);
+    expect(mockGetGameInfo).toHaveBeenCalledWith('uuid-tagged');
+    expect(mockDb.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itadTags: ['rpg', 'indie'],
+      }),
+    );
+  });
+});
 
-      // Both games looked up and updated regardless of prior enrichment state
-      expect(mockLookup).toHaveBeenCalledTimes(2);
-      expect(mockDb.update).toHaveBeenCalledTimes(2);
-    });
+describe('AC: itadTags defaults to empty array when getGameInfo returns null', () => {
+  it('sets itadTags to empty array when getGameInfo returns null', async () => {
+    const games = [{ id: 71, steamAppId: 601 }];
+    const mockDb = createEnrichMockDb(games);
+    const itadGame = makeItadGame({ id: 'uuid-no-info' });
+    const mockLookup = jest.fn().mockResolvedValue(itadGame);
+    const mockGetGameInfo = jest.fn().mockResolvedValue(null);
+
+    await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
+
+    expect(mockGetGameInfo).toHaveBeenCalledWith('uuid-no-info');
+    expect(mockDb.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itadTags: [],
+      }),
+    );
+  });
+});
+
+describe('AC: getGameInfo failure degrades gracefully — game still enriched', () => {
+  it('still enriches game with empty tags when getGameInfo throws', async () => {
+    const games = [{ id: 72, steamAppId: 602 }];
+    const mockDb = createEnrichMockDb(games);
+    const itadGame = makeItadGame({ id: 'uuid-info-fail' });
+    const mockLookup = jest.fn().mockResolvedValue(itadGame);
+    const mockGetGameInfo = jest
+      .fn()
+      .mockRejectedValue(new Error('ITAD info API timeout'));
+
+    const result = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      mockLookup,
+      mockGetGameInfo,
+    );
+
+    // Game is still enriched — getGameInfo failure degrades gracefully
+    expect(result).toBe(1);
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itadGameId: 'uuid-info-fail',
+        itadTags: [],
+      }),
+    );
   });
 });

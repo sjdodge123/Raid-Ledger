@@ -536,7 +536,7 @@ This script (`tools/test-bot/scripts/no-sleep-lint.sh`) scans all smoke test fil
 
 ## Discord Smoke Tests (Companion Bot)
 
-The Discord companion bot runs 53 smoke tests that validate real Discord behavior end-to-end — embed posting, roster calculations, DM notifications, interaction flows, and voice activity. These extend the authoring standards above with operational details.
+The Discord companion bot runs smoke tests (see `tools/test-bot/src/smoke/tests/*.test.ts`) that validate real Discord behavior end-to-end — embed posting, roster calculations, DM notifications, interaction flows, and voice activity. These extend the authoring standards above with operational details.
 
 ### Directory structure
 
