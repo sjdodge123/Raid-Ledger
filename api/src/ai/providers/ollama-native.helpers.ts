@@ -44,12 +44,16 @@ export async function downloadAndExtractBinary(
   }
 }
 
-/** Extract a .tar.zst archive to a directory using tar CLI. */
+/**
+ * Extract a .tar.zst archive to a directory.
+ * Uses `zstd -dc | tar -xf -` instead of `tar --zstd` because
+ * BusyBox tar (Alpine/allinone image) does not support the --zstd flag.
+ */
 function extractTarZst(archive: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(
-      'tar',
-      ['--zstd', '-xf', archive, '-C', dest],
+      '/bin/sh',
+      ['-c', `zstd -dc "${archive}" | tar -xf - -C "${dest}"`],
       { timeout: DOWNLOAD_TIMEOUT_MS },
       (err) => {
         if (err) reject(new Error(err.message));

@@ -85,13 +85,10 @@ describe('downloadAndExtractBinary', () => {
     );
     expect(mockMkdtemp).toHaveBeenCalled();
     expect(mockExecFile).toHaveBeenCalledWith(
-      'tar',
+      '/bin/sh',
       [
-        '--zstd',
-        '-xf',
-        '/usr/local/bin/ollama.tar.zst.tmp',
-        '-C',
-        '/tmp/ollama-abc123',
+        '-c',
+        'zstd -dc "/usr/local/bin/ollama.tar.zst.tmp" | tar -xf - -C "/tmp/ollama-abc123"',
       ],
       expect.objectContaining({ timeout: 300_000 }),
       expect.any(Function),
