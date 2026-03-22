@@ -19,6 +19,8 @@ import { voiceActivityTests } from './tests/voice-activity.test.js';
 import { interactionFlowTests } from './tests/interaction-flows.test.js';
 import { rosterCalculationTests } from './tests/roster-calculation.test.js';
 import { pushContentTests } from './tests/push-content.test.js';
+import { slashCommandTests } from './tests/slash-commands.test.js';
+import { cdpSlashCommandTests } from './tests/cdp-slash-commands.test.js';
 
 /** Connect the companion bot and return its Discord user ID. */
 async function connectBot(): Promise<{ botDiscordId: string }> {
@@ -269,15 +271,19 @@ async function main(): Promise<void> {
     ...dmNotificationTests,
     ...voiceActivityTests,
     ...interactionFlowTests,
+    ...slashCommandTests,
+    ...cdpSlashCommandTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 
-  const voiceTests = allTests.filter((t) => t.category === 'voice');
-  const parallelTests = allTests.filter((t) => t.category !== 'voice');
+  // Voice and CDP tests must run sequentially (shared resources)
+  const sequentialCats = new Set(['voice', 'cdp-command']);
+  const sequentialTests = allTests.filter((t) => sequentialCats.has(t.category));
+  const parallelTests = allTests.filter((t) => !sequentialCats.has(t.category));
 
   const concurrency = SMOKE.concurrency;
   console.log(
     `=== Running ${parallelTests.length} tests (concurrency=${concurrency})` +
-      `${voiceTests.length ? `, ${voiceTests.length} voice tests sequentially` : ''} ===\n`,
+      `${sequentialTests.length ? `, ${sequentialTests.length} sequential tests (voice/cdp)` : ''} ===\n`,
   );
 
   const parallelResults = await runWithConcurrency(
@@ -286,12 +292,12 @@ async function main(): Promise<void> {
     concurrency,
   );
 
-  const voiceResults: TestResult[] = [];
-  for (const t of voiceTests) {
-    voiceResults.push(await runTest(t, ctx));
+  const sequentialResults: TestResult[] = [];
+  for (const t of sequentialTests) {
+    sequentialResults.push(await runTest(t, ctx));
   }
 
-  const results = [...parallelResults, ...voiceResults];
+  const results = [...parallelResults, ...sequentialResults];
   const failCount = report(results);
 
   console.log('\n=== Teardown ===');

@@ -35,7 +35,7 @@ export interface TestContext {
 
 export interface SmokeTest {
   name: string;
-  category: 'embed' | 'dm' | 'voice' | 'flow';
+  category: 'embed' | 'dm' | 'voice' | 'flow' | 'command' | 'cdp-command';
   run: (ctx: TestContext) => Promise<void>;
 }
 
