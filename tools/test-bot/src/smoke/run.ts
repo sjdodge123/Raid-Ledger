@@ -19,6 +19,7 @@ import { voiceActivityTests } from './tests/voice-activity.test.js';
 import { interactionFlowTests } from './tests/interaction-flows.test.js';
 import { rosterCalculationTests } from './tests/roster-calculation.test.js';
 import { pushContentTests } from './tests/push-content.test.js';
+import { slashCommandTests } from './tests/slash-commands.test.js';
 
 /** Connect the companion bot and return its Discord user ID. */
 async function connectBot(): Promise<{ botDiscordId: string }> {
@@ -269,6 +270,7 @@ async function main(): Promise<void> {
     ...dmNotificationTests,
     ...voiceActivityTests,
     ...interactionFlowTests,
+    ...slashCommandTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 
   const voiceTests = allTests.filter((t) => t.category === 'voice');
