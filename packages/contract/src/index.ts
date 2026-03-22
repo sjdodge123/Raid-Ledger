@@ -114,3 +114,6 @@ export * from './event-series.schema.js';
 
 // AI Features (ROK-542)
 export * from './ai.schema.js';
+
+// Community Lineup (ROK-933)
+export * from './lineup.schema.js';
