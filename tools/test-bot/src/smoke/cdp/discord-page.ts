@@ -64,9 +64,8 @@ export async function readEphemeralResponse(
     if (currentCount > prevCount) break;
     await page.waitForTimeout(500);
   }
-  // Find the last ephemeral message (has "Only you can see this" nearby)
+  // Find the last ephemeral message (has "Dismiss message" link nearby)
   return page.evaluate(() => {
-    // Find all "Dismiss message" elements — each belongs to an ephemeral msg
     const dismissEls = Array.from(document.querySelectorAll('*')).filter(
       (el) =>
         el.childNodes.length <= 3 &&
@@ -75,19 +74,19 @@ export async function readEphemeralResponse(
     if (dismissEls.length === 0) {
       return { content: '', hasEmbed: false, embedTitle: null };
     }
-    // Walk up from the last "Dismiss message" to find the parent message group
+    // Walk up from the last "Dismiss message" to find the message container
     const lastDismiss = dismissEls[dismissEls.length - 1];
     let container = lastDismiss.parentElement;
-    // Walk up to find a message container with embed or content
     for (let i = 0; i < 10 && container; i++) {
-      const embedEl = container.querySelector('[class*="embedWrapper"]');
+      // Embed selectors: embedFull (current) + embedWrapper (legacy)
+      const embedEl = container.querySelector(
+        '[class*="embedFull"], [class*="embedWrapper"]',
+      );
       const contentEl = container.querySelector(
         '[id^="message-content-"], [class*="messageContent"]',
       );
-      if (embedEl || contentEl) {
-        const embedTitleEl = embedEl?.querySelector(
-          '[class*="embedTitle"], [class*="embed-title"]',
-        );
+      if (embedEl || (contentEl && contentEl.textContent?.trim())) {
+        const embedTitleEl = embedEl?.querySelector('[class*="embedTitle"]');
         return {
           content: contentEl?.textContent?.trim() ?? '',
           hasEmbed: !!embedEl,
@@ -96,7 +95,6 @@ export async function readEphemeralResponse(
       }
       container = container.parentElement;
     }
-    // Fallback: something was found (count increased) but couldn't parse
     return { content: 'ephemeral-detected', hasEmbed: false, embedTitle: null };
   });
 }
