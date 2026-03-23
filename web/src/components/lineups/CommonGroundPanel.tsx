@@ -191,7 +191,7 @@ export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: numbe
     if (!hasBuilding) return null;
 
     return (
-        <section className="space-y-3 overflow-hidden px-px">
+        <section className="space-y-3">
             <PanelHeader nominated={data?.meta.nominatedCount ?? 0} max={data?.meta.maxNominations ?? 20} />
             <PanelContent
                 data={filtered} filters={filters} setFilters={setFilters} availableTags={availableTags}

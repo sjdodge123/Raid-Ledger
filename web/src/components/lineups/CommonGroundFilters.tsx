@@ -103,7 +103,7 @@ export function CommonGroundFilters({ filters, onChange, availableTags, search, 
                 value={search}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="Search games..."
-                className="bg-panel border border-edge/50 rounded px-2 py-1 text-sm text-foreground placeholder:text-dim w-full"
+                className="bg-panel border border-edge/50 rounded px-2 py-1 text-sm text-foreground placeholder:text-dim w-full focus:outline focus:outline-2 focus:outline-emerald-500/50 focus:border-emerald-500/50"
             />
             <MinOwnersSlider
                 value={filters.minOwners ?? 2}
