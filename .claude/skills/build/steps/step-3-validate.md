@@ -27,11 +27,20 @@ npm run lint -w web --prefix $WORKTREE
 # Tests
 npm run test -w api --prefix $WORKTREE
 npm run test -w web --prefix $WORKTREE
+
+# Smoke tests — BOTH desktop AND mobile (matches CI exactly)
+# MANDATORY for any story with UI changes. Do NOT use --project=desktop.
+cd $WORKTREE && npx playwright test && cd -
 ```
+
+**Smoke test verification is MANDATORY before pushing.** CI runs both desktop and mobile
+Playwright projects. If you only verify desktop locally, mobile failures will fail CI and
+waste GitHub Actions minutes. See CLAUDE.md "Smoke Test Verification" for details.
 
 If CI fails:
 - **Lint/type errors:** Fix directly in the worktree, commit as `fix: resolve CI issues (ROK-XXX)`
 - **Test failures:** Assess — if trivial, fix. If complex, re-spawn dev for the failing story.
+- **Smoke test failures:** Run `npx playwright test` (both projects) locally, fix ALL failures before re-pushing. Do NOT re-run CI hoping for a different result.
 
 Update state: `gates.ci: PASS` (or `FAIL`)
 
