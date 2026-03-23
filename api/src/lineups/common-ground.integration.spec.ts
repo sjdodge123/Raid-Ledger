@@ -247,14 +247,27 @@ function describeCommonGround() {
       expect(gameIds).not.toContain(singleOwnerGame.id);
     });
 
-    it('applies maxPlayers filter — excludes games where player_count max exceeds limit', async () => {
+    it('applies maxPlayers filter — shows games that support N players', async () => {
       await createBuildingLineup();
       const { userId: memberId } = await loginAsMember();
 
-      // 2-player game — should be included with maxPlayers=4
+      // 4-player co-op — supports 4 players (min=1, max=4)
+      const coopGame = await insertGame({
+        name: 'Co-op Game',
+        slug: 'coop-game',
+        playerCount: { min: 1, max: 4 },
+      });
+      await addGameInterest(
+        testApp.seed.adminUser.id,
+        coopGame.id,
+        'steam_library',
+      );
+      await addGameInterest(memberId, coopGame.id, 'steam_library');
+
+      // 2-player only — does NOT support 4 players (max=2 < 4)
       const twoPlayerGame = await insertGame({
-        name: 'Two Player',
-        slug: 'two-player',
+        name: 'Two Player Only',
+        slug: 'two-player-only',
         playerCount: { min: 1, max: 2 },
       });
       await addGameInterest(
@@ -263,19 +276,6 @@ function describeCommonGround() {
         'steam_library',
       );
       await addGameInterest(memberId, twoPlayerGame.id, 'steam_library');
-
-      // 20-player game — should be excluded with maxPlayers=4
-      const largeGame = await insertGame({
-        name: 'Large MMO',
-        slug: 'large-mmo',
-        playerCount: { min: 1, max: 20 },
-      });
-      await addGameInterest(
-        testApp.seed.adminUser.id,
-        largeGame.id,
-        'steam_library',
-      );
-      await addGameInterest(memberId, largeGame.id, 'steam_library');
 
       const res = await testApp.request
         .get('/lineups/common-ground')
@@ -286,15 +286,15 @@ function describeCommonGround() {
       const gameIds = (res.body.data as Array<{ gameId: number }>).map(
         (g) => g.gameId,
       );
-      expect(gameIds).toContain(twoPlayerGame.id);
-      expect(gameIds).not.toContain(largeGame.id);
+      expect(gameIds).toContain(coopGame.id);
+      expect(gameIds).not.toContain(twoPlayerGame.id);
     });
 
-    it('does NOT exclude games with null player_count when maxPlayers filter is applied', async () => {
+    it('excludes games with null player_count when maxPlayers filter is applied', async () => {
       await createBuildingLineup();
       const { userId: memberId } = await loginAsMember();
 
-      // Game with no player_count metadata — must NOT be excluded
+      // Game with no player_count metadata — excluded (unknown != compatible)
       const unknownSizeGame = await insertGame({
         name: 'Unknown Size',
         slug: 'unknown-size',
@@ -316,7 +316,7 @@ function describeCommonGround() {
       const gameIds = (res.body.data as Array<{ gameId: number }>).map(
         (g) => g.gameId,
       );
-      expect(gameIds).toContain(unknownSizeGame.id);
+      expect(gameIds).not.toContain(unknownSizeGame.id);
     });
 
     it('applies genre filter — matches ITAD tags', async () => {
