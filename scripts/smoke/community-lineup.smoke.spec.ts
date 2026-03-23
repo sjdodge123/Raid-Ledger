@@ -169,27 +169,24 @@ test.describe('Nomination modal', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal.getByRole('heading', { name: 'Nominate a Game' })).toBeVisible({ timeout: 5_000 });
 
-        // Type a short search that is likely to find results in the demo data
+        // Search for a game known to exist in most demo/IGDB-seeded databases
         const searchInput = modal.getByPlaceholder('Search games...');
-        await searchInput.fill('a');
+        await searchInput.fill('Lethal');
 
-        // Wait for search results to appear (buttons inside the modal results list)
-        // The results are buttons with game names -- exclude modal controls
-        const resultButtons = modal.locator('button').filter({
-            hasNotText: /Back to search|Submit|Close/,
-        });
+        // Wait for debounced search (300ms) + API response
+        // The SearchResultItem renders as <button> with game name text
+        const firstResult = modal.getByRole('button', { name: /Lethal/i }).first();
 
-        // Give search time to return results
-        const hasResults = await resultButtons.first().isVisible({ timeout: 10_000 }).catch(() => false);
+        // Allow debounce (300ms) + API search + render time
+        const hasResults = await firstResult.isVisible({ timeout: 15_000 }).catch(() => false);
 
         if (!hasResults) {
-            // No games in demo data matching 'a' -- skip the click assertion
-            test.skip(true, 'No search results in demo data -- cannot test preview card');
+            test.skip(true, 'No search results for "Lethal" in demo data');
             return;
         }
 
         // Click the first search result
-        await resultButtons.first().click();
+        await firstResult.click();
 
         // Preview card shows the "Back to search" link, note textarea, and Submit button
         await expect(modal.getByText(/Back to search/)).toBeVisible({ timeout: 5_000 });
