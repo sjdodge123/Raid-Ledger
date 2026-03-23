@@ -61,26 +61,30 @@ function GenreDropdown({
     );
 }
 
-/** Number input for max player count. */
-function MaxPlayersInput({
+/** Slider for filtering by player count. */
+function PlayersSlider({
     value,
     onChange,
 }: {
     value: number | undefined;
     onChange: (v: number | undefined) => void;
 }): JSX.Element {
+    const current = value ?? 0;
     return (
         <label className="flex items-center gap-2 text-sm text-muted">
-            <span className="whitespace-nowrap">Max players</span>
+            <span className="whitespace-nowrap">Players</span>
             <input
-                type="number"
-                min={1}
-                max={999}
-                value={value ?? ''}
-                placeholder="Any"
-                onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
-                className="w-16 bg-panel border border-edge/50 rounded px-2 py-1 text-sm text-muted"
+                type="range"
+                min={0}
+                max={16}
+                value={current}
+                onChange={(e) => {
+                    const v = Number(e.target.value);
+                    onChange(v === 0 ? undefined : v);
+                }}
+                className="w-24 accent-emerald-500"
             />
+            <span className="text-xs font-mono w-8 text-right">{current === 0 ? 'Any' : current}</span>
         </label>
     );
 }
@@ -110,7 +114,7 @@ export function CommonGroundFilters({ filters, onChange, availableTags, search, 
                 tags={availableTags}
                 onChange={(v) => update({ genre: v })}
             />
-            <MaxPlayersInput
+            <PlayersSlider
                 value={filters.maxPlayers}
                 onChange={(v) => update({ maxPlayers: v })}
             />
