@@ -63,7 +63,7 @@ export function useNominateGame() {
   >({
     mutationFn: ({ lineupId, body }) => nominateGame(lineupId, body),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...ACTIVE_LINEUP_KEY] });
+      void queryClient.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
       void queryClient.invalidateQueries({ queryKey: [...COMMON_GROUND_KEY] });
     },
   });
