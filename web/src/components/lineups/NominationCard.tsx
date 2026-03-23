@@ -106,7 +106,7 @@ export function NominationCard({ entry, onRemove }: NominationCardProps): JSX.El
     const canRemove = user?.id === entry.nominatedBy.id || isOperatorOrAdmin(user);
 
     return (
-        <Link to={`/games/${entry.gameId}`} className="block rounded-xl bg-surface border border-edge overflow-hidden hover:border-edge/80 transition-colors">
+        <Link to={`/games/${entry.gameId}`} className="block rounded-xl bg-surface border border-edge overflow-hidden hover:border-emerald-500/50 hover:shadow-lg transition-all">
             <CardCover entry={entry} />
             <CardBody entry={entry} canRemove={canRemove} onRemove={onRemove} />
         </Link>
