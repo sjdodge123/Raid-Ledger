@@ -82,7 +82,7 @@ function GameGrid({
 }): JSX.Element {
     const items = games;
     return (
-        <div className="flex gap-3 overflow-x-auto pb-2" style={{ minHeight: 280 }}>
+        <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2">
             {items.map((g) => (
                 <CommonGroundGameCard
                     key={g.gameId}
@@ -191,7 +191,7 @@ export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: numbe
     if (!hasBuilding) return null;
 
     return (
-        <section className="space-y-3">
+        <section className="space-y-3 overflow-hidden">
             <PanelHeader nominated={data?.meta.nominatedCount ?? 0} max={data?.meta.maxNominations ?? 20} />
             <PanelContent
                 data={filtered} filters={filters} setFilters={setFilters} availableTags={availableTags}
