@@ -27,10 +27,15 @@ export default defineConfig({
     forbidOnly: !!process.env.CI,
 
     /* Retry once on CI to absorb cold-start timing flakes */
-    retries: process.env.CI ? 1 : 0,
+    retries: process.env.CI ? 2 : 0,
 
     /* Max time per test */
     timeout: 30_000,
+
+    /* Default expect timeout — longer on CI where runners are slower */
+    expect: {
+        timeout: process.env.CI ? 15_000 : 5_000,
+    },
 
     /* Reporter to use */
     reporter: process.env.CI ? 'github' : 'list',

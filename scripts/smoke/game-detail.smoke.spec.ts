@@ -11,22 +11,29 @@ import { test, expect, type Page } from '@playwright/test';
  * Navigate to the first game detail page by clicking the first
  * game card link on /games.
  */
-async function navigateToFirstGame(page: Page): Promise<void> {
-    // Fetch a game ID from the API and navigate directly — avoids mobile
-    // viewport issues where the lineup banner covers all game card links.
-    const API_BASE = process.env.API_URL || 'http://localhost:3000';
-    const res = await page.request.get(`${API_BASE}/games/search?q=a&limit=1`);
-    const body = await res.json();
-    const games = body?.data ?? body ?? [];
-    if (games.length > 0) {
-        await page.goto(`/games/${games[0].id}`);
-    } else {
-        // Fallback: navigate via UI
-        await page.goto('/games');
-        const gameLink = page.locator('a[href*="/games/"]').first();
-        await expect(gameLink).toBeAttached({ timeout: 15_000 });
-        await gameLink.click({ force: true });
+async function navigateToFirstGame(page: Page, isMobileViewport: boolean): Promise<void> {
+    await page.goto('/games');
+
+    if (isMobileViewport) {
+        // On mobile the lineup banner covers game cards — scroll past it
+        const gameLink = page.locator('a[href*="/games/"]');
+        await expect(gameLink.first()).toBeAttached({ timeout: 15_000 });
+        // Find a game link that's actually in the card grid, not the banner
+        const allLinks = await gameLink.all();
+        for (const link of allLinks) {
+            await link.scrollIntoViewIfNeeded();
+            if (await link.isVisible({ timeout: 1_000 }).catch(() => false)) {
+                await link.click();
+                await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
+                return;
+            }
+        }
     }
+
+    // Desktop: first visible game link
+    const gameLink = page.locator('a[href*="/games/"]').first();
+    await expect(gameLink).toBeVisible({ timeout: 15_000 });
+    await gameLink.click();
     await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
 }
 
@@ -37,7 +44,7 @@ async function navigateToFirstGame(page: Page): Promise<void> {
 test.describe('Game detail — desktop', () => {
     test.beforeEach(async ({ page }, testInfo) => {
         test.skip(testInfo.project.name === 'mobile', 'Desktop-only tests');
-        await navigateToFirstGame(page);
+        await navigateToFirstGame(page, false);
     });
 
     test('page renders without crashing', async ({ page }) => {
@@ -119,7 +126,7 @@ test.describe('Game detail — desktop', () => {
 test.describe('Game detail — mobile', () => {
     test.beforeEach(async ({ page }, testInfo) => {
         test.skip(testInfo.project.name === 'desktop', 'Mobile-only tests');
-        await navigateToFirstGame(page);
+        await navigateToFirstGame(page, true);
     });
 
     test('page renders without crashing', async ({ page }) => {
