@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { LineupsService } from './lineups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 const NOW = new Date('2026-03-22T20:00:00Z');
 
@@ -137,6 +138,7 @@ function describeLineupsService() {
       providers: [
         LineupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: ActivityLogService, useValue: { log: jest.fn() } },
       ],
     }).compile();
     service = module.get<LineupsService>(LineupsService);

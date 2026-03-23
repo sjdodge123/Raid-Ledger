@@ -68,6 +68,7 @@ export async function queryCommonGround(
     WHERE ${sql.join(conditions, sql` AND `)}
     GROUP BY g.id
     HAVING COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0) >= ${filters.minOwners}
+    ORDER BY COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0) DESC
     LIMIT ${filters.limit}
   `)) as unknown as CommonGroundRow[];
 

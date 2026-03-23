@@ -3,9 +3,9 @@
  * Renders filter controls, a horizontal-scroll game grid, and handles nomination.
  */
 import { type JSX, useState, useMemo, useCallback } from 'react';
+import type { CommonGroundResponseDto } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../../lib/api-client';
-import { useActiveLineup } from '../../hooks/use-lineups';
-import { useCommonGround, useNominateGame } from '../../hooks/use-lineups';
+import { useActiveLineup, useCommonGround, useNominateGame } from '../../hooks/use-lineups';
 import { CommonGroundFilters } from './CommonGroundFilters';
 import { CommonGroundGameCard } from './CommonGroundGameCard';
 
@@ -74,13 +74,12 @@ function GameGrid({
     nominatingId,
     atCap,
 }: {
-    games: { gameId: number }[];
+    games: import('@raid-ledger/contract').CommonGroundGameDto[];
     onNominate: (id: number) => void;
     nominatingId: number | null;
     atCap: boolean;
 }): JSX.Element {
-    // Safe cast — we know these are CommonGroundGameDto
-    const items = games as import('@raid-ledger/contract').CommonGroundGameDto[];
+    const items = games;
     return (
         <div className="flex gap-3 overflow-x-auto pb-2">
             {items.map((g) => (
@@ -96,59 +95,83 @@ function GameGrid({
     );
 }
 
+/** Hook for nomination state management. */
+function useNomination(lineupId: number | undefined) {
+    const [nominatingId, setNominatingId] = useState<number | null>(null);
+    const nominate = useNominateGame();
+
+    const handleNominate = useCallback(
+        (gameId: number) => {
+            if (!lineupId) return;
+            setNominatingId(gameId);
+            nominate.mutate(
+                { lineupId, body: { gameId } },
+                { onSettled: () => setNominatingId(null) },
+            );
+        },
+        [lineupId, nominate],
+    );
+
+    return { nominatingId, handleNominate };
+}
+
+/** Content area — renders filters, loading/error states, and game grid. */
+function PanelContent({
+    data,
+    filters,
+    setFilters,
+    availableTags,
+    isLoading,
+    isError,
+    refetch,
+    onNominate,
+    nominatingId,
+    atCap,
+}: {
+    data: CommonGroundResponseDto | undefined;
+    filters: CommonGroundParams;
+    setFilters: (f: CommonGroundParams) => void;
+    availableTags: string[];
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => void;
+    onNominate: (id: number) => void;
+    nominatingId: number | null;
+    atCap: boolean;
+}): JSX.Element {
+    return (
+        <>
+            <CommonGroundFilters filters={filters} onChange={setFilters} availableTags={availableTags} />
+            {isLoading && <LoadingSkeleton />}
+            {isError && <ErrorState onRetry={refetch} />}
+            {data && data.data.length === 0 && <EmptyState />}
+            {data && data.data.length > 0 && (
+                <GameGrid games={data.data} onNominate={onNominate} nominatingId={nominatingId} atCap={atCap} />
+            )}
+        </>
+    );
+}
+
 /** Main Common Ground panel. */
 export function CommonGroundPanel(): JSX.Element | null {
     const { data: lineup } = useActiveLineup();
     const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 2 });
-    const [nominatingId, setNominatingId] = useState<number | null>(null);
-
     const hasBuilding = lineup?.status === 'building';
     const { data, isLoading, isError, refetch } = useCommonGround(filters, hasBuilding);
-    const nominate = useNominateGame();
-
-    const availableTags = useMemo(
-        () => (data?.data ? extractUniqueTags(data.data) : []),
-        [data],
-    );
-
+    const availableTags = useMemo(() => (data?.data ? extractUniqueTags(data.data) : []), [data]);
     const atCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
-
-    const handleNominate = useCallback(
-        (gameId: number) => {
-            if (!lineup) return;
-            setNominatingId(gameId);
-            nominate.mutate(
-                { lineupId: lineup.id, body: { gameId } },
-                { onSettled: () => setNominatingId(null) },
-            );
-        },
-        [lineup, nominate],
-    );
+    const { nominatingId, handleNominate } = useNomination(lineup?.id);
 
     if (!hasBuilding) return null;
 
     return (
         <section className="space-y-3">
-            <PanelHeader
-                nominated={data?.meta.nominatedCount ?? 0}
-                max={data?.meta.maxNominations ?? 20}
+            <PanelHeader nominated={data?.meta.nominatedCount ?? 0} max={data?.meta.maxNominations ?? 20} />
+            <PanelContent
+                data={data} filters={filters} setFilters={setFilters} availableTags={availableTags}
+                isLoading={isLoading} isError={isError} refetch={() => void refetch()}
+                onNominate={handleNominate} nominatingId={nominatingId} atCap={atCap}
             />
-            <CommonGroundFilters
-                filters={filters}
-                onChange={setFilters}
-                availableTags={availableTags}
-            />
-            {isLoading && <LoadingSkeleton />}
-            {isError && <ErrorState onRetry={() => void refetch()} />}
-            {data && data.data.length === 0 && <EmptyState />}
-            {data && data.data.length > 0 && (
-                <GameGrid
-                    games={data.data}
-                    onNominate={handleNominate}
-                    nominatingId={nominatingId}
-                    atCap={atCap}
-                />
-            )}
         </section>
     );
 }

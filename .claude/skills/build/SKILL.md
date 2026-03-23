@@ -165,9 +165,9 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 
 | Agent | Template | When | Model | Lifetime |
 |-------|----------|------|-------|----------|
-| E2E Test Agent | `templates/test-agent.md` | Step 2d (BEFORE dev — writes failing test) | sonnet | Per-story |
+| E2E Test Agent | `templates/test-agent.md` | Step 2d (BEFORE dev — writes failing test) | opus | Per-story |
 | Dev | `templates/dev.md` | Step 2e (builds to make test pass) | opus | Per-story |
-| Reviewer | `templates/reviewer.md` | Step 4 (after operator approves) | sonnet | Per-story |
+| Reviewer | `templates/reviewer.md` | Step 4 (after operator approves) | opus | Per-story |
 | Architect | `templates/architect.md` | Step 2 pre-dev / Step 4 post-review (one-shot) | opus | One-shot |
 | Planner | `templates/planner.md` | Step 2 pre-dev (full scope only, one-shot) | opus | One-shot |
 | Wiki Updater | `templates/wiki-updater.md` | Step 5i (after tech debt, feat: stories only) | — | One-shot |
