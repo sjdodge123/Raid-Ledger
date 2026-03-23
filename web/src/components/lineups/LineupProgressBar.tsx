@@ -29,7 +29,7 @@ export function LineupProgressBar({ lineup }: Props): JSX.Element {
         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
       </div>
       <div className="flex items-center justify-between mt-1.5">
-        <span className="text-xs text-dim">{nominators} member{nominators !== 1 ? 's' : ''} have nominated</span>
+        <span className="text-xs text-dim">{nominators} member{nominators !== 1 ? 's' : ''} {nominators === 1 ? 'has' : 'have'} nominated</span>
         {lineup.status === 'building' && user && isOperatorOrAdmin(user) && (
           <Link to="#" className="text-xs text-emerald-400 font-medium hover:underline">
             Start Voting →
