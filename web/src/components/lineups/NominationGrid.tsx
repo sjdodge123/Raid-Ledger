@@ -2,14 +2,15 @@
  * Nomination grid for the Community Lineup detail page (ROK-935).
  * Renders entries sorted by ownership in a responsive 2-column grid.
  */
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { JSX } from 'react';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
+import { useRemoveNomination } from '../../hooks/use-lineups';
 import { NominationCard } from './NominationCard';
 
 interface NominationGridProps {
     entries: LineupEntryResponseDto[];
-    onRemove: (gameId: number) => void;
+    lineupId: number;
 }
 
 /** Sort entries by ownerCount descending. */
@@ -18,8 +19,13 @@ function sortByOwnership(entries: LineupEntryResponseDto[]): LineupEntryResponse
 }
 
 /** Nomination grid with heading, sorted cards. */
-export function NominationGrid({ entries, onRemove }: NominationGridProps): JSX.Element {
+export function NominationGrid({ entries, lineupId }: NominationGridProps): JSX.Element {
     const sorted = useMemo(() => sortByOwnership(entries), [entries]);
+    const removeMutation = useRemoveNomination();
+    const handleRemove = useCallback(
+        (gameId: number) => removeMutation.mutate({ lineupId, gameId }),
+        [lineupId, removeMutation],
+    );
 
     return (
         <section>
@@ -29,7 +35,7 @@ export function NominationGrid({ entries, onRemove }: NominationGridProps): JSX.
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {sorted.map((entry) => (
-                    <NominationCard key={entry.id} entry={entry} onRemove={onRemove} />
+                    <NominationCard key={entry.id} entry={entry} onRemove={handleRemove} />
                 ))}
             </div>
         </section>

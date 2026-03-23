@@ -14,17 +14,22 @@ vi.mock('../../hooks/use-auth', () => ({
     isOperatorOrAdmin: vi.fn(() => false),
 }));
 
+// Mock useRemoveNomination
+vi.mock('../../hooks/use-lineups', () => ({
+    useRemoveNomination: vi.fn(() => ({ mutate: vi.fn() })),
+}));
+
 describe('NominationGrid', () => {
     it('renders "Nominated Games" heading', () => {
         renderWithProviders(
-            <NominationGrid entries={[createMockEntry()]} onRemove={vi.fn()} />,
+            <NominationGrid entries={[createMockEntry()]} lineupId={1} />,
         );
         expect(screen.getByText('Nominated Games')).toBeInTheDocument();
     });
 
     it('renders "Sorted by ownership" label', () => {
         renderWithProviders(
-            <NominationGrid entries={[createMockEntry()]} onRemove={vi.fn()} />,
+            <NominationGrid entries={[createMockEntry()]} lineupId={1} />,
         );
         expect(screen.getByText(/sorted by ownership/i)).toBeInTheDocument();
     });
@@ -36,7 +41,7 @@ describe('NominationGrid', () => {
             createMockEntry({ id: 3, gameId: 3, gameName: 'Mid', ownerCount: 5 }),
         ];
         renderWithProviders(
-            <NominationGrid entries={entries} onRemove={vi.fn()} />,
+            <NominationGrid entries={entries} lineupId={1} />,
         );
         const gameNames = screen.getAllByText(/High|Mid|Low/).map((el) => el.textContent);
         expect(gameNames).toEqual(['High', 'Mid', 'Low']);
@@ -48,7 +53,7 @@ describe('NominationGrid', () => {
             createMockEntry({ id: 2, gameId: 2, gameName: 'Game B' }),
         ];
         renderWithProviders(
-            <NominationGrid entries={entries} onRemove={vi.fn()} />,
+            <NominationGrid entries={entries} lineupId={1} />,
         );
         expect(screen.getByText('Game A')).toBeInTheDocument();
         expect(screen.getByText('Game B')).toBeInTheDocument();
