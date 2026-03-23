@@ -60,13 +60,15 @@ function makeSelectChain(overrides: {
     .fn()
     .mockReturnValue({ where, innerJoin: innerJoin2 });
 
-  const from = jest.fn().mockReturnValue({
+  const fromResult = {
+    then: thenable(defaultData).then,
     where,
     innerJoin: innerJoin1,
     orderBy: jest.fn().mockImplementation(() => thenable(defaultData)),
     limit: jest.fn().mockImplementation(() => thenable(limitData)),
     groupBy: jest.fn().mockImplementation(() => thenable(groupByData)),
-  });
+  };
+  const from = jest.fn().mockReturnValue(fromResult);
 
   return { from };
 }

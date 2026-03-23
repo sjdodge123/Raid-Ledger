@@ -104,23 +104,9 @@ export async function fetchPricingMetadata(
  * Count total registered community members.
  */
 export async function countTotalMembers(db: Db): Promise<number> {
-  const selectResult = db.select({
-    count: sql<number>`count(*)::int`.as('count'),
-  });
-
-  console.log('CTM selectResult keys:', Object.keys(selectResult as any));
-  const fromResult = selectResult.from(schema.users);
-
-  console.log(
-    'CTM fromResult keys:',
-    Object.keys(fromResult as any),
-    'then:',
-    typeof (fromResult as any)?.then,
-  );
-  const raw = await fromResult;
-
-  console.log('CTM raw:', raw, 'isArray:', Array.isArray(raw));
-  const [row] = raw;
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int`.as('count') })
+    .from(schema.users);
 
   return row?.count ?? 0;
 }
