@@ -2,7 +2,7 @@
  * Enrichment helpers for lineup detail responses (ROK-935).
  * Provides batch queries for ownership, wishlist, pricing, and member counts.
  */
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
@@ -32,9 +32,10 @@ export async function countOwnersPerGame(
       count: sql<number>`count(*)::int`.as('count'),
     })
     .from(schema.gameInterests)
-    .where(
-      sql`${schema.gameInterests.gameId} = ANY(${gameIds}) AND ${schema.gameInterests.source} = 'steam_library'`,
-    )
+    .where(and(
+      inArray(schema.gameInterests.gameId, gameIds),
+      eq(schema.gameInterests.source, 'steam_library'),
+    ))
     .groupBy(schema.gameInterests.gameId);
 
   return new Map(rows.map((r) => [r.gameId, r.count]));
@@ -56,9 +57,10 @@ export async function countWishlistPerGame(
       count: sql<number>`count(*)::int`.as('count'),
     })
     .from(schema.gameInterests)
-    .where(
-      sql`${schema.gameInterests.gameId} = ANY(${gameIds}) AND ${schema.gameInterests.source} = 'steam_wishlist'`,
-    )
+    .where(and(
+      inArray(schema.gameInterests.gameId, gameIds),
+      eq(schema.gameInterests.source, 'steam_wishlist'),
+    ))
     .groupBy(schema.gameInterests.gameId);
 
   return new Map(rows.map((r) => [r.gameId, r.count]));
