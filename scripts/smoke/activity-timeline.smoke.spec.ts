@@ -78,46 +78,59 @@ test.describe('Activity Timeline on event detail', () => {
     test('shows event_created and signup_added entries', async ({ page }) => {
         await page.goto(`/events/${eventId}`);
 
-        await expect(
-            page.getByRole('heading', { name: 'Activity' }),
-        ).toBeVisible({ timeout: 15_000 });
+        // The Activity section is a collapsible button with text "Activity · N events"
+        const activityBtn = page.locator('button', { hasText: /Activity · \d+ event/ });
+        await expect(activityBtn).toBeVisible({ timeout: 15_000 });
 
-        // Scope assertions to the timeline section
-        const timeline = page.locator('h3:has-text("Activity")').locator('..');
+        // Expand the timeline if collapsed
+        const expanded = page.locator('.border-t.border-edge');
+        if (!(await expanded.isVisible({ timeout: 2_000 }).catch(() => false))) {
+            await activityBtn.click();
+        }
 
         // The creator auto-signs up, so we should see both actions
         await expect(
-            timeline.getByText(/created the event/),
+            page.getByText(/created the event/),
         ).toBeVisible({ timeout: 10_000 });
 
         await expect(
-            timeline.getByText(/signed up/),
+            page.getByText(/signed up/),
         ).toBeVisible({ timeout: 10_000 });
     });
 
     test('timeline entries have timestamps', async ({ page }) => {
         await page.goto(`/events/${eventId}`);
 
-        await expect(
-            page.getByRole('heading', { name: 'Activity' }),
-        ).toBeVisible({ timeout: 15_000 });
+        // The Activity section is a collapsible button
+        const activityBtn = page.locator('button', { hasText: /Activity · \d+ event/ });
+        await expect(activityBtn).toBeVisible({ timeout: 15_000 });
+
+        // Expand the timeline if collapsed
+        const expanded = page.locator('.border-t.border-edge');
+        if (!(await expanded.isVisible({ timeout: 2_000 }).catch(() => false))) {
+            await activityBtn.click();
+        }
 
         // Timestamps show as relative ("Just now", "1m ago") or absolute dates
-        const timelineSection = page.locator('h3:has-text("Activity")').locator('..');
-        const timestamps = timelineSection.locator('p.text-dim, p[class*="text-[11px]"]');
+        const timestamps = page.locator('p[class*="text-[11px]"]');
         await expect(timestamps.first()).toBeVisible({ timeout: 10_000 });
     });
 
     test('timeline shows colored dot indicators', async ({ page }) => {
         await page.goto(`/events/${eventId}`);
 
-        await expect(
-            page.getByRole('heading', { name: 'Activity' }),
-        ).toBeVisible({ timeout: 15_000 });
+        // The Activity section is a collapsible button
+        const activityBtn = page.locator('button', { hasText: /Activity · \d+ event/ });
+        await expect(activityBtn).toBeVisible({ timeout: 15_000 });
+
+        // Expand the timeline if collapsed
+        const expanded = page.locator('.border-t.border-edge');
+        if (!(await expanded.isVisible({ timeout: 2_000 }).catch(() => false))) {
+            await activityBtn.click();
+        }
 
         // Each entry has a colored dot (w-8 h-8 rounded-full)
-        const timelineSection = page.locator('h3:has-text("Activity")').locator('..');
-        const dots = timelineSection.locator('.rounded-full.w-8');
+        const dots = page.locator('.rounded-full.w-8');
         const count = await dots.count();
         expect(count).toBeGreaterThanOrEqual(2); // event_created + signup_added
     });

@@ -20,7 +20,10 @@ test.describe('Admin Integrations — IGDB panel', () => {
         await expect(page.getByRole('heading', { name: 'IGDB / Twitch' }).first()).toBeVisible({ timeout: 10_000 });
 
         // IntegrationCard status badge — shows "Online" or "Offline"
-        await expect(page.getByText(/^(Online|Offline)$/).first()).toBeVisible({ timeout: 10_000 });
+        // On mobile the badge may be scrolled offscreen; scroll it into view first
+        const badge = page.getByText(/^(Online|Offline)$/).first();
+        await badge.scrollIntoViewIfNeeded();
+        await expect(badge).toBeVisible({ timeout: 10_000 });
 
         // Setup instructions block
         await expect(page.getByText('Setup Instructions')).toBeVisible();

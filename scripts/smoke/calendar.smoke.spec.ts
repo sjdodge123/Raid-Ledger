@@ -62,22 +62,20 @@ test.describe('Calendar — mobile', () => {
         test.skip(testInfo.project.name === 'desktop', 'Mobile-only tests');
     });
 
-    test('month view renders grid and view switcher', async ({ page }) => {
+    test('view switcher renders with Schedule/Month/Day tabs', async ({ page }) => {
         await page.goto('/calendar');
-        // Calendar heading is hidden md:block — not visible on mobile.
-        // Instead, verify the calendar toolbar (Month/Day view switcher) renders.
-        const toolbar = page.getByRole('toolbar', { name: 'Calendar view switcher' });
-        await expect(toolbar).toBeVisible({ timeout: 15_000 });
-        await expect(toolbar.getByRole('button', { name: 'Month' })).toBeVisible();
-        // Day-of-week column headers render as generic elements on mobile.
-        // Verify at least one day name appears in the grid.
-        await expect(page.locator('.rbc-header').first()).toBeVisible({ timeout: 10_000 });
+        // Mobile uses a segmented control with Schedule/Month/Day buttons
+        // wrapped in a MobilePageToolbar with aria-label "Calendar view switcher"
+        const viewSwitcher = page.locator('[aria-label="Calendar view switcher"]');
+        await expect(viewSwitcher).toBeVisible({ timeout: 15_000 });
+        await expect(viewSwitcher.getByRole('button', { name: 'Schedule' })).toBeVisible();
+        await expect(viewSwitcher.getByRole('button', { name: 'Month' })).toBeVisible();
+        await expect(viewSwitcher.getByRole('button', { name: 'Day' })).toBeVisible();
     });
 
     test('bottom nav has Calendar and Events links', async ({ page }) => {
         await page.goto('/calendar');
-        // Quick action links (Create Event, All Events) are hidden on mobile.
-        // The bottom navigation bar provides equivalent navigation.
+        // The bottom navigation bar provides mobile navigation.
         const nav = page.locator('nav[aria-label="Main navigation"]');
         await expect(nav).toBeVisible({ timeout: 15_000 });
         await expect(nav.getByRole('link', { name: 'Calendar' })).toBeVisible();
