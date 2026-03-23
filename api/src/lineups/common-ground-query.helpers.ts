@@ -99,7 +99,7 @@ function buildWhereConditions(
 
   if (filters.maxPlayers != null) {
     conditions.push(
-      sql`(g.player_count IS NULL OR (g.player_count->>'max')::int <= ${filters.maxPlayers})`,
+      sql`(g.player_count IS NOT NULL AND (g.player_count->>'max')::int <= ${filters.maxPlayers})`,
     );
   }
 

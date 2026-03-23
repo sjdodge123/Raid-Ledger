@@ -9,6 +9,8 @@ interface Props {
     filters: CommonGroundParams;
     onChange: (next: CommonGroundParams) => void;
     availableTags: string[];
+    search: string;
+    onSearchChange: (v: string) => void;
 }
 
 /** Slider for the minimum owners threshold (0–15). */
@@ -84,7 +86,7 @@ function MaxPlayersInput({
 }
 
 /** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, availableTags }: Props): JSX.Element {
+export function CommonGroundFilters({ filters, onChange, availableTags, search, onSearchChange }: Props): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
         [filters, onChange],
@@ -92,6 +94,13 @@ export function CommonGroundFilters({ filters, onChange, availableTags }: Props)
 
     return (
         <div className="flex flex-wrap items-center gap-4">
+            <input
+                type="text"
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search games..."
+                className="bg-panel border border-edge/50 rounded px-2 py-1 text-sm text-foreground placeholder:text-dim w-40"
+            />
             <MinOwnersSlider
                 value={filters.minOwners ?? 2}
                 onChange={(v) => update({ minOwners: v })}

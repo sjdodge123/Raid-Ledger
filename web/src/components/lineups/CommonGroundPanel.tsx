@@ -127,6 +127,8 @@ function PanelContent({
     onNominate,
     nominatingId,
     atCap,
+    search,
+    onSearchChange,
 }: {
     data: CommonGroundResponseDto | undefined;
     filters: CommonGroundParams;
@@ -138,10 +140,12 @@ function PanelContent({
     onNominate: (id: number) => void;
     nominatingId: number | null;
     atCap: boolean;
+    search: string;
+    onSearchChange: (v: string) => void;
 }): JSX.Element {
     return (
         <>
-            <CommonGroundFilters filters={filters} onChange={setFilters} availableTags={availableTags} />
+            <CommonGroundFilters filters={filters} onChange={setFilters} availableTags={availableTags} search={search} onSearchChange={onSearchChange} />
             {isLoading && <LoadingSkeleton />}
             {isError && <ErrorState onRetry={refetch} />}
             {data && data.data.length === 0 && <EmptyState />}
@@ -152,12 +156,25 @@ function PanelContent({
     );
 }
 
+/** Filter results client-side by name search. */
+function filterBySearch(
+    data: CommonGroundResponseDto | undefined,
+    search: string,
+): CommonGroundResponseDto | undefined {
+    if (!data || !search.trim()) return data;
+    const q = search.toLowerCase();
+    const filtered = data.data.filter((g) => g.gameName.toLowerCase().includes(q));
+    return { ...data, data: filtered };
+}
+
 /** Main Common Ground panel. */
 export function CommonGroundPanel(): JSX.Element | null {
     const { data: lineup } = useActiveLineup();
     const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 2 });
+    const [search, setSearch] = useState('');
     const hasBuilding = lineup?.status === 'building';
     const { data, isLoading, isError, refetch } = useCommonGround(filters, hasBuilding);
+    const filtered = useMemo(() => filterBySearch(data, search), [data, search]);
     const availableTags = useMemo(() => (data?.data ? extractUniqueTags(data.data) : []), [data]);
     const atCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
     const { nominatingId, handleNominate } = useNomination(lineup?.id);
@@ -168,9 +185,10 @@ export function CommonGroundPanel(): JSX.Element | null {
         <section className="space-y-3">
             <PanelHeader nominated={data?.meta.nominatedCount ?? 0} max={data?.meta.maxNominations ?? 20} />
             <PanelContent
-                data={data} filters={filters} setFilters={setFilters} availableTags={availableTags}
+                data={filtered} filters={filters} setFilters={setFilters} availableTags={availableTags}
                 isLoading={isLoading} isError={isError} refetch={() => void refetch()}
                 onNominate={handleNominate} nominatingId={nominatingId} atCap={atCap}
+                search={search} onSearchChange={setSearch}
             />
         </section>
     );
