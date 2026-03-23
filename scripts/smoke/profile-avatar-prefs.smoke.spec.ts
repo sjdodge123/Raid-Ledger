@@ -88,21 +88,22 @@ test.describe('Preferences panel (desktop)', () => {
 
     test('renders appearance section with theme mode buttons', async ({ page }) => {
         await expect(page.getByText('Choose your preferred color scheme and theme')).toBeVisible();
-        // Three mode buttons: Light, Dark, Auto
-        await expect(page.getByRole('button', { name: /Light/i })).toBeVisible();
+        // Three mode buttons: Light, Dark, Auto — use .first() to avoid strict mode
+        // violations when multiple elements match (e.g., button text + icon label).
+        await expect(page.getByRole('button', { name: /Light/i }).first()).toBeVisible();
         await expect(page.getByRole('button', { name: /Dark/i }).first()).toBeVisible();
-        await expect(page.getByRole('button', { name: /Auto/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Auto/i }).first()).toBeVisible();
     });
 
     test('theme mode toggle switches without crash', async ({ page }) => {
-        const lightBtn = page.getByRole('button', { name: /Light/i });
+        const lightBtn = page.getByRole('button', { name: /Light/i }).first();
         await lightBtn.click();
         // After clicking Light, verify the page does not crash
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
         await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
 
-        // Switch back to Dark
-        const darkBtn = page.getByRole('button', { name: /^Dark Always dark$/i });
+        // Switch back to Dark — use .first() to handle multiple matching elements
+        const darkBtn = page.getByRole('button', { name: /Dark/i }).first();
         await darkBtn.click();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
         await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
@@ -131,22 +132,22 @@ test.describe('Preferences panel (mobile)', () => {
     });
 
     test('renders appearance and timezone on mobile', async ({ page }) => {
-        // Appearance mode buttons
-        await expect(page.getByRole('button', { name: /Light/i })).toBeVisible();
+        // Appearance mode buttons — use .first() for strict mode safety
+        await expect(page.getByRole('button', { name: /Light/i }).first()).toBeVisible();
         await expect(page.getByRole('button', { name: /Dark/i }).first()).toBeVisible();
-        await expect(page.getByRole('button', { name: /Auto/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Auto/i }).first()).toBeVisible();
         // Timezone
         await expect(page.getByRole('heading', { name: 'Timezone' })).toBeVisible();
         await expect(page.locator('select')).toBeVisible();
     });
 
     test('theme toggle works on mobile without crash', async ({ page }) => {
-        await page.getByRole('button', { name: /Light/i }).click();
+        await page.getByRole('button', { name: /Light/i }).first().click();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
         await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
 
-        // Switch back
-        await page.getByRole('button', { name: /^Dark Always dark$/i }).click();
+        // Switch back — use .first() to handle multiple matching elements
+        await page.getByRole('button', { name: /Dark/i }).first().click();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 
