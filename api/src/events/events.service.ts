@@ -94,7 +94,11 @@ export class EventsService {
             title: dto.title,
           })
           .catch((err) =>
-            this.logger.warn('Activity log failed for event %d: %s', eventId, err),
+            this.logger.warn(
+              'Activity log failed for event %d: %s',
+              eventId,
+              err,
+            ),
           );
       }
       return result;

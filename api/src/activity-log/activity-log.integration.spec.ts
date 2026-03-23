@@ -12,6 +12,22 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 
+interface ActivityEntry {
+  id: number;
+  action: string;
+  actor: { id: number; displayName: string } | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+interface TimelineBody {
+  data: ActivityEntry[];
+}
+
+function timeline(res: { body: unknown }): TimelineBody {
+  return res.body as TimelineBody;
+}
+
 function describeActivityLog() {
   let testApp: TestApp;
   let adminToken: string;
@@ -41,10 +57,10 @@ function describeActivityLog() {
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data).toBeInstanceOf(Array);
+      expect(timeline(res).data).toBeInstanceOf(Array);
       // lineup_created should have been logged
-      expect(res.body.data.length).toBeGreaterThanOrEqual(1);
-      expect(res.body.data[0]).toMatchObject({
+      expect(timeline(res).data.length).toBeGreaterThanOrEqual(1);
+      expect(timeline(res).data[0]).toMatchObject({
         action: 'lineup_created',
         actor: expect.objectContaining({
           id: expect.any(Number),
@@ -71,14 +87,12 @@ function describeActivityLog() {
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      const actions = res.body.data.map(
-        (e: { action: string }) => e.action,
-      );
+      const actions = timeline(res).data.map((e) => e.action);
       expect(actions).toContain('lineup_created');
       expect(actions).toContain('game_nominated');
 
-      const nomination = res.body.data.find(
-        (e: { action: string }) => e.action === 'game_nominated',
+      const nomination = timeline(res).data.find(
+        (e) => e.action === 'game_nominated',
       );
       expect(nomination.metadata).toMatchObject({
         gameId: testApp.seed.game.id,
@@ -102,9 +116,7 @@ function describeActivityLog() {
         .get(`/lineups/${lineupId}/activity`)
         .set('Authorization', `Bearer ${adminToken}`);
 
-      const actions = res.body.data.map(
-        (e: { action: string }) => e.action,
-      );
+      const actions = timeline(res).data.map((e) => e.action);
       expect(actions).toContain('voting_started');
     });
 
@@ -124,8 +136,8 @@ function describeActivityLog() {
         .get(`/lineups/${lineupId}/activity`)
         .set('Authorization', `Bearer ${adminToken}`);
 
-      const timestamps = res.body.data.map(
-        (e: { createdAt: string }) => new Date(e.createdAt).getTime(),
+      const timestamps = timeline(res).data.map((e) =>
+        new Date(e.createdAt).getTime(),
       );
       for (let i = 1; i < timestamps.length; i++) {
         expect(timestamps[i]).toBeGreaterThanOrEqual(timestamps[i - 1]);
@@ -165,10 +177,8 @@ function describeActivityLog() {
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data).toBeInstanceOf(Array);
-      const actions = res.body.data.map(
-        (e: { action: string }) => e.action,
-      );
+      expect(timeline(res).data).toBeInstanceOf(Array);
+      const actions = timeline(res).data.map((e) => e.action);
       // event_created + signup_added (creator auto-signs up)
       expect(actions).toContain('event_created');
       expect(actions).toContain('signup_added');
@@ -178,11 +188,10 @@ function describeActivityLog() {
       const createRes = await createEvent(adminToken);
       const eventId = createRes.body.id as number;
 
-      const res = await testApp.request
-        .get(`/events/${eventId}/activity`);
+      const res = await testApp.request.get(`/events/${eventId}/activity`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data[0]).toMatchObject({
+      expect(timeline(res).data[0]).toMatchObject({
         id: expect.any(Number),
         action: expect.any(String),
         createdAt: expect.any(String),
@@ -191,11 +200,10 @@ function describeActivityLog() {
 
     it('should return empty array for entity with no activity', async () => {
       // Query a non-existent entity — returns 200 with empty data
-      const res = await testApp.request
-        .get('/events/99999/activity');
+      const res = await testApp.request.get('/events/99999/activity');
 
       expect(res.status).toBe(200);
-      expect(res.body.data).toEqual([]);
+      expect(timeline(res).data).toEqual([]);
     });
   }
   describe('GET /events/:id/activity', describeEventActivity);
@@ -212,9 +220,7 @@ function describeActivityLog() {
         metadata: { title: 'Direct insert test' },
       });
 
-      const rows = await testApp.db
-        .select()
-        .from(schema.activityLog);
+      const rows = await testApp.db.select().from(schema.activityLog);
 
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({

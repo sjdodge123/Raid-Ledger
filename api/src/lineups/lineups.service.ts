@@ -66,7 +66,7 @@ export class LineupsService {
     });
 
     void this.activityLog.log('lineup', row.id, 'lineup_created', userId);
-    return buildDetailResponse(this.db,row.id);
+    return buildDetailResponse(this.db, row.id);
   }
 
   /** Get the currently active lineup (building or voting). */
@@ -75,12 +75,12 @@ export class LineupsService {
     if (!row) {
       throw new NotFoundException('No active lineup');
     }
-    return buildDetailResponse(this.db,row.id);
+    return buildDetailResponse(this.db, row.id);
   }
 
   /** Get a lineup by ID with full detail. */
   async findById(id: number): Promise<LineupDetailResponseDto> {
-    return buildDetailResponse(this.db,id);
+    return buildDetailResponse(this.db, id);
   }
 
   /** Transition a lineup to a new status. */
@@ -98,7 +98,7 @@ export class LineupsService {
 
     await this.applyStatusUpdate(id, dto);
     await this.logTransition(id, dto);
-    return buildDetailResponse(this.db,id);
+    return buildDetailResponse(this.db, id);
   }
 
   /** Get Common Ground games — ownership overlap. */
@@ -142,7 +142,7 @@ export class LineupsService {
     await this.validateNominationCap(lineupId);
     await this.validateGameExists(dto.gameId);
     await this.insertNomination(lineupId, dto, userId);
-    return buildDetailResponse(this.db,lineupId);
+    return buildDetailResponse(this.db, lineupId);
   }
 
   /** Apply the status update to the database. */
@@ -258,5 +258,4 @@ export class LineupsService {
       throw new BadRequestException('Game must be in lineup entries');
     }
   }
-
 }
