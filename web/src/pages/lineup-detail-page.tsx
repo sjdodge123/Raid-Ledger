@@ -42,6 +42,12 @@ export function LineupDetailPage(): JSX.Element {
         maxVisible={5}
       />
 
+      {lineup.status === 'building' && (
+        <div className="mt-4">
+          <CommonGroundPanel lineupId={lineup.id} />
+        </div>
+      )}
+
       <div className="mt-4">
         <LineupProgressBar lineup={lineup} />
       </div>
@@ -50,12 +56,6 @@ export function LineupDetailPage(): JSX.Element {
         <NominationGrid entries={lineup.entries} lineupId={lineup.id} />
       ) : (
         <LineupEmptyState />
-      )}
-
-      {lineup.status === 'building' && (
-        <div className="mt-8">
-          <CommonGroundPanel lineupId={lineup.id} />
-        </div>
       )}
 
       <PastLineups />
