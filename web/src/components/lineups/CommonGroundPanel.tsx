@@ -60,7 +60,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }): JSX.Element {
 function PanelHeader({ nominated, max }: { nominated: number; max: number }): JSX.Element {
     return (
         <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-white">Common Ground</h2>
+            <h2 className="text-lg font-semibold text-white">Nominate a Game</h2>
             <span className="text-xs text-muted bg-panel border border-edge/50 rounded-full px-2.5 py-0.5">
                 {nominated}/{max} nominated
             </span>
