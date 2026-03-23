@@ -102,14 +102,15 @@ function ThumbnailRow({ entries }: { entries: LineupBannerResponseDto['entries']
 }
 
 /** CTA buttons: view lineup link and nominate button. */
-function BannerActions({ id, onNominate }: { id: number; onNominate: () => void }): JSX.Element {
+function BannerActions({ id, status, onNominate }: { id: number; status: string; onNominate: () => void }): JSX.Element {
+    const ctaLabel = status === 'voting' ? 'View Lineup & Vote' : 'View Lineup';
     return (
         <div className="flex items-center gap-3">
             <Link
                 to={`/community-lineup/${id}`}
                 className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors"
             >
-                View Lineup &amp; Vote
+                {ctaLabel}
             </Link>
             <button
                 type="button"
@@ -136,7 +137,7 @@ function BannerContent({
             <BannerHeading banner={banner} />
             <BannerSubtitle banner={banner} />
             {banner.entries.length > 0 && <ThumbnailRow entries={banner.entries} />}
-            <BannerActions id={banner.id} onNominate={onNominate} />
+            <BannerActions id={banner.id} status={banner.status} onNominate={onNominate} />
         </div>
     );
 }

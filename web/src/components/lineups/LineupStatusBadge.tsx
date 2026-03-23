@@ -16,16 +16,18 @@ const STATUS_STYLES: Record<LineupStatusDto, string> = {
     archived: 'bg-zinc-500/20 text-zinc-400',
 };
 
-/** Capitalize the first letter of a string. */
-function capitalize(s: string): string {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-}
+const STATUS_LABELS: Record<LineupStatusDto, string> = {
+    building: 'Nominating',
+    voting: 'Voting',
+    decided: 'Decided',
+    archived: 'Archived',
+};
 
 /** Colored status badge pill for lineup status. */
 export function LineupStatusBadge({ status }: LineupStatusBadgeProps): JSX.Element {
     return (
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[status]}`}>
-            {capitalize(status)}
+            {STATUS_LABELS[status]}
         </span>
     );
 }
