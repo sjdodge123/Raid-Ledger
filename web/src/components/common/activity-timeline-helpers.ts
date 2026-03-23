@@ -118,7 +118,7 @@ const FALLBACK: ActionDisplay = {
   dotColor: 'bg-muted',
   bgColor: 'bg-panel',
   borderColor: 'border-edge',
-  label: (_actor, _meta) => 'Activity',
+  label: () => 'Activity',
 };
 
 export function getActionDisplay(action: ActivityActionDto): ActionDisplay {
