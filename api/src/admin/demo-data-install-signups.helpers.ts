@@ -95,8 +95,13 @@ export async function installSignups(
 ) {
   const mmoGameIds = buildMmoGameIdSet(allGames);
   const uniqueSignups = buildUniqueSignups(
-    origEvents, genEvents, allUsers, userByName,
-    charByUserGame, generatedSignups, mmoGameIds,
+    origEvents,
+    genEvents,
+    allUsers,
+    userByName,
+    charByUserGame,
+    generatedSignups,
+    mmoGameIds,
   );
   const createdSignups = (await batchInsertReturning(
     schema.eventSignups,
@@ -115,10 +120,17 @@ function buildUniqueSignups(
   mmoGameIds: Set<number>,
 ): Record<string, unknown>[] {
   const origSignupValues = buildOrigSignupValues(
-    origEvents, allUsers, charByUserGame, mmoGameIds,
+    origEvents,
+    allUsers,
+    charByUserGame,
+    mmoGameIds,
   );
   const genSignupValues = buildGenSignupValues(
-    genEvents, userByName, charByUserGame, generatedSignups, mmoGameIds,
+    genEvents,
+    userByName,
+    charByUserGame,
+    generatedSignups,
+    mmoGameIds,
   );
   return dedupeByKey(
     [...origSignupValues, ...genSignupValues],

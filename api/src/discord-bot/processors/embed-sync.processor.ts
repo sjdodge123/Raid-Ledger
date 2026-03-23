@@ -35,10 +35,7 @@ import {
  * Retries up to 3 times with exponential backoff.
  */
 @Processor(EMBED_SYNC_QUEUE)
-export class EmbedSyncProcessor
-  extends WorkerHost
-  implements OnModuleInit
-{
+export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(EmbedSyncProcessor.name);
 
   constructor(

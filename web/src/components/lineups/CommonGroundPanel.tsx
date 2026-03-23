@@ -103,17 +103,11 @@ function useNomination(lineupId: number | undefined) {
 
     const handleNominate = useCallback(
         (gameId: number) => {
-            if (!lineupId) {
-                console.warn('CommonGround: no lineupId, cannot nominate');
-                return;
-            }
+            if (!lineupId) return;
             setNominatingId(gameId);
             nominate.mutate(
                 { lineupId, body: { gameId } },
-                {
-                    onSettled: () => setNominatingId(null),
-                    onError: (err) => console.error('Nominate failed:', err),
-                },
+                { onSettled: () => setNominatingId(null) },
             );
         },
         [lineupId, nominate],

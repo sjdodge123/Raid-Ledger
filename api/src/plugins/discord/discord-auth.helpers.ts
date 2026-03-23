@@ -38,7 +38,9 @@ export class DiscordAuthGuard extends AuthGuard('discord') {
     if (err || !user) {
       const errorMessage = err?.message || 'Unknown OAuth error';
       const errorName = err?.constructor?.name || 'UnknownError';
-      this.guardLogger.warn(`Discord OAuth callback failed: [${errorName}] ${errorMessage}`);
+      this.guardLogger.warn(
+        `Discord OAuth callback failed: [${errorName}] ${errorMessage}`,
+      );
       const httpCtx = context.switchToHttp();
       const req = httpCtx.getRequest<Request>();
       const res = httpCtx.getResponse<Response>();

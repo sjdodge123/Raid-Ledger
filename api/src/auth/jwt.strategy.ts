@@ -37,14 +37,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       .where(eq(schema.users.id, payload.sub))
       .limit(1);
     if (!user) throw new UnauthorizedException('User no longer exists');
-    setCachedAuthUser(payload.sub, { role: user.role, discordId: user.discordId });
+    setCachedAuthUser(payload.sub, {
+      role: user.role,
+      discordId: user.discordId,
+    });
     return buildAuthResult(payload, user.role, user.discordId);
   }
 }
 
-function buildAuthResult(payload: JwtPayload, role: string, discordId: string | null) {
+function buildAuthResult(
+  payload: JwtPayload,
+  role: string,
+  discordId: string | null,
+) {
   return {
-    id: payload.sub, username: payload.username, role, discordId,
+    id: payload.sub,
+    username: payload.username,
+    role,
+    discordId,
     impersonatedBy: payload.impersonatedBy || null,
   };
 }

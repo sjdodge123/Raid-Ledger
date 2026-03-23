@@ -278,7 +278,15 @@ describe('earlyAccess persistence (integration)', () => {
     await enrichSyncedGamesWithItad(
       testApp.db,
       async (_appId) => mockItadGame,
-      async (_itadId) => ({ id: 'itad-777001', slug: 'enriched-game', title: 'Enriched Game', type: 'game', mature: false, earlyAccess: true, tags: ['RPG'] }),
+      async (_itadId) => ({
+        id: 'itad-777001',
+        slug: 'enriched-game',
+        title: 'Enriched Game',
+        type: 'game',
+        mature: false,
+        earlyAccess: true,
+        tags: ['RPG'],
+      }),
     );
 
     expect(await fetchEarlyAccess(game.id)).toBe(true);
@@ -303,7 +311,15 @@ describe('earlyAccess persistence (integration)', () => {
     await enrichSyncedGamesWithItad(
       testApp.db,
       async (_appId) => mockItadGame,
-      async (_itadId) => ({ id: 'itad-777002', slug: 'enriched-game-2', title: 'Enriched Game 2', type: 'game', mature: false, earlyAccess: false, tags: [] }),
+      async (_itadId) => ({
+        id: 'itad-777002',
+        slug: 'enriched-game-2',
+        title: 'Enriched Game 2',
+        type: 'game',
+        mature: false,
+        earlyAccess: false,
+        tags: [],
+      }),
     );
 
     expect(await fetchEarlyAccess(game.id)).toBe(false);

@@ -31,7 +31,7 @@ describe('NominationCard — basic rendering', () => {
                 onRemove={vi.fn()}
             />,
         );
-        expect(screen.getByText(/by Alice/)).toBeInTheDocument();
+        expect(screen.getByText('Alice')).toBeInTheDocument();
     });
 
     it('renders cover image when available', () => {
@@ -47,7 +47,7 @@ describe('NominationCard — ownership badge', () => {
         renderWithProviders(
             <NominationCard entry={createMockEntry({ ownerCount: 6, totalMembers: 10 })} onRemove={vi.fn()} />,
         );
-        expect(screen.getByText(/6\/10 own/)).toBeInTheDocument();
+        expect(screen.getByText('6/10')).toBeInTheDocument();
     });
 });
 

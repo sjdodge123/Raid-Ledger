@@ -7,9 +7,9 @@ import { render, screen } from '@testing-library/react';
 import { LineupStatusBadge } from './LineupStatusBadge';
 
 describe('LineupStatusBadge', () => {
-    it('renders "Building" text for building status', () => {
+    it('renders "Nominating" text for building status', () => {
         render(<LineupStatusBadge status="building" />);
-        expect(screen.getByText('Building')).toBeInTheDocument();
+        expect(screen.getByText('Nominating')).toBeInTheDocument();
     });
 
     it('renders "Voting" text for voting status', () => {
@@ -27,9 +27,9 @@ describe('LineupStatusBadge', () => {
         expect(screen.getByText('Archived')).toBeInTheDocument();
     });
 
-    it('capitalizes the first letter of any status', () => {
+    it('uses friendly label for building status', () => {
         render(<LineupStatusBadge status="building" />);
-        const badge = screen.getByText('Building');
+        const badge = screen.getByText('Nominating');
         expect(badge).toBeInTheDocument();
     });
 });

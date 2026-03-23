@@ -32,10 +32,12 @@ export async function countOwnersPerGame(
       count: sql<number>`count(*)::int`.as('count'),
     })
     .from(schema.gameInterests)
-    .where(and(
-      inArray(schema.gameInterests.gameId, gameIds),
-      eq(schema.gameInterests.source, 'steam_library'),
-    ))
+    .where(
+      and(
+        inArray(schema.gameInterests.gameId, gameIds),
+        eq(schema.gameInterests.source, 'steam_library'),
+      ),
+    )
     .groupBy(schema.gameInterests.gameId);
 
   return new Map(rows.map((r) => [r.gameId, r.count]));
@@ -57,10 +59,12 @@ export async function countWishlistPerGame(
       count: sql<number>`count(*)::int`.as('count'),
     })
     .from(schema.gameInterests)
-    .where(and(
-      inArray(schema.gameInterests.gameId, gameIds),
-      eq(schema.gameInterests.source, 'steam_wishlist'),
-    ))
+    .where(
+      and(
+        inArray(schema.gameInterests.gameId, gameIds),
+        eq(schema.gameInterests.source, 'steam_wishlist'),
+      ),
+    )
     .groupBy(schema.gameInterests.gameId);
 
   return new Map(rows.map((r) => [r.gameId, r.count]));

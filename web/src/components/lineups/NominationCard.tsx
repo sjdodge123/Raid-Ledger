@@ -29,7 +29,7 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
     return (
         <div className="relative h-48 overflow-hidden">
             {entry.gameCoverUrl ? (
-                <img src={entry.gameCoverUrl} alt="" className="w-full h-full object-cover" />
+                <img src={entry.gameCoverUrl} alt={entry.gameName} className="w-full h-full object-cover" />
             ) : (
                 <div className="w-full h-full bg-zinc-800" />
             )}

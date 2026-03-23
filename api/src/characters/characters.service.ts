@@ -174,12 +174,26 @@ export class CharactersService {
         'No character sync adapter found for this game variant',
       );
     await importH.validateUserExists(this.db, userId);
-    const game = await importH.resolveGameByVariant(this.db, adapter, dto.gameVariant);
+    const game = await importH.resolveGameByVariant(
+      this.db,
+      adapter,
+      dto.gameVariant,
+    );
     const fetched = await fetchFullProfile(
-      adapter, dto.name, dto.realm, dto.region, game.apiNamespacePrefix ?? null,
+      adapter,
+      dto.name,
+      dto.realm,
+      dto.region,
+      game.apiNamespacePrefix ?? null,
     );
     return importH.insertOrMergeImport(
-      this.db, userId, game.id, fetched, dto, this.logger, crudH.isUniqueViolation,
+      this.db,
+      userId,
+      game.id,
+      fetched,
+      dto,
+      this.logger,
+      crudH.isUniqueViolation,
     );
   }
 
@@ -190,17 +204,30 @@ export class CharactersService {
   ): Promise<CharacterDto> {
     const character = await this.findOne(userId, characterId);
     const { region, gameVariant, adapter } = crudH.prepareRefresh(
-      character, dto, (v) => this.findCharacterSyncAdapter(v),
+      character,
+      dto,
+      (v) => this.findCharacterSyncAdapter(v),
     );
     const nsPrefix = await crudH.resolveNsPrefix(this.db, character.gameId);
     const fetched = await fetchFullProfile(
-      adapter, character.name, character.realm ?? '', region, nsPrefix,
+      adapter,
+      character.name,
+      character.realm ?? '',
+      region,
+      nsPrefix,
     );
     const fields = buildSyncUpdateFields(
-      fetched.profile, fetched.equipment, fetched.talents, { region, gameVariant },
+      fetched.profile,
+      fetched.equipment,
+      fetched.talents,
+      { region, gameVariant },
     );
     const result = await crudH.applyRefreshUpdate(
-      this.db, userId, characterId, fields, this.logger,
+      this.db,
+      userId,
+      characterId,
+      fields,
+      this.logger,
     );
     this.enqueueEnrichmentsBackground(characterId, character.gameId);
     return result;

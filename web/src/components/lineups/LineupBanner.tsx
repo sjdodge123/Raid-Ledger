@@ -112,13 +112,15 @@ function BannerActions({ id, status, onNominate }: { id: number; status: string;
             >
                 {ctaLabel}
             </Link>
-            <button
-                type="button"
-                onClick={onNominate}
-                className="px-4 py-2 text-sm font-medium bg-panel text-secondary border border-edge rounded-lg hover:bg-overlay transition-colors"
-            >
-                Nominate
-            </button>
+            {status === 'building' && (
+                <button
+                    type="button"
+                    onClick={onNominate}
+                    className="px-4 py-2 text-sm font-medium bg-panel text-secondary border border-edge rounded-lg hover:bg-overlay transition-colors"
+                >
+                    Nominate
+                </button>
+            )}
         </div>
     );
 }

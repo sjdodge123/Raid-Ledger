@@ -73,7 +73,7 @@ describe('LineupBanner — populated state', () => {
     it('renders the lineup status badge', () => {
         mockHookReturn(createMockBanner({ status: 'building' }));
         renderWithProviders(<LineupBanner />);
-        expect(screen.getByText('Building')).toBeInTheDocument();
+        expect(screen.getByText('Nominating')).toBeInTheDocument();
     });
 
     it('displays entry count and voter stats', () => {

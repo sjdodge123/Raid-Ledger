@@ -57,15 +57,27 @@ export async function adminRemoveCore(
   isAdmin: boolean,
   logger: Logger,
 ) {
-  const event = await cancelH.verifyAdminPermission(db, eventId, requesterId, isAdmin);
+  const event = await cancelH.verifyAdminPermission(
+    db,
+    eventId,
+    requesterId,
+    isAdmin,
+  );
   const signup = await cancelH.findSignupForEvent(db, eventId, signupId);
   const assignment = await cancelH.findAssignmentForSignup(db, signup.id);
   if (signup.userId) {
-    await db.delete(schema.pugSlots).where(
-      and(eq(schema.pugSlots.eventId, eventId), eq(schema.pugSlots.claimedByUserId, signup.userId)),
-    );
+    await db
+      .delete(schema.pugSlots)
+      .where(
+        and(
+          eq(schema.pugSlots.eventId, eventId),
+          eq(schema.pugSlots.claimedByUserId, signup.userId),
+        ),
+      );
   }
-  await db.delete(schema.eventSignups).where(eq(schema.eventSignups.id, signup.id));
+  await db
+    .delete(schema.eventSignups)
+    .where(eq(schema.eventSignups.id, signup.id));
   logger.log(
     `Admin ${requesterId} removed signup ${signupId} from event ${eventId}`,
   );
@@ -103,9 +115,21 @@ export function fireRosterNotifications(
     logger.warn(msg, err instanceof Error ? err.message : 'Unknown error');
   fetchNotificationCtx(eventId)
     .then((extra) => {
-      const args = [notificationService, eventId, eventTitle, assignments, signupByUserId, oldRoleBySignupId, extra] as const;
-      notifH.notifyRoleChanges(...args).catch(logError('Failed to send roster reassign notifications: %s'));
-      notifH.notifyNewAssignments(...args).catch(logError('Failed to send roster assignment notifications: %s'));
+      const args = [
+        notificationService,
+        eventId,
+        eventTitle,
+        assignments,
+        signupByUserId,
+        oldRoleBySignupId,
+        extra,
+      ] as const;
+      notifH
+        .notifyRoleChanges(...args)
+        .catch(logError('Failed to send roster reassign notifications: %s'));
+      notifH
+        .notifyNewAssignments(...args)
+        .catch(logError('Failed to send roster assignment notifications: %s'));
     })
     .catch(logError('Failed to fetch notification context: %s'));
 }

@@ -239,9 +239,9 @@ describe('useNominateGame', () => {
             });
         });
 
-        // Should invalidate the active lineup key
+        // Should invalidate all lineup queries via prefix
         const lineupCalls = invalidateSpy.mock.calls.filter(
-            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(ACTIVE_LINEUP_KEY),
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
         );
         expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
 
