@@ -23,8 +23,10 @@ import {
   NominateGameSchema,
   type LineupDetailResponseDto,
   type CommonGroundResponseDto,
+  type ActivityTimelineResponseDto,
 } from '@raid-ledger/contract';
 import { LineupsService } from './lineups.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 interface AuthRequest extends Request {
   user: { id: number; username: string; role: string };
@@ -33,7 +35,10 @@ interface AuthRequest extends Request {
 @Controller('lineups')
 @UseGuards(AuthGuard('jwt'))
 export class LineupsController {
-  constructor(private readonly lineupsService: LineupsService) {}
+  constructor(
+    private readonly lineupsService: LineupsService,
+    private readonly activityLog: ActivityLogService,
+  ) {}
 
   /** POST /lineups — create a new lineup (operator/admin). */
   @Post()
@@ -105,5 +110,13 @@ export class LineupsController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.lineupsService.transitionStatus(id, parsed.data);
+  }
+
+  /** GET /lineups/:id/activity — activity timeline for a lineup. */
+  @Get(':id/activity')
+  async getActivity(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<ActivityTimelineResponseDto> {
+    return this.activityLog.getTimeline('lineup', id);
   }
 }

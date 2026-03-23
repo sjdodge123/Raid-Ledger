@@ -65,7 +65,7 @@ export class LineupsService {
         .returning();
     });
 
-    await this.activityLog.log('lineup', row.id, 'lineup_created', userId);
+    void this.activityLog.log('lineup', row.id, 'lineup_created', userId);
     return buildDetailResponse(this.db,row.id);
   }
 
@@ -166,12 +166,12 @@ export class LineupsService {
   /** Log activity for a status transition. */
   private async logTransition(id: number, dto: UpdateLineupStatusDto) {
     if (dto.status === 'voting') {
-      await this.activityLog.log('lineup', id, 'voting_started', null, {
+      void this.activityLog.log('lineup', id, 'voting_started', null, {
         votingDeadline: dto.votingDeadline ?? null,
       });
     } else if (dto.status === 'decided' && dto.decidedGameId) {
       const [game] = await findGameName(this.db, dto.decidedGameId);
-      await this.activityLog.log('lineup', id, 'lineup_decided', null, {
+      void this.activityLog.log('lineup', id, 'lineup_decided', null, {
         gameId: dto.decidedGameId,
         gameName: game?.name ?? 'Unknown',
       });
@@ -198,7 +198,7 @@ export class LineupsService {
       throw err;
     }
     const [game] = await findGameName(this.db, dto.gameId);
-    await this.activityLog.log('lineup', lineupId, 'game_nominated', userId, {
+    void this.activityLog.log('lineup', lineupId, 'game_nominated', userId, {
       gameId: dto.gameId,
       gameName: game?.name ?? 'Unknown',
       note: dto.note ?? null,

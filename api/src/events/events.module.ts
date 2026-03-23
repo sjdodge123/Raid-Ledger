@@ -35,6 +35,7 @@ import {
   BENCH_PROMOTION_QUEUE,
 } from './bench-promotion.service';
 import { AdHocEventsGateway } from './ad-hoc-events.gateway';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
     forwardRef(() => NotificationModule),
     SettingsModule,
     forwardRef(() => DiscordBotModule),
+    ActivityLogModule,
     BullModule.registerQueue({ name: BENCH_PROMOTION_QUEUE }),
     BullModule.registerQueue({ name: EVENT_PLANS_QUEUE }),
     JwtModule.registerAsync({

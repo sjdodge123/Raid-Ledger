@@ -266,6 +266,8 @@ function describeLineupsService() {
       // validateDecidedGame — entry with gameId 5
       mockSelects(makeSelectChain({ whereResult: [{ gameId: 5 }] }));
       mockUpdate();
+      // findGameName for activity log
+      mockSelects(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
       mockBuildDetail({ ...votingLineup, status: 'decided', decidedGameId: 5 });
 
       const result = await service.transitionStatus(1, {

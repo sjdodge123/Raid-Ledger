@@ -29,6 +29,7 @@ import * as rosterH from './signups-roster.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
 import * as flowH from './signups-flow.helpers';
 import * as discordSignupH from './signups-discord-signup.helpers';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 /** Service for managing event signups (FR-006), character confirmation (ROK-131), and anonymous Discord signups (ROK-137). */
 @Injectable()
@@ -43,6 +44,7 @@ export class SignupsService {
     private allocationService: SignupsAllocationService,
     private rosterService: SignupsRosterService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   private get flowDeps(): flowH.FlowDeps {
@@ -62,19 +64,49 @@ export class SignupsService {
     dto?: CreateSignupDto,
   ): Promise<SignupResponseDto> {
     const eventRow = await cancelH.fetchEventOrThrow(this.db, eventId);
-    const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
-    if (dto?.characterId) await cancelH.verifyCharacterOwnership(this.db, dto.characterId, userId);
+    const [user] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    if (dto?.characterId)
+      await cancelH.verifyCharacterOwnership(this.db, dto.characterId, userId);
     const result = await this.db.transaction((tx) =>
-      flowH.signupTxBody(this.flowDeps, { tx, eventRow, eventId, userId, dto, user }),
+      flowH.signupTxBody(this.flowDeps, {
+        tx,
+        eventRow,
+        eventId,
+        userId,
+        dto,
+        user,
+      }),
     );
     cancelH.cleanupMatchingPugSlots(this.db, eventId, userId).catch((err) => {
-      this.logger.warn('Failed to cleanup PUG slots: %s', err instanceof Error ? err.message : 'Unknown error');
+      this.logger.warn(
+        'Failed to cleanup PUG slots: %s',
+        err instanceof Error ? err.message : 'Unknown error',
+      );
     });
     if (result.isDuplicate) return result.response;
-    this.emit(SIGNUP_EVENTS.CREATED, { eventId, userId, signupId: result.signup.id, action: 'signup_created' });
+    this.emit(SIGNUP_EVENTS.CREATED, {
+      eventId,
+      userId,
+      signupId: result.signup.id,
+      action: 'signup_created',
+    });
     this.rosterNotificationBuffer.bufferJoin(eventId, userId);
-    const character = dto?.characterId ? await cancelH.getCharacterById(this.db, dto.characterId) : null;
-    return rosterH.buildSignupResponseDto(result.signup, user, character, result.assignedSlot ?? undefined);
+    void this.activityLog.log('event', eventId, 'signup_added', userId, {
+      role: dto?.slotRole ?? dto?.preferredRoles?.[0] ?? null,
+    });
+    const character = dto?.characterId
+      ? await cancelH.getCharacterById(this.db, dto.characterId)
+      : null;
+    return rosterH.buildSignupResponseDto(
+      result.signup,
+      user,
+      character,
+      result.assignedSlot ?? undefined,
+    );
   }
 
   async signupDiscord(
@@ -111,10 +143,19 @@ export class SignupsService {
   ): Promise<SignupResponseDto> {
     const signup = await cancelH.findSignupByIdentifier(this.db, eventId, id);
     const [updated] = await this.db
-      .update(schema.eventSignups).set({ status: dto.status })
-      .where(eq(schema.eventSignups.id, signup.id)).returning();
-    this.logger.log(`Signup ${signup.id} status updated to ${dto.status} for event ${eventId}`);
-    this.emit(SIGNUP_EVENTS.UPDATED, { eventId, userId: updated.userId, signupId: updated.id, action: `status_changed_to_${dto.status}` });
+      .update(schema.eventSignups)
+      .set({ status: dto.status })
+      .where(eq(schema.eventSignups.id, signup.id))
+      .returning();
+    this.logger.log(
+      `Signup ${signup.id} status updated to ${dto.status} for event ${eventId}`,
+    );
+    this.emit(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      userId: updated.userId,
+      signupId: updated.id,
+      action: `status_changed_to_${dto.status}`,
+    });
     if (dto.status === 'tentative') {
       this.allocationService
         .checkTentativeDisplacement(eventId, signup.id)
@@ -171,21 +212,40 @@ export class SignupsService {
     userId: number,
     dto: ConfirmSignupDto,
   ): Promise<SignupResponseDto> {
-    const signup = await cancelH.fetchAndVerifySignup(this.db, eventId, signupId, userId);
-    const character = await cancelH.verifyCharacterOwnership(this.db, dto.characterId, userId);
-    const newStatus: ConfirmationStatus = signup.confirmationStatus === 'pending' ? 'confirmed' : 'changed';
+    const signup = await cancelH.fetchAndVerifySignup(
+      this.db,
+      eventId,
+      signupId,
+      userId,
+    );
+    const character = await cancelH.verifyCharacterOwnership(
+      this.db,
+      dto.characterId,
+      userId,
+    );
+    const newStatus: ConfirmationStatus =
+      signup.confirmationStatus === 'pending' ? 'confirmed' : 'changed';
     const [updated] = await this.db
       .update(schema.eventSignups)
       .set({ characterId: dto.characterId, confirmationStatus: newStatus })
-      .where(eq(schema.eventSignups.id, signupId)).returning();
+      .where(eq(schema.eventSignups.id, signupId))
+      .returning();
     const user = await cancelH.fetchUserById(this.db, userId);
-    this.logger.log(`User ${userId} confirmed signup ${signupId} with character ${dto.characterId}`);
-    this.emit(SIGNUP_EVENTS.UPDATED, { eventId, userId, signupId, action: 'signup_confirmed' });
+    this.logger.log(
+      `User ${userId} confirmed signup ${signupId} with character ${dto.characterId}`,
+    );
+    this.emit(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      userId,
+      signupId,
+      action: 'signup_confirmed',
+    });
     return rosterH.buildSignupResponseDto(updated, user, character);
   }
 
   async cancel(eventId: number, userId: number): Promise<void> {
-    return this.rosterService.cancel(eventId, userId);
+    await this.rosterService.cancel(eventId, userId);
+    void this.activityLog.log('event', eventId, 'signup_cancelled', userId);
   }
 
   async selfUnassign(

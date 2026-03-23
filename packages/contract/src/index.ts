@@ -117,3 +117,6 @@ export * from './ai.schema.js';
 
 // Community Lineup (ROK-933)
 export * from './lineup.schema.js';
+
+// Activity Log (ROK-930)
+export * from './activity-log.schema.js';

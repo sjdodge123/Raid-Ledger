@@ -37,6 +37,7 @@ import {
     MobileQuickInfo,
 } from './event-detail/EventDetailSubComponents';
 import { RosterSlotSection } from './event-detail/EventDetailRosterSlot';
+import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import './event-detail-page.css';
 
 function useVoiceChannelFetch(eventId: number, isAdHoc: boolean) {
@@ -181,6 +182,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
             <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} />
             <EventDetailRoster roster={page.roster} event={page.event} />
+            <ActivityTimeline entityType="event" entityId={page.eventId} />
             <PluginSlot name="event-detail:content-sections" context={{ contentInstances: page.event.contentInstances ?? [], eventId: page.eventId, gameSlug: page.event.game?.slug, characterId: derived.userSignup?.character?.id }} />
         </>
     );

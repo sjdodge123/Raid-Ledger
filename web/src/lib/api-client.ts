@@ -171,3 +171,9 @@ export {
     getCommonGround,
     nominateGame,
 } from './api/lineups-api';
+
+// Activity Log (ROK-930)
+export {
+    getLineupActivity,
+    getEventActivity,
+} from './api/activity-log-api';
