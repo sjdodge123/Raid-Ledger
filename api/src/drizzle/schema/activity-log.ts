@@ -22,7 +22,7 @@ export const activityLog = pgTable(
     entityType: text('entity_type').notNull(),
     entityId: integer('entity_id').notNull(),
     action: text('action').notNull(),
-    actorId: integer('actor_id').references(() => users.id),
+    actorId: integer('actor_id').references(() => users.id, { onDelete: 'set null' }),
     metadata: jsonb('metadata'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
