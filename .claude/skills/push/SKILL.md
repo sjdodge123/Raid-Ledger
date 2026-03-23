@@ -167,13 +167,20 @@ npm run test -w web
 Only if `web/src/` files changed:
 
 ```bash
+# CRITICAL: Do NOT add --project=desktop. CI runs BOTH desktop AND mobile.
+# Running only desktop locally and pushing will fail CI on mobile tests.
 npx playwright test
 ```
 
+**This runs BOTH desktop and mobile projects (~450 tests).** Takes ~3 minutes.
+
 If Playwright fails:
-- Diagnose the failure
+- Check the error: "element not found" vs "strict mode" vs "timeout"
+- "Strict mode" = your new DOM elements collided with selectors in OTHER test files
+- New components on shared pages (Games, Events, Layout) affect tests in other files — run the FULL suite
 - Fix the code or the test
 - **NEVER skip and proceed**
+- **NEVER re-push and re-run CI hoping it passes** — fix locally first
 
 If the branch is API-only (no web changes), this step can be skipped.
 
