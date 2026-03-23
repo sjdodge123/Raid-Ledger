@@ -103,11 +103,17 @@ function useNomination(lineupId: number | undefined) {
 
     const handleNominate = useCallback(
         (gameId: number) => {
-            if (!lineupId) return;
+            if (!lineupId) {
+                console.warn('CommonGround: no lineupId, cannot nominate');
+                return;
+            }
             setNominatingId(gameId);
             nominate.mutate(
                 { lineupId, body: { gameId } },
-                { onSettled: () => setNominatingId(null) },
+                {
+                    onSettled: () => setNominatingId(null),
+                    onError: (err) => console.error('Nominate failed:', err),
+                },
             );
         },
         [lineupId, nominate],
@@ -168,18 +174,19 @@ function filterBySearch(
     return { ...data, data: filtered };
 }
 
-/** Main Common Ground panel. */
-export function CommonGroundPanel(): JSX.Element | null {
+/** Main Common Ground panel. Pass lineupId when the parent already has it. */
+export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: number } = {}): JSX.Element | null {
     const { data: lineup } = useActiveLineup();
+    const resolvedId = propLineupId ?? lineup?.id;
     const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0 });
     const [search, setSearch] = useState('');
-    const hasBuilding = lineup?.status === 'building';
+    const hasBuilding = propLineupId != null || lineup?.status === 'building';
     const debouncedFilters = useDebouncedValue(filters, 300);
     const { data, isLoading, isError, refetch } = useCommonGround(debouncedFilters, hasBuilding);
     const filtered = useMemo(() => filterBySearch(data, search), [data, search]);
     const availableTags = useMemo(() => (data?.data ? extractUniqueTags(data.data) : []), [data]);
     const atCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
-    const { nominatingId, handleNominate } = useNomination(lineup?.id);
+    const { nominatingId, handleNominate } = useNomination(resolvedId);
 
     if (!hasBuilding) return null;
 

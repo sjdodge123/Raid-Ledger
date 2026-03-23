@@ -54,7 +54,7 @@ export function LineupDetailPage(): JSX.Element {
 
       {lineup.status === 'building' && (
         <div className="mt-8">
-          <CommonGroundPanel />
+          <CommonGroundPanel lineupId={lineup.id} />
         </div>
       )}
 
