@@ -70,9 +70,9 @@ test.describe('Activity Timeline on event detail', () => {
             page.getByText('Timeline Smoke Test Event'),
         ).toBeVisible({ timeout: 15_000 });
 
-        // Activity section should be visible with entries
-        const activityHeading = page.getByRole('heading', { name: 'Activity' });
-        await expect(activityHeading).toBeVisible({ timeout: 15_000 });
+        // Activity section is a collapsible button "Activity · N events"
+        const activityBtn = page.locator('button', { hasText: /Activity · \d+ event/ });
+        await expect(activityBtn).toBeVisible({ timeout: 15_000 });
     });
 
     test('shows event_created and signup_added entries', async ({ page }) => {
@@ -94,7 +94,7 @@ test.describe('Activity Timeline on event detail', () => {
         ).toBeVisible({ timeout: 10_000 });
 
         await expect(
-            page.getByText(/signed up/),
+            page.getByText(/signed up/).first(),
         ).toBeVisible({ timeout: 10_000 });
     });
 
