@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
@@ -158,5 +158,6 @@ export function findBuildingLineup(db: PostgresJsDatabase<typeof schema>) {
     .select({ id: schema.communityLineups.id })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.status, 'building'))
+    .orderBy(desc(schema.communityLineups.createdAt))
     .limit(1);
 }

@@ -12,26 +12,23 @@ import type {
   CommonGroundResponseDto,
   CreateLineupDto,
   LineupDetailResponseDto,
-  LineupEntryResponseDto,
   NominateGameDto,
   UpdateLineupStatusDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import {
   findActiveLineup,
   findLineupById,
-  findEntriesWithGames,
-  countVotesPerGame,
-  countDistinctVoters,
-  findUserById,
   findGameName,
   findBuildingLineup,
   findNominatedGameIds,
   countLineupEntries,
   VALID_TRANSITIONS,
 } from './lineups-query.helpers';
+import { buildDetailResponse } from './lineups-response.helpers';
 import {
   queryCommonGround,
   mapCommonGroundRow,
@@ -46,6 +43,7 @@ export class LineupsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   /** Create a new lineup. Throws 409 if an active lineup already exists. */
@@ -67,7 +65,8 @@ export class LineupsService {
         .returning();
     });
 
-    return this.buildDetailResponse(row.id);
+    await this.activityLog.log('lineup', row.id, 'lineup_created', userId);
+    return buildDetailResponse(this.db,row.id);
   }
 
   /** Get the currently active lineup (building or voting). */
@@ -76,12 +75,12 @@ export class LineupsService {
     if (!row) {
       throw new NotFoundException('No active lineup');
     }
-    return this.buildDetailResponse(row.id);
+    return buildDetailResponse(this.db,row.id);
   }
 
   /** Get a lineup by ID with full detail. */
   async findById(id: number): Promise<LineupDetailResponseDto> {
-    return this.buildDetailResponse(id);
+    return buildDetailResponse(this.db,id);
   }
 
   /** Transition a lineup to a new status. */
@@ -90,34 +89,16 @@ export class LineupsService {
     dto: UpdateLineupStatusDto,
   ): Promise<LineupDetailResponseDto> {
     const [lineup] = await findLineupById(this.db, id);
-    if (!lineup) {
-      throw new NotFoundException('Lineup not found');
-    }
+    if (!lineup) throw new NotFoundException('Lineup not found');
 
-    const currentStatus = lineup.status as LineupStatus;
-    this.validateTransition(currentStatus, dto);
-
+    this.validateTransition(lineup.status as LineupStatus, dto);
     if (dto.status === 'decided' && dto.decidedGameId) {
       await this.validateDecidedGame(id, dto.decidedGameId);
     }
 
-    const values: Partial<typeof schema.communityLineups.$inferInsert> = {
-      status: dto.status,
-      updatedAt: new Date(),
-    };
-    if (dto.status === 'voting' && dto.votingDeadline) {
-      values.votingDeadline = new Date(dto.votingDeadline);
-    }
-    if (dto.status === 'decided' && dto.decidedGameId) {
-      values.decidedGameId = dto.decidedGameId;
-    }
-
-    await this.db
-      .update(schema.communityLineups)
-      .set(values)
-      .where(eq(schema.communityLineups.id, id));
-
-    return this.buildDetailResponse(id);
+    await this.applyStatusUpdate(id, dto);
+    await this.logTransition(id, dto);
+    return buildDetailResponse(this.db,id);
   }
 
   /** Get Common Ground games — ownership overlap. */
@@ -154,14 +135,55 @@ export class LineupsService {
   ): Promise<LineupDetailResponseDto> {
     const [lineup] = await findLineupById(this.db, lineupId);
     if (!lineup) throw new NotFoundException('Lineup not found');
-
     if (lineup.status !== 'building') {
       throw new BadRequestException('Lineup is not in building status');
     }
 
     await this.validateNominationCap(lineupId);
     await this.validateGameExists(dto.gameId);
+    await this.insertNomination(lineupId, dto, userId);
+    return buildDetailResponse(this.db,lineupId);
+  }
 
+  /** Apply the status update to the database. */
+  private async applyStatusUpdate(id: number, dto: UpdateLineupStatusDto) {
+    const values: Partial<typeof schema.communityLineups.$inferInsert> = {
+      status: dto.status,
+      updatedAt: new Date(),
+    };
+    if (dto.status === 'voting' && dto.votingDeadline) {
+      values.votingDeadline = new Date(dto.votingDeadline);
+    }
+    if (dto.status === 'decided' && dto.decidedGameId) {
+      values.decidedGameId = dto.decidedGameId;
+    }
+    await this.db
+      .update(schema.communityLineups)
+      .set(values)
+      .where(eq(schema.communityLineups.id, id));
+  }
+
+  /** Log activity for a status transition. */
+  private async logTransition(id: number, dto: UpdateLineupStatusDto) {
+    if (dto.status === 'voting') {
+      await this.activityLog.log('lineup', id, 'voting_started', null, {
+        votingDeadline: dto.votingDeadline ?? null,
+      });
+    } else if (dto.status === 'decided' && dto.decidedGameId) {
+      const [game] = await findGameName(this.db, dto.decidedGameId);
+      await this.activityLog.log('lineup', id, 'lineup_decided', null, {
+        gameId: dto.decidedGameId,
+        gameName: game?.name ?? 'Unknown',
+      });
+    }
+  }
+
+  /** Insert a nomination entry, handling duplicate conflicts. */
+  private async insertNomination(
+    lineupId: number,
+    dto: NominateGameDto,
+    userId: number,
+  ) {
     try {
       await this.db.insert(schema.communityLineupEntries).values({
         lineupId,
@@ -175,8 +197,12 @@ export class LineupsService {
       }
       throw err;
     }
-
-    return this.buildDetailResponse(lineupId);
+    const [game] = await findGameName(this.db, dto.gameId);
+    await this.activityLog.log('lineup', lineupId, 'game_nominated', userId, {
+      gameId: dto.gameId,
+      gameName: game?.name ?? 'Unknown',
+      note: dto.note ?? null,
+    });
   }
 
   /** Enforce the 20-entry cap for a lineup. */
@@ -233,75 +259,4 @@ export class LineupsService {
     }
   }
 
-  /** Assemble the full detail response for a lineup. */
-  private async buildDetailResponse(
-    lineupId: number,
-  ): Promise<LineupDetailResponseDto> {
-    const [lineup] = await findLineupById(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-
-    const [entries, voteCounts, voterCount, creator, decidedGame] =
-      await Promise.all([
-        findEntriesWithGames(this.db, lineupId),
-        countVotesPerGame(this.db, lineupId),
-        countDistinctVoters(this.db, lineupId),
-        findUserById(this.db, lineup.createdBy),
-        lineup.decidedGameId
-          ? findGameName(this.db, lineup.decidedGameId)
-          : Promise.resolve([]),
-      ]);
-
-    return this.mapToDetailResponse(
-      lineup,
-      entries,
-      voteCounts,
-      voterCount,
-      creator,
-      decidedGame,
-    );
-  }
-
-  /** Map raw query results to the detail response shape. */
-  private mapToDetailResponse(
-    lineup: typeof schema.communityLineups.$inferSelect,
-    entries: Awaited<ReturnType<typeof findEntriesWithGames>>,
-    voteCounts: Awaited<ReturnType<typeof countVotesPerGame>>,
-    voterCount: Awaited<ReturnType<typeof countDistinctVoters>>,
-    creator: Awaited<ReturnType<typeof findUserById>>,
-    decidedGame: Awaited<ReturnType<typeof findGameName>>,
-  ): LineupDetailResponseDto {
-    const voteMap = new Map(voteCounts.map((v) => [v.gameId, v.voteCount]));
-    return {
-      id: lineup.id,
-      status: lineup.status,
-      targetDate: lineup.targetDate?.toISOString() ?? null,
-      decidedGameId: lineup.decidedGameId,
-      decidedGameName: decidedGame[0]?.name ?? null,
-      linkedEventId: lineup.linkedEventId,
-      createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
-      votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
-      entries: entries.map((e) => this.mapEntry(e, voteMap)),
-      totalVoters: voterCount[0]?.total ?? 0,
-      createdAt: lineup.createdAt.toISOString(),
-      updatedAt: lineup.updatedAt.toISOString(),
-    };
-  }
-
-  /** Map a single entry row to the response shape. */
-  private mapEntry(
-    e: Awaited<ReturnType<typeof findEntriesWithGames>>[0],
-    voteMap: Map<number, number>,
-  ): LineupEntryResponseDto {
-    return {
-      id: e.id,
-      gameId: e.gameId,
-      gameName: e.gameName,
-      gameCoverUrl: e.gameCoverUrl,
-      nominatedBy: { id: e.nominatedById, displayName: e.nominatedByName },
-      note: e.note,
-      carriedOver: e.carriedOverFrom !== null,
-      voteCount: voteMap.get(e.gameId) ?? 0,
-      createdAt: e.createdAt.toISOString(),
-    };
-  }
 }

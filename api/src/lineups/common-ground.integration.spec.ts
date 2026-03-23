@@ -400,9 +400,6 @@ function describeCommonGround() {
       await createBuildingLineup();
 
       // Create 3 users to build ownership spread
-      const bcrypt = await import('bcrypt');
-      const hash = await bcrypt.hash('Pass1!', 4);
-
       const [user2] = await testApp.db
         .insert(schema.users)
         .values({ discordId: 'u2', username: 'user2', role: 'member' })

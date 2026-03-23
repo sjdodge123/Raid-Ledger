@@ -97,6 +97,7 @@ export type LineupSummaryResponseDto = z.infer<typeof LineupSummaryResponseSchem
 
 /** Query params for the Common Ground endpoint. */
 export const CommonGroundQuerySchema = z.object({
+    /** Minimum library owners. 0 = show all games (including unowned). */
     minOwners: z.coerce.number().int().min(0).max(15).default(2),
     maxPlayers: z.coerce.number().int().positive().optional(),
     genre: z.string().optional(),

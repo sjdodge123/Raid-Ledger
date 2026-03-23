@@ -142,7 +142,7 @@ export async function enrichSyncedGamesWithItad(
 /** Info extracted from ITAD getGameInfo endpoint. */
 interface ItadEnrichInfo {
   tags: string[];
-  earlyAccess: boolean;
+  earlyAccess: boolean | undefined;
 }
 
 /** Fetch tags and earlyAccess via getGameInfo, with safe defaults on failure. */
@@ -152,9 +152,9 @@ async function fetchInfoGracefully(
 ): Promise<ItadEnrichInfo> {
   try {
     const info = await getGameInfo(itadId);
-    return { tags: info?.tags ?? [], earlyAccess: info?.earlyAccess ?? false };
+    return { tags: info?.tags ?? [], earlyAccess: info?.earlyAccess };
   } catch {
-    return { tags: [], earlyAccess: false };
+    return { tags: [], earlyAccess: undefined };
   }
 }
 
@@ -165,13 +165,16 @@ async function updateGameWithItadData(
   itadGame: ItadGame,
   info: ItadEnrichInfo,
 ): Promise<void> {
+  const values: Record<string, unknown> = {
+    itadGameId: itadGame.id,
+    itadBoxartUrl: itadGame.assets?.boxart ?? null,
+    itadTags: info.tags,
+  };
+  if (info.earlyAccess !== undefined) {
+    values.earlyAccess = info.earlyAccess;
+  }
   await db
     .update(schema.games)
-    .set({
-      itadGameId: itadGame.id,
-      itadBoxartUrl: itadGame.assets?.boxart ?? null,
-      itadTags: info.tags,
-      earlyAccess: info.earlyAccess,
-    })
+    .set(values)
     .where(eq(schema.games.id, gameId));
 }
