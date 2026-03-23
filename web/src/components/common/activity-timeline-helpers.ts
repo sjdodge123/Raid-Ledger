@@ -25,6 +25,14 @@ const ACTION_MAP: Record<string, ActionDisplay> = {
     label: (actor, meta) =>
       `${actor ?? 'Someone'} nominated ${(meta?.gameName as string) ?? 'a game'}`,
   },
+  nomination_removed: {
+    color: 'text-red-400',
+    dotColor: 'bg-red-400',
+    bgColor: 'bg-red-500/20',
+    borderColor: 'border-red-500/40',
+    label: (actor, meta) =>
+      `${actor ?? 'Someone'} removed ${(meta?.gameName as string) ?? 'a game'}`,
+  },
   game_carried_over: {
     color: 'text-amber-400',
     dotColor: 'bg-amber-400',

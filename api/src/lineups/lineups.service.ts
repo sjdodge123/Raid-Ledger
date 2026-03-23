@@ -11,6 +11,7 @@ import type {
   CommonGroundQueryDto,
   CommonGroundResponseDto,
   CreateLineupDto,
+  LineupBannerResponseDto,
   LineupDetailResponseDto,
   NominateGameDto,
   UpdateLineupStatusDto,
@@ -25,7 +26,9 @@ import {
   findGameName,
   findBuildingLineup,
   findNominatedGameIds,
-  countLineupEntries,
+  findEntriesWithGames,
+  countVotesPerGame,
+  countDistinctVoters,
   VALID_TRANSITIONS,
 } from './lineups-query.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
@@ -37,6 +40,30 @@ import {
   SCORING_WEIGHTS,
   MAX_LINEUP_ENTRIES,
 } from './common-ground-scoring.constants';
+import {
+  countOwnersPerGame,
+  countTotalMembers,
+} from './lineups-enrichment.helpers';
+import {
+  findBannerLineup,
+  buildBannerResponse,
+} from './lineups-banner.helpers';
+import {
+  findEntry,
+  validateRemoval,
+  deleteEntry,
+} from './lineups-removal.helpers';
+import {
+  validateNominationCap,
+  validateGameExists,
+  insertNomination,
+} from './lineups-nomination.helpers';
+
+/** Caller identity for authorization checks. */
+export interface CallerIdentity {
+  id: number;
+  role: string;
+}
 
 @Injectable()
 export class LineupsService {
@@ -139,10 +166,70 @@ export class LineupsService {
       throw new BadRequestException('Lineup is not in building status');
     }
 
-    await this.validateNominationCap(lineupId);
-    await this.validateGameExists(dto.gameId);
-    await this.insertNomination(lineupId, dto, userId);
+    await validateNominationCap(this.db, lineupId);
+    await validateGameExists(this.db, dto.gameId);
+    await insertNomination(this.db, lineupId, dto, userId);
+    await this.logNomination(lineupId, dto, userId);
     return buildDetailResponse(this.db, lineupId);
+  }
+
+  /** Remove a nomination. Members can remove own; operators/admins can remove any. */
+  async removeNomination(
+    lineupId: number,
+    gameId: number,
+    caller: CallerIdentity,
+  ): Promise<void> {
+    const [lineup] = await findLineupById(this.db, lineupId);
+    if (!lineup) throw new NotFoundException('Lineup not found');
+    if (lineup.status !== 'building') {
+      throw new BadRequestException('Can only remove during building');
+    }
+
+    const entry = await findEntry(this.db, lineupId, gameId);
+    validateRemoval(entry, caller);
+    await deleteEntry(this.db, lineupId, gameId);
+    void this.activityLog.log(
+      'lineup',
+      lineupId,
+      'nomination_removed',
+      caller.id,
+      { gameId },
+    );
+  }
+
+  /** Get banner data for the Games page. Returns null if no eligible lineup. */
+  async findBanner(): Promise<LineupBannerResponseDto | null> {
+    const [lineup] = await findBannerLineup(this.db);
+    if (!lineup) return null;
+
+    const entries = await findEntriesWithGames(this.db, lineup.id);
+    const gameIds = entries.map((e) => e.gameId);
+    const [ownerMap, voteMap, voterCount, totalMembers, decidedGame] =
+      await Promise.all([
+        countOwnersPerGame(this.db, gameIds),
+        countVotesPerGame(this.db, lineup.id),
+        countDistinctVoters(this.db, lineup.id),
+        countTotalMembers(this.db),
+        lineup.decidedGameId
+          ? findGameName(this.db, lineup.decidedGameId)
+          : Promise.resolve([]),
+      ]);
+
+    const vMap = new Map(voteMap.map((v) => [v.gameId, v.voteCount]));
+    const bannerEntries = entries.map((e) => ({
+      gameId: e.gameId,
+      gameName: e.gameName,
+      gameCoverUrl: e.gameCoverUrl,
+    }));
+
+    return buildBannerResponse(
+      { ...lineup, decidedGameName: decidedGame[0]?.name ?? null },
+      bannerEntries,
+      ownerMap,
+      vMap,
+      voterCount[0]?.total ?? 0,
+      totalMembers,
+    );
   }
 
   /** Apply the status update to the database. */
@@ -178,56 +265,18 @@ export class LineupsService {
     }
   }
 
-  /** Insert a nomination entry, handling duplicate conflicts. */
-  private async insertNomination(
+  /** Log a nomination event. */
+  private async logNomination(
     lineupId: number,
     dto: NominateGameDto,
     userId: number,
   ) {
-    try {
-      await this.db.insert(schema.communityLineupEntries).values({
-        lineupId,
-        gameId: dto.gameId,
-        nominatedBy: userId,
-        note: dto.note ?? null,
-      });
-    } catch (err: unknown) {
-      if (this.isUniqueViolation(err)) {
-        throw new ConflictException('Game already nominated in this lineup');
-      }
-      throw err;
-    }
     const [game] = await findGameName(this.db, dto.gameId);
     void this.activityLog.log('lineup', lineupId, 'game_nominated', userId, {
       gameId: dto.gameId,
       gameName: game?.name ?? 'Unknown',
       note: dto.note ?? null,
     });
-  }
-
-  /** Enforce the 20-entry cap for a lineup. */
-  private async validateNominationCap(lineupId: number): Promise<void> {
-    const [result] = await countLineupEntries(this.db, lineupId);
-    if (result && result.count >= MAX_LINEUP_ENTRIES) {
-      throw new BadRequestException('Lineup has reached the 20-entry cap');
-    }
-  }
-
-  /** Validate that a game exists in the database. */
-  private async validateGameExists(gameId: number): Promise<void> {
-    const [game] = await findGameName(this.db, gameId);
-    if (!game) throw new NotFoundException('Game not found');
-  }
-
-  /** Check if a DB error is a unique constraint violation. */
-  private isUniqueViolation(err: unknown): boolean {
-    if (typeof err !== 'object' || err === null) return false;
-    const e = err as Record<string, unknown>;
-    if (e.code === '23505') return true;
-    if (e.cause && typeof e.cause === 'object') {
-      return (e.cause as Record<string, unknown>).code === '23505';
-    }
-    return false;
   }
 
   /** Validate a status transition is legal. */

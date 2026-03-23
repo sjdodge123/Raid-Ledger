@@ -4,6 +4,7 @@
  */
 import type {
   LineupDetailResponseDto,
+  LineupBannerResponseDto,
   CommonGroundResponseDto,
   NominateGameDto,
 } from '@raid-ledger/contract';
@@ -45,4 +46,19 @@ export async function nominateGame(
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+/** Fetch the lightweight banner data for the Games page hero. */
+export async function getLineupBanner(): Promise<LineupBannerResponseDto | null> {
+  return fetchApi('/lineups/banner');
+}
+
+/** Fetch full lineup detail by ID. */
+export async function getLineupById(id: number): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${id}`);
+}
+
+/** Remove a nomination from a lineup. */
+export async function removeNomination(lineupId: number, gameId: number): Promise<void> {
+  return fetchApi(`/lineups/${lineupId}/nominations/${gameId}`, { method: 'DELETE' });
 }

@@ -111,7 +111,7 @@ function describeLineupsService() {
     });
   }
 
-  /** Set up mocks for buildDetailResponse (5-6 sequential selects). */
+  /** Set up mocks for buildDetailResponse (9-10 sequential selects). */
   function mockBuildDetail(lineup = mockLineup) {
     const chains = [
       // findLineupById
@@ -129,6 +129,8 @@ function describeLineupsService() {
     if (lineup.decidedGameId) {
       chains.push(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
     }
+    // Enrichment: only countTotalMembers calls DB (others short-circuit on empty gameIds)
+    chains.push(makeSelectChain({ whereResult: [{ count: 10 }] }));
     mockSelects(...chains);
   }
 

@@ -12,7 +12,7 @@ import { AuthSuccessPage } from './pages/auth-success-page';
 import {
   JoinPage, InvitePage,
   CalendarPage, CreateEventPage, PlanEventPage, EditEventPage,
-  GamesPage, GameDetailPage, CharacterDetailPage,
+  GamesPage, GameDetailPage, LineupDetailPage, CharacterDetailPage,
   PlayersPage, MyEventsPage, EventMetricsPage,
   UserProfilePage, OnboardingWizardPage,
   ProfileLayout, PreferencesPanel,
@@ -97,6 +97,7 @@ export function AppRoutes() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/games/:id" element={<GameDetailPage />} />
+        <Route path="/community-lineup/:id" element={<LineupDetailPage />} />
         <Route path="/characters/:id" element={<CharacterDetailPage />} />
         <Route path="/players" element={<PlayersPage />} />
         <Route path="/events" element={<EventsPage />} />

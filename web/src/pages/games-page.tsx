@@ -14,6 +14,7 @@ import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import { BottomSheet } from "../components/ui/bottom-sheet";
 import { FAB } from "../components/ui/fab";
+import { LineupBanner } from "../components/lineups/LineupBanner";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
 import type { GameDetailDto, GameDiscoverRowDto, ItadGamePricingDto } from "@raid-ledger/contract";
@@ -69,6 +70,7 @@ export function GamesPage() {
     <div className="pb-20 md:pb-0">
       <GamesMobileToolbar activeTab={state.activeTab === "manage" ? "manage" : "discover"} onTabChange={(tab) => state.setActiveTab(tab)} showManageTab={state.canManage} />
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <LineupBanner />
         <GamesHeader activeTab={state.activeTab} />
         <AdminTabToggle canManage={state.canManage} activeTab={state.activeTab} onTabChange={state.setActiveTab} />
         <ManageTab canManage={state.canManage} activeTab={state.activeTab} showHidden={state.showHidden} setShowHidden={state.setShowHidden} />

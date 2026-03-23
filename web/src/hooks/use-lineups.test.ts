@@ -11,14 +11,23 @@ import { createElement, type ReactNode } from 'react';
 const mockGetActiveLineup = vi.fn();
 const mockGetCommonGround = vi.fn();
 const mockNominateGame = vi.fn();
+const mockGetLineupBanner = vi.fn();
+const mockGetLineupById = vi.fn();
+const mockRemoveNomination = vi.fn();
 
 vi.mock('../lib/api-client', () => ({
     getActiveLineup: (...args: unknown[]) => mockGetActiveLineup(...args),
     getCommonGround: (...args: unknown[]) => mockGetCommonGround(...args),
     nominateGame: (...args: unknown[]) => mockNominateGame(...args),
+    getLineupBanner: (...args: unknown[]) => mockGetLineupBanner(...args),
+    getLineupById: (...args: unknown[]) => mockGetLineupById(...args),
+    removeNomination: (...args: unknown[]) => mockRemoveNomination(...args),
 }));
 
-import { useActiveLineup, useCommonGround, useNominateGame } from './use-lineups';
+import {
+    useActiveLineup, useCommonGround, useNominateGame,
+    useLineupBanner, useLineupDetail, useRemoveNomination,
+} from './use-lineups';
 
 // --- Helpers ---
 
@@ -264,5 +273,82 @@ describe('useNominateGame', () => {
         });
 
         expect(invalidateSpy).not.toHaveBeenCalled();
+    });
+});
+
+const mockBanner = {
+    id: 1,
+    status: 'building' as const,
+    targetDate: '2026-03-28',
+    entryCount: 5,
+    totalVoters: 3,
+    totalMembers: 10,
+    decidedGameName: null,
+    entries: [{ gameId: 42, gameName: 'Valheim', gameCoverUrl: null, ownerCount: 5, voteCount: 2 }],
+};
+
+describe('useLineupBanner', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('fetches banner data on mount', async () => {
+        mockGetLineupBanner.mockResolvedValue(mockBanner);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useLineupBanner(), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toEqual(mockBanner);
+        expect(mockGetLineupBanner).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles null response', async () => {
+        mockGetLineupBanner.mockResolvedValue(null);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useLineupBanner(), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toBeNull();
+    });
+});
+
+describe('useLineupDetail', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('fetches detail when id is provided', async () => {
+        mockGetLineupById.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useLineupDetail(1), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toEqual(mockLineupResponse);
+        expect(mockGetLineupById).toHaveBeenCalledWith(1);
+    });
+
+    it('does not fetch when id is undefined', () => {
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useLineupDetail(undefined), { wrapper });
+        expect(result.current.isFetching).toBe(false);
+        expect(mockGetLineupById).not.toHaveBeenCalled();
+    });
+});
+
+describe('useRemoveNomination', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('calls removeNomination with lineupId and gameId', async () => {
+        mockRemoveNomination.mockResolvedValue(undefined);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useRemoveNomination(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        expect(mockRemoveNomination).toHaveBeenCalledWith(1, 42);
+    });
+
+    it('invalidates lineup queries on success', async () => {
+        mockRemoveNomination.mockResolvedValue(undefined);
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useRemoveNomination(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        expect(invalidateSpy).toHaveBeenCalled();
     });
 });

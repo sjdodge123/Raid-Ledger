@@ -9,6 +9,7 @@ export const ActivityActionSchema = z.enum([
     // Lineup actions
     'lineup_created',
     'game_nominated',
+    'nomination_removed',
     'game_carried_over',
     'voting_started',
     'vote_cast',
