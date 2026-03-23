@@ -29,7 +29,7 @@ test.describe('Profile integrations panel', () => {
         // a CTA to connect. Either state is valid — verify one is present.
         const linkedText = page.getByText('Discord linked');
         const linkCta = page.getByText(/link.*discord/i);
-        await expect(linkedText.or(linkCta)).toBeVisible({ timeout: 5_000 });
+        await expect(linkedText.or(linkCta).first()).toBeVisible({ timeout: 5_000 });
     });
 
     test('profile sidebar shows Integrations section on desktop', async ({ page }, testInfo) => {
@@ -39,7 +39,7 @@ test.describe('Profile integrations panel', () => {
         const sidebar = page.locator('nav[aria-label="Profile navigation"]');
         await expect(sidebar).toBeVisible({ timeout: 10_000 });
 
-        await expect(sidebar.getByText('Integrations')).toBeVisible({ timeout: 5_000 });
+        await expect(sidebar.getByText('Integrations', { exact: true })).toBeVisible({ timeout: 5_000 });
         await expect(sidebar.getByRole('link', { name: 'My Integrations' })).toBeVisible({ timeout: 5_000 });
     });
 
@@ -75,7 +75,7 @@ test.describe('Profile notifications panel', () => {
         // Verify several notification types are rendered as rows
         await expect(page.getByText('Slot Vacated')).toBeVisible({ timeout: 5_000 });
         await expect(page.getByText('Event Reminders')).toBeVisible({ timeout: 5_000 });
-        await expect(page.getByText('New Events')).toBeVisible({ timeout: 5_000 });
+        await expect(page.getByText('New Events', { exact: true })).toBeVisible({ timeout: 5_000 });
 
         // Verify channel toggle buttons exist — each row has per-channel toggles.
         // The In-App column header should always be present.

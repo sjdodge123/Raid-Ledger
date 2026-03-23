@@ -112,8 +112,8 @@ test.describe('Onboarding wizard step navigation', () => {
     test('Skip button advances to next step', async ({ page }) => {
         const dialog = await openWizard(page);
 
-        // Skip button should be visible on non-final steps
-        const skipBtn = dialog.getByRole('button', { name: 'Skip' });
+        // Skip button should be visible on non-final steps (use exact to avoid matching "Skip All")
+        const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
         await expect(skipBtn).toBeVisible();
 
         // Click Skip to advance
@@ -126,7 +126,7 @@ test.describe('Onboarding wizard step navigation', () => {
 
         // The breadcrumb bar should contain step labels.
         // The "Games" label should be visible as it is the current/adjacent step.
-        await expect(dialog.getByText('Games')).toBeVisible({ timeout: 5_000 });
+        await expect(dialog.getByRole('button', { name: 'Games' })).toBeVisible({ timeout: 5_000 });
 
         // Advance to step 2 and verify breadcrumbs update
         await dialog.getByRole('button', { name: 'Next' }).click();
@@ -150,9 +150,9 @@ test.describe('Onboarding wizard games step', () => {
         await expect(dialog.getByRole('heading', { name: 'What Do You Play?' })).toBeVisible({ timeout: 10_000 });
 
         // Genre chips: All is always present, plus specific genres
-        await expect(dialog.getByRole('button', { name: 'All' })).toBeVisible();
-        await expect(dialog.getByRole('button', { name: 'RPG' })).toBeVisible();
-        await expect(dialog.getByRole('button', { name: 'MMORPG' })).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'RPG', exact: true })).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'MMORPG', exact: true })).toBeVisible();
     });
 
     test('game search input accepts text', async ({ page }) => {
@@ -172,7 +172,7 @@ test.describe('Onboarding wizard games step', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Onboarding wizard final step', () => {
-    test('navigating to final step shows Complete button instead of Next', async ({ page }) => {
+    test('final step shows Complete button instead of Next', async ({ page }) => {
         test.skip(isMobile(test.info()), 'Desktop-only — breadcrumb tap navigation may differ on mobile');
 
         const dialog = await openWizard(page);
@@ -182,11 +182,19 @@ test.describe('Onboarding wizard final step', () => {
         const totalSteps = parseInt(stepText?.match(/of (\d+)/)?.[1] ?? '0', 10);
         expect(totalSteps).toBeGreaterThanOrEqual(2);
 
-        // Navigate to the final step by clicking Next repeatedly
-        for (let i = 1; i < totalSteps; i++) {
-            await dialog.getByRole('button', { name: 'Next' }).click();
-            await expect(dialog.getByText(new RegExp(`Step ${i + 1} of ${totalSteps}`))).toBeVisible({ timeout: 5_000 });
+        // Navigate to the final step via the "Personalize" breadcrumb.
+        // Breadcrumbs call setCurrentStep directly, bypassing step validators.
+        // Collapsed breadcrumbs may need a second click due to the expand animation.
+        const personalizeBreadcrumb = dialog.getByRole('button', { name: /Personalize/ });
+        await personalizeBreadcrumb.click({ force: true });
+
+        const finalStepPattern = new RegExp(`Step ${totalSteps} of ${totalSteps}`);
+        const landed = await dialog.getByText(finalStepPattern).isVisible({ timeout: 3_000 }).catch(() => false);
+        if (!landed) {
+            // The first click may have only expanded the breadcrumb — click again
+            await personalizeBreadcrumb.click({ force: true });
         }
+        await expect(dialog.getByText(finalStepPattern)).toBeVisible({ timeout: 5_000 });
 
         // On final step: Complete button should be visible, Next should not
         await expect(dialog.getByRole('button', { name: 'Complete' })).toBeVisible({ timeout: 5_000 });

@@ -115,8 +115,8 @@ test.describe('Profile gaming — Watched Games (desktop)', () => {
         // Description text
         await expect(page.getByText(/Click a game to toggle your interest/)).toBeVisible();
 
-        // At least one game button should render (seed data has watched games)
-        const gameButtons = page.locator('main button').filter({ has: page.locator('h3') });
+        // At least one game toggle card should render (seed data has watched games)
+        const gameButtons = page.locator('main [role="button"]').filter({ has: page.locator('h3') });
         await expect(gameButtons.first()).toBeVisible({ timeout: 10_000 });
 
         // Auto-heart setting should be present
@@ -136,8 +136,8 @@ test.describe('Profile gaming — Watched Games (mobile)', () => {
         await page.goto('/profile/gaming/watched-games');
         await expect(page.getByRole('heading', { name: 'My Watched Games' })).toBeVisible({ timeout: 15_000 });
 
-        // At least one game button should render
-        const gameButtons = page.locator('main button').filter({ has: page.locator('h3') });
+        // At least one game toggle card should render
+        const gameButtons = page.locator('main [role="button"]').filter({ has: page.locator('h3') });
         await expect(gameButtons.first()).toBeVisible({ timeout: 10_000 });
     });
 });

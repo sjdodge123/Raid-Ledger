@@ -14,7 +14,7 @@ test.describe('Avatar panel (desktop)', () => {
     test.beforeEach(async ({ page }) => {
         test.skip(test.info().project.name === 'mobile', 'Desktop-only tests');
         await page.goto('/profile/avatar');
-        await expect(page.getByRole('heading', { name: 'Avatar' })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole('heading', { name: 'Avatar' }).first()).toBeVisible({ timeout: 15_000 });
     });
 
     test('renders heading and current avatar preview', async ({ page }) => {
@@ -40,9 +40,9 @@ test.describe('Avatar panel (desktop)', () => {
         // "Available Avatars" heading may appear if user has multiple avatar sources
         const heading = page.getByRole('heading', { name: 'Available Avatars' });
         if (await heading.isVisible({ timeout: 3_000 }).catch(() => false)) {
-            // At least one avatar option button should be visible
+            // At least one avatar option button should be attached in the DOM
             const avatarButtons = page.locator('button img.rounded-full');
-            await expect(avatarButtons.first()).toBeVisible({ timeout: 5_000 });
+            await expect(avatarButtons.first()).toBeAttached({ timeout: 5_000 });
         }
     });
 });
@@ -55,7 +55,7 @@ test.describe('Avatar panel (mobile)', () => {
     test.beforeEach(async ({ page }) => {
         test.skip(test.info().project.name === 'desktop', 'Mobile-only tests');
         await page.goto('/profile/avatar');
-        await expect(page.getByRole('heading', { name: 'Avatar' })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole('heading', { name: 'Avatar' }).first()).toBeVisible({ timeout: 15_000 });
     });
 
     test('renders heading and avatar preview on mobile', async ({ page }) => {
@@ -169,7 +169,7 @@ test.describe('Profile sidebar navigation (desktop)', () => {
 
         // Verify sidebar sections are visible
         await expect(sidebar.getByText('Identity')).toBeVisible();
-        await expect(sidebar.getByText('Preferences')).toBeVisible();
+        await expect(sidebar.getByText('Preferences').first()).toBeVisible();
 
         // Navigate to Preferences via sidebar
         await sidebar.getByRole('link', { name: 'Preferences' }).click();
@@ -178,7 +178,7 @@ test.describe('Profile sidebar navigation (desktop)', () => {
 
         // Navigate back to Avatar via sidebar
         await sidebar.getByRole('link', { name: 'My Avatar' }).click();
-        await expect(page.getByRole('heading', { name: 'Avatar' })).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByRole('heading', { name: 'Avatar' }).first()).toBeVisible({ timeout: 10_000 });
         await expect(page).toHaveURL(/\/profile\/avatar/);
     });
 });

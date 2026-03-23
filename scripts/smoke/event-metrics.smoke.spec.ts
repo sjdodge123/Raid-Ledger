@@ -77,8 +77,8 @@ test.describe('Event metrics', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // Table renders sortable column headers
-        await expect(page.getByText('Player')).toBeVisible();
-        await expect(page.getByText('Attendance')).toBeVisible();
+        await expect(page.getByText('Player').first()).toBeVisible();
+        await expect(page.getByRole('columnheader', { name: 'Attendance' })).toBeVisible();
     });
 
     test('donut chart renders without crashing', async ({ page }) => {
@@ -89,7 +89,7 @@ test.describe('Event metrics', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // The donut chart displays an attendance percentage with "attended" label
-        await expect(page.getByText('attended')).toBeVisible();
+        await expect(page.getByText('attended', { exact: true })).toBeVisible();
 
         // No error boundary triggered
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
