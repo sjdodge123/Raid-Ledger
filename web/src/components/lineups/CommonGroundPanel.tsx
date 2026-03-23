@@ -82,7 +82,7 @@ function GameGrid({
 }): JSX.Element {
     const items = games;
     return (
-        <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2">
+        <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
             {items.map((g) => (
                 <CommonGroundGameCard
                     key={g.gameId}
