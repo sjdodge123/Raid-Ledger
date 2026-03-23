@@ -97,13 +97,13 @@ export function CommonGroundFilters({ filters, onChange, availableTags, search, 
     );
 
     return (
-        <div className="flex flex-wrap items-center gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr', gap: 16, alignItems: 'center' }}>
             <input
                 type="text"
                 value={search}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="Search games..."
-                className="bg-panel border border-edge/50 rounded px-2 py-1 text-sm text-foreground placeholder:text-dim w-40"
+                className="bg-panel border border-edge/50 rounded px-2 py-1 text-sm text-foreground placeholder:text-dim w-full"
             />
             <MinOwnersSlider
                 value={filters.minOwners ?? 2}
