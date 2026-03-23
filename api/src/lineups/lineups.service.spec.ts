@@ -60,13 +60,15 @@ function makeSelectChain(overrides: {
     .fn()
     .mockReturnValue({ where, innerJoin: innerJoin2 });
 
-  const from = jest.fn().mockReturnValue({
+  const fromResult = {
+    then: thenable(defaultData).then,
     where,
     innerJoin: innerJoin1,
     orderBy: jest.fn().mockImplementation(() => thenable(defaultData)),
     limit: jest.fn().mockImplementation(() => thenable(limitData)),
     groupBy: jest.fn().mockImplementation(() => thenable(groupByData)),
-  });
+  };
+  const from = jest.fn().mockReturnValue(fromResult);
 
   return { from };
 }
@@ -111,7 +113,7 @@ function describeLineupsService() {
     });
   }
 
-  /** Set up mocks for buildDetailResponse (5-6 sequential selects). */
+  /** Set up mocks for buildDetailResponse (9-10 sequential selects). */
   function mockBuildDetail(lineup = mockLineup) {
     const chains = [
       // findLineupById
@@ -129,6 +131,8 @@ function describeLineupsService() {
     if (lineup.decidedGameId) {
       chains.push(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
     }
+    // Enrichment: only countTotalMembers calls DB (others short-circuit on empty gameIds)
+    chains.push(makeSelectChain({ whereResult: [{ count: 10 }] }));
     mockSelects(...chains);
   }
 

@@ -1,6 +1,6 @@
 /**
- * Lineup response mapping helpers (ROK-933/934).
- * Maps raw query results to LineupDetailResponseDto.
+ * Lineup response mapping helpers (ROK-933/934/935).
+ * Maps raw query results to LineupDetailResponseDto with enrichment.
  */
 import type {
   LineupDetailResponseDto,
@@ -17,14 +17,33 @@ import {
   findUserById,
   findGameName,
 } from './lineups-query.helpers';
+import {
+  countOwnersPerGame,
+  countWishlistPerGame,
+  fetchPricingMetadata,
+  countTotalMembers,
+  type GamePricing,
+} from './lineups-enrichment.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Map a single entry row to the response shape. */
+/** Enrichment maps passed through to entry mapping. */
+interface EnrichmentMaps {
+  ownerMap: Map<number, number>;
+  wishlistMap: Map<number, number>;
+  pricingMap: Map<number, GamePricing>;
+  totalMembers: number;
+}
+
+/** Map a single entry row to the response shape with enrichment. */
 function mapEntry(
   e: Awaited<ReturnType<typeof findEntriesWithGames>>[0],
   voteMap: Map<number, number>,
+  enrichment: EnrichmentMaps,
 ): LineupEntryResponseDto {
+  const ownerCount = enrichment.ownerMap.get(e.gameId) ?? 0;
+  const pricing = enrichment.pricingMap.get(e.gameId);
+
   return {
     id: e.id,
     gameId: e.gameId,
@@ -35,6 +54,14 @@ function mapEntry(
     carriedOver: e.carriedOverFrom !== null,
     voteCount: voteMap.get(e.gameId) ?? 0,
     createdAt: e.createdAt.toISOString(),
+    ownerCount,
+    totalMembers: enrichment.totalMembers,
+    nonOwnerCount: enrichment.totalMembers - ownerCount,
+    wishlistCount: enrichment.wishlistMap.get(e.gameId) ?? 0,
+    itadCurrentPrice: pricing?.itadCurrentPrice ?? null,
+    itadCurrentCut: pricing?.itadCurrentCut ?? null,
+    itadCurrentShop: pricing?.itadCurrentShop ?? null,
+    itadCurrentUrl: pricing?.itadCurrentUrl ?? null,
   };
 }
 
@@ -46,6 +73,7 @@ function mapToDetailResponse(
   voterCount: Awaited<ReturnType<typeof countDistinctVoters>>,
   creator: Awaited<ReturnType<typeof findUserById>>,
   decidedGame: Awaited<ReturnType<typeof findGameName>>,
+  enrichment: EnrichmentMaps,
 ): LineupDetailResponseDto {
   const voteMap = new Map(voteCounts.map((v) => [v.gameId, v.voteCount]));
   return {
@@ -57,8 +85,9 @@ function mapToDetailResponse(
     linkedEventId: lineup.linkedEventId,
     createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
     votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
-    entries: entries.map((e) => mapEntry(e, voteMap)),
+    entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
     totalVoters: voterCount[0]?.total ?? 0,
+    totalMembers: enrichment.totalMembers,
     createdAt: lineup.createdAt.toISOString(),
     updatedAt: lineup.updatedAt.toISOString(),
   };
@@ -83,6 +112,14 @@ export async function buildDetailResponse(
         : Promise.resolve([]),
     ]);
 
+  const gameIds = entries.map((e) => e.gameId);
+  const [ownerMap, wishlistMap, pricingMap, totalMembers] = await Promise.all([
+    countOwnersPerGame(db, gameIds),
+    countWishlistPerGame(db, gameIds),
+    fetchPricingMetadata(db, gameIds),
+    countTotalMembers(db),
+  ]);
+
   return mapToDetailResponse(
     lineup,
     entries,
@@ -90,5 +127,6 @@ export async function buildDetailResponse(
     voterCount,
     creator,
     decidedGame,
+    { ownerMap, wishlistMap, pricingMap, totalMembers },
   );
 }

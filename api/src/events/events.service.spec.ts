@@ -72,7 +72,13 @@ async function setupEach() {
           emitAsync: jest.fn().mockResolvedValue([]),
         },
       },
-      { provide: ActivityLogService, useValue: { log: jest.fn().mockResolvedValue(undefined), getTimeline: jest.fn().mockResolvedValue({ data: [] }) } },
+      {
+        provide: ActivityLogService,
+        useValue: {
+          log: jest.fn().mockResolvedValue(undefined),
+          getTimeline: jest.fn().mockResolvedValue({ data: [] }),
+        },
+      },
     ],
   }).compile();
 

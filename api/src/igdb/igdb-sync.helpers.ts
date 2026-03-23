@@ -173,8 +173,5 @@ async function updateGameWithItadData(
   if (info.earlyAccess !== undefined) {
     values.earlyAccess = info.earlyAccess;
   }
-  await db
-    .update(schema.games)
-    .set(values)
-    .where(eq(schema.games.id, gameId));
+  await db.update(schema.games).set(values).where(eq(schema.games.id, gameId));
 }

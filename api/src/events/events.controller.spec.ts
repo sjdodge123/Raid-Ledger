@@ -138,7 +138,13 @@ describe('EventsController', () => {
         provide: DiscordBotClientService,
         useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
       },
-      { provide: ActivityLogService, useValue: { log: jest.fn().mockResolvedValue(undefined), getTimeline: jest.fn().mockResolvedValue({ data: [] }) } },
+      {
+        provide: ActivityLogService,
+        useValue: {
+          log: jest.fn().mockResolvedValue(undefined),
+          getTimeline: jest.fn().mockResolvedValue({ data: [] }),
+        },
+      },
     ];
   }
 

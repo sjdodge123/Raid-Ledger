@@ -14,9 +14,7 @@ export async function executeBulkEarlyAccessUpdate(
   db: Db,
   rows: { id: number; earlyAccess: boolean }[],
 ): Promise<void> {
-  const frags = rows.map(
-    (r) => sql`(${r.id}::int, ${r.earlyAccess}::boolean)`,
-  );
+  const frags = rows.map((r) => sql`(${r.id}::int, ${r.earlyAccess}::boolean)`);
   await db.execute(sql`
     UPDATE ${schema.games} AS g
     SET early_access = v.ea
@@ -35,7 +33,8 @@ export async function enrichChunkEarlyAccess(
   for (const game of chunk) {
     try {
       const info = await itadService.getGameInfo(game.itadGameId);
-      if (info) updates.push({ id: game.id, earlyAccess: info.earlyAccess ?? false });
+      if (info)
+        updates.push({ id: game.id, earlyAccess: info.earlyAccess ?? false });
     } catch {
       /* skip — don't fail the batch for one game */
     }

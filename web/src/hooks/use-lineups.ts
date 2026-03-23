@@ -4,6 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   LineupDetailResponseDto,
+  LineupBannerResponseDto,
   CommonGroundResponseDto,
   NominateGameDto,
 } from '@raid-ledger/contract';
@@ -12,12 +13,21 @@ import {
   getActiveLineup,
   getCommonGround,
   nominateGame,
+  getLineupBanner,
+  getLineupById,
+  removeNomination,
 } from '../lib/api-client';
 
 /** Query key for the active lineup. */
 const ACTIVE_LINEUP_KEY = ['lineups', 'active'] as const;
+/** Query key for the banner. */
+const BANNER_KEY = ['lineups', 'banner'] as const;
+/** Query key prefix for lineup detail queries. */
+const DETAIL_KEY = ['lineups', 'detail'] as const;
 /** Query key prefix for common ground queries. */
 const COMMON_GROUND_KEY = ['common-ground'] as const;
+/** Shared prefix for all lineup query invalidation. */
+const LINEUPS_PREFIX = ['lineups'] as const;
 
 /** Hook for fetching the active lineup. */
 export function useActiveLineup() {
@@ -53,8 +63,44 @@ export function useNominateGame() {
   >({
     mutationFn: ({ lineupId, body }) => nominateGame(lineupId, body),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...ACTIVE_LINEUP_KEY] });
+      void queryClient.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
       void queryClient.invalidateQueries({ queryKey: [...COMMON_GROUND_KEY] });
+    },
+  });
+}
+
+/** Hook for fetching the lightweight lineup banner. */
+export function useLineupBanner() {
+  return useQuery<LineupBannerResponseDto | null>({
+    queryKey: [...BANNER_KEY],
+    queryFn: getLineupBanner,
+    staleTime: 120_000,
+    retry: false,
+  });
+}
+
+/** Hook for fetching full lineup detail by ID. */
+export function useLineupDetail(id: number | undefined) {
+  return useQuery<LineupDetailResponseDto>({
+    queryKey: [...DETAIL_KEY, id],
+    queryFn: () => getLineupById(id!),
+    enabled: !!id,
+    staleTime: 30_000,
+  });
+}
+
+/** Hook for removing a nomination from a lineup. */
+export function useRemoveNomination() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    void,
+    Error,
+    { lineupId: number; gameId: number }
+  >({
+    mutationFn: ({ lineupId, gameId }) => removeNomination(lineupId, gameId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
     },
   });
 }

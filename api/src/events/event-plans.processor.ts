@@ -16,10 +16,7 @@ import {
  */
 @Processor(EVENT_PLANS_QUEUE)
 @Injectable()
-export class EventPlansProcessor
-  extends WorkerHost
-  implements OnModuleInit
-{
+export class EventPlansProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(EventPlansProcessor.name);
 
   constructor(

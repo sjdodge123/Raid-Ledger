@@ -127,20 +127,55 @@ export class DemoDataService {
     allGames: (typeof schema.games.$inferSelect)[],
     gen: ReturnType<typeof coreH.generateAllData>,
   ) {
-    const bir = (t: Parameters<typeof this.db.insert>[0], r: Record<string, unknown>[]) => this.batchInsertReturning(t, r);
-    const bi = (t: Parameters<typeof this.db.insert>[0], r: Record<string, unknown>[], o?: 'doNothing') => this.batchInsert(t, r, o);
+    const bir = (
+      t: Parameters<typeof this.db.insert>[0],
+      r: Record<string, unknown>[],
+    ) => this.batchInsertReturning(t, r);
+    const bi = (
+      t: Parameters<typeof this.db.insert>[0],
+      r: Record<string, unknown>[],
+      o?: 'doNothing',
+    ) => this.batchInsert(t, r, o);
     const gamesBySlug = new Map(allGames.map((g) => [g.slug, g]));
-    const evResult = await coreH.installEvents(bir, allUsers[0].id, allGames, gen.events);
-    const chResult = await coreH.installCharacters(bir, userByName, allGames, gamesBySlug, gen.chars);
+    const evResult = await coreH.installEvents(
+      bir,
+      allUsers[0].id,
+      allGames,
+      gen.events,
+    );
+    const chResult = await coreH.installCharacters(
+      bir,
+      userByName,
+      allGames,
+      gamesBySlug,
+      gen.chars,
+    );
     const suResult = await signupsH.installSignups(
-      bir, evResult.origEvents, evResult.genEvents, allUsers,
-      userByName, chResult.charByUserGame, gen.signups, allGames,
+      bir,
+      evResult.origEvents,
+      evResult.genEvents,
+      allUsers,
+      userByName,
+      chResult.charByUserGame,
+      gen.signups,
+      allGames,
     );
     await signupsH.installRosterAssignments(
-      bi, suResult.createdSignups, chResult.createdChars,
-      evResult.createdEvents, evResult.genEvents, gen.events, allGames,
+      bi,
+      suResult.createdSignups,
+      chResult.createdChars,
+      evResult.createdEvents,
+      evResult.genEvents,
+      gen.events,
+      allGames,
     );
-    await secondaryH.reassignEventCreators(this.db, userByName, allUsers, evResult.origEvents, evResult.genEvents);
+    await secondaryH.reassignEventCreators(
+      this.db,
+      userByName,
+      allUsers,
+      evResult.origEvents,
+      evResult.genEvents,
+    );
     return {
       events: evResult.createdEvents.length,
       characters: chResult.createdChars.length,
@@ -161,13 +196,36 @@ export class DemoDataService {
     ) => this.batchInsert(t, r, o);
     const igdbIdsByDbId = new Map(allGames.map((g) => [g.igdbId, g.id]));
     const origEvents = (await this.db.select().from(schema.events)).slice(0, 6);
-    const avail = await secondaryH.installAvailability(bi, userByName, gen.avail);
-    const gameTime = await secondaryH.installGameTime(bi, userByName, gen.gameTime);
-    const notifs = await secondaryH.installNotifications(
-      bi, this.db, userByName, allUsers, origEvents, gen.notifs,
+    const avail = await secondaryH.installAvailability(
+      bi,
+      userByName,
+      gen.avail,
     );
-    await secondaryH.installPreferences(bi, userByName, allUsers, gen.notifPrefs);
-    await secondaryH.installGameInterests(bi, userByName, igdbIdsByDbId, gen.interests);
+    const gameTime = await secondaryH.installGameTime(
+      bi,
+      userByName,
+      gen.gameTime,
+    );
+    const notifs = await secondaryH.installNotifications(
+      bi,
+      this.db,
+      userByName,
+      allUsers,
+      origEvents,
+      gen.notifs,
+    );
+    await secondaryH.installPreferences(
+      bi,
+      userByName,
+      allUsers,
+      gen.notifPrefs,
+    );
+    await secondaryH.installGameInterests(
+      bi,
+      userByName,
+      igdbIdsByDbId,
+      gen.interests,
+    );
     return {
       availability: avail.length,
       gameTimeSlots: gameTime.length,

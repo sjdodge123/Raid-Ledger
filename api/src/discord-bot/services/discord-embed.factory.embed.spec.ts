@@ -473,7 +473,13 @@ describe('buildEventEmbed — timezone threading (ROK-918)', () => {
   });
 
   it('should use timezone for FULL state push content', () => {
-    const fullEvent = { ...baseEvent, title: 'Raid', game: null, signupCount: 20, maxAttendees: 20 };
+    const fullEvent = {
+      ...baseEvent,
+      title: 'Raid',
+      game: null,
+      signupCount: 20,
+      maxAttendees: 20,
+    };
     const { content } = factory.buildEventEmbed(
       fullEvent,
       { ...baseContext, timezone: 'UTC' },

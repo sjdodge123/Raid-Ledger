@@ -21,6 +21,8 @@ describe('CommonGroundFilters — min owners slider', () => {
                 filters={defaultFilters}
                 onChange={vi.fn()}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
         expect(screen.getByText('Min owners')).toBeInTheDocument();
@@ -32,9 +34,11 @@ describe('CommonGroundFilters — min owners slider', () => {
                 filters={{ ...defaultFilters, minOwners: 5 }}
                 onChange={vi.fn()}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
-        const slider = screen.getByRole('slider');
+        const slider = screen.getByRole('slider', { name: /min owners/i });
         expect(slider).toHaveValue('5');
     });
 
@@ -44,9 +48,11 @@ describe('CommonGroundFilters — min owners slider', () => {
                 filters={{ ...defaultFilters, minOwners: undefined }}
                 onChange={vi.fn()}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
-        const slider = screen.getByRole('slider');
+        const slider = screen.getByRole('slider', { name: /min owners/i });
         expect(slider).toHaveValue('2');
     });
 
@@ -56,6 +62,8 @@ describe('CommonGroundFilters — min owners slider', () => {
                 filters={{ ...defaultFilters, minOwners: 8 }}
                 onChange={vi.fn()}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
         expect(screen.getByText('8')).toBeInTheDocument();
@@ -68,9 +76,11 @@ describe('CommonGroundFilters — min owners slider', () => {
                 filters={{ ...defaultFilters, minOwners: 2 }}
                 onChange={onChange}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
-        const slider = screen.getByRole('slider');
+        const slider = screen.getByRole('slider', { name: /min owners/i });
         // Range inputs require native value setter + input event
         const nativeSetter = Object.getOwnPropertyDescriptor(
             HTMLInputElement.prototype,
@@ -155,6 +165,8 @@ describe('CommonGroundFilters — genre dropdown', () => {
                 filters={defaultFilters}
                 onChange={vi.fn()}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
         const select = screen.getByRole('combobox');
@@ -165,73 +177,44 @@ describe('CommonGroundFilters — genre dropdown', () => {
     });
 });
 
-describe('CommonGroundFilters — max players input', () => {
-    it('renders the "Max players" label', () => {
+describe('CommonGroundFilters — players slider', () => {
+    it('renders the "Players" label', () => {
         render(
             <CommonGroundFilters
                 filters={defaultFilters}
                 onChange={vi.fn()}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
-        expect(screen.getByText('Max players')).toBeInTheDocument();
+        expect(screen.getByText('Players')).toBeInTheDocument();
     });
 
-    it('renders empty input with placeholder when maxPlayers is undefined', () => {
+    it('shows "Any" when maxPlayers is undefined (slider at 0)', () => {
         render(
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={vi.fn()}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
-        const input = screen.getByPlaceholderText('Any');
-        expect(input).toHaveValue(null);
+        expect(screen.getByText('Any')).toBeInTheDocument();
     });
 
-    it('renders input with value when maxPlayers is set', () => {
+    it('shows numeric value when maxPlayers is set', () => {
         render(
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 4 }}
                 onChange={vi.fn()}
                 availableTags={[]}
+                search=""
+                onSearchChange={vi.fn()}
             />,
         );
-        const input = screen.getByPlaceholderText('Any');
-        expect(input).toHaveValue(4);
-    });
-
-    it('calls onChange with updated maxPlayers when value is entered', async () => {
-        const user = userEvent.setup();
-        const onChange = vi.fn();
-        render(
-            <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
-                onChange={onChange}
-                availableTags={[]}
-            />,
-        );
-        const input = screen.getByPlaceholderText('Any');
-        await user.type(input, '8');
-        expect(onChange).toHaveBeenCalledWith(
-            expect.objectContaining({ maxPlayers: 8 }),
-        );
-    });
-
-    it('calls onChange with undefined maxPlayers when value is cleared', async () => {
-        const user = userEvent.setup();
-        const onChange = vi.fn();
-        render(
-            <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: 6 }}
-                onChange={onChange}
-                availableTags={[]}
-            />,
-        );
-        const input = screen.getByPlaceholderText('Any');
-        await user.clear(input);
-        expect(onChange).toHaveBeenCalledWith(
-            expect.objectContaining({ maxPlayers: undefined }),
-        );
+        const slider = screen.getByRole('slider', { name: /players/i });
+        expect(slider).toHaveValue('4');
     });
 });

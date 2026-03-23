@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
@@ -22,6 +23,7 @@ import {
   CommonGroundQuerySchema,
   NominateGameSchema,
   type LineupDetailResponseDto,
+  type LineupBannerResponseDto,
   type CommonGroundResponseDto,
   type ActivityTimelineResponseDto,
 } from '@raid-ledger/contract';
@@ -62,6 +64,12 @@ export class LineupsController {
     return this.lineupsService.findActive();
   }
 
+  /** GET /lineups/banner — lightweight banner for Games page. */
+  @Get('banner')
+  async getBanner(): Promise<LineupBannerResponseDto | null> {
+    return this.lineupsService.findBanner();
+  }
+
   /** GET /lineups/common-ground — ownership overlap query. */
   @Get('common-ground')
   async getCommonGround(
@@ -95,6 +103,20 @@ export class LineupsController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.lineupsService.nominate(id, parsed.data, req.user.id);
+  }
+
+  /** DELETE /lineups/:id/nominations/:gameId — remove a nomination. */
+  @Delete(':id/nominations/:gameId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeNomination(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('gameId', ParseIntPipe) gameId: number,
+    @Req() req: AuthRequest,
+  ): Promise<void> {
+    return this.lineupsService.removeNomination(id, gameId, {
+      id: req.user.id,
+      role: req.user.role,
+    });
   }
 
   /** PATCH /lineups/:id/status — transition status (operator/admin). */

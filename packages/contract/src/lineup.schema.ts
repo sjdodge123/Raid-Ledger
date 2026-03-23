@@ -57,6 +57,22 @@ export const LineupEntryResponseSchema = z.object({
     carriedOver: z.boolean(),
     voteCount: z.number(),
     createdAt: z.string(),
+    /** How many community members own this game (source=steam_library). */
+    ownerCount: z.number(),
+    /** Total registered community members. */
+    totalMembers: z.number(),
+    /** Members who do NOT own this game. */
+    nonOwnerCount: z.number(),
+    /** Members who have this game on their Steam wishlist. */
+    wishlistCount: z.number(),
+    /** Current best deal price from ITAD. */
+    itadCurrentPrice: z.number().nullable(),
+    /** Discount percentage (0-100). */
+    itadCurrentCut: z.number().nullable(),
+    /** Store name offering the current deal. */
+    itadCurrentShop: z.string().nullable(),
+    /** URL to the current deal. */
+    itadCurrentUrl: z.string().nullable(),
 });
 
 export type LineupEntryResponseDto = z.infer<typeof LineupEntryResponseSchema>;
@@ -73,11 +89,35 @@ export const LineupDetailResponseSchema = z.object({
     votingDeadline: z.string().nullable(),
     entries: z.array(LineupEntryResponseSchema),
     totalVoters: z.number(),
+    totalMembers: z.number(),
     createdAt: z.string(),
     updatedAt: z.string(),
 });
 
 export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;
+
+/** Banner entry — lightweight game summary for the banner. */
+const LineupBannerEntrySchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    ownerCount: z.number(),
+    voteCount: z.number(),
+});
+
+/** Lightweight banner data for the Games page hero. */
+export const LineupBannerResponseSchema = z.object({
+    id: z.number(),
+    status: LineupStatusSchema,
+    targetDate: z.string().nullable(),
+    entryCount: z.number(),
+    totalVoters: z.number(),
+    totalMembers: z.number(),
+    decidedGameName: z.string().nullable(),
+    entries: z.array(LineupBannerEntrySchema),
+});
+
+export type LineupBannerResponseDto = z.infer<typeof LineupBannerResponseSchema>;
 
 /** Lightweight lineup summary for lists. */
 export const LineupSummaryResponseSchema = z.object({

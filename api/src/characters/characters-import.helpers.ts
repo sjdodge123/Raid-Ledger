@@ -146,9 +146,25 @@ export async function executeImportTx(
   logger: Logger,
 ): Promise<CharacterDto> {
   await checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
-  const shouldBeMain = await resolveAndDemoteMain(tx, userId, gameId, dto.isMain);
-  const values = buildImportInsertValues(userId, gameId, profile, dto, equipment, talents, shouldBeMain);
-  const [character] = await tx.insert(schema.characters).values(values).returning();
+  const shouldBeMain = await resolveAndDemoteMain(
+    tx,
+    userId,
+    gameId,
+    dto.isMain,
+  );
+  const values = buildImportInsertValues(
+    userId,
+    gameId,
+    profile,
+    dto,
+    equipment,
+    talents,
+    shouldBeMain,
+  );
+  const [character] = await tx
+    .insert(schema.characters)
+    .values(values)
+    .returning();
   logger.log(
     `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
   );
@@ -189,15 +205,26 @@ export async function mergeIntoExisting(
   talents: unknown,
   logger: Logger,
 ): Promise<CharacterDto> {
-  const existing = await findExistingByProfile(db, userId, gameId, profile.name, profile.realm);
+  const existing = await findExistingByProfile(
+    db,
+    userId,
+    gameId,
+    profile.name,
+    profile.realm,
+  );
   if (!existing)
-    throw new ConflictException(`Character ${profile.name} on ${profile.realm} already exists`);
+    throw new ConflictException(
+      `Character ${profile.name} on ${profile.realm} already exists`,
+    );
   const fields = buildSyncUpdateFields(profile as never, equipment, talents, {
-    region: dto.region, gameVariant: dto.gameVariant,
+    region: dto.region,
+    gameVariant: dto.gameVariant,
   });
   const [merged] = await db
-    .update(schema.characters).set(fields)
-    .where(eq(schema.characters.id, existing.id)).returning();
+    .update(schema.characters)
+    .set(fields)
+    .where(eq(schema.characters.id, existing.id))
+    .returning();
   logger.log(
     `User ${userId} merged import into existing character ${existing.id} (${profile.name}-${profile.realm})`,
   );
@@ -216,12 +243,28 @@ export async function insertOrMergeImport(
 ): Promise<CharacterDto> {
   try {
     return await db.transaction((tx) =>
-      executeImportTx(tx, userId, gameId, fetched.profile, dto, fetched.equipment, fetched.talents, logger),
+      executeImportTx(
+        tx,
+        userId,
+        gameId,
+        fetched.profile,
+        dto,
+        fetched.equipment,
+        fetched.talents,
+        logger,
+      ),
     );
   } catch (error: unknown) {
     if (isUniqueViolation(error, 'unique_user_game_character'))
       return mergeIntoExisting(
-        db, userId, gameId, fetched.profile, dto, fetched.equipment, fetched.talents, logger,
+        db,
+        userId,
+        gameId,
+        fetched.profile,
+        dto,
+        fetched.equipment,
+        fetched.talents,
+        logger,
       );
     throw error;
   }

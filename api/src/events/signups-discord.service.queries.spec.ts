@@ -139,7 +139,13 @@ async function setupEach() {
         },
       },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
-      { provide: ActivityLogService, useValue: { log: jest.fn().mockResolvedValue(undefined), getTimeline: jest.fn().mockResolvedValue({ data: [] }) } },
+      {
+        provide: ActivityLogService,
+        useValue: {
+          log: jest.fn().mockResolvedValue(undefined),
+          getTimeline: jest.fn().mockResolvedValue({ data: [] }),
+        },
+      },
     ],
   }).compile();
   service = module.get<SignupsService>(SignupsService);

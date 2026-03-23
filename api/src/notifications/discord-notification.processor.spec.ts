@@ -80,7 +80,13 @@ describe('DiscordNotificationProcessor', () => {
           provide: getQueueToken(DISCORD_NOTIFICATION_QUEUE),
           useValue: {
             drain: jest.fn(),
-            getJobCounts: jest.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+            getJobCounts: jest.fn().mockResolvedValue({
+              waiting: 0,
+              active: 0,
+              completed: 0,
+              failed: 0,
+              delayed: 0,
+            }),
           },
         },
         { provide: QueueHealthService, useValue: { register: jest.fn() } },

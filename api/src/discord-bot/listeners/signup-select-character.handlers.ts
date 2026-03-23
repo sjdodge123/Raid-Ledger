@@ -138,17 +138,25 @@ async function signupWithCharacterDirect(
   const character = await deps.charactersService.findOne(userId, characterId);
   const preferred = derivePreferredRoles(character);
   const signupResult = await deps.signupsService.signup(
-    eventId, userId,
+    eventId,
+    userId,
     ...(preferred ? ([{ preferredRoles: preferred }] as const) : []),
   );
-  await deps.signupsService.confirmSignup(eventId, signupResult.id, userId, { characterId });
+  await deps.signupsService.confirmSignup(eventId, signupResult.id, userId, {
+    characterId,
+  });
   if (signupStatus === 'tentative') {
-    await deps.signupsService.updateStatus(eventId, { userId }, { status: 'tentative' });
+    await deps.signupsService.updateStatus(
+      eventId,
+      { userId },
+      { status: 'tentative' },
+    );
   }
   const bench = benchSuffix(signupResult.assignedSlot);
-  const content = signupStatus === 'tentative'
-    ? `You're marked as **tentative** with **${character.name}**.`
-    : `Signed up as **${character.name}**!${bench}`;
+  const content =
+    signupStatus === 'tentative'
+      ? `You're marked as **tentative** with **${character.name}**.`
+      : `Signed up as **${character.name}**!${bench}`;
   await interaction.editReply({ content, embeds: [], components: [] });
   void deps.updateEmbedSignupCount(eventId);
 }

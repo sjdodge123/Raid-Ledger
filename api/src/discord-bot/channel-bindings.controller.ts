@@ -84,7 +84,12 @@ export class ChannelBindingsController {
         if (!exists) throw new NotFoundException('Game not found');
       }
       const { binding: result } = await this.channelBindingsService.bind(
-        guildId, dto.channelId, dto.channelType, dto.bindingPurpose, dto.gameId ?? null, dto.config,
+        guildId,
+        dto.channelId,
+        dto.channelType,
+        dto.bindingPurpose,
+        dto.gameId ?? null,
+        dto.config,
       );
       return { data: toBindingDto(result) };
     } catch (error) {

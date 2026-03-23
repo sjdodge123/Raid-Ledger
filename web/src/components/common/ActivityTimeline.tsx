@@ -76,36 +76,61 @@ export function ActivityTimeline({
   maxVisible = 5,
 }: ActivityTimelineProps) {
   const { data, isLoading } = useActivityTimeline(entityType, entityId);
-  const [expanded, setExpanded] = useState(!collapsible);
+  const [open, setOpen] = useState(!collapsible);
+  const [showAll, setShowAll] = useState(false);
 
   if (isLoading) return <TimelineSkeleton />;
 
   const entries = data?.data ?? [];
   if (entries.length === 0) return null;
 
-  const visibleEntries = expanded ? entries : entries.slice(0, maxVisible);
-  const hasMore = !expanded && entries.length > maxVisible;
+  const visibleEntries = showAll ? entries : entries.slice(0, maxVisible);
+  const hasMore = !showAll && entries.length > maxVisible;
 
   return (
-    <div className="py-4">
-      <h3 className="text-secondary font-semibold text-sm mb-4">Activity</h3>
-      <div className="space-y-0">
-        {visibleEntries.map((entry, i) => (
-          <TimelineEntry
-            key={entry.id}
-            entry={entry}
-            isLast={i === visibleEntries.length - 1 && !hasMore}
-          />
-        ))}
-      </div>
-      {hasMore && (
-        <button
-          onClick={() => setExpanded(true)}
-          className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium transition-colors mt-1"
-        >
-          View full timeline ({entries.length - maxVisible} more) &darr;
-        </button>
+    <div className="rounded-lg border border-edge bg-surface overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-panel/50 transition"
+      >
+        <span className="flex items-center gap-2 text-sm text-secondary font-medium">
+          Activity · {entries.length} event{entries.length !== 1 ? 's' : ''}
+        </span>
+        <ChevronIcon open={open} />
+      </button>
+      {open && (
+        <div className="border-t border-edge px-4 py-3">
+          <div className="space-y-0">
+            {visibleEntries.map((entry, i) => (
+              <TimelineEntry
+                key={entry.id}
+                entry={entry}
+                isLast={i === visibleEntries.length - 1 && !hasMore}
+              />
+            ))}
+          </div>
+          {hasMore && (
+            <button
+              onClick={() => setShowAll(true)}
+              className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium transition-colors mt-1"
+            >
+              Show all ({entries.length - maxVisible} more) &darr;
+            </button>
+          )}
+        </div>
       )}
     </div>
+  );
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`w-4 h-4 text-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
   );
 }

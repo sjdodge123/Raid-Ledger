@@ -9,6 +9,8 @@ interface Props {
     filters: CommonGroundParams;
     onChange: (next: CommonGroundParams) => void;
     availableTags: string[];
+    search: string;
+    onSearchChange: (v: string) => void;
 }
 
 /** Slider for the minimum owners threshold (0–15). */
@@ -59,39 +61,50 @@ function GenreDropdown({
     );
 }
 
-/** Number input for max player count. */
-function MaxPlayersInput({
+/** Slider for filtering by player count. */
+function PlayersSlider({
     value,
     onChange,
 }: {
     value: number | undefined;
     onChange: (v: number | undefined) => void;
 }): JSX.Element {
+    const current = value ?? 0;
     return (
         <label className="flex items-center gap-2 text-sm text-muted">
-            <span className="whitespace-nowrap">Max players</span>
+            <span className="whitespace-nowrap">Players</span>
             <input
-                type="number"
-                min={1}
-                max={999}
-                value={value ?? ''}
-                placeholder="Any"
-                onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
-                className="w-16 bg-panel border border-edge/50 rounded px-2 py-1 text-sm text-muted"
+                type="range"
+                min={0}
+                max={16}
+                value={current}
+                onChange={(e) => {
+                    const v = Number(e.target.value);
+                    onChange(v === 0 ? undefined : v);
+                }}
+                className="w-24 accent-emerald-500"
             />
+            <span className="text-xs font-mono w-6 text-right">{current || 'Any'}</span>
         </label>
     );
 }
 
 /** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, availableTags }: Props): JSX.Element {
+export function CommonGroundFilters({ filters, onChange, availableTags, search, onSearchChange }: Props): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
         [filters, onChange],
     );
 
     return (
-        <div className="flex flex-wrap items-center gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr', gap: 16, alignItems: 'center' }}>
+            <input
+                type="text"
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search games..."
+                className="bg-panel border border-edge/50 rounded px-2 py-1 text-sm text-foreground placeholder:text-dim w-full focus:outline focus:outline-2 focus:outline-emerald-500/50 focus:border-emerald-500/50"
+            />
             <MinOwnersSlider
                 value={filters.minOwners ?? 2}
                 onChange={(v) => update({ minOwners: v })}
@@ -101,7 +114,7 @@ export function CommonGroundFilters({ filters, onChange, availableTags }: Props)
                 tags={availableTags}
                 onChange={(v) => update({ genre: v })}
             />
-            <MaxPlayersInput
+            <PlayersSlider
                 value={filters.maxPlayers}
                 onChange={(v) => update({ maxPlayers: v })}
             />
