@@ -84,7 +84,7 @@ function PlayersSlider({
                 }}
                 className="w-24 accent-emerald-500"
             />
-            <span className="text-xs font-mono w-8 text-right">{current === 0 ? 'Any' : current}</span>
+            <span className="text-xs font-mono w-6 text-right">{current || 'Any'}</span>
         </label>
     );
 }

@@ -6,6 +6,7 @@ import { type JSX, useState, useMemo, useCallback } from 'react';
 import type { CommonGroundResponseDto } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../../lib/api-client';
 import { useActiveLineup, useCommonGround, useNominateGame } from '../../hooks/use-lineups';
+import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { CommonGroundFilters } from './CommonGroundFilters';
 import { CommonGroundGameCard } from './CommonGroundGameCard';
 
@@ -81,7 +82,7 @@ function GameGrid({
 }): JSX.Element {
     const items = games;
     return (
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div className="flex gap-3 overflow-x-auto pb-2" style={{ minHeight: 280 }}>
             {items.map((g) => (
                 <CommonGroundGameCard
                     key={g.gameId}
@@ -173,7 +174,8 @@ export function CommonGroundPanel(): JSX.Element | null {
     const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 2 });
     const [search, setSearch] = useState('');
     const hasBuilding = lineup?.status === 'building';
-    const { data, isLoading, isError, refetch } = useCommonGround(filters, hasBuilding);
+    const debouncedFilters = useDebouncedValue(filters, 300);
+    const { data, isLoading, isError, refetch } = useCommonGround(debouncedFilters, hasBuilding);
     const filtered = useMemo(() => filterBySearch(data, search), [data, search]);
     const availableTags = useMemo(() => (data?.data ? extractUniqueTags(data.data) : []), [data]);
     const atCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
