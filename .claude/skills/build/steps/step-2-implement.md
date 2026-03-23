@@ -71,11 +71,11 @@ Agent(prompt: <filled architect.md>)
 
 ---
 
-## 2d. E2E Test First — TDD (BEFORE dev starts)
+## 2d. E2E Test First — TDD (MANDATORY for standard/full scope)
 
-**For standard/full scope stories**, spawn a test agent to write the **failing** end-to-end test BEFORE the dev agent starts. This is TDD — the test defines "done" and the dev builds to make it pass.
+**This step is NOT optional. Every standard and full scope story MUST have a failing test committed BEFORE the dev agent starts.** No exceptions. No judgment calls. No "this is simple enough to skip."
 
-**Skip for light scope** (config, copy, docs — no testable behavior).
+If the scope is `light` (config, copy, docs — no testable runtime behavior), set `gates.e2e_test_first: N/A` and proceed. For ALL other scopes, this gate MUST be PASS before spawning any dev agent.
 
 ### Determine test type from the story's area:
 
@@ -84,8 +84,9 @@ Agent(prompt: <filled architect.md>)
 | UI (web pages/components) | Playwright smoke test (desktop + mobile) | `scripts/smoke/<feature>.smoke.spec.ts` |
 | Discord bot / notifications | Discord companion bot smoke test | `tools/test-bot/src/smoke/tests/<feature>.test.ts` |
 | API-only (no UI/Discord) | Integration test (Jest, real DB) | `api/src/<module>/*.integration.spec.ts` |
+| Pure logic / utility | Unit test | `api/src/<module>/*.spec.ts` or `web/src/<module>/*.test.ts` |
 
-### Spawn E2E test agent:
+### Spawn TDD test agent:
 
 Read `templates/test-agent.md`, fill in template variables, and set `<TASK_TYPE>` to `TDD_WRITE_FAILING`:
 
@@ -93,16 +94,22 @@ Read `templates/test-agent.md`, fill in template variables, and set `<TASK_TYPE>
 Agent(prompt: <filled test-agent.md>, model: "sonnet")
 ```
 
-The test agent must:
-1. Read the story spec and acceptance criteria
-2. Write the appropriate test type (Playwright/Discord smoke/integration)
-3. Run the test and **confirm it FAILS** (the feature doesn't exist yet)
-4. Commit the failing test: `test: add failing e2e test for ROK-XXX`
-5. Report which test file was created and what assertions it makes
+### Validate the test agent's output (Lead MUST check):
 
-Update state: `gates.e2e_test_first: PASS`, `status: "test_written"`
+1. **Output includes the TDD Test Report table** — if not, re-spawn the test agent
+2. **Every AC has "Confirmed Failing? = YES"** — if any say NO or are missing, re-spawn
+3. **Failure output is included** — actual test runner output showing failures. If missing, re-spawn
+4. **Test file was committed** — verify in the worktree: `cd <worktree> && git log --oneline -1`
 
-If the test agent writes a test that **passes** (feature already works), investigate — the story may already be done or the test isn't asserting the right thing.
+### Gate enforcement:
+
+- `gates.e2e_test_first: PASS` — test agent output validated, failing test committed
+- `gates.e2e_test_first: N/A` — light scope only
+- **Any other value (PENDING, SKIP, FAIL) blocks dev agent spawn**
+
+**HARD RULE: Do NOT spawn a dev agent for any story where `gates.e2e_test_first` is not PASS or N/A.** If the test agent fails to produce a valid TDD report, re-spawn it. If it fails 3 times, escalate to the operator — do NOT skip TDD and proceed to dev.
+
+If the test agent writes a test that **passes** (feature already works), investigate — the story may already be done or the test isn't asserting the right thing. Do NOT set the gate to PASS if the tests pass — TDD means tests must FAIL first.
 
 ---
 

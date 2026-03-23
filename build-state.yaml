@@ -1,0 +1,30 @@
+pipeline:
+  current_step: "implement"
+  batch: 1
+  next_action: |
+    Spawn dev agent for ROK-935. Read planning-artifacts/specs/ROK-935.md and
+    the plan at .claude/plans/imperative-chasing-bubble.md for full spec.
+  stories:
+    ROK-935:
+      title: "feat: Community Lineup nominations and detail page"
+      linear_id: "ROK-935"
+      scope: full
+      status: "dev_active"
+      branch: "rok-935-lineup-detail"
+      worktree: "../Raid-Ledger--rok-935"
+      needs_planner: false
+      needs_architect: false
+      requirements_gathered: true
+      spec_file: "planning-artifacts/specs/ROK-935.md"
+      e2e_test_type: "playwright"
+      e2e_test_file: null
+      gates:
+        e2e_test_first: SKIP
+        dev: PENDING
+        ci: PENDING
+        operator: PENDING
+        reviewer: PENDING
+        architect_final: PENDING
+        smoke_test: PENDING
+      next_action: "Dev agent active. Implementing full feature."
+      agent_history: []

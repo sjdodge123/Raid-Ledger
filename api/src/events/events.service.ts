@@ -53,6 +53,7 @@ import {
 } from './event-update.helpers';
 import { inviteMemberFlow } from './event-invite.helpers';
 import { findOneEvent, findEventsByIds } from './event-find.helpers';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 @Injectable()
 export class EventsService {
@@ -64,6 +65,7 @@ export class EventsService {
     private readonly availabilityService: AvailabilityService,
     private readonly notificationService: NotificationService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   /** Creates a single or recurring event. */
@@ -78,7 +80,7 @@ export class EventsService {
     const baseValues = buildBaseValues(creatorId, dto, groupId);
     const deps = this.createFlowDeps();
     if (dto.recurrence) {
-      return createRecurringFlow(
+      const result = await createRecurringFlow(
         deps,
         dto,
         baseValues,
@@ -86,8 +88,32 @@ export class EventsService {
         durationMs,
         creatorId,
       );
+      for (const eventId of result.allEventIds ?? []) {
+        this.activityLog
+          .log('event', eventId, 'event_created', creatorId, {
+            title: dto.title,
+          })
+          .catch((err) =>
+            this.logger.warn(
+              'Activity log failed for event %d: %s',
+              eventId,
+              err,
+            ),
+          );
+      }
+      return result;
     }
-    return createSingleFlow(deps, baseValues, startTime, endTime, creatorId);
+    const result = await createSingleFlow(
+      deps,
+      baseValues,
+      startTime,
+      endTime,
+      creatorId,
+    );
+    void this.activityLog.log('event', result.id, 'event_created', creatorId, {
+      title: dto.title,
+    });
+    return result;
   }
 
   /** Lists events with filtering and pagination. */
@@ -178,6 +204,9 @@ export class EventsService {
       isAdmin,
       dto,
     );
+    void this.activityLog.log('event', eventId, 'event_cancelled', userId, {
+      reason: dto.reason ?? null,
+    });
     return this.postMutate(
       eventId,
       userId,
@@ -218,6 +247,7 @@ export class EventsService {
     isAdmin: boolean,
     dto: RescheduleEventDto,
   ): Promise<EventResponseDto> {
+    const eventBefore = await this.findOne(eventId);
     await rescheduleEvent(
       this.db,
       this.notificationService,
@@ -226,6 +256,10 @@ export class EventsService {
       isAdmin,
       dto,
     );
+    void this.activityLog.log('event', eventId, 'event_rescheduled', userId, {
+      oldStart: eventBefore.startTime,
+      newStart: dto.startTime,
+    });
     return this.postMutate(
       eventId,
       userId,

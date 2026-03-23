@@ -70,6 +70,8 @@ export const GameDetailSchema = z.object({
     itadLowestCut: z.number().nullable().optional(),
     /** ROK-818: Last successful ITAD pricing sync timestamp */
     itadPriceUpdatedAt: z.string().nullable().optional(),
+    /** ROK-934: Whether this game is in early access (from ITAD) */
+    earlyAccess: z.boolean().optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;

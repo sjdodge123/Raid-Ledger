@@ -173,15 +173,31 @@ export async function findByDiscordUserFlow(
 ): Promise<SignupResponseDto | null> {
   const linkedUser = await findLinkedUser(db, discordUserId);
   if (linkedUser) {
-    const [signup] = await db.select().from(schema.eventSignups)
-      .where(and(eq(schema.eventSignups.eventId, eventId), eq(schema.eventSignups.userId, linkedUser.id)))
+    const [signup] = await db
+      .select()
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.userId, linkedUser.id),
+        ),
+      )
       .limit(1);
     if (!signup) return null;
-    const character = signup.characterId ? await cancelH.getCharacterById(db, signup.characterId) : null;
+    const character = signup.characterId
+      ? await cancelH.getCharacterById(db, signup.characterId)
+      : null;
     return rosterH.buildSignupResponseDto(signup, linkedUser, character);
   }
-  const [signup] = await db.select().from(schema.eventSignups)
-    .where(and(eq(schema.eventSignups.eventId, eventId), eq(schema.eventSignups.discordUserId, discordUserId)))
+  const [signup] = await db
+    .select()
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.discordUserId, discordUserId),
+      ),
+    )
     .limit(1);
   if (!signup) return null;
   return rosterH.buildAnonymousSignupResponseDto(signup);
@@ -249,10 +265,25 @@ export async function allocateDiscordSlot(
   const hasPrefs = dto.preferredRoles && dto.preferredRoles.length > 0;
   const hasSingleRole = !hasPrefs && dto.role;
   if (isMMO && (hasPrefs || hasSingleRole)) {
-    await allocateMmoDiscordSlot(tx, eventId, inserted.id, dto, hasSingleRole, autoAllocate, slotConfig);
+    await allocateMmoDiscordSlot(
+      tx,
+      eventId,
+      inserted.id,
+      dto,
+      hasSingleRole,
+      autoAllocate,
+      slotConfig,
+    );
   } else {
     await allocateGenericDiscordSlot(
-      tx, event, eventId, inserted.id, dto, isMMO, hasPrefs, hasSingleRole,
+      tx,
+      event,
+      eventId,
+      inserted.id,
+      dto,
+      isMMO,
+      hasPrefs,
+      hasSingleRole,
       (t, ev, eId) => resolveGenericSlotRole(t, ev, eId),
       (t, eId, role) => findNextPosition(t, eId, role),
     );

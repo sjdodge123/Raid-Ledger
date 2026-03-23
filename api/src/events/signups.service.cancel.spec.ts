@@ -8,6 +8,7 @@ import { RosterNotificationBufferService } from '../notifications/roster-notific
 import { BenchPromotionService } from './bench-promotion.service';
 import { SignupsAllocationService } from './signups-allocation.service';
 import { SignupsRosterService } from './signups-roster.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 describe('SignupsService — cancel', () => {
   let service: SignupsService;
@@ -143,6 +144,13 @@ describe('SignupsService — cancel', () => {
         },
         SignupsRosterService,
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        {
+          provide: ActivityLogService,
+          useValue: {
+            log: jest.fn().mockResolvedValue(undefined),
+            getTimeline: jest.fn().mockResolvedValue({ data: [] }),
+          },
+        },
       ],
     }).compile();
 

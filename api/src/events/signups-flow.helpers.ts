@@ -116,15 +116,25 @@ async function ensureAssignment(
   if (await checkHasAssignment(tx, existing.id)) return;
   if (signupH.shouldUseAutoAllocation(eventRow, existing, dto, autoBench)) {
     const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
-    if (!(existing.preferredRoles?.length) && dto?.slotRole) {
-      await tx.update(schema.eventSignups).set({ preferredRoles: [dto.slotRole] }).where(eq(schema.eventSignups.id, existing.id));
+    if (!existing.preferredRoles?.length && dto?.slotRole) {
+      await tx
+        .update(schema.eventSignups)
+        .set({ preferredRoles: [dto.slotRole] })
+        .where(eq(schema.eventSignups.id, existing.id));
     }
     await deps.autoAllocateSignup(tx, eventId, existing.id, slotConfig);
-    if (await checkHasAssignment(tx, existing.id)) await signupH.syncConfirmationStatus(tx, existing);
+    if (await checkHasAssignment(tx, existing.id))
+      await signupH.syncConfirmationStatus(tx, existing);
     else await assignBenchFallback(deps, tx, eventId, existing.id);
   } else {
     const confirmed = await assignDirectSlot(deps, {
-      tx, eventRow, eventId, signupId: existing.id, dto, autoBench, logPrefix: `Re-assigned user ${existing.userId}`,
+      tx,
+      eventRow,
+      eventId,
+      signupId: existing.id,
+      dto,
+      autoBench,
+      logPrefix: `Re-assigned user ${existing.userId}`,
     });
     if (confirmed) existing.confirmationStatus = 'confirmed';
   }
@@ -137,12 +147,24 @@ export async function assignDirectSlot(
   const { tx, eventRow, eventId, signupId, dto, autoBench, logPrefix } = p;
   const slotRole = autoBench
     ? 'bench'
-    : (dto?.slotRole ?? (await rosterQH.resolveGenericSlotRole(tx, eventRow, eventId)));
+    : (dto?.slotRole ??
+      (await rosterQH.resolveGenericSlotRole(tx, eventRow, eventId)));
   if (!slotRole) return false;
-  const position = await rosterQH.findNextPosition(tx, eventId, slotRole, dto?.slotPosition, autoBench);
-  await tx.insert(schema.rosterAssignments).values({ eventId, signupId, role: slotRole, position, isOverride: 0 });
+  const position = await rosterQH.findNextPosition(
+    tx,
+    eventId,
+    slotRole,
+    dto?.slotPosition,
+    autoBench,
+  );
+  await tx
+    .insert(schema.rosterAssignments)
+    .values({ eventId, signupId, role: slotRole, position, isOverride: 0 });
   if (slotRole !== 'bench') {
-    await tx.update(schema.eventSignups).set({ confirmationStatus: 'confirmed' }).where(eq(schema.eventSignups.id, signupId));
+    await tx
+      .update(schema.eventSignups)
+      .set({ confirmationStatus: 'confirmed' })
+      .where(eq(schema.eventSignups.id, signupId));
     await deps.cancelPromotion(eventId, slotRole, position);
   }
   deps.logger.log(
@@ -248,19 +270,39 @@ export async function discordSignupTxBody(
 ) {
   const rows = await discordH.insertDiscordSignupRow(tx, eventId, dto);
   if (rows.length === 0) {
-    const existing = await discordH.fetchExistingDiscordSignup(tx, eventId, dto.discordUserId);
-    return { signup: existing, assignedSlot: await rosterQH.getAssignedSlotRole(tx, existing.id) };
+    const existing = await discordH.fetchExistingDiscordSignup(
+      tx,
+      eventId,
+      dto.discordUserId,
+    );
+    return {
+      signup: existing,
+      assignedSlot: await rosterQH.getAssignedSlotRole(tx, existing.id),
+    };
   }
   const [inserted] = rows;
   const autoBench = await signupH.checkAutoBench(tx, event, eventId);
   if (autoBench) {
-    await assignBenchFallback(deps, tx, eventId, inserted.id, 'anonymous signup');
+    await assignBenchFallback(
+      deps,
+      tx,
+      eventId,
+      inserted.id,
+      'anonymous signup',
+    );
   } else {
     await discordH.allocateDiscordSlot(
-      tx, event, eventId, inserted, dto, (t, eId, sId, sc) => deps.autoAllocateSignup(t, eId, sId, sc),
+      tx,
+      event,
+      eventId,
+      inserted,
+      dto,
+      (t, eId, sId, sc) => deps.autoAllocateSignup(t, eId, sId, sc),
     );
   }
-  deps.logger.log(`Anonymous Discord user ${dto.discordUsername} (${dto.discordUserId}) signed up for event ${eventId}`);
+  deps.logger.log(
+    `Anonymous Discord user ${dto.discordUsername} (${dto.discordUserId}) signed up for event ${eventId}`,
+  );
   const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
   return { signup: inserted, assignedSlot };
 }

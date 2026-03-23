@@ -245,13 +245,24 @@ export async function classifyEventSessions(
   if (sec <= 0) return;
   const { sessions, orphanCount } = await loadAndFilterSessions(db, eventId);
   if (orphanCount > 0) {
-    logger.log(`Removed ${orphanCount} voice session(s) for non-signed-up users in event ${eventId}`);
+    logger.log(
+      `Removed ${orphanCount} voice session(s) for non-signed-up users in event ${eventId}`,
+    );
   }
   if (sessions.length > 0) {
-    await batchClassifySessions(db, sessions, event.duration[0], event.duration[1], sec, graceMs);
+    await batchClassifySessions(
+      db,
+      sessions,
+      event.duration[0],
+      event.duration[1],
+      sec,
+      graceMs,
+    );
   }
   await classifyNoShows(db, eventId, sessions, event);
-  logger.log(`Classified ${sessions.length} voice session(s) for event ${eventId}`);
+  logger.log(
+    `Classified ${sessions.length} voice session(s) for event ${eventId}`,
+  );
 }
 
 /** Check if an event should be classified. */

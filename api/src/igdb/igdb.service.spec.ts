@@ -100,6 +100,7 @@ describe('IgdbService', () => {
       itadLowestPrice: null,
       itadLowestCut: null,
       itadPriceUpdatedAt: null,
+      earlyAccess: false,
     },
   ];
 

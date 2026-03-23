@@ -214,23 +214,23 @@ All agent prompt templates are in the `templates/` directory. Read the appropria
 
 | Agent | Template | When to Spawn | Model | Lifetime |
 |-------|----------|---------------|-------|----------|
-| Sprint Planner | `templates/sprint-planner.md` | Step 0b (sync-down) | sonnet | Full dispatch |
-| Janitor | `templates/janitor.md` | Step 0 (pre-dispatch), Step 9b (post-batch) | sonnet | Step 0 + Step 9 |
-| Orchestrator | `templates/orchestrator.md` | Step 2 (after enrichment) — **MUST spawn** | sonnet | Full dispatch |
-| Scrum Master | `templates/scrum-master.md` | Step 0 (after janitor) — **MUST spawn** | sonnet | Full dispatch |
-| Planner | `templates/planner.md` | Step 5b (large stories only) | sonnet | Per-story |
-| Architect | `templates/architect.md` | Step 5a (batch start) | sonnet | Per-batch (until Step 9 docs) |
-| Product Manager | `templates/pm.md` | Step 5a (batch start) | sonnet | Per-batch (until Step 9 docs) |
-| Test Engineer | `templates/test-engineer.md` | Step 5a (batch start) | sonnet | Per-batch (until Step 9 docs) |
+| Sprint Planner | `templates/sprint-planner.md` | Step 0b (sync-down) | opus | Full dispatch |
+| Janitor | `templates/janitor.md` | Step 0 (pre-dispatch), Step 9b (post-batch) | opus | Step 0 + Step 9 |
+| Orchestrator | `templates/orchestrator.md` | Step 2 (after enrichment) — **MUST spawn** | opus | Full dispatch |
+| Scrum Master | `templates/scrum-master.md` | Step 0 (after janitor) — **MUST spawn** | opus | Full dispatch |
+| Planner | `templates/planner.md` | Step 5b (large stories only) | opus | Per-story |
+| Architect | `templates/architect.md` | Step 5a (batch start) | opus | Per-batch (until Step 9 docs) |
+| Product Manager | `templates/pm.md` | Step 5a (batch start) | opus | Per-batch (until Step 9 docs) |
+| Test Engineer | `templates/test-engineer.md` | Step 5a (batch start) | opus | Per-batch (until Step 9 docs) |
 | Dev (rework) | `templates/dev-rework.md` | Step 5d — for Changes Requested stories | opus | Per-story |
 | Dev (new) | `templates/dev-new-ready.md` | Step 5d — for Dispatch Ready stories | opus | Per-story |
 | Co-Lead Dev | `templates/co-lead-dev.md` | Step 7b — minor operator fixes | opus | Per-fix |
-| Build agent | `templates/build-agent.md` | Step 5d — one per batch | sonnet | Per-batch |
+| Build agent | `templates/build-agent.md` | Step 5d — one per batch | opus | Per-batch |
 | Test agent | `templates/test-agent.md` | Step 6a — after dev completes | opus | Per-story |
-| Quality Checker | `templates/quality-checker.md` | Step 6a.6 — after test engineer | sonnet | Per-story |
-| QA test cases | `templates/qa-test-cases.md` | Step 6d — generates test plan for Playwright | sonnet | Per-story |
-| Playwright tester | `templates/playwright-tester.md` | Step 6e — Playwright gate (before "In Review") | sonnet | Per-story |
-| UX Reviewer | `templates/ux-reviewer.md` | Step 6e.5 — after Playwright (UI stories only) | sonnet | Per-story |
+| Quality Checker | `templates/quality-checker.md` | Step 6a.6 — after test engineer | opus | Per-story |
+| QA test cases | `templates/qa-test-cases.md` | Step 6d — generates test plan for Playwright | opus | Per-story |
+| Playwright tester | `templates/playwright-tester.md` | Step 6e — Playwright gate (before "In Review") | opus | Per-story |
+| UX Reviewer | `templates/ux-reviewer.md` | Step 6e.5 — after Playwright (UI stories only) | opus | Per-story |
 | Reviewer | `templates/reviewer.md` | Step 7c — after operator approves | opus | Per-story |
-| Smoke Tester | `templates/smoke-tester.md` | Step 8a.4 — before PR (SEQUENTIAL, after architect) | sonnet | Per-story |
-| Retrospective Analyst | `templates/retrospective-analyst.md` | Step 10b — end of dispatch | sonnet | Per-dispatch |
+| Smoke Tester | `templates/smoke-tester.md` | Step 8a.4 — before PR (SEQUENTIAL, after architect) | opus | Per-story |
+| Retrospective Analyst | `templates/retrospective-analyst.md` | Step 10b — end of dispatch | opus | Per-dispatch |

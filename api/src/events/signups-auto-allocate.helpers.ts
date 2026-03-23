@@ -248,9 +248,38 @@ async function runAllocationStrategies(
   cancelPromotion: (e: number, r: string, p: number) => Promise<void>,
   executeDisplacementFn: (p: ExecuteDisplacementParams) => Promise<boolean>,
 ): Promise<boolean> {
-  if (await tryDirectAllocation(tx, eventId, newSignupId, newPrefs, status, ctx, logger, cancelPromotion))
+  if (
+    await tryDirectAllocation(
+      tx,
+      eventId,
+      newSignupId,
+      newPrefs,
+      status,
+      ctx,
+      logger,
+      cancelPromotion,
+    )
+  )
     return true;
-  if (await tryChainRearrangement(tx, eventId, newSignupId, newPrefs, ctx, logger, cancelPromotion))
+  if (
+    await tryChainRearrangement(
+      tx,
+      eventId,
+      newSignupId,
+      newPrefs,
+      ctx,
+      logger,
+      cancelPromotion,
+    )
+  )
     return true;
-  return tryTentativeDisplacement(tx, eventId, newSignupId, newPrefs, status, ctx, executeDisplacementFn);
+  return tryTentativeDisplacement(
+    tx,
+    eventId,
+    newSignupId,
+    newPrefs,
+    status,
+    ctx,
+    executeDisplacementFn,
+  );
 }

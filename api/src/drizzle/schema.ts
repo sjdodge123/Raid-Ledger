@@ -36,3 +36,5 @@ export * from './schema/game-interest-suppressions';
 export * from './schema/event-voice-sessions';
 export * from './schema/enrichments';
 export * from './schema/ai-request-logs';
+export * from './schema/community-lineups';
+export * from './schema/activity-log';

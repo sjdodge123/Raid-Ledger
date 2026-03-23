@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community Lineup v3 — Tournament Board — Raid Ledger Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Cinzel', 'serif'],
+          },
+          colors: {
+            backdrop: '#020617',
+            surface: '#0f172a',
+            panel: '#1e293b',
+            overlay: '#334155',
+            faint: '#475569',
+            dim: '#64748b',
+            muted: '#94a3b8',
+            secondary: '#cbd5e1',
+            foreground: '#ffffff',
+            edge: '#334155',
+            'edge-strong': '#475569',
+            'edge-subtle': '#1e293b',
+            gold: '#fbbf24',
+            silver: '#9ca3af',
+            bronze: '#d97706',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #020617; color: #ffffff; font-family: 'Inter', system-ui, sans-serif; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .tab-active { border-bottom: 2px solid #10b981; color: #10b981; }
+    .tab-inactive { border-bottom: 2px solid transparent; color: #94a3b8; }
+    .tab-inactive:hover { color: #cbd5e1; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+    .view-btn.active { background: #1e293b; color: #10b981; border-color: #10b981; }
+    .view-btn { background: transparent; color: #94a3b8; border-color: #334155; }
+
+    /* Tournament-specific styles */
+    @keyframes crown-glow {
+      0%, 100% { filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.4)); }
+      50% { filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.8)); }
+    }
+    .crown-glow { animation: crown-glow 3s ease-in-out infinite; }
+
+    @keyframes vs-pulse {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.1); opacity: 1; }
+    }
+    .vs-pulse { animation: vs-pulse 2s ease-in-out infinite; }
+
+    .seed-bar { transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+
+    /* Podium glow effects */
+    .podium-gold { box-shadow: 0 0 30px rgba(251, 191, 36, 0.15), inset 0 1px 0 rgba(251, 191, 36, 0.2); }
+    .podium-silver { box-shadow: 0 0 20px rgba(156, 163, 175, 0.1), inset 0 1px 0 rgba(156, 163, 175, 0.15); }
+    .podium-bronze { box-shadow: 0 0 20px rgba(217, 119, 6, 0.1), inset 0 1px 0 rgba(217, 119, 6, 0.15); }
+
+    /* Diagonal stripes for tournament feel */
+    .tournament-stripe {
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 4px,
+        rgba(16, 185, 129, 0.03) 4px,
+        rgba(16, 185, 129, 0.03) 8px
+      );
+    }
+
+    /* Vote bar animation */
+    .vote-bar-fill { transition: width 1s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- NAV TABS -->
+  <nav class="sticky top-0 z-50 bg-backdrop/95 backdrop-blur border-b border-edge">
+    <div class="max-w-6xl mx-auto px-4 flex items-center gap-6 h-12">
+      <span class="text-xs text-dim font-medium uppercase tracking-wider">Variation B</span>
+      <button onclick="showView('games')" id="tab-games" class="tab-active text-sm font-medium pb-0.5 pt-1 px-1 transition-colors">Games Page</button>
+      <button onclick="showView('detail')" id="tab-detail" class="tab-inactive text-sm font-medium pb-0.5 pt-1 px-1 transition-colors">Lineup Detail</button>
+      <button onclick="showView('voting')" id="tab-voting" class="tab-inactive text-sm font-medium pb-0.5 pt-1 px-1 transition-colors">Voting</button>
+      <button onclick="showView('decided')" id="tab-decided" class="tab-inactive text-sm font-medium pb-0.5 pt-1 px-1 transition-colors">Decided</button>
+      <div class="ml-auto flex gap-2">
+        <button onclick="toggleMobile()" class="view-btn border rounded-md px-3 py-1 text-xs font-medium transition-all" id="mobile-toggle">Mobile</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONTAINER -->
+  <div id="app-container" class="max-w-6xl mx-auto transition-all duration-300">
+
+    <!-- ============================================ -->
+    <!-- VIEW 1: GAMES PAGE — MATCHUP BANNER         -->
+    <!-- ============================================ -->
+    <div id="view-games" class="view-panel">
+
+      <!-- App header -->
+      <header class="border-b border-edge px-4 py-3 flex items-center justify-between">
+        <h1 class="font-display text-lg font-semibold">Games</h1>
+        <div class="flex items-center gap-3">
+          <button class="text-muted hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </button>
+          <div class="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold">SD</div>
+        </div>
+      </header>
+
+      <div class="p-4 space-y-6">
+
+        <!-- TOURNAMENT MATCHUP BANNER -->
+        <div class="bg-surface border border-edge rounded-xl overflow-hidden tournament-stripe">
+          <!-- Status bar -->
+          <div class="bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-2 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
+              <span class="text-emerald-400 text-xs font-semibold uppercase tracking-wider">Community Lineup</span>
+            </div>
+            <span class="text-dim text-xs">Fri, Mar 27</span>
+          </div>
+
+          <div class="p-4">
+            <!-- VS Matchup header -->
+            <div class="flex items-center justify-center gap-3 mb-4">
+              <!-- Contender 1 -->
+              <div class="flex-1 flex flex-col items-center">
+                <div class="w-20 h-26 rounded-xl bg-panel border-2 border-emerald-500/40 overflow-hidden relative mb-2">
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-emerald-500/10"></div>
+                  <div class="absolute bottom-1.5 left-1.5 right-1.5">
+                    <div class="text-[10px] text-foreground font-bold leading-tight text-center">Lethal Company</div>
+                  </div>
+                  <div class="absolute top-1 left-1 bg-emerald-500/90 rounded text-[9px] font-black px-1.5 py-0.5">#1</div>
+                </div>
+                <span class="text-emerald-400 text-[10px] font-semibold">5 votes</span>
+              </div>
+
+              <!-- VS badge -->
+              <div class="flex-shrink-0 relative">
+                <div class="w-12 h-12 rounded-full bg-panel border-2 border-edge-strong flex items-center justify-center vs-pulse">
+                  <span class="font-display text-sm font-bold text-foreground tracking-wider">VS</span>
+                </div>
+              </div>
+
+              <!-- Contender 2 -->
+              <div class="flex-1 flex flex-col items-center">
+                <div class="w-20 h-26 rounded-xl bg-panel border-2 border-amber-500/30 overflow-hidden relative mb-2">
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-amber-500/10"></div>
+                  <div class="absolute bottom-1.5 left-1.5 right-1.5">
+                    <div class="text-[10px] text-foreground font-bold leading-tight text-center">Deep Rock Galactic</div>
+                  </div>
+                  <div class="absolute top-1 left-1 bg-amber-500/90 rounded text-[9px] font-black px-1.5 py-0.5 text-black">#2</div>
+                </div>
+                <span class="text-amber-400 text-[10px] font-semibold">4 votes</span>
+              </div>
+            </div>
+
+            <!-- Subtitle -->
+            <p class="text-center text-muted text-sm mb-4">6 games competing &mdash; <span class="text-amber-400 font-medium">vote now</span></p>
+            <p class="text-center text-dim text-xs mb-4">8 of 12 members voted &middot; closes Thu, Mar 26</p>
+
+            <!-- Action buttons -->
+            <div class="flex gap-2">
+              <a href="#" onclick="showView('voting'); return false;" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg px-4 py-2.5 text-center transition-colors flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+                Cast Your Votes
+              </a>
+              <button class="bg-panel hover:bg-overlay text-muted hover:text-foreground text-sm font-medium rounded-lg px-4 py-2.5 border border-edge transition-colors">
+                Nominate
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- REST OF GAMES PAGE (simulated) -->
+        <div>
+          <h3 class="text-secondary font-semibold text-sm mb-3">Your Community Wants to Play</h3>
+          <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Monster Hunter</div>
+                <div class="text-[10px] text-muted">8 interested</div>
+              </div>
+            </div>
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Helldivers 2</div>
+                <div class="text-[10px] text-muted">6 interested</div>
+              </div>
+            </div>
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Ready or Not</div>
+                <div class="text-[10px] text-muted">5 interested</div>
+              </div>
+            </div>
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Satisfactory</div>
+                <div class="text-[10px] text-muted">4 interested</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-secondary font-semibold text-sm mb-3">Community Wishlisted On Sale</h3>
+          <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute top-2 right-2 bg-emerald-500/90 text-[10px] font-bold px-1.5 py-0.5 rounded-md">-65%</div>
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Baldur's Gate 3</div>
+                <div class="text-[10px] text-emerald-400">$20.99</div>
+              </div>
+            </div>
+            <div class="w-[140px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden aspect-[3/4] relative">
+              <div class="absolute top-2 right-2 bg-emerald-500/90 text-[10px] font-bold px-1.5 py-0.5 rounded-md">-40%</div>
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <div class="text-xs font-medium truncate">Enshrouded</div>
+                <div class="text-[10px] text-emerald-400">$17.99</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- VIEW 2: LINEUP DETAIL — SEEDED LAYOUT       -->
+    <!-- ============================================ -->
+    <div id="view-detail" class="view-panel hidden">
+
+      <header class="border-b border-edge px-4 py-3">
+        <div class="flex items-center gap-3 mb-2">
+          <button onclick="showView('games')" class="text-muted hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <h1 class="font-display text-lg font-semibold">Tournament Seedings</h1>
+          <span class="bg-emerald-500/20 text-emerald-400 text-xs font-medium px-2.5 py-1 rounded-full border border-emerald-500/30">Building</span>
+        </div>
+        <p class="text-muted text-sm ml-8">For Friday, Mar 27 &middot; Started by <span class="text-secondary">Roknua</span></p>
+      </header>
+
+      <div class="p-4 space-y-6">
+
+        <!-- Progress bar -->
+        <div class="bg-surface border border-edge rounded-lg p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm text-secondary font-medium">Nominations</span>
+            <span class="text-xs text-muted">6 / 20 max</span>
+          </div>
+          <div class="w-full h-1.5 bg-panel rounded-full overflow-hidden">
+            <div class="h-full bg-emerald-500 rounded-full transition-all" style="width: 30%"></div>
+          </div>
+          <div class="flex items-center justify-between mt-2">
+            <span class="text-xs text-dim">4 members have nominated</span>
+            <button class="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors">Start Voting &rarr;</button>
+          </div>
+        </div>
+
+        <!-- Seeded nominations -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-secondary font-semibold text-sm">Seeded by Ownership</h3>
+            <div class="flex items-center gap-1 text-xs text-dim">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+              Ranked by coverage
+            </div>
+          </div>
+
+          <!-- Seed #1: Lethal Company -->
+          <div class="bg-surface border border-edge rounded-xl overflow-hidden hover:border-emerald-500/30 transition-colors cursor-pointer">
+            <div class="flex items-stretch">
+              <!-- Seed number -->
+              <div class="w-12 bg-emerald-500/10 border-r border-edge flex flex-col items-center justify-center flex-shrink-0">
+                <span class="text-[10px] text-emerald-400/60 font-medium uppercase">Seed</span>
+                <span class="text-xl font-black text-emerald-400">#1</span>
+              </div>
+              <!-- Content -->
+              <div class="flex-1 p-3">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                    <div>
+                      <h4 class="text-foreground font-semibold text-sm">Lethal Company</h4>
+                      <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Vex</span></p>
+                    </div>
+                  </div>
+                  <div class="flex gap-1.5 flex-shrink-0">
+                    <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                    <span class="bg-blue-500/20 text-blue-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30">4 players</span>
+                  </div>
+                </div>
+                <!-- Ownership strength bar -->
+                <div class="mb-1.5">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-emerald-400 text-xs font-medium">11 / 12 own it</span>
+                    <span class="text-muted text-xs">1 needs it &middot; <span class="text-emerald-400">$9.99</span></span>
+                  </div>
+                  <div class="w-full h-2.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full seed-bar" style="width: 92%"></div>
+                  </div>
+                </div>
+                <p class="text-dim text-xs italic">"We haven't played this in months, it's been updated!"</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seed #2: Deep Rock Galactic -->
+          <div class="bg-surface border border-edge rounded-xl overflow-hidden hover:border-emerald-500/30 transition-colors cursor-pointer">
+            <div class="flex items-stretch">
+              <div class="w-12 bg-emerald-500/5 border-r border-edge flex flex-col items-center justify-center flex-shrink-0">
+                <span class="text-[10px] text-muted/60 font-medium uppercase">Seed</span>
+                <span class="text-xl font-black text-secondary">#2</span>
+              </div>
+              <div class="flex-1 p-3">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                    <div>
+                      <h4 class="text-foreground font-semibold text-sm">Deep Rock Galactic</h4>
+                      <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Roknua</span></p>
+                    </div>
+                  </div>
+                  <div class="flex gap-1.5 flex-shrink-0">
+                    <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                    <span class="bg-blue-500/20 text-blue-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30">4 players</span>
+                    <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">On Sale</span>
+                  </div>
+                </div>
+                <div class="mb-1.5">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-emerald-400 text-xs font-medium">10 / 12 own it</span>
+                    <span class="text-muted text-xs">2 need it &middot; <span class="text-emerald-400">$14.99</span> <span class="text-emerald-400 text-[10px]">(-50%)</span></span>
+                  </div>
+                  <div class="w-full h-2.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full seed-bar" style="width: 83%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seed #3: Phasmophobia -->
+          <div class="bg-surface border border-edge rounded-xl overflow-hidden hover:border-emerald-500/30 transition-colors cursor-pointer">
+            <div class="flex items-stretch">
+              <div class="w-12 bg-transparent border-r border-edge flex flex-col items-center justify-center flex-shrink-0">
+                <span class="text-[10px] text-muted/60 font-medium uppercase">Seed</span>
+                <span class="text-xl font-black text-muted">#3</span>
+              </div>
+              <div class="flex-1 p-3">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                    <div>
+                      <h4 class="text-foreground font-semibold text-sm">Phasmophobia</h4>
+                      <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Forge</span></p>
+                    </div>
+                  </div>
+                  <div class="flex gap-1.5 flex-shrink-0">
+                    <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                    <span class="bg-blue-500/20 text-blue-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-blue-500/30">4 players</span>
+                  </div>
+                </div>
+                <div class="mb-1.5">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-emerald-400 text-xs font-medium">9 / 12 own it</span>
+                    <span class="text-muted text-xs">3 need it &middot; <span class="text-secondary">$13.99</span></span>
+                  </div>
+                  <div class="w-full h-2.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-emerald-600/80 to-emerald-400/80 rounded-full seed-bar" style="width: 75%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seed #4: Valheim -->
+          <div class="bg-surface border border-edge rounded-xl overflow-hidden hover:border-emerald-500/30 transition-colors cursor-pointer">
+            <div class="flex items-stretch">
+              <div class="w-12 bg-transparent border-r border-edge flex flex-col items-center justify-center flex-shrink-0">
+                <span class="text-[10px] text-muted/60 font-medium uppercase">Seed</span>
+                <span class="text-xl font-black text-dim">#4</span>
+              </div>
+              <div class="flex-1 p-3">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                    <div>
+                      <h4 class="text-foreground font-semibold text-sm">Valheim</h4>
+                      <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Storm</span></p>
+                    </div>
+                  </div>
+                  <div class="flex gap-1.5 flex-shrink-0">
+                    <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                    <span class="bg-cyan-500/20 text-cyan-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-cyan-500/30">10 players</span>
+                  </div>
+                </div>
+                <div class="mb-1.5">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-amber-400 text-xs font-medium">7 / 12 own it</span>
+                    <span class="text-muted text-xs">5 need it &middot; <span class="text-secondary">$19.99</span></span>
+                  </div>
+                  <div class="w-full h-2.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-amber-600/70 to-amber-400/70 rounded-full seed-bar" style="width: 58%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seed #5: GTFO (carried over) -->
+          <div class="bg-surface border border-edge rounded-xl overflow-hidden hover:border-emerald-500/30 transition-colors cursor-pointer">
+            <div class="flex items-stretch">
+              <div class="w-12 bg-transparent border-r border-edge flex flex-col items-center justify-center flex-shrink-0">
+                <span class="text-[10px] text-muted/60 font-medium uppercase">Seed</span>
+                <span class="text-xl font-black text-dim">#5</span>
+              </div>
+              <div class="flex-1 p-3">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                    <div>
+                      <h4 class="text-foreground font-semibold text-sm">GTFO</h4>
+                      <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Kira</span> <span class="text-faint">&middot; carried over</span></p>
+                    </div>
+                  </div>
+                  <div class="flex gap-1.5 flex-shrink-0">
+                    <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                    <span class="bg-orange-500/20 text-orange-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-orange-500/30">Carried Over</span>
+                  </div>
+                </div>
+                <div class="mb-1.5">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-amber-400 text-xs font-medium">5 / 12 own it</span>
+                    <span class="text-muted text-xs">7 need it &middot; <span class="text-emerald-400">$19.99</span> <span class="text-emerald-400 text-[10px]">(-50%)</span></span>
+                  </div>
+                  <div class="w-full h-2.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-amber-600/50 to-amber-400/50 rounded-full seed-bar" style="width: 42%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Seed #6: Elden Ring -->
+          <div class="bg-surface border border-edge rounded-xl overflow-hidden hover:border-emerald-500/30 transition-colors cursor-pointer">
+            <div class="flex items-stretch">
+              <div class="w-12 bg-transparent border-r border-edge flex flex-col items-center justify-center flex-shrink-0">
+                <span class="text-[10px] text-muted/60 font-medium uppercase">Seed</span>
+                <span class="text-xl font-black text-dim">#6</span>
+              </div>
+              <div class="flex-1 p-3">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-10 h-13 rounded-lg bg-panel border border-edge-subtle flex-shrink-0 overflow-hidden"></div>
+                    <div>
+                      <h4 class="text-foreground font-semibold text-sm">Elden Ring</h4>
+                      <p class="text-dim text-xs mt-0.5">by <span class="text-secondary">Ash</span></p>
+                    </div>
+                  </div>
+                  <div class="flex gap-1.5 flex-shrink-0">
+                    <span class="bg-purple-500/20 text-purple-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-purple-500/30">RPG</span>
+                    <span class="bg-yellow-500/20 text-yellow-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-yellow-500/30">Early Access</span>
+                  </div>
+                </div>
+                <div class="mb-1.5">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-red-400 text-xs font-medium">3 / 12 own it</span>
+                    <span class="text-muted text-xs">5 wishlisted &middot; <span class="text-secondary">$59.99</span> full price</span>
+                  </div>
+                  <div class="w-full h-2.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-red-600/50 to-red-400/50 rounded-full seed-bar" style="width: 25%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Common Ground section -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-secondary font-semibold text-sm">Suggested from Common Ground</h3>
+            <button class="text-xs text-emerald-400 hover:text-emerald-300 font-medium">Filters</button>
+          </div>
+          <p class="text-dim text-xs mb-3">Games most of your community owns and hasn't nominated yet</p>
+          <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+            <div class="w-[130px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden relative group cursor-pointer hover:border-emerald-500/30 transition-colors">
+              <div class="aspect-[3/4]">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                <div class="absolute bottom-2 left-2 right-2">
+                  <div class="text-xs font-medium truncate">Risk of Rain 2</div>
+                  <div class="text-[10px] text-emerald-400">10 own &middot; 4p co-op</div>
+                </div>
+              </div>
+              <div class="absolute top-2 left-2 right-2 flex justify-between">
+                <span class="bg-emerald-500/20 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded border border-emerald-500/30">On Sale</span>
+              </div>
+              <div class="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-colors flex items-center justify-center">
+                <span class="text-foreground text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-600 px-3 py-1.5 rounded-lg">+ Nominate</span>
+              </div>
+            </div>
+            <div class="w-[130px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden relative group cursor-pointer hover:border-emerald-500/30 transition-colors">
+              <div class="aspect-[3/4]">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                <div class="absolute bottom-2 left-2 right-2">
+                  <div class="text-xs font-medium truncate">Terraria</div>
+                  <div class="text-[10px] text-emerald-400">12 own &middot; 8p</div>
+                </div>
+              </div>
+              <div class="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-colors flex items-center justify-center">
+                <span class="text-foreground text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-600 px-3 py-1.5 rounded-lg">+ Nominate</span>
+              </div>
+            </div>
+            <div class="w-[130px] flex-shrink-0 bg-panel border border-edge rounded-xl overflow-hidden relative group cursor-pointer hover:border-emerald-500/30 transition-colors">
+              <div class="aspect-[3/4]">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                <div class="absolute bottom-2 left-2 right-2">
+                  <div class="text-xs font-medium truncate">Left 4 Dead 2</div>
+                  <div class="text-[10px] text-emerald-400">11 own &middot; 4p</div>
+                </div>
+              </div>
+              <div class="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-colors flex items-center justify-center">
+                <span class="text-foreground text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-600 px-3 py-1.5 rounded-lg">+ Nominate</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Past lineups -->
+        <div>
+          <h3 class="text-secondary font-semibold text-sm mb-3">Past Lineups</h3>
+          <div class="space-y-2">
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span class="text-sm text-foreground font-medium">Mar 20</span>
+                <span class="text-dim text-sm"> &mdash; Deep Rock Galactic</span>
+              </div>
+              <span class="text-dim text-xs">5 nominated &middot; 10 voted</span>
+            </div>
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span class="text-sm text-foreground font-medium">Mar 13</span>
+                <span class="text-dim text-sm"> &mdash; Phasmophobia</span>
+              </div>
+              <span class="text-dim text-xs">7 nominated &middot; 11 voted</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- VIEW 3: VOTING — BRACKET LEADERBOARD        -->
+    <!-- ============================================ -->
+    <div id="view-voting" class="view-panel hidden">
+
+      <header class="border-b border-edge px-4 py-3">
+        <div class="flex items-center gap-3 mb-2">
+          <button onclick="showView('detail')" class="text-muted hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <h1 class="font-display text-lg font-semibold">Leaderboard</h1>
+          <span class="bg-amber-500/20 text-amber-400 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-500/30">Voting Open</span>
+        </div>
+        <p class="text-muted text-sm ml-8">Pick your top 3 &middot; Voting closes <span class="text-amber-400 font-medium">Thu, Mar 26 at 6 PM</span></p>
+      </header>
+
+      <div class="p-4 space-y-4">
+
+        <!-- Vote status -->
+        <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span class="text-emerald-400 text-sm font-medium">You've used 2 of 3 votes</span>
+          </div>
+          <span class="text-dim text-xs">8 / 12 voted</span>
+        </div>
+
+        <!-- Leaderboard -->
+        <div class="bg-surface border border-edge rounded-xl overflow-hidden">
+          <!-- Leaderboard header -->
+          <div class="bg-panel/50 border-b border-edge px-4 py-2.5 flex items-center justify-between">
+            <span class="text-xs text-muted font-semibold uppercase tracking-wider">Rank</span>
+            <span class="text-xs text-muted font-semibold uppercase tracking-wider">Votes</span>
+          </div>
+
+          <!-- #1 — Lethal Company (voted) -->
+          <div class="border-b border-edge hover:bg-panel/30 transition-colors cursor-pointer relative">
+            <div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div>
+            <div class="px-4 py-3 flex items-center gap-3">
+              <!-- Rank -->
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
+                <span class="text-emerald-400 font-black text-sm">1</span>
+              </div>
+              <!-- Game info -->
+              <div class="w-8 h-10 rounded bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="text-foreground font-semibold text-sm truncate">Lethal Company</h4>
+                  <span class="bg-emerald-500/20 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex-shrink-0">Co-op</span>
+                  <span class="bg-blue-500/20 text-blue-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-blue-500/30 flex-shrink-0">4p</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-emerald-400 text-[11px]">11 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-[11px]">$9.99</span>
+                </div>
+                <!-- Vote bar -->
+                <div class="mt-1.5 flex items-center gap-2">
+                  <div class="flex-1 h-3 bg-panel rounded overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded vote-bar-fill flex items-center justify-end pr-1" style="width: 62%">
+                      <span class="text-[8px] font-bold text-white/90">62%</span>
+                    </div>
+                  </div>
+                  <span class="text-emerald-400 text-xs font-bold w-12 text-right">5 votes</span>
+                </div>
+              </div>
+              <!-- Your vote indicator -->
+              <div class="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center">
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- #2 — Deep Rock Galactic (voted) -->
+          <div class="border-b border-edge hover:bg-panel/30 transition-colors cursor-pointer relative">
+            <div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div>
+            <div class="px-4 py-3 flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                <span class="text-emerald-400/80 font-black text-sm">2</span>
+              </div>
+              <div class="w-8 h-10 rounded bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="text-foreground font-semibold text-sm truncate">Deep Rock Galactic</h4>
+                  <span class="bg-emerald-500/20 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex-shrink-0">Co-op</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex-shrink-0">-50%</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-emerald-400 text-[11px]">10 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-[11px]">$14.99</span>
+                </div>
+                <div class="mt-1.5 flex items-center gap-2">
+                  <div class="flex-1 h-3 bg-panel rounded overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-emerald-600/80 to-emerald-400/80 rounded vote-bar-fill flex items-center justify-end pr-1" style="width: 50%">
+                      <span class="text-[8px] font-bold text-white/90">50%</span>
+                    </div>
+                  </div>
+                  <span class="text-emerald-400 text-xs font-bold w-12 text-right">4 votes</span>
+                </div>
+              </div>
+              <div class="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center">
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- #3 — Phasmophobia (not voted) -->
+          <div class="border-b border-edge hover:bg-panel/30 transition-colors cursor-pointer group">
+            <div class="px-4 py-3 flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-panel border border-edge flex items-center justify-center flex-shrink-0">
+                <span class="text-muted font-black text-sm">3</span>
+              </div>
+              <div class="w-8 h-10 rounded bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="text-foreground font-medium text-sm truncate">Phasmophobia</h4>
+                  <span class="bg-emerald-500/20 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex-shrink-0">Co-op</span>
+                  <span class="bg-blue-500/20 text-blue-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-blue-500/30 flex-shrink-0">4p</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-emerald-400 text-[11px]">9 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-[11px]">$13.99</span>
+                </div>
+                <div class="mt-1.5 flex items-center gap-2">
+                  <div class="flex-1 h-3 bg-panel rounded overflow-hidden">
+                    <div class="h-full bg-muted/40 rounded vote-bar-fill" style="width: 37%"></div>
+                  </div>
+                  <span class="text-muted text-xs font-medium w-12 text-right">3 votes</span>
+                </div>
+              </div>
+              <div class="flex-shrink-0 w-7 h-7 rounded-full border-2 border-edge group-hover:border-emerald-500/50 transition-colors"></div>
+            </div>
+          </div>
+
+          <!-- #4 — Valheim (not voted) -->
+          <div class="border-b border-edge hover:bg-panel/30 transition-colors cursor-pointer group">
+            <div class="px-4 py-3 flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-panel border border-edge flex items-center justify-center flex-shrink-0">
+                <span class="text-dim font-black text-sm">4</span>
+              </div>
+              <div class="w-8 h-10 rounded bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="text-foreground font-medium text-sm truncate">Valheim</h4>
+                  <span class="bg-emerald-500/20 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex-shrink-0">Co-op</span>
+                  <span class="bg-cyan-500/20 text-cyan-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-cyan-500/30 flex-shrink-0">10p</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-amber-400 text-[11px]">7 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-[11px]">$19.99</span>
+                </div>
+                <div class="mt-1.5 flex items-center gap-2">
+                  <div class="flex-1 h-3 bg-panel rounded overflow-hidden">
+                    <div class="h-full bg-amber-500/30 rounded vote-bar-fill" style="width: 25%"></div>
+                  </div>
+                  <span class="text-muted text-xs font-medium w-12 text-right">2 votes</span>
+                </div>
+              </div>
+              <div class="flex-shrink-0 w-7 h-7 rounded-full border-2 border-edge group-hover:border-emerald-500/50 transition-colors"></div>
+            </div>
+          </div>
+
+          <!-- #5 — GTFO (not voted) -->
+          <div class="border-b border-edge hover:bg-panel/30 transition-colors cursor-pointer group">
+            <div class="px-4 py-3 flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-panel border border-edge flex items-center justify-center flex-shrink-0">
+                <span class="text-dim font-black text-sm">5</span>
+              </div>
+              <div class="w-8 h-10 rounded bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="text-foreground font-medium text-sm truncate">GTFO</h4>
+                  <span class="bg-emerald-500/20 text-emerald-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex-shrink-0">Co-op</span>
+                  <span class="bg-orange-500/20 text-orange-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-orange-500/30 flex-shrink-0">Carried</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-amber-400 text-[11px]">5 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-emerald-400 text-[11px]">$19.99 (-50%)</span>
+                </div>
+                <div class="mt-1.5 flex items-center gap-2">
+                  <div class="flex-1 h-3 bg-panel rounded overflow-hidden">
+                    <div class="h-full bg-amber-500/20 rounded vote-bar-fill" style="width: 12%"></div>
+                  </div>
+                  <span class="text-dim text-xs font-medium w-12 text-right">1 vote</span>
+                </div>
+              </div>
+              <div class="flex-shrink-0 w-7 h-7 rounded-full border-2 border-edge group-hover:border-emerald-500/50 transition-colors"></div>
+            </div>
+          </div>
+
+          <!-- #6 — Elden Ring (not voted, last) -->
+          <div class="hover:bg-panel/30 transition-colors cursor-pointer group">
+            <div class="px-4 py-3 flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-panel border border-edge flex items-center justify-center flex-shrink-0">
+                <span class="text-dim font-black text-sm">6</span>
+              </div>
+              <div class="w-8 h-10 rounded bg-panel border border-edge-subtle flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 class="text-secondary font-medium text-sm truncate">Elden Ring</h4>
+                  <span class="bg-purple-500/20 text-purple-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-purple-500/30 flex-shrink-0">RPG</span>
+                  <span class="bg-yellow-500/20 text-yellow-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-yellow-500/30 flex-shrink-0">Early Access</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-red-400 text-[11px]">3 own</span>
+                  <span class="text-dim text-[10px]">&middot;</span>
+                  <span class="text-muted text-[11px]">$59.99</span>
+                </div>
+                <div class="mt-1.5 flex items-center gap-2">
+                  <div class="flex-1 h-3 bg-panel rounded overflow-hidden">
+                    <div class="h-full bg-red-500/20 rounded vote-bar-fill" style="width: 6%"></div>
+                  </div>
+                  <span class="text-dim text-xs font-medium w-12 text-right">0 votes</span>
+                </div>
+              </div>
+              <div class="flex-shrink-0 w-7 h-7 rounded-full border-2 border-edge group-hover:border-emerald-500/50 transition-colors"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- VIEW 4: DECIDED — PODIUM                    -->
+    <!-- ============================================ -->
+    <div id="view-decided" class="view-panel hidden">
+
+      <header class="border-b border-edge px-4 py-3">
+        <div class="flex items-center gap-3">
+          <button onclick="showView('games')" class="text-muted hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <h1 class="font-display text-lg font-semibold">Final Results</h1>
+          <span class="bg-emerald-500/20 text-emerald-400 text-xs font-medium px-2.5 py-1 rounded-full border border-emerald-500/30">Decided</span>
+        </div>
+      </header>
+
+      <div class="p-4 space-y-6">
+
+        <!-- Podium layout -->
+        <div class="bg-surface border border-edge rounded-xl overflow-hidden tournament-stripe">
+          <div class="bg-panel/30 border-b border-edge px-4 py-2 text-center">
+            <span class="text-xs text-muted font-semibold uppercase tracking-widest">This Week's Podium</span>
+          </div>
+
+          <div class="p-6">
+            <!-- Podium arrangement: 2nd | 1st (elevated) | 3rd -->
+            <div class="flex items-end justify-center gap-3 mb-6">
+
+              <!-- 2nd Place — Silver -->
+              <div class="flex-1 max-w-[140px] flex flex-col items-center">
+                <div class="w-20 h-26 rounded-xl bg-panel border-2 border-silver/30 overflow-hidden relative mb-2 podium-silver">
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-silver/5"></div>
+                  <div class="absolute bottom-1.5 left-1.5 right-1.5">
+                    <div class="text-[10px] text-foreground font-bold text-center leading-tight">Deep Rock Galactic</div>
+                  </div>
+                </div>
+                <span class="text-silver text-xs font-bold mb-1">4 votes</span>
+                <div class="w-full bg-panel border border-silver/20 rounded-lg pt-3 pb-2 text-center">
+                  <!-- Silver medal -->
+                  <div class="w-8 h-8 rounded-full bg-gradient-to-br from-gray-300 to-gray-500 mx-auto flex items-center justify-center mb-1 shadow-lg">
+                    <span class="text-sm font-black text-gray-800">2</span>
+                  </div>
+                  <span class="text-silver text-[10px] font-semibold uppercase tracking-wider">Silver</span>
+                  <div class="mt-1.5 space-y-0.5 px-2">
+                    <div class="text-[10px] text-emerald-400">10 own</div>
+                    <div class="text-[10px] text-muted">$14.99 <span class="text-emerald-400">(-50%)</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 1st Place — Gold (elevated) -->
+              <div class="flex-1 max-w-[160px] flex flex-col items-center -mt-6">
+                <!-- Crown icon -->
+                <div class="mb-1 crown-glow">
+                  <svg class="w-8 h-8 text-gold" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm0 2h14v2H5v-2z"/>
+                  </svg>
+                </div>
+                <div class="w-24 h-32 rounded-xl bg-panel border-2 border-gold/40 overflow-hidden relative mb-2 podium-gold">
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-gold/10"></div>
+                  <div class="absolute bottom-2 left-2 right-2">
+                    <div class="text-xs text-foreground font-bold text-center leading-tight">Lethal Company</div>
+                  </div>
+                </div>
+                <span class="text-gold text-sm font-bold mb-1">5 votes</span>
+                <div class="w-full bg-panel border border-gold/20 rounded-lg pt-3 pb-2 text-center">
+                  <!-- Gold medal -->
+                  <div class="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-300 to-yellow-600 mx-auto flex items-center justify-center mb-1 shadow-lg">
+                    <span class="text-lg font-black text-yellow-900">1</span>
+                  </div>
+                  <span class="text-gold text-[10px] font-semibold uppercase tracking-wider">Champion</span>
+                  <div class="mt-1.5 space-y-0.5 px-2">
+                    <div class="text-[10px] text-emerald-400">11 of 12 own it</div>
+                    <div class="text-[10px] text-muted">$9.99 for others</div>
+                    <div class="flex gap-1 justify-center mt-1">
+                      <span class="bg-emerald-500/20 text-emerald-400 text-[8px] font-medium px-1.5 py-0.5 rounded-full border border-emerald-500/30">Co-op</span>
+                      <span class="bg-blue-500/20 text-blue-400 text-[8px] font-medium px-1.5 py-0.5 rounded-full border border-blue-500/30">4p</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3rd Place — Bronze -->
+              <div class="flex-1 max-w-[140px] flex flex-col items-center mt-2">
+                <div class="w-20 h-26 rounded-xl bg-panel border-2 border-bronze/30 overflow-hidden relative mb-2 podium-bronze">
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-bronze/5"></div>
+                  <div class="absolute bottom-1.5 left-1.5 right-1.5">
+                    <div class="text-[10px] text-foreground font-bold text-center leading-tight">Phasmophobia</div>
+                  </div>
+                </div>
+                <span class="text-bronze text-xs font-bold mb-1">3 votes</span>
+                <div class="w-full bg-panel border border-bronze/20 rounded-lg pt-3 pb-2 text-center">
+                  <!-- Bronze medal -->
+                  <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-800 mx-auto flex items-center justify-center mb-1 shadow-lg">
+                    <span class="text-sm font-black text-amber-100">3</span>
+                  </div>
+                  <span class="text-bronze text-[10px] font-semibold uppercase tracking-wider">Bronze</span>
+                  <div class="mt-1.5 space-y-0.5 px-2">
+                    <div class="text-[10px] text-emerald-400">9 own</div>
+                    <div class="text-[10px] text-muted">$13.99</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Champion actions -->
+            <div class="flex gap-2">
+              <button class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg px-5 py-2.5 transition-colors flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Create Event
+              </button>
+              <button class="bg-panel hover:bg-overlay text-muted hover:text-foreground text-sm font-medium rounded-lg px-5 py-2.5 border border-edge transition-colors">
+                Share to Discord
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Remaining results -->
+        <div>
+          <h3 class="text-secondary font-semibold text-sm mb-3">Also Ran</h3>
+          <div class="space-y-2">
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center gap-3 opacity-70">
+              <span class="text-dim font-black text-sm w-6 text-center">4</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-secondary text-sm">Valheim</span>
+                  <span class="text-amber-400 text-[10px]">7 own</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-dim/40 rounded-full" style="width: 25%"></div>
+                  </div>
+                  <span class="text-dim text-xs">2 votes</span>
+                </div>
+              </div>
+            </div>
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center gap-3 opacity-70">
+              <span class="text-dim font-black text-sm w-6 text-center">5</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-secondary text-sm">GTFO</span>
+                  <span class="text-amber-400 text-[10px]">5 own</span>
+                  <span class="bg-orange-500/20 text-orange-400 text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-orange-500/30">Carried</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-dim/40 rounded-full" style="width: 12%"></div>
+                  </div>
+                  <span class="text-dim text-xs">1 vote</span>
+                </div>
+              </div>
+            </div>
+            <div class="bg-surface border border-edge rounded-lg p-3 flex items-center gap-3 opacity-50">
+              <span class="text-dim font-black text-sm w-6 text-center">6</span>
+              <div class="w-8 h-10 rounded bg-panel flex-shrink-0"></div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-muted text-sm">Elden Ring</span>
+                  <span class="text-red-400 text-[10px]">3 own</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex-1 h-1.5 bg-panel rounded-full overflow-hidden">
+                    <div class="h-full bg-dim/20 rounded-full" style="width: 0%"></div>
+                  </div>
+                  <span class="text-dim text-xs">0 votes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Carry forward prompt -->
+        <div class="bg-surface border border-edge rounded-xl p-4">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            <div>
+              <h4 class="text-secondary text-sm font-medium">Carry forward to next week?</h4>
+              <p class="text-dim text-xs mt-1">3 unchosen games can be carried to the next lineup round.</p>
+              <div class="flex gap-2 mt-3">
+                <button class="bg-panel hover:bg-overlay text-secondary text-xs font-medium rounded-lg px-3 py-1.5 border border-edge transition-colors">Carry All</button>
+                <button class="text-dim text-xs hover:text-muted transition-colors px-3 py-1.5">Pick Individually</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voting stats -->
+        <div class="bg-surface border border-edge rounded-xl p-4">
+          <h4 class="text-secondary text-sm font-medium mb-3">Match Stats</h4>
+          <div class="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div class="text-xl font-black text-foreground">8</div>
+              <div class="text-[10px] text-muted uppercase tracking-wider">Voters</div>
+            </div>
+            <div>
+              <div class="text-xl font-black text-foreground">6</div>
+              <div class="text-[10px] text-muted uppercase tracking-wider">Contenders</div>
+            </div>
+            <div>
+              <div class="text-xl font-black text-foreground">15</div>
+              <div class="text-[10px] text-muted uppercase tracking-wider">Total Votes</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MOBILE BOTTOM TAB BAR -->
+  <div id="bottom-bar" class="fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur border-t border-edge hidden z-40">
+    <div class="flex justify-around py-2 max-w-md mx-auto">
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <span class="text-[10px] text-muted">Calendar</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <span class="text-[10px] text-muted">Events</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1 border-t-2 border-emerald-500">
+        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span class="text-[10px] text-emerald-400 font-medium">Games</span>
+      </button>
+      <button class="flex flex-col items-center gap-0.5 px-3 py-1">
+        <svg class="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="text-[10px] text-muted">Players</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let isMobile = false;
+
+    function showView(name) {
+      document.querySelectorAll('.view-panel').forEach(el => el.classList.add('hidden'));
+      document.getElementById('view-' + name).classList.remove('hidden');
+      document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.className = el.id === 'tab-' + name
+          ? 'tab-active text-sm font-medium pb-0.5 pt-1 px-1 transition-colors'
+          : 'tab-inactive text-sm font-medium pb-0.5 pt-1 px-1 transition-colors';
+      });
+    }
+
+    function toggleMobile() {
+      isMobile = !isMobile;
+      const container = document.getElementById('app-container');
+      const toggle = document.getElementById('mobile-toggle');
+      const bottomBar = document.getElementById('bottom-bar');
+
+      if (isMobile) {
+        container.className = 'max-w-[390px] mx-auto border-x border-edge min-h-screen transition-all duration-300';
+        toggle.classList.add('active');
+        bottomBar.classList.remove('hidden');
+      } else {
+        container.className = 'max-w-6xl mx-auto transition-all duration-300';
+        toggle.classList.remove('active');
+        bottomBar.classList.add('hidden');
+      }
+    }
+  </script>
+</body>
+</html>

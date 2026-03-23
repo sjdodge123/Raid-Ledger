@@ -6,6 +6,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 let service: EventsService;
 let mockDb: MockDb;
@@ -69,6 +70,13 @@ async function setupEach() {
         useValue: {
           emit: jest.fn(),
           emitAsync: jest.fn().mockResolvedValue([]),
+        },
+      },
+      {
+        provide: ActivityLogService,
+        useValue: {
+          log: jest.fn().mockResolvedValue(undefined),
+          getTimeline: jest.fn().mockResolvedValue({ data: [] }),
         },
       },
     ],

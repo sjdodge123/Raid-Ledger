@@ -14,6 +14,7 @@ import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance
 import { AnalyticsService } from './analytics.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
@@ -136,6 +137,13 @@ describe('EventsController', () => {
       {
         provide: DiscordBotClientService,
         useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
+      },
+      {
+        provide: ActivityLogService,
+        useValue: {
+          log: jest.fn().mockResolvedValue(undefined),
+          getTimeline: jest.fn().mockResolvedValue({ data: [] }),
+        },
       },
     ];
   }

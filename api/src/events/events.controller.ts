@@ -32,10 +32,12 @@ import {
   DashboardResponseDto,
   AggregateGameTimeResponse,
   ShareEventResponseDto,
+  type ActivityTimelineResponseDto,
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 /**
  * Core event CRUD controller.
@@ -49,6 +51,7 @@ export class EventsController {
     private readonly seriesService: EventSeriesService,
     private readonly signupsService: SignupsService,
     private readonly shareService: ShareService,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   @Post()
@@ -102,6 +105,13 @@ export class EventsController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<EventResponseDto> {
     return this.eventsService.findOne(id);
+  }
+
+  @Get(':id/activity')
+  async getActivity(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<ActivityTimelineResponseDto> {
+    return this.activityLog.getTimeline('event', id);
   }
 
   @Get(':id/variant-context')

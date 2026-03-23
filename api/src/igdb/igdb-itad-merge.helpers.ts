@@ -76,6 +76,7 @@ function buildItadBaseFields(itad: ItadSearchGame, boxart: string | null) {
     itadBoxartUrl: boxart,
     itadGameId: itad.id,
     itadTags: itad.tags ?? [],
+    earlyAccess: false,
     firstReleaseDate: parseReleaseDate(itad.releaseDate),
     popularity: null,
   };

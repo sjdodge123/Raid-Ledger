@@ -1,0 +1,354 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import {
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { LineupsService } from './lineups.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+
+const NOW = new Date('2026-03-22T20:00:00Z');
+
+const mockLineup = {
+  id: 1,
+  status: 'building',
+  targetDate: null as Date | null,
+  decidedGameId: null as number | null,
+  linkedEventId: null as number | null,
+  createdBy: 10,
+  votingDeadline: null as Date | null,
+  createdAt: NOW,
+  updatedAt: NOW,
+};
+
+const mockUser = { id: 10, displayName: 'TestUser', username: 'TestUser' };
+
+/**
+ * Build a thenable object that mimics Drizzle's query builder.
+ * Can be awaited directly (resolves to `data`) OR chained further
+ * via .limit(), .groupBy(), .orderBy().
+ */
+function thenable(data: unknown[]) {
+  return {
+    then: (resolve: (v: unknown[]) => void, reject?: (e: unknown) => void) =>
+      Promise.resolve(data).then(resolve, reject),
+    limit: jest.fn().mockImplementation(() => thenable(data)),
+    groupBy: jest.fn().mockImplementation(() => thenable(data)),
+    orderBy: jest.fn().mockImplementation(() => thenable(data)),
+  };
+}
+
+function makeSelectChain(overrides: {
+  whereResult?: unknown[];
+  limitResult?: unknown[];
+  groupByResult?: unknown[];
+}) {
+  const defaultData = overrides.whereResult ?? [];
+  const limitData = overrides.limitResult ?? defaultData;
+  const groupByData = overrides.groupByResult ?? defaultData;
+
+  const where = jest.fn().mockImplementation(() => {
+    const t = thenable(defaultData);
+    t.limit = jest.fn().mockImplementation(() => thenable(limitData));
+    t.groupBy = jest.fn().mockImplementation(() => thenable(groupByData));
+    return t;
+  });
+
+  const innerJoin2 = jest.fn().mockReturnValue({ where });
+  const innerJoin1 = jest
+    .fn()
+    .mockReturnValue({ where, innerJoin: innerJoin2 });
+
+  const fromResult = {
+    then: thenable(defaultData).then,
+    where,
+    innerJoin: innerJoin1,
+    orderBy: jest.fn().mockImplementation(() => thenable(defaultData)),
+    limit: jest.fn().mockImplementation(() => thenable(limitData)),
+    groupBy: jest.fn().mockImplementation(() => thenable(groupByData)),
+  };
+  const from = jest.fn().mockReturnValue(fromResult);
+
+  return { from };
+}
+
+function describeLineupsService() {
+  let service: LineupsService;
+  let mockDb: Record<string, jest.Mock>;
+
+  function setupMockDb() {
+    mockDb = {
+      select: jest.fn(),
+      insert: jest.fn(),
+      update: jest.fn(),
+      transaction: jest
+        .fn()
+        .mockImplementation((fn: (tx: Record<string, jest.Mock>) => unknown) =>
+          fn(mockDb),
+        ),
+    };
+  }
+
+  /** Wire up sequential select() calls with specific return data. */
+  function mockSelects(...chains: ReturnType<typeof makeSelectChain>[]) {
+    chains.forEach((chain) => {
+      mockDb.select.mockReturnValueOnce(chain);
+    });
+  }
+
+  function mockInsert(returnValue: unknown[]) {
+    mockDb.insert.mockReturnValue({
+      values: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue(returnValue),
+      }),
+    });
+  }
+
+  function mockUpdate() {
+    mockDb.update.mockReturnValue({
+      set: jest.fn().mockReturnValue({
+        where: jest.fn().mockResolvedValue(undefined),
+      }),
+    });
+  }
+
+  /** Set up mocks for buildDetailResponse (9-10 sequential selects). */
+  function mockBuildDetail(lineup = mockLineup) {
+    const chains = [
+      // findLineupById
+      makeSelectChain({ limitResult: [lineup] }),
+      // findEntriesWithGames
+      makeSelectChain({ whereResult: [] }),
+      // countVotesPerGame
+      makeSelectChain({ groupByResult: [] }),
+      // countDistinctVoters
+      makeSelectChain({ whereResult: [{ total: 0 }] }),
+      // creator query
+      makeSelectChain({ limitResult: [mockUser] }),
+    ];
+    // decidedGameName query (only when decidedGameId is set)
+    if (lineup.decidedGameId) {
+      chains.push(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
+    }
+    // Enrichment: only countTotalMembers calls DB (others short-circuit on empty gameIds)
+    chains.push(makeSelectChain({ whereResult: [{ count: 10 }] }));
+    mockSelects(...chains);
+  }
+
+  async function createService() {
+    setupMockDb();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LineupsService,
+        { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: ActivityLogService, useValue: { log: jest.fn() } },
+      ],
+    }).compile();
+    service = module.get<LineupsService>(LineupsService);
+  }
+
+  beforeEach(() => createService());
+
+  describe('create', () => {
+    it('should create a lineup when none is active', async () => {
+      // findActiveLineup → empty (no active)
+      mockSelects(makeSelectChain({ limitResult: [] }));
+      mockInsert([{ ...mockLineup, id: 1 }]);
+      mockBuildDetail();
+
+      const result = await service.create({}, 10);
+
+      expect(result.id).toBe(1);
+      expect(result.status).toBe('building');
+      expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it('should throw ConflictException when active lineup exists', async () => {
+      mockSelects(makeSelectChain({ limitResult: [{ id: 99 }] }));
+
+      await expect(service.create({}, 10)).rejects.toThrow(ConflictException);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it('should pass targetDate to insert', async () => {
+      const targetDate = '2026-04-01T00:00:00Z';
+      mockSelects(makeSelectChain({ limitResult: [] }));
+      mockInsert([{ ...mockLineup, targetDate: new Date(targetDate) }]);
+      mockBuildDetail({ ...mockLineup, targetDate: new Date(targetDate) });
+
+      const result = await service.create({ targetDate }, 10);
+
+      expect(result.targetDate).toBe(new Date(targetDate).toISOString());
+    });
+  });
+
+  describe('findActive', () => {
+    it('should return the active lineup', async () => {
+      // findActive select
+      mockSelects(makeSelectChain({ limitResult: [mockLineup] }));
+      // buildDetailResponse
+      mockBuildDetail();
+
+      const result = await service.findActive();
+
+      expect(result.id).toBe(1);
+      expect(result.status).toBe('building');
+    });
+
+    it('should return voting lineup as active', async () => {
+      const votingLineup = { ...mockLineup, status: 'voting' };
+      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+      mockBuildDetail(votingLineup);
+
+      const result = await service.findActive();
+
+      expect(result.status).toBe('voting');
+    });
+
+    it('should throw NotFoundException when no active lineup', async () => {
+      mockSelects(makeSelectChain({ limitResult: [] }));
+
+      await expect(service.findActive()).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findById', () => {
+    it('should return lineup detail', async () => {
+      mockBuildDetail();
+
+      const result = await service.findById(1);
+
+      expect(result.id).toBe(1);
+      expect(result.entries).toEqual([]);
+      expect(result.totalVoters).toBe(0);
+      expect(result.createdBy.displayName).toBe('TestUser');
+    });
+
+    it('should throw NotFoundException for missing lineup', async () => {
+      mockSelects(makeSelectChain({ limitResult: [] }));
+
+      await expect(service.findById(999)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('transitionStatus', () => {
+    it('should transition building → voting', async () => {
+      // findLineupById for transition check
+      mockSelects(makeSelectChain({ limitResult: [mockLineup] }));
+      mockUpdate();
+      mockBuildDetail({ ...mockLineup, status: 'voting' });
+
+      const result = await service.transitionStatus(1, { status: 'voting' });
+
+      expect(result.status).toBe('voting');
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    it('should set votingDeadline on building → voting', async () => {
+      const deadline = '2026-04-01T00:00:00Z';
+      mockSelects(makeSelectChain({ limitResult: [mockLineup] }));
+      mockUpdate();
+      mockBuildDetail({
+        ...mockLineup,
+        status: 'voting',
+        votingDeadline: new Date(deadline),
+      });
+
+      const result = await service.transitionStatus(1, {
+        status: 'voting',
+        votingDeadline: deadline,
+      });
+
+      expect(result.votingDeadline).toBe(new Date(deadline).toISOString());
+    });
+
+    it('should transition voting → decided with decidedGameId', async () => {
+      const votingLineup = { ...mockLineup, status: 'voting' };
+      // findLineupById
+      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+      // validateDecidedGame — entry with gameId 5
+      mockSelects(makeSelectChain({ whereResult: [{ gameId: 5 }] }));
+      mockUpdate();
+      // findGameName for activity log
+      mockSelects(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
+      mockBuildDetail({ ...votingLineup, status: 'decided', decidedGameId: 5 });
+
+      const result = await service.transitionStatus(1, {
+        status: 'decided',
+        decidedGameId: 5,
+      });
+
+      expect(result.status).toBe('decided');
+    });
+
+    it('should transition decided → archived', async () => {
+      const decidedLineup = { ...mockLineup, status: 'decided' };
+      mockSelects(makeSelectChain({ limitResult: [decidedLineup] }));
+      mockUpdate();
+      mockBuildDetail({ ...decidedLineup, status: 'archived' });
+
+      const result = await service.transitionStatus(1, { status: 'archived' });
+
+      expect(result.status).toBe('archived');
+    });
+
+    it('should throw BadRequestException for invalid transition', async () => {
+      // building → decided (skipping voting)
+      mockSelects(makeSelectChain({ limitResult: [mockLineup] }));
+
+      await expect(
+        service.transitionStatus(1, { status: 'decided', decidedGameId: 5 }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for backward transition', async () => {
+      const votingLineup = { ...mockLineup, status: 'voting' };
+      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+
+      await expect(
+        service.transitionStatus(1, { status: 'building' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for archived → anything', async () => {
+      const archivedLineup = { ...mockLineup, status: 'archived' };
+      mockSelects(makeSelectChain({ limitResult: [archivedLineup] }));
+
+      await expect(
+        service.transitionStatus(1, { status: 'building' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should require decidedGameId for voting → decided', async () => {
+      const votingLineup = { ...mockLineup, status: 'voting' };
+      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+
+      await expect(
+        service.transitionStatus(1, { status: 'decided' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if decidedGameId not in entries', async () => {
+      const votingLineup = { ...mockLineup, status: 'voting' };
+      // findLineupById
+      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+      // validateDecidedGame — no entries
+      mockSelects(makeSelectChain({ whereResult: [] }));
+
+      await expect(
+        service.transitionStatus(1, { status: 'decided', decidedGameId: 999 }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException for missing lineup', async () => {
+      mockSelects(makeSelectChain({ limitResult: [] }));
+
+      await expect(
+        service.transitionStatus(999, { status: 'voting' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+}
+
+describe('LineupsService', describeLineupsService);

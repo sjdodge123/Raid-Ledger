@@ -76,8 +76,8 @@ Requirements Interview (plan mode, if spec incomplete) → Enriched spec on disk
 
 **Eight gates before PR:**
 1. **Requirements** — spec completeness interview in plan mode (skipped if spec already complete)
-2. **E2E Test First (TDD)** — test agent writes failing Playwright/Discord/integration test BEFORE dev starts (skipped for light)
-3. **Dev** — implements feature to make the failing test pass
+2. **E2E Test First (TDD)** — test agent writes failing test BEFORE dev starts. **MANDATORY for standard/full scope — NEVER skipped.** N/A for light scope only. Dev agent CANNOT be spawned until this gate is PASS. See step-2-implement.md §2d.
+3. **Dev** — implements feature to make the failing test pass. Output MUST include TDD test runner proof.
 4. **CI** — build + type check + lint + tests
 5. **Operator** — manual testing approval via Linear
 6. **Reviewer** — code review after operator approves
@@ -165,9 +165,9 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 
 | Agent | Template | When | Model | Lifetime |
 |-------|----------|------|-------|----------|
-| E2E Test Agent | `templates/test-agent.md` | Step 2d (BEFORE dev — writes failing test) | sonnet | Per-story |
+| E2E Test Agent | `templates/test-agent.md` | Step 2d (BEFORE dev — writes failing test) | opus | Per-story |
 | Dev | `templates/dev.md` | Step 2e (builds to make test pass) | opus | Per-story |
-| Reviewer | `templates/reviewer.md` | Step 4 (after operator approves) | sonnet | Per-story |
+| Reviewer | `templates/reviewer.md` | Step 4 (after operator approves) | opus | Per-story |
 | Architect | `templates/architect.md` | Step 2 pre-dev / Step 4 post-review (one-shot) | opus | One-shot |
 | Planner | `templates/planner.md` | Step 2 pre-dev (full scope only, one-shot) | opus | One-shot |
 | Wiki Updater | `templates/wiki-updater.md` | Step 5i (after tech debt, feat: stories only) | — | One-shot |

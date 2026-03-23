@@ -31,9 +31,11 @@ test.describe('Regression: ROK-811 — games page mobile card spacing', () => {
         // Look for carousel row headings on mobile (h2 elements inside the discover view)
         const carouselHeadings = page.locator('h2');
         if (await carouselHeadings.first().isVisible({ timeout: 5_000 }).catch(() => false)) {
-            // Game cards within the first carousel row should be visible
+            // Game cards within the first carousel row — scroll past banner if needed
             const gameCards = page.locator('a[href*="/games/"]');
-            await expect(gameCards.first()).toBeVisible({ timeout: 5_000 });
+            await expect(gameCards.first()).toBeAttached({ timeout: 5_000 });
+            await gameCards.first().scrollIntoViewIfNeeded();
+            await expect(gameCards.first()).toBeVisible({ timeout: 3_000 });
         }
 
         await context.close();
