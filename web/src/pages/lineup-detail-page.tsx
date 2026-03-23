@@ -35,6 +35,10 @@ export function LineupDetailPage(): JSX.Element {
     <div className="max-w-4xl mx-auto px-4 py-4">
       <LineupDetailHeader lineup={lineup} />
 
+      <div className="mt-3 mb-4">
+        <LineupProgressBar lineup={lineup} />
+      </div>
+
       <ActivityTimeline
         entityType="lineup"
         entityId={lineup.id}
@@ -47,10 +51,6 @@ export function LineupDetailPage(): JSX.Element {
           <CommonGroundPanel lineupId={lineup.id} />
         </div>
       )}
-
-      <div className="mt-4">
-        <LineupProgressBar lineup={lineup} />
-      </div>
 
       {hasEntries ? (
         <NominationGrid entries={lineup.entries} lineupId={lineup.id} />

@@ -1,40 +1,96 @@
 import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
-import type { LineupDetailResponseDto } from '@raid-ledger/contract';
+import type { LineupDetailResponseDto, LineupStatusDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 
 interface Props {
   lineup: LineupDetailResponseDto;
 }
 
-const MAX_NOMINATIONS = 20;
+const PHASES: LineupStatusDto[] = ['building', 'voting', 'decided', 'archived'];
+const PHASE_LABELS: Record<LineupStatusDto, string> = {
+  building: 'Nominating',
+  voting: 'Voting',
+  decided: 'Decided',
+  archived: 'Archived',
+};
 
-function uniqueNominators(entries: LineupDetailResponseDto['entries']): number {
-  return new Set(entries.map((e) => e.nominatedBy.id)).size;
+function phaseIndex(status: string): number {
+  return PHASES.indexOf(status as LineupStatusDto);
+}
+
+function PhaseSteps({ status }: { status: string }): JSX.Element {
+  const current = phaseIndex(status);
+  return (
+    <div className="flex items-center gap-1">
+      {PHASES.map((phase, i) => (
+        <div key={phase} className="flex items-center gap-1">
+          <div
+            className={`h-1.5 rounded-full transition-all ${
+              i <= current ? 'bg-emerald-500 w-12' : 'bg-panel border border-edge w-12'
+            }`}
+          />
+          {i < PHASES.length - 1 && <div className="w-1" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BuildingInfo({ lineup }: Props): JSX.Element {
+  const { user } = useAuth();
+  const count = lineup.entries.length;
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-dim">
+        {count} / 20 nominated
+      </span>
+      {user && isOperatorOrAdmin(user) && (
+        <span className="text-xs text-emerald-400 font-medium cursor-pointer hover:underline">
+          Start Voting →
+        </span>
+      )}
+    </div>
+  );
+}
+
+function VotingInfo({ lineup }: Props): JSX.Element {
+  const total = lineup.totalMembers ?? 0;
+  return (
+    <span className="text-xs text-dim">
+      {lineup.totalVoters} of {total} members voted
+    </span>
+  );
+}
+
+function DecidedInfo({ lineup }: Props): JSX.Element {
+  return (
+    <span className="text-xs text-dim">
+      Winner: {lineup.decidedGameName ?? 'TBD'}
+    </span>
+  );
 }
 
 export function LineupProgressBar({ lineup }: Props): JSX.Element {
-  const { user } = useAuth();
-  const count = lineup.entries.length;
-  const pct = Math.min((count / MAX_NOMINATIONS) * 100, 100);
-  const nominators = uniqueNominators(lineup.entries);
+  const current = phaseIndex(lineup.status);
+  const label = PHASE_LABELS[lineup.status as LineupStatusDto] ?? lineup.status;
 
   return (
-    <div className="rounded-lg border border-edge bg-surface p-3 mb-5">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-sm text-secondary font-medium">Nominations</span>
-        <span className="text-sm text-muted">{count} / {MAX_NOMINATIONS} max</span>
+    <div className="rounded-lg border border-edge bg-surface p-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm text-secondary font-medium">{label}</span>
+        <span className="text-[11px] text-dim">
+          {PHASES.map((p, i) => (
+            <span key={p} className={i === current ? 'text-emerald-400 font-medium' : ''}>
+              {i > 0 && ' → '}{PHASE_LABELS[p]}
+            </span>
+          ))}
+        </span>
       </div>
-      <div className="w-full h-1.5 rounded-full bg-panel border border-edge overflow-hidden">
-        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="flex items-center justify-between mt-1.5">
-        <span className="text-xs text-dim">{nominators} member{nominators !== 1 ? 's' : ''} {nominators === 1 ? 'has' : 'have'} nominated</span>
-        {lineup.status === 'building' && user && isOperatorOrAdmin(user) && (
-          <Link to="#" className="text-xs text-emerald-400 font-medium hover:underline">
-            Start Voting →
-          </Link>
-        )}
+      <PhaseSteps status={lineup.status} />
+      <div className="mt-2">
+        {lineup.status === 'building' && <BuildingInfo lineup={lineup} />}
+        {lineup.status === 'voting' && <VotingInfo lineup={lineup} />}
+        {lineup.status === 'decided' && <DecidedInfo lineup={lineup} />}
       </div>
     </div>
   );
