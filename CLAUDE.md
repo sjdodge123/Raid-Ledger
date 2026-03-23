@@ -81,9 +81,33 @@ Three custom MCP servers provide tools for environment management, story trackin
 - **Read `TESTING.md` before writing or modifying any test file.**
 - Shared test infra: `api/src/common/testing/` (drizzle-mock, factories), `web/src/test/` (MSW handlers, render helpers, factories)
 
+### Smoke Test Verification (STRICT — learned from ROK-935 incident)
+
+**CI runs BOTH desktop AND mobile Playwright projects.** Local verification MUST match CI:
+
+```bash
+# WRONG — only tests desktop, mobile failures will surprise you in CI
+npx playwright test --project=desktop
+
+# RIGHT — tests both projects, matches CI exactly
+npx playwright test
+```
+
+**Before pushing ANY branch with UI changes:**
+1. Run `npx playwright test` (both projects) locally — not `--project=desktop`
+2. If any test fails, fix it BEFORE pushing — do NOT use CI as a debugger
+3. New components on shared pages (layout, nav, Games page) break selectors in OTHER test files — run the FULL suite, not just your feature's tests
+
+**When smoke tests fail in CI:**
+1. Check the ACTUAL error message — is it "element not found", "strict mode", or "timeout"?
+2. "Element not found" = the selector is wrong or the UI differs in CI (missing data, unconfigured services)
+3. "Strict mode" = selector matches 2+ elements (new DOM from your changes collided with existing selectors)
+4. "Timeout" with correct selector = CI runner is slow, increase timeout or add retry
+5. **NEVER re-run CI hoping it passes** — investigate the failure first
+
 ### Test Failure Rules (STRICT — applies to ALL agents)
 
-- **NEVER dismiss test failures as "pre-existing" or "unrelated to this change."** Every test failure must be investigated and either fixed or tracked in a Linear story with root cause.
+- **NEVER dismiss test failures as "pre-existing" or "unrelated to this change."** Every test failure must be investigated and either fixed or tracked in a Linear story with root cause. This rule was violated during ROK-935 and cost 6 hours — it exists for a reason.
 - **NEVER use `sleep()` in smoke tests.** Use deterministic wait helpers (`waitForEmbedUpdate`, `pollForCondition`, etc.).
 - **NEVER skip or weaken a test assertion to make CI pass.** Fix the code or fix the test infrastructure.
 - **Every feature/fix MUST include an end-to-end test:**
