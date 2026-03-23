@@ -18,6 +18,7 @@ import {
   executeBulkPricingUpdate,
 } from './itad-price-sync.service';
 import { ItadPriceService } from './itad-price.service';
+import { ItadService } from './itad.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
@@ -58,11 +59,13 @@ describe('ItadPriceSyncService — adversarial', () => {
   let service: ItadPriceSyncService;
   let mockDb: MockDb;
   let mockItadPriceService: { getOverviewBatch: jest.Mock };
+  let mockItadService: { getGameInfo: jest.Mock };
   let mockCronJobService: { executeWithTracking: jest.Mock };
 
   beforeEach(async () => {
     mockDb = createDrizzleMock();
     mockItadPriceService = { getOverviewBatch: jest.fn() };
+    mockItadService = { getGameInfo: jest.fn().mockResolvedValue(null) };
     mockCronJobService = {
       executeWithTracking: jest
         .fn()
@@ -74,6 +77,7 @@ describe('ItadPriceSyncService — adversarial', () => {
         ItadPriceSyncService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: ItadPriceService, useValue: mockItadPriceService },
+        { provide: ItadService, useValue: mockItadService },
         { provide: CronJobService, useValue: mockCronJobService },
       ],
     }).compile();

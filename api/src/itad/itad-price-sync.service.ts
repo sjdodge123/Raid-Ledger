@@ -14,8 +14,10 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { ItadPriceService } from './itad-price.service';
+import { ItadService } from './itad.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import type { ItadOverviewGameEntry } from './itad-price.types';
+import { enrichChunkEarlyAccess } from './itad-early-access-sync.helpers';
 
 /** Number of games to fetch from ITAD per batch request. */
 export const CHUNK_SIZE = 50;
@@ -121,6 +123,7 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly itadPriceService: ItadPriceService,
+    private readonly itadService: ItadService,
     private readonly cronJobService: CronJobService,
   ) {}
 
@@ -168,6 +171,8 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
       this.logger.log(`Cleared stale pricing for ${cleared} games`);
     }
     this.logSyncSummary(succeeded, failed, games.length);
+
+    await this.syncEarlyAccess(games);
   }
 
   /** Query all games that have an itadGameId. */
@@ -256,6 +261,22 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
       this.logger.warn(msg);
     } else {
       this.logger.log(msg);
+    }
+  }
+
+  /**
+   * Enrich games with earlyAccess status from ITAD game info.
+   * Runs after pricing sync. Results are Redis-cached via ItadService.
+   */
+  private async syncEarlyAccess(
+    games: { id: number; itadGameId: string }[],
+  ): Promise<void> {
+    let updated = 0;
+    for (const chunk of this.chunkArray(games, CHUNK_SIZE)) {
+      updated += await enrichChunkEarlyAccess(this.db, this.itadService, chunk);
+    }
+    if (updated > 0) {
+      this.logger.log(`Updated earlyAccess for ${updated} games`);
     }
   }
 
