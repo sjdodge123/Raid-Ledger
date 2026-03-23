@@ -91,7 +91,7 @@ function buildItadUpdateSet(game: GameDetailDto) {
     itadGameId: game.itadGameId,
     itadBoxartUrl: game.itadBoxartUrl,
     itadTags: game.itadTags,
-    earlyAccess: game.earlyAccess ?? false,
+    earlyAccess: game.earlyAccess ?? sql`${schema.games.earlyAccess}`,
     cachedAt: new Date(),
   };
 }
