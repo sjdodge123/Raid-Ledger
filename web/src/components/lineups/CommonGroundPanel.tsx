@@ -171,7 +171,7 @@ function filterBySearch(
 /** Main Common Ground panel. */
 export function CommonGroundPanel(): JSX.Element | null {
     const { data: lineup } = useActiveLineup();
-    const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 2 });
+    const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0 });
     const [search, setSearch] = useState('');
     const hasBuilding = lineup?.status === 'building';
     const debouncedFilters = useDebouncedValue(filters, 300);
