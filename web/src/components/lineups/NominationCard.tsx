@@ -3,6 +3,7 @@
  * Matches the Figma "Lineup Detail" card layout.
  */
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 
@@ -53,10 +54,10 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
                 </span>
             )}
 
-            {/* Game title overlaid at bottom of cover */}
-            <h3 className="absolute bottom-2 left-2.5 right-2.5 text-sm font-semibold text-white truncate">
+            {/* Game title overlaid at bottom of cover, links to game page */}
+            <Link to={`/games/${entry.gameId}`} className="absolute bottom-2 left-2.5 right-2.5 text-sm font-semibold text-white truncate hover:underline">
                 {entry.gameName}
-            </h3>
+            </Link>
         </div>
     );
 }
