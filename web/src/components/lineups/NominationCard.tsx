@@ -26,9 +26,9 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
     const onSale = (entry.itadCurrentCut ?? 0) > 0;
 
     return (
-        <div className="relative h-28 overflow-hidden">
+        <div className="relative h-48 overflow-hidden">
             {entry.gameCoverUrl ? (
-                <img src={entry.gameCoverUrl} alt="" className="w-full h-full object-cover object-top" />
+                <img src={entry.gameCoverUrl} alt="" className="w-full h-full object-cover" />
             ) : (
                 <div className="w-full h-full bg-zinc-800" />
             )}
