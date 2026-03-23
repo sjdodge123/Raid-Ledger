@@ -160,6 +160,7 @@ export function NominateModal({ isOpen, onClose, lineupId }: NominateModalProps)
                 />
             ) : (
                 <>
+                    <p className="text-xs text-dim mb-3">Search by name or paste a Steam store URL</p>
                     <SearchInput value={query} onChange={setQuery} />
                     {searchLoading && <p className="text-sm text-muted py-4 text-center">Searching...</p>}
                     {results.length > 0 && <SearchResults results={results} onSelect={handleSelect} />}
