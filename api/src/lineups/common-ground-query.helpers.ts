@@ -99,12 +99,12 @@ function buildWhereConditions(
 
   if (filters.maxPlayers != null) {
     // Show games that SUPPORT this many players: min <= N <= max
-    // Games with null player_count are included (unknown = assumed compatible)
+    // Excludes games with unknown player count when filter is active
     conditions.push(
-      sql`(g.player_count IS NULL OR (
+      sql`(g.player_count IS NOT NULL AND
         (g.player_count->>'min')::int <= ${filters.maxPlayers}
         AND (g.player_count->>'max')::int >= ${filters.maxPlayers}
-      ))`,
+      )`,
     );
   }
 
