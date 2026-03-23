@@ -40,12 +40,22 @@ Implement this story from the spec below.
 - Test files (`*.spec.ts`, `*.test.tsx`) have a relaxed **750-line** file limit (not 300).
 - If you find yourself approaching 300 lines in a file or 30 lines in a function, stop and split.
 
+### TDD Test File
+**A failing test exists at `<TEST_FILE>`.** Your PRIMARY job is to make this test pass. The test defines "done" — do not consider the story complete until this test passes.
+
 ### Workflow
 1. You are already on branch `rok-<num>-<short-name>` in your worktree
-2. Implement all acceptance criteria (or address all rework feedback)
-3. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.json`
-4. Run `npm run lint -w api` and/or `npm run lint -w web` — fix any issues in files you touched
-5. **AC Verification (MANDATORY — do NOT skip):** Before committing, re-read every AC in the spec and trace each one through the actual code you wrote:
+2. **Read the failing test first** — understand what it asserts before writing any code
+3. Implement all acceptance criteria (or address all rework feedback)
+4. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.json`
+5. Run `npm run lint -w api` and/or `npm run lint -w web` — fix any issues in files you touched
+6. **Run the TDD test and confirm it PASSES** (MANDATORY — do NOT skip):
+   - Playwright: `npx playwright test <TEST_FILE>`
+   - Discord smoke: `cd tools/test-bot && npm run smoke`
+   - Integration: `npm run test -w api -- --testPathPattern=<TEST_FILE>`
+   - Unit: `npm run test -w api -- --testPathPattern=<TEST_FILE>` or `npm run test -w web -- <TEST_FILE>`
+   - **If the test still fails, fix your implementation until it passes. Do NOT commit with a failing TDD test.**
+7. **AC Verification (MANDATORY — do NOT skip):** Before committing, re-read every AC in the spec and trace each one through the actual code you wrote:
    - **Backend ACs:** Trace the full path: controller `@Query` param → service method signature → query helper WHERE clause. Confirm the param is actually passed at every layer, not just declared.
    - **Frontend ACs:** Confirm every UI element mentioned in the spec actually exists in the rendered component tree. Read the final JSX output and check that each filter/input/button is present.
    - **Cross-layer ACs:** For each filter/feature, verify: (a) the frontend sends the param, (b) the API reads it, (c) the service passes it through, (d) the query applies it. A break at ANY layer means the AC fails.
@@ -57,9 +67,17 @@ Implement this story from the spec below.
 
 ### Output Format (MANDATORY)
 
-Your output MUST include this AC trace table. The Lead uses it to verify your work.
+Your output MUST include both the TDD test proof AND the AC trace table. The Lead uses these to verify your work.
 
 ```
+## TDD Test Result (MANDATORY)
+
+Test file: <TEST_FILE>
+Command: <exact command used to run the test>
+Result: PASS — all N tests green
+
+<paste the actual test runner output showing the test passes>
+
 ## AC Verification Trace
 
 | AC | Frontend | API | Service | Query | Status |
@@ -73,6 +91,8 @@ Your output MUST include this AC trace table. The Lead uses it to verify your wo
 ## Summary
 <what was done>
 ```
+
+**CRITICAL:** If the TDD Test Result is missing or shows FAIL, the Lead will reject your output and re-spawn you. Do NOT commit without a passing TDD test.
 
 If any AC has Status = FAIL, you MUST fix it before outputting. A FAIL in the trace table means you are reporting incomplete work.
 

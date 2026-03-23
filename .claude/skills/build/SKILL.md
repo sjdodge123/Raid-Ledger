@@ -76,8 +76,8 @@ Requirements Interview (plan mode, if spec incomplete) → Enriched spec on disk
 
 **Eight gates before PR:**
 1. **Requirements** — spec completeness interview in plan mode (skipped if spec already complete)
-2. **E2E Test First (TDD)** — test agent writes failing Playwright/Discord/integration test BEFORE dev starts (skipped for light)
-3. **Dev** — implements feature to make the failing test pass
+2. **E2E Test First (TDD)** — test agent writes failing test BEFORE dev starts. **MANDATORY for standard/full scope — NEVER skipped.** N/A for light scope only. Dev agent CANNOT be spawned until this gate is PASS. See step-2-implement.md §2d.
+3. **Dev** — implements feature to make the failing test pass. Output MUST include TDD test runner proof.
 4. **CI** — build + type check + lint + tests
 5. **Operator** — manual testing approval via Linear
 6. **Reviewer** — code review after operator approves
