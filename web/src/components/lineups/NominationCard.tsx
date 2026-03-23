@@ -54,10 +54,10 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
                 </span>
             )}
 
-            {/* Game title overlaid at bottom of cover, links to game page */}
-            <Link to={`/games/${entry.gameId}`} className="absolute bottom-2 left-2.5 right-2.5 text-sm font-semibold text-white truncate hover:underline">
+            {/* Game title overlaid at bottom of cover */}
+            <h3 className="absolute bottom-2 left-2.5 right-2.5 text-sm font-semibold text-white truncate">
                 {entry.gameName}
-            </Link>
+            </h3>
         </div>
     );
 }
@@ -92,7 +92,7 @@ function CardBody({ entry, canRemove, onRemove }: {
                 <p className="text-[10px] text-dim italic mt-1 line-clamp-2">&ldquo;{entry.note}&rdquo;</p>
             )}
             {canRemove && (
-                <button type="button" onClick={() => onRemove(entry.gameId)}
+                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(entry.gameId); }}
                     className="text-[10px] text-red-400/60 hover:text-red-400 mt-1 transition-colors"
                 >Remove</button>
             )}
@@ -106,9 +106,9 @@ export function NominationCard({ entry, onRemove }: NominationCardProps): JSX.El
     const canRemove = user?.id === entry.nominatedBy.id || isOperatorOrAdmin(user);
 
     return (
-        <div className="rounded-xl bg-surface border border-edge overflow-hidden hover:border-edge/80 transition-colors">
+        <Link to={`/games/${entry.gameId}`} className="block rounded-xl bg-surface border border-edge overflow-hidden hover:border-edge/80 transition-colors">
             <CardCover entry={entry} />
             <CardBody entry={entry} canRemove={canRemove} onRemove={onRemove} />
-        </div>
+        </Link>
     );
 }
