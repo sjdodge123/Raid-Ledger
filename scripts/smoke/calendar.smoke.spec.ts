@@ -76,7 +76,7 @@ test.describe('Calendar — mobile', () => {
     test('bottom nav has Calendar and Events links', async ({ page }) => {
         await page.goto('/calendar');
         // The bottom navigation bar provides mobile navigation.
-        const nav = page.locator('nav[aria-label="Main navigation"]');
+        const nav = page.locator('nav[aria-label="Main navigation"]').last();
         await expect(nav).toBeVisible({ timeout: 15_000 });
         await expect(nav.getByRole('link', { name: 'Calendar' })).toBeVisible();
         await expect(nav.getByRole('link', { name: 'Events' })).toBeVisible();
@@ -84,18 +84,16 @@ test.describe('Calendar — mobile', () => {
 
     test('seeded events appear on calendar', async ({ page }) => {
         await page.goto('/calendar');
-        // On mobile, calendar events render as buttons (not anchor links).
-        // Each event button contains the event title text.
-        const calendarEvents = page.locator('.rbc-event');
-        await expect(calendarEvents.first()).toBeVisible({ timeout: 10_000 });
-        const count = await calendarEvents.count();
-        expect(count).toBeGreaterThan(0);
+        // Mobile uses Schedule view (list) not the rbc-event grid.
+        // Look for event cards with "smoke-" prefix from seeded data.
+        const eventItem = page.locator('text=/smoke-/').first();
+        await expect(eventItem).toBeVisible({ timeout: 15_000 });
     });
 
     test('game filter opens dialog when games exist', async ({ page }) => {
         await page.goto('/calendar');
-        // Wait for calendar grid to load (no heading on mobile).
-        await expect(page.locator('.rbc-header').first()).toBeVisible({ timeout: 15_000 });
+        // Wait for schedule view to load on mobile.
+        await expect(page.getByRole('button', { name: 'Schedule', exact: true })).toBeVisible({ timeout: 15_000 });
 
         // Soft check: filter button may not exist without IGDB seed data (CI).
         const filterBtn = page.getByRole('button', { name: /filter by game/i });

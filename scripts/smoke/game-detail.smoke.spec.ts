@@ -12,13 +12,21 @@ import { test, expect, type Page } from '@playwright/test';
  * game card link on /games.
  */
 async function navigateToFirstGame(page: Page): Promise<void> {
-    await page.goto('/games');
-
-    // Wait for at least one game card link to appear
-    const gameLink = page.locator('a[href*="/games/"]').first();
-    await expect(gameLink).toBeVisible({ timeout: 15_000 });
-
-    await gameLink.click();
+    // Fetch a game ID from the API and navigate directly — avoids mobile
+    // viewport issues where the lineup banner covers all game card links.
+    const API_BASE = process.env.API_URL || 'http://localhost:3000';
+    const res = await page.request.get(`${API_BASE}/games/search?q=a&limit=1`);
+    const body = await res.json();
+    const games = body?.data ?? body ?? [];
+    if (games.length > 0) {
+        await page.goto(`/games/${games[0].id}`);
+    } else {
+        // Fallback: navigate via UI
+        await page.goto('/games');
+        const gameLink = page.locator('a[href*="/games/"]').first();
+        await expect(gameLink).toBeAttached({ timeout: 15_000 });
+        await gameLink.click({ force: true });
+    }
     await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
 }
 

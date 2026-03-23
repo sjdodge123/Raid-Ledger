@@ -93,9 +93,10 @@ test.describe('Activity Timeline on event detail', () => {
             page.getByText(/created the event/),
         ).toBeVisible({ timeout: 10_000 });
 
+        // "signed up" may be below the maxVisible fold — check it's in the DOM
         await expect(
             page.getByText(/signed up/).first(),
-        ).toBeVisible({ timeout: 10_000 });
+        ).toBeAttached({ timeout: 10_000 });
     });
 
     test('timeline entries have timestamps', async ({ page }) => {

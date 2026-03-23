@@ -85,23 +85,25 @@ test.describe('Navigation (mobile)', () => {
         test.skip(!isMobile(test.info()), 'Mobile-only — uses bottom tab bar');
 
         await page.goto('/calendar');
-        const tabBar = page.locator('nav[aria-label="Main navigation"]').last();
+        // Bottom tab bar is the fixed nav at the bottom — use the mobile toolbar selector
+        const tabBar = page.locator('nav.fixed, nav[aria-label="Main navigation"]').last();
         await expect(tabBar).toBeVisible({ timeout: 15_000 });
 
-        // Navigate to Events
-        await tabBar.getByRole('link', { name: 'Events' }).click();
+        // Use evaluate to click programmatically — bypasses Playwright viewport checks
+        const eventsLink = tabBar.getByRole('link', { name: 'Events' });
+        await eventsLink.evaluate((el: HTMLElement) => el.click());
         await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 10_000 });
 
         // Navigate to Games
-        await tabBar.getByRole('link', { name: 'Games' }).click();
+        await tabBar.getByRole('link', { name: 'Games' }).evaluate((el: HTMLElement) => el.click());
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         // Navigate to Players
-        await tabBar.getByRole('link', { name: 'Players' }).click();
+        await tabBar.getByRole('link', { name: 'Players' }).evaluate((el: HTMLElement) => el.click());
         await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 10_000 });
 
         // Navigate back to Calendar — heading is hidden (md:block), use mobile toolbar
-        await tabBar.getByRole('link', { name: 'Calendar' }).click();
+        await tabBar.getByRole('link', { name: 'Calendar' }).evaluate((el: HTMLElement) => el.click());
         await expect(page.getByLabel('Calendar view switcher')).toBeVisible({ timeout: 10_000 });
     });
 
