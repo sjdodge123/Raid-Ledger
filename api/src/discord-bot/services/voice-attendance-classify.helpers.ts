@@ -229,6 +229,15 @@ async function setAttendanceStatus(
     );
 }
 
+/** Compute event duration in whole seconds from the event's time range. */
+export function getEventDurationSec(
+  event: typeof schema.events.$inferSelect,
+): number {
+  return Math.floor(
+    (event.duration[1].getTime() - event.duration[0].getTime()) / 1000,
+  );
+}
+
 /** Full classify pipeline for a single event. */
 export async function classifyEventSessions(
   db: Db,
@@ -239,9 +248,7 @@ export async function classifyEventSessions(
 ): Promise<void> {
   const event = eventData ?? (await flushH.fetchEvent(db, eventId));
   if (!event) return;
-  const sec = Math.floor(
-    (event.duration[1].getTime() - event.duration[0].getTime()) / 1000,
-  );
+  const sec = getEventDurationSec(event);
   if (sec <= 0) return;
   const { sessions, orphanCount } = await loadAndFilterSessions(db, eventId);
   if (orphanCount > 0) {

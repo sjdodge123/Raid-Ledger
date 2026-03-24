@@ -29,13 +29,7 @@ export function channelForTest(
     return { channelId: ctx.defaultChannelId };
   }
   const slot = ctx.channelPool[index % ctx.channelPool.length];
-  const result: { channelId: string; gameId?: number } = {
-    channelId: slot.channelId,
-  };
-  if ('gameId' in slot && slot.gameId !== undefined) {
-    result.gameId = slot.gameId;
-  }
-  return result;
+  return { channelId: slot.channelId, gameId: slot.gameId };
 }
 
 /**

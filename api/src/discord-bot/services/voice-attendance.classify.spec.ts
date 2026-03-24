@@ -58,7 +58,7 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
       expect(result).toBe('no_show');
     });
 
-    it('does NOT classify as no_show at exactly 120 seconds', () => {
+    it('classifies no_show at exactly 120 seconds on a 2h event (< 20% presence)', () => {
       const { start, end, durationSec, graceMs } = eventWindow(2);
 
       const result = classifyVoiceSession(
@@ -73,9 +73,8 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
         graceMs,
       );
 
-      // 120s on a 2h event = ~1.67% presence, which is < 20%, so partial fallback
-      // but more importantly: it's NOT no_show
-      expect(result).not.toBe('no_show');
+      // 120s on a 2h event = ~1.67% presence, which is < 20% → no_show fallback
+      expect(result).toBe('no_show');
     });
   });
 
@@ -140,11 +139,9 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
       expect(result).toBe('no_show');
     });
 
-    it('classifies partial (not late) when joined late but presence is low (just above no_show, below 20%)', () => {
-      // This tests a gap: if someone joins late with 2-19% presence — they have
+    it('classifies no_show (not late) when joined late but presence is below 20%', () => {
       // >= 120s duration but < 20% presence. The late check requires >= 0.2,
-      // so they fall through to the partial/full checks. With < 20% they should
-      // hit the fallback 'partial' return at the end.
+      // so they fall through. With < 20% they hit the no_show fallback.
       const { start, end, durationSec, graceMs } = eventWindow(2);
 
       // 5% presence on 2h event = 360s (> 120s threshold), joined 10min late
@@ -160,9 +157,8 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
         graceMs,
       );
 
-      // Joined late AND < 20% presence → NOT classified as 'late'
-      // Falls through to partial (< 20% presence but > 0 → fallback partial)
       expect(result).not.toBe('late');
+      expect(result).toBe('no_show');
     });
   });
 
@@ -247,14 +243,10 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
     });
   });
 
-  describe('partial at exactly 20% boundary (lower boundary)', () => {
-    it('classifies partial at exactly 1 second below 20% boundary (just above no_show)', () => {
-      // At exactly 19.99%, presence < 0.2 so it falls to the fallback partial
-      // The logic returns 'partial' as fallback for < 20%
+  describe('sub-20% presence boundary (>= 120s but < 20%)', () => {
+    it('classifies no_show at exactly 1 second below 20% boundary', () => {
+      // At exactly 19.99%, presence < 0.2 — not meaningful attendance
       const { start, end, durationSec, graceMs } = eventWindow(2);
-      const justBelow20Pct = Math.floor(durationSec * 0.2) - 1;
-      // Must be >= 120 seconds to pass the no_show gate
-      const totalDuration = Math.max(justBelow20Pct, 120);
 
       // For a 2h event: 20% = 1440s, so 1439s is just under 20% but above 120s
       const result = classifyVoiceSession(
@@ -269,9 +261,27 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
         graceMs,
       );
 
-      // Not no_show (>= 120s), not late, not early_leaver, presenceRatio < 0.2 → fallback partial
-      expect(result).toBe('partial');
-      void totalDuration; // suppress unused var warning
+      // Not no_show (>= 120s), not late, not early_leaver, presenceRatio < 0.2 → no_show fallback
+      expect(result).toBe('no_show');
+    });
+
+    it('classifies no_show for 120+ seconds but < 20% presence ratio', () => {
+      const { start, end, durationSec, graceMs } = eventWindow(2);
+
+      // 5% presence on 2h event = 360s (> 120s threshold)
+      const result = classifyVoiceSession(
+        {
+          totalDurationSec: Math.floor(durationSec * 0.05), // 360s
+          firstJoinAt: start,
+          lastLeaveAt: end,
+        },
+        start,
+        end,
+        durationSec,
+        graceMs,
+      );
+
+      expect(result).toBe('no_show');
     });
   });
 
