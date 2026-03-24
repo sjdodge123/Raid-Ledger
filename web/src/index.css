@@ -1652,3 +1652,10 @@ body {
 [data-variant="quest-log"] .border-t-emerald-500 {
     border-top-color: var(--ql-gold) !important;
 }
+
+/* Hourglass spin animation for phase countdown (ROK-946) */
+@keyframes hourglass-spin {
+    0%, 80% { transform: rotate(0deg); }
+    90% { transform: rotate(360deg); }
+    100% { transform: rotate(360deg); }
+}

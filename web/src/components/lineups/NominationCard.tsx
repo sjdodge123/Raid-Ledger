@@ -42,9 +42,9 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
                 </span>
             )}
 
-            {/* Top-right: ownership pill */}
+            {/* Top-right: ownership tally */}
             <span className={`absolute top-2 right-2 px-1.5 py-0.5 text-[9px] font-bold text-white rounded ${badgeClass}`}>
-                {entry.ownerCount}/{entry.totalMembers}
+                +{entry.ownerCount}
             </span>
 
             {/* On Sale badge below ownership */}

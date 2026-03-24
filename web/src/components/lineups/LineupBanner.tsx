@@ -153,8 +153,13 @@ function BannerContent({ banner, onNominate }: {
 /** Start Lineup CTA when no active lineup exists. */
 function StartLineupCTA({ onStart }: { onStart: () => void }): JSX.Element {
     return (
-        <div className="rounded-xl bg-panel/50 border border-edge/50 border-dashed p-6 mb-8 text-center">
-            <p className="text-muted text-sm mb-3">No active community lineup</p>
+        <div className="rounded-xl bg-panel/50 border border-edge/50 border-dashed p-6 mb-8">
+            <h3 className="text-lg font-semibold text-foreground mb-2">Community Lineup</h3>
+            <p className="text-muted text-sm mb-4 max-w-lg">
+                Start a lineup to let your community nominate and vote on the next game
+                to play together. Members suggest games during the building phase, then
+                vote to pick a winner.
+            </p>
             <button type="button" onClick={onStart}
                 className="px-5 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors">
                 Start Lineup

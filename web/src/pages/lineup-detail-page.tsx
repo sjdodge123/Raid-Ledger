@@ -5,7 +5,6 @@ import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { useLineupDetail, useTransitionLineupStatus } from '../hooks/use-lineups';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
-import { LineupProgressBar } from '../components/lineups/LineupProgressBar';
 import { NominationGrid } from '../components/lineups/NominationGrid';
 import { LineupEmptyState } from '../components/lineups/LineupEmptyState';
 import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton';
@@ -13,7 +12,6 @@ import { CommonGroundPanel } from '../components/lineups/CommonGroundPanel';
 import { NominateModal } from '../components/lineups/NominateModal';
 import { PastLineups } from '../components/lineups/PastLineups';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
-import { PhaseCountdown } from '../components/lineups/phase-countdown';
 import { toast } from '../lib/toast';
 
 function LineupNotFound(): JSX.Element {
@@ -63,36 +61,25 @@ function ForceAdvanceButton({ lineup }: { lineup: LineupDetailResponseDto }) {
   );
 }
 
-function PhaseSection({ lineup }: { lineup: LineupDetailResponseDto }) {
-  const { user } = useAuth();
-  const canForce = isOperatorOrAdmin(user) && lineup.status !== 'archived';
-
-  return (
-    <div className="flex items-center gap-4 mt-3 mb-4">
-      <div className="flex-1">
-        <PhaseCountdown phaseDeadline={lineup.phaseDeadline} status={lineup.status} />
-      </div>
-      {canForce && <ForceAdvanceButton lineup={lineup} />}
-    </div>
-  );
-}
-
 export function LineupDetailPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const lineupId = id ? parseInt(id, 10) : undefined;
   const { data: lineup, isLoading, error } = useLineupDetail(lineupId);
   const [modalOpen, setModalOpen] = useState(false);
+  const { user } = useAuth();
 
   if (isLoading) return <LineupDetailSkeleton />;
   if (error || !lineup) return <LineupNotFound />;
 
   const hasEntries = lineup.entries.length > 0;
   const isBuilding = lineup.status === 'building';
+  const canForce = isOperatorOrAdmin(user) && lineup.status !== 'archived';
+  const forceAdvance = canForce ? <ForceAdvanceButton lineup={lineup} /> : null;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4">
       <div className="flex items-start justify-between">
-        <LineupDetailHeader lineup={lineup} />
+        <LineupDetailHeader lineup={lineup} actions={forceAdvance} />
         {isBuilding && (
           <button
             type="button"
@@ -102,12 +89,6 @@ export function LineupDetailPage(): JSX.Element {
             Nominate
           </button>
         )}
-      </div>
-
-      <PhaseSection lineup={lineup} />
-
-      <div className="mb-4">
-        <LineupProgressBar lineup={lineup} />
       </div>
 
       <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />

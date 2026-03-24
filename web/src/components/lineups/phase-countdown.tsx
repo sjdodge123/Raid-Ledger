@@ -3,10 +3,12 @@
  * Compact mode: "Building - 23h 15m remaining"
  * Full mode: larger countdown with hours/minutes/seconds
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type JSX } from 'react';
 
 interface Props {
   phaseDeadline: string | null;
+  /** When the current phase started (lineup updatedAt). Used to compute % remaining. */
+  phaseStartedAt?: string | null;
   status: string;
   compact?: boolean;
 }
@@ -42,7 +44,33 @@ function formatFull(ms: number): string {
   return `${parts.join(' ')} remaining`;
 }
 
-function CompactCountdown({ status, deadline }: { status: string; deadline: string }) {
+/** Hourglass color: green >50%, yellow >20%, red ≤20% of configured duration. */
+function hourglassColor(remainingMs: number, deadlineIso: string, startIso?: string | null): string {
+  const totalMs = startIso
+    ? new Date(deadlineIso).getTime() - new Date(startIso).getTime()
+    : 0;
+  if (totalMs <= 0) return 'text-emerald-500'; // can't compute, default green
+  const pct = Math.max(0, remainingMs) / totalMs;
+  if (pct > 0.5) return 'text-emerald-500';
+  if (pct > 0.2) return 'text-yellow-500';
+  return 'text-red-500';
+}
+
+/** Hourglass icon that spins 360° every 5 seconds. */
+function HourglassIcon({ colorClass }: { colorClass: string }): JSX.Element {
+  return (
+    <svg
+      className={`w-3.5 h-3.5 ${colorClass} inline-block animate-[hourglass-spin_5s_ease-in-out_infinite]`}
+      fill="currentColor" viewBox="0 0 24 24"
+    >
+      <path d="M6 2v6l4 4-4 4v6h12v-6l-4-4 4-4V2H6zm10 15.5V20H8v-2.5l4-4 4 4zm-4-5.5L8 8.5V4h8v4.5l-4 4z" />
+    </svg>
+  );
+}
+
+function CompactCountdown({ status, deadline, startedAt }: {
+  status: string; deadline: string; startedAt?: string | null;
+}) {
   const [remaining, setRemaining] = useState(computeRemaining(deadline));
 
   useEffect(() => {
@@ -51,8 +79,10 @@ function CompactCountdown({ status, deadline }: { status: string; deadline: stri
   }, [deadline]);
 
   const label = STATUS_LABELS[status] ?? status;
+  const color = hourglassColor(remaining, deadline, startedAt);
   return (
-    <span className="text-xs text-muted">
+    <span className="text-xs text-muted inline-flex items-center gap-1.5">
+      <HourglassIcon colorClass={color} />
       {label} - {formatCompact(remaining)}
     </span>
   );
@@ -79,8 +109,8 @@ function FullCountdown({ status, deadline }: { status: string; deadline: string 
   );
 }
 
-export function PhaseCountdown({ phaseDeadline, status, compact }: Props) {
+export function PhaseCountdown({ phaseDeadline, phaseStartedAt, status, compact }: Props) {
   if (!phaseDeadline) return null;
-  if (compact) return <CompactCountdown status={status} deadline={phaseDeadline} />;
+  if (compact) return <CompactCountdown status={status} deadline={phaseDeadline} startedAt={phaseStartedAt} />;
   return <FullCountdown status={status} deadline={phaseDeadline} />;
 }

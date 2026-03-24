@@ -18,46 +18,52 @@ function useDurationState() {
   const defaults = lineupDefaults.data;
   const [building, setBuilding] = useState<number | ''>('');
   const [voting, setVoting] = useState<number | ''>('');
-  const [decided, setDecided] = useState<number | ''>('');
-
   const buildingVal = building === '' ? (defaults?.buildingDurationHours ?? 48) : building;
   const votingVal = voting === '' ? (defaults?.votingDurationHours ?? 24) : voting;
-  const decidedVal = decided === '' ? (defaults?.decidedDurationHours ?? 72) : decided;
 
   return {
     building: buildingVal,
     voting: votingVal,
-    decided: decidedVal,
     setBuilding,
     setVoting,
-    setDecided,
     isLoading: lineupDefaults.isLoading,
   };
 }
 
-function DurationInput({ label, name, testId, value, onChange }: {
+const MIN_DAYS = 1;
+const MAX_DAYS = 30;
+
+function DurationSlider({ label, name, testId, value, onChange }: {
   label: string;
   name: string;
   testId: string;
   value: number;
   onChange: (v: number | '') => void;
 }) {
+  const days = Math.round(value / 24) || 1;
   return (
     <div>
-      <label className="block text-sm font-medium text-secondary mb-1">{label}</label>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-medium text-secondary">{label}</label>
+        <span className="text-sm text-muted tabular-nums">
+          {days} {days === 1 ? 'day' : 'days'}
+        </span>
+      </div>
       <input
-        type="number"
+        type="range"
         name={name}
         data-testid={testId}
-        min={1}
-        max={720}
-        value={value}
-        onChange={(e) => {
-          const v = e.target.value;
-          onChange(v === '' ? '' : Number(v));
-        }}
-        className="w-full px-3 py-2 bg-surface/50 border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        min={MIN_DAYS}
+        max={MAX_DAYS}
+        step={1}
+        value={days}
+        onChange={(e) => onChange(Number(e.target.value) * 24)}
+        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
       />
+      <div className="flex justify-between text-xs text-muted/60 mt-1">
+        <span>1 day</span>
+        <span>30 days</span>
+      </div>
     </div>
   );
 }
@@ -72,7 +78,6 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
       const result = await createLineup.mutateAsync({
         buildingDurationHours: durations.building,
         votingDurationHours: durations.voting,
-        decidedDurationHours: durations.decided,
       });
       onClose();
       navigate(`/community-lineup/${result.id}`);
@@ -88,26 +93,19 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
           Configure the duration for each phase. The lineup will automatically
           advance through phases when time expires.
         </p>
-        <DurationInput
-          label="Building Phase (hours)"
+        <DurationSlider
+          label="Building Phase"
           name="buildingDurationHours"
           testId="building-duration"
           value={durations.building}
           onChange={durations.setBuilding}
         />
-        <DurationInput
-          label="Voting Phase (hours)"
+        <DurationSlider
+          label="Voting Phase"
           name="votingDurationHours"
           testId="voting-duration"
           value={durations.voting}
           onChange={durations.setVoting}
-        />
-        <DurationInput
-          label="Decided Phase (hours)"
-          name="decidedDurationHours"
-          testId="decided-duration"
-          value={durations.decided}
-          onChange={durations.setDecided}
         />
         <div className="flex justify-end gap-3 pt-2">
           <button
