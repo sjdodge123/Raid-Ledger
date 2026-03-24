@@ -229,21 +229,12 @@ test.describe('Lineup creation modal', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 5_000 });
 
-        // Duration fields for each phase should be present and pre-filled
-        const buildingDuration = modal.locator(
-            'input[name="buildingDurationHours"], [data-testid="building-duration"]',
-        );
+        // Duration sliders for building and voting should be present
+        const buildingDuration = modal.locator('[data-testid="building-duration"]');
         await expect(buildingDuration).toBeVisible({ timeout: 5_000 });
 
-        const votingDuration = modal.locator(
-            'input[name="votingDurationHours"], [data-testid="voting-duration"]',
-        );
+        const votingDuration = modal.locator('[data-testid="voting-duration"]');
         await expect(votingDuration).toBeVisible({ timeout: 5_000 });
-
-        const decidedDuration = modal.locator(
-            'input[name="decidedDurationHours"], [data-testid="decided-duration"]',
-        );
-        await expect(decidedDuration).toBeVisible({ timeout: 5_000 });
     });
 
     test('submitting modal creates lineup and navigates to detail page', async ({ page }) => {
