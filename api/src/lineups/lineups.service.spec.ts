@@ -7,6 +7,8 @@ import {
 import { LineupsService } from './lineups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
+import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 
 const NOW = new Date('2026-03-22T20:00:00Z');
 
@@ -143,6 +145,8 @@ function describeLineupsService() {
         LineupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: ActivityLogService, useValue: { log: jest.fn() } },
+        { provide: SettingsService, useValue: { get: jest.fn().mockResolvedValue(null) } },
+        { provide: LineupPhaseQueueService, useValue: { scheduleTransition: jest.fn() } },
       ],
     }).compile();
     service = module.get<LineupsService>(LineupsService);
@@ -320,13 +324,26 @@ function describeLineupsService() {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should require decidedGameId for voting → decided', async () => {
+    it('should allow voting → decided without decidedGameId (force-advance)', async () => {
       const votingLineup = { ...mockLineup, status: 'voting' };
+      // findLineupById
       mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+      // applyStatusUpdate (update)
+      mockDb.update.mockReturnValue({
+        set: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue(undefined),
+        }),
+      });
+      // buildDetailResponse chain (findLineupById + enrichment queries)
+      mockSelects(makeSelectChain({ limitResult: [{ ...votingLineup, status: 'decided' }] }));
+      mockSelects(makeSelectChain({ whereResult: [] })); // entries
+      mockSelects(makeSelectChain({ groupByResult: [] })); // votes
+      mockSelects(makeSelectChain({ whereResult: [{ count: 0 }] })); // voters
+      mockSelects(makeSelectChain({ limitResult: [{ displayName: 'Admin', username: 'Admin' }] })); // creator
+      mockSelects(makeSelectChain({ whereResult: [{ count: 10 }] })); // totalMembers
 
-      await expect(
-        service.transitionStatus(1, { status: 'decided' }),
-      ).rejects.toThrow(BadRequestException);
+      const result = await service.transitionStatus(1, { status: 'decided' });
+      expect(result.status).toBe('decided');
     });
 
     it('should throw BadRequestException if decidedGameId not in entries', async () => {
