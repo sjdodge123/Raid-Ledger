@@ -343,17 +343,17 @@ test.describe('Force-advance phase transition', () => {
     });
 
     test('detail page shows Force Advance button for operators', async ({ page }) => {
-        const banner = await apiGet(adminToken, '/lineups/banner');
-        const activeId = banner?.id ?? lineupId;
-
-        await page.goto(`/community-lineup/${activeId}`);
-        await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
-        ).toBeVisible({ timeout: 15_000 });
-
-        // Force Advance button should be visible for operator/admin users
-        const forceBtn = page.getByRole('button', { name: /Force Advance/i });
-        await expect(forceBtn).toBeVisible({ timeout: 10_000 });
+        // Retry the full flow — parallel workers may archive our lineup between
+        // creation and page load, causing an "Archived" state with no button.
+        await expect(async () => {
+            lineupId = await ensureActiveLineup(adminToken);
+            await page.goto(`/community-lineup/${lineupId}`);
+            await expect(
+                page.getByRole('heading', { name: 'Community Lineup' }),
+            ).toBeVisible({ timeout: 5_000 });
+            const forceBtn = page.getByRole('button', { name: /Force Advance/i });
+            await expect(forceBtn).toBeVisible({ timeout: 5_000 });
+        }).toPass({ timeout: 30_000 });
     });
 
     test('clicking Force Advance transitions the phase', async ({ page }) => {
