@@ -13,7 +13,6 @@ jobs:
   # Determines which jobs need to run based on changed files.
   # All downstream jobs check these outputs before starting.
   detect-changes:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
