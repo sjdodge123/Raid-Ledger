@@ -1,0 +1,20 @@
+{
+  "enabledPlugins": {
+    "devedup-rl@devedup-rl": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command'); if ! echo \"$CMD\" | grep -qE '^git push'; then echo '{\"continue\":true}'; exit 0; fi; if ! git diff --name-only origin/main...HEAD 2>/dev/null | grep -q '^web/src/'; then echo '{\"continue\":true}'; exit 0; fi; SENTINEL=\"/tmp/.playwright-verified-$(git rev-parse --short HEAD 2>/dev/null)\"; if [ -f \"$SENTINEL\" ]; then echo '{\"continue\":true}'; exit 0; fi; echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Smoke tests not verified for this commit. Run: npx playwright test (both desktop + mobile), or use /push which handles this automatically.\"}}'",
+            "timeout": 10,
+            "statusMessage": "Checking smoke test verification..."
+          }
+        ]
+      }
+    ]
+  }
+}
