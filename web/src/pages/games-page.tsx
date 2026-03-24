@@ -35,7 +35,7 @@ function useGamesPageState() {
 
 function useGamesData(searchQuery: string, selectedGenres: Set<string>) {
   const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
-  const { data: searchData, isLoading: searchLoading, isFetching: searchFetching } = useGameSearch(searchQuery, searchQuery.length >= 2);
+  const { data: searchData, isLoading: searchLoading } = useGameSearch(searchQuery, searchQuery.length >= 2);
   const isSearching = searchQuery.length >= 2;
   const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
   const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters);
@@ -47,7 +47,7 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>) {
     if (searchResults) for (const game of searchResults) ids.push(game.id);
     return ids;
   }, [filteredRows, searchResults]);
-  return { discoverLoading, searchLoading, searchFetching, isSearching, filteredRows, searchResults, searchSource, allGameIds };
+  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds };
 }
 
 function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS) {
