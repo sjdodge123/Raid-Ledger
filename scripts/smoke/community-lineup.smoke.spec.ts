@@ -64,17 +64,37 @@ let adminToken: string;
 let lineupId: number;
 let createdLineup = false;
 
+/** Archive an active lineup by walking through all valid transitions. */
+async function archiveLineup(token: string, id: number): Promise<void> {
+    const detail = await apiGet(token, `/lineups/${id}`);
+    if (!detail) return;
+    const transitions: Record<string, string[]> = {
+        building: ['voting', 'decided', 'archived'],
+        voting: ['decided', 'archived'],
+        decided: ['archived'],
+    };
+    const steps = transitions[detail.status];
+    if (!steps) return;
+    for (const status of steps) {
+        await apiPatch(token, `/lineups/${id}/status`, { status });
+    }
+}
+
 test.beforeAll(async () => {
     adminToken = await getAdminToken();
 
     // Check if an active lineup already exists
     const banner = await apiGet(adminToken, '/lineups/banner');
     if (banner && typeof banner.id === 'number') {
-        lineupId = banner.id;
-        return;
+        // Must be in building phase for nomination tests; archive and recreate if not
+        if (banner.status === 'building') {
+            lineupId = banner.id;
+            return;
+        }
+        await archiveLineup(adminToken, banner.id);
     }
 
-    // No active lineup -- create one
+    // Create a fresh lineup in building phase
     const lineup = (await apiPost(adminToken, '/lineups', {
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
     })) as { id: number };
