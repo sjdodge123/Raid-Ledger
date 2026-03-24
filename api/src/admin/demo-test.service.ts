@@ -55,6 +55,17 @@ export class DemoTestService {
     username: string,
   ): Promise<typeof schema.users.$inferSelect | undefined> {
     await this.assertDemoMode();
+    // Clear the Discord ID from any other user first (avoids unique constraint
+    // when multiple CI smoke categories re-run setup with different dmRecipient)
+    await this.db
+      .update(schema.users)
+      .set({ discordId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.users.discordId, discordId),
+          sql`${schema.users.id} != ${userId}`,
+        ),
+      );
     const [updated] = await this.db
       .update(schema.users)
       .set({ discordId, username, updatedAt: new Date() })
