@@ -4,7 +4,7 @@
  * Truth table:
  *   Case 1: no unclassified, no signups           => false
  *   Case 2: no unclassified, signups, 0 sessions  => true  (needs no_show creation)
- *   Case 3: no unclassified, signups, >0 sessions => true  (BUG: currently returns false)
+ *   Case 3: no unclassified, signups, >0 sessions => true  (was BUG in ROK-943, now fixed)
  *   Case 4: has unclassified, no signups           => true
  *   Case 5: has unclassified, has signups          => true
  */
