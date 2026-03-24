@@ -218,7 +218,13 @@ export class DemoTestService {
         firstJoinAt: join,
         lastLeaveAt: leave,
         totalDurationSec: p.durationSec,
-        segments: [{ joinAt: join.toISOString(), leaveAt: leave.toISOString(), durationSec: p.durationSec }],
+        segments: [
+          {
+            joinAt: join.toISOString(),
+            leaveAt: leave.toISOString(),
+            durationSec: p.durationSec,
+          },
+        ],
       })
       .onConflictDoNothing();
   }

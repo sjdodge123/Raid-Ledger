@@ -348,8 +348,13 @@ async function rok943ClassifyAllStatuses(ctx: TestContext) {
     endTime: evEnd,
   });
 
+  const fakeIds = users.map((_, i) => `900000000000000${String(i).padStart(4, '0')}`);
+  const start = new Date(evStart);
+  const end = new Date(evEnd);
+
   try {
-    await rok943SetupUsers(ctx, ev.id, users, evStart, evEnd);
+    await rok943SignupUsers(ctx, ev.id, users, fakeIds);
+    await rok943InjectSessions(ctx, ev.id, users, fakeIds, start, end);
     await triggerClassify(ctx.api, ev.id);
     await awaitProcessing(ctx.api);
     await rok943AssertMetrics(ctx, ev.id);
@@ -358,91 +363,52 @@ async function rok943ClassifyAllStatuses(ctx: TestContext) {
   }
 }
 
-/** Sign up 7 users and inject voice sessions for 5 of them. */
-async function rok943SetupUsers(
+/** Link Discord IDs and sign up 7 users for the event. */
+async function rok943SignupUsers(
   ctx: TestContext,
   eventId: number,
   users: number[],
-  evStart: string,
-  evEnd: string,
+  fakeIds: string[],
 ) {
-  const start = new Date(evStart);
-  const end = new Date(evEnd);
-  const fakeIds = users.map((_, i) => `900000000000000${String(i).padStart(4, '0')}`);
-
   // Link fake Discord IDs to 5 demo users (user[5] stays unlinked → unmarked)
   for (let i = 0; i < 5; i++) {
     await linkDiscord(ctx.api, users[i], fakeIds[i], `smoke-user-${i}`);
   }
-
   // Sign up all 7: dmRecipient + 6 demo users
   await signupAs(ctx.api, eventId, ctx.dmRecipientUserId, undefined, {
     linkDiscord: true,
   });
   for (let i = 0; i < 6; i++) {
     await signupAs(ctx.api, eventId, users[i], undefined, {
-      linkDiscord: i < 5, // user[5] has no discord → unmarked
+      linkDiscord: i < 5,
     });
   }
+}
 
-  const base = { eventId };
-
-  // 1. FULL — dmRecipient: joined at start, stayed full event (50/60 min = 83%)
-  await injectVoiceSession(ctx.api, {
-    ...base,
-    discordUserId: ctx.testBotDiscordId,
-    userId: ctx.dmRecipientUserId,
-    durationSec: 3000,
-    firstJoinAt: start.toISOString(),
-    lastLeaveAt: end.toISOString(),
-  });
-
-  // 2. PARTIAL — user[0]: on time, stayed till end, but only 25 min (42%)
-  await injectVoiceSession(ctx.api, {
-    ...base,
-    discordUserId: fakeIds[0],
-    userId: users[0],
-    durationSec: 1500,
-    firstJoinAt: start.toISOString(),
-    lastLeaveAt: end.toISOString(),
-  });
-
-  // 3. LATE — user[1]: joined 10 min late, 25 min voice (42%)
+/** Inject voice sessions with controlled timing for each classification. */
+async function rok943InjectSessions(
+  ctx: TestContext,
+  eventId: number,
+  users: number[],
+  fakeIds: string[],
+  start: Date,
+  end: Date,
+) {
+  const b = { eventId };
+  // FULL — 50/60 min = 83%, on time
+  await injectVoiceSession(ctx.api, { ...b, discordUserId: ctx.testBotDiscordId, userId: ctx.dmRecipientUserId, durationSec: 3000, firstJoinAt: start.toISOString(), lastLeaveAt: end.toISOString() });
+  // PARTIAL — 25/60 min = 42%, on time, stayed till end
+  await injectVoiceSession(ctx.api, { ...b, discordUserId: fakeIds[0], userId: users[0], durationSec: 1500, firstJoinAt: start.toISOString(), lastLeaveAt: end.toISOString() });
+  // LATE — joined 10 min late, 25 min voice
   const lateJoin = new Date(start.getTime() + 10 * 60000);
-  await injectVoiceSession(ctx.api, {
-    ...base,
-    discordUserId: fakeIds[1],
-    userId: users[1],
-    durationSec: 1500,
-    firstJoinAt: lateJoin.toISOString(),
-    lastLeaveAt: end.toISOString(),
-  });
-
-  // 4. EARLY_LEAVER — user[2]: on time, left 20 min early, 20 min voice (33%)
+  await injectVoiceSession(ctx.api, { ...b, discordUserId: fakeIds[1], userId: users[1], durationSec: 1500, firstJoinAt: lateJoin.toISOString(), lastLeaveAt: end.toISOString() });
+  // EARLY_LEAVER — on time, left 20 min early, 20 min voice
   const earlyLeave = new Date(end.getTime() - 20 * 60000);
-  await injectVoiceSession(ctx.api, {
-    ...base,
-    discordUserId: fakeIds[2],
-    userId: users[2],
-    durationSec: 1200,
-    firstJoinAt: start.toISOString(),
-    lastLeaveAt: earlyLeave.toISOString(),
-  });
-
-  // 5. NO_SHOW (brief) — user[3]: joined for 30 sec (< 120s threshold)
-  await injectVoiceSession(ctx.api, {
-    ...base,
-    discordUserId: fakeIds[3],
-    userId: users[3],
-    durationSec: 30,
-    firstJoinAt: start.toISOString(),
-    lastLeaveAt: new Date(start.getTime() + 30000).toISOString(),
-  });
-
-  // 6. NO_SHOW (classifyNoShows) — user[4]: discord linked, no voice session
-  //    classifyNoShows will create a no_show entry for them
-
-  // 7. UNMARKED — user[5]: no discord link, no voice session → stays null
+  await injectVoiceSession(ctx.api, { ...b, discordUserId: fakeIds[2], userId: users[2], durationSec: 1200, firstJoinAt: start.toISOString(), lastLeaveAt: earlyLeave.toISOString() });
+  // NO_SHOW (brief) — 30 sec (< 120s threshold)
+  await injectVoiceSession(ctx.api, { ...b, discordUserId: fakeIds[3], userId: users[3], durationSec: 30, firstJoinAt: start.toISOString(), lastLeaveAt: new Date(start.getTime() + 30000).toISOString() });
+  // user[4]: discord linked, no voice → classifyNoShows creates no_show
+  // user[5]: no discord → stays unmarked
 }
 
 type Metrics = {
