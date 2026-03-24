@@ -60,7 +60,7 @@ export interface ScheduledEventMocks {
   createUpdateChain: () => Record<string, jest.Mock>;
 }
 
-/** Helper to build a chainable Drizzle select mock. */
+/** Helper to build a chainable Drizzle select mock (terminates at .limit()). */
 export function createSelectChain(
   rows: unknown[] = [],
 ): Record<string, jest.Mock> {
@@ -69,6 +69,17 @@ export function createSelectChain(
   chain.from = jest.fn().mockReturnValue(chain);
   chain.where = jest.fn().mockReturnValue(chain);
   chain.limit = jest.fn().mockResolvedValue(rows);
+  return chain;
+}
+
+/** Helper to build a chainable Drizzle select mock (terminates at .where(), no .limit()). */
+export function createSelectChainNoLimit(
+  rows: unknown[] = [],
+): Record<string, jest.Mock> {
+  const chain: Record<string, jest.Mock> = {};
+  chain.select = jest.fn().mockReturnValue(chain);
+  chain.from = jest.fn().mockReturnValue(chain);
+  chain.where = jest.fn().mockResolvedValue(rows);
   return chain;
 }
 
@@ -136,8 +147,23 @@ function buildScheduledEventProviders(
   ];
 }
 
+/**
+ * Optional mocks to inject into the service after module creation.
+ *
+ * NestJS @Optional() with union types (e.g. `ActiveEventCacheService | null`)
+ * causes TypeScript to emit `Object` as the design type, preventing automatic
+ * token resolution. We work around this by setting the private field directly
+ * after module creation -- matching how production DI wires it.
+ */
+export interface OptionalMocks {
+  eventCache?: { getRecentlyEndedEvents: jest.Mock };
+  embedSyncQueue?: { enqueue: jest.Mock };
+}
+
 /** Set up the shared test module and return all mocks. */
-export async function setupScheduledEventTestModule(): Promise<ScheduledEventMocks> {
+export async function setupScheduledEventTestModule(
+  optionalMocks?: OptionalMocks,
+): Promise<ScheduledEventMocks> {
   const mockGuild = createMockGuild();
   const selectChain = createSelectChain();
   const updateChain = createUpdateChain();
@@ -150,8 +176,16 @@ export async function setupScheduledEventTestModule(): Promise<ScheduledEventMoc
     providers: buildScheduledEventProviders(mockDb, mockGuild),
   }).compile();
 
+  const service = module.get(ScheduledEventService);
+  if (optionalMocks?.eventCache) {
+    (service as any).eventCache = optionalMocks.eventCache;
+  }
+  if (optionalMocks?.embedSyncQueue) {
+    (service as any).embedSyncQueue = optionalMocks.embedSyncQueue;
+  }
+
   return {
-    service: module.get(ScheduledEventService),
+    service,
     clientService: module.get(DiscordBotClientService),
     channelResolver: module.get(ChannelResolverService),
     settingsService: module.get(SettingsService),

@@ -49,13 +49,16 @@ export function useTestAiConnection() {
     });
 }
 
-/** Query all AI providers with status. */
-export function useAiProviders() {
+/** Query all AI providers with status. Polling is opt-in via `pollingInterval`. */
+export function useAiProviders(options?: { pollingInterval?: number | false }) {
+    const interval = options?.pollingInterval ?? false;
     return useQuery<AiProviderInfoDto[]>({
         queryKey: [...PROVIDERS_KEY],
         queryFn: () => adminFetch('/admin/ai/providers'),
         enabled: !!getAuthToken(),
-        staleTime: 10_000,
+        staleTime: 30_000,
+        refetchInterval: interval,
+        refetchIntervalInBackground: false,
     });
 }
 

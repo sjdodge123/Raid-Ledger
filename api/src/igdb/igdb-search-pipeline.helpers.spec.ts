@@ -1,9 +1,11 @@
 /**
- * Tests for search pipeline wiring (ROK-773).
- * Verifies ITAD-primary with IGDB fallback logic and error handling.
+ * Tests for search pipeline wiring (ROK-773, ROK-953).
+ * Verifies ITAD-primary with IGDB fallback logic, error handling,
+ * and partial prefix query optimization.
  */
 import {
   runSearchPipeline,
+  isPartialPrefixQuery,
   type SearchPipelineParams,
 } from './igdb-search-pipeline.helpers';
 
@@ -66,7 +68,7 @@ describe('runSearchPipeline', () => {
 
   it('returns ITAD results when ITAD search succeeds with results', async () => {
     const itadResult = {
-      games: [{ id: 0, name: 'Game A', slug: 'game-a' }],
+      games: [{ id: 0, name: 'Game Alpha', slug: 'game-alpha' }],
       cached: false,
       source: 'itad' as const,
     };
@@ -77,8 +79,8 @@ describe('runSearchPipeline', () => {
 
     const result = await runSearchPipeline(
       params,
-      'game a',
-      'game a',
+      'game alpha',
+      'game alpha',
       triggerRefresh,
     );
 
@@ -181,5 +183,75 @@ describe('runSearchPipeline', () => {
       'test',
       triggerRefresh,
     );
+  });
+
+  it('skips ITAD for partial prefix queries (ROK-953)', async () => {
+    const igdbResult = {
+      games: [{ id: 3, name: 'World of Warcraft' }],
+      cached: false,
+      source: 'igdb' as const,
+    };
+    executeSearch.mockResolvedValue(igdbResult);
+
+    const params = makeParams();
+    const triggerRefresh = jest.fn();
+
+    const result = await runSearchPipeline(
+      params,
+      'world of',
+      'world of',
+      triggerRefresh,
+    );
+
+    expect(result).toBe(igdbResult);
+    expect(executeItadSearch).not.toHaveBeenCalled();
+    expect(executeSearch).toHaveBeenCalled();
+  });
+
+  it('uses ITAD for complete multi-word queries (ROK-953)', async () => {
+    const itadResult = {
+      games: [{ id: 4, name: 'World of Warcraft', slug: 'wow' }],
+      cached: false,
+      source: 'itad' as const,
+    };
+    executeItadSearch.mockResolvedValue(itadResult);
+
+    const params = makeParams();
+    const triggerRefresh = jest.fn();
+
+    const result = await runSearchPipeline(
+      params,
+      'world of warcraft',
+      'world of warcraft',
+      triggerRefresh,
+    );
+
+    expect(result).toBe(itadResult);
+    expect(executeItadSearch).toHaveBeenCalled();
+  });
+});
+
+describe('isPartialPrefixQuery (ROK-953)', () => {
+  it('returns true for multi-word query with short last token', () => {
+    expect(isPartialPrefixQuery('world of')).toBe(true);
+    expect(isPartialPrefixQuery('world o')).toBe(true);
+    expect(isPartialPrefixQuery('final fantasy x')).toBe(true);
+  });
+
+  it('returns false for single-word queries', () => {
+    expect(isPartialPrefixQuery('wo')).toBe(false);
+    expect(isPartialPrefixQuery('w')).toBe(false);
+    expect(isPartialPrefixQuery('world')).toBe(false);
+  });
+
+  it('returns false when last token is 3+ characters', () => {
+    expect(isPartialPrefixQuery('world of war')).toBe(false);
+    expect(isPartialPrefixQuery('world of warcraft')).toBe(false);
+  });
+
+  it('handles edge cases', () => {
+    expect(isPartialPrefixQuery('')).toBe(false);
+    expect(isPartialPrefixQuery('  ')).toBe(false);
+    expect(isPartialPrefixQuery('a b')).toBe(true);
   });
 });
