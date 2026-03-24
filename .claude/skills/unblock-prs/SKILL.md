@@ -140,6 +140,23 @@ git checkout main
 git pull origin main
 ```
 
+### 3g: Post-Merge Main Verification
+
+**After each merge, verify main is healthy before processing the next PR.**
+
+Check the CI status of the merge commit on main:
+```bash
+gh run list --branch main --limit 1 --json databaseId,status,conclusion
+```
+
+If CI is still running, wait for it. If CI failed on main:
+1. **STOP processing further PRs** — main is broken
+2. Investigate the failure: `gh run view <id> --log-failed`
+3. Fix the issue on a hotfix branch, push, and merge
+4. Only resume the PR queue once main CI is green
+
+**This step is critical** — merging PRs on top of a broken main compounds the problem and makes diagnosis harder.
+
 Now main is updated for the next PR. **Continue the loop from Step 3a with the next PR.**
 
 ---
@@ -162,14 +179,66 @@ If a batch branch exists (e.g., `batch/2026-03-24`):
 
 ---
 
-## Step 5: Cleanup
+## Step 5: Stale Remote Branch Cleanup
+
+After all PRs are processed, clean up remote branches whose work is already on main.
+
+### 5a: List all remote branches (excluding main)
 
 ```bash
-# Delete merged local branches
+git fetch --prune
+for branch in $(git branch -r | grep -v 'origin/main\|origin/HEAD' | sed 's|origin/||'); do
+  pr=$(gh pr list --head "$branch" --state all --json number,state --jq '.[0] | "\(.number) \(.state)"' 2>/dev/null)
+  echo "$branch | PR: ${pr:-none}"
+done
+```
+
+### 5b: Classify each branch
+
+| Condition | Classification | Action |
+|-----------|---------------|--------|
+| PR exists and state = MERGED | **Stale** — squash-merged, branch leftover | Delete |
+| PR exists and state = CLOSED (not merged) | **Stale** — abandoned | Delete |
+| No PR, 0 commits ahead of main | **Stale** — empty/subsumed | Delete |
+| No PR, commits ahead, last commit > 14 days old | **Dormant** — flag for operator review | Ask |
+| No PR, commits ahead, last commit < 14 days old | **Active WIP** | Keep |
+| PR exists and state = OPEN | **Active** — being processed | Keep |
+
+### 5c: Delete stale branches
+
+Present the list and **ask the operator to confirm** before deleting:
+
+```
+## Stale Branches to Delete
+| Branch | Reason | Last updated |
+|--------|--------|-------------|
+| chore/pre-push-playwright-hook-v2 | PR #512 merged | 18 hours ago |
+| fix/batch-2026-03-01-r3 | PR #317 merged | 3 weeks ago |
+| ... | ... | ... |
+
+Delete these N branches? (y/n)
+```
+
+If confirmed:
+```bash
+git push origin --delete <branch1> <branch2> ...
+```
+
+For **dormant** branches (no PR, old commits), present separately:
+```
+## Dormant Branches (no PR, >14 days old)
+| Branch | Commits ahead | Last commit |
+|--------|--------------|-------------|
+| rok-654-ci-claude-reviewer | 5 | 3 weeks ago |
+
+These may contain abandoned work. Delete? (y/n/skip)
+```
+
+### 5d: Local cleanup
+
+```bash
 git checkout main
 git branch --merged main | grep -v 'main' | xargs -r git branch -d
-
-# Prune remote tracking branches
 git fetch --prune
 ```
 
@@ -190,5 +259,10 @@ Merged: N
 Skipped: N (reasons listed above)
 Failed: N (reasons listed above)
 
+Branches deleted: N (stale/merged)
+Branches kept: N (active WIP)
+Branches flagged: N (dormant, operator review)
+
 main is now at: <sha>
+Main CI: ✓ green / ✗ red (details)
 ```
