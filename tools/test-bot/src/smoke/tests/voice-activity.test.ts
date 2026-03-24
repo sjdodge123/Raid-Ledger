@@ -17,6 +17,7 @@ import {
   flushVoiceSessions,
   triggerClassify,
   injectVoiceSession,
+  linkDiscord,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -316,82 +317,200 @@ const metricsVoicePopulated: SmokeTest = {
 };
 
 /**
- * ROK-943: Voice classification must populate attendance and produce
- * non-zero attended count when a user has significant voice time.
+ * ROK-943: Comprehensive voice classification + attendance metrics test.
  *
- * Injects a synthetic 30-minute voice session (bypassing real-time voice
- * tracking), then triggers classification and asserts attended >= 1.
- * This validates the full pipeline: session → classify → attendance → metrics.
+ * Validates ALL classification statuses (full, partial, late, early_leaver,
+ * no_show) and ALL attendance statuses (attended, no_show, unmarked) by
+ * injecting synthetic voice sessions with controlled timing, then asserting
+ * the metrics endpoint returns correct counts and roster entries.
+ *
+ * Event: 60 min, ended 5 min ago. 7 signups covering every status combination.
  */
 const classifyPopulatesAttendance: SmokeTest = {
   name: 'Voice classification populates attendance and metrics (ROK-943)',
   category: 'voice',
-  async run(ctx) {
-    const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
-      '/admin/settings/games?limit=1',
-    );
-    const gameId = gamesRes.data[0]?.id;
-    if (!gameId) throw new Error('No games in DB');
-
-    const ev = await createEvent(ctx.api, 'rok943-classify', {
-      gameId,
-      startTime: futureTime(-65),
-      endTime: futureTime(-5),
-    });
-    try {
-      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, undefined, {
-        linkDiscord: true,
-      });
-
-      // Inject a synthetic 30-min voice session (>= 120s threshold for
-      // classification as something other than no_show).
-      await injectVoiceSession(ctx.api, {
-        eventId: ev.id,
-        discordUserId: ctx.testBotDiscordId,
-        userId: ctx.dmRecipientUserId,
-        durationSec: 1800,
-      });
-
-      await triggerClassify(ctx.api, ev.id);
-      await awaitProcessing(ctx.api);
-
-      type MetricsResponse = {
-        attendanceSummary: {
-          attended: number;
-          attendanceRate: number;
-        } | null;
-        voiceSummary: { totalTracked: number } | null;
-      };
-      const metrics = await ctx.api.get<MetricsResponse>(
-        `/events/${ev.id}/metrics`,
-      );
-
-      if (!metrics.voiceSummary) {
-        throw new Error('voiceSummary null after classify');
-      }
-      if (metrics.voiceSummary.totalTracked < 1) {
-        throw new Error(
-          `totalTracked=${metrics.voiceSummary.totalTracked}, expected >= 1`,
-        );
-      }
-      if (!metrics.attendanceSummary) {
-        throw new Error('attendanceSummary null after classify');
-      }
-      if (metrics.attendanceSummary.attended < 1) {
-        throw new Error(
-          `attended=${metrics.attendanceSummary.attended}, expected >= 1`,
-        );
-      }
-      if (metrics.attendanceSummary.attendanceRate <= 0) {
-        throw new Error(
-          `attendanceRate=${metrics.attendanceSummary.attendanceRate}, expected > 0`,
-        );
-      }
-    } finally {
-      await deleteEvent(ctx.api, ev.id);
-    }
-  },
+  run: rok943ClassifyAllStatuses,
 };
+
+async function rok943ClassifyAllStatuses(ctx: TestContext) {
+  const users = ctx.demoUserIds ?? [];
+  if (users.length < 6) throw new Error('Need 6+ demo users for ROK-943');
+
+  const gameId = ctx.games[0]?.id;
+  if (!gameId) throw new Error('No games in DB');
+
+  // 60-min event that ended 5 min ago
+  const evStart = futureTime(-65);
+  const evEnd = futureTime(-5);
+  const ev = await createEvent(ctx.api, 'rok943-all-statuses', {
+    gameId,
+    startTime: evStart,
+    endTime: evEnd,
+  });
+
+  try {
+    await rok943SetupUsers(ctx, ev.id, users, evStart, evEnd);
+    await triggerClassify(ctx.api, ev.id);
+    await awaitProcessing(ctx.api);
+    await rok943AssertMetrics(ctx, ev.id);
+  } finally {
+    await deleteEvent(ctx.api, ev.id);
+  }
+}
+
+/** Sign up 7 users and inject voice sessions for 5 of them. */
+async function rok943SetupUsers(
+  ctx: TestContext,
+  eventId: number,
+  users: number[],
+  evStart: string,
+  evEnd: string,
+) {
+  const start = new Date(evStart);
+  const end = new Date(evEnd);
+  const fakeIds = users.map((_, i) => `900000000000000${String(i).padStart(4, '0')}`);
+
+  // Link fake Discord IDs to 5 demo users (user[5] stays unlinked → unmarked)
+  for (let i = 0; i < 5; i++) {
+    await linkDiscord(ctx.api, users[i], fakeIds[i], `smoke-user-${i}`);
+  }
+
+  // Sign up all 7: dmRecipient + 6 demo users
+  await signupAs(ctx.api, eventId, ctx.dmRecipientUserId, undefined, {
+    linkDiscord: true,
+  });
+  for (let i = 0; i < 6; i++) {
+    await signupAs(ctx.api, eventId, users[i], undefined, {
+      linkDiscord: i < 5, // user[5] has no discord → unmarked
+    });
+  }
+
+  const base = { eventId };
+
+  // 1. FULL — dmRecipient: joined at start, stayed full event (50/60 min = 83%)
+  await injectVoiceSession(ctx.api, {
+    ...base,
+    discordUserId: ctx.testBotDiscordId,
+    userId: ctx.dmRecipientUserId,
+    durationSec: 3000,
+    firstJoinAt: start.toISOString(),
+    lastLeaveAt: end.toISOString(),
+  });
+
+  // 2. PARTIAL — user[0]: on time, stayed till end, but only 25 min (42%)
+  await injectVoiceSession(ctx.api, {
+    ...base,
+    discordUserId: fakeIds[0],
+    userId: users[0],
+    durationSec: 1500,
+    firstJoinAt: start.toISOString(),
+    lastLeaveAt: end.toISOString(),
+  });
+
+  // 3. LATE — user[1]: joined 10 min late, 25 min voice (42%)
+  const lateJoin = new Date(start.getTime() + 10 * 60000);
+  await injectVoiceSession(ctx.api, {
+    ...base,
+    discordUserId: fakeIds[1],
+    userId: users[1],
+    durationSec: 1500,
+    firstJoinAt: lateJoin.toISOString(),
+    lastLeaveAt: end.toISOString(),
+  });
+
+  // 4. EARLY_LEAVER — user[2]: on time, left 20 min early, 20 min voice (33%)
+  const earlyLeave = new Date(end.getTime() - 20 * 60000);
+  await injectVoiceSession(ctx.api, {
+    ...base,
+    discordUserId: fakeIds[2],
+    userId: users[2],
+    durationSec: 1200,
+    firstJoinAt: start.toISOString(),
+    lastLeaveAt: earlyLeave.toISOString(),
+  });
+
+  // 5. NO_SHOW (brief) — user[3]: joined for 30 sec (< 120s threshold)
+  await injectVoiceSession(ctx.api, {
+    ...base,
+    discordUserId: fakeIds[3],
+    userId: users[3],
+    durationSec: 30,
+    firstJoinAt: start.toISOString(),
+    lastLeaveAt: new Date(start.getTime() + 30000).toISOString(),
+  });
+
+  // 6. NO_SHOW (classifyNoShows) — user[4]: discord linked, no voice session
+  //    classifyNoShows will create a no_show entry for them
+
+  // 7. UNMARKED — user[5]: no discord link, no voice session → stays null
+}
+
+type Metrics = {
+  attendanceSummary: {
+    attended: number;
+    noShow: number;
+    excused: number;
+    unmarked: number;
+    total: number;
+    attendanceRate: number;
+  } | null;
+  voiceSummary: {
+    totalTracked: number;
+    full: number;
+    partial: number;
+    late: number;
+    earlyLeaver: number;
+    noShow: number;
+  } | null;
+  rosterBreakdown: Array<{
+    attendanceStatus: string | null;
+    voiceClassification: string | null;
+  }>;
+};
+
+/** Assert every classification and attendance status appears in metrics. */
+async function rok943AssertMetrics(ctx: TestContext, eventId: number) {
+  const m = await ctx.api.get<Metrics>(`/events/${eventId}/metrics`);
+
+  // --- Attendance donut ---
+  // 8 signups: 7 explicit + event creator (admin, auto-signed-up, unmarked)
+  const a = m.attendanceSummary;
+  if (!a) throw new Error('attendanceSummary null');
+  assertEq('attended', a.attended, 4); // full + partial + late + early_leaver
+  assertEq('noShow', a.noShow, 2); // brief voice + classifyNoShows
+  assertEq('unmarked', a.unmarked, 2); // user[5] no discord + event creator
+  assertEq('total', a.total, 8);
+
+  // --- Voice summary ---
+  const v = m.voiceSummary;
+  if (!v) throw new Error('voiceSummary null');
+  assertEq('full', v.full, 1);
+  assertEq('partial', v.partial, 1);
+  assertEq('late', v.late, 1);
+  assertEq('earlyLeaver', v.earlyLeaver, 1);
+  assertEq('voiceNoShow', v.noShow, 2); // brief + classifyNoShows
+
+  // --- Roster has all statuses ---
+  const statuses = new Set(m.rosterBreakdown.map((r) => r.attendanceStatus));
+  if (!statuses.has('attended')) throw new Error('No "attended" in roster');
+  if (!statuses.has('no_show')) throw new Error('No "no_show" in roster');
+  if (!statuses.has(null)) throw new Error('No unmarked (null) in roster');
+
+  const voiceStatuses = new Set(
+    m.rosterBreakdown.map((r) => r.voiceClassification),
+  );
+  for (const expected of ['full', 'partial', 'late', 'early_leaver', 'no_show']) {
+    if (!voiceStatuses.has(expected)) {
+      throw new Error(`Voice classification "${expected}" missing from roster`);
+    }
+  }
+}
+
+function assertEq(label: string, actual: number, expected: number) {
+  if (actual !== expected) {
+    throw new Error(`${label}: expected ${expected}, got ${actual}`);
+  }
+}
 
 // Ad-hoc spawn excluded — requires 15-minute SPAWN_DELAY_MS timer to fire.
 // Run with SMOKE_INCLUDE_SLOW=1 to include.

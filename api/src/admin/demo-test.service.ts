@@ -200,10 +200,14 @@ export class DemoTestService {
     discordUserId: string;
     userId: number;
     durationSec: number;
+    firstJoinAt?: string;
+    lastLeaveAt?: string;
   }): Promise<void> {
     await this.assertDemoMode();
-    const now = new Date();
-    const joinAt = new Date(now.getTime() - p.durationSec * 1000);
+    const leave = p.lastLeaveAt ? new Date(p.lastLeaveAt) : new Date();
+    const join = p.firstJoinAt
+      ? new Date(p.firstJoinAt)
+      : new Date(leave.getTime() - p.durationSec * 1000);
     await this.db
       .insert(schema.eventVoiceSessions)
       .values({
@@ -211,10 +215,10 @@ export class DemoTestService {
         userId: p.userId,
         discordUserId: p.discordUserId,
         discordUsername: 'smoke-test',
-        firstJoinAt: joinAt,
-        lastLeaveAt: now,
+        firstJoinAt: join,
+        lastLeaveAt: leave,
         totalDurationSec: p.durationSec,
-        segments: [{ joinAt: joinAt.toISOString(), leaveAt: now.toISOString(), durationSec: p.durationSec }],
+        segments: [{ joinAt: join.toISOString(), leaveAt: leave.toISOString(), durationSec: p.durationSec }],
       })
       .onConflictDoNothing();
   }
