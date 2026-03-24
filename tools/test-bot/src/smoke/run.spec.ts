@@ -43,8 +43,15 @@ test('returns true for awaitDrained timeout error', () => {
   assert.equal(isTimeoutError(err), true);
 });
 
-test('returns false for SmokeAssertionError', () => {
+test('returns false for SmokeAssertionError without timeout text', () => {
   const err = new SmokeAssertionError('Expected embed title matching /foo/');
+  assert.equal(isTimeoutError(err), false);
+});
+
+test('returns false for SmokeAssertionError even when message contains "timed out"', () => {
+  // A SmokeAssertionError is a real test failure, not a retriable timeout.
+  // isTimeoutError must check the error type, not just the message text.
+  const err = new SmokeAssertionError('Embed assertion timed out waiting for update');
   assert.equal(isTimeoutError(err), false);
 });
 
