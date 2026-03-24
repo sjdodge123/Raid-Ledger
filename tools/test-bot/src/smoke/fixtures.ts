@@ -289,3 +289,11 @@ export async function triggerClassify(
 ): Promise<void> {
   await api.post('/admin/test/trigger-classify', { eventId });
 }
+
+/** Inject a synthetic voice session into the DB — DEMO_MODE only (ROK-943). */
+export async function injectVoiceSession(
+  api: ApiClient,
+  p: { eventId: number; discordUserId: string; userId: number; durationSec: number },
+): Promise<void> {
+  await api.post('/admin/test/inject-voice-session', p);
+}

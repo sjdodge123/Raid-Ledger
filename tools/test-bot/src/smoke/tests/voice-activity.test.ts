@@ -16,6 +16,7 @@ import {
   awaitProcessing,
   flushVoiceSessions,
   triggerClassify,
+  injectVoiceSession,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -316,83 +317,79 @@ const metricsVoicePopulated: SmokeTest = {
 
 /**
  * ROK-943: Voice classification must populate attendance and produce
- * non-zero metrics when signups and voice data both exist.
+ * non-zero attended count when a user has significant voice time.
  *
- * Pipeline: voice join -> flush sessions -> trigger classify ->
- *   attendance populated -> metrics show attended >= 1.
- *
- * SLOW: requires voice join + flush + classification cycle.
+ * Injects a synthetic 30-minute voice session (bypassing real-time voice
+ * tracking), then triggers classification and asserts attended >= 1.
+ * This validates the full pipeline: session → classify → attendance → metrics.
  */
 const classifyPopulatesAttendance: SmokeTest = {
   name: 'Voice classification populates attendance and metrics (ROK-943)',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 2, 'game-voice-monitor', async (vChId) => {
-      const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
-        '/admin/settings/games?limit=1',
-      );
-      const gameId = gamesRes.data[0]?.id;
-      if (!gameId) throw new Error('No games in DB');
+    const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+      '/admin/settings/games?limit=1',
+    );
+    const gameId = gamesRes.data[0]?.id;
+    if (!gameId) throw new Error('No games in DB');
 
-      const ev = await createEvent(ctx.api, 'rok943-classify', {
-        gameId,
-        startTime: futureTime(-5),
-        endTime: futureTime(55),
-      });
-      try {
-        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, undefined, {
-          linkDiscord: true,
-        });
-
-        await joinVoice(vChId);
-        // Poll flush+classify until classification runs and populates
-        // attendance. Voice time will be short (seconds), so classification
-        // produces "no_show" — the key assertion is that the pipeline
-        // RUNS AT ALL (the bug was it never ran). We check that
-        // attendanceSummary exists and has classified entries.
-        type MetricsResponse = {
-          attendanceSummary: {
-            attended: number;
-            noShow: number;
-            total: number;
-            attendanceRate: number;
-          } | null;
-          voiceSummary: { totalTracked: number } | null;
-        };
-        const metrics = await pollForCondition(
-          async () => {
-            await flushVoiceSessions(ctx.api);
-            await triggerClassify(ctx.api, ev.id);
-            await awaitProcessing(ctx.api);
-            const m = await ctx.api.get<MetricsResponse>(
-              `/events/${ev.id}/metrics`,
-            );
-            // Classification ran if voiceSummary has tracked sessions
-            if (m.voiceSummary && m.voiceSummary.totalTracked >= 1) return m;
-            return null;
-          },
-          30000,
-          { intervalMs: 3000 },
-        );
-
-        // Pipeline ran — voice sessions were classified
-        if (!metrics.voiceSummary) {
-          throw new Error('voiceSummary null after classify');
-        }
-        if (metrics.voiceSummary.totalTracked < 1) {
-          throw new Error(
-            `totalTracked=${metrics.voiceSummary.totalTracked}, expected >= 1`,
-          );
-        }
-        // Attendance was populated (either attended or no_show)
-        if (!metrics.attendanceSummary) {
-          throw new Error('attendanceSummary null — classification did not populate attendance');
-        }
-      } finally {
-        leaveVoice();
-        await deleteEvent(ctx.api, ev.id);
-      }
+    const ev = await createEvent(ctx.api, 'rok943-classify', {
+      gameId,
+      startTime: futureTime(-65),
+      endTime: futureTime(-5),
     });
+    try {
+      await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, undefined, {
+        linkDiscord: true,
+      });
+
+      // Inject a synthetic 30-min voice session (>= 120s threshold for
+      // classification as something other than no_show).
+      await injectVoiceSession(ctx.api, {
+        eventId: ev.id,
+        discordUserId: ctx.testBotDiscordId,
+        userId: ctx.dmRecipientUserId,
+        durationSec: 1800,
+      });
+
+      await triggerClassify(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
+
+      type MetricsResponse = {
+        attendanceSummary: {
+          attended: number;
+          attendanceRate: number;
+        } | null;
+        voiceSummary: { totalTracked: number } | null;
+      };
+      const metrics = await ctx.api.get<MetricsResponse>(
+        `/events/${ev.id}/metrics`,
+      );
+
+      if (!metrics.voiceSummary) {
+        throw new Error('voiceSummary null after classify');
+      }
+      if (metrics.voiceSummary.totalTracked < 1) {
+        throw new Error(
+          `totalTracked=${metrics.voiceSummary.totalTracked}, expected >= 1`,
+        );
+      }
+      if (!metrics.attendanceSummary) {
+        throw new Error('attendanceSummary null after classify');
+      }
+      if (metrics.attendanceSummary.attended < 1) {
+        throw new Error(
+          `attended=${metrics.attendanceSummary.attended}, expected >= 1`,
+        );
+      }
+      if (metrics.attendanceSummary.attendanceRate <= 0) {
+        throw new Error(
+          `attendanceRate=${metrics.attendanceSummary.attendanceRate}, expected > 0`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
   },
 };
 
@@ -403,9 +400,8 @@ const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 export const voiceActivityTests: SmokeTest[] = [
   voiceJoinDetected,
   voiceLeaveRecorded,
-  ...(includeSlow
-    ? [adHocSpawn, metricsVoicePopulated, classifyPopulatesAttendance]
-    : []),
+  classifyPopulatesAttendance,
+  ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
   voiceMemberList,
   multiGameVoiceDetected,
 ];

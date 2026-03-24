@@ -194,6 +194,31 @@ export class DemoTestService {
     await qhs.awaitDrained(timeoutMs);
   }
 
+  /** Inject a synthetic voice session — DEMO_MODE only (ROK-943 smoke test). */
+  async injectVoiceSessionForTest(p: {
+    eventId: number;
+    discordUserId: string;
+    userId: number;
+    durationSec: number;
+  }): Promise<void> {
+    await this.assertDemoMode();
+    const now = new Date();
+    const joinAt = new Date(now.getTime() - p.durationSec * 1000);
+    await this.db
+      .insert(schema.eventVoiceSessions)
+      .values({
+        eventId: p.eventId,
+        userId: p.userId,
+        discordUserId: p.discordUserId,
+        discordUsername: 'smoke-test',
+        firstJoinAt: joinAt,
+        lastLeaveAt: now,
+        totalDurationSec: p.durationSec,
+        segments: [{ joinAt: joinAt.toISOString(), leaveAt: now.toISOString(), durationSec: p.durationSec }],
+      })
+      .onConflictDoNothing();
+  }
+
   /** Trigger voice classification + attendance for an event — DEMO_MODE only (ROK-943). */
   async triggerClassifyForTest(eventId: number): Promise<void> {
     await this.assertDemoMode();

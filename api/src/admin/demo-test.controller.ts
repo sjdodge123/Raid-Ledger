@@ -54,6 +54,13 @@ const TriggerClassifySchema = z.object({
   eventId: z.number().int().positive(),
 });
 
+const InjectVoiceSessionSchema = z.object({
+  eventId: z.number().int().positive(),
+  discordUserId: z.string().min(1),
+  userId: z.number().int().positive(),
+  durationSec: z.number().int().positive(),
+});
+
 const AwaitProcessingSchema = z.object({
   timeoutMs: z.number().int().positive().max(60_000).optional(),
 });
@@ -225,6 +232,17 @@ export class DemoTestController {
     await this.demoTestService.awaitProcessingForTest(
       parsed.timeoutMs ?? 30_000,
     );
+    return { success: true };
+  }
+
+  /** Inject a synthetic voice session — DEMO_MODE only (ROK-943 smoke test). */
+  @Post('inject-voice-session')
+  @HttpCode(HttpStatus.OK)
+  async injectVoiceSessionForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(InjectVoiceSessionSchema, body);
+    await this.demoTestService.injectVoiceSessionForTest(parsed);
     return { success: true };
   }
 
