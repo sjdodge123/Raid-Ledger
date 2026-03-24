@@ -235,6 +235,14 @@ test.describe('Lineup creation modal', () => {
 
         const votingDuration = modal.locator('[data-testid="voting-duration"]');
         await expect(votingDuration).toBeVisible({ timeout: 5_000 });
+
+        // Match threshold slider (10%–75%) should be present
+        const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
+        await expect(thresholdSlider).toBeVisible({ timeout: 5_000 });
+
+        // Verify slider labels
+        await expect(modal.getByText('More matches')).toBeVisible();
+        await expect(modal.getByText('Fewer, larger matches')).toBeVisible();
     });
 
     test('submitting modal creates lineup and navigates to detail page', async ({ page }) => {

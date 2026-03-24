@@ -37,6 +37,7 @@ function describePhaseScheduling() {
       buildingDurationHours?: number;
       votingDurationHours?: number;
       decidedDurationHours?: number;
+      matchThreshold?: number;
     } = {},
   ) {
     return testApp.request
@@ -278,5 +279,47 @@ function describePhaseScheduling() {
     });
   }
   describe('PUT /admin/settings/lineup', describePUTLineupSettings);
+
+  // ── POST /lineups with matchThreshold ─────────────────────
+
+  function describePOSTWithMatchThreshold() {
+    it('should accept matchThreshold and return it in detail', async () => {
+      const res = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+        matchThreshold: 0.5,
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.matchThreshold).toBe(0.5);
+    });
+
+    it('should default matchThreshold to 0.35 when not provided', async () => {
+      const res = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.matchThreshold).toBe(0.35);
+    });
+
+    it('should reject matchThreshold below 0.10', async () => {
+      const res = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+        matchThreshold: 0.05,
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should reject matchThreshold above 0.75', async () => {
+      const res = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+        matchThreshold: 0.90,
+      });
+
+      expect(res.status).toBe(400);
+    });
+  }
+  describe('POST /lineups with matchThreshold', describePOSTWithMatchThreshold);
 }
 describe('Lineup Phase Scheduling (integration)', describePhaseScheduling);

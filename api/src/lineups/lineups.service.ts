@@ -223,6 +223,7 @@ export class LineupsService {
           targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
           phaseDeadline,
           phaseDurationOverride: overrides,
+          matchThreshold: dto.matchThreshold?.toFixed(2) ?? undefined,
         })
         .returning();
     });

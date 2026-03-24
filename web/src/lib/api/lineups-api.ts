@@ -69,6 +69,7 @@ export interface CreateLineupParams {
   buildingDurationHours?: number;
   votingDurationHours?: number;
   decidedDurationHours?: number;
+  matchThreshold?: number;
 }
 
 /** Create a new lineup with optional duration params. */

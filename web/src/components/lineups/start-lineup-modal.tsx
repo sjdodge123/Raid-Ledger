@@ -18,14 +18,17 @@ function useDurationState() {
   const defaults = lineupDefaults.data;
   const [building, setBuilding] = useState<number | ''>('');
   const [voting, setVoting] = useState<number | ''>('');
+  const [matchThreshold, setMatchThreshold] = useState<number>(0.35);
   const buildingVal = building === '' ? (defaults?.buildingDurationHours ?? 48) : building;
   const votingVal = voting === '' ? (defaults?.votingDurationHours ?? 24) : voting;
 
   return {
     building: buildingVal,
     voting: votingVal,
+    matchThreshold,
     setBuilding,
     setVoting,
+    setMatchThreshold,
     isLoading: lineupDefaults.isLoading,
   };
 }
@@ -68,6 +71,35 @@ function DurationSlider({ label, name, testId, value, onChange }: {
   );
 }
 
+function ThresholdSlider({ value, onChange }: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const pct = Math.round(value * 100);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-medium text-secondary">Match Threshold</label>
+        <span className="text-sm text-muted tabular-nums">{pct}%</span>
+      </div>
+      <input
+        type="range"
+        data-testid="match-threshold"
+        min={10}
+        max={75}
+        step={5}
+        value={pct}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+      />
+      <div className="flex justify-between text-xs text-muted/60 mt-1">
+        <span>More matches</span>
+        <span>Fewer, larger matches</span>
+      </div>
+    </div>
+  );
+}
+
 export function StartLineupModal({ isOpen, onClose }: Props) {
   const navigate = useNavigate();
   const createLineup = useCreateLineup();
@@ -78,6 +110,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
       const result = await createLineup.mutateAsync({
         buildingDurationHours: durations.building,
         votingDurationHours: durations.voting,
+        matchThreshold: durations.matchThreshold,
       });
       onClose();
       navigate(`/community-lineup/${result.id}`);
@@ -107,6 +140,12 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
           value={durations.voting}
           onChange={durations.setVoting}
         />
+        <div className="border-t border-edge/30 pt-4">
+          <ThresholdSlider
+            value={durations.matchThreshold}
+            onChange={durations.setMatchThreshold}
+          />
+        </div>
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
