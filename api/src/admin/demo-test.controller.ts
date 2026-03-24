@@ -50,6 +50,10 @@ const CancelSignupSchema = z.object({
   userId: z.number().int().positive(),
 });
 
+const TriggerClassifySchema = z.object({
+  eventId: z.number().int().positive(),
+});
+
 const AwaitProcessingSchema = z.object({
   timeoutMs: z.number().int().positive().max(60_000).optional(),
 });
@@ -219,6 +223,17 @@ export class DemoTestController {
     await this.demoTestService.awaitProcessingForTest(
       parsed.timeoutMs ?? 30_000,
     );
+    return { success: true };
+  }
+
+  /** Trigger voice classification for an event — DEMO_MODE only (ROK-943). */
+  @Post('trigger-classify')
+  @HttpCode(HttpStatus.OK)
+  async triggerClassifyForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(TriggerClassifySchema, body);
+    await this.demoTestService.triggerClassifyForTest(parsed.eventId);
     return { success: true };
   }
 

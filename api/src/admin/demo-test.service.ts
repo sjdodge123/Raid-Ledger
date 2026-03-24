@@ -16,6 +16,10 @@ import { RosterNotificationBufferService } from '../notifications/roster-notific
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
+import {
+  classifyEventSessions,
+  autoPopulateAttendance,
+} from '../discord-bot/services/voice-attendance-classify.helpers';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -184,6 +188,21 @@ export class DemoTestService {
     await this.assertDemoMode();
     const qhs = this.moduleRef.get(QueueHealthService, { strict: false });
     await qhs.awaitDrained(timeoutMs);
+  }
+
+  /** Trigger voice classification + attendance for an event — DEMO_MODE only (ROK-943). */
+  async triggerClassifyForTest(eventId: number): Promise<void> {
+    await this.assertDemoMode();
+    const logger = { log: () => {}, warn: () => {} };
+    const defaultGraceMs = 5 * 60 * 1000;
+    await classifyEventSessions(
+      this.db,
+      eventId,
+      undefined,
+      defaultGraceMs,
+      logger,
+    );
+    await autoPopulateAttendance(this.db, eventId, logger);
   }
 
   /** Directly update a signup's status in the DB. */
