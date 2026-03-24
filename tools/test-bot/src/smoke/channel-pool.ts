@@ -32,8 +32,7 @@ export async function setupChannelPool(
   textChannels: DiscordChannel[],
   defaultChannelId: string,
 ): Promise<ChannelSlot[]> {
-  const games = await fetchGames(api);
-  const poolGames = games;
+  const poolGames = await fetchGames(api);
   // Use non-default channels for the pool
   const poolChannels = textChannels.filter((ch) => ch.id !== defaultChannelId);
 
@@ -73,7 +72,11 @@ export async function teardownChannelPool(
   pool: ChannelSlot[],
 ): Promise<void> {
   for (const slot of pool) {
-    await deleteBinding(api, slot.bindingId);
+    try {
+      await deleteBinding(api, slot.bindingId);
+    } catch (err) {
+      console.warn(`  Channel pool: failed to delete binding ${slot.bindingId}:`, err);
+    }
   }
   if (pool.length > 0) {
     console.log(`  Channel pool: ${pool.length} bindings cleaned up`);

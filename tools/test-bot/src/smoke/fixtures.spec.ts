@@ -11,6 +11,7 @@
 import assert from 'node:assert/strict';
 
 import { channelForTest, channelForGame } from './fixtures.js';
+import type { ChannelSlot } from './types.js';
 
 let passed = 0;
 let failed = 0;
@@ -35,7 +36,7 @@ console.log('fixtures.spec.ts — channelForTest\n');
 test('returns defaultChannelId when channelPool is undefined', () => {
   const ctx = {
     defaultChannelId: 'ch-default-123',
-  } as { defaultChannelId: string; channelPool?: { channelId: string }[] };
+  } as { defaultChannelId: string; channelPool?: ChannelSlot[] };
 
   const result = channelForTest(ctx, 0);
   assert.deepEqual(result, { channelId: 'ch-default-123' });
@@ -44,8 +45,8 @@ test('returns defaultChannelId when channelPool is undefined', () => {
 test('returns defaultChannelId when channelPool is empty', () => {
   const ctx = {
     defaultChannelId: 'ch-default-456',
-    channelPool: [],
-  } as { defaultChannelId: string; channelPool: { channelId: string }[] };
+    channelPool: [] as ChannelSlot[],
+  };
 
   const result = channelForTest(ctx, 0);
   assert.deepEqual(result, { channelId: 'ch-default-456' });
@@ -55,60 +56,60 @@ test('returns pool entry at given index', () => {
   const ctx = {
     defaultChannelId: 'ch-default-789',
     channelPool: [
-      { channelId: 'ch-pool-0' },
-      { channelId: 'ch-pool-1' },
-      { channelId: 'ch-pool-2' },
+      { channelId: 'ch-pool-0', gameId: 1, bindingId: 'b0' },
+      { channelId: 'ch-pool-1', gameId: 2, bindingId: 'b1' },
+      { channelId: 'ch-pool-2', gameId: 3, bindingId: 'b2' },
     ],
   };
 
   const result = channelForTest(ctx, 1);
-  assert.deepEqual(result, { channelId: 'ch-pool-1' });
+  assert.deepEqual(result, { channelId: 'ch-pool-1', gameId: 2 });
 });
 
 test('wraps around when index exceeds pool length', () => {
   const ctx = {
     defaultChannelId: 'ch-default-abc',
     channelPool: [
-      { channelId: 'ch-pool-a' },
-      { channelId: 'ch-pool-b' },
-      { channelId: 'ch-pool-c' },
+      { channelId: 'ch-pool-a', gameId: 1, bindingId: 'ba' },
+      { channelId: 'ch-pool-b', gameId: 2, bindingId: 'bb' },
+      { channelId: 'ch-pool-c', gameId: 3, bindingId: 'bc' },
     ],
   };
 
   // index 5 % 3 = 2, so should return pool[2]
   const result = channelForTest(ctx, 5);
-  assert.deepEqual(result, { channelId: 'ch-pool-c' });
+  assert.deepEqual(result, { channelId: 'ch-pool-c', gameId: 3 });
 });
 
 test('returns first pool entry for index 0', () => {
   const ctx = {
     defaultChannelId: 'ch-default-xyz',
     channelPool: [
-      { channelId: 'ch-pool-first' },
-      { channelId: 'ch-pool-second' },
+      { channelId: 'ch-pool-first', gameId: 1, bindingId: 'bf' },
+      { channelId: 'ch-pool-second', gameId: 2, bindingId: 'bs' },
     ],
   };
 
   const result = channelForTest(ctx, 0);
-  assert.deepEqual(result, { channelId: 'ch-pool-first' });
+  assert.deepEqual(result, { channelId: 'ch-pool-first', gameId: 1 });
 });
 
 test('wraps correctly for large index values', () => {
   const ctx = {
     defaultChannelId: 'ch-default-lg',
     channelPool: [
-      { channelId: 'ch-a' },
-      { channelId: 'ch-b' },
+      { channelId: 'ch-a', gameId: 1, bindingId: 'b1' },
+      { channelId: 'ch-b', gameId: 2, bindingId: 'b2' },
     ],
   };
 
   // index 100 % 2 = 0
   const result = channelForTest(ctx, 100);
-  assert.deepEqual(result, { channelId: 'ch-a' });
+  assert.deepEqual(result, { channelId: 'ch-a', gameId: 1 });
 
   // index 101 % 2 = 1
   const result2 = channelForTest(ctx, 101);
-  assert.deepEqual(result2, { channelId: 'ch-b' });
+  assert.deepEqual(result2, { channelId: 'ch-b', gameId: 2 });
 });
 
 // --- channelForGame tests ---
