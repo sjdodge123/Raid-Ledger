@@ -1,17 +1,11 @@
-#!/usr/bin/env npx tsx
 /**
- * TDD failing tests for ROK-952: retry logic in smoke test runner.
+ * Unit tests for isTimeoutError retry helper (ROK-952).
  *
- * Tests the NEW `isTimeoutError` function that will be exported from run.ts.
- * These tests MUST fail until the dev agent implements the function.
- *
- * Run: npx tsx src/smoke/run.spec.ts
+ * Run: npx tsx --test src/smoke/run.spec.ts
  */
 import assert from 'node:assert/strict';
 import { SmokeAssertionError } from './assert.js';
-
-// This import will fail until the dev agent exports isTimeoutError from run.ts
-import { isTimeoutError } from './run.js';
+import { isTimeoutError } from './retry.js';
 
 let passed = 0;
 let failed = 0;

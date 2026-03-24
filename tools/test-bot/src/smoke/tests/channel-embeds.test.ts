@@ -15,6 +15,7 @@ import {
   deleteEvent,
   awaitProcessing,
   channelForTest,
+  channelForGame,
 } from '../fixtures.js';
 import { assertEmbedTitle, assertEmbedCount, assertHasButton } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -236,20 +237,21 @@ const nonMmoNoWowAvatars: SmokeTest = {
       console.log('    SKIP: No non-MMO game found in configured games');
       return;
     }
-    // Create event with the non-MMO gameId so the game filter is exercised
-    const ch = channelForTest(ctx, 7);
+    // Create event with the non-MMO gameId so the game filter is exercised.
+    // Use channelForGame to poll the channel bound to this specific game.
+    const pollCh = channelForGame(ctx, nonMmoGame.id);
     const ev = await createEvent(ctx.api, 'embed-nowow', {
       gameId: nonMmoGame.id,
       maxAttendees: 10,
     });
     try {
-      await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      await embedInChannel(pollCh, ev.title, ctx.config.timeoutMs);
       // Sign up with MMO character (which has a WoW class)
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx));
       await awaitProcessing(ctx.api);
       // Re-poll for the embed (don't depend on catching the edit event)
       const found = await pollForEmbed(
-        ch.channelId,
+        pollCh,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );

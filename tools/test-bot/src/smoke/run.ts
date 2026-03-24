@@ -9,8 +9,8 @@
  */
 import { connect, disconnect, getClient } from '../client.js';
 import { readLastMessages } from '../helpers/messages.js';
-import { SmokeAssertionError } from './assert.js';
 import { ApiClient } from './api.js';
+import { isTimeoutError } from './retry.js';
 import { SMOKE } from './config.js';
 import { linkDiscord } from './fixtures.js';
 import { setupChannelPool, teardownChannelPool } from './channel-pool.js';
@@ -195,16 +195,6 @@ async function setup(): Promise<TestContext> {
     dmRecipientUserId,
     channelPool,
   };
-}
-
-/**
- * Returns true if the error is a retriable timeout (not an assertion failure).
- * SmokeAssertionError indicates a real test failure that should not be retried.
- */
-export function isTimeoutError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  if (err instanceof SmokeAssertionError) return false;
-  return err.message.includes('timed out');
 }
 
 async function runTest(
