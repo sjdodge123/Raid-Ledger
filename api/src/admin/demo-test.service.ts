@@ -15,6 +15,7 @@ import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grac
 import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { QueueHealthService } from '../queue/queue-health.service';
+import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -165,6 +166,16 @@ export class DemoTestService {
     await this.assertDemoMode();
     const qhs = this.moduleRef.get(QueueHealthService, { strict: false });
     await qhs.drainAll();
+    return { success: true };
+  }
+
+  /** Trigger scheduled event completion cron — DEMO_MODE only (ROK-944). */
+  async triggerScheduledEventCompletionForTest(): Promise<{
+    success: boolean;
+  }> {
+    await this.assertDemoMode();
+    const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
+    await svc.completeExpiredEvents();
     return { success: true };
   }
 
