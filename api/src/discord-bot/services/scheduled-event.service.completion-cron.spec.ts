@@ -339,10 +339,10 @@ describe('completeExpiredEvents — ROK-944: cache bypass', () => {
 /**
  * Build a test module and manually wire the EmbedSyncQueueService mock.
  *
- * After the ROK-944 fix, ScheduledEventService will accept an @Optional()
- * EmbedSyncQueueService and call enqueue() after each completion.
- * We manually set the private field since the constructor does not accept
- * it yet (this is TDD — the service code has not been changed).
+ * NestJS @Optional() with union types (e.g. `EmbedSyncQueueService | null`)
+ * causes TypeScript to emit `Object` as the design type, preventing automatic
+ * token resolution. We work around this by setting the private field directly
+ * after module creation — matching how production DI wires it.
  */
 async function setupModuleWithEmbedSync(mockEmbedSyncQueue: {
   enqueue: jest.Mock;
