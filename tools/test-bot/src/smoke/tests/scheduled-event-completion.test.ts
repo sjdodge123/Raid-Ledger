@@ -58,6 +58,30 @@ const scheduledEventCreatedOnEventCreate: SmokeTest = {
     const ev = await createEvent(ctx.api, 'se-create');
     try {
       await awaitProcessing(ctx.api);
+
+      // Explicitly trigger scheduled event creation via test endpoint
+      const createResult = await ctx.api.post<{
+        success: boolean;
+        skipReason: string | null;
+        error: string | null;
+        debug: Record<string, unknown> | null;
+        discordScheduledEventId: string | null;
+      }>('/admin/test/trigger-scheduled-event-create', { eventId: ev.id });
+
+      if (!createResult.success) {
+        throw new Error(
+          `Scheduled event creation failed for event ${ev.id}: ` +
+            `skipReason=${createResult.skipReason}, error=${createResult.error}, ` +
+            `debug=${JSON.stringify(createResult.debug)}`,
+        );
+      }
+      if (!createResult.discordScheduledEventId) {
+        throw new Error(
+          `Creation returned success but no discordScheduledEventId for event ${ev.id}. ` +
+            `error=${createResult.error}, debug=${JSON.stringify(createResult.debug)}`,
+        );
+      }
+
       // Poll for the Discord scheduled event to appear in the guild
       const se = await pollForCondition(
         () => findScheduledEventByTitle(ev.title),
@@ -82,6 +106,22 @@ const scheduledEventCompletedAfterCron: SmokeTest = {
     const ev = await createEvent(ctx.api, 'se-complete');
     try {
       await awaitProcessing(ctx.api);
+
+      // Explicitly trigger scheduled event creation via test endpoint
+      const createResult = await ctx.api.post<{
+        success: boolean;
+        skipReason: string | null;
+        error: string | null;
+        discordScheduledEventId: string | null;
+      }>('/admin/test/trigger-scheduled-event-create', { eventId: ev.id });
+
+      if (!createResult.success) {
+        throw new Error(
+          `Scheduled event creation failed for event ${ev.id}: ` +
+            `skipReason=${createResult.skipReason}, error=${createResult.error}`,
+        );
+      }
+
       // Wait for the Discord scheduled event to appear
       const created = await pollForCondition(
         () => findScheduledEventByTitle(ev.title),
@@ -129,6 +169,22 @@ const completionCronSkipsFutureEvents: SmokeTest = {
     const ev = await createEvent(ctx.api, 'se-future');
     try {
       await awaitProcessing(ctx.api);
+
+      // Explicitly trigger scheduled event creation via test endpoint
+      const createResult = await ctx.api.post<{
+        success: boolean;
+        skipReason: string | null;
+        error: string | null;
+        discordScheduledEventId: string | null;
+      }>('/admin/test/trigger-scheduled-event-create', { eventId: ev.id });
+
+      if (!createResult.success) {
+        throw new Error(
+          `Scheduled event creation failed for event ${ev.id}: ` +
+            `skipReason=${createResult.skipReason}, error=${createResult.error}`,
+        );
+      }
+
       // Wait for the Discord scheduled event to appear
       const created = await pollForCondition(
         () => findScheduledEventByTitle(ev.title),

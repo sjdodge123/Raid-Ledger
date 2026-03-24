@@ -20,6 +20,10 @@ import {
   classifyEventSessions,
   autoPopulateAttendance,
 } from '../discord-bot/services/voice-attendance-classify.helpers';
+import {
+  triggerScheduledEventCreate,
+  type ScheduledEventCreateResult,
+} from './demo-test-scheduled-event.helpers';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -196,6 +200,14 @@ export class DemoTestService {
     const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
     await svc.completeExpiredEvents();
     return { success: true };
+  }
+
+  /** Trigger Discord scheduled event creation for an event — DEMO_MODE only. */
+  async triggerScheduledEventCreateForTest(
+    eventId: number,
+  ): Promise<ScheduledEventCreateResult> {
+    await this.assertDemoMode();
+    return triggerScheduledEventCreate(this.db, this.moduleRef, eventId);
   }
 
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */

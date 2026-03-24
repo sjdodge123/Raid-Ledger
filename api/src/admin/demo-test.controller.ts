@@ -215,6 +215,25 @@ export class DemoTestController {
     return this.demoTestService.flushEmbedQueueForTest();
   }
 
+  /** Trigger Discord scheduled event creation — DEMO_MODE only. */
+  @Post('trigger-scheduled-event-create')
+  @HttpCode(HttpStatus.OK)
+  async triggerScheduledEventCreateForTest(
+    @Body() body: unknown,
+  ): Promise<{
+    success: boolean;
+    skipReason: string | null;
+    discordScheduledEventId: string | null;
+  }> {
+    const parsed = this.parseBody(
+      z.object({ eventId: z.number().int().positive() }),
+      body,
+    );
+    return this.demoTestService.triggerScheduledEventCreateForTest(
+      parsed.eventId,
+    );
+  }
+
   /** Trigger scheduled event completion cron — DEMO_MODE only (ROK-944). */
   @Post('trigger-scheduled-event-completion')
   @HttpCode(HttpStatus.OK)
