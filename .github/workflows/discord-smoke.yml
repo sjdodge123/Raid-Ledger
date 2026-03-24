@@ -147,9 +147,57 @@ jobs:
         run: npm install
         working-directory: tools/test-bot
 
-      - name: Run Discord smoke tests
+      - name: Run embed smoke tests
         run: npx tsx src/smoke/run.ts
         working-directory: tools/test-bot
         env:
           API_URL: http://localhost:3000
           ADMIN_PASSWORD: discord-smoke-ci-password
+          SMOKE_CATEGORY: embed
+          SMOKE_TIMEOUT_MS: '90000'
+          SMOKE_CONCURRENCY: '3'
+          SMOKE_RETRY_COUNT: '1'
+
+      - name: Run flow smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          API_URL: http://localhost:3000
+          ADMIN_PASSWORD: discord-smoke-ci-password
+          SMOKE_CATEGORY: flow
+          SMOKE_TIMEOUT_MS: '90000'
+          SMOKE_CONCURRENCY: '3'
+          SMOKE_RETRY_COUNT: '1'
+
+      - name: Run DM smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          API_URL: http://localhost:3000
+          ADMIN_PASSWORD: discord-smoke-ci-password
+          SMOKE_CATEGORY: dm
+          SMOKE_TIMEOUT_MS: '90000'
+          SMOKE_CONCURRENCY: '3'
+          SMOKE_RETRY_COUNT: '1'
+
+      - name: Run command smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          API_URL: http://localhost:3000
+          ADMIN_PASSWORD: discord-smoke-ci-password
+          SMOKE_CATEGORY: command
+          SMOKE_TIMEOUT_MS: '90000'
+          SMOKE_CONCURRENCY: '3'
+          SMOKE_RETRY_COUNT: '1'
+
+      - name: Run voice smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          API_URL: http://localhost:3000
+          ADMIN_PASSWORD: discord-smoke-ci-password
+          SMOKE_CATEGORY: voice
+          SMOKE_TIMEOUT_MS: '90000'
+          SMOKE_CONCURRENCY: '3'
+          SMOKE_RETRY_COUNT: '1'

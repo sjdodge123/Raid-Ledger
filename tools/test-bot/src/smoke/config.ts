@@ -18,4 +18,5 @@ export const SMOKE = {
   guildId: required('TEST_GUILD_ID'),
   timeoutMs: parseInt(process.env.SMOKE_TIMEOUT_MS ?? '60000', 10),
   concurrency: parseInt(process.env.SMOKE_CONCURRENCY ?? '5', 10),
+  retryCount: parseInt(process.env.SMOKE_RETRY_COUNT ?? '0', 10),
 };

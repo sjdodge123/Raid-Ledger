@@ -6,6 +6,13 @@ export interface DiscordChannel {
   name: string;
 }
 
+/** A channel slot bound to a specific game for test isolation. */
+export interface ChannelSlot {
+  gameId: number;
+  channelId: string;
+  bindingId: string;
+}
+
 export interface TestContext {
   api: ApiClient;
   config: typeof SMOKE;
@@ -31,6 +38,8 @@ export interface TestContext {
   demoUserIds?: number[];
   /** Demo user whose discordId = test bot (receives DMs) */
   dmRecipientUserId: number;
+  /** Pool of game-channel bindings for distributing tests across channels. */
+  channelPool?: ChannelSlot[];
 }
 
 export interface SmokeTest {
@@ -45,4 +54,6 @@ export interface TestResult {
   status: 'PASS' | 'FAIL';
   durationMs: number;
   error?: string;
+  /** Whether this test was retried after a timeout. */
+  retried?: boolean;
 }

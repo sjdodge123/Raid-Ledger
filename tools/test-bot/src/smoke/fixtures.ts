@@ -1,5 +1,5 @@
 import type { ApiClient } from './api.js';
-import type { DiscordChannel } from './types.js';
+import type { DiscordChannel, TestContext } from './types.js';
 
 let counter = 0;
 function uid(prefix: string) {
@@ -15,6 +15,40 @@ export function futureTime(minutesFromNow: number): string {
 export function pickChannel(channels: DiscordChannel[], index: number) {
   if (channels.length === 0) throw new Error('No channels available');
   return channels[index % channels.length];
+}
+
+/**
+ * Select a channel for a test from the channel pool.
+ * Falls back to defaultChannelId when no pool is configured.
+ */
+export function channelForTest(
+  ctx: Pick<TestContext, 'defaultChannelId' | 'channelPool'>,
+  index: number,
+): { channelId: string; gameId?: number } {
+  if (!ctx.channelPool?.length) {
+    return { channelId: ctx.defaultChannelId };
+  }
+  const slot = ctx.channelPool[index % ctx.channelPool.length];
+  const result: { channelId: string; gameId?: number } = {
+    channelId: slot.channelId,
+  };
+  if ('gameId' in slot && slot.gameId !== undefined) {
+    result.gameId = slot.gameId;
+  }
+  return result;
+}
+
+/**
+ * Look up the channel bound to a specific game in the pool.
+ * Falls back to defaultChannelId if the game isn't in the pool.
+ */
+export function channelForGame(
+  ctx: Pick<TestContext, 'defaultChannelId' | 'channelPool'>,
+  gameId: number | undefined,
+): string {
+  if (!gameId || !ctx.channelPool?.length) return ctx.defaultChannelId;
+  const slot = ctx.channelPool.find((s) => s.gameId === gameId);
+  return slot?.channelId ?? ctx.defaultChannelId;
 }
 
 /** Create an event with a unique title for test isolation. */
