@@ -235,11 +235,11 @@ test.describe('Community Lineup detail page', () => {
             page.getByRole('heading', { name: 'Community Lineup' }),
         ).toBeVisible({ timeout: 15_000 });
 
-        // Progress bar phase label (LineupProgressBar renders PHASE_LABELS[status])
-        await expect(page.getByText('Nominating', { exact: true }).first()).toBeVisible({ timeout: 5_000 });
+        // Phase breadcrumb shows "Nominating" in the header
+        await expect(page.getByText('Nominating').first()).toBeVisible({ timeout: 5_000 });
 
-        // "X / 20 nominated" text
-        await expect(page.getByText(/\d+ \/ 20 nominated/)).toBeVisible({ timeout: 5_000 });
+        // "X/20 nominated" text in the subheader context info
+        await expect(page.getByText(/\d+\/20 nominated/)).toBeVisible({ timeout: 5_000 });
     });
 
     test('activity timeline section is present', async ({ page }) => {
