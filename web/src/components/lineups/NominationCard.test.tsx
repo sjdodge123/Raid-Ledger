@@ -43,11 +43,11 @@ describe('NominationCard — basic rendering', () => {
 });
 
 describe('NominationCard — ownership badge', () => {
-    it('shows owner count and total members', () => {
+    it('shows owner count as tally', () => {
         renderWithProviders(
             <NominationCard entry={createMockEntry({ ownerCount: 6, totalMembers: 10 })} onRemove={vi.fn()} />,
         );
-        expect(screen.getByText('6/10')).toBeInTheDocument();
+        expect(screen.getByText('+6')).toBeInTheDocument();
     });
 });
 

@@ -119,8 +119,14 @@ describe('LineupsService.removeNomination', () => {
         LineupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: ActivityLogService, useValue: mockActivityLog },
-        { provide: SettingsService, useValue: { get: jest.fn().mockResolvedValue(null) } },
-        { provide: LineupPhaseQueueService, useValue: { scheduleTransition: jest.fn() } },
+        {
+          provide: SettingsService,
+          useValue: { get: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: LineupPhaseQueueService,
+          useValue: { scheduleTransition: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get<LineupsService>(LineupsService);

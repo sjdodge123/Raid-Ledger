@@ -145,8 +145,14 @@ function describeLineupsService() {
         LineupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: ActivityLogService, useValue: { log: jest.fn() } },
-        { provide: SettingsService, useValue: { get: jest.fn().mockResolvedValue(null) } },
-        { provide: LineupPhaseQueueService, useValue: { scheduleTransition: jest.fn() } },
+        {
+          provide: SettingsService,
+          useValue: { get: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: LineupPhaseQueueService,
+          useValue: { scheduleTransition: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get<LineupsService>(LineupsService);
@@ -335,11 +341,19 @@ function describeLineupsService() {
         }),
       });
       // buildDetailResponse chain (findLineupById + enrichment queries)
-      mockSelects(makeSelectChain({ limitResult: [{ ...votingLineup, status: 'decided' }] }));
+      mockSelects(
+        makeSelectChain({
+          limitResult: [{ ...votingLineup, status: 'decided' }],
+        }),
+      );
       mockSelects(makeSelectChain({ whereResult: [] })); // entries
       mockSelects(makeSelectChain({ groupByResult: [] })); // votes
       mockSelects(makeSelectChain({ whereResult: [{ count: 0 }] })); // voters
-      mockSelects(makeSelectChain({ limitResult: [{ displayName: 'Admin', username: 'Admin' }] })); // creator
+      mockSelects(
+        makeSelectChain({
+          limitResult: [{ displayName: 'Admin', username: 'Admin' }],
+        }),
+      ); // creator
       mockSelects(makeSelectChain({ whereResult: [{ count: 10 }] })); // totalMembers
 
       const result = await service.transitionStatus(1, { status: 'decided' });
