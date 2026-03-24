@@ -191,7 +191,8 @@ export function classifyVoiceSession(
   // 5. full: presence >= 80%
   if (presenceRatio >= 0.8) return 'full';
 
-  return 'partial';
+  // 6. Fallback: >= 120s but < 20% presence — not meaningful attendance
+  return 'no_show';
 }
 
 /**

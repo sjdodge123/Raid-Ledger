@@ -58,7 +58,7 @@ const InjectVoiceSessionSchema = z.object({
   eventId: z.number().int().positive(),
   discordUserId: z.string().min(1),
   userId: z.number().int().positive(),
-  durationSec: z.number().int().positive(),
+  durationSec: z.number().int().nonnegative(),
   firstJoinAt: z.string().datetime().optional(),
   lastLeaveAt: z.string().datetime().optional(),
 });

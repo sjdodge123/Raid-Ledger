@@ -10,7 +10,6 @@ vi.mock('recharts', () => ({
     Pie: () => null,
     Cell: () => null,
     ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    Tooltip: () => null,
 }));
 
 function makeSummary(overrides: Partial<EventAttendanceSummaryDto> = {}): EventAttendanceSummaryDto {
