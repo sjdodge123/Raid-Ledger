@@ -170,7 +170,7 @@ describe('QueueHealthService — configurable poll interval', () => {
     const mockQueue = {
       name: 'test-queue',
       drain: jest.fn(),
-      getJobCounts: jest.fn().mockImplementation(async () => {
+      getJobCounts: jest.fn().mockImplementation(() => {
         pollCount++;
         // Remain busy for the first 3 polls, then become idle
         if (pollCount <= 3) {
@@ -233,7 +233,7 @@ describe('QueueHealthService — configurable poll interval', () => {
     const mockQueue = {
       name: 'test-queue',
       drain: jest.fn(),
-      getJobCounts: jest.fn().mockImplementation(async () => {
+      getJobCounts: jest.fn().mockImplementation(() => {
         pollCount++;
         if (pollCount <= 2) {
           return {
