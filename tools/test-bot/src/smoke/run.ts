@@ -9,9 +9,11 @@
  */
 import { connect, disconnect, getClient } from '../client.js';
 import { readLastMessages } from '../helpers/messages.js';
+import { SmokeAssertionError } from './assert.js';
 import { ApiClient } from './api.js';
 import { SMOKE } from './config.js';
 import { linkDiscord } from './fixtures.js';
+import { setupChannelPool, teardownChannelPool } from './channel-pool.js';
 import type { SmokeTest, TestContext, TestResult, DiscordChannel } from './types.js';
 import { channelEmbedTests } from './tests/channel-embeds.test.js';
 import { dmNotificationTests } from './tests/dm-notifications.test.js';
@@ -171,6 +173,11 @@ async function setup(): Promise<TestContext> {
     .slice(0, 8);
   console.log(`  ${demoUserIds.length} demo users available for roster tests`);
 
+  console.log('  Setting up channel pool...');
+  const channelPool = await setupChannelPool(
+    api, textChannels, defaultChannelId, mmoGameId,
+  );
+
   console.log('  Setup complete.\n');
   return {
     api,
@@ -186,31 +193,62 @@ async function setup(): Promise<TestContext> {
     testCharRole,
     demoUserIds,
     dmRecipientUserId,
+    channelPool,
   };
+}
+
+/**
+ * Returns true if the error is a retriable timeout (not an assertion failure).
+ * SmokeAssertionError indicates a real test failure that should not be retried.
+ */
+export function isTimeoutError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err instanceof SmokeAssertionError) return false;
+  return err.message.includes('timed out');
 }
 
 async function runTest(
   test: SmokeTest,
   ctx: TestContext,
 ): Promise<TestResult> {
+  const maxAttempts = 1 + ctx.config.retryCount;
   const start = Date.now();
-  try {
-    await test.run(ctx);
-    return {
-      name: test.name,
-      category: test.category,
-      status: 'PASS',
-      durationMs: Date.now() - start,
-    };
-  } catch (err) {
-    return {
-      name: test.name,
-      category: test.category,
-      status: 'FAIL',
-      durationMs: Date.now() - start,
-      error: err instanceof Error ? err.message : String(err),
-    };
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await test.run(ctx);
+      return {
+        name: test.name,
+        category: test.category,
+        status: 'PASS',
+        durationMs: Date.now() - start,
+        retried: attempt > 1,
+      };
+    } catch (err) {
+      const isRetriable = isTimeoutError(err) && attempt < maxAttempts;
+      if (isRetriable) {
+        console.log(`  RETRY ${test.name} (attempt ${attempt + 1}/${maxAttempts})`);
+        continue;
+      }
+      return {
+        name: test.name,
+        category: test.category,
+        status: 'FAIL',
+        durationMs: Date.now() - start,
+        error: err instanceof Error ? err.message : String(err),
+        retried: attempt > 1,
+      };
+    }
   }
+
+  // Unreachable, but satisfies TypeScript
+  return {
+    name: test.name,
+    category: test.category,
+    status: 'FAIL',
+    durationMs: Date.now() - start,
+    error: 'Exhausted all retry attempts',
+  };
 }
 
 function report(results: TestResult[]): number {
@@ -227,7 +265,8 @@ function report(results: TestResult[]): number {
     for (const t of tests) {
       const icon = t.status === 'PASS' ? 'PASS' : 'FAIL';
       const dur = `${(t.durationMs / 1000).toFixed(1)}s`;
-      console.log(`  ${icon}  ${t.name} (${dur})`);
+      const suffix = t.retried ? ' (retried)' : '';
+      console.log(`  ${icon}  ${t.name} (${dur})${suffix}`);
       if (t.error) console.log(`        ${t.error}`);
     }
     console.log();
@@ -235,7 +274,9 @@ function report(results: TestResult[]): number {
 
   const pass = results.filter((r) => r.status === 'PASS').length;
   const fail = results.filter((r) => r.status === 'FAIL').length;
-  console.log(`Total: ${pass} passed, ${fail} failed, ${results.length} total`);
+  const retried = results.filter((r) => r.retried).length;
+  const retriedSuffix = retried > 0 ? `, ${retried} retried` : '';
+  console.log(`Total: ${pass} passed, ${fail} failed, ${results.length} total${retriedSuffix}`);
   return fail;
 }
 
@@ -303,6 +344,7 @@ async function main(): Promise<void> {
   const failCount = report(results);
 
   console.log('\n=== Teardown ===');
+  await teardownChannelPool(ctx.api, ctx.channelPool ?? []);
   await disconnect();
   console.log('  Done.');
 
