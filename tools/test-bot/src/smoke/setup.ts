@@ -176,6 +176,15 @@ export async function setup(): Promise<TestContext> {
 
   const { textChannels, voiceChannels } = await fetchChannels(api);
   const defaultChannelId = await discoverDefaultChannel(api, textChannels);
+
+  // Set default voice channel so Discord Scheduled Events can be created (ROK-944)
+  if (voiceChannels.length > 0) {
+    console.log(`  Setting default voice channel: ${voiceChannels[0].id}`);
+    await api.put('/admin/settings/discord-bot/voice-channel', {
+      channelId: voiceChannels[0].id,
+    }).catch(() => {});
+  }
+
   const { mmoGameId, testCharId, testCharRole } = await setupCharacters(api);
   const { games, demoUserIds } = buildDemoData(
     allUsers, testUserId, dmRecipientUserId, mmoGameId,
