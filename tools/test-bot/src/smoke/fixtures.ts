@@ -1,5 +1,5 @@
 import type { ApiClient } from './api.js';
-import type { DiscordChannel } from './types.js';
+import type { DiscordChannel, TestContext } from './types.js';
 
 let counter = 0;
 function uid(prefix: string) {
@@ -15,6 +15,34 @@ export function futureTime(minutesFromNow: number): string {
 export function pickChannel(channels: DiscordChannel[], index: number) {
   if (channels.length === 0) throw new Error('No channels available');
   return channels[index % channels.length];
+}
+
+/**
+ * Select a channel for a test from the channel pool.
+ * Falls back to defaultChannelId when no pool is configured.
+ */
+export function channelForTest(
+  ctx: Pick<TestContext, 'defaultChannelId' | 'channelPool'>,
+  index: number,
+): { channelId: string; gameId?: number } {
+  if (!ctx.channelPool?.length) {
+    return { channelId: ctx.defaultChannelId };
+  }
+  const slot = ctx.channelPool[index % ctx.channelPool.length];
+  return { channelId: slot.channelId, gameId: slot.gameId };
+}
+
+/**
+ * Look up the channel bound to a specific game in the pool.
+ * Falls back to defaultChannelId if the game isn't in the pool.
+ */
+export function channelForGame(
+  ctx: Pick<TestContext, 'defaultChannelId' | 'channelPool'>,
+  gameId: number | undefined,
+): string {
+  if (!gameId || !ctx.channelPool?.length) return ctx.defaultChannelId;
+  const slot = ctx.channelPool.find((s) => s.gameId === gameId);
+  return slot?.channelId ?? ctx.defaultChannelId;
 }
 
 /** Create an event with a unique title for test isolation. */
@@ -114,7 +142,7 @@ export async function signupAs(
   eventId: number,
   userId: number,
   preferredRoles?: string[],
-  opts?: { characterId?: string; status?: string },
+  opts?: { characterId?: string; status?: string; linkDiscord?: boolean },
 ) {
   return api.post('/admin/test/signup', {
     eventId,
@@ -122,6 +150,7 @@ export async function signupAs(
     preferredRoles,
     characterId: opts?.characterId,
     status: opts?.status,
+    linkDiscord: opts?.linkDiscord,
   });
 }
 
@@ -245,4 +274,27 @@ export async function awaitProcessing(
   timeoutMs = 10_000,
 ): Promise<void> {
   await api.post('/admin/test/await-processing', { timeoutMs });
+}
+
+/** Trigger voice classification for a specific event — DEMO_MODE only (ROK-943). */
+export async function triggerClassify(
+  api: ApiClient,
+  eventId: number,
+): Promise<void> {
+  await api.post('/admin/test/trigger-classify', { eventId });
+}
+
+/** Inject a synthetic voice session into the DB — DEMO_MODE only (ROK-943). */
+export async function injectVoiceSession(
+  api: ApiClient,
+  p: {
+    eventId: number;
+    discordUserId: string;
+    userId: number;
+    durationSec: number;
+    firstJoinAt?: string;
+    lastLeaveAt?: string;
+  },
+): Promise<void> {
+  await api.post('/admin/test/inject-voice-session', p);
 }

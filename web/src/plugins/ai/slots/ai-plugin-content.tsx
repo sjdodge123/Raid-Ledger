@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { getPluginBadge } from '../../plugin-registry';
 import { IntegrationCard } from '../../../components/admin/IntegrationCard';
 import { useAiProviders, useAiStatus, useTestChat } from '../../../hooks/admin/use-ai-settings';
@@ -7,6 +7,9 @@ import { CloudProviderCard } from './cloud-provider-card';
 import { AiFeatureToggles } from './ai-feature-toggles';
 import { AiUsageStats } from './ai-usage-stats';
 import type { AiProviderInfoDto } from '@raid-ledger/contract';
+
+/** Polling interval used during active setup/test operations (10s). */
+const ACTIVE_POLL_INTERVAL = 10_000;
 
 function AiIcon() {
     return (
@@ -25,12 +28,15 @@ function ActiveIndicator({ providers }: { providers: AiProviderInfoDto[] }) {
 }
 
 /** Grid of provider cards — Ollama first, then cloud providers. */
-function ProviderGrid({ providers }: { providers: AiProviderInfoDto[] }) {
+function ProviderGrid({ providers, onOllamaSettingChange }: {
+    providers: AiProviderInfoDto[];
+    onOllamaSettingChange: (setting: boolean) => void;
+}) {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {providers.map((p) =>
                 p.selfHosted
-                    ? <OllamaSetupCard key={p.key} provider={p} />
+                    ? <OllamaSetupCard key={p.key} provider={p} onSettingChange={onOllamaSettingChange} />
                     : <CloudProviderCard key={p.key} provider={p} />,
             )}
         </div>
@@ -43,7 +49,10 @@ function ProviderGrid({ providers }: { providers: AiProviderInfoDto[] }) {
  */
 export function AiPluginContent({ pluginSlug }: { pluginSlug?: string }) {
     const { data: status, isLoading: statusLoading } = useAiStatus();
-    const { data: providers, isLoading: providersLoading } = useAiProviders();
+    const [setupActive, setSetupActive] = useState(false);
+    const pollingInterval = setupActive ? ACTIVE_POLL_INTERVAL : false;
+    const { data: providers, isLoading: providersLoading } = useAiProviders({ pollingInterval });
+    const handleOllamaSettingChange = useCallback((v: boolean) => setSetupActive(v), []);
 
     if (pluginSlug && pluginSlug !== 'ai') return null;
 
@@ -60,7 +69,7 @@ export function AiPluginContent({ pluginSlug }: { pluginSlug?: string }) {
                             <h3 className="text-sm font-medium text-secondary">AI Providers</h3>
                             <ActiveIndicator providers={providers} />
                         </div>
-                        <ProviderGrid providers={providers} />
+                        <ProviderGrid providers={providers} onOllamaSettingChange={handleOllamaSettingChange} />
                     </>
                 )}
                 {available && <TestChatSection />}

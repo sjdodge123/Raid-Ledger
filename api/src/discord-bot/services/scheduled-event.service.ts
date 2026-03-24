@@ -104,10 +104,8 @@ export class ScheduledEventService {
     if (!this.clientService.isConnected()) return false;
     const guild = this.clientService.getGuild();
     if (!guild) return false;
-    // ROK-944: cache is advisory only — always fall through to DB query
-    this.eventCache?.getRecentlyEndedEvents(new Date(), 2 * 60 * 60 * 1000);
     const candidates = await findCompletionCandidates(this.db);
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) return false;
     for (const c of candidates) {
       await this.completeScheduledEvent(c.id);
       await this.embedSyncQueue

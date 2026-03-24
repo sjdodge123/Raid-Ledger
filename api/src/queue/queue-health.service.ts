@@ -13,6 +13,14 @@ export interface QueueHealthStatus {
 @Injectable()
 export class QueueHealthService {
   private readonly queues = new Map<string, Queue>();
+  private readonly pollIntervalMs: number;
+
+  constructor() {
+    this.pollIntervalMs = parseInt(
+      process.env.QUEUE_POLL_INTERVAL_MS ?? '500',
+      10,
+    );
+  }
 
   /**
    * Register a queue for health monitoring.
@@ -60,7 +68,7 @@ export class QueueHealthService {
    */
   async awaitDrained(timeoutMs = 30_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
-    const pollInterval = 500;
+    const pollInterval = this.pollIntervalMs;
 
     while (Date.now() < deadline) {
       const statuses = await this.getHealthStatus();

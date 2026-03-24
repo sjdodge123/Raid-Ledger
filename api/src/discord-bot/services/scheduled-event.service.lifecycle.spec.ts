@@ -2,6 +2,7 @@ import { GuildScheduledEventStatus } from 'discord.js';
 import type { ScheduledEventData } from './scheduled-event.service';
 import {
   setupScheduledEventTestModule,
+  createSelectChainNoLimit,
   makeDiscordApiError,
   baseEventData,
   type ScheduledEventMocks,
@@ -253,14 +254,6 @@ describe('startScheduledEvents — basic cases', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  const createSelectChainNoLimit = (rows: unknown[] = []) => {
-    const chain: Record<string, jest.Mock> = {};
-    chain.select = jest.fn().mockReturnValue(chain);
-    chain.from = jest.fn().mockReturnValue(chain);
-    chain.where = jest.fn().mockResolvedValue(rows);
-    return chain;
-  };
-
   it('starts a Discord scheduled event that is still in SCHEDULED state', async () => {
     const selectChain = createSelectChainNoLimit([
       { id: 42, discordScheduledEventId: 'discord-se-id-1' },
@@ -317,14 +310,6 @@ describe('startScheduledEvents — error handling & multiple', () => {
   });
 
   afterEach(() => jest.clearAllMocks());
-
-  const createSelectChainNoLimit = (rows: unknown[] = []) => {
-    const chain: Record<string, jest.Mock> = {};
-    chain.select = jest.fn().mockReturnValue(chain);
-    chain.from = jest.fn().mockReturnValue(chain);
-    chain.where = jest.fn().mockResolvedValue(rows);
-    return chain;
-  };
 
   it('clears DB reference when Discord event was manually deleted (10070)', async () => {
     const selectChain = createSelectChainNoLimit([

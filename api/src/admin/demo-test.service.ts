@@ -16,6 +16,10 @@ import { RosterNotificationBufferService } from '../notifications/roster-notific
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
+import {
+  classifyEventSessions,
+  autoPopulateAttendance,
+} from '../discord-bot/services/voice-attendance-classify.helpers';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -51,6 +55,17 @@ export class DemoTestService {
     username: string,
   ): Promise<typeof schema.users.$inferSelect | undefined> {
     await this.assertDemoMode();
+    // Clear the Discord ID from any other user first (avoids unique constraint
+    // when multiple CI smoke categories re-run setup with different dmRecipient)
+    await this.db
+      .update(schema.users)
+      .set({ discordId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.users.discordId, discordId),
+          sql`${schema.users.id} != ${userId}`,
+        ),
+      );
     const [updated] = await this.db
       .update(schema.users)
       .set({ discordId, username, updatedAt: new Date() })
@@ -89,12 +104,16 @@ export class DemoTestService {
       preferredRoles?: string[];
       characterId?: string;
       status?: SignupStatus;
+      linkDiscord?: boolean;
     },
   ): Promise<SignupResponseDto> {
     await this.assertDemoMode();
     const svc = this.moduleRef.get(SignupsService, { strict: false });
     const signupDto = this.buildSignupDto(dto);
     const result = await svc.signup(eventId, userId, signupDto);
+    if (dto?.linkDiscord) {
+      await this.linkSignupDiscordId(result.id, userId);
+    }
     if (dto?.status && dto.status !== 'signed_up') {
       await this.overrideSignupStatus(result.id, dto.status);
     }
@@ -184,6 +203,73 @@ export class DemoTestService {
     await this.assertDemoMode();
     const qhs = this.moduleRef.get(QueueHealthService, { strict: false });
     await qhs.awaitDrained(timeoutMs);
+  }
+
+  /** Inject a synthetic voice session — DEMO_MODE only (ROK-943 smoke test). */
+  async injectVoiceSessionForTest(p: {
+    eventId: number;
+    discordUserId: string;
+    userId: number;
+    durationSec: number;
+    firstJoinAt?: string;
+    lastLeaveAt?: string;
+  }): Promise<void> {
+    await this.assertDemoMode();
+    const leave = p.lastLeaveAt ? new Date(p.lastLeaveAt) : new Date();
+    const join = p.firstJoinAt
+      ? new Date(p.firstJoinAt)
+      : new Date(leave.getTime() - p.durationSec * 1000);
+    await this.db
+      .insert(schema.eventVoiceSessions)
+      .values({
+        eventId: p.eventId,
+        userId: p.userId,
+        discordUserId: p.discordUserId,
+        discordUsername: 'smoke-test',
+        firstJoinAt: join,
+        lastLeaveAt: leave,
+        totalDurationSec: p.durationSec,
+        segments: [
+          {
+            joinAt: join.toISOString(),
+            leaveAt: leave.toISOString(),
+            durationSec: p.durationSec,
+          },
+        ],
+      })
+      .onConflictDoNothing();
+  }
+
+  /** Trigger voice classification + attendance for an event — DEMO_MODE only (ROK-943). */
+  async triggerClassifyForTest(eventId: number): Promise<void> {
+    await this.assertDemoMode();
+    const logger = { log: () => {}, warn: () => {} };
+    const defaultGraceMs = 5 * 60 * 1000;
+    await classifyEventSessions(
+      this.db,
+      eventId,
+      undefined,
+      defaultGraceMs,
+      logger,
+    );
+    await autoPopulateAttendance(this.db, eventId, logger);
+  }
+
+  /** Copy the user's discordId onto their signup row (for voice classification). */
+  private async linkSignupDiscordId(
+    signupId: number,
+    userId: number,
+  ): Promise<void> {
+    const [user] = await this.db
+      .select({ discordId: schema.users.discordId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId));
+    if (user?.discordId) {
+      await this.db
+        .update(schema.eventSignups)
+        .set({ discordUserId: user.discordId })
+        .where(eq(schema.eventSignups.id, signupId));
+    }
   }
 
   /** Directly update a signup's status in the DB. */

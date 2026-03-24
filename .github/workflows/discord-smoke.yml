@@ -55,6 +55,10 @@ jobs:
       # Companion test bot (channels auto-discovered from API)
       TEST_BOT_TOKEN: ${{ secrets.TEST_BOT_TOKEN }}
       TEST_GUILD_ID: ${{ secrets.TEST_GUILD_ID }}
+      # Shared smoke runner config (used by all category steps below)
+      SMOKE_TIMEOUT_MS: '90000'
+      SMOKE_CONCURRENCY: '3'
+      SMOKE_RETRY_COUNT: '1'
 
     steps:
       - name: Checkout code
@@ -147,9 +151,38 @@ jobs:
         run: npm install
         working-directory: tools/test-bot
 
-      - name: Run Discord smoke tests
+      # Categories: embed, flow, dm, command, voice
+      # Note: 'cdp-command' is intentionally excluded — it requires Discord
+      # Electron running with CDP (--remote-debugging-port), which is only
+      # available in local dev (see scripts/launch-discord.sh). Run it
+      # locally with: SMOKE_CATEGORY=cdp-command npx tsx src/smoke/run.ts
+
+      - name: Run embed smoke tests
         run: npx tsx src/smoke/run.ts
         working-directory: tools/test-bot
         env:
-          API_URL: http://localhost:3000
-          ADMIN_PASSWORD: discord-smoke-ci-password
+          SMOKE_CATEGORY: embed
+
+      - name: Run flow smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: flow
+
+      - name: Run DM smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: dm
+
+      - name: Run command smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: command
+
+      - name: Run voice smoke tests
+        run: npx tsx src/smoke/run.ts
+        working-directory: tools/test-bot
+        env:
+          SMOKE_CATEGORY: voice

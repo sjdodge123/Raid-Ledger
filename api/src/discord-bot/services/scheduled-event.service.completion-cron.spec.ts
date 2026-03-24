@@ -1,25 +1,10 @@
 import { GuildScheduledEventStatus } from 'discord.js';
-import { Test } from '@nestjs/testing';
 import {
   setupScheduledEventTestModule,
+  createSelectChainNoLimit,
   makeDiscordApiError,
   type ScheduledEventMocks,
 } from './scheduled-event.service.spec-helpers';
-import { ScheduledEventService } from './scheduled-event.service';
-import { DiscordBotClientService } from '../discord-bot-client.service';
-import { ChannelResolverService } from './channel-resolver.service';
-import { SettingsService } from '../../settings/settings.service';
-import { CronJobService } from '../../cron-jobs/cron-job.service';
-import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-
-/** Build a select chain that resolves at .where() (no .limit()). */
-const createSelectChainNoLimit = (rows: unknown[] = []) => {
-  const chain: Record<string, jest.Mock> = {};
-  chain.select = jest.fn().mockReturnValue(chain);
-  chain.from = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockResolvedValue(rows);
-  return chain;
-};
 
 describe('completeExpiredEvents — normal completion', () => {
   let mocks: ScheduledEventMocks;
@@ -173,237 +158,9 @@ describe('completeExpiredEvents — error handling', () => {
 });
 
 // ─── ROK-944: Cache bypass and embed-sync tests ───────────────
-
-/** Helper to build the select chain for findCompletionCandidates (no .limit()). */
-const buildCandidateChain = (rows: unknown[] = []) => {
-  const chain: Record<string, jest.Mock> = {};
-  chain.select = jest.fn().mockReturnValue(chain);
-  chain.from = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockResolvedValue(rows);
-  return chain;
-};
-
-/** Helper to build the select chain for getScheduledEventId (uses .limit()). */
-const buildSeIdChain = (seId: string) => {
-  const chain: Record<string, jest.Mock> = {};
-  chain.select = jest.fn().mockReturnValue(chain);
-  chain.from = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockReturnValue(chain);
-  chain.limit = jest
-    .fn()
-    .mockResolvedValue([{ discordScheduledEventId: seId }]);
-  return chain;
-};
-
-/** Helper to build a chainable Drizzle update mock. */
-const buildUpdateChain = () => {
-  const chain: Record<string, jest.Mock> = {};
-  chain.set = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockResolvedValue(undefined);
-  return chain;
-};
-
-/**
- * Build a test module and manually wire the ActiveEventCacheService mock.
- *
- * NestJS @Optional() with union types (e.g. `ActiveEventCacheService | null`)
- * causes TypeScript to emit `Object` as the design type, preventing automatic
- * token resolution. We work around this by setting the private field directly
- * after module creation — matching how production DI wires it.
- */
-async function setupModuleWithCache(mockEventCache: {
-  getRecentlyEndedEvents: jest.Mock;
-}) {
-  const mockGuild = {
-    scheduledEvents: {
-      create: jest.fn().mockResolvedValue({ id: 'discord-se-id-1' }),
-      edit: jest.fn().mockResolvedValue({ id: 'discord-se-id-1' }),
-      delete: jest.fn().mockResolvedValue(undefined),
-      fetch: jest.fn().mockResolvedValue({
-        id: 'discord-se-id-1',
-        status: GuildScheduledEventStatus.Active,
-      }),
-    },
-  };
-  const mockDb = {
-    select: jest.fn(),
-    update: jest.fn().mockReturnValue(buildUpdateChain()),
-  };
-  const module = await Test.createTestingModule({
-    providers: [
-      ScheduledEventService,
-      { provide: DrizzleAsyncProvider, useValue: mockDb },
-      {
-        provide: DiscordBotClientService,
-        useValue: {
-          isConnected: jest.fn().mockReturnValue(true),
-          getGuild: jest.fn().mockReturnValue(mockGuild),
-        },
-      },
-      {
-        provide: ChannelResolverService,
-        useValue: {
-          resolveVoiceChannelForScheduledEvent: jest
-            .fn()
-            .mockResolvedValue('voice-channel-123'),
-        },
-      },
-      {
-        provide: SettingsService,
-        useValue: {
-          getClientUrl: jest.fn().mockResolvedValue('https://raidledger.app'),
-        },
-      },
-      {
-        provide: CronJobService,
-        useValue: {
-          executeWithTracking: jest
-            .fn()
-            .mockImplementation((_n: string, fn: () => Promise<void>) => fn()),
-        },
-      },
-    ],
-  }).compile();
-
-  const service = module.get(ScheduledEventService);
-  // Manually inject cache mock (see comment above re: @Optional + union type)
-  (service as any).eventCache = mockEventCache;
-
-  return { service, mockDb, mockGuild };
-}
-
-describe('completeExpiredEvents — ROK-944: cache bypass', () => {
-  afterEach(() => jest.clearAllMocks());
-
-  it('completes events via DB query when cache returns empty', async () => {
-    const mockCache = {
-      getRecentlyEndedEvents: jest.fn().mockReturnValue([]),
-    };
-    const { service, mockDb, mockGuild } =
-      await setupModuleWithCache(mockCache);
-
-    const candidateChain = buildCandidateChain([
-      { id: 42, discordScheduledEventId: 'se-1' },
-    ]);
-    const seIdChain = buildSeIdChain('se-1');
-    mockDb.select
-      .mockReturnValueOnce(candidateChain)
-      .mockReturnValueOnce(seIdChain);
-    mockDb.update.mockReturnValue(buildUpdateChain());
-    mockGuild.scheduledEvents.fetch.mockResolvedValue({
-      id: 'se-1',
-      status: GuildScheduledEventStatus.Active,
-    });
-
-    await service.completeExpiredEvents();
-
-    // Verify the cache WAS consulted (confirms injection worked)
-    expect(mockCache.getRecentlyEndedEvents).toHaveBeenCalled();
-    // The DB query should have been called even though cache was empty
-    expect(candidateChain.where).toHaveBeenCalled();
-    // The event should have been completed in Discord
-    expect(mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-1', {
-      status: GuildScheduledEventStatus.Completed,
-    });
-  });
-
-  it('does not short-circuit on empty cache — DB fallback always runs', async () => {
-    const mockCache = {
-      getRecentlyEndedEvents: jest.fn().mockReturnValue([]),
-    };
-    const { service, mockDb, mockGuild } =
-      await setupModuleWithCache(mockCache);
-
-    const candidateChain = buildCandidateChain([
-      { id: 100, discordScheduledEventId: 'se-old' },
-    ]);
-    const seIdChain = buildSeIdChain('se-old');
-    mockDb.select
-      .mockReturnValueOnce(candidateChain)
-      .mockReturnValueOnce(seIdChain);
-    mockDb.update.mockReturnValue(buildUpdateChain());
-    mockGuild.scheduledEvents.fetch.mockResolvedValue({
-      id: 'se-old',
-      status: GuildScheduledEventStatus.Active,
-    });
-
-    const result = await service.completeExpiredEvents();
-
-    // Verify the cache WAS consulted (confirms injection worked)
-    expect(mockCache.getRecentlyEndedEvents).toHaveBeenCalled();
-    // Should NOT return false (early exit) — should proceed to completion
-    expect(result).not.toBe(false);
-  });
-});
-
-/**
- * Build a test module and manually wire the EmbedSyncQueueService mock.
- *
- * NestJS @Optional() with union types (e.g. `EmbedSyncQueueService | null`)
- * causes TypeScript to emit `Object` as the design type, preventing automatic
- * token resolution. We work around this by setting the private field directly
- * after module creation — matching how production DI wires it.
- */
-async function setupModuleWithEmbedSync(mockEmbedSyncQueue: {
-  enqueue: jest.Mock;
-}) {
-  const mockGuild = {
-    scheduledEvents: {
-      create: jest.fn().mockResolvedValue({ id: 'discord-se-id-1' }),
-      edit: jest.fn().mockResolvedValue({ id: 'discord-se-id-1' }),
-      delete: jest.fn().mockResolvedValue(undefined),
-      fetch: jest.fn().mockResolvedValue({
-        id: 'discord-se-id-1',
-        status: GuildScheduledEventStatus.Active,
-      }),
-    },
-  };
-  const mockDb = {
-    select: jest.fn(),
-    update: jest.fn().mockReturnValue(buildUpdateChain()),
-  };
-  const module = await Test.createTestingModule({
-    providers: [
-      ScheduledEventService,
-      { provide: DrizzleAsyncProvider, useValue: mockDb },
-      {
-        provide: DiscordBotClientService,
-        useValue: {
-          isConnected: jest.fn().mockReturnValue(true),
-          getGuild: jest.fn().mockReturnValue(mockGuild),
-        },
-      },
-      {
-        provide: ChannelResolverService,
-        useValue: {
-          resolveVoiceChannelForScheduledEvent: jest
-            .fn()
-            .mockResolvedValue('voice-channel-123'),
-        },
-      },
-      {
-        provide: SettingsService,
-        useValue: {
-          getClientUrl: jest.fn().mockResolvedValue('https://raidledger.app'),
-        },
-      },
-      {
-        provide: CronJobService,
-        useValue: {
-          executeWithTracking: jest
-            .fn()
-            .mockImplementation((_n: string, fn: () => Promise<void>) => fn()),
-        },
-      },
-    ],
-  }).compile();
-
-  const service = module.get(ScheduledEventService);
-  // Manually inject embed-sync mock (service does not accept it yet — TDD)
-  (service as any).embedSyncQueue = mockEmbedSyncQueue;
-
-  return { service, mockDb, mockGuild };
-}
+// ROK-958: Dead cache call removed — completeExpiredEvents no longer consults
+// the event cache (it was advisory-only and the result was never used).
+// These tests verify completion still works correctly with cache injected.
 
 describe('completeExpiredEvents — ROK-944: embed-sync enqueue', () => {
   afterEach(() => jest.clearAllMocks());
@@ -412,23 +169,26 @@ describe('completeExpiredEvents — ROK-944: embed-sync enqueue', () => {
     const mockEmbedSync = {
       enqueue: jest.fn().mockResolvedValue(undefined),
     };
-    const { service, mockDb, mockGuild } =
-      await setupModuleWithEmbedSync(mockEmbedSync);
+    const mocks = await setupScheduledEventTestModule({
+      embedSyncQueue: mockEmbedSync,
+    });
 
-    const candidateChain = buildCandidateChain([
+    const candidateChain = createSelectChainNoLimit([
       { id: 42, discordScheduledEventId: 'se-1' },
     ]);
-    const seIdChain = buildSeIdChain('se-1');
-    mockDb.select
+    const seIdChain = mocks.createSelectChain([
+      { discordScheduledEventId: 'se-1' },
+    ]);
+    mocks.mockDb.select
       .mockReturnValueOnce(candidateChain)
       .mockReturnValueOnce(seIdChain);
-    mockDb.update.mockReturnValue(buildUpdateChain());
-    mockGuild.scheduledEvents.fetch.mockResolvedValue({
+    mocks.mockDb.update.mockReturnValue(mocks.createUpdateChain());
+    mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({
       id: 'se-1',
       status: GuildScheduledEventStatus.Active,
     });
 
-    await service.completeExpiredEvents();
+    await mocks.service.completeExpiredEvents();
 
     expect(mockEmbedSync.enqueue).toHaveBeenCalledWith(
       42,
@@ -440,21 +200,26 @@ describe('completeExpiredEvents — ROK-944: embed-sync enqueue', () => {
     const mockEmbedSync = {
       enqueue: jest.fn().mockResolvedValue(undefined),
     };
-    const { service, mockDb, mockGuild } =
-      await setupModuleWithEmbedSync(mockEmbedSync);
+    const mocks = await setupScheduledEventTestModule({
+      embedSyncQueue: mockEmbedSync,
+    });
 
-    const candidateChain = buildCandidateChain([
+    const candidateChain = createSelectChainNoLimit([
       { id: 42, discordScheduledEventId: 'se-1' },
       { id: 43, discordScheduledEventId: 'se-2' },
     ]);
-    const seIdChain1 = buildSeIdChain('se-1');
-    const seIdChain2 = buildSeIdChain('se-2');
-    mockDb.select
+    const seIdChain1 = mocks.createSelectChain([
+      { discordScheduledEventId: 'se-1' },
+    ]);
+    const seIdChain2 = mocks.createSelectChain([
+      { discordScheduledEventId: 'se-2' },
+    ]);
+    mocks.mockDb.select
       .mockReturnValueOnce(candidateChain)
       .mockReturnValueOnce(seIdChain1)
       .mockReturnValueOnce(seIdChain2);
-    mockDb.update.mockReturnValue(buildUpdateChain());
-    mockGuild.scheduledEvents.fetch
+    mocks.mockDb.update.mockReturnValue(mocks.createUpdateChain());
+    mocks.mockGuild.scheduledEvents.fetch
       .mockResolvedValueOnce({
         id: 'se-1',
         status: GuildScheduledEventStatus.Active,
@@ -464,7 +229,7 @@ describe('completeExpiredEvents — ROK-944: embed-sync enqueue', () => {
         status: GuildScheduledEventStatus.Active,
       });
 
-    await service.completeExpiredEvents();
+    await mocks.service.completeExpiredEvents();
 
     expect(mockEmbedSync.enqueue).toHaveBeenCalledTimes(2);
     expect(mockEmbedSync.enqueue).toHaveBeenCalledWith(
@@ -484,21 +249,26 @@ describe('completeExpiredEvents — ROK-944: embed-sync enqueue', () => {
         .mockRejectedValueOnce(new Error('Redis down'))
         .mockResolvedValueOnce(undefined),
     };
-    const { service, mockDb, mockGuild } =
-      await setupModuleWithEmbedSync(mockEmbedSync);
+    const mocks = await setupScheduledEventTestModule({
+      embedSyncQueue: mockEmbedSync,
+    });
 
-    const candidateChain = buildCandidateChain([
+    const candidateChain = createSelectChainNoLimit([
       { id: 42, discordScheduledEventId: 'se-1' },
       { id: 43, discordScheduledEventId: 'se-2' },
     ]);
-    const seIdChain1 = buildSeIdChain('se-1');
-    const seIdChain2 = buildSeIdChain('se-2');
-    mockDb.select
+    const seIdChain1 = mocks.createSelectChain([
+      { discordScheduledEventId: 'se-1' },
+    ]);
+    const seIdChain2 = mocks.createSelectChain([
+      { discordScheduledEventId: 'se-2' },
+    ]);
+    mocks.mockDb.select
       .mockReturnValueOnce(candidateChain)
       .mockReturnValueOnce(seIdChain1)
       .mockReturnValueOnce(seIdChain2);
-    mockDb.update.mockReturnValue(buildUpdateChain());
-    mockGuild.scheduledEvents.fetch
+    mocks.mockDb.update.mockReturnValue(mocks.createUpdateChain());
+    mocks.mockGuild.scheduledEvents.fetch
       .mockResolvedValueOnce({
         id: 'se-1',
         status: GuildScheduledEventStatus.Active,
@@ -508,14 +278,14 @@ describe('completeExpiredEvents — ROK-944: embed-sync enqueue', () => {
         status: GuildScheduledEventStatus.Active,
       });
 
-    await service.completeExpiredEvents();
+    await mocks.service.completeExpiredEvents();
 
     // Both events should still be completed in Discord despite enqueue failure on first
-    expect(mockGuild.scheduledEvents.edit).toHaveBeenCalledTimes(2);
-    expect(mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-1', {
+    expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledTimes(2);
+    expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-1', {
       status: GuildScheduledEventStatus.Completed,
     });
-    expect(mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-2', {
+    expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-2', {
       status: GuildScheduledEventStatus.Completed,
     });
     // Embed-sync enqueue should have been attempted for both despite first failure

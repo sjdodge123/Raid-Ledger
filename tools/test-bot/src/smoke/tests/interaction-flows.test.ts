@@ -10,6 +10,8 @@ import {
   signupAs,
   cancelSignup,
   deleteEvent,
+  channelForTest,
+  channelForGame,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -38,18 +40,18 @@ const signupCancelFlow: SmokeTest = {
   name: 'Full signup -> cancel -> embed reflects both',
   category: 'flow',
   async run(ctx) {
-    const chId = ctx.defaultChannelId;
-    const ev = await createEvent(ctx.api, 'flow-signup-cancel', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 0);
+    const ev = await createEvent(ctx.api, 'flow-signup-cancel', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
       await pollForEmbed(
-        chId,
+        ch.channelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
       await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
       await cancelSignup(ctx.api, ev.id);
       await pollForEmbed(
-        chId,
+        ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -65,11 +67,12 @@ const slotVacatedFlow: SmokeTest = {
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
     if (users.length < 1) throw new Error('Need demo users');
-    const ev = await createEvent(ctx.api, 'flow-vacated', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 1);
+    const ev = await createEvent(ctx.api, 'flow-vacated', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
       // Wait for initial embed
       await pollForEmbed(
-        ctx.defaultChannelId,
+        ch.channelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -80,7 +83,7 @@ const slotVacatedFlow: SmokeTest = {
         await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
       }
       await pollForEmbed(
-        ctx.defaultChannelId,
+        ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -96,13 +99,15 @@ const benchPromotionFlow: SmokeTest = {
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
     if (users.length < 3) throw new Error('Need 3+ demo users');
+    const ch = channelForTest(ctx, 2);
     const ev = await createEvent(ctx.api, 'flow-bench-promote', {
       maxAttendees: 2,
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
     });
     try {
       // Wait for initial embed
       await pollForEmbed(
-        ctx.defaultChannelId,
+        ch.channelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -118,7 +123,7 @@ const benchPromotionFlow: SmokeTest = {
       }
       // Verify embed still exists and reflects roster change
       await pollForEmbed(
-        ctx.defaultChannelId,
+        ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -132,18 +137,18 @@ const embedSyncBatchFlush: SmokeTest = {
   name: 'Embed sync queue flushes within 10s',
   category: 'flow',
   async run(ctx) {
-    const chId = ctx.defaultChannelId;
-    const ev = await createEvent(ctx.api, 'flow-sync', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 3);
+    const ev = await createEvent(ctx.api, 'flow-sync', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
       // Use polling for initial embed (avoids waitForMessage race condition)
       await pollForEmbed(
-        chId,
+        ch.channelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
       await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
       await pollForEmbed(
-        chId,
+        ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -159,10 +164,11 @@ const multiUserSignupFlow: SmokeTest = {
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
     if (users.length < 3) throw new Error('Need 3+ demo users');
-    const ev = await createEvent(ctx.api, 'flow-multi-signup', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 4);
+    const ev = await createEvent(ctx.api, 'flow-multi-signup', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
       await pollForEmbed(
-        ctx.defaultChannelId,
+        ch.channelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -171,7 +177,7 @@ const multiUserSignupFlow: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
       const found = await pollForEmbed(
-        ctx.defaultChannelId,
+        ch.channelId,
         (m) => {
           const embed = m.embeds.find((e) => e.title?.includes(ev.title));
           if (!embed) return false;
@@ -192,10 +198,11 @@ const eventDeleteCleansEmbed: SmokeTest = {
   name: 'Event deletion removes embed from channel',
   category: 'flow',
   async run(ctx) {
-    const ev = await createEvent(ctx.api, 'flow-delete');
+    const ch = channelForTest(ctx, 5);
+    const ev = await createEvent(ctx.api, 'flow-delete', ch.gameId ? { gameId: ch.gameId } : {});
     try {
       await pollForEmbed(
-        ctx.defaultChannelId,
+        ch.channelId,
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -206,7 +213,7 @@ const eventDeleteCleansEmbed: SmokeTest = {
       try {
         await pollForCondition(
           async () => {
-            const msgs = await readLastMessages(ctx.defaultChannelId, 50);
+            const msgs = await readLastMessages(ch.channelId, 50);
             const has = msgs.some((m) =>
               m.embeds.some((e) => e.title?.includes(ev.title)),
             );
@@ -247,7 +254,7 @@ const characterOnDuplicateSignup: SmokeTest = {
     });
     try {
       await pollForEmbed(
-        ctx.defaultChannelId,
+        channelForGame(ctx, ctx.mmoGameId),
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );

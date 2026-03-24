@@ -10,6 +10,7 @@ import {
   signup,
   cancelEvent,
   deleteEvent,
+  channelForTest,
 } from '../fixtures.js';
 import {
   assertEmbedCount,
@@ -50,9 +51,10 @@ const eventEmbedHasContent: SmokeTest = {
   name: 'Event embed includes push content field (ROK-864)',
   category: 'embed',
   async run(ctx) {
-    const ev = await createEvent(ctx.api, 'push-content', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 0);
+    const ev = await createEvent(ctx.api, 'push-content', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
-      const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       assertEmbedCount(msg.embeds, 1);
       assertHasContent(msg.content);
     } finally {
@@ -65,9 +67,10 @@ const contentHasNoDiscordTokens: SmokeTest = {
   name: 'Push content has no raw Discord tokens (ROK-864)',
   category: 'embed',
   async run(ctx) {
-    const ev = await createEvent(ctx.api, 'push-tokens', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 1);
+    const ev = await createEvent(ctx.api, 'push-tokens', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
-      const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       assertNoDiscordTokens(msg.content);
     } finally {
       await deleteEvent(ctx.api, ev.id);
@@ -79,9 +82,10 @@ const contentHasNoMarkdown: SmokeTest = {
   name: 'Push content has no raw markdown (ROK-864)',
   category: 'embed',
   async run(ctx) {
-    const ev = await createEvent(ctx.api, 'push-md', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 2);
+    const ev = await createEvent(ctx.api, 'push-md', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
-      const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       assertNoMarkdown(msg.content);
     } finally {
       await deleteEvent(ctx.api, ev.id);
@@ -93,9 +97,10 @@ const contentIncludesTitle: SmokeTest = {
   name: 'Push content includes event title (ROK-864)',
   category: 'embed',
   async run(ctx) {
-    const ev = await createEvent(ctx.api, 'push-title', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 3);
+    const ev = await createEvent(ctx.api, 'push-title', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
-      const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       assertHasContent(msg.content);
       // Title may be truncated, check first 20 chars of the unique tag
       const titleStart = ev.title.slice(0, 20);
@@ -114,7 +119,8 @@ const contentIncludesSignupCount: SmokeTest = {
   name: 'Push content includes signup count (ROK-864)',
   category: 'embed',
   async run(ctx) {
-    // Create without game so title is short enough to fit "signed up" within 80 chars
+    // No gameId — title must be short to fit "signed up" within 80 chars.
+    // Embed routes to default channel since no game binding applies.
     const ev = await createEvent(ctx.api, 'push-count', {});
     try {
       const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
@@ -135,13 +141,14 @@ const cancelledEmbedHasContent: SmokeTest = {
   name: 'Cancelled event embed has push content (ROK-864)',
   category: 'embed',
   async run(ctx) {
-    const ev = await createEvent(ctx.api, 'push-cancel', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 5);
+    const ev = await createEvent(ctx.api, 'push-cancel', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
-      await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
       // Poll for the cancel edit — match both event title and CANCELLED
       const found = await pollForEmbed(
-        ctx.defaultChannelId,
+        ch.channelId,
         (m) => m.embeds.some((e) =>
           e.title?.includes('CANCELLED') && e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
@@ -160,12 +167,13 @@ const updatedEmbedKeepsContent: SmokeTest = {
   name: 'Updated embed preserves push content after signup (ROK-864)',
   category: 'embed',
   async run(ctx) {
-    const ev = await createEvent(ctx.api, 'push-update', mmoOverrides(ctx));
+    const ch = channelForTest(ctx, 6);
+    const ev = await createEvent(ctx.api, 'push-update', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
-      await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx));
       const found = await waitForEmbedUpdate(
-        ctx.defaultChannelId,
+        ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -203,7 +211,8 @@ const contentTimeMatchesEmbed: SmokeTest = {
       console.log('    SKIP: Guild timezone not configured (CI without timezone setting)');
       return;
     }
-    // Use a short tag + no game so title+date fit within 80-char push content limit
+    // No gameId — short tag so title+date fit within 80-char push content limit.
+    // Embed routes to default channel since no game binding applies.
     const ev = await createEvent(ctx.api, 'tz', { maxAttendees: 5 });
     try {
       const msg = await embedInChannel(

@@ -1,4 +1,4 @@
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import type { EventAttendanceSummaryDto } from '@raid-ledger/contract';
 
 interface EventAttendanceDonutProps {
@@ -29,12 +29,13 @@ function DonutChart({ chartData, ratePercent }: { chartData: { name: string; val
                     <Pie data={chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
                         {chartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}
                     </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6' }} />
                 </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-bold text-foreground">{ratePercent}%</span>
-                <span className="text-xs text-muted">attended</span>
+                <div className="flex flex-col items-center bg-surface/95 rounded-full px-4 py-2">
+                    <span className="text-2xl font-bold text-foreground">{ratePercent}%</span>
+                    <span className="text-xs text-muted">attended</span>
+                </div>
             </div>
         </div>
     );
