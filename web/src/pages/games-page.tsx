@@ -3,7 +3,6 @@ import { useState, useMemo } from "react";
 import { FunnelIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { useGamesDiscover } from "../hooks/use-games-discover";
 import { useGameSearch } from "../hooks/use-game-search";
-import { useDebouncedValue } from "../hooks/use-debounced-value";
 import { useAuth, isOperatorOrAdmin } from "../hooks/use-auth";
 import { useScrollDirection } from "../hooks/use-scroll-direction";
 import { WantToPlayProvider } from "../hooks/use-want-to-play-batch";
@@ -29,16 +28,15 @@ function useGamesPageState() {
   const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
-  const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const scrollDirection = useScrollDirection();
   const isHeaderHidden = scrollDirection === 'down';
-  return { canManage, activeTab, setActiveTab, searchQuery, setSearchQuery, selectedGenres, setSelectedGenres, genreSheetOpen, setGenreSheetOpen, showHidden, setShowHidden, debouncedSearch, isHeaderHidden };
+  return { canManage, activeTab, setActiveTab, searchQuery, setSearchQuery, selectedGenres, setSelectedGenres, genreSheetOpen, setGenreSheetOpen, showHidden, setShowHidden, isHeaderHidden };
 }
 
-function useGamesData(debouncedSearch: string, selectedGenres: Set<string>) {
+function useGamesData(searchQuery: string, selectedGenres: Set<string>) {
   const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
-  const { data: searchData, isLoading: searchLoading } = useGameSearch(debouncedSearch, debouncedSearch.length >= 2);
-  const isSearching = debouncedSearch.length >= 2;
+  const { data: searchData, isLoading: searchLoading, isFetching: searchFetching } = useGameSearch(searchQuery, searchQuery.length >= 2);
+  const isSearching = searchQuery.length >= 2;
   const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
   const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters);
   const searchResults = searchData?.data;
@@ -49,7 +47,7 @@ function useGamesData(debouncedSearch: string, selectedGenres: Set<string>) {
     if (searchResults) for (const game of searchResults) ids.push(game.id);
     return ids;
   }, [filteredRows, searchResults]);
-  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds };
+  return { discoverLoading, searchLoading, searchFetching, isSearching, filteredRows, searchResults, searchSource, allGameIds };
 }
 
 function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS) {
@@ -65,7 +63,7 @@ function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilter
 
 export function GamesPage() {
   const state = useGamesPageState();
-  const data = useGamesData(state.debouncedSearch, state.selectedGenres);
+  const data = useGamesData(state.searchQuery, state.selectedGenres);
   return (
     <div className="pb-20 md:pb-0">
       <GamesMobileToolbar activeTab={state.activeTab === "manage" ? "manage" : "discover"} onTabChange={(tab) => state.setActiveTab(tab)} showManageTab={state.canManage} />
@@ -104,7 +102,7 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
       <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
       {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
       {data.isSearching ? (
-        <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} debouncedSearch={state.debouncedSearch} pricingMap={pricingMap} />
+        <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />
       ) : (
         <DiscoverContent discoverLoading={data.discoverLoading} filteredRows={data.filteredRows} selectedGenres={state.selectedGenres} pricingMap={pricingMap} />
       )}
@@ -201,8 +199,8 @@ function LocalSearchWarning() {
 
 type PricingMap = Map<number, ItadGamePricingDto | null>;
 
-function SearchResults({ searchLoading, searchResults, searchSource, debouncedSearch, pricingMap }: {
-  searchLoading: boolean; searchResults: GameDetailDto[] | undefined; searchSource: string | undefined; debouncedSearch: string; pricingMap: PricingMap;
+function SearchResults({ searchLoading, searchResults, searchSource, searchQuery, pricingMap }: {
+  searchLoading: boolean; searchResults: GameDetailDto[] | undefined; searchSource: string | undefined; searchQuery: string; pricingMap: PricingMap;
 }): JSX.Element {
   if (searchLoading) return <SearchLoadingSkeleton />;
   if (searchResults && searchResults.length > 0) {
@@ -220,7 +218,7 @@ function SearchResults({ searchLoading, searchResults, searchSource, debouncedSe
   }
   return (
     <div className="text-center py-16">
-      <p className="text-muted text-lg">No games found for &ldquo;{debouncedSearch}&rdquo;</p>
+      <p className="text-muted text-lg">No games found for &ldquo;{searchQuery}&rdquo;</p>
       <p className="text-dim text-sm mt-1">Try a different search term</p>
     </div>
   );

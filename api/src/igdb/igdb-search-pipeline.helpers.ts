@@ -37,7 +37,22 @@ export interface SearchPipelineParams {
 }
 
 /**
+ * Detect whether a query is a partial prefix (user still typing).
+ * Returns true when there are multiple words and the last word is
+ * shorter than 3 characters — e.g. "World of" or "World o".
+ * In that case the ITAD enrichment pipeline (O(N) external API calls)
+ * is too expensive; we fall through to IGDB/local DB which has Redis
+ * caching and trigram index.
+ */
+export function isPartialPrefixQuery(normalized: string): boolean {
+  const tokens = normalized.trim().split(/\s+/);
+  return tokens.length >= 2 && tokens[tokens.length - 1].length < 3;
+}
+
+/**
  * Execute the search pipeline: ITAD-primary with IGDB fallback.
+ * Skips the expensive ITAD pipeline for partial prefix queries
+ * (multi-word queries where the last token is <3 chars).
  * @param params - Pipeline dependencies
  * @param query - Raw search query
  * @param normalized - Normalized query string
@@ -50,18 +65,22 @@ export async function runSearchPipeline(
   normalized: string,
   triggerRefresh: (q: string, n: string, k: string) => void,
 ): Promise<SearchResult> {
-  try {
-    const itadDeps = buildItadSearchDeps({
-      itadService: params.itadService,
-      db: params.db,
-      queryIgdb: params.queryIgdb,
-      getAdultFilter: params.getAdultFilter,
-    });
-    const result = await executeItadSearch(itadDeps, normalized);
-    if (result.games.length > 0)
-      return mergeLocalGames(params, result, normalized);
-  } catch (err) {
-    logger.debug(`ITAD search failed, trying IGDB: ${err}`);
+  if (!isPartialPrefixQuery(normalized)) {
+    try {
+      const itadDeps = buildItadSearchDeps({
+        itadService: params.itadService,
+        db: params.db,
+        queryIgdb: params.queryIgdb,
+        getAdultFilter: params.getAdultFilter,
+      });
+      const result = await executeItadSearch(itadDeps, normalized);
+      if (result.games.length > 0)
+        return mergeLocalGames(params, result, normalized);
+    } catch (err) {
+      logger.debug(`ITAD search failed, trying IGDB: ${err}`);
+    }
+  } else {
+    logger.debug(`Skipping ITAD for partial prefix query: "${normalized}"`);
   }
   const deps = buildIgdbSearchDeps(params);
   return executeSearch(deps, query, normalized, triggerRefresh);
