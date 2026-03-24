@@ -9,7 +9,10 @@
  *   Case 5: has unclassified, has signups          => true
  */
 import { shouldClassifyEvent } from './voice-attendance-classify.helpers';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 
 describe('shouldClassifyEvent', () => {
   let mockDb: MockDb;
