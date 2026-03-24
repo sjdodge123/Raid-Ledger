@@ -71,16 +71,21 @@ function describePhaseScheduling() {
       expect(hoursUntilDeadline).toBeLessThan(25);
     });
 
-    it('should return phaseDeadline as null when no durations provided', async () => {
+    it('should use admin defaults when no durations provided', async () => {
       const res = await testApp.request
         .post('/lineups')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({});
 
       expect(res.status).toBe(201);
-      // Without duration params, phaseDeadline should be present but null
+      // Without explicit durations, admin defaults (48h building) are applied
       expect(res.body).toHaveProperty('phaseDeadline');
-      expect(res.body.phaseDeadline).toBeNull();
+      expect(res.body.phaseDeadline).not.toBeNull();
+      const deadline = new Date(res.body.phaseDeadline);
+      const hoursUntilDeadline =
+        (deadline.getTime() - Date.now()) / (1000 * 60 * 60);
+      expect(hoursUntilDeadline).toBeGreaterThan(46);
+      expect(hoursUntilDeadline).toBeLessThan(49);
     });
   }
   describe('POST /lineups with duration params', describePOSTWithDurations);

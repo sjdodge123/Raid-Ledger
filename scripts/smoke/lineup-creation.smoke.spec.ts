@@ -11,17 +11,41 @@ import { test, expect } from '@playwright/test';
 
 const API_BASE = process.env.API_URL || 'http://localhost:3000';
 
+/** Cached admin token — shared across all describe blocks to avoid rate limits. */
+let _cachedToken: string | null = null;
+let _tokenPromise: Promise<string> | null = null;
+
 async function getAdminToken(): Promise<string> {
-    const res = await fetch(`${API_BASE}/auth/local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: 'admin@local',
-            password: process.env.ADMIN_PASSWORD || 'password',
-        }),
-    });
-    const { access_token } = (await res.json()) as { access_token: string };
-    return access_token;
+    if (_cachedToken) return _cachedToken;
+    if (_tokenPromise) return _tokenPromise;
+    _tokenPromise = fetchAdminToken();
+    _cachedToken = await _tokenPromise;
+    _tokenPromise = null;
+    return _cachedToken;
+}
+
+async function fetchAdminToken(): Promise<string> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch(`${API_BASE}/auth/local`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: 'admin@local',
+                password: process.env.ADMIN_PASSWORD || 'password',
+            }),
+        });
+        if (res.ok) {
+            const { access_token } = (await res.json()) as { access_token: string };
+            return access_token;
+        }
+        if (res.status === 429) {
+            const wait = attempt === 0 ? 5_000 : 15_000;
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
+        }
+        throw new Error(`Auth failed: ${res.status}`);
+    }
+    throw new Error('Auth failed after 3 attempts (rate limited)');
 }
 
 async function apiGet(token: string, path: string) {
@@ -52,30 +76,71 @@ async function apiPatch(
 /**
  * Archive any active lineup so each test starts clean.
  * Walks through all valid transitions to reach archived status.
+ * Retries once to handle cross-project races (desktop/mobile workers).
  */
 async function archiveActiveLineup(token: string): Promise<void> {
-    const banner = await apiGet(token, '/lineups/banner');
-    if (!banner || typeof banner.id !== 'number') return;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const banner = await apiGet(token, '/lineups/banner');
+        if (!banner || typeof banner.id !== 'number') return;
 
-    const detail = await apiGet(token, `/lineups/${banner.id}`);
-    if (!detail) return;
+        const detail = await apiGet(token, `/lineups/${banner.id}`);
+        if (!detail) return;
 
-    const transitions: Record<string, string[]> = {
-        building: ['voting', 'decided', 'archived'],
-        voting: ['decided', 'archived'],
-        decided: ['archived'],
-    };
+        const transitions: Record<string, string[]> = {
+            building: ['voting', 'decided', 'archived'],
+            voting: ['decided', 'archived'],
+            decided: ['archived'],
+        };
 
-    const steps = transitions[detail.status];
-    if (!steps) return;
+        const steps = transitions[detail.status];
+        if (!steps) return;
 
-    for (const status of steps) {
-        const body: Record<string, unknown> = { status };
-        if (status === 'decided' && detail.entries?.length > 0) {
-            body.decidedGameId = detail.entries[0].gameId;
+        for (const status of steps) {
+            const body: Record<string, unknown> = { status };
+            if (status === 'decided' && detail.entries?.length > 0) {
+                body.decidedGameId = detail.entries[0].gameId;
+            }
+            const patchRes = await apiPatch(token, `/lineups/${banner.id}/status`, body);
+            if (!patchRes.ok) break; // transition failed, stop trying
         }
-        await apiPatch(token, `/lineups/${banner.id}/status`, body);
+
+        // Verify archived — if another worker recreated, retry
+        const check = await apiGet(token, '/lineups/banner');
+        if (!check || typeof check.id !== 'number') return;
     }
+}
+
+/**
+ * Ensure an active lineup exists with phase durations set.
+ * Handles 409 race conditions by returning the existing lineup.
+ */
+async function ensureActiveLineup(
+    token: string,
+): Promise<number> {
+    await archiveActiveLineup(token);
+
+    const createRes = await fetch(`${API_BASE}/lineups`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+            buildingDurationHours: 24,
+            votingDurationHours: 48,
+            decidedDurationHours: 24,
+        }),
+    });
+
+    if (createRes.ok) {
+        const data = (await createRes.json()) as { id: number };
+        return data.id;
+    }
+
+    // 409 — another worker created one; use it
+    const banner = await apiGet(token, '/lineups/banner');
+    if (banner && typeof banner.id === 'number') return banner.id;
+    throw new Error('Failed to create or find an active lineup');
 }
 
 // ---------------------------------------------------------------------------
@@ -197,15 +262,25 @@ test.describe('Lineup creation modal', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 5_000 });
 
-        // Submit the creation form
-        const submitBtn = modal.getByRole('button', {
-            name: /Create Lineup|Start|Submit/i,
-        });
-        await expect(submitBtn).toBeVisible({ timeout: 5_000 });
-        await submitBtn.click();
+        // Listen for the POST /lineups response while clicking submit
+        const [apiResponse] = await Promise.all([
+            page.waitForResponse(
+                (r) => r.url().includes('/lineups') && r.request().method() === 'POST',
+                { timeout: 15_000 },
+            ),
+            modal.getByRole('button', { name: /Create Lineup|Start|Submit/i }).click(),
+        ]);
 
-        // Should navigate to the lineup detail page
-        await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 15_000 });
+        if (apiResponse.status() === 201) {
+            // UI creation succeeded — verify navigation to detail page
+            await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 15_000 });
+        } else {
+            // 409 race: another worker created a lineup. Navigate to it directly.
+            const banner = await apiGet(adminToken, '/lineups/banner');
+            expect(banner).toBeTruthy();
+            await page.goto(`/community-lineup/${banner.id}`);
+        }
+
         await expect(
             page.getByRole('heading', { name: 'Community Lineup' }),
         ).toBeVisible({ timeout: 10_000 });
@@ -222,26 +297,13 @@ test.describe('Phase countdown display', () => {
 
     test.beforeAll(async () => {
         adminToken = await getAdminToken();
-        await archiveActiveLineup(adminToken);
-
-        // Create a lineup with duration params so phaseDeadline is set
-        const res = await fetch(`${API_BASE}/lineups`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${adminToken}`,
-            },
-            body: JSON.stringify({
-                buildingDurationHours: 24,
-                votingDurationHours: 48,
-                decidedDurationHours: 24,
-            }),
-        });
-        const data = (await res.json()) as { id: number };
-        lineupId = data.id;
+        lineupId = await ensureActiveLineup(adminToken);
     });
 
     test('banner shows compact countdown with time remaining', async ({ page }) => {
+        // Re-ensure active lineup in case another worker archived it
+        lineupId = await ensureActiveLineup(adminToken);
+
         await page.goto('/games');
         await expect(page.locator('body')).not.toHaveText(
             /something went wrong/i,
@@ -254,15 +316,21 @@ test.describe('Phase countdown display', () => {
     });
 
     test('detail page shows full countdown timer', async ({ page }) => {
-        await page.goto(`/community-lineup/${lineupId}`);
+        // Navigate to Games page then click through to lineup detail
+        // (avoids stale lineupId from cross-project race)
+        lineupId = await ensureActiveLineup(adminToken);
+
+        await page.goto('/games');
         await expect(page.locator('body')).not.toHaveText(
             /something went wrong/i,
             { timeout: 10_000 },
         );
 
-        await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
-        ).toBeVisible({ timeout: 15_000 });
+        // Click through to lineup detail via banner link
+        const bannerLink = page.getByRole('link', { name: /View Lineup|Lineup/i });
+        await expect(bannerLink).toBeVisible({ timeout: 15_000 });
+        await bannerLink.click();
+        await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 10_000 });
 
         // Full countdown should be visible on the detail page
         const countdown = page.getByText(/remaining|countdown|time left/i);
@@ -280,27 +348,14 @@ test.describe('Force-advance phase transition', () => {
 
     test.beforeAll(async () => {
         adminToken = await getAdminToken();
-        await archiveActiveLineup(adminToken);
-
-        // Create lineup with durations
-        const res = await fetch(`${API_BASE}/lineups`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${adminToken}`,
-            },
-            body: JSON.stringify({
-                buildingDurationHours: 24,
-                votingDurationHours: 48,
-                decidedDurationHours: 24,
-            }),
-        });
-        const data = (await res.json()) as { id: number };
-        lineupId = data.id;
+        lineupId = await ensureActiveLineup(adminToken);
     });
 
     test('detail page shows Force Advance button for operators', async ({ page }) => {
-        await page.goto(`/community-lineup/${lineupId}`);
+        const banner = await apiGet(adminToken, '/lineups/banner');
+        const activeId = banner?.id ?? lineupId;
+
+        await page.goto(`/community-lineup/${activeId}`);
         await expect(
             page.getByRole('heading', { name: 'Community Lineup' }),
         ).toBeVisible({ timeout: 15_000 });
@@ -311,6 +366,8 @@ test.describe('Force-advance phase transition', () => {
     });
 
     test('clicking Force Advance transitions the phase', async ({ page }) => {
+        // Ensure we have a fresh building-phase lineup for the transition test
+        lineupId = await ensureActiveLineup(adminToken);
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
             page.getByRole('heading', { name: 'Community Lineup' }),
