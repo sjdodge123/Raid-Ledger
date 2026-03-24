@@ -239,7 +239,7 @@ test.describe('Community Lineup detail page', () => {
         await expect(page.getByText('Nominating').first()).toBeVisible({ timeout: 5_000 });
 
         // "X/20 nominated" text in the subheader context info
-        await expect(page.getByText(/\d+\/20 nominated/)).toBeVisible({ timeout: 5_000 });
+        await expect(page.getByText(/\d+\/20 nominated/).first()).toBeVisible({ timeout: 5_000 });
     });
 
     test('activity timeline section is present', async ({ page }) => {
