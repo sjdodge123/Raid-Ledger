@@ -148,7 +148,7 @@ export async function signupAs(
   eventId: number,
   userId: number,
   preferredRoles?: string[],
-  opts?: { characterId?: string; status?: string },
+  opts?: { characterId?: string; status?: string; linkDiscord?: boolean },
 ) {
   return api.post('/admin/test/signup', {
     eventId,
@@ -156,6 +156,7 @@ export async function signupAs(
     preferredRoles,
     characterId: opts?.characterId,
     status: opts?.status,
+    linkDiscord: opts?.linkDiscord,
   });
 }
 
@@ -279,4 +280,27 @@ export async function awaitProcessing(
   timeoutMs = 10_000,
 ): Promise<void> {
   await api.post('/admin/test/await-processing', { timeoutMs });
+}
+
+/** Trigger voice classification for a specific event — DEMO_MODE only (ROK-943). */
+export async function triggerClassify(
+  api: ApiClient,
+  eventId: number,
+): Promise<void> {
+  await api.post('/admin/test/trigger-classify', { eventId });
+}
+
+/** Inject a synthetic voice session into the DB — DEMO_MODE only (ROK-943). */
+export async function injectVoiceSession(
+  api: ApiClient,
+  p: {
+    eventId: number;
+    discordUserId: string;
+    userId: number;
+    durationSec: number;
+    firstJoinAt?: string;
+    lastLeaveAt?: string;
+  },
+): Promise<void> {
+  await api.post('/admin/test/inject-voice-session', p);
 }

@@ -291,7 +291,7 @@ export async function shouldClassifyEvent(
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.eventVoiceSessions)
       .where(eq(schema.eventVoiceSessions.eventId, eventId));
-    if (sessionCount && sessionCount.count > 0) return false;
+    if (sessionCount && sessionCount.count > 0) return true;
   }
   return true;
 }
