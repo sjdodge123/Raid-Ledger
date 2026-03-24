@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useLineupDetail } from '../hooks/use-lineups';
+import type { LineupDetailResponseDto } from '@raid-ledger/contract';
+import { useLineupDetail, useTransitionLineupStatus } from '../hooks/use-lineups';
+import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
-import { LineupProgressBar } from '../components/lineups/LineupProgressBar';
 import { NominationGrid } from '../components/lineups/NominationGrid';
 import { LineupEmptyState } from '../components/lineups/LineupEmptyState';
 import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton';
@@ -11,6 +12,7 @@ import { CommonGroundPanel } from '../components/lineups/CommonGroundPanel';
 import { NominateModal } from '../components/lineups/NominateModal';
 import { PastLineups } from '../components/lineups/PastLineups';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
+import { toast } from '../lib/toast';
 
 function LineupNotFound(): JSX.Element {
   return (
@@ -23,22 +25,61 @@ function LineupNotFound(): JSX.Element {
   );
 }
 
+const NEXT_STATUS: Record<string, string> = {
+  building: 'voting',
+  voting: 'decided',
+  decided: 'archived',
+};
+
+function ForceAdvanceButton({ lineup }: { lineup: LineupDetailResponseDto }) {
+  const transition = useTransitionLineupStatus();
+  const nextStatus = NEXT_STATUS[lineup.status];
+  if (!nextStatus) return null;
+
+  async function handleClick() {
+    try {
+      const body: { status: string; decidedGameId?: number | null } = { status: nextStatus };
+      if (nextStatus === 'decided') {
+        body.decidedGameId = lineup.entries[0]?.gameId ?? null;
+      }
+      await transition.mutateAsync({ lineupId: lineup.id, body });
+      toast.success(`Advanced to ${nextStatus}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to advance phase');
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleClick()}
+      disabled={transition.isPending}
+      className="px-3 py-1.5 text-xs font-medium text-amber-400 border border-amber-500/50 rounded-lg hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+    >
+      {transition.isPending ? 'Advancing...' : 'Force Advance'}
+    </button>
+  );
+}
+
 export function LineupDetailPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const lineupId = id ? parseInt(id, 10) : undefined;
   const { data: lineup, isLoading, error } = useLineupDetail(lineupId);
   const [modalOpen, setModalOpen] = useState(false);
+  const { user } = useAuth();
 
   if (isLoading) return <LineupDetailSkeleton />;
   if (error || !lineup) return <LineupNotFound />;
 
   const hasEntries = lineup.entries.length > 0;
   const isBuilding = lineup.status === 'building';
+  const canForce = isOperatorOrAdmin(user) && lineup.status !== 'archived';
+  const forceAdvance = canForce ? <ForceAdvanceButton lineup={lineup} /> : null;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4">
       <div className="flex items-start justify-between">
-        <LineupDetailHeader lineup={lineup} />
+        <LineupDetailHeader lineup={lineup} actions={forceAdvance} />
         {isBuilding && (
           <button
             type="button"
@@ -50,16 +91,7 @@ export function LineupDetailPage(): JSX.Element {
         )}
       </div>
 
-      <div className="mt-3 mb-4">
-        <LineupProgressBar lineup={lineup} />
-      </div>
-
-      <ActivityTimeline
-        entityType="lineup"
-        entityId={lineup.id}
-        collapsible
-        maxVisible={5}
-      />
+      <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
 
       {lineup.status === 'building' && (
         <div className="mt-4">
@@ -76,11 +108,7 @@ export function LineupDetailPage(): JSX.Element {
       <PastLineups />
 
       {isBuilding && (
-        <NominateModal
-          isOpen={modalOpen}
-          onClose={() => setModalOpen(false)}
-          lineupId={lineup.id}
-        />
+        <NominateModal isOpen={modalOpen} onClose={() => setModalOpen(false)} lineupId={lineup.id} />
       )}
     </div>
   );

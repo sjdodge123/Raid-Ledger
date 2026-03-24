@@ -56,6 +56,18 @@ function SaleBadge({ cut, price }: { cut: number | null; price: number | null })
     );
 }
 
+/** Player count badge (e.g. "1-4 players"). */
+function PlayerBadge({ playerCount }: { playerCount: { min: number; max: number } | null }): JSX.Element | null {
+    if (!playerCount) return null;
+    const { min, max } = playerCount;
+    const label = min === max ? `${min}` : `${min}-${max}`;
+    return (
+        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/90 text-white rounded">
+            {label} {max === 1 ? 'player' : 'players'}
+        </span>
+    );
+}
+
 /** Early access indicator badge. */
 function EarlyAccessBadge(): JSX.Element {
     return (
@@ -96,6 +108,7 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
     return (
         <div className="flex flex-wrap items-center gap-1 mt-1">
             <OwnerBadge count={game.ownerCount} />
+            <PlayerBadge playerCount={game.playerCount} />
             <WishlistBadge count={game.wishlistCount} />
             <SaleBadge cut={game.itadCurrentCut} price={game.nonOwnerPrice} />
             {game.earlyAccess && <EarlyAccessBadge />}

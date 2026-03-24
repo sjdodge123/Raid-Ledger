@@ -25,6 +25,7 @@ interface BannerLineup {
   id: number;
   status: string;
   targetDate: Date | null;
+  phaseDeadline?: Date | null;
   decidedGameId: number | null;
   decidedGameName: string | null;
 }
@@ -60,6 +61,7 @@ export function buildBannerResponse(
     id: lineup.id,
     status: lineup.status as LineupBannerResponseDto['status'],
     targetDate: lineup.targetDate?.toISOString?.() ?? null,
+    phaseDeadline: lineup.phaseDeadline?.toISOString?.() ?? null,
     entryCount: entries.length,
     totalVoters,
     totalMembers,

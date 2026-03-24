@@ -11,6 +11,8 @@ import {
 import { LineupsService } from './lineups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
+import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 
 const NOW = new Date('2026-03-22T20:00:00Z');
 
@@ -117,6 +119,14 @@ describe('LineupsService.removeNomination', () => {
         LineupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: ActivityLogService, useValue: mockActivityLog },
+        {
+          provide: SettingsService,
+          useValue: { get: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: LineupPhaseQueueService,
+          useValue: { scheduleTransition: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get<LineupsService>(LineupsService);

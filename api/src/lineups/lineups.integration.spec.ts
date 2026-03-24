@@ -344,7 +344,7 @@ function describeLineups() {
       expect(res.status).toBe(400);
     });
 
-    it('should require decidedGameId for voting → decided', async () => {
+    it('should allow voting → decided without decidedGameId (force-advance)', async () => {
       const createRes = await createLineup(adminToken);
       const lineupId = createRes.body.id as number;
 
@@ -358,7 +358,8 @@ function describeLineups() {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'decided' });
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('decided');
     });
 
     it('should reject decidedGameId not in entries', async () => {

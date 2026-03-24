@@ -1,14 +1,18 @@
 /**
- * Community Lineup banner for the Games page (ROK-935).
+ * Community Lineup banner for the Games page (ROK-935, ROK-946).
  * Shows a compact hero with nomination thumbnails and CTA links.
+ * When no active lineup, shows "Start Lineup" button for operators.
  */
 import { type JSX, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 import { useLineupBanner } from '../../hooks/use-lineups';
+import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { LineupStatusBadge } from './LineupStatusBadge';
 import { LineupBannerSkeleton } from './LineupBannerSkeleton';
 import { NominateModal } from './NominateModal';
+import { StartLineupModal } from './start-lineup-modal';
+import { PhaseCountdown } from './phase-countdown';
 import { formatTargetDate } from './lineup-banner-helpers';
 
 /** Pulsing green dot indicator for active lineup. */
@@ -22,7 +26,11 @@ function PulsingDot(): JSX.Element {
 }
 
 /** Status bar row with pulsing dot, label, and target date. */
-function StatusBar({ targetDate }: { targetDate: string | null }): JSX.Element {
+function StatusBar({ targetDate, phaseDeadline, status }: {
+    targetDate: string | null;
+    phaseDeadline: string | null;
+    status: string;
+}): JSX.Element {
     const formatted = formatTargetDate(targetDate);
     return (
         <div className="flex items-center justify-between mb-2">
@@ -32,9 +40,12 @@ function StatusBar({ targetDate }: { targetDate: string | null }): JSX.Element {
                     COMMUNITY LINEUP
                 </span>
             </div>
-            {formatted && (
-                <span className="text-xs text-muted">Target: {formatted}</span>
-            )}
+            <div className="flex items-center gap-3">
+                <PhaseCountdown phaseDeadline={phaseDeadline} status={status} compact />
+                {formatted && (
+                    <span className="text-xs text-muted">Target: {formatted}</span>
+                )}
+            </div>
         </div>
     );
 }
@@ -102,7 +113,9 @@ function ThumbnailRow({ entries }: { entries: LineupBannerResponseDto['entries']
 }
 
 /** CTA buttons: view lineup link and nominate button. */
-function BannerActions({ id, status, onNominate }: { id: number; status: string; onNominate: () => void }): JSX.Element {
+function BannerActions({ id, status, onNominate }: {
+    id: number; status: string; onNominate: () => void;
+}): JSX.Element {
     const ctaLabel = status === 'voting' ? 'View Lineup & Vote' : 'View Lineup';
     return (
         <div className="flex items-center gap-3">
@@ -113,11 +126,8 @@ function BannerActions({ id, status, onNominate }: { id: number; status: string;
                 {ctaLabel}
             </Link>
             {status === 'building' && (
-                <button
-                    type="button"
-                    onClick={onNominate}
-                    className="px-4 py-2 text-sm font-medium bg-panel text-secondary border border-edge rounded-lg hover:bg-overlay transition-colors"
-                >
+                <button type="button" onClick={onNominate}
+                    className="px-4 py-2 text-sm font-medium bg-panel text-secondary border border-edge rounded-lg hover:bg-overlay transition-colors">
                     Nominate
                 </button>
             )}
@@ -126,16 +136,12 @@ function BannerActions({ id, status, onNominate }: { id: number; status: string;
 }
 
 /** Populated banner content. */
-function BannerContent({
-    banner,
-    onNominate,
-}: {
-    banner: LineupBannerResponseDto;
-    onNominate: () => void;
+function BannerContent({ banner, onNominate }: {
+    banner: LineupBannerResponseDto; onNominate: () => void;
 }): JSX.Element {
     return (
         <div className="rounded-xl bg-panel/50 border border-edge/50 p-6 mb-8">
-            <StatusBar targetDate={banner.targetDate} />
+            <StatusBar targetDate={banner.targetDate} phaseDeadline={banner.phaseDeadline} status={banner.status} />
             <BannerHeading banner={banner} />
             <BannerSubtitle banner={banner} />
             {banner.entries.length > 0 && <ThumbnailRow entries={banner.entries} />}
@@ -144,22 +150,47 @@ function BannerContent({
     );
 }
 
+/** Start Lineup CTA when no active lineup exists. */
+function StartLineupCTA({ onStart }: { onStart: () => void }): JSX.Element {
+    return (
+        <div className="rounded-xl bg-panel/50 border border-edge/50 border-dashed p-6 mb-8">
+            <h3 className="text-lg font-semibold text-foreground mb-2">Community Lineup</h3>
+            <p className="text-muted text-sm mb-4 max-w-lg">
+                Start a lineup to let your community nominate and vote on the next game
+                to play together. Members suggest games during the building phase, then
+                vote to pick a winner.
+            </p>
+            <button type="button" onClick={onStart}
+                className="px-5 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors">
+                Start Lineup
+            </button>
+        </div>
+    );
+}
+
 /** Community Lineup banner for the Games page. */
 export function LineupBanner(): JSX.Element | null {
     const { data: banner, isLoading } = useLineupBanner();
+    const { user } = useAuth();
     const [nominateOpen, setNominateOpen] = useState(false);
+    const [startOpen, setStartOpen] = useState(false);
 
     if (isLoading) return <LineupBannerSkeleton />;
-    if (!banner) return null;
+
+    if (!banner) {
+        if (!isOperatorOrAdmin(user)) return null;
+        return (
+            <>
+                <StartLineupCTA onStart={() => setStartOpen(true)} />
+                <StartLineupModal isOpen={startOpen} onClose={() => setStartOpen(false)} />
+            </>
+        );
+    }
 
     return (
         <>
             <BannerContent banner={banner} onNominate={() => setNominateOpen(true)} />
-            <NominateModal
-                isOpen={nominateOpen}
-                onClose={() => setNominateOpen(false)}
-                lineupId={banner.id}
-            />
+            <NominateModal isOpen={nominateOpen} onClose={() => setNominateOpen(false)} lineupId={banner.id} />
         </>
     );
 }

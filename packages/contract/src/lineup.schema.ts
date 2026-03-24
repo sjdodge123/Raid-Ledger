@@ -21,6 +21,12 @@ export type LineupStatusDto = z.infer<typeof LineupStatusSchema>;
 /** Create a new lineup. */
 export const CreateLineupSchema = z.object({
     targetDate: z.string().datetime({ offset: true }).nullable().optional(),
+    /** Hours for the building phase (1-720, default from admin settings). */
+    buildingDurationHours: z.number().int().min(1).max(720).optional(),
+    /** Hours for the voting phase (1-720, default from admin settings). */
+    votingDurationHours: z.number().int().min(1).max(720).optional(),
+    /** Hours for the decided phase (1-720, default from admin settings). */
+    decidedDurationHours: z.number().int().min(1).max(720).optional(),
 });
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
@@ -87,6 +93,7 @@ export const LineupDetailResponseSchema = z.object({
     linkedEventId: z.number().nullable(),
     createdBy: LineupUserSchema,
     votingDeadline: z.string().nullable(),
+    phaseDeadline: z.string().nullable(),
     entries: z.array(LineupEntryResponseSchema),
     totalVoters: z.number(),
     totalMembers: z.number(),
@@ -110,6 +117,7 @@ export const LineupBannerResponseSchema = z.object({
     id: z.number(),
     status: LineupStatusSchema,
     targetDate: z.string().nullable(),
+    phaseDeadline: z.string().nullable(),
     entryCount: z.number(),
     totalVoters: z.number(),
     totalMembers: z.number(),

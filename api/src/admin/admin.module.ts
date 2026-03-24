@@ -6,6 +6,7 @@ import { BrandingController } from './branding.controller';
 import { DemoTestController } from './demo-test.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
+import { LineupSettingsController } from './settings-lineup.controller';
 import { OnboardingController } from './onboarding.controller';
 import { SettingsModule } from '../settings/settings.module';
 import { AuthModule } from '../auth/auth.module';
@@ -24,6 +25,7 @@ import { SlashCommandTestService } from './slash-command-test.service';
     DemoTestController,
     SlashCommandTestController,
     ItadSettingsController,
+    LineupSettingsController,
     OnboardingController,
   ],
   providers: [DemoDataService, DemoTestService, SlashCommandTestService],

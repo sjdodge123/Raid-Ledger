@@ -41,7 +41,6 @@ import type {
   BlizzardStatusResponse,
   OAuthTestResponse,
 } from './settings.dto';
-
 // Re-export DTOs/interfaces for consumers importing from this file
 export type {
   OAuthStatusResponse,

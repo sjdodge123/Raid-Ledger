@@ -135,6 +135,9 @@ export const RolesPanel = lazyWithRetry(() =>
 export const DemoDataPanel = lazyWithRetry(() =>
     import('./pages/admin/demo-data-panel').then((m) => ({ default: m.DemoDataPanel })),
 );
+export const LineupDefaultsPanel = lazyWithRetry(() =>
+    import('./pages/admin/lineup-defaults-panel').then((m) => ({ default: m.LineupDefaultsPanel })),
+);
 export const IgdbPanel = lazyWithRetry(() =>
     import('./pages/admin/igdb-panel').then((m) => ({ default: m.IgdbPanel })),
 );
