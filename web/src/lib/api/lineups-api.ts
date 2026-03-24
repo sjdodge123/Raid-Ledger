@@ -62,3 +62,32 @@ export async function getLineupById(id: number): Promise<LineupDetailResponseDto
 export async function removeNomination(lineupId: number, gameId: number): Promise<void> {
   return fetchApi(`/lineups/${lineupId}/nominations/${gameId}`, { method: 'DELETE' });
 }
+
+/** Parameters for creating a lineup. */
+export interface CreateLineupParams {
+  targetDate?: string | null;
+  buildingDurationHours?: number;
+  votingDurationHours?: number;
+  decidedDurationHours?: number;
+}
+
+/** Create a new lineup with optional duration params. */
+export async function createLineup(
+  params: CreateLineupParams = {},
+): Promise<LineupDetailResponseDto> {
+  return fetchApi('/lineups', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+/** Transition a lineup to a new status. */
+export async function transitionLineupStatus(
+  lineupId: number,
+  body: { status: string; decidedGameId?: number | null },
+): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${lineupId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}

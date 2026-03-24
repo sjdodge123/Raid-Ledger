@@ -197,7 +197,7 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
             <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
                 onClick={onClose} aria-hidden="true" data-testid="more-drawer-backdrop" />
             <div ref={trapRef} className={`absolute inset-0 bg-surface flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
-                style={{ transitionTimingFunction: 'var(--spring-smooth)' }} data-testid="more-drawer-panel" role="dialog" aria-modal="true" aria-label="More menu">
+                style={{ transitionTimingFunction: 'var(--spring-smooth)' }} data-testid="more-drawer-panel" role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? 'More menu' : undefined}>
                 <DrawerHeader onClose={onClose} />
                 <MoreDrawerBody s={s} onClose={onClose} onFeedbackClick={onFeedbackClick} />
             </div>

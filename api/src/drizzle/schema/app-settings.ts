@@ -102,6 +102,12 @@ export const SETTING_KEYS = {
   AI_OLLAMA_SETUP_STEP: 'ai_ollama_setup_step',
   /** ROK-840: Ollama Docker setup error message */
   AI_OLLAMA_SETUP_ERROR: 'ai_ollama_setup_error',
+  /** ROK-946: Default hours for lineup building phase */
+  LINEUP_DEFAULT_BUILDING_HOURS: 'lineup_default_building_hours',
+  /** ROK-946: Default hours for lineup voting phase */
+  LINEUP_DEFAULT_VOTING_HOURS: 'lineup_default_voting_hours',
+  /** ROK-946: Default hours for lineup decided phase */
+  LINEUP_DEFAULT_DECIDED_HOURS: 'lineup_default_decided_hours',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

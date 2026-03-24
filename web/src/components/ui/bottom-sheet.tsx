@@ -104,7 +104,7 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
         <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET }}>
             <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} aria-hidden="true" />
             <div
-                ref={sheetRef} role="dialog" aria-modal="true" aria-label={title || 'Bottom sheet'}
+                ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (title || 'Bottom sheet') : undefined}
                 className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl transition-all duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
                 style={{ maxHeight: activeMaxHeight }}
             >

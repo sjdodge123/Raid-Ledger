@@ -107,7 +107,10 @@ function describePhaseScheduling() {
       expect(deadline.getTime()).toBeGreaterThan(Date.now());
     });
   }
-  describe('GET /lineups/:id includes phaseDeadline', describeGETByIdPhaseDeadline);
+  describe(
+    'GET /lineups/:id includes phaseDeadline',
+    describeGETByIdPhaseDeadline,
+  );
 
   // ── GET /lineups/banner includes phaseDeadline ──────────────
 
@@ -126,7 +129,10 @@ function describePhaseScheduling() {
       expect(res.body.phaseDeadline).toBeTruthy();
     });
   }
-  describe('GET /lineups/banner includes phaseDeadline', describeGETBannerPhaseDeadline);
+  describe(
+    'GET /lineups/banner includes phaseDeadline',
+    describeGETBannerPhaseDeadline,
+  );
 
   // ── PATCH /lineups/:id/status (force-advance) ──────────────
 
@@ -186,7 +192,10 @@ function describePhaseScheduling() {
       expect(res.body.phaseDeadline).toBeNull();
     });
   }
-  describe('PATCH /lineups/:id/status updates phaseDeadline', describePATCHForceAdvance);
+  describe(
+    'PATCH /lineups/:id/status updates phaseDeadline',
+    describePATCHForceAdvance,
+  );
 
   // ── GET /admin/settings/lineup — default durations ─────────
 
@@ -254,13 +263,11 @@ function describePhaseScheduling() {
     });
 
     it('should require authentication', async () => {
-      const res = await testApp.request
-        .put('/admin/settings/lineup')
-        .send({
-          buildingDurationHours: 24,
-          votingDurationHours: 48,
-          decidedDurationHours: 24,
-        });
+      const res = await testApp.request.put('/admin/settings/lineup').send({
+        buildingDurationHours: 24,
+        votingDurationHours: 48,
+        decidedDurationHours: 24,
+      });
 
       expect(res.status).toBe(401);
     });

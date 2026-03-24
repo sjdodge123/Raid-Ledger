@@ -85,6 +85,7 @@ function mapToDetailResponse(
     linkedEventId: lineup.linkedEventId,
     createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
     votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
+    phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
     entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
     totalVoters: voterCount[0]?.total ?? 0,
     totalMembers: enrichment.totalMembers,

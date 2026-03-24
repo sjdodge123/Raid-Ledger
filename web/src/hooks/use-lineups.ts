@@ -16,7 +16,10 @@ import {
   getLineupBanner,
   getLineupById,
   removeNomination,
+  createLineup,
+  transitionLineupStatus,
 } from '../lib/api-client';
+import type { CreateLineupParams } from '../lib/api/lineups-api';
 
 /** Query key for the active lineup. */
 const ACTIVE_LINEUP_KEY = ['lineups', 'active'] as const;
@@ -99,6 +102,38 @@ export function useRemoveNomination() {
     { lineupId: number; gameId: number }
   >({
     mutationFn: ({ lineupId, gameId }) => removeNomination(lineupId, gameId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/** Hook for creating a new lineup. */
+export function useCreateLineup() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    CreateLineupParams
+  >({
+    mutationFn: (params) => createLineup(params),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/** Hook for transitioning a lineup to a new status. */
+export function useTransitionLineupStatus() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    { lineupId: number; body: { status: string; decidedGameId?: number | null } }
+  >({
+    mutationFn: ({ lineupId, body }) => transitionLineupStatus(lineupId, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
     },

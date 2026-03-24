@@ -5,6 +5,7 @@ import {
   timestamp,
   integer,
   unique,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { games } from './games';
@@ -32,6 +33,12 @@ export const communityLineups = pgTable('community_lineups', {
     .references(() => users.id)
     .notNull(),
   votingDeadline: timestamp('voting_deadline'),
+  phaseDeadline: timestamp('phase_deadline'),
+  phaseDurationOverride: jsonb('phase_duration_override').$type<{
+    building?: number;
+    voting?: number;
+    decided?: number;
+  } | null>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

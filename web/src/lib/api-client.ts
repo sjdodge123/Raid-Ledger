@@ -165,7 +165,7 @@ export {
 } from './api/analytics-api';
 
 // Lineups (ROK-934, ROK-935)
-export type { CommonGroundParams } from './api/lineups-api';
+export type { CommonGroundParams, CreateLineupParams } from './api/lineups-api';
 export {
     getActiveLineup,
     getCommonGround,
@@ -173,6 +173,8 @@ export {
     getLineupBanner,
     getLineupById,
     removeNomination,
+    createLineup,
+    transitionLineupStatus,
 } from './api/lineups-api';
 
 // Activity Log (ROK-930)
