@@ -8,6 +8,7 @@ import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { ActiveEventCacheService } from '../../events/active-event-cache.service';
+import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import {
   buildDescriptionText,
   formatApiError,
@@ -53,6 +54,7 @@ export class ScheduledEventService {
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
     @Optional() private readonly eventCache: ActiveEventCacheService | null,
+    @Optional() private readonly embedSyncQueue: EmbedSyncQueueService | null,
   ) {}
 
   /** Cron: auto-start Discord Scheduled Events whose start time has passed. */
@@ -97,21 +99,25 @@ export class ScheduledEventService {
     );
   }
 
-  /** Find and complete events past their effective end time (ROK-717). */
+  /** Find and complete events past their effective end time (ROK-717, ROK-944). */
   async completeExpiredEvents(): Promise<void | false> {
     if (!this.clientService.isConnected()) return false;
     const guild = this.clientService.getGuild();
     if (!guild) return false;
-    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-    if (
-      this.eventCache &&
-      this.eventCache.getRecentlyEndedEvents(new Date(), TWO_HOURS_MS)
-        .length === 0
-    )
-      return false;
+    // ROK-944: cache is advisory only — always fall through to DB query
+    this.eventCache?.getRecentlyEndedEvents(new Date(), 2 * 60 * 60 * 1000);
     const candidates = await findCompletionCandidates(this.db);
-    if (candidates.length === 0) return false;
-    for (const c of candidates) await this.completeScheduledEvent(c.id);
+    if (candidates.length === 0) return;
+    for (const c of candidates) {
+      await this.completeScheduledEvent(c.id);
+      await this.embedSyncQueue
+        ?.enqueue(c.id, 'cron-complete')
+        .catch((err) =>
+          this.logger.warn(
+            `Embed-sync enqueue failed for event ${c.id}: ${err instanceof Error ? err.message : 'unknown'}`,
+          ),
+        );
+    }
   }
 
   /** Create a Discord Scheduled Event. */
@@ -278,9 +284,7 @@ export class ScheduledEventService {
       this.channelResolver,
     );
     if (!vc) {
-      this.logger.warn(
-        `Skipping scheduled event for event ${eventId}: no voice channel`,
-      );
+      this.logger.warn(`Skip SE ${eventId}: no voice channel`);
       return;
     }
     const desc = await this.buildDescription(eventId, eventData);

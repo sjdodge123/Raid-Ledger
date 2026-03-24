@@ -200,6 +200,15 @@ export class DemoTestController {
     return this.demoTestService.flushEmbedQueueForTest();
   }
 
+  /** Trigger scheduled event completion cron — DEMO_MODE only (ROK-944). */
+  @Post('trigger-scheduled-event-completion')
+  @HttpCode(HttpStatus.OK)
+  async triggerScheduledEventCompletionForTest(): Promise<{
+    success: boolean;
+  }> {
+    return this.demoTestService.triggerScheduledEventCompletionForTest();
+  }
+
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
   @Post('await-processing')
   @HttpCode(HttpStatus.OK)

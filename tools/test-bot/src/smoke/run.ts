@@ -21,6 +21,7 @@ import { rosterCalculationTests } from './tests/roster-calculation.test.js';
 import { pushContentTests } from './tests/push-content.test.js';
 import { slashCommandTests } from './tests/slash-commands.test.js';
 import { cdpSlashCommandTests } from './tests/cdp-slash-commands.test.js';
+import { scheduledEventCompletionTests } from './tests/scheduled-event-completion.test.js';
 
 /** Connect the companion bot and return its Discord user ID. */
 async function connectBot(): Promise<{ botDiscordId: string }> {
@@ -273,6 +274,7 @@ async function main(): Promise<void> {
     ...interactionFlowTests,
     ...slashCommandTests,
     ...cdpSlashCommandTests,
+    ...scheduledEventCompletionTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 
   // Voice and CDP tests must run sequentially (shared resources)
