@@ -15,6 +15,7 @@ import {
   futureTime,
   awaitProcessing,
   flushVoiceSessions,
+  triggerClassify,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -299,6 +300,72 @@ const metricsVoicePopulated: SmokeTest = {
   },
 };
 
+/**
+ * ROK-943: Voice classification must populate attendance and produce
+ * non-zero metrics when signups and voice data both exist.
+ *
+ * Pipeline: voice join -> flush sessions -> trigger classify ->
+ *   attendance populated -> metrics show attended >= 1.
+ *
+ * SLOW: requires voice join + flush + classification cycle.
+ */
+const classifyPopulatesAttendance: SmokeTest = {
+  name: 'Voice classification populates attendance and metrics (ROK-943)',
+  category: 'voice',
+  async run(ctx) {
+    await withVoiceBinding(ctx, 2, 'game-voice-monitor', async (vChId) => {
+      const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+        '/admin/settings/games?limit=1',
+      );
+      const gameId = gamesRes.data[0]?.id;
+      if (!gameId) throw new Error('No games in DB');
+
+      const ev = await createEvent(ctx.api, 'rok943-classify', {
+        gameId,
+        startTime: futureTime(-5),
+        endTime: futureTime(55),
+      });
+      try {
+        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
+
+        await joinVoice(vChId);
+        await flushVoiceSessions(ctx.api);
+
+        // Trigger classification — endpoint does not exist yet (TDD)
+        await triggerClassify(ctx.api, ev.id);
+        await awaitProcessing(ctx.api);
+
+        type MetricsResponse = {
+          attendanceSummary: {
+            attended: number;
+            attendanceRate: number;
+          } | null;
+        };
+        const metrics = await ctx.api.get<MetricsResponse>(
+          `/events/${ev.id}/metrics`,
+        );
+
+        if (!metrics.attendanceSummary) {
+          throw new Error('attendanceSummary null after classify');
+        }
+        if (metrics.attendanceSummary.attended < 1) {
+          throw new Error(
+            `attended=${metrics.attendanceSummary.attended}, expected >= 1`,
+          );
+        }
+        if (metrics.attendanceSummary.attendanceRate <= 0) {
+          throw new Error(
+            `attendanceRate=${metrics.attendanceSummary.attendanceRate}, expected > 0`,
+          );
+        }
+      } finally {
+        leaveVoice();
+        await deleteEvent(ctx.api, ev.id);
+      }
+    });
+  },
+};
+
 // Ad-hoc spawn excluded — requires 15-minute SPAWN_DELAY_MS timer to fire.
 // Run with SMOKE_INCLUDE_SLOW=1 to include.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
@@ -306,7 +373,9 @@ const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 export const voiceActivityTests: SmokeTest[] = [
   voiceJoinDetected,
   voiceLeaveRecorded,
-  ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
+  ...(includeSlow
+    ? [adHocSpawn, metricsVoicePopulated, classifyPopulatesAttendance]
+    : []),
   voiceMemberList,
   multiGameVoiceDetected,
 ];

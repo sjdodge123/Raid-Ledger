@@ -280,3 +280,11 @@ export async function awaitProcessing(
 ): Promise<void> {
   await api.post('/admin/test/await-processing', { timeoutMs });
 }
+
+/** Trigger voice classification for a specific event — DEMO_MODE only (ROK-943). */
+export async function triggerClassify(
+  api: ApiClient,
+  eventId: number,
+): Promise<void> {
+  await api.post('/admin/test/trigger-classify', { eventId });
+}
