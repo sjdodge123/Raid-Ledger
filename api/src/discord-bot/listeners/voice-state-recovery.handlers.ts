@@ -112,6 +112,9 @@ export async function handleGameSpecificGroupRoster(
       binding.bindingId,
       memberInfo,
       binding,
+      undefined,
+      undefined,
+      channelId,
     );
   }
 }
@@ -131,8 +134,22 @@ export async function handleGeneralLobbyGroupDetection(
   const groups = filterGroups(allGroups, allowJustChatting);
   if (groups.length === 0) return;
   const addedMembers = new Set<string>();
-  await addDetectedMembers(deps, channel, groups, binding, addedMembers);
-  await addRemainingMembers(deps, channel, groups, binding, addedMembers);
+  await addDetectedMembers(
+    deps,
+    channel,
+    groups,
+    binding,
+    addedMembers,
+    channelId,
+  );
+  await addRemainingMembers(
+    deps,
+    channel,
+    groups,
+    binding,
+    addedMembers,
+    channelId,
+  );
 }
 
 /** Filter game groups based on Just Chatting setting. */
@@ -154,12 +171,13 @@ async function addDetectedMembers(
   groups: GameGroup[],
   binding: ResolvedBinding,
   addedMembers: Set<string>,
+  channelId?: string,
 ): Promise<void> {
   for (const group of groups) {
     for (const memberId of group.memberIds) {
       const gm = channel.members.get(memberId);
       if (!gm) continue;
-      await addGroupMember(deps, memberId, gm, group, binding);
+      await addGroupMember(deps, memberId, gm, group, binding, channelId);
       addedMembers.add(memberId);
     }
   }
@@ -172,6 +190,7 @@ async function addGroupMember(
   gm: GuildMember,
   group: GameGroup,
   binding: ResolvedBinding,
+  channelId?: string,
 ): Promise<void> {
   const rlUser = await deps.usersService.findByDiscordId(memberId);
   const mi = buildMemberInfo(memberId, gm, rlUser?.id ?? null);
@@ -181,6 +200,7 @@ async function addGroupMember(
     binding,
     group.gameId,
     group.gameName,
+    channelId,
   );
   startVoiceGameTracking(
     deps,
@@ -198,6 +218,7 @@ async function addRemainingMembers(
   groups: GameGroup[],
   binding: ResolvedBinding,
   addedMembers: Set<string>,
+  channelId?: string,
 ): Promise<void> {
   if (groups.length === 0) return;
   const primaryGroup = groups[0];
@@ -211,6 +232,7 @@ async function addRemainingMembers(
       binding,
       primaryGroup.gameId,
       primaryGroup.gameName,
+      channelId,
     );
   }
 }

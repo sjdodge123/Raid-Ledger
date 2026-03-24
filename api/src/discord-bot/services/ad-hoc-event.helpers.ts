@@ -2,7 +2,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
-import type { VoiceMemberInfo } from './ad-hoc-participant.service';
+
+// Re-export from extracted file for backward compatibility
+export { autoSignupParticipant } from './ad-hoc-event.signup-helpers';
 
 /**
  * Check if a scheduled (non-ad-hoc) event is currently active for the same
@@ -14,9 +16,15 @@ export async function findActiveScheduledEvent(
   bindingId: string,
   effectiveGameId: number | null | undefined,
   now: Date,
+  channelId?: string,
 ): Promise<{ id: number } | undefined> {
   const lookbackMs = 30 * 60 * 1000;
   const lookbackTime = new Date(now.getTime() - lookbackMs);
+  const bindingClause = buildBindingClause(
+    bindingId,
+    effectiveGameId,
+    channelId,
+  );
 
   const [match] = await db
     .select({
@@ -26,9 +34,7 @@ export async function findActiveScheduledEvent(
     .from(tables.events)
     .where(
       and(
-        effectiveGameId
-          ? sql`(${tables.events.channelBindingId} = ${bindingId} OR ${tables.events.gameId} = ${effectiveGameId})`
-          : eq(tables.events.channelBindingId, bindingId),
+        bindingClause,
         eq(tables.events.isAdHoc, false),
         sql`${tables.events.cancelledAt} IS NULL`,
         sql`lower(${tables.events.duration}) <= ${now.toISOString()}::timestamptz`,
@@ -38,6 +44,27 @@ export async function findActiveScheduledEvent(
     .limit(1);
 
   return match;
+}
+
+/** Build the binding/game/channel OR clause for suppression. */
+function buildBindingClause(
+  bindingId: string,
+  effectiveGameId: number | null | undefined,
+  channelId?: string,
+) {
+  const siblingSubquery = channelId
+    ? sql`${tables.events.channelBindingId} IN (SELECT id FROM channel_bindings WHERE channel_id = ${channelId} AND binding_purpose = 'game-voice-monitor')`
+    : undefined;
+  if (effectiveGameId && siblingSubquery) {
+    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${tables.events.gameId} = ${effectiveGameId} OR ${siblingSubquery})`;
+  }
+  if (effectiveGameId) {
+    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${tables.events.gameId} = ${effectiveGameId})`;
+  }
+  if (siblingSubquery) {
+    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${siblingSubquery})`;
+  }
+  return eq(tables.events.channelBindingId, bindingId);
 }
 
 /**
@@ -72,120 +99,6 @@ export async function resolveGameName(
     .where(eq(tables.games.id, gameId))
     .limit(1);
   return game?.name;
-}
-
-/**
- * Auto-create a signup and roster slot for an ad-hoc participant.
- * Idempotent: skips if the participant already has a signup.
- */
-export async function autoSignupParticipant(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  member: VoiceMemberInfo,
-): Promise<void> {
-  // Check if signup already exists (re-join case)
-  const [existing] = await db
-    .select({ id: tables.eventSignups.id })
-    .from(tables.eventSignups)
-    .where(
-      and(
-        eq(tables.eventSignups.eventId, eventId),
-        eq(tables.eventSignups.discordUserId, member.discordUserId),
-      ),
-    )
-    .limit(1);
-
-  if (existing) return;
-
-  const signup = await insertSignup(db, eventId, member);
-  if (!signup) return;
-
-  await assignSlot(db, eventId, signup.id);
-}
-
-/**
- * Insert a signup row for an ad-hoc participant.
- */
-async function insertSignup(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  member: VoiceMemberInfo,
-): Promise<{ id: number } | null> {
-  const [signup] = await db
-    .insert(tables.eventSignups)
-    .values({
-      eventId,
-      userId: member.userId,
-      discordUserId: member.discordUserId,
-      discordUsername: member.discordUsername,
-      discordAvatarHash: member.discordAvatarHash,
-      confirmationStatus: 'confirmed',
-      status: 'signed_up',
-    })
-    .onConflictDoNothing()
-    .returning({ id: tables.eventSignups.id });
-
-  return signup ?? null;
-}
-
-/**
- * Assign a signup to the next available player or bench slot.
- */
-async function assignSlot(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  signupId: number,
-): Promise<void> {
-  const maxPlayers = 25;
-  const maxBench = 10;
-
-  const playerSlot = await findNextSlot(db, eventId, 'player', maxPlayers);
-  if (playerSlot) {
-    await db.insert(tables.rosterAssignments).values({
-      eventId,
-      signupId,
-      role: 'player',
-      position: playerSlot,
-      isOverride: 0,
-    });
-    return;
-  }
-
-  const benchSlot = await findNextSlot(db, eventId, 'bench', maxBench);
-  if (benchSlot) {
-    await db.insert(tables.rosterAssignments).values({
-      eventId,
-      signupId,
-      role: 'bench',
-      position: benchSlot,
-      isOverride: 0,
-    });
-  }
-}
-
-/**
- * Find the next available position for a given role.
- */
-async function findNextSlot(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  role: string,
-  max: number,
-): Promise<number | null> {
-  const existing = await db
-    .select({ position: tables.rosterAssignments.position })
-    .from(tables.rosterAssignments)
-    .where(
-      and(
-        eq(tables.rosterAssignments.eventId, eventId),
-        eq(tables.rosterAssignments.role, role),
-      ),
-    );
-
-  const used = new Set(existing.map((s) => s.position));
-  let pos = 1;
-  while (used.has(pos) && pos <= max) pos++;
-  return pos <= max ? pos : null;
 }
 
 /**

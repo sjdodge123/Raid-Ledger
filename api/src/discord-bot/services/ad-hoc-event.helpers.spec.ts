@@ -11,13 +11,18 @@ import {
 function sqlToString(obj: unknown, depth = 0): string {
   if (depth > 15 || !obj) return '';
   if (typeof obj === 'string') return obj;
-  if (Array.isArray(obj)) return obj.map((v) => sqlToString(v, depth + 1)).join('');
+  if (Array.isArray(obj))
+    return obj.map((v) => sqlToString(v, depth + 1)).join('');
   const record = obj as Record<string, unknown>;
   if (record.value && Array.isArray(record.value)) {
-    return (record.value as unknown[]).map((v) => sqlToString(v, depth + 1)).join('');
+    return (record.value as unknown[])
+      .map((v) => sqlToString(v, depth + 1))
+      .join('');
   }
   if (record.queryChunks && Array.isArray(record.queryChunks)) {
-    return (record.queryChunks as unknown[]).map((v) => sqlToString(v, depth + 1)).join('');
+    return (record.queryChunks as unknown[])
+      .map((v) => sqlToString(v, depth + 1))
+      .join('');
   }
   return '';
 }
@@ -71,12 +76,7 @@ describe('findActiveScheduledEvent — sibling binding suppression (ROK-959)', (
     // channel_bindings — only match by bindingId/effectiveGameId.
     db.limit.mockResolvedValueOnce([{ id: 88 }]);
 
-    await findActiveScheduledEvent(
-      db as never,
-      'binding-A',
-      10,
-      now,
-    );
+    await findActiveScheduledEvent(db as never, 'binding-A', 10, now);
 
     const whereArg = db.where.mock.calls[0]?.[0];
     const sqlText = sqlToString(whereArg);

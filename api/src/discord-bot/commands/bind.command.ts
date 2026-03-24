@@ -23,8 +23,7 @@ import {
   autocompleteSeries,
   autocompleteEvents,
   buildEventUpdatePayload,
-  setChannelOverride,
-  applyGameChange,
+  applyEventChanges,
   findSeriesEventIds,
   findSeriesGame,
 } from './bind.helpers';
@@ -36,6 +35,7 @@ import {
   checkEventPermission,
   type ResolvedChannel,
 } from './bind.resolvers';
+import { confirmMultiMonitor } from './bind.confirmation';
 
 @Injectable()
 export class BindCommand
@@ -156,6 +156,15 @@ export class BindCommand
       ch.bindingChannelType,
       game?.id ?? null,
     );
+    const confirmed = await confirmMultiMonitor(
+      this.db,
+      interaction,
+      guildId,
+      ch.channelId,
+      behavior,
+      game?.id ?? null,
+    );
+    if (!confirmed) return;
     try {
       await this.executeBindAndReply(
         interaction,
@@ -165,9 +174,7 @@ export class BindCommand
         game,
         series,
       );
-      if (series) {
-        await this.resyncSeriesEvents(series.id);
-      }
+      if (series) await this.resyncSeriesEvents(series.id);
     } catch (err: unknown) {
       this.logger.error('Failed to create channel binding:', err);
       await interaction.editReply(
@@ -256,48 +263,18 @@ export class BindCommand
       );
       return;
     }
-    const changes = await this.applyEventChanges(
+    const changes = await applyEventChanges(
+      this.db,
       eventId,
       channelOption,
       gameName,
       interaction,
     );
     if (!changes) return;
-    await this.emitEventUpdate(eventId);
+    const payload = await buildEventUpdatePayload(this.db, eventId);
+    if (payload) this.eventEmitter.emit(APP_EVENT_EVENTS.UPDATED, payload);
     await interaction.editReply({
       embeds: [buildEventBindEmbed(eventTitle, changes)],
     });
-  }
-
-  private async applyEventChanges(
-    eventId: number,
-    channelOption: ReturnType<
-      ChatInputCommandInteraction['options']['getChannel']
-    >,
-    gameName: string | null,
-    interaction: ChatInputCommandInteraction,
-  ): Promise<string[] | null> {
-    const changes: string[] = [];
-    if (channelOption) {
-      const ch = channelOption as { name?: string; id: string };
-      const name = ch.name ?? ch.id;
-      await setChannelOverride(this.db, eventId, channelOption.id);
-      changes.push(`Notification channel set to **#${name}**`);
-    }
-    if (gameName) {
-      const result = await applyGameChange(this.db, eventId, gameName);
-      if (!result) return changes;
-      if ('error' in result) {
-        await interaction.editReply(result.error);
-        return null;
-      }
-      changes.push(result.change);
-    }
-    return changes;
-  }
-
-  private async emitEventUpdate(eventId: number): Promise<void> {
-    const payload = await buildEventUpdatePayload(this.db, eventId);
-    if (payload) this.eventEmitter.emit(APP_EVENT_EVENTS.UPDATED, payload);
   }
 }

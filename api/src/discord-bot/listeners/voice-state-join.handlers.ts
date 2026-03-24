@@ -42,6 +42,9 @@ export async function handleGameBindingJoin(
       binding.bindingId,
       mi,
       binding,
+      undefined,
+      undefined,
+      channelId,
     );
     return;
   }
@@ -178,6 +181,7 @@ async function processLobbyMember(
     binding,
     detected.gameId,
     detected.gameName,
+    channelId,
   );
 }
 

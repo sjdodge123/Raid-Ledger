@@ -229,9 +229,9 @@ describe('AdHocEventService — voice', () => {
       // as the 5th positional argument
       expect(spy).toHaveBeenCalledWith(
         expect.anything(), // db
-        'binding-A',       // bindingId
-        10,                // effectiveGameId
-        expect.any(Date),  // now
+        'binding-A', // bindingId
+        10, // effectiveGameId
+        expect.any(Date), // now
         'voice-channel-shared', // channelId — must be threaded
       );
 

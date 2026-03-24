@@ -92,6 +92,7 @@ export class AdHocEventService implements OnModuleInit {
     },
     resolvedGameId?: number | null,
     resolvedGameName?: string,
+    channelId?: string,
   ): Promise<void> {
     if (!(await this.isEnabled())) return;
 
@@ -100,7 +101,10 @@ export class AdHocEventService implements OnModuleInit {
     const eventKey = this.buildEventKey(bindingId, effectiveGameId);
 
     if (await this.tryJoinExisting(eventKey, bindingId, member)) return;
-    if (await this.trySuppressForScheduled(bindingId, effectiveGameId)) return;
+    if (
+      await this.trySuppressForScheduled(bindingId, effectiveGameId, channelId)
+    )
+      return;
 
     await spawnNewEvent(
       this.getDeps(),
@@ -230,6 +234,7 @@ export class AdHocEventService implements OnModuleInit {
   private async trySuppressForScheduled(
     bindingId: string,
     effectiveGameId: number | null | undefined,
+    channelId?: string,
   ): Promise<boolean> {
     const now = new Date();
     const scheduled = await findActiveScheduledEvent(
@@ -237,6 +242,7 @@ export class AdHocEventService implements OnModuleInit {
       bindingId,
       effectiveGameId,
       now,
+      channelId,
     );
     if (!scheduled) return false;
     await extendScheduledEventWindow(this.db, scheduled.id, null, now);
