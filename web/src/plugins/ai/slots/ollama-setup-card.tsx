@@ -10,6 +10,7 @@ import type { AiProviderInfoDto } from '@raid-ledger/contract';
 
 interface OllamaSetupCardProps {
     provider: AiProviderInfoDto;
+    onSettingChange?: (setting: boolean) => void;
 }
 
 const STEP_LABELS: Record<string, { label: string; pct: number }> = {
@@ -42,30 +43,24 @@ function useOllamaHandlers(
     return { handleSetup, handleStop, handleActivate };
 }
 
-function useOllamaPolling(
-    setting: boolean, localSetup: boolean,
-    setLocalSetup: (v: boolean) => void, qc: ReturnType<typeof useQueryClient>,
+/** Watch provider data for setup completion/error (polling driven by parent query). */
+function useOllamaSetupWatcher(
+    provider: AiProviderInfoDto, localSetup: boolean,
+    setLocalSetup: (v: boolean) => void,
 ) {
     useEffect(() => {
-        if (!setting) return;
-        const pollTimer = setInterval(async () => {
-            await qc.invalidateQueries({ queryKey: ['admin', 'ai', 'providers'] });
-            const providers = qc.getQueryData<AiProviderInfoDto[]>(['admin', 'ai', 'providers']);
-            const ollama = providers?.find((p) => p.key === 'ollama');
-            if (!ollama) return;
-            if (ollama.available) { setLocalSetup(false); toast.success('Ollama is ready'); }
-            else if (ollama.setupStep === 'error') { setLocalSetup(false); toast.error(ollama.error || 'Ollama setup failed'); }
-            else if (!ollama.setupInProgress && localSetup) setLocalSetup(false);
-        }, 5000);
-        return () => { clearInterval(pollTimer); };
-    }, [setting, localSetup, qc, setLocalSetup]);
+        if (!localSetup) return;
+        if (provider.available) { setLocalSetup(false); toast.success('Ollama is ready'); }
+        else if (provider.setupStep === 'error') { setLocalSetup(false); toast.error(provider.error || 'Ollama setup failed'); }
+        else if (!provider.setupInProgress) setLocalSetup(false);
+    }, [provider.available, provider.setupStep, provider.setupInProgress, provider.error, localSetup, setLocalSetup]);
 }
 
 /**
  * Card for Ollama with Docker container management.
  * Shows setup progress, status, and action buttons.
  */
-export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
+export function OllamaSetupCard({ provider, onSettingChange }: OllamaSetupCardProps) {
     const setup = useOllamaSetup();
     const stop = useOllamaStop();
     const activate = useActivateProvider();
@@ -73,7 +68,8 @@ export function OllamaSetupCard({ provider }: OllamaSetupCardProps) {
     const [localSetup, setLocalSetup] = useState(false);
     const setting = localSetup || (provider.setupInProgress ?? false);
 
-    useOllamaPolling(setting, localSetup, setLocalSetup, qc);
+    useOllamaSetupWatcher(provider, localSetup, setLocalSetup);
+    useEffect(() => { onSettingChange?.(setting); }, [setting, onSettingChange]);
     const { handleSetup, handleStop, handleActivate } = useOllamaHandlers(setup, stop, activate, setLocalSetup, qc);
     return (
         <div className="bg-surface/30 border border-edge rounded-lg p-4 space-y-3">
