@@ -119,11 +119,11 @@ const contentIncludesSignupCount: SmokeTest = {
   name: 'Push content includes signup count (ROK-864)',
   category: 'embed',
   async run(ctx) {
-    const ch = channelForTest(ctx, 4);
-    // Create without game so title is short enough to fit "signed up" within 80 chars
+    // No gameId — title must be short to fit "signed up" within 80 chars.
+    // Embed routes to default channel since no game binding applies.
     const ev = await createEvent(ctx.api, 'push-count', {});
     try {
-      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      const msg = await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
       assertHasContent(msg.content);
       // Content may be truncated if title is long — check either "signed up" or "..."
       if (!msg.content.includes('signed up') && !msg.content.endsWith('...')) {
@@ -211,12 +211,12 @@ const contentTimeMatchesEmbed: SmokeTest = {
       console.log('    SKIP: Guild timezone not configured (CI without timezone setting)');
       return;
     }
-    // Use a short tag + no game so title+date fit within 80-char push content limit
-    const ch = channelForTest(ctx, 7);
+    // No gameId — short tag so title+date fit within 80-char push content limit.
+    // Embed routes to default channel since no game binding applies.
     const ev = await createEvent(ctx.api, 'tz', { maxAttendees: 5 });
     try {
       const msg = await embedInChannel(
-        ch.channelId, ev.title, ctx.config.timeoutMs,
+        ctx.defaultChannelId, ev.title, ctx.config.timeoutMs,
       );
       assertHasContent(msg.content);
       // Format startTime in guild timezone and in UTC
