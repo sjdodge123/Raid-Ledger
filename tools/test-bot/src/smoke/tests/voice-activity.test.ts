@@ -257,7 +257,9 @@ const metricsVoicePopulated: SmokeTest = {
       });
       try {
         // Sign up the user whose Discord ID = test bot
-        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
+        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, undefined, {
+          linkDiscord: true,
+        });
 
         await joinVoice(vChId);
         // Poll flush+metrics until voice data appears. The API's voice
@@ -338,7 +340,9 @@ const classifyPopulatesAttendance: SmokeTest = {
         endTime: futureTime(55),
       });
       try {
-        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
+        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, undefined, {
+          linkDiscord: true,
+        });
 
         await joinVoice(vChId);
         // Poll flush+classify until classification runs and populates

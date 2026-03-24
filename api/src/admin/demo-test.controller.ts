@@ -66,6 +66,7 @@ const CreateTestSignupSchema = z.object({
   preferredRoles: z.array(z.enum(VALID_ROLES)).optional(),
   characterId: z.string().uuid().optional(),
   status: z.enum(VALID_STATUSES).optional(),
+  linkDiscord: z.boolean().optional(),
 });
 
 /**
@@ -116,6 +117,7 @@ export class DemoTestController {
         preferredRoles: parsed.preferredRoles,
         characterId: parsed.characterId,
         status: parsed.status,
+        linkDiscord: parsed.linkDiscord,
       },
     );
   }

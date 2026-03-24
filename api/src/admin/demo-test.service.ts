@@ -93,12 +93,16 @@ export class DemoTestService {
       preferredRoles?: string[];
       characterId?: string;
       status?: SignupStatus;
+      linkDiscord?: boolean;
     },
   ): Promise<SignupResponseDto> {
     await this.assertDemoMode();
     const svc = this.moduleRef.get(SignupsService, { strict: false });
     const signupDto = this.buildSignupDto(dto);
     const result = await svc.signup(eventId, userId, signupDto);
+    if (dto?.linkDiscord) {
+      await this.linkSignupDiscordId(result.id, userId);
+    }
     if (dto?.status && dto.status !== 'signed_up') {
       await this.overrideSignupStatus(result.id, dto.status);
     }
@@ -203,6 +207,23 @@ export class DemoTestService {
       logger,
     );
     await autoPopulateAttendance(this.db, eventId, logger);
+  }
+
+  /** Copy the user's discordId onto their signup row (for voice classification). */
+  private async linkSignupDiscordId(
+    signupId: number,
+    userId: number,
+  ): Promise<void> {
+    const [user] = await this.db
+      .select({ discordId: schema.users.discordId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId));
+    if (user?.discordId) {
+      await this.db
+        .update(schema.eventSignups)
+        .set({ discordUserId: user.discordId })
+        .where(eq(schema.eventSignups.id, signupId));
+    }
   }
 
   /** Directly update a signup's status in the DB. */
