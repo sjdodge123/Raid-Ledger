@@ -38,6 +38,19 @@ export function channelForTest(
   return result;
 }
 
+/**
+ * Look up the channel bound to a specific game in the pool.
+ * Falls back to defaultChannelId if the game isn't in the pool.
+ */
+export function channelForGame(
+  ctx: Pick<TestContext, 'defaultChannelId' | 'channelPool'>,
+  gameId: number | undefined,
+): string {
+  if (!gameId || !ctx.channelPool?.length) return ctx.defaultChannelId;
+  const slot = ctx.channelPool.find((s) => s.gameId === gameId);
+  return slot?.channelId ?? ctx.defaultChannelId;
+}
+
 /** Create an event with a unique title for test isolation. */
 export async function createEvent(
   api: ApiClient,

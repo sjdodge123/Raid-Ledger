@@ -31,11 +31,9 @@ export async function setupChannelPool(
   api: ApiClient,
   textChannels: DiscordChannel[],
   defaultChannelId: string,
-  mmoGameId?: number,
 ): Promise<ChannelSlot[]> {
   const games = await fetchGames(api);
-  // Skip the MMO game — roster tests need it on the default channel
-  const poolGames = games.filter((g) => g.id !== mmoGameId);
+  const poolGames = games;
   // Use non-default channels for the pool
   const poolChannels = textChannels.filter((ch) => ch.id !== defaultChannelId);
 

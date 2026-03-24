@@ -11,6 +11,7 @@ import {
   createEvent,
   signupAs,
   deleteEvent,
+  channelForGame,
 } from '../fixtures.js';
 import { assertEmbedHasField } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -48,11 +49,11 @@ const multiPreferredRoles: SmokeTest = {
       slotConfig: MMO_SLOTS,
     });
     try {
-      await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      await embedInChannel(channelForGame(ctx, ctx.mmoGameId), ev.title, ctx.config.timeoutMs);
       // Sign up with ['tank', 'healer'] — should get tank (first pref)
       await signupAs(ctx.api, ev.id, users[0], ['tank', 'healer']);
       const found = await pollForEmbed(
-        ctx.defaultChannelId,
+        channelForGame(ctx, ctx.mmoGameId),
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -84,7 +85,7 @@ const fullRosterFill: SmokeTest = {
       slotConfig: MMO_SLOTS,
     });
     try {
-      await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      await embedInChannel(channelForGame(ctx, ctx.mmoGameId), ev.title, ctx.config.timeoutMs);
       // Fill all 5 main slots: 1 tank, 1 healer, 3 dps
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
@@ -92,7 +93,7 @@ const fullRosterFill: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[3], ['dps']);
       await signupAs(ctx.api, ev.id, users[4], ['dps']);
       const rosterMsg = await pollForEmbed(
-        ctx.defaultChannelId,
+        channelForGame(ctx, ctx.mmoGameId),
         (m) => {
           const e = m.embeds.find((x) => x.title?.includes(ev.title));
           if (!e) return false;
@@ -137,7 +138,7 @@ const roleShiftChain: SmokeTest = {
       slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 2, flex: 0, bench: 1 },
     });
     try {
-      await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      await embedInChannel(channelForGame(ctx, ctx.mmoGameId), ev.title, ctx.config.timeoutMs);
       // First 3: fill specific roles cleanly
       await signupAs(ctx.api, ev.id, users[0], ['dps']);
       await signupAs(ctx.api, ev.id, users[1], ['dps']);
@@ -146,7 +147,7 @@ const roleShiftChain: SmokeTest = {
       // User 3 prefers tank and dps — should get tank
       await signupAs(ctx.api, ev.id, users[3], ['tank', 'dps']);
       const shiftMsg = await pollForEmbed(
-        ctx.defaultChannelId,
+        channelForGame(ctx, ctx.mmoGameId),
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );
@@ -180,7 +181,7 @@ const tentativeDisplacement: SmokeTest = {
       slotConfig: MMO_SLOTS,
     });
     try {
-      await embedInChannel(ctx.defaultChannelId, ev.title, ctx.config.timeoutMs);
+      await embedInChannel(channelForGame(ctx, ctx.mmoGameId), ev.title, ctx.config.timeoutMs);
       // Fill 4 confirmed slots
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
@@ -193,7 +194,7 @@ const tentativeDisplacement: SmokeTest = {
       // User 5 signs up CONFIRMED for dps — tentative should be displaced
       await signupAs(ctx.api, ev.id, users[5], ['dps']);
       const dispMsg = await pollForEmbed(
-        ctx.defaultChannelId,
+        channelForGame(ctx, ctx.mmoGameId),
         (m) => {
           const e = m.embeds.find((x) => x.title?.includes(ev.title));
           if (!e) return false;

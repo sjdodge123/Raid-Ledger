@@ -11,6 +11,7 @@ import {
   cancelSignup,
   deleteEvent,
   channelForTest,
+  channelForGame,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -252,9 +253,8 @@ const characterOnDuplicateSignup: SmokeTest = {
       slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 },
     });
     try {
-      // Uses defaultChannelId — this test needs mmoGameId for slot config
       await pollForEmbed(
-        ctx.defaultChannelId,
+        channelForGame(ctx, ctx.mmoGameId),
         (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
         ctx.config.timeoutMs,
       );

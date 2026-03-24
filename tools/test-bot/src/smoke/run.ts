@@ -175,7 +175,7 @@ async function setup(): Promise<TestContext> {
 
   console.log('  Setting up channel pool...');
   const channelPool = await setupChannelPool(
-    api, textChannels, defaultChannelId, mmoGameId,
+    api, textChannels, defaultChannelId,
   );
 
   console.log('  Setup complete.\n');

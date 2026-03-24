@@ -10,8 +10,7 @@
  */
 import assert from 'node:assert/strict';
 
-// This import will fail until the dev agent exports channelForTest from fixtures.ts
-import { channelForTest } from './fixtures.js';
+import { channelForTest, channelForGame } from './fixtures.js';
 
 let passed = 0;
 let failed = 0;
@@ -110,6 +109,39 @@ test('wraps correctly for large index values', () => {
   // index 101 % 2 = 1
   const result2 = channelForTest(ctx, 101);
   assert.deepEqual(result2, { channelId: 'ch-b' });
+});
+
+// --- channelForGame tests ---
+
+console.log('\nfixtures.spec.ts — channelForGame\n');
+
+test('returns defaultChannelId when gameId is undefined', () => {
+  const ctx = { defaultChannelId: 'ch-def', channelPool: [{ gameId: 1, channelId: 'ch-1', bindingId: 'b1' }] };
+  assert.equal(channelForGame(ctx, undefined), 'ch-def');
+});
+
+test('returns defaultChannelId when pool is empty', () => {
+  const ctx = { defaultChannelId: 'ch-def', channelPool: [] };
+  assert.equal(channelForGame(ctx, 5), 'ch-def');
+});
+
+test('returns bound channel when game is in pool', () => {
+  const ctx = {
+    defaultChannelId: 'ch-def',
+    channelPool: [
+      { gameId: 10, channelId: 'ch-10', bindingId: 'b10' },
+      { gameId: 20, channelId: 'ch-20', bindingId: 'b20' },
+    ],
+  };
+  assert.equal(channelForGame(ctx, 20), 'ch-20');
+});
+
+test('returns defaultChannelId when game is not in pool', () => {
+  const ctx = {
+    defaultChannelId: 'ch-def',
+    channelPool: [{ gameId: 10, channelId: 'ch-10', bindingId: 'b10' }],
+  };
+  assert.equal(channelForGame(ctx, 99), 'ch-def');
 });
 
 // --- Summary ---
