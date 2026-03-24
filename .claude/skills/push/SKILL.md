@@ -174,6 +174,12 @@ npx playwright test
 
 **This runs BOTH desktop and mobile projects (~450 tests).** Takes ~3 minutes.
 
+After Playwright passes, create the sentinel file so the pre-push hook allows `git push`:
+
+```bash
+touch "/tmp/.playwright-verified-$(git rev-parse --short HEAD)"
+```
+
 If Playwright fails:
 - Check the error: "element not found" vs "strict mode" vs "timeout"
 - "Strict mode" = your new DOM elements collided with selectors in OTHER test files
