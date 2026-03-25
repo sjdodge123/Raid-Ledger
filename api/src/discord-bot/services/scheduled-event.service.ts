@@ -46,10 +46,8 @@ export type { ScheduledEventData } from './scheduled-event.helpers';
 export class ScheduledEventService {
   private readonly logger = new Logger(ScheduledEventService.name);
 
-  /** Test-only toggle -- when false, createScheduledEvent returns immediately (ROK-969). */
+  /** Test-only toggle — when false, createScheduledEvent is a no-op (ROK-969). */
   private scheduledEventsEnabled = true;
-
-  /** Enable/disable scheduled event creation (DEMO_MODE test toggle). */
   setScheduledEventsEnabled(enabled: boolean): void {
     this.scheduledEventsEnabled = enabled;
   }
@@ -262,7 +260,7 @@ export class ScheduledEventService {
       const seId = await getScheduledEventId(this.db, eventId);
       if (!seId) return;
 
-      const description = await this.buildDescription(eventId, eventData);
+      const description = await buildDescriptionText(eventId, eventData, await this.settingsService.getClientUrl());
       const cleared = await tryEditDescription(
         guild,
         eventId,
@@ -295,7 +293,7 @@ export class ScheduledEventService {
       this.logger.warn(`Skip SE ${eventId}: no voice channel`);
       return;
     }
-    const desc = await this.buildDescription(eventId, eventData);
+    const desc = await buildDescriptionText(eventId, eventData, await this.settingsService.getClientUrl());
     const se = await tryCreateNewEvent(guild, eventId, eventData, vc, desc);
     await saveScheduledEventId(this.db, eventId, se.id);
   }
@@ -307,7 +305,7 @@ export class ScheduledEventService {
     eventData: ScheduledEventData,
     gameId?: number | null,
   ): Promise<void> {
-    const desc = await this.buildDescription(eventId, eventData);
+    const desc = await buildDescriptionText(eventId, eventData, await this.settingsService.getClientUrl());
     const vc = await resolveVoiceForEdit(
       guild,
       event,
@@ -336,14 +334,5 @@ export class ScheduledEventService {
     }
   }
 
-  private async buildDescription(
-    eventId: number,
-    eventData: ScheduledEventData,
-  ): Promise<string> {
-    return buildDescriptionText(
-      eventId,
-      eventData,
-      await this.settingsService.getClientUrl(),
-    );
-  }
+
 }
