@@ -28,10 +28,12 @@ import {
   findGameName,
   findBuildingLineup,
   findNominatedGameIds,
+  countDistinctNominators,
   findEntriesWithGames,
   countVotesPerGame,
   countDistinctVoters,
   VALID_TRANSITIONS,
+  VALID_REVERSIONS,
 } from './lineups-query.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import {
@@ -40,7 +42,7 @@ import {
 } from './common-ground-query.helpers';
 import {
   SCORING_WEIGHTS,
-  MAX_LINEUP_ENTRIES,
+  nominationCap,
 } from './common-ground-scoring.constants';
 import {
   countOwnersPerGame,
@@ -146,6 +148,7 @@ export class LineupsService {
       throw new NotFoundException('No active lineup in building status');
 
     const nominated = await findNominatedGameIds(this.db, lineup.id);
+    const [nominators] = await countDistinctNominators(this.db, lineup.id);
     const rows = await queryCommonGround(this.db, filters, nominated);
     const scored = rows.map(mapCommonGroundRow);
     scored.sort((a, b) => b.score - a.score);
@@ -157,7 +160,7 @@ export class LineupsService {
         appliedWeights: { ...SCORING_WEIGHTS },
         activeLineupId: lineup.id,
         nominatedCount: nominated.length,
-        maxNominations: MAX_LINEUP_ENTRIES,
+        maxNominations: nominationCap(nominators?.count ?? 0),
       },
     };
   }
@@ -322,7 +325,9 @@ export class LineupsService {
     current: LineupStatus,
     dto: UpdateLineupStatusDto,
   ) {
-    if (VALID_TRANSITIONS[current] !== dto.status) {
+    const isForward = VALID_TRANSITIONS[current] === dto.status;
+    const isReverse = VALID_REVERSIONS[current] === dto.status;
+    if (!isForward && !isReverse) {
       throw new BadRequestException(
         `Cannot transition from '${current}' to '${dto.status}'`,
       );

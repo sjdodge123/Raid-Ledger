@@ -120,11 +120,20 @@ export function findGameName(
 }
 
 /** Valid status transitions: current → allowed next. */
+/** Forward transitions (auto-advance / force-advance). */
 export const VALID_TRANSITIONS: Record<LineupStatus, LineupStatus | null> = {
   building: 'voting',
   voting: 'decided',
   decided: 'archived',
   archived: null,
+};
+
+/** Reverse transitions (operator revert). */
+export const VALID_REVERSIONS: Record<LineupStatus, LineupStatus | null> = {
+  building: null,
+  voting: 'building',
+  decided: 'voting',
+  archived: 'decided',
 };
 
 /** Count entries in a lineup (for cap enforcement). */
@@ -135,6 +144,19 @@ export function countLineupEntries(
   return db
     .select({
       count: sql<number>`count(*)::int`.as('count'),
+    })
+    .from(schema.communityLineupEntries)
+    .where(eq(schema.communityLineupEntries.lineupId, lineupId));
+}
+
+/** Count distinct nominators in a lineup (for dynamic cap). */
+export function countDistinctNominators(
+  db: PostgresJsDatabase<typeof schema>,
+  lineupId: number,
+) {
+  return db
+    .select({
+      count: sql<number>`count(distinct ${schema.communityLineupEntries.nominatedBy})::int`.as('count'),
     })
     .from(schema.communityLineupEntries)
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));

@@ -18,8 +18,22 @@ export const DEFAULT_MIN_OWNERS = 2;
 /** Maximum results returned per query. */
 export const MAX_RESULTS = 50;
 
-/** Maximum entries allowed in a single lineup. */
-export const MAX_LINEUP_ENTRIES = 20;
+/** Base nomination cap (floor). */
+export const BASE_NOMINATION_CAP = 20;
+
+/** Extra nomination slots per unique participant. */
+export const NOMINATIONS_PER_PARTICIPANT = 5;
+
+/** Dynamic cap: max(20, participants * 5). */
+export function nominationCap(participantCount: number): number {
+  return Math.max(BASE_NOMINATION_CAP, participantCount * NOMINATIONS_PER_PARTICIPANT);
+}
+
+/**
+ * @deprecated Use nominationCap() for dynamic cap.
+ * Kept for backward-compat in common-ground meta response.
+ */
+export const MAX_LINEUP_ENTRIES = BASE_NOMINATION_CAP;
 
 /** Pre-built weights object for API response metadata. */
 export const SCORING_WEIGHTS = {
