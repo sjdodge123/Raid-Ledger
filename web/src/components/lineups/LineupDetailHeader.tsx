@@ -44,7 +44,7 @@ function PhaseBreadcrumb({ lineup }: { lineup: LineupDetailResponseDto }): JSX.E
   const canOperate = isOperatorOrAdmin(user);
   const currentIdx = PHASES.indexOf(lineup.status as LineupStatusDto);
   const [pendingIdx, setPendingIdx] = useState<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const clearPending = useCallback(() => {
     setPendingIdx(null);
