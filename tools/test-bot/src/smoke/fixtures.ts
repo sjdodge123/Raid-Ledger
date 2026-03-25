@@ -301,6 +301,16 @@ export async function pauseReconciliation(api: ApiClient): Promise<void> {
   await api.post('/admin/test/pause-reconciliation', {}).catch(() => null);
 }
 
+/** Disable Discord scheduled event creation for non-SE tests (ROK-969). */
+export async function disableScheduledEvents(api: ApiClient): Promise<void> {
+  await api.post('/admin/test/disable-scheduled-events', {}).catch(() => null);
+}
+
+/** Re-enable Discord scheduled event creation for SE tests (ROK-969). */
+export async function enableScheduledEvents(api: ApiClient): Promise<void> {
+  await api.post('/admin/test/enable-scheduled-events', {}).catch(() => null);
+}
+
 /** Inject a synthetic voice session into the DB — DEMO_MODE only (ROK-943). */
 export async function injectVoiceSession(
   api: ApiClient,

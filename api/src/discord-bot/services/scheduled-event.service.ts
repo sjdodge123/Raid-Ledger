@@ -46,6 +46,14 @@ export type { ScheduledEventData } from './scheduled-event.helpers';
 export class ScheduledEventService {
   private readonly logger = new Logger(ScheduledEventService.name);
 
+  /** Test-only toggle -- when false, createScheduledEvent returns immediately (ROK-969). */
+  private scheduledEventsEnabled = true;
+
+  /** Enable/disable scheduled event creation (DEMO_MODE test toggle). */
+  setScheduledEventsEnabled(enabled: boolean): void {
+    this.scheduledEventsEnabled = enabled;
+  }
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
@@ -126,6 +134,7 @@ export class ScheduledEventService {
     isAdHoc?: boolean,
     voiceChannelOverride?: string | null,
   ): Promise<void> {
+    if (!this.scheduledEventsEnabled) return;
     try {
       const skip = getCreateSkipReason(
         eventId,

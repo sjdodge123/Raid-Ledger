@@ -19,6 +19,12 @@ function createMockService() {
     cleanupScheduledEventsForTest: jest
       .fn()
       .mockResolvedValue({ success: true, deleted: 3, failed: 0, total: 3 }),
+    enableScheduledEventsForTest: jest
+      .fn()
+      .mockResolvedValue({ success: true }),
+    disableScheduledEventsForTest: jest
+      .fn()
+      .mockResolvedValue({ success: true }),
   };
 }
 
@@ -72,5 +78,17 @@ describe('DemoTestController — new test utility endpoints', () => {
       total: 3,
     });
     expect(mockService.cleanupScheduledEventsForTest).toHaveBeenCalled();
+  });
+
+  it('enableScheduledEvents delegates to service (ROK-969)', async () => {
+    const result = await controller.enableScheduledEventsForTest();
+    expect(result).toMatchObject({ success: true });
+    expect(mockService.enableScheduledEventsForTest).toHaveBeenCalled();
+  });
+
+  it('disableScheduledEvents delegates to service (ROK-969)', async () => {
+    const result = await controller.disableScheduledEventsForTest();
+    expect(result).toMatchObject({ success: true });
+    expect(mockService.disableScheduledEventsForTest).toHaveBeenCalled();
   });
 });

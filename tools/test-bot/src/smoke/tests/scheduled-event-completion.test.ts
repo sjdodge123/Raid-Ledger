@@ -16,6 +16,8 @@ import {
   deleteEvent,
   awaitProcessing,
   flushEmbedQueue,
+  enableScheduledEvents,
+  disableScheduledEvents,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -55,6 +57,7 @@ const scheduledEventCreatedOnEventCreate: SmokeTest = {
   name: 'Discord Scheduled Event is created when an event is created',
   category: 'flow',
   async run(ctx) {
+    await enableScheduledEvents(ctx.api);
     const ev = await createEvent(ctx.api, 'se-create');
     try {
       await awaitProcessing(ctx.api);
@@ -70,6 +73,7 @@ const scheduledEventCreatedOnEventCreate: SmokeTest = {
         );
       }
     } finally {
+      await disableScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
@@ -79,6 +83,7 @@ const scheduledEventCompletedAfterCron: SmokeTest = {
   name: 'ROK-944: Scheduled Event transitions to Completed after completion cron',
   category: 'flow',
   async run(ctx) {
+    await enableScheduledEvents(ctx.api);
     const ev = await createEvent(ctx.api, 'se-complete');
     try {
       await awaitProcessing(ctx.api);
@@ -117,6 +122,7 @@ const scheduledEventCompletedAfterCron: SmokeTest = {
         { intervalMs: 2000 },
       );
     } finally {
+      await disableScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
@@ -126,6 +132,7 @@ const completionCronSkipsFutureEvents: SmokeTest = {
   name: 'Completion cron does not complete events with future end times',
   category: 'flow',
   async run(ctx) {
+    await enableScheduledEvents(ctx.api);
     const ev = await createEvent(ctx.api, 'se-future');
     try {
       await awaitProcessing(ctx.api);
@@ -154,6 +161,7 @@ const completionCronSkipsFutureEvents: SmokeTest = {
         );
       }
     } finally {
+      await disableScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },

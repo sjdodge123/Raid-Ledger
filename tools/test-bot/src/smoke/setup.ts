@@ -6,7 +6,7 @@ import { connect, getClient } from '../client.js';
 import { readLastMessages } from '../helpers/messages.js';
 import { ApiClient } from './api.js';
 import { SMOKE } from './config.js';
-import { linkDiscord, cleanupScheduledEvents, pauseReconciliation } from './fixtures.js';
+import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents } from './fixtures.js';
 import { setupChannelPool } from './channel-pool.js';
 import type { TestContext, DiscordChannel } from './types.js';
 
@@ -190,6 +190,9 @@ export async function setup(): Promise<TestContext> {
 
   console.log('  Pausing reconciliation cron...');
   await pauseReconciliation(api);
+
+  console.log('  Disabling scheduled event creation for non-SE tests...');
+  await disableScheduledEvents(api);
 
   const { mmoGameId, testCharId, testCharRole } = await setupCharacters(api);
   const { games, demoUserIds } = buildDemoData(

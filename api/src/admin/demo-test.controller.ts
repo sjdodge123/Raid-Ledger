@@ -231,6 +231,20 @@ export class DemoTestController {
     return this.demoTestService.pauseReconciliationForTest();
   }
 
+  /** Enable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
+  @Post('enable-scheduled-events')
+  @HttpCode(HttpStatus.OK)
+  async enableScheduledEventsForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.enableScheduledEventsForTest();
+  }
+
+  /** Disable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
+  @Post('disable-scheduled-events')
+  @HttpCode(HttpStatus.OK)
+  async disableScheduledEventsForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.disableScheduledEventsForTest();
+  }
+
   /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
   @Post('cleanup-scheduled-events')
   @HttpCode(HttpStatus.OK)

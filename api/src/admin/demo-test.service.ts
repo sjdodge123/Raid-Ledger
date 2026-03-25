@@ -200,6 +200,22 @@ export class DemoTestService {
     return { success: true };
   }
 
+  /** Enable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
+  async enableScheduledEventsForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
+    svc.setScheduledEventsEnabled(true);
+    return { success: true };
+  }
+
+  /** Disable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
+  async disableScheduledEventsForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
+    svc.setScheduledEventsEnabled(false);
+    return { success: true };
+  }
+
   /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
   async cleanupScheduledEventsForTest(): Promise<{
     success: boolean;

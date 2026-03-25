@@ -152,6 +152,38 @@ describe('DemoTestService — test utility endpoints', () => {
     });
   });
 
+  describe('enableScheduledEventsForTest (ROK-969)', () => {
+    it('calls setScheduledEventsEnabled(true) on ScheduledEventService', async () => {
+      const mockSeSvc = { setScheduledEventsEnabled: jest.fn() };
+      mockModuleRef.get.mockImplementation((token: unknown) => {
+        const name = typeof token === 'function' ? token.name : String(token);
+        if (name === 'ScheduledEventService') return mockSeSvc;
+        return {};
+      });
+
+      const result = await service.enableScheduledEventsForTest();
+
+      expect(result).toMatchObject({ success: true });
+      expect(mockSeSvc.setScheduledEventsEnabled).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('disableScheduledEventsForTest (ROK-969)', () => {
+    it('calls setScheduledEventsEnabled(false) on ScheduledEventService', async () => {
+      const mockSeSvc = { setScheduledEventsEnabled: jest.fn() };
+      mockModuleRef.get.mockImplementation((token: unknown) => {
+        const name = typeof token === 'function' ? token.name : String(token);
+        if (name === 'ScheduledEventService') return mockSeSvc;
+        return {};
+      });
+
+      const result = await service.disableScheduledEventsForTest();
+
+      expect(result).toMatchObject({ success: true });
+      expect(mockSeSvc.setScheduledEventsEnabled).toHaveBeenCalledWith(false);
+    });
+  });
+
   describe('cleanupScheduledEventsForTest', () => {
     it('deletes all scheduled events and returns counts', async () => {
       const mockSe1 = {
