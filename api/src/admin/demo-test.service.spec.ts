@@ -205,7 +205,11 @@ describe('DemoTestService — test utility endpoints', () => {
     it('rejects when DEMO_MODE is disabled', async () => {
       process.env.DEMO_MODE = 'false';
       await expect(
-        service.setEventTimesForTest(1, '2026-04-01T00:00:00Z', '2026-04-01T02:00:00Z'),
+        service.setEventTimesForTest(
+          1,
+          '2026-04-01T00:00:00Z',
+          '2026-04-01T02:00:00Z',
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });

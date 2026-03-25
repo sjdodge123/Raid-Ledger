@@ -28,10 +28,12 @@ import {
   findGameName,
   findBuildingLineup,
   findNominatedGameIds,
+  countDistinctNominators,
   findEntriesWithGames,
   countVotesPerGame,
   countDistinctVoters,
   VALID_TRANSITIONS,
+  VALID_REVERSIONS,
 } from './lineups-query.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import {
@@ -40,7 +42,7 @@ import {
 } from './common-ground-query.helpers';
 import {
   SCORING_WEIGHTS,
-  MAX_LINEUP_ENTRIES,
+  nominationCap,
 } from './common-ground-scoring.constants';
 import {
   countOwnersPerGame,
@@ -68,6 +70,7 @@ import {
   getNextPhase,
   buildTransitionValues,
 } from './lineups-phase.helpers';
+import { logTransition, logNomination } from './lineups-activity.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -133,7 +136,7 @@ export class LineupsService {
     }
 
     await this.applyStatusUpdate(id, dto, lineup);
-    await this.logTransition(id, dto);
+    await logTransition(this.db, this.activityLog, id, dto);
     return buildDetailResponse(this.db, id);
   }
 
@@ -146,6 +149,7 @@ export class LineupsService {
       throw new NotFoundException('No active lineup in building status');
 
     const nominated = await findNominatedGameIds(this.db, lineup.id);
+    const [nominators] = await countDistinctNominators(this.db, lineup.id);
     const rows = await queryCommonGround(this.db, filters, nominated);
     const scored = rows.map(mapCommonGroundRow);
     scored.sort((a, b) => b.score - a.score);
@@ -157,7 +161,7 @@ export class LineupsService {
         appliedWeights: { ...SCORING_WEIGHTS },
         activeLineupId: lineup.id,
         nominatedCount: nominated.length,
-        maxNominations: MAX_LINEUP_ENTRIES,
+        maxNominations: nominationCap(nominators?.count ?? 0),
       },
     };
   }
@@ -172,7 +176,7 @@ export class LineupsService {
     await validateNominationCap(this.db, lineupId);
     await validateGameExists(this.db, dto.gameId);
     await insertNomination(this.db, lineupId, dto, userId);
-    await this.logNomination(lineupId, dto, userId);
+    await logNomination(this.db, this.activityLog, lineupId, dto, userId);
     return buildDetailResponse(this.db, lineupId);
   }
 
@@ -223,6 +227,7 @@ export class LineupsService {
           targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
           phaseDeadline,
           phaseDurationOverride: overrides,
+          matchThreshold: dto.matchThreshold?.toFixed(2) ?? undefined,
         })
         .returning();
     });
@@ -287,41 +292,14 @@ export class LineupsService {
     );
   }
 
-  /** Log activity for a status transition. */
-  private async logTransition(id: number, dto: UpdateLineupStatusDto) {
-    if (dto.status === 'voting') {
-      void this.activityLog.log('lineup', id, 'voting_started', null, {
-        votingDeadline: dto.votingDeadline ?? null,
-      });
-    } else if (dto.status === 'decided' && dto.decidedGameId) {
-      const [game] = await findGameName(this.db, dto.decidedGameId);
-      void this.activityLog.log('lineup', id, 'lineup_decided', null, {
-        gameId: dto.decidedGameId,
-        gameName: game?.name ?? 'Unknown',
-      });
-    }
-  }
-
-  /** Log a nomination event. */
-  private async logNomination(
-    lineupId: number,
-    dto: NominateGameDto,
-    userId: number,
-  ) {
-    const [game] = await findGameName(this.db, dto.gameId);
-    void this.activityLog.log('lineup', lineupId, 'game_nominated', userId, {
-      gameId: dto.gameId,
-      gameName: game?.name ?? 'Unknown',
-      note: dto.note ?? null,
-    });
-  }
-
   /** Validate a status transition is legal. */
   private validateTransition(
     current: LineupStatus,
     dto: UpdateLineupStatusDto,
   ) {
-    if (VALID_TRANSITIONS[current] !== dto.status) {
+    const isForward = VALID_TRANSITIONS[current] === dto.status;
+    const isReverse = VALID_REVERSIONS[current] === dto.status;
+    if (!isForward && !isReverse) {
       throw new BadRequestException(
         `Cannot transition from '${current}' to '${dto.status}'`,
       );

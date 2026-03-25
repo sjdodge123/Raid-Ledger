@@ -27,6 +27,8 @@ export const CreateLineupSchema = z.object({
     votingDurationHours: z.number().int().min(1).max(720).optional(),
     /** Hours for the decided phase (1-720, default from admin settings). */
     decidedDurationHours: z.number().int().min(1).max(720).optional(),
+    /** Match threshold for grouping algorithm (0.10–0.75, default 0.35). */
+    matchThreshold: z.number().min(0.10).max(0.75).optional(),
 });
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
@@ -94,6 +96,7 @@ export const LineupDetailResponseSchema = z.object({
     createdBy: LineupUserSchema,
     votingDeadline: z.string().nullable(),
     phaseDeadline: z.string().nullable(),
+    matchThreshold: z.number().nullable(),
     entries: z.array(LineupEntryResponseSchema),
     totalVoters: z.number(),
     totalMembers: z.number(),

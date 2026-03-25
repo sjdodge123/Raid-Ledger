@@ -1,12 +1,14 @@
-import type { JSX } from 'react';
+import { useState, useEffect, useRef, useCallback, type JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { LineupDetailResponseDto, LineupStatusDto } from '@raid-ledger/contract';
+import { useTransitionLineupStatus } from '../../hooks/use-lineups';
+import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { LineupStatusBadge } from './LineupStatusBadge';
 import { PhaseCountdown } from './phase-countdown';
+import { toast } from '../../lib/toast';
 
 interface Props {
   lineup: LineupDetailResponseDto;
-  actions?: JSX.Element | null;
 }
 
 const PHASES: LineupStatusDto[] = ['building', 'voting', 'decided', 'archived'];
@@ -34,16 +36,89 @@ function PhaseCircle({ status }: { status: string }): JSX.Element {
   );
 }
 
-function PhaseBreadcrumb({ status }: { status: string }): JSX.Element {
-  const current = PHASES.indexOf(status as LineupStatusDto);
+const CONFIRM_TIMEOUT = 3_000;
+
+function PhaseBreadcrumb({ lineup }: { lineup: LineupDetailResponseDto }): JSX.Element {
+  const { user } = useAuth();
+  const transition = useTransitionLineupStatus();
+  const canOperate = isOperatorOrAdmin(user);
+  const currentIdx = PHASES.indexOf(lineup.status as LineupStatusDto);
+  const [pendingIdx, setPendingIdx] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const clearPending = useCallback(() => {
+    setPendingIdx(null);
+    clearTimeout(timerRef.current);
+  }, []);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  function handleClick(targetIdx: number) {
+    if (!canOperate || transition.isPending) return;
+    const diff = targetIdx - currentIdx;
+    if (diff !== 1 && diff !== -1) return; // only adjacent phases
+
+    if (pendingIdx === targetIdx) {
+      // Second click — execute
+      clearPending();
+      const targetStatus = PHASES[targetIdx];
+      const body: { status: string; decidedGameId?: number | null } = { status: targetStatus };
+      if (targetStatus === 'decided') {
+        body.decidedGameId = lineup.entries[0]?.gameId ?? null;
+      }
+      transition.mutate(
+        { lineupId: lineup.id, body },
+        {
+          onSuccess: () => toast.success(`Moved to ${PHASE_LABELS[PHASES[targetIdx]]}`),
+          onError: (err) => toast.error(err instanceof Error ? err.message : 'Transition failed'),
+        },
+      );
+    } else {
+      // First click — show confirmation
+      setPendingIdx(targetIdx);
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(clearPending, CONFIRM_TIMEOUT);
+    }
+  }
+
   return (
-    <span className="text-[11px] text-dim">
-      {PHASES.map((p, i) => (
-        <span key={p} className={i === current ? 'text-emerald-400 font-medium' : ''}>
-          {i > 0 && ' → '}{PHASE_LABELS[p]}
-        </span>
-      ))}
-    </span>
+    <div className="flex items-center gap-1 text-sm">
+      {PHASES.map((p, i) => {
+        const isCurrent = i === currentIdx;
+        const isClickable = canOperate && (i === currentIdx + 1 || i === currentIdx - 1);
+        const isPending = pendingIdx === i;
+        const isAdvance = i > currentIdx;
+
+        let label = PHASE_LABELS[p];
+        if (isPending) label = isAdvance ? 'Advance?' : 'Revert?';
+
+        return (
+          <span key={p} className="inline-flex items-center">
+            {i > 0 && <span className="text-dim mx-1">→</span>}
+            {isClickable ? (
+              <button
+                type="button"
+                onClick={() => handleClick(i)}
+                disabled={transition.isPending}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  isPending
+                    ? isAdvance
+                      ? 'text-emerald-300 bg-emerald-500/20 font-medium'
+                      : 'text-amber-300 bg-amber-500/20 font-medium'
+                    : 'text-dim hover:text-foreground hover:bg-overlay/50'
+                } disabled:opacity-50`}
+              >
+                {label}
+              </button>
+            ) : (
+              <span className={`px-1.5 py-0.5 ${isCurrent ? 'text-emerald-400 font-medium' : 'text-dim'}`}>
+                {label}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -62,7 +137,7 @@ function PhaseContextInfo({ lineup }: { lineup: LineupDetailResponseDto }): JSX.
   return null;
 }
 
-export function LineupDetailHeader({ lineup, actions }: Props): JSX.Element {
+export function LineupDetailHeader({ lineup }: Props): JSX.Element {
   const navigate = useNavigate();
 
   return (
@@ -81,12 +156,9 @@ export function LineupDetailHeader({ lineup, actions }: Props): JSX.Element {
           <h1 className="text-lg font-display font-bold tracking-wide">Community Lineup</h1>
           <LineupStatusBadge status={lineup.status} />
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2">
-            <PhaseBreadcrumb status={lineup.status} />
-            <PhaseCircle status={lineup.status} />
-          </div>
-          {actions}
+        <div className="flex items-center gap-2">
+          <PhaseBreadcrumb lineup={lineup} />
+          <PhaseCircle status={lineup.status} />
         </div>
       </div>
       <div className="flex items-center justify-between ml-8">

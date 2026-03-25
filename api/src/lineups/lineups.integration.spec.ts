@@ -327,7 +327,7 @@ function describeLineups() {
       expect(res.status).toBe(400);
     });
 
-    it('should reject backward transition voting → building', async () => {
+    it('should allow reversion voting → building', async () => {
       const createRes = await createLineup(adminToken);
       const lineupId = createRes.body.id as number;
 
@@ -341,7 +341,8 @@ function describeLineups() {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'building' });
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('building');
     });
 
     it('should allow voting → decided without decidedGameId (force-advance)', async () => {

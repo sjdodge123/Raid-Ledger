@@ -10,19 +10,27 @@ import {
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { NominateGameDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import { findGameName, countLineupEntries } from './lineups-query.helpers';
-import { MAX_LINEUP_ENTRIES } from './common-ground-scoring.constants';
+import {
+  findGameName,
+  countLineupEntries,
+  countDistinctNominators,
+} from './lineups-query.helpers';
+import { nominationCap } from './common-ground-scoring.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Enforce the 20-entry cap for a lineup. */
+/** Enforce the dynamic nomination cap (base 20, +5 per unique participant). */
 export async function validateNominationCap(
   db: Db,
   lineupId: number,
 ): Promise<void> {
-  const [result] = await countLineupEntries(db, lineupId);
-  if (result && result.count >= MAX_LINEUP_ENTRIES) {
-    throw new BadRequestException('Lineup has reached the 20-entry cap');
+  const [[entries], [nominators]] = await Promise.all([
+    countLineupEntries(db, lineupId),
+    countDistinctNominators(db, lineupId),
+  ]);
+  const cap = nominationCap(nominators?.count ?? 0);
+  if (entries && entries.count >= cap) {
+    throw new BadRequestException(`Lineup has reached the ${cap}-entry cap`);
   }
 }
 

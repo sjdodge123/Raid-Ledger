@@ -235,6 +235,14 @@ test.describe('Lineup creation modal', () => {
 
         const votingDuration = modal.locator('[data-testid="voting-duration"]');
         await expect(votingDuration).toBeVisible({ timeout: 5_000 });
+
+        // Match threshold slider (10%–75%) should be present
+        const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
+        await expect(thresholdSlider).toBeVisible({ timeout: 5_000 });
+
+        // Verify slider labels
+        await expect(modal.getByText('More matches')).toBeVisible();
+        await expect(modal.getByText('Fewer, larger matches')).toBeVisible();
     });
 
     test('submitting modal creates lineup and navigates to detail page', async ({ page }) => {
@@ -330,10 +338,10 @@ test.describe('Phase countdown display', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Force-advance functionality
+// Phase breadcrumb transitions (advance + revert)
 // ---------------------------------------------------------------------------
 
-test.describe('Force-advance phase transition', () => {
+test.describe('Phase breadcrumb transitions', () => {
     let adminToken: string;
     let lineupId: number;
 
@@ -342,42 +350,63 @@ test.describe('Force-advance phase transition', () => {
         lineupId = await ensureActiveLineup(adminToken);
     });
 
-    test('detail page shows Force Advance button for operators', async ({ page }) => {
-        const banner = await apiGet(adminToken, '/lineups/banner');
-        const activeId = banner?.id ?? lineupId;
-
-        await page.goto(`/community-lineup/${activeId}`);
-        await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
-        ).toBeVisible({ timeout: 15_000 });
-
-        // Force Advance button should be visible for operator/admin users
-        const forceBtn = page.getByRole('button', { name: /Force Advance/i });
-        await expect(forceBtn).toBeVisible({ timeout: 10_000 });
+    test('breadcrumb shows clickable next phase for operators', async ({ page }) => {
+        await expect(async () => {
+            lineupId = await ensureActiveLineup(adminToken);
+            await page.goto(`/community-lineup/${lineupId}`);
+            await expect(
+                page.getByRole('heading', { name: 'Community Lineup' }),
+            ).toBeVisible({ timeout: 5_000 });
+            // "Voting" should be a clickable button (next phase from building)
+            const votingBtn = page.getByRole('button', { name: 'Voting' });
+            await expect(votingBtn).toBeVisible({ timeout: 5_000 });
+        }).toPass({ timeout: 30_000 });
     });
 
-    test('clicking Force Advance transitions the phase', async ({ page }) => {
-        // Ensure we have a fresh building-phase lineup for the transition test
-        lineupId = await ensureActiveLineup(adminToken);
-        await page.goto(`/community-lineup/${lineupId}`);
-        await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
-        ).toBeVisible({ timeout: 15_000 });
+    test('double-click on next phase advances the lineup', async ({ page }) => {
+        await expect(async () => {
+            lineupId = await ensureActiveLineup(adminToken);
+            await page.goto(`/community-lineup/${lineupId}`);
+            await expect(
+                page.getByRole('heading', { name: 'Community Lineup' }),
+            ).toBeVisible({ timeout: 5_000 });
 
-        // Current phase should be "Building" (or its label equivalent)
-        const buildingBadge = page.locator('span').filter({
-            hasText: /Building|Nominating/,
-        });
-        await expect(buildingBadge.first()).toBeVisible({ timeout: 5_000 });
+            // First click — shows "Advance?"
+            const votingBtn = page.getByRole('button', { name: 'Voting' });
+            await expect(votingBtn).toBeVisible({ timeout: 3_000 });
+            await votingBtn.click();
+            await expect(page.getByRole('button', { name: 'Advance?' })).toBeVisible({ timeout: 3_000 });
+            await page.getByRole('button', { name: 'Advance?' }).click();
+        }).toPass({ timeout: 30_000 });
 
-        // Click Force Advance
-        const forceBtn = page.getByRole('button', { name: /Force Advance/i });
-        await expect(forceBtn).toBeVisible({ timeout: 5_000 });
-        await forceBtn.click();
-
-        // Phase should transition to "Voting"
+        // Status badge should update to Voting
         const votingBadge = page.locator('span').filter({ hasText: /Voting/ });
         await expect(votingBadge.first()).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('double-click on previous phase reverts the lineup', async ({ page }) => {
+        // Retry — parallel workers may archive our lineup between setup and navigation
+        await expect(async () => {
+            // Ensure lineup is in voting phase
+            lineupId = await ensureActiveLineup(adminToken);
+            await apiPatch(adminToken, `/lineups/${lineupId}/status`, { status: 'voting' });
+
+            await page.goto(`/community-lineup/${lineupId}`);
+            await expect(
+                page.getByRole('heading', { name: 'Community Lineup' }),
+            ).toBeVisible({ timeout: 5_000 });
+
+            // "Nominating" should be a clickable button (previous phase from voting)
+            const nominatingBtn = page.getByRole('button', { name: 'Nominating' });
+            await expect(nominatingBtn).toBeVisible({ timeout: 3_000 });
+            await nominatingBtn.click();
+            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
+            await page.getByRole('button', { name: 'Revert?' }).click();
+        }).toPass({ timeout: 30_000 });
+
+        // Status badge should update back to building/Nominating
+        const buildingBadge = page.locator('span').filter({ hasText: /Nominating/ });
+        await expect(buildingBadge.first()).toBeVisible({ timeout: 10_000 });
     });
 });
 

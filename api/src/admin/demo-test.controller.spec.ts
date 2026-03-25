@@ -25,9 +25,7 @@ function createMockService() {
     disableScheduledEventsForTest: jest
       .fn()
       .mockResolvedValue({ success: true }),
-    pauseReconciliationForTest: jest
-      .fn()
-      .mockResolvedValue({ success: true }),
+    pauseReconciliationForTest: jest.fn().mockResolvedValue({ success: true }),
     setEventTimesForTest: jest.fn().mockResolvedValue({ success: true }),
   };
 }

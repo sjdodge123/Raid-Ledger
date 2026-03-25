@@ -37,6 +37,7 @@ function describePhaseScheduling() {
       buildingDurationHours?: number;
       votingDurationHours?: number;
       decidedDurationHours?: number;
+      matchThreshold?: number;
     } = {},
   ) {
     return testApp.request
@@ -278,5 +279,115 @@ function describePhaseScheduling() {
     });
   }
   describe('PUT /admin/settings/lineup', describePUTLineupSettings);
+
+  // ── POST /lineups with matchThreshold ─────────────────────
+
+  function describePOSTWithMatchThreshold() {
+    it('should accept matchThreshold and return it in detail', async () => {
+      const res = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+        matchThreshold: 0.5,
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.matchThreshold).toBe(0.5);
+    });
+
+    it('should default matchThreshold to 0.35 when not provided', async () => {
+      const res = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.matchThreshold).toBe(0.35);
+    });
+
+    it('should reject matchThreshold below 0.10', async () => {
+      const res = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+        matchThreshold: 0.05,
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should reject matchThreshold above 0.75', async () => {
+      const res = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+        matchThreshold: 0.9,
+      });
+
+      expect(res.status).toBe(400);
+    });
+  }
+  describe('POST /lineups with matchThreshold', describePOSTWithMatchThreshold);
+
+  // ── PATCH /lineups/:id/status — reverse transitions ───────
+
+  function describeReverseTransitions() {
+    it('should allow reverting voting back to building', async () => {
+      const createRes = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+      });
+      const lineupId = createRes.body.id as number;
+
+      // Advance to voting
+      await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'voting' });
+
+      // Revert to building
+      const res = await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'building' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('building');
+      expect(res.body.phaseDeadline).toBeTruthy();
+    });
+
+    it('should allow reverting decided back to voting', async () => {
+      const createRes = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+        votingDurationHours: 48,
+      });
+      const lineupId = createRes.body.id as number;
+
+      await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'voting' });
+      await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'decided', decidedGameId: null });
+
+      // Revert to voting
+      const res = await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'voting' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('voting');
+    });
+
+    it('should reject skipping phases (building to decided)', async () => {
+      const createRes = await createLineupWithDurations(adminToken, {
+        buildingDurationHours: 24,
+      });
+      const lineupId = createRes.body.id as number;
+
+      const res = await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'decided' });
+
+      expect(res.status).toBe(400);
+    });
+  }
+  describe('PATCH reverse transitions', describeReverseTransitions);
 }
 describe('Lineup Phase Scheduling (integration)', describePhaseScheduling);

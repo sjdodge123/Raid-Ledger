@@ -5,31 +5,40 @@ import { useState } from 'react';
 import { useLineupSettings } from '../../hooks/admin/use-lineup-settings';
 import { toast } from '../../lib/toast';
 
-function DurationField({ label, name, testId, value, onChange }: {
+const MIN_DAYS = 1;
+const MAX_DAYS = 30;
+
+function DurationSlider({ label, name, testId, value, onChange }: {
   label: string;
   name: string;
   testId: string;
   value: number;
   onChange: (v: number) => void;
 }) {
+  const days = Math.round(value / 24) || 1;
   return (
     <div>
-      <label className="block text-sm font-medium text-secondary mb-1">
-        {label}
-      </label>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-medium text-secondary">{label}</label>
+        <span className="text-sm text-muted tabular-nums">
+          {days} {days === 1 ? 'day' : 'days'}
+        </span>
+      </div>
       <input
-        type="number"
+        type="range"
         name={name}
         data-testid={testId}
-        min={1}
-        max={720}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full sm:max-w-xs px-4 py-3 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
+        min={MIN_DAYS}
+        max={MAX_DAYS}
+        step={1}
+        value={days}
+        onChange={(e) => onChange(Number(e.target.value) * 24)}
+        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
       />
-      <p className="text-xs text-muted mt-1">
-        {Math.floor(value / 24)} days, {value % 24} hours
-      </p>
+      <div className="flex justify-between text-xs text-muted/60 mt-1">
+        <span>1 day</span>
+        <span>30 days</span>
+      </div>
     </div>
   );
 }
@@ -103,22 +112,22 @@ export function LineupDefaultsPanel() {
         </p>
       </div>
       <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
-        <DurationField
-          label="Building Phase (hours)"
+        <DurationSlider
+          label="Building Phase"
           name="buildingDurationHours"
           testId="default-building-duration"
           value={state.building}
           onChange={(v) => state.setBuilding(v)}
         />
-        <DurationField
-          label="Voting Phase (hours)"
+        <DurationSlider
+          label="Voting Phase"
           name="votingDurationHours"
           testId="default-voting-duration"
           value={state.voting}
           onChange={(v) => state.setVoting(v)}
         />
-        <DurationField
-          label="Decided Phase (hours)"
+        <DurationSlider
+          label="Decided Phase"
           name="decidedDurationHours"
           testId="default-decided-duration"
           value={state.decided}

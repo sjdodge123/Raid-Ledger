@@ -24,16 +24,39 @@ function computeRemaining(deadline: string): number {
   return new Date(deadline).getTime() - Date.now();
 }
 
-function formatCompact(ms: number): string {
+function formatHumanDuration(ms: number): string {
   if (ms <= 0) return 'Transitioning...';
-  const hours = Math.floor(ms / 3_600_000);
-  const minutes = Math.floor((ms % 3_600_000) / 60_000);
-  if (hours > 0) return `${hours}h ${minutes}m remaining`;
-  return `${minutes}m remaining`;
+  const totalMinutes = Math.floor(ms / 60_000);
+  const totalHours = Math.floor(ms / 3_600_000);
+  const totalDays = Math.floor(ms / 86_400_000);
+
+  if (totalDays >= 7) {
+    const weeks = Math.floor(totalDays / 7);
+    const days = totalDays % 7;
+    if (days === 0) return `${weeks}w remaining`;
+    return `${weeks}w ${days}d remaining`;
+  }
+  if (totalDays >= 1) {
+    const hours = totalHours % 24;
+    if (hours === 0) return `${totalDays}d remaining`;
+    return `${totalDays}d ${hours}h remaining`;
+  }
+  if (totalHours >= 1) {
+    const minutes = totalMinutes % 60;
+    return `${totalHours}h ${minutes}m remaining`;
+  }
+  return `${totalMinutes}m remaining`;
+}
+
+function formatCompact(ms: number): string {
+  return formatHumanDuration(ms);
 }
 
 function formatFull(ms: number): string {
   if (ms <= 0) return 'Transitioning...';
+  const totalDays = Math.floor(ms / 86_400_000);
+  // Show seconds only when under 24h
+  if (totalDays >= 1) return formatHumanDuration(ms);
   const hours = Math.floor(ms / 3_600_000);
   const minutes = Math.floor((ms % 3_600_000) / 60_000);
   const seconds = Math.floor((ms % 60_000) / 1_000);

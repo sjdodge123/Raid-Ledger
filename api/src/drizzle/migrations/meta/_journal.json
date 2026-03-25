@@ -722,6 +722,13 @@
       "when": 1774400000000,
       "tag": "0102_lineup_phase_scheduling",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1774387416668,
+      "tag": "0103_lineup_match_threshold",
+      "breakpoints": true
     }
   ]
 }
