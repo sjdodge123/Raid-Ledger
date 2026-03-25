@@ -34,6 +34,9 @@ test.describe('Admin plugins panel', () => {
         await page.goto('/admin/settings/plugins');
         await expect(page.getByRole('heading', { name: 'Manage Plugins' })).toBeVisible({ timeout: 10_000 });
 
+        // Wait for plugin cards to finish loading (h3 headings appear when cards render)
+        await expect(page.locator('h3').first()).toBeVisible({ timeout: 15_000 });
+
         // Every plugin in a known state should have an action button:
         //   active -> Deactivate, inactive -> Activate + Uninstall, not_installed -> Install
         const actionButtons = page.getByRole('button', {
