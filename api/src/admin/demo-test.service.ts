@@ -213,17 +213,11 @@ export class DemoTestService {
     const guild = client.getGuild();
     if (!guild) return { success: true, deleted: 0, failed: 0, total: 0 };
     const events = await guild.scheduledEvents.fetch();
-    let deleted = 0;
-    let failed = 0;
-    for (const se of events.values()) {
-      try {
-        await se.delete();
-        deleted++;
-      } catch {
-        failed++;
-      }
-    }
-    return { success: true, deleted, failed, total: events.size };
+    const results = await Promise.allSettled(
+      [...events.values()].map((se) => se.delete()),
+    );
+    const deleted = results.filter((r) => r.status === 'fulfilled').length;
+    return { success: true, deleted, failed: results.length - deleted, total: events.size };
   }
 
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
