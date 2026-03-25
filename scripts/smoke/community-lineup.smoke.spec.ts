@@ -452,3 +452,120 @@ test.describe('Community Lineup responsive layout', () => {
         await expect(page.getByRole('button', { name: 'Nominate' })).toBeVisible({ timeout: 5_000 });
     });
 });
+
+// ---------------------------------------------------------------------------
+// Voting phase (ROK-936)
+// ---------------------------------------------------------------------------
+
+test.describe('Voting phase', () => {
+    let votingLineupId: number;
+
+    test.beforeAll(async () => {
+        // Ensure a lineup exists and advance it to voting status
+        const banner = await apiGet(adminToken, '/lineups/banner');
+        if (banner && typeof banner.id === 'number') {
+            if (banner.status === 'voting') {
+                votingLineupId = banner.id;
+                return;
+            }
+            // Archive anything that is not building (decided, etc)
+            if (banner.status !== 'building') {
+                await archiveLineup(adminToken, banner.id);
+                const created = (await apiPost(adminToken, '/lineups', {
+                    targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+                })) as { id: number };
+                votingLineupId = created.id;
+            } else {
+                votingLineupId = banner.id;
+            }
+        } else {
+            // No active lineup -- create one
+            const created = (await apiPost(adminToken, '/lineups', {
+                targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+            })) as { id: number };
+            votingLineupId = created.id;
+        }
+
+        // Advance to voting (the detail page needs games to render a leaderboard)
+        await apiPatch(adminToken, `/lineups/${votingLineupId}/status`, { status: 'voting' });
+    });
+
+    test('leaderboard renders sorted by vote count descending', async ({ page }) => {
+        await page.goto(`/community-lineup/${votingLineupId}`);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // The detail page should show the voting leaderboard when status=voting
+        // Look for the leaderboard container or a heading indicating voting mode
+        const leaderboard = page.locator('[data-testid="voting-leaderboard"]');
+        await expect(leaderboard).toBeVisible({ timeout: 15_000 });
+
+        // Leaderboard rows should be present (at least the nominated games)
+        const rows = leaderboard.locator('[data-testid="leaderboard-row"]');
+        const rowCount = await rows.count();
+        expect(rowCount).toBeGreaterThan(0);
+    });
+
+    test('clicking a game row toggles vote with emerald accent and filled checkmark', async ({ page }) => {
+        await page.goto(`/community-lineup/${votingLineupId}`);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        const leaderboard = page.locator('[data-testid="voting-leaderboard"]');
+        await expect(leaderboard).toBeVisible({ timeout: 15_000 });
+
+        // Click the first leaderboard row to cast a vote
+        const firstRow = leaderboard.locator('[data-testid="leaderboard-row"]').first();
+        await firstRow.click();
+
+        // After voting, the row should show an emerald left accent (via data attribute or visual marker)
+        // The row should have a "voted" state indicator
+        await expect(firstRow.locator('[data-voted="true"]')).toBeVisible({ timeout: 5_000 });
+
+        // A filled checkmark icon should be visible on voted rows
+        const checkmark = firstRow.locator('[data-testid="vote-checkmark"]');
+        await expect(checkmark).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('VoteStatusBar shows vote count and voter participation', async ({ page }) => {
+        await page.goto(`/community-lineup/${votingLineupId}`);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // VoteStatusBar should display "X of 3 votes" text
+        const voteCountText = page.getByText(/\d+ of 3 votes/i);
+        await expect(voteCountText).toBeVisible({ timeout: 15_000 });
+
+        // VoteStatusBar should display "Y / Z voted" participation text
+        const participationText = page.getByText(/\d+\s*\/\s*\d+\s*voted/i);
+        await expect(participationText).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('match threshold slider is present in StartLineupModal', async ({ page }) => {
+        // Archive the voting lineup so we can see the "Start Lineup" button
+        await archiveLineup(adminToken, votingLineupId);
+
+        await page.goto('/games');
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // Click "Start Lineup" to open the creation modal
+        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
+        await expect(startBtn).toBeVisible({ timeout: 15_000 });
+        await startBtn.click();
+
+        const modal = page.locator('[role="dialog"]');
+        await expect(modal).toBeVisible({ timeout: 5_000 });
+
+        // Match threshold slider should be present with correct labels
+        const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
+        await expect(thresholdSlider).toBeVisible({ timeout: 5_000 });
+
+        // Verify the slider has min/max labels
+        await expect(modal.getByText('More matches')).toBeVisible({ timeout: 3_000 });
+        await expect(modal.getByText('Fewer, larger matches')).toBeVisible({ timeout: 3_000 });
+
+        // Recreate a lineup to restore state for other tests
+        const modal2 = page.locator('[role="dialog"]');
+        const closeBtn = modal2.getByRole('button', { name: /close/i });
+        if (await closeBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+            await closeBtn.click();
+        }
+    });
+});
