@@ -174,5 +174,6 @@ export async function findReconciliationCandidates(
         sql`${schema.events.isAdHoc} = false`,
         sql`lower(${schema.events.duration}) > ${now.toISOString()}::timestamptz`,
       ),
-    );
+    )
+    .limit(5);
 }

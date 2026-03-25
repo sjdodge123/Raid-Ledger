@@ -224,6 +224,13 @@ export class DemoTestController {
     return this.demoTestService.triggerScheduledEventCompletionForTest();
   }
 
+  /** Pause the reconciliation cron to prevent API queue flooding — DEMO_MODE only (ROK-969). */
+  @Post('pause-reconciliation')
+  @HttpCode(HttpStatus.OK)
+  async pauseReconciliationForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.pauseReconciliationForTest();
+  }
+
   /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
   @Post('cleanup-scheduled-events')
   @HttpCode(HttpStatus.OK)

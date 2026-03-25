@@ -86,6 +86,72 @@ describe('DemoTestService — test utility endpoints', () => {
     );
   });
 
+  describe('pauseReconciliationForTest (ROK-969)', () => {
+    it('pauses the reconciliation cron job via CronJobService', async () => {
+      const mockCronJobService = {
+        listJobs: jest.fn().mockResolvedValue([
+          {
+            id: 7,
+            name: 'ScheduledEventReconciliation_reconcileMissing',
+            paused: false,
+          },
+        ]),
+        pauseJob: jest.fn().mockResolvedValue(undefined),
+      };
+      mockModuleRef.get.mockImplementation((token: unknown) => {
+        const name = typeof token === 'function' ? token.name : String(token);
+        if (name === 'CronJobService') return mockCronJobService;
+        return {};
+      });
+
+      const result = await service.pauseReconciliationForTest();
+
+      expect(result).toMatchObject({ success: true });
+      expect(mockCronJobService.listJobs).toHaveBeenCalled();
+      expect(mockCronJobService.pauseJob).toHaveBeenCalledWith(7);
+    });
+
+    it('skips pausing if the job is already paused', async () => {
+      const mockCronJobService = {
+        listJobs: jest.fn().mockResolvedValue([
+          {
+            id: 7,
+            name: 'ScheduledEventReconciliation_reconcileMissing',
+            paused: true,
+          },
+        ]),
+        pauseJob: jest.fn(),
+      };
+      mockModuleRef.get.mockImplementation((token: unknown) => {
+        const name = typeof token === 'function' ? token.name : String(token);
+        if (name === 'CronJobService') return mockCronJobService;
+        return {};
+      });
+
+      const result = await service.pauseReconciliationForTest();
+
+      expect(result).toMatchObject({ success: true });
+      expect(mockCronJobService.pauseJob).not.toHaveBeenCalled();
+    });
+
+    it('succeeds gracefully when the job is not found', async () => {
+      const mockCronJobService = {
+        listJobs: jest.fn().mockResolvedValue([]),
+        pauseJob: jest.fn(),
+      };
+      mockModuleRef.get.mockImplementation((token: unknown) => {
+        const name = typeof token === 'function' ? token.name : String(token);
+        if (name === 'CronJobService') return mockCronJobService;
+        return {};
+      });
+
+      const result = await service.pauseReconciliationForTest();
+
+      expect(result).toMatchObject({ success: true });
+      expect(mockCronJobService.pauseJob).not.toHaveBeenCalled();
+    });
+  });
+
   describe('cleanupScheduledEventsForTest', () => {
     it('deletes all scheduled events and returns counts', async () => {
       const mockSe1 = {

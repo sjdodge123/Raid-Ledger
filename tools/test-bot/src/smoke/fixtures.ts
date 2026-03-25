@@ -296,6 +296,11 @@ export async function cleanupScheduledEvents(api: ApiClient): Promise<void> {
   }
 }
 
+/** Pause reconciliation cron to prevent Discord API queue flooding (ROK-969). */
+export async function pauseReconciliation(api: ApiClient): Promise<void> {
+  await api.post('/admin/test/pause-reconciliation', {}).catch(() => null);
+}
+
 /** Inject a synthetic voice session into the DB — DEMO_MODE only (ROK-943). */
 export async function injectVoiceSession(
   api: ApiClient,

@@ -12,6 +12,7 @@ function createSelectChain(rows: unknown[] = []) {
   const chain: Record<string, jest.Mock> & { then?: unknown } = {};
   chain.from = jest.fn().mockReturnValue(chain);
   chain.where = jest.fn().mockReturnValue(chain);
+  chain.limit = jest.fn().mockReturnValue(chain);
   chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
     Promise.resolve(rows).then(resolve, reject);
   return chain;

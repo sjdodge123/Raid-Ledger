@@ -17,6 +17,7 @@ import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance
 import { QueueHealthService } from '../queue/queue-health.service';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 import {
   classifyEventSessions,
   autoPopulateAttendance,
@@ -217,7 +218,25 @@ export class DemoTestService {
       [...events.values()].map((se) => se.delete()),
     );
     const deleted = results.filter((r) => r.status === 'fulfilled').length;
-    return { success: true, deleted, failed: results.length - deleted, total: events.size };
+    return {
+      success: true,
+      deleted,
+      failed: results.length - deleted,
+      total: events.size,
+    };
+  }
+
+  /** Pause the reconciliation cron to prevent Discord API queue flooding — DEMO_MODE only (ROK-969). */
+  async pauseReconciliationForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const cron = this.moduleRef.get(CronJobService, { strict: false });
+    const jobs = await cron.listJobs();
+    const job = jobs.find(
+      (j: { name: string }) =>
+        j.name === 'ScheduledEventReconciliation_reconcileMissing',
+    );
+    if (job && !job.paused) await cron.pauseJob(job.id);
+    return { success: true };
   }
 
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
