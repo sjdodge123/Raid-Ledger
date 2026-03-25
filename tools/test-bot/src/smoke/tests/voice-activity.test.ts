@@ -336,7 +336,10 @@ async function rok943ClassifyAllStatuses(ctx: TestContext) {
   const users = ctx.demoUserIds ?? [];
   if (users.length < 6) throw new Error('Need 6+ demo users for ROK-943');
 
-  const gameId = ctx.games[0]?.id;
+  const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+    '/admin/settings/games?limit=1',
+  );
+  const gameId = gamesRes.data[0]?.id;
   if (!gameId) throw new Error('No games in DB');
 
   // 60-min event that ended 5 min ago
@@ -482,11 +485,13 @@ function assertEq(label: string, actual: number, expected: number) {
 // Run with SMOKE_INCLUDE_SLOW=1 to include.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 
+// Voice-join tests require real UDP connectivity to Discord voice servers.
+// CI runners can't establish voice connections — skip with SMOKE_SKIP_VOICE_JOIN=1 (ROK-969).
+const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
+
 export const voiceActivityTests: SmokeTest[] = [
-  voiceJoinDetected,
-  voiceLeaveRecorded,
+  ...(canJoinVoice ? [voiceJoinDetected, voiceLeaveRecorded] : []),
   classifyPopulatesAttendance,
   ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
-  voiceMemberList,
-  multiGameVoiceDetected,
+  ...(canJoinVoice ? [voiceMemberList, multiGameVoiceDetected] : []),
 ];

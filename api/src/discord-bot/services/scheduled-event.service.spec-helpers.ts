@@ -6,7 +6,7 @@ import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import type { ScheduledEventData } from './scheduled-event.service';
+import type { ScheduledEventData } from './scheduled-event.helpers';
 
 /** Build a DiscordAPIError mock that satisfies `instanceof DiscordAPIError` checks. */
 export function makeDiscordApiError(

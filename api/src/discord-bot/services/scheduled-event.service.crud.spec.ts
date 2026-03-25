@@ -86,13 +86,13 @@ describe('createScheduledEvent — DB persistence & edge cases', () => {
     });
   });
 
-  it('does not throw when Discord API returns an error (AC-13)', async () => {
+  it('re-throws when Discord API returns an error (ROK-969)', async () => {
     mocks.mockGuild.scheduledEvents.create.mockRejectedValue(
       new Error('Discord API is down'),
     );
     await expect(
       mocks.service.createScheduledEvent(42, baseEventData, 1, false),
-    ).resolves.not.toThrow();
+    ).rejects.toThrow('Discord API is down');
   });
 
   it('passes scheduledEndTime from eventData.endTime', async () => {
