@@ -12,10 +12,10 @@ const SENTRY_DSN =
 const isProduction = process.env.NODE_ENV === 'production';
 const telemetryDisabled = process.env.DISABLE_TELEMETRY === 'true';
 
-if (!telemetryDisabled) {
+if (!telemetryDisabled && isProduction) {
   Sentry.init({
     dsn: SENTRY_DSN,
-    environment: isProduction ? 'production' : 'development',
+    environment: 'production',
     tracesSampleRate: isProduction ? 0.1 : 1.0,
     beforeSend(event) {
       const exceptionType = event.exception?.values?.[0]?.type;
