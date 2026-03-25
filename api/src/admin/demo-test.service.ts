@@ -366,7 +366,7 @@ export class DemoTestService {
     await this.db
       .update(schema.events)
       .set({
-        duration: sql`tstzrange(${startTime}::timestamptz, ${endTime}::timestamptz)`,
+        duration: sql`tsrange(${startTime}::timestamp, ${endTime}::timestamp)`,
       })
       .where(eq(schema.events.id, eventId));
     return { success: true };
