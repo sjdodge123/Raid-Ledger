@@ -37,11 +37,11 @@ import {
   resolveVoiceForEdit,
 } from './scheduled-event.discord-ops';
 
-export type { ScheduledEventData } from './scheduled-event.helpers';
+async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
+  return buildDescriptionText(id, d, await s.getClientUrl());
+}
 
-/**
- * Manages Discord Scheduled Events for Raid Ledger events (ROK-471).
- */
+/** Manages Discord Scheduled Events for Raid Ledger events (ROK-471). */
 @Injectable()
 export class ScheduledEventService {
   private readonly logger = new Logger(ScheduledEventService.name);
@@ -260,7 +260,7 @@ export class ScheduledEventService {
       const seId = await getScheduledEventId(this.db, eventId);
       if (!seId) return;
 
-      const description = await buildDescriptionText(eventId, eventData, await this.settingsService.getClientUrl());
+      const description = await desc(this.settingsService, eventId, eventData);
       const cleared = await tryEditDescription(
         guild,
         eventId,
@@ -293,8 +293,8 @@ export class ScheduledEventService {
       this.logger.warn(`Skip SE ${eventId}: no voice channel`);
       return;
     }
-    const desc = await buildDescriptionText(eventId, eventData, await this.settingsService.getClientUrl());
-    const se = await tryCreateNewEvent(guild, eventId, eventData, vc, desc);
+    const d = await desc(this.settingsService, eventId, eventData);
+    const se = await tryCreateNewEvent(guild, eventId, eventData, vc, d);
     await saveScheduledEventId(this.db, eventId, se.id);
   }
 
@@ -305,7 +305,7 @@ export class ScheduledEventService {
     eventData: ScheduledEventData,
     gameId?: number | null,
   ): Promise<void> {
-    const desc = await buildDescriptionText(eventId, eventData, await this.settingsService.getClientUrl());
+    const d = await desc(this.settingsService, eventId, eventData);
     const vc = await resolveVoiceForEdit(
       guild,
       event,
@@ -318,7 +318,7 @@ export class ScheduledEventService {
         eventId,
         event.discordScheduledEventId!,
         eventData,
-        desc,
+        d,
         vc,
       );
     } catch (err) {
@@ -333,6 +333,4 @@ export class ScheduledEventService {
       );
     }
   }
-
-
 }

@@ -336,7 +336,10 @@ async function rok943ClassifyAllStatuses(ctx: TestContext) {
   const users = ctx.demoUserIds ?? [];
   if (users.length < 6) throw new Error('Need 6+ demo users for ROK-943');
 
-  const gameId = ctx.games[0]?.id;
+  const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+    '/admin/settings/games?limit=1',
+  );
+  const gameId = gamesRes.data[0]?.id;
   if (!gameId) throw new Error('No games in DB');
 
   // 60-min event that ended 5 min ago
