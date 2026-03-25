@@ -57,7 +57,7 @@ function describeSentryInstrumentTs() {
     jest.resetModules();
   });
 
-  function describeWhenTelemetryIsEnabled() {
+  describe('when not in production (default)', () => {
     let sentryInitMock: jest.MockedFunction<
       (options?: Record<string, unknown>) => void
     >;
@@ -68,87 +68,10 @@ function describeSentryInstrumentTs() {
       }));
     });
 
-    it('calls Sentry.init', () => {
-      expect(sentryInitMock).toHaveBeenCalledTimes(1);
+    it('does NOT call Sentry.init in development', () => {
+      expect(sentryInitMock).not.toHaveBeenCalled();
     });
-
-    it('includes ignoreSpans in the Sentry config', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
-      expect(config).toHaveProperty('ignoreSpans');
-    });
-
-    it('ignoreSpans contains a regex matching pg_catalog queries', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
-      const ignoreSpans = config['ignoreSpans'] as RegExp[];
-
-      expect(Array.isArray(ignoreSpans)).toBe(true);
-      expect(ignoreSpans.length).toBeGreaterThan(0);
-
-      const regex = ignoreSpans[0];
-      expect(regex).toBeInstanceOf(RegExp);
-      expect(regex.test('pg_catalog.pg_type')).toBe(true);
-    });
-
-    it('ignoreSpans regex matches various pg_catalog span names', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
-      const ignoreSpans = config['ignoreSpans'] as RegExp[];
-      const regex = ignoreSpans[0];
-
-      // All of these are typical Postgres driver type introspection spans
-      expect(regex.test('pg_catalog.pg_type')).toBe(true);
-      expect(regex.test('SELECT * FROM pg_catalog.pg_namespace')).toBe(true);
-      expect(regex.test('pg_catalog')).toBe(true);
-    });
-
-    it('ignoreSpans regex does NOT match unrelated span names', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
-      const ignoreSpans = config['ignoreSpans'] as RegExp[];
-      const regex = ignoreSpans[0];
-
-      expect(regex.test('SELECT * FROM users')).toBe(false);
-      expect(regex.test('INSERT INTO events')).toBe(false);
-      expect(regex.test('db.query')).toBe(false);
-      expect(regex.test('http.request')).toBe(false);
-    });
-
-    it('includes a beforeSend handler that suppresses ThrottlerException events', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
-      const beforeSend = config['beforeSend'] as (
-        event: Record<string, unknown>,
-      ) => Record<string, unknown> | null;
-
-      expect(typeof beforeSend).toBe('function');
-
-      const throttlerEvent = {
-        exception: { values: [{ type: 'ThrottlerException' }] },
-      };
-      expect(beforeSend(throttlerEvent)).toBeNull();
-    });
-
-    it('does not suppress non-ThrottlerException events via beforeSend', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
-      const beforeSend = config['beforeSend'] as (
-        event: Record<string, unknown>,
-      ) => Record<string, unknown> | null;
-
-      const normalEvent = {
-        exception: { values: [{ type: 'Error' }] },
-      };
-      expect(beforeSend(normalEvent)).toBe(normalEvent);
-    });
-
-    it('sets tracesSampleRate to 1.0 in non-production environment', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
-      expect(config['tracesSampleRate']).toBe(1.0);
-    });
-
-    it('sets environment tag to development in non-production', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
-      expect(config['environment']).toBe('development');
-    });
-  }
-  describe('when telemetry is enabled (default)', () =>
-    describeWhenTelemetryIsEnabled());
+  });
 
   describe('when NODE_ENV=production', () => {
     let sentryInitMock: jest.MockedFunction<
@@ -162,6 +85,10 @@ function describeSentryInstrumentTs() {
       }));
     });
 
+    it('calls Sentry.init', () => {
+      expect(sentryInitMock).toHaveBeenCalledTimes(1);
+    });
+
     it('sets tracesSampleRate to 0.1 in production', () => {
       const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
       expect(config['tracesSampleRate']).toBe(0.1);
@@ -172,7 +99,7 @@ function describeSentryInstrumentTs() {
       expect(config['environment']).toBe('production');
     });
 
-    it('still includes ignoreSpans with pg_catalog filter in production', () => {
+    it('includes ignoreSpans with pg_catalog filter', () => {
       const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
       const ignoreSpans = config['ignoreSpans'] as RegExp[];
 
@@ -198,7 +125,7 @@ function describeSentryInstrumentTs() {
     });
   });
 
-  describe('when DISABLE_TELEMETRY is not set', () => {
+  describe('when DISABLE_TELEMETRY is not set (but not production)', () => {
     let sentryInitMock: jest.MockedFunction<
       (options?: Record<string, unknown>) => void
     >;
@@ -209,8 +136,8 @@ function describeSentryInstrumentTs() {
       }));
     });
 
-    it('calls Sentry.init (telemetry is on by default)', () => {
-      expect(sentryInitMock).toHaveBeenCalledTimes(1);
+    it('does NOT call Sentry.init (production-only)', () => {
+      expect(sentryInitMock).not.toHaveBeenCalled();
     });
   });
 }
