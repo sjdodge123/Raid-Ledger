@@ -485,11 +485,13 @@ function assertEq(label: string, actual: number, expected: number) {
 // Run with SMOKE_INCLUDE_SLOW=1 to include.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 
+// Voice-join tests require real UDP connectivity to Discord voice servers.
+// CI runners can't establish voice connections — skip with SMOKE_SKIP_VOICE_JOIN=1 (ROK-969).
+const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
+
 export const voiceActivityTests: SmokeTest[] = [
-  voiceJoinDetected,
-  voiceLeaveRecorded,
+  ...(canJoinVoice ? [voiceJoinDetected, voiceLeaveRecorded] : []),
   classifyPopulatesAttendance,
   ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
-  voiceMemberList,
-  multiGameVoiceDetected,
+  ...(canJoinVoice ? [voiceMemberList, multiGameVoiceDetected] : []),
 ];

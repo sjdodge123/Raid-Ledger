@@ -57,6 +57,8 @@ jobs:
       TEST_GUILD_ID: ${{ secrets.TEST_GUILD_ID }}
       # Discord API timeout — relaxed for CI runners (ROK-969)
       DISCORD_API_TIMEOUT_MS: '15000'
+      # Voice-join tests require UDP to Discord — CI runners can't do this (ROK-969)
+      SMOKE_SKIP_VOICE_JOIN: '1'
       # Shared smoke runner config (used by all category steps below)
       SMOKE_TIMEOUT_MS: '90000'
       SMOKE_CONCURRENCY: '3'
