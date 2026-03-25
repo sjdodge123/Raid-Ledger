@@ -70,6 +70,7 @@ import {
   getNextPhase,
   buildTransitionValues,
 } from './lineups-phase.helpers';
+import { logTransition, logNomination } from './lineups-activity.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -135,7 +136,7 @@ export class LineupsService {
     }
 
     await this.applyStatusUpdate(id, dto, lineup);
-    await this.logTransition(id, dto);
+    await logTransition(this.db, this.activityLog, id, dto);
     return buildDetailResponse(this.db, id);
   }
 
@@ -175,7 +176,7 @@ export class LineupsService {
     await validateNominationCap(this.db, lineupId);
     await validateGameExists(this.db, dto.gameId);
     await insertNomination(this.db, lineupId, dto, userId);
-    await this.logNomination(lineupId, dto, userId);
+    await logNomination(this.db, this.activityLog, lineupId, dto, userId);
     return buildDetailResponse(this.db, lineupId);
   }
 
@@ -289,35 +290,6 @@ export class LineupsService {
       voterCount[0]?.total ?? 0,
       totalMembers,
     );
-  }
-
-  /** Log activity for a status transition. */
-  private async logTransition(id: number, dto: UpdateLineupStatusDto) {
-    if (dto.status === 'voting') {
-      void this.activityLog.log('lineup', id, 'voting_started', null, {
-        votingDeadline: dto.votingDeadline ?? null,
-      });
-    } else if (dto.status === 'decided' && dto.decidedGameId) {
-      const [game] = await findGameName(this.db, dto.decidedGameId);
-      void this.activityLog.log('lineup', id, 'lineup_decided', null, {
-        gameId: dto.decidedGameId,
-        gameName: game?.name ?? 'Unknown',
-      });
-    }
-  }
-
-  /** Log a nomination event. */
-  private async logNomination(
-    lineupId: number,
-    dto: NominateGameDto,
-    userId: number,
-  ) {
-    const [game] = await findGameName(this.db, dto.gameId);
-    void this.activityLog.log('lineup', lineupId, 'game_nominated', userId, {
-      gameId: dto.gameId,
-      gameName: game?.name ?? 'Unknown',
-      note: dto.note ?? null,
-    });
   }
 
   /** Validate a status transition is legal. */
