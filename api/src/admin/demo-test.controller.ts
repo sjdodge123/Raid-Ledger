@@ -293,9 +293,9 @@ export class DemoTestController {
   async setEventTimesForTest(@Body() body: unknown) {
     const parsed = this.parseBody(
       z.object({
-        eventId: z.number(),
-        startTime: z.string(),
-        endTime: z.string(),
+        eventId: z.number().int().positive(),
+        startTime: z.string().datetime(),
+        endTime: z.string().datetime(),
       }),
       body,
     );

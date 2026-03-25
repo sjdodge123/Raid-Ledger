@@ -1,7 +1,10 @@
 /**
  * Tests for scheduled-event.db-helpers — findReconciliationCandidates batch limit (ROK-969).
  */
-import { findReconciliationCandidates } from './scheduled-event.db-helpers';
+import {
+  findReconciliationCandidates,
+  RECONCILIATION_BATCH_SIZE,
+} from './scheduled-event.db-helpers';
 
 function createQueryChain(rows: unknown[] = []) {
   const chain: Record<string, jest.Mock> & { then?: unknown } = {};
@@ -21,7 +24,7 @@ describe('findReconciliationCandidates', () => {
 
     await findReconciliationCandidates(mockDb);
 
-    expect(chain.limit).toHaveBeenCalledWith(5);
+    expect(chain.limit).toHaveBeenCalledWith(RECONCILIATION_BATCH_SIZE);
   });
 
   it('returns candidates from the query', async () => {

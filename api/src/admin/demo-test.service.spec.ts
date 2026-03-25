@@ -184,6 +184,32 @@ describe('DemoTestService — test utility endpoints', () => {
     });
   });
 
+  describe('setEventTimesForTest (ROK-969)', () => {
+    it('updates event duration in the DB', async () => {
+      const mockWhere = jest.fn().mockResolvedValue(undefined);
+      const mockSet = jest.fn().mockReturnValue({ where: mockWhere });
+      const mockUpdate = jest.fn().mockReturnValue({ set: mockSet });
+      const dbWithUpdate = service['db'] as unknown as Record<string, unknown>;
+      dbWithUpdate.update = mockUpdate;
+
+      const result = await service.setEventTimesForTest(
+        1,
+        '2026-04-01T00:00:00Z',
+        '2026-04-01T02:00:00Z',
+      );
+
+      expect(result).toMatchObject({ success: true });
+      expect(mockUpdate).toHaveBeenCalled();
+    });
+
+    it('rejects when DEMO_MODE is disabled', async () => {
+      process.env.DEMO_MODE = 'false';
+      await expect(
+        service.setEventTimesForTest(1, '2026-04-01T00:00:00Z', '2026-04-01T02:00:00Z'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
   describe('cleanupScheduledEventsForTest', () => {
     it('deletes all scheduled events and returns counts', async () => {
       const mockSe1 = {

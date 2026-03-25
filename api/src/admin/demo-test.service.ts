@@ -15,9 +15,14 @@ import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grac
 import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { QueueHealthService } from '../queue/queue-health.service';
+import {
+  enableScheduledEventsForTest as enableSE,
+  disableScheduledEventsForTest as disableSE,
+  cleanupScheduledEventsForTest as cleanupSE,
+  pauseReconciliationForTest as pauseRecon,
+  setEventTimesForTest as setTimes,
+} from './demo-test-scheduled-event.helpers';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
-import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
-import { CronJobService } from '../cron-jobs/cron-job.service';
 import {
   classifyEventSessions,
   autoPopulateAttendance,
@@ -203,17 +208,13 @@ export class DemoTestService {
   /** Enable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
   async enableScheduledEventsForTest(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
-    const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
-    svc.setScheduledEventsEnabled(true);
-    return { success: true };
+    return enableSE(this.moduleRef);
   }
 
   /** Disable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
   async disableScheduledEventsForTest(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
-    const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
-    svc.setScheduledEventsEnabled(false);
-    return { success: true };
+    return disableSE(this.moduleRef);
   }
 
   /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
@@ -224,35 +225,13 @@ export class DemoTestService {
     total: number;
   }> {
     await this.assertDemoMode();
-    const client = this.moduleRef.get(DiscordBotClientService, {
-      strict: false,
-    });
-    const guild = client.getGuild();
-    if (!guild) return { success: true, deleted: 0, failed: 0, total: 0 };
-    const events = await guild.scheduledEvents.fetch();
-    const results = await Promise.allSettled(
-      [...events.values()].map((se) => se.delete()),
-    );
-    const deleted = results.filter((r) => r.status === 'fulfilled').length;
-    return {
-      success: true,
-      deleted,
-      failed: results.length - deleted,
-      total: events.size,
-    };
+    return cleanupSE(this.moduleRef);
   }
 
-  /** Pause the reconciliation cron to prevent Discord API queue flooding — DEMO_MODE only (ROK-969). */
+  /** Pause the reconciliation cron — DEMO_MODE only (ROK-969). */
   async pauseReconciliationForTest(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
-    const cron = this.moduleRef.get(CronJobService, { strict: false });
-    const jobs = await cron.listJobs();
-    const job = jobs.find(
-      (j: { name: string }) =>
-        j.name === 'ScheduledEventReconciliation_reconcileMissing',
-    );
-    if (job && !job.paused) await cron.pauseJob(job.id);
-    return { success: true };
+    return pauseRecon(this.moduleRef);
   }
 
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
@@ -363,13 +342,7 @@ export class DemoTestService {
     endTime: string,
   ): Promise<{ success: boolean }> {
     await this.assertDemoMode();
-    await this.db
-      .update(schema.events)
-      .set({
-        duration: sql`tsrange(${startTime}::timestamp, ${endTime}::timestamp)`,
-      })
-      .where(eq(schema.events.id, eventId));
-    return { success: true };
+    return setTimes(this.db, eventId, startTime, endTime);
   }
 
   /** Build a ChannelPrefs object with all channels enabled for all types. */
