@@ -47,13 +47,19 @@ export class ScheduledEventReconciliationService {
       `Reconciling ${candidates.length} events missing Discord scheduled events`,
     );
     for (const c of candidates) {
-      await this.scheduledEventService.createScheduledEvent(
-        c.id,
-        c,
-        c.gameId,
-        c.isAdHoc,
-        c.notificationChannelOverride,
-      );
+      try {
+        await this.scheduledEventService.createScheduledEvent(
+          c.id,
+          c,
+          c.gameId,
+          c.isAdHoc,
+          c.notificationChannelOverride,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Reconciliation failed for event ${c.id}: ${err instanceof Error ? err.message : 'unknown'}`,
+        );
+      }
     }
   }
 }

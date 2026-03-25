@@ -55,6 +55,8 @@ jobs:
       # Companion test bot (channels auto-discovered from API)
       TEST_BOT_TOKEN: ${{ secrets.TEST_BOT_TOKEN }}
       TEST_GUILD_ID: ${{ secrets.TEST_GUILD_ID }}
+      # Discord API timeout — relaxed for CI runners (ROK-969)
+      DISCORD_API_TIMEOUT_MS: '15000'
       # Shared smoke runner config (used by all category steps below)
       SMOKE_TIMEOUT_MS: '90000'
       SMOKE_CONCURRENCY: '3'

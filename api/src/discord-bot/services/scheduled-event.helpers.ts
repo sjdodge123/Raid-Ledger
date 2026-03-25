@@ -6,8 +6,11 @@ export const UNKNOWN_SCHEDULED_EVENT = 10070;
 /** Maximum description length for Discord Scheduled Events. */
 export const MAX_DESCRIPTION_LENGTH = 1000;
 
-/** Timeout (ms) for individual Discord API calls (ROK-685). */
-export const DISCORD_API_TIMEOUT_MS = 5_000;
+/** Timeout (ms) for individual Discord API calls (ROK-685, ROK-969). */
+export const DISCORD_API_TIMEOUT_MS = parseInt(
+  process.env.DISCORD_API_TIMEOUT_MS ?? '5000',
+  10,
+);
 
 /**
  * Execute a Discord API call with [PERF] DISCORD instrumentation

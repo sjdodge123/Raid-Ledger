@@ -113,6 +113,48 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
     ).not.toHaveBeenCalled();
   });
 
+  it('continues processing remaining candidates when one fails (ROK-969)', async () => {
+    const future = new Date(Date.now() + 86400000).toISOString();
+    const futureEnd = new Date(Date.now() + 90000000).toISOString();
+    const candidates = [
+      {
+        id: 1,
+        title: 'A',
+        description: null,
+        startTime: future,
+        endTime: futureEnd,
+        gameId: 1,
+        isAdHoc: false,
+        notificationChannelOverride: null,
+        signupCount: 0,
+        maxAttendees: null,
+      },
+      {
+        id: 2,
+        title: 'B',
+        description: null,
+        startTime: future,
+        endTime: futureEnd,
+        gameId: 2,
+        isAdHoc: false,
+        notificationChannelOverride: null,
+        signupCount: 0,
+        maxAttendees: null,
+      },
+    ];
+    mocks.mockDb.select.mockReturnValue(createSelectChain(candidates));
+    mocks.scheduledEventService.createScheduledEvent
+      .mockRejectedValueOnce(new Error('Discord timeout'))
+      .mockResolvedValueOnce(undefined);
+    await mocks.service.reconcileMissingScheduledEvents();
+    expect(
+      mocks.scheduledEventService.createScheduledEvent,
+    ).toHaveBeenCalledTimes(2);
+    expect(
+      mocks.scheduledEventService.createScheduledEvent,
+    ).toHaveBeenCalledWith(2, candidates[1], 2, false, null);
+  });
+
   it('processes multiple candidates', async () => {
     const future = new Date(Date.now() + 86400000).toISOString();
     const futureEnd = new Date(Date.now() + 90000000).toISOString();

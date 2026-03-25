@@ -156,6 +156,7 @@ export class ScheduledEventService {
       );
     } catch (error) {
       this.logger.error(formatApiError('create', eventId, error));
+      throw error;
     }
   }
 
