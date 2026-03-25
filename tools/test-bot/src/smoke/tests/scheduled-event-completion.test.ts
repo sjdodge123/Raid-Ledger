@@ -21,14 +21,15 @@ import {
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
-/** Reschedule an event to past times so it qualifies as a completion candidate. */
+/** Force-set event times to the past via test endpoint (bypasses Zod validation). */
 async function rescheduleToThePast(
   ctx: TestContext,
   eventId: number,
 ): Promise<void> {
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
-  await ctx.api.patch(`/events/${eventId}/reschedule`, {
+  await ctx.api.post('/admin/test/set-event-times', {
+    eventId,
     startTime: twoHoursAgo,
     endTime: oneHourAgo,
   });

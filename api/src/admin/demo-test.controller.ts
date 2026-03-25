@@ -287,6 +287,25 @@ export class DemoTestController {
     return { success: true };
   }
 
+  /** Force-set event times bypassing Zod validation — DEMO_MODE only (ROK-969). */
+  @Post('set-event-times')
+  @HttpCode(HttpStatus.OK)
+  async setEventTimesForTest(@Body() body: unknown) {
+    const parsed = this.parseBody(
+      z.object({
+        eventId: z.number(),
+        startTime: z.string(),
+        endTime: z.string(),
+      }),
+      body,
+    );
+    return this.demoTestService.setEventTimesForTest(
+      parsed.eventId,
+      parsed.startTime,
+      parsed.endTime,
+    );
+  }
+
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */
   private parseBody<T>(schema: z.ZodSchema<T>, body: unknown): T {
     const result = schema.safeParse(body);

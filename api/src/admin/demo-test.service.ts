@@ -356,6 +356,22 @@ export class DemoTestService {
     };
   }
 
+  /** Force-set event times bypassing Zod validation — DEMO_MODE only (ROK-969). */
+  async setEventTimesForTest(
+    eventId: number,
+    startTime: string,
+    endTime: string,
+  ): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    await this.db
+      .update(schema.events)
+      .set({
+        duration: sql`tstzrange(${startTime}::timestamptz, ${endTime}::timestamptz)`,
+      })
+      .where(eq(schema.events.id, eventId));
+    return { success: true };
+  }
+
   /** Build a ChannelPrefs object with all channels enabled for all types. */
   private buildAllChannelsEnabled(): ChannelPrefs {
     const prefs = {} as Record<string, Record<string, boolean>>;
