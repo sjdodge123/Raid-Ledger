@@ -120,7 +120,7 @@ stories:
       Deployed and in "In Review". Waiting for operator to test and update Linear.
 ```
 
-**FULL STOP.** Tell the operator:
+**FULL STOP.** Tell the operator. The summary MUST include the test verification table — this is not optional.
 
 ```
 ## Ready for Testing
@@ -129,11 +129,28 @@ stories:
 |-------|--------|--------|
 | ROK-XXX: Title | rok-xxx-name | In Review — ready for your testing |
 
+### Test Verification
+
+| Story | TDD Tests | E2E Type Required | E2E Test File | Smoke Run |
+|-------|-----------|-------------------|---------------|-----------|
+| ROK-XXX | ✅ N failing → N passing | Playwright / Discord / Integration / Unit | `path/to/test/file` | ✅ PASS / ❌ FAIL / ⏭️ N/A |
+
+### Gate Summary
+
+| Gate | ROK-XXX |
+|------|---------|
+| E2E Test First (TDD) | PASS / N/A |
+| Dev AC Audit | PASS |
+| CI (build/lint/test) | PASS |
+| Test Coverage Audit | PASS / GAP: <detail> |
+
 The app is deployed locally. Test each story and update Linear:
 - **Code Review** = approved, ready for code review
 - **Changes Requested** = needs rework (add feedback as comment)
 
 I'll wait here until you're ready to proceed.
 ```
+
+**If any row in the Gate Summary shows GAP or FAIL, fix it BEFORE presenting to the operator.** The operator should never see unresolved test gaps.
 
 **Do NOT proceed until the operator gives direction.** This is a mandatory gate.

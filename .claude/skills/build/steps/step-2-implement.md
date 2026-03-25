@@ -173,6 +173,22 @@ When a dev subagent returns its output, the Lead **MUST** audit the AC trace tab
 2. **If the test passes** → `gates.dev: PASS`, `status: "ready_for_validate"`
 3. **If the test still fails** → re-spawn dev with the specific failure output, or fix directly
 
+### E2E Test Coverage Audit (Lead MUST check before proceeding to Step 3)
+
+After dev passes, verify the **right type** of E2E test exists. Cross-reference the story's area against the profiling matrix:
+
+| Area Touched | Required Test Type | How to verify |
+|-------------|-------------------|---------------|
+| UI (web pages/components) | Playwright smoke test | `ls scripts/smoke/` — new or modified `.smoke.spec.ts` file |
+| Discord bot / notifications | Discord companion bot smoke test | `ls tools/test-bot/src/smoke/tests/` — new or modified `.test.ts` file |
+| API-only (no UI/Discord) | Integration test (Jest) | `git diff main --name-only \| grep integration.spec` |
+| Pure logic / utility | Unit test | `git diff main --name-only \| grep -E '\.spec\.ts\|\.test\.ts'` |
+
+**Check:** Does the test agent's output match the required type from the matrix?
+- If story AC mentions "smoke test" or "Discord test" but no such test file exists → **GAP.** Re-spawn test agent with explicit instructions.
+- If the dev agent wrote only unit tests but the area requires Playwright/Discord smoke → **GAP.** Spawn test agent to write the missing E2E test.
+- Record findings in state: `test_coverage: { type: "<type>", file: "<path>", gap: null | "<description>" }`
+
 ---
 
 ## Post-Compaction Recovery
