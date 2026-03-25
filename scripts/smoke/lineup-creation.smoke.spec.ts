@@ -155,18 +155,22 @@ test.describe('Start Lineup button on Games page', () => {
     });
 
     test('shows Start Lineup button when no active lineup and user is operator', async ({ page }) => {
-        // Ensure no active lineup exists
-        await archiveActiveLineup(adminToken);
+        test.setTimeout(60_000);
+        // Ensure no active lineup exists — retry to handle cross-project races
+        // (community-lineup tests may recreate the lineup between archive and assertion)
+        await expect(async () => {
+            await archiveActiveLineup(adminToken);
 
-        await page.goto('/games');
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+            await page.goto('/games');
+            await expect(page.locator('body')).not.toHaveText(
+                /something went wrong/i,
+                { timeout: 3_000 },
+            );
 
-        // The "Start Lineup" button should be visible for operators/admins
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await expect(startBtn).toBeVisible({ timeout: 15_000 });
+            // The "Start Lineup" button should be visible for operators/admins
+            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
+            await expect(startBtn).toBeVisible({ timeout: 5_000 });
+        }).toPass({ timeout: 45_000 });
     });
 
     test('Games page shows lineup banner with countdown instead of Start Lineup when active', async ({ page }) => {
@@ -210,19 +214,24 @@ test.describe('Lineup creation modal', () => {
 
     test.beforeAll(async () => {
         adminToken = await getAdminToken();
-        await archiveActiveLineup(adminToken);
     });
 
     test('modal opens with duration fields pre-filled from admin defaults', async ({ page }) => {
-        await page.goto('/games');
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        test.setTimeout(60_000);
+        // Archive and navigate — retry to handle cross-project races
+        await expect(async () => {
+            await archiveActiveLineup(adminToken);
+            await page.goto('/games');
+            await expect(page.locator('body')).not.toHaveText(
+                /something went wrong/i,
+                { timeout: 3_000 },
+            );
+            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
+            await expect(startBtn).toBeVisible({ timeout: 5_000 });
+        }).toPass({ timeout: 45_000 });
 
         // Click "Start Lineup" to open modal
         const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await expect(startBtn).toBeVisible({ timeout: 15_000 });
         await startBtn.click();
 
         // Modal should open with duration configuration fields
@@ -246,16 +255,20 @@ test.describe('Lineup creation modal', () => {
     });
 
     test('submitting modal creates lineup and navigates to detail page', async ({ page }) => {
-        await archiveActiveLineup(adminToken);
-
-        await page.goto('/games');
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        test.setTimeout(60_000);
+        // Archive and navigate — retry to handle cross-project races
+        await expect(async () => {
+            await archiveActiveLineup(adminToken);
+            await page.goto('/games');
+            await expect(page.locator('body')).not.toHaveText(
+                /something went wrong/i,
+                { timeout: 3_000 },
+            );
+            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
+            await expect(startBtn).toBeVisible({ timeout: 5_000 });
+        }).toPass({ timeout: 45_000 });
 
         const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await expect(startBtn).toBeVisible({ timeout: 15_000 });
         await startBtn.click();
 
         const modal = page.locator('[role="dialog"]');

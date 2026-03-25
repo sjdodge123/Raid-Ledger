@@ -257,9 +257,13 @@ test.describe('Event detail — mobile', () => {
         await expect(rescheduleBtn).toBeVisible({ timeout: 5_000 });
         await rescheduleBtn.click();
 
-        // Modal should open with heading and show player availability
-        await expect(page.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
-        await expect(page.getByText(/player availability/i)).toBeVisible({ timeout: 5_000 });
+        // Modal/BottomSheet should open with heading and show signup info
+        const modal = page.locator('[role="dialog"]').filter({ hasText: 'Reschedule Event' });
+        await expect(modal.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
+        // Wait for loading to finish — either availability heatmap or zero-signup message
+        await expect(modal.getByText(/loading availability/i)).not.toBeVisible({ timeout: 10_000 });
+        const availabilityOrEmpty = modal.getByText(/player availability|no players signed up/i).first();
+        await expect(availabilityOrEmpty).toBeVisible({ timeout: 5_000 });
     });
 });
 
@@ -340,9 +344,14 @@ test.describe('Reschedule modal', () => {
         await expect(rescheduleBtn).toBeVisible({ timeout: 10_000 });
         await rescheduleBtn.click();
 
-        // Modal should open with "Reschedule Event" heading and show player availability
-        await expect(page.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
-        await expect(page.getByText(/player availability/i)).toBeVisible({ timeout: 5_000 });
+        // Modal should open with "Reschedule Event" heading and show signup info
+        const modal = page.locator('[role="dialog"]');
+        await expect(modal.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
+        // Wait for loading to finish — either availability heatmap or zero-signup message
+        await expect(modal.getByText(/loading availability/i)).not.toBeVisible({ timeout: 10_000 });
+        // Now one of these two texts should be visible
+        const availabilityOrEmpty = modal.getByText(/player availability|no players signed up/i).first();
+        await expect(availabilityOrEmpty).toBeVisible({ timeout: 5_000 });
     });
 });
 

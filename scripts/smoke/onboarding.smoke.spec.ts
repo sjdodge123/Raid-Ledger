@@ -177,30 +177,26 @@ test.describe('Onboarding wizard final step', () => {
 
         const dialog = await openWizard(page);
 
-        // Extract total steps from the step counter
-        const stepText = await dialog.getByText(/Step 1 of \d+/).textContent();
-        const totalSteps = parseInt(stepText?.match(/of (\d+)/)?.[1] ?? '0', 10);
-        expect(totalSteps).toBeGreaterThanOrEqual(2);
-
-        // Navigate to the final step via the "Personalize" breadcrumb.
-        // Breadcrumbs call setCurrentStep directly, bypassing step validators.
-        // Collapsed breadcrumbs may need a second click due to the expand animation.
-        const personalizeBreadcrumb = dialog.getByRole('button', { name: /Personalize/ });
-        await personalizeBreadcrumb.click({ force: true });
-
-        const finalStepPattern = new RegExp(`Step ${totalSteps} of ${totalSteps}`);
-        const landed = await dialog.getByText(finalStepPattern).isVisible({ timeout: 3_000 }).catch(() => false);
-        if (!landed) {
-            // The first click may have only expanded the breadcrumb — click again
-            await personalizeBreadcrumb.click({ force: true });
+        // Navigate to the final step by clicking Next/Skip until Complete appears
+        // AND Skip All is hidden (both conditions confirm we're truly on the last step).
+        // Step count is dynamic — character steps load async, so Complete may appear
+        // momentarily on a non-final step before a new step is appended.
+        const maxClicks = 10; // safety limit
+        for (let i = 0; i < maxClicks; i++) {
+            const complete = dialog.getByRole('button', { name: 'Complete' });
+            const skipAll = dialog.getByRole('button', { name: 'Skip All' });
+            const isComplete = await complete.isVisible({ timeout: 1_000 }).catch(() => false);
+            const isSkipAllGone = !(await skipAll.isVisible({ timeout: 500 }).catch(() => false));
+            if (isComplete && isSkipAllGone) break;
+            const nextBtn = dialog.getByRole('button', { name: 'Next' });
+            const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
+            const hasNext = await nextBtn.isVisible({ timeout: 1_000 }).catch(() => false);
+            if (hasNext) { await nextBtn.click(); } else { await skipBtn.click(); }
         }
-        await expect(dialog.getByText(finalStepPattern)).toBeVisible({ timeout: 5_000 });
 
-        // On final step: Complete button should be visible, Next should not
+        // On final step: Complete button should be visible, Next and Skip All should not
         await expect(dialog.getByRole('button', { name: 'Complete' })).toBeVisible({ timeout: 5_000 });
         await expect(dialog.getByRole('button', { name: 'Next' })).not.toBeVisible();
-
-        // Skip All should not be visible on the final step
         await expect(dialog.getByRole('button', { name: 'Skip All' })).not.toBeVisible();
     });
 });
