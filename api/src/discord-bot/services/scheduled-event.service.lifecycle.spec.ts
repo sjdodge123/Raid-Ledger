@@ -1,5 +1,5 @@
 import { GuildScheduledEventStatus } from 'discord.js';
-import type { ScheduledEventData } from './scheduled-event.service';
+import type { ScheduledEventData } from './scheduled-event.helpers';
 import {
   setupScheduledEventTestModule,
   createSelectChainNoLimit,

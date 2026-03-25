@@ -23,7 +23,7 @@ export async function joinVoice(channelId: string): Promise<void> {
   });
 
   try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
   } catch (err) {
     connection.destroy();
     throw err;

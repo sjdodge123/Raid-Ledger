@@ -224,6 +224,34 @@ export class DemoTestController {
     return this.demoTestService.triggerScheduledEventCompletionForTest();
   }
 
+  /** Pause the reconciliation cron to prevent API queue flooding — DEMO_MODE only (ROK-969). */
+  @Post('pause-reconciliation')
+  @HttpCode(HttpStatus.OK)
+  async pauseReconciliationForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.pauseReconciliationForTest();
+  }
+
+  /** Enable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
+  @Post('enable-scheduled-events')
+  @HttpCode(HttpStatus.OK)
+  async enableScheduledEventsForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.enableScheduledEventsForTest();
+  }
+
+  /** Disable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
+  @Post('disable-scheduled-events')
+  @HttpCode(HttpStatus.OK)
+  async disableScheduledEventsForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.disableScheduledEventsForTest();
+  }
+
+  /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
+  @Post('cleanup-scheduled-events')
+  @HttpCode(HttpStatus.OK)
+  async cleanupScheduledEventsForTest() {
+    return this.demoTestService.cleanupScheduledEventsForTest();
+  }
+
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
   @Post('await-processing')
   @HttpCode(HttpStatus.OK)
@@ -257,6 +285,25 @@ export class DemoTestController {
     const parsed = this.parseBody(TriggerClassifySchema, body);
     await this.demoTestService.triggerClassifyForTest(parsed.eventId);
     return { success: true };
+  }
+
+  /** Force-set event times bypassing Zod validation — DEMO_MODE only (ROK-969). */
+  @Post('set-event-times')
+  @HttpCode(HttpStatus.OK)
+  async setEventTimesForTest(@Body() body: unknown) {
+    const parsed = this.parseBody(
+      z.object({
+        eventId: z.number().int().positive(),
+        startTime: z.string().datetime(),
+        endTime: z.string().datetime(),
+      }),
+      body,
+    );
+    return this.demoTestService.setEventTimesForTest(
+      parsed.eventId,
+      parsed.startTime,
+      parsed.endTime,
+    );
   }
 
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */

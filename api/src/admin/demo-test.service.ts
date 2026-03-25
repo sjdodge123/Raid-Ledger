@@ -15,6 +15,13 @@ import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grac
 import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { QueueHealthService } from '../queue/queue-health.service';
+import {
+  enableScheduledEventsForTest as enableSE,
+  disableScheduledEventsForTest as disableSE,
+  cleanupScheduledEventsForTest as cleanupSE,
+  pauseReconciliationForTest as pauseRecon,
+  setEventTimesForTest as setTimes,
+} from './demo-test-scheduled-event.helpers';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
 import {
   classifyEventSessions,
@@ -198,6 +205,35 @@ export class DemoTestService {
     return { success: true };
   }
 
+  /** Enable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
+  async enableScheduledEventsForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    return enableSE(this.moduleRef);
+  }
+
+  /** Disable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
+  async disableScheduledEventsForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    return disableSE(this.moduleRef);
+  }
+
+  /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
+  async cleanupScheduledEventsForTest(): Promise<{
+    success: boolean;
+    deleted: number;
+    failed: number;
+    total: number;
+  }> {
+    await this.assertDemoMode();
+    return cleanupSE(this.moduleRef);
+  }
+
+  /** Pause the reconciliation cron — DEMO_MODE only (ROK-969). */
+  async pauseReconciliationForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    return pauseRecon(this.moduleRef);
+  }
+
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
   async awaitProcessingForTest(timeoutMs = 30_000): Promise<void> {
     await this.assertDemoMode();
@@ -297,6 +333,16 @@ export class DemoTestService {
       preferredRoles: filtered?.length ? filtered : undefined,
       characterId: dto.characterId,
     };
+  }
+
+  /** Force-set event times bypassing Zod validation — DEMO_MODE only (ROK-969). */
+  async setEventTimesForTest(
+    eventId: number,
+    startTime: string,
+    endTime: string,
+  ): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    return setTimes(this.db, eventId, startTime, endTime);
   }
 
   /** Build a ChannelPrefs object with all channels enabled for all types. */

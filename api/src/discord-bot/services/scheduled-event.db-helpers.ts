@@ -134,6 +134,9 @@ export async function resolveVoiceForCreate(
   );
 }
 
+/** Maximum number of events to reconcile per batch (ROK-755, ROK-969). */
+export const RECONCILIATION_BATCH_SIZE = 5;
+
 /** Reconciliation candidate shape (ROK-755). */
 export interface ReconciliationCandidate {
   id: number;
@@ -174,5 +177,6 @@ export async function findReconciliationCandidates(
         sql`${schema.events.isAdHoc} = false`,
         sql`lower(${schema.events.duration}) > ${now.toISOString()}::timestamptz`,
       ),
-    );
+    )
+    .limit(RECONCILIATION_BATCH_SIZE);
 }

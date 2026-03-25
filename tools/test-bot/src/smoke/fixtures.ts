@@ -284,6 +284,33 @@ export async function triggerClassify(
   await api.post('/admin/test/trigger-classify', { eventId });
 }
 
+/** Delete all Discord scheduled events in the guild — prevents 100-event limit (ROK-969). */
+export async function cleanupScheduledEvents(api: ApiClient): Promise<void> {
+  // Bulk-deleting many events can exceed the default HTTP timeout, so use a generous limit
+  const res = await api.post<{ deleted: number; failed: number; total: number }>(
+    '/admin/test/cleanup-scheduled-events',
+    {},
+  ).catch(() => null);
+  if (res && res.total > 0) {
+    console.log(`  Cleaned up ${res.deleted}/${res.total} scheduled events (${res.failed} failed)`);
+  }
+}
+
+/** Pause reconciliation cron to prevent Discord API queue flooding (ROK-969). */
+export async function pauseReconciliation(api: ApiClient): Promise<void> {
+  await api.post('/admin/test/pause-reconciliation', {}).catch(() => null);
+}
+
+/** Disable Discord scheduled event creation for non-SE tests (ROK-969). */
+export async function disableScheduledEvents(api: ApiClient): Promise<void> {
+  await api.post('/admin/test/disable-scheduled-events', {}).catch(() => null);
+}
+
+/** Re-enable Discord scheduled event creation for SE tests (ROK-969). */
+export async function enableScheduledEvents(api: ApiClient): Promise<void> {
+  await api.post('/admin/test/enable-scheduled-events', {}).catch(() => null);
+}
+
 /** Inject a synthetic voice session into the DB — DEMO_MODE only (ROK-943). */
 export async function injectVoiceSession(
   api: ApiClient,
