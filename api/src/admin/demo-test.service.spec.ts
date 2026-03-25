@@ -85,4 +85,73 @@ describe('DemoTestService — test utility endpoints', () => {
       ForbiddenException,
     );
   });
+
+  describe('cleanupScheduledEventsForTest', () => {
+    it('deletes all scheduled events and returns counts', async () => {
+      const mockSe1 = {
+        id: '1',
+        delete: jest.fn().mockResolvedValue(undefined),
+      };
+      const mockSe2 = {
+        id: '2',
+        delete: jest.fn().mockResolvedValue(undefined),
+      };
+      const mockGuild = {
+        scheduledEvents: {
+          fetch: jest.fn().mockResolvedValue(
+            new Map([
+              ['1', mockSe1],
+              ['2', mockSe2],
+            ]),
+          ),
+        },
+      };
+      const mockClientService = {
+        getGuild: jest.fn().mockReturnValue(mockGuild),
+      };
+      mockModuleRef.get.mockImplementation((token: unknown) => {
+        const name = typeof token === 'function' ? token.name : String(token);
+        if (name === 'DiscordBotClientService') return mockClientService;
+        return {};
+      });
+
+      const result = await service.cleanupScheduledEventsForTest();
+      expect(result).toMatchObject({
+        success: true,
+        deleted: 2,
+        failed: 0,
+        total: 2,
+      });
+      expect(mockSe1.delete).toHaveBeenCalled();
+      expect(mockSe2.delete).toHaveBeenCalled();
+    });
+
+    it('counts failures without throwing', async () => {
+      const mockSe1 = {
+        id: '1',
+        delete: jest.fn().mockRejectedValue(new Error('fail')),
+      };
+      const mockGuild = {
+        scheduledEvents: {
+          fetch: jest.fn().mockResolvedValue(new Map([['1', mockSe1]])),
+        },
+      };
+      const mockClientService = {
+        getGuild: jest.fn().mockReturnValue(mockGuild),
+      };
+      mockModuleRef.get.mockImplementation((token: unknown) => {
+        const name = typeof token === 'function' ? token.name : String(token);
+        if (name === 'DiscordBotClientService') return mockClientService;
+        return {};
+      });
+
+      const result = await service.cleanupScheduledEventsForTest();
+      expect(result).toMatchObject({
+        success: true,
+        deleted: 0,
+        failed: 1,
+        total: 1,
+      });
+    });
+  });
 });

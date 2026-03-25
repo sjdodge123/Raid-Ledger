@@ -16,6 +16,7 @@ import { RosterNotificationBufferService } from '../notifications/roster-notific
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import {
   classifyEventSessions,
   autoPopulateAttendance,
@@ -196,6 +197,33 @@ export class DemoTestService {
     const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
     await svc.completeExpiredEvents();
     return { success: true };
+  }
+
+  /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
+  async cleanupScheduledEventsForTest(): Promise<{
+    success: boolean;
+    deleted: number;
+    failed: number;
+    total: number;
+  }> {
+    await this.assertDemoMode();
+    const client = this.moduleRef.get(DiscordBotClientService, {
+      strict: false,
+    });
+    const guild = client.getGuild();
+    if (!guild) return { success: true, deleted: 0, failed: 0, total: 0 };
+    const events = await guild.scheduledEvents.fetch();
+    let deleted = 0;
+    let failed = 0;
+    for (const se of events.values()) {
+      try {
+        await se.delete();
+        deleted++;
+      } catch {
+        failed++;
+      }
+    }
+    return { success: true, deleted, failed, total: events.size };
   }
 
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */

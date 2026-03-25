@@ -16,6 +16,9 @@ function createMockService() {
     cancelSignupForTest: jest.fn(),
     getNotificationsForTest: jest.fn(),
     flushNotificationBufferForTest: jest.fn(),
+    cleanupScheduledEventsForTest: jest
+      .fn()
+      .mockResolvedValue({ success: true, deleted: 3, failed: 0, total: 3 }),
   };
 }
 
@@ -58,5 +61,16 @@ describe('DemoTestController — new test utility endpoints', () => {
     });
     expect(result).toMatchObject({ success: true });
     expect(mockService.awaitProcessingForTest).toHaveBeenCalledWith(5000);
+  });
+
+  it('cleanupScheduledEvents delegates to service', async () => {
+    const result = await controller.cleanupScheduledEventsForTest();
+    expect(result).toMatchObject({
+      success: true,
+      deleted: 3,
+      failed: 0,
+      total: 3,
+    });
+    expect(mockService.cleanupScheduledEventsForTest).toHaveBeenCalled();
   });
 });

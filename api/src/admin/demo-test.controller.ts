@@ -224,6 +224,13 @@ export class DemoTestController {
     return this.demoTestService.triggerScheduledEventCompletionForTest();
   }
 
+  /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
+  @Post('cleanup-scheduled-events')
+  @HttpCode(HttpStatus.OK)
+  async cleanupScheduledEventsForTest() {
+    return this.demoTestService.cleanupScheduledEventsForTest();
+  }
+
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
   @Post('await-processing')
   @HttpCode(HttpStatus.OK)

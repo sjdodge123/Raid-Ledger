@@ -284,6 +284,11 @@ export async function triggerClassify(
   await api.post('/admin/test/trigger-classify', { eventId });
 }
 
+/** Delete all Discord scheduled events in the guild — prevents 100-event limit (ROK-969). */
+export async function cleanupScheduledEvents(api: ApiClient): Promise<void> {
+  await api.post('/admin/test/cleanup-scheduled-events', {});
+}
+
 /** Inject a synthetic voice session into the DB — DEMO_MODE only (ROK-943). */
 export async function injectVoiceSession(
   api: ApiClient,
