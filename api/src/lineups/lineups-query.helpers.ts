@@ -156,7 +156,10 @@ export function countDistinctNominators(
 ) {
   return db
     .select({
-      count: sql<number>`count(distinct ${schema.communityLineupEntries.nominatedBy})::int`.as('count'),
+      count:
+        sql<number>`count(distinct ${schema.communityLineupEntries.nominatedBy})::int`.as(
+          'count',
+        ),
     })
     .from(schema.communityLineupEntries)
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));

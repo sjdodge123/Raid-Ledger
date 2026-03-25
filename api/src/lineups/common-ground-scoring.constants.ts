@@ -26,7 +26,10 @@ export const NOMINATIONS_PER_PARTICIPANT = 5;
 
 /** Dynamic cap: max(20, participants * 5). */
 export function nominationCap(participantCount: number): number {
-  return Math.max(BASE_NOMINATION_CAP, participantCount * NOMINATIONS_PER_PARTICIPANT);
+  return Math.max(
+    BASE_NOMINATION_CAP,
+    participantCount * NOMINATIONS_PER_PARTICIPANT,
+  );
 }
 
 /**

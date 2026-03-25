@@ -10,7 +10,11 @@ import {
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { NominateGameDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import { findGameName, countLineupEntries, countDistinctNominators } from './lineups-query.helpers';
+import {
+  findGameName,
+  countLineupEntries,
+  countDistinctNominators,
+} from './lineups-query.helpers';
 import { nominationCap } from './common-ground-scoring.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;

@@ -86,7 +86,9 @@ function mapToDetailResponse(
     createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
     votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
     phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
-    matchThreshold: lineup.matchThreshold ? Number(lineup.matchThreshold) : null,
+    matchThreshold: lineup.matchThreshold
+      ? Number(lineup.matchThreshold)
+      : null,
     entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
     totalVoters: voterCount[0]?.total ?? 0,
     totalMembers: enrichment.totalMembers,

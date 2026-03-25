@@ -41,7 +41,10 @@ export const communityLineups = pgTable('community_lineups', {
     decided?: number;
   } | null>(),
   /** Match threshold for the matching algorithm (0.10–0.75, default 0.35). */
-  matchThreshold: numeric('match_threshold', { precision: 3, scale: 2 }).default('0.35'),
+  matchThreshold: numeric('match_threshold', {
+    precision: 3,
+    scale: 2,
+  }).default('0.35'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

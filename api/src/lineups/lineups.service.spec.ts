@@ -312,12 +312,12 @@ function describeLineupsService() {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException for backward transition', async () => {
+    it('should throw BadRequestException for non-adjacent transition', async () => {
       const votingLineup = { ...mockLineup, status: 'voting' };
       mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
 
       await expect(
-        service.transitionStatus(1, { status: 'building' }),
+        service.transitionStatus(1, { status: 'archived' }),
       ).rejects.toThrow(BadRequestException);
     });
 

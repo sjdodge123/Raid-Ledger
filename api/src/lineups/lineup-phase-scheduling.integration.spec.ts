@@ -314,7 +314,7 @@ function describePhaseScheduling() {
     it('should reject matchThreshold above 0.75', async () => {
       const res = await createLineupWithDurations(adminToken, {
         buildingDurationHours: 24,
-        matchThreshold: 0.90,
+        matchThreshold: 0.9,
       });
 
       expect(res.status).toBe(400);
