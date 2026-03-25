@@ -3,6 +3,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  type ChatInputCommandInteraction,
 } from 'discord.js';
 import { and, sql, ilike, eq, notInArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -248,4 +249,32 @@ export async function findSeriesEventIds(
       ),
     );
   return rows.map((r) => r.id);
+}
+
+/** Apply channel and/or game changes to an event (ROK-959 extraction). */
+export async function applyEventChanges(
+  db: PostgresJsDatabase<typeof schemaType>,
+  eventId: number,
+  channelOption: ReturnType<
+    ChatInputCommandInteraction['options']['getChannel']
+  >,
+  gameName: string | null,
+  interaction: ChatInputCommandInteraction,
+): Promise<string[] | null> {
+  const changes: string[] = [];
+  if (channelOption) {
+    const ch = channelOption as { name?: string; id: string };
+    await setChannelOverride(db, eventId, channelOption.id);
+    changes.push(`Notification channel set to **#${ch.name ?? ch.id}**`);
+  }
+  if (gameName) {
+    const result = await applyGameChange(db, eventId, gameName);
+    if (!result) return changes;
+    if ('error' in result) {
+      await interaction.editReply(result.error);
+      return null;
+    }
+    changes.push(result.change);
+  }
+  return changes;
 }

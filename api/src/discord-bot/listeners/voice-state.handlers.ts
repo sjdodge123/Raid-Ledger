@@ -183,12 +183,14 @@ async function moveToNewGame(
   const uid = rlUser?.id ?? null;
   startVoiceGameTracking(deps, userId, detected.gameId, detected.gameName, uid);
   const mi = buildMemberInfo(userId, guildMember, uid);
+  const voiceChannelId = guildMember.voice?.channelId ?? undefined;
   await deps.adHocEventService.handleVoiceJoin(
     binding.bindingId,
     mi,
     binding,
     detected.gameId,
     detected.gameName,
+    voiceChannelId,
   );
 }
 

@@ -91,6 +91,7 @@ function gameDetectedJoinTest() {
       expect.any(Object),
       5,
       'WoW',
+      'gl-ch',
     );
   });
 }
@@ -147,6 +148,7 @@ function recheckTests() {
       expect.any(Object),
       42,
       'World of Warcraft Classic',
+      'gl-ch',
     );
   });
 
@@ -229,6 +231,7 @@ function allowJustChattingTest() {
       expect.any(Object),
       null,
       'Just Chatting',
+      'gl-ch',
     );
   });
 }
@@ -292,6 +295,7 @@ function presenceChangeGameSwitchTest() {
         displayName: 'Switcher',
         user: { username: 'Switcher', avatar: null },
         presence: { activities: [{ type: 0, name: 'FFXIV' }] },
+        voice: { channelId: 'presence-ch' },
       },
     });
     await jest.advanceTimersByTimeAsync(100);
@@ -305,6 +309,7 @@ function presenceChangeGameSwitchTest() {
       expect.any(Object),
       2,
       'FFXIV',
+      'presence-ch',
     );
   });
 }
