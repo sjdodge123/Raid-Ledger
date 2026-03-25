@@ -9,6 +9,7 @@ import {
   type AdHocMocks,
 } from './ad-hoc-event.service.spec-helpers';
 import type { AdHocEventService } from './ad-hoc-event.service';
+import * as helpers from './ad-hoc-event.helpers';
 
 describe('AdHocEventService — voice', () => {
   let service: AdHocEventService;
@@ -194,6 +195,47 @@ describe('AdHocEventService — voice', () => {
         200,
         secondMember,
       );
+    });
+  });
+
+  describe('handleVoiceJoin — sibling binding suppression (ROK-959)', () => {
+    it('threads channelId to findActiveScheduledEvent (AC4)', async () => {
+      // AC4: handleVoiceJoin called with channelId must thread it
+      // through trySuppressForScheduled to findActiveScheduledEvent.
+      // We spy on findActiveScheduledEvent to verify channelId arrives
+      // as the 5th argument.
+      mocks.settingsService.get.mockResolvedValue('true');
+
+      const spy = jest
+        .spyOn(helpers, 'findActiveScheduledEvent')
+        .mockResolvedValueOnce({ id: 55 });
+
+      const siblingBinding = {
+        ...baseBinding,
+        gameId: 10,
+      };
+
+      // Call handleVoiceJoin with the new channelId parameter (6th arg)
+      await service.handleVoiceJoin(
+        'binding-A',
+        baseMember,
+        siblingBinding,
+        undefined,
+        undefined,
+        'voice-channel-shared', // channelId — the new param
+      );
+
+      // Verify findActiveScheduledEvent was called with channelId
+      // as the 5th positional argument
+      expect(spy).toHaveBeenCalledWith(
+        expect.anything(), // db
+        'binding-A', // bindingId
+        10, // effectiveGameId
+        expect.any(Date), // now
+        'voice-channel-shared', // channelId — must be threaded
+      );
+
+      spy.mockRestore();
     });
   });
 

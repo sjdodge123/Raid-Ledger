@@ -154,6 +154,12 @@ export const RESCHEDULE_BUTTON_IDS = {
   ROLE_SELECT: 'reschedule_role_select',
 } as const;
 
+/** Custom IDs for /bind multi-monitor confirmation buttons (ROK-959). */
+export const BIND_CONFIRM_BUTTON_IDS = {
+  CONTINUE: 'bind_confirm_continue',
+  CANCEL: 'bind_confirm_cancel',
+} as const;
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',

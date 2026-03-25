@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ChannelBindingDto, UpdateChannelBindingDto } from '@raid-ledger/contract';
 import { BindingConfigForm } from './BindingConfigForm';
 
@@ -35,7 +35,15 @@ function BindingBadge({ purpose }: { purpose: string }) {
     return <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${badge.className}`}>{badge.label}</span>;
 }
 
-function BindingInfo({ binding }: { binding: ChannelBindingDto }) {
+function MultiMonitorWarning() {
+    return (
+        <p className="text-xs text-amber-400 mt-1">
+            Multiple game monitors on this channel. Scheduled events for one game will suppress Quick Play for all.
+        </p>
+    );
+}
+
+function BindingInfo({ binding, hasMultiMonitor }: { binding: ChannelBindingDto; hasMultiMonitor: boolean }) {
     return (
         <div className="flex items-center gap-3 min-w-0">
             <div className="flex-shrink-0"><ChannelTypeIcon type={binding.channelType} /></div>
@@ -47,6 +55,7 @@ function BindingInfo({ binding }: { binding: ChannelBindingDto }) {
                 <p className="text-xs text-muted mt-0.5">
                     {binding.gameName ? binding.gameName : 'All games'}{' \u00B7 '}{BEHAVIOR_LABELS[binding.bindingPurpose] ?? binding.bindingPurpose}
                 </p>
+                {hasMultiMonitor && <MultiMonitorWarning />}
             </div>
         </div>
     );
@@ -69,15 +78,15 @@ function BindingActions({ binding, isEditing, onToggleEdit, onDelete, isDeleting
     );
 }
 
-function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpdating, isDeleting, deletingId }: {
+function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpdating, isDeleting, deletingId, hasMultiMonitor }: {
     binding: ChannelBindingDto; editingId: string | null; setEditingId: (id: string | null) => void;
     onSave: (id: string, dto: UpdateChannelBindingDto) => void; onDelete: (id: string) => void;
-    isUpdating: boolean; isDeleting: boolean; deletingId: string | null;
+    isUpdating: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean;
 }) {
     return (
         <div key={binding.id}>
             <div className="flex items-center justify-between p-4 bg-panel/50 rounded-lg border border-border">
-                <BindingInfo binding={binding} />
+                <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} />
                 <BindingActions binding={binding} isEditing={editingId === binding.id}
                     onToggleEdit={() => setEditingId(editingId === binding.id ? null : binding.id)}
                     onDelete={onDelete} isDeleting={isDeleting} deletingId={deletingId} />
@@ -98,6 +107,19 @@ export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, i
     const [editingId, setEditingId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
+    const multiMonitorChannels = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const b of bindings) {
+            if (b.bindingPurpose !== 'game-voice-monitor') continue;
+            counts.set(b.channelId, (counts.get(b.channelId) ?? 0) + 1);
+        }
+        const result = new Set<string>();
+        for (const [chId, count] of counts) {
+            if (count >= 2) result.add(chId);
+        }
+        return result;
+    }, [bindings]);
+
     if (bindings.length === 0) {
         return (
             <div className="text-center py-12 text-muted">
@@ -114,7 +136,8 @@ export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, i
         <div className="space-y-3">
             {bindings.map((binding) => (
                 <BindingRow key={binding.id} binding={binding} editingId={editingId} setEditingId={setEditingId}
-                    onSave={handleSave} onDelete={handleDelete} isUpdating={isUpdating} isDeleting={isDeleting} deletingId={deletingId} />
+                    onSave={handleSave} onDelete={handleDelete} isUpdating={isUpdating} isDeleting={isDeleting} deletingId={deletingId}
+                    hasMultiMonitor={binding.bindingPurpose === 'game-voice-monitor' && multiMonitorChannels.has(binding.channelId)} />
             ))}
         </div>
     );

@@ -481,6 +481,84 @@ function assertEq(label: string, actual: number, expected: number) {
   }
 }
 
+/**
+ * ROK-959: When two game-voice-monitor bindings share a voice channel and a
+ * scheduled event exists on binding B, ad-hoc creation for binding A must be
+ * suppressed. The suppression check calls extendScheduledEventWindow(), so we
+ * verify extendedUntil is set on the scheduled event after voice join.
+ */
+const siblingBindingSuppression: SmokeTest = {
+  name: 'Sibling binding suppresses ad-hoc via channel-level check (ROK-959)',
+  category: 'voice',
+  async run(ctx) {
+    const vCh = pickChannel(ctx.voiceChannels, 0);
+    const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+      '/admin/settings/games?limit=2',
+    );
+    const gameIds = gamesRes.data.map((g) => g.id);
+    if (gameIds.length < 2) {
+      throw new Error('Need at least 2 games in DB for ROK-959 test');
+    }
+    const [gameA, gameB] = gameIds;
+    let bindA: string | undefined;
+    let bindB: string | undefined;
+    let eventId: number | undefined;
+    try {
+      bindA = await createBinding(ctx.api, {
+        channelId: vCh.id,
+        channelType: 'voice',
+        purpose: 'game-voice-monitor',
+        gameId: gameA,
+        config: { minPlayers: 1 },
+      });
+      bindB = await createBinding(ctx.api, {
+        channelId: vCh.id,
+        channelType: 'voice',
+        purpose: 'game-voice-monitor',
+        gameId: gameB,
+        config: { minPlayers: 1 },
+      });
+      await awaitProcessing(ctx.api);
+
+      // Live event for gameB — extendedUntil starts null
+      const ev = await createEvent(ctx.api, 'rok959-suppress', {
+        gameId: gameB,
+        startTime: futureTime(-5),
+        endTime: futureTime(55),
+      });
+      eventId = ev.id;
+      await signup(ctx.api, ev.id);
+
+      // Voice join triggers suppression check on binding A → finds
+      // scheduled event on binding B via channel-level subquery →
+      // calls extendScheduledEventWindow()
+      await joinVoice(vCh.id);
+
+      type EventDetail = { extendedUntil: string | null };
+      await pollForCondition(
+        async () => {
+          await awaitProcessing(ctx.api);
+          const detail = await ctx.api.get<EventDetail>(
+            `/events/${ev.id}`,
+          );
+          return detail.extendedUntil ? detail : null;
+        },
+        ctx.config.timeoutMs,
+        { intervalMs: 2000 },
+      ).catch(() => {
+        throw new Error(
+          `extendedUntil not set on event ${ev.id} — sibling suppression failed`,
+        );
+      });
+    } finally {
+      leaveVoice();
+      if (bindA) await deleteBinding(ctx.api, bindA);
+      if (bindB) await deleteBinding(ctx.api, bindB);
+      if (eventId) await deleteEvent(ctx.api, eventId);
+    }
+  },
+};
+
 // Ad-hoc spawn excluded — requires 15-minute SPAWN_DELAY_MS timer to fire.
 // Run with SMOKE_INCLUDE_SLOW=1 to include.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
@@ -493,5 +571,5 @@ export const voiceActivityTests: SmokeTest[] = [
   ...(canJoinVoice ? [voiceJoinDetected, voiceLeaveRecorded] : []),
   classifyPopulatesAttendance,
   ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
-  ...(canJoinVoice ? [voiceMemberList, multiGameVoiceDetected] : []),
+  ...(canJoinVoice ? [voiceMemberList, multiGameVoiceDetected, siblingBindingSuppression] : []),
 ];
