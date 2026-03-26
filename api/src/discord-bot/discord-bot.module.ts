@@ -63,6 +63,7 @@ import { BindingsCommand } from './commands/bindings.command';
 import { InviteCommand } from './commands/invite.command';
 import { HelpCommand } from './commands/help.command';
 import { EventLinkListener } from './listeners/event-link.listener';
+import { SteamLinkListener } from './listeners/steam-link.listener';
 import { DiscordEmojiService } from './services/discord-emoji.service';
 import { EmbedPosterService } from './services/embed-poster.service';
 import { EmbedSchedulerService } from './services/embed-scheduler.service';
@@ -131,6 +132,7 @@ import { PlayingCommand } from './commands/playing.command';
     EventAutoExtendService,
     AdHocReaperService,
     EventLinkListener,
+    SteamLinkListener,
     EmbedPosterService,
     EmbedSchedulerService,
     ScheduledEventService,

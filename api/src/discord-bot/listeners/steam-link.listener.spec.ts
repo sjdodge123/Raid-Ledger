@@ -37,10 +37,7 @@ function setupSteamLinkModule() {
   chain.select = jest.fn().mockReturnValue(chain);
   mockDb = chain;
 
-  listener = new SteamLinkListener(
-    mockDb as never,
-    mockClientService as never,
-  );
+  listener = new SteamLinkListener(mockDb as never, mockClientService as never);
 }
 
 function callHandleMessage(message: unknown): Promise<void> {
@@ -49,9 +46,7 @@ function callHandleMessage(message: unknown): Promise<void> {
   ).handleMessage(message);
 }
 
-function callHandleButtonInteraction(
-  interaction: unknown,
-): Promise<void> {
+function callHandleButtonInteraction(interaction: unknown): Promise<void> {
   return (
     listener as unknown as {
       handleButtonInteraction: (i: unknown) => Promise<void>;
@@ -106,9 +101,7 @@ function stubGameLookup(
   }
 }
 
-function stubUserLookup(
-  user: { id: number; discordId: string } | null,
-) {
+function stubUserLookup(user: { id: number; discordId: string } | null) {
   if (user) {
     mockDb.limit.mockResolvedValueOnce([user]);
   } else {
@@ -241,19 +234,17 @@ function steamUrlDetectionTests() {
   });
 
   it('skips messages from bots', async () => {
-    const msg = createMessage(
-      'https://store.steampowered.com/app/730/CS2/',
-      { author: { bot: true, id: 'bot-1' } },
-    );
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/', {
+      author: { bot: true, id: 'bot-1' },
+    });
     await callHandleMessage(msg);
     expect(mockReply).not.toHaveBeenCalled();
   });
 
   it('skips DM messages (no guild)', async () => {
-    const msg = createMessage(
-      'https://store.steampowered.com/app/730/CS2/',
-      { guild: null },
-    );
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/', {
+      guild: null,
+    });
     await callHandleMessage(msg);
     expect(mockReply).not.toHaveBeenCalled();
   });
@@ -272,9 +263,7 @@ function ephemeralPromptTests() {
     stubInterestCheck(false);
     stubAutoHeartPref(false);
 
-    const msg = createMessage(
-      'https://store.steampowered.com/app/730/CS2/',
-    );
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
     expect(mockReply).toHaveBeenCalledWith(
@@ -290,9 +279,7 @@ function ephemeralPromptTests() {
     stubInterestCheck(false);
     stubAutoHeartPref(false);
 
-    const msg = createMessage(
-      'https://store.steampowered.com/app/730/CS2/',
-    );
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
     expect(mockReply).toHaveBeenCalledWith(
@@ -320,9 +307,7 @@ function silentSkipTests() {
     stubGameLookup({ id: 42, name: 'CS2', steamAppId: 730 });
     stubUserLookup(null);
 
-    const msg = createMessage(
-      'https://store.steampowered.com/app/730/CS2/',
-    );
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
     expect(mockReply).not.toHaveBeenCalled();
@@ -333,9 +318,7 @@ function silentSkipTests() {
     stubUserLookup({ id: 7, discordId: 'discord-user-1' });
     stubInterestCheck(true);
 
-    const msg = createMessage(
-      'https://store.steampowered.com/app/730/CS2/',
-    );
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
     expect(mockReply).not.toHaveBeenCalled();
@@ -349,9 +332,7 @@ function autoHeartTests() {
     stubInterestCheck(false);
     stubAutoHeartPref(true);
 
-    const msg = createMessage(
-      'https://store.steampowered.com/app/730/CS2/',
-    );
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
     // Should auto-insert the interest (calls insert)
@@ -382,18 +363,14 @@ function buttonHandlerTests() {
   });
 
   it('dismiss button does not create any interest row', async () => {
-    const interaction = makeButtonInteraction(
-      'steam_interest_dismiss:42',
-    );
+    const interaction = makeButtonInteraction('steam_interest_dismiss:42');
     await callHandleButtonInteraction(interaction);
 
     expect(mockDb.insert).not.toHaveBeenCalled();
   });
 
   it('dismiss button updates the ephemeral message', async () => {
-    const interaction = makeButtonInteraction(
-      'steam_interest_dismiss:42',
-    );
+    const interaction = makeButtonInteraction('steam_interest_dismiss:42');
     await callHandleButtonInteraction(interaction);
 
     expect(interaction.update).toHaveBeenCalled();
@@ -416,8 +393,7 @@ function buttonHandlerTests() {
     );
     const hasAutoHeartPref = valuesCalls.some(
       (call: unknown[]) =>
-        (call[0] as Record<string, unknown>)?.key ===
-        'autoHeartSteamUrls',
+        (call[0] as Record<string, unknown>)?.key === 'autoHeartSteamUrls',
     );
     expect(hasDiscordSource).toBe(true);
     expect(hasAutoHeartPref).toBe(true);
@@ -440,9 +416,7 @@ function rateLimitTests() {
     stubInterestCheck(false);
     stubAutoHeartPref(false);
 
-    const msg = createMessage(
-      'https://store.steampowered.com/app/730/CS2/',
-    );
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     // Call twice with the same message
     await callHandleMessage(msg);
     await callHandleMessage(msg);

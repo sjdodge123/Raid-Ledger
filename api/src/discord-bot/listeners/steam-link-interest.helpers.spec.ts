@@ -55,10 +55,7 @@ describe('findLinkedRlUser', () => {
     const mockUser = { id: 7, discordId: 'discord-user-123' };
     mockDb.limit.mockResolvedValueOnce([mockUser]);
 
-    const result = await findLinkedRlUser(
-      mockDb as never,
-      'discord-user-123',
-    );
+    const result = await findLinkedRlUser(mockDb as never, 'discord-user-123');
 
     expect(result).toMatchObject({
       id: expect.any(Number),
@@ -81,11 +78,7 @@ describe('hasExistingHeartInterest', () => {
   it('returns true when user already has a heart interest for the game', async () => {
     mockDb.limit.mockResolvedValueOnce([{ id: 1 }]);
 
-    const result = await hasExistingHeartInterest(
-      mockDb as never,
-      7,
-      42,
-    );
+    const result = await hasExistingHeartInterest(mockDb as never, 7, 42);
 
     expect(result).toBe(true);
   });
@@ -93,11 +86,7 @@ describe('hasExistingHeartInterest', () => {
   it('returns false when user has no heart interest for the game', async () => {
     mockDb.limit.mockResolvedValueOnce([]);
 
-    const result = await hasExistingHeartInterest(
-      mockDb as never,
-      7,
-      42,
-    );
+    const result = await hasExistingHeartInterest(mockDb as never, 7, 42);
 
     expect(result).toBe(false);
   });

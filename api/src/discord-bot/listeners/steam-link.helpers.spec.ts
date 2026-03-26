@@ -19,9 +19,7 @@ describe('parseSteamAppIds', () => {
     });
 
     it('extracts app ID from minimal URL without trailing path', () => {
-      const result = parseSteamAppIds(
-        'https://store.steampowered.com/app/570',
-      );
+      const result = parseSteamAppIds('https://store.steampowered.com/app/570');
       expect(result).toEqual([570]);
     });
 
@@ -106,9 +104,7 @@ describe('parseSteamAppIds', () => {
 
   describe('non-store URLs ignored', () => {
     it('ignores Steam community URLs', () => {
-      const result = parseSteamAppIds(
-        'https://steamcommunity.com/app/730',
-      );
+      const result = parseSteamAppIds('https://steamcommunity.com/app/730');
       expect(result).toEqual([]);
     });
 
