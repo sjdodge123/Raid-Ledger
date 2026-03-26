@@ -274,3 +274,4 @@ test.describe('Phase breadcrumb — revert', () => {
         await expect(page.locator('span').filter({ hasText: /Scheduling/ }).first()).toBeVisible({ timeout: 10_000 });
     });
 });
+
