@@ -42,6 +42,7 @@ export class DiscordModule implements OnModuleInit {
     private readonly discordAuthService: DiscordAuthService,
   ) {}
 
+  // STARTUP-CRITICAL: Discord auth plugin must be registered for OAuth login to work. @see bestEffortInit
   async onModuleInit(): Promise<void> {
     this.pluginRegistry.registerManifest(DISCORD_MANIFEST);
     await this.pluginRegistry.ensureInstalled(DISCORD_MANIFEST.id);
