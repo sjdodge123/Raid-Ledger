@@ -9,7 +9,7 @@ import type {
   MatchDetailResponseDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import { findLineupById, countMemberUsers } from './lineups-query.helpers';
+import { findLineupById, countDistinctVoters } from './lineups-query.helpers';
 import {
   findMatchesByLineup,
   findMatchMembers,
@@ -79,12 +79,12 @@ export async function buildGroupedMatchesResponse(
 
   const threshold = lineup.matchThreshold ?? 35;
 
-  const [matches, memberCountRows] = await Promise.all([
+  const [matches, voterRows] = await Promise.all([
     findMatchesByLineup(db, lineupId),
-    countMemberUsers(db),
+    countDistinctVoters(db, lineupId),
   ]);
 
-  const totalVoters = memberCountRows[0]?.total ?? 0;
+  const totalVoters = voterRows[0]?.total ?? 0;
   const matchIds = matches.map((m) => m.id);
   const matchMemberRows = await findMatchMembers(db, matchIds);
 

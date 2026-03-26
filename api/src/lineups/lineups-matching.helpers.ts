@@ -5,7 +5,10 @@
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { countVotesPerGame, countMemberUsers } from './lineups-query.helpers';
+import {
+  countVotesPerGame,
+  countDistinctVoters,
+} from './lineups-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -32,12 +35,12 @@ export async function buildMatchesForLineup(
   if (!lineup) return;
 
   const threshold = lineup.matchThreshold ?? 35;
-  const [voteCounts, memberRows] = await Promise.all([
+  const [voteCounts, voterRows] = await Promise.all([
     countVotesPerGame(db, lineupId),
-    countMemberUsers(db),
+    countDistinctVoters(db, lineupId),
   ]);
 
-  const totalVoters = memberRows[0]?.total ?? 0;
+  const totalVoters = voterRows[0]?.total ?? 0;
   if (totalVoters === 0) return;
 
   for (const vc of voteCounts) {

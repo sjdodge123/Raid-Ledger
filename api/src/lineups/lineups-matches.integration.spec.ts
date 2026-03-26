@@ -149,7 +149,9 @@ function describeGETMatches() {
     const game2 = await createGame('Game Mid', 'game-mid');
     const game3 = await createGame('Game Low', 'game-low');
 
-    // Create 10 voters so we can spread votes
+    // Create 10 voters; every voter must cast at least one vote so
+    // countDistinctVoters = 10 (the denominator for votePercentage).
+    const game4 = await createGame('Filler Game', 'filler-game');
     const voters: { userId: number; gameIds: number[] }[] = [];
     for (let i = 0; i < 10; i++) {
       const m = await loginAsMember(`voter-${i}`);
@@ -163,10 +165,12 @@ function describeGETMatches() {
     for (let i = 0; i < 5; i++) voters[i].gameIds.push(game1.id);
     for (let i = 0; i < 3; i++) voters[i].gameIds.push(game2.id);
     voters[0].gameIds.push(game3.id);
+    // Voters 5-9 need at least one vote; give them game4
+    for (let i = 5; i < 10; i++) voters[i].gameIds.push(game4.id);
 
     const lineupId = await buildDecidedLineup({
       token: adminToken,
-      games: [game1, game2, game3],
+      games: [game1, game2, game3, game4],
       voters,
       matchThreshold: 35,
     });
@@ -214,13 +218,12 @@ function describeGETMatches() {
     const gameAbove = await createGame('Above Game', 'above-game');
     const voters: { userId: number; gameIds: number[] }[] = [];
 
-    // 10 voters, threshold=50
+    // 10 voters, threshold=50 — all must vote so countDistinctVoters = 10
     // gameAlmost: 4/10 = 40% — almostThere (>= 50*0.7=35%)
-    // gameAbove: 6/10 = 60% — scheduling (>= 50%)
+    // gameAbove: 10/10 = 100% — scheduling (>= 50%)
     for (let i = 0; i < 10; i++) {
       const m = await loginAsMember(`almost-voter-${i}`);
-      const gameIds: number[] = [];
-      if (i < 6) gameIds.push(gameAbove.id);
+      const gameIds: number[] = [gameAbove.id];
       if (i < 4) gameIds.push(gameAlmost.id);
       voters.push({ userId: m.userId, gameIds });
     }
@@ -246,13 +249,12 @@ function describeGETMatches() {
     const gameAbove = await createGame('Above2 Game', 'above2-game');
     const voters: { userId: number; gameIds: number[] }[] = [];
 
-    // 10 voters, threshold=50
+    // 10 voters, threshold=50 — all must vote so countDistinctVoters = 10
     // gameRally: 2/10 = 20% — rallyYourCrew (< 50*0.7=35%)
-    // gameAbove: 6/10 = 60% — scheduling (>= 50%)
+    // gameAbove: 10/10 = 100% — scheduling (>= 50%)
     for (let i = 0; i < 10; i++) {
       const m = await loginAsMember(`rally-voter-${i}`);
-      const gameIds: number[] = [];
-      if (i < 6) gameIds.push(gameAbove.id);
+      const gameIds: number[] = [gameAbove.id];
       if (i < 2) gameIds.push(gameRally.id);
       voters.push({ userId: m.userId, gameIds });
     }
@@ -327,9 +329,7 @@ function describeJoin() {
     const members = await testApp.db
       .select()
       .from(schema.communityLineupMatchMembers);
-    const bandwagonMember = members.find(
-      (m) => m.userId === newMember.userId,
-    );
+    const bandwagonMember = members.find((m) => m.userId === newMember.userId);
     expect(bandwagonMember).toBeDefined();
     expect(bandwagonMember!.source).toBe('bandwagon');
   });
@@ -341,12 +341,12 @@ function describeJoin() {
 
     // 10 voters, threshold=50
     // game1: 4/10 = 40% -> suggested (below 50%)
-    // game2: 6/10 = 60% -> scheduling (above 50%)
+    // game2: 10/10 = 100% -> scheduling (above 50%)
+    // All voters must vote for at least one game so countDistinctVoters = 10
     for (let i = 0; i < 10; i++) {
       const m = await loginAsMember(`promote-voter-${i}`);
-      const gameIds: number[] = [];
+      const gameIds: number[] = [game2.id];
       if (i < 4) gameIds.push(game1.id);
-      if (i < 6) gameIds.push(game2.id);
       voters.push({ userId: m.userId, gameIds });
     }
 
@@ -472,14 +472,13 @@ function describeAdvance() {
     const game2 = await createGame('Filler2 Game', 'filler2-game');
     const voters: { userId: number; gameIds: number[] }[] = [];
 
-    // 10 voters, threshold=80
+    // 10 voters, threshold=80 — all must vote so countDistinctVoters = 10
     // game1: 5/10 = 50% -> suggested (below 80%)
-    // game2: 9/10 = 90% -> scheduling (above 80%)
+    // game2: 10/10 = 100% -> scheduling (above 80%)
     for (let i = 0; i < 10; i++) {
       const m = await loginAsMember(`adv-voter-${i}`);
-      const gameIds: number[] = [];
+      const gameIds: number[] = [game2.id];
       if (i < 5) gameIds.push(game1.id);
-      if (i < 9) gameIds.push(game2.id);
       voters.push({ userId: m.userId, gameIds });
     }
 
@@ -505,9 +504,6 @@ function describeAdvance() {
     expect(res.status).toBe(200);
 
     // Verify match was updated
-    const [updated] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches);
     const advancedMatch = (
       await testApp.db.select().from(schema.communityLineupMatches)
     ).find((m) => m.id === suggestedMatch!.id);
@@ -610,14 +606,13 @@ function describeCarryover() {
     const game2 = await createGame('Strong Game', 'strong-game');
     const voters: { userId: number; gameIds: number[] }[] = [];
 
-    // 10 voters, threshold=50
+    // 10 voters, threshold=50 — all must vote so countDistinctVoters = 10
     // game1: 3/10 = 30% -> suggested (below 50%)
-    // game2: 7/10 = 70% -> scheduling (above 50%)
+    // game2: 10/10 = 100% -> scheduling (above 50%)
     for (let i = 0; i < 10; i++) {
       const m = await loginAsMember(`carry-voter-${i}`);
-      const gameIds: number[] = [];
+      const gameIds: number[] = [game2.id];
       if (i < 3) gameIds.push(game1.id);
-      if (i < 7) gameIds.push(game2.id);
       voters.push({ userId: m.userId, gameIds });
     }
 
