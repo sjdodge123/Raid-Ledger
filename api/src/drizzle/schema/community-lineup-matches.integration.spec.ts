@@ -69,12 +69,7 @@ describe('MatchStatusSchema (ROK-964)', () => {
   });
 
   it('accepts valid match statuses', () => {
-    for (const val of [
-      'suggested',
-      'scheduling',
-      'scheduled',
-      'archived',
-    ]) {
+    for (const val of ['suggested', 'scheduling', 'scheduled', 'archived']) {
       expect(MatchStatusSchema.safeParse(val).success).toBe(true);
     }
   });
@@ -171,7 +166,7 @@ describe('LineupMatchSchema (ROK-964)', () => {
   });
 
   it('rejects match with missing required fields', () => {
-    const { id: _, ...incomplete } = validMatch;
+    const { id: _id, ...incomplete } = validMatch;
     const result = LineupMatchSchema.safeParse(incomplete);
     expect(result.success).toBe(false);
   });
@@ -272,7 +267,7 @@ describe('LineupScheduleVoteSchema (ROK-964)', () => {
   });
 
   it('rejects vote with missing slotId', () => {
-    const { slotId: _, ...incomplete } = validVote;
+    const { slotId: _slotId, ...incomplete } = validVote;
     const result = LineupScheduleVoteSchema.safeParse(incomplete);
     expect(result.success).toBe(false);
   });
@@ -419,9 +414,7 @@ describe('Drizzle column types (ROK-964)', () => {
   it('communityLineupMatches.status maps to "status" with correct enum', () => {
     const columns = getTableColumns(schema.communityLineupMatches);
     expect(columns.status.name).toBe('status');
-    expect(
-      (columns.status as { enumValues?: string[] }).enumValues,
-    ).toEqual(
+    expect((columns.status as { enumValues?: string[] }).enumValues).toEqual(
       expect.arrayContaining([
         'suggested',
         'scheduling',
@@ -440,9 +433,9 @@ describe('Drizzle column types (ROK-964)', () => {
   it('communityLineupMatchMembers.source has voted/bandwagon enum', () => {
     const columns = getTableColumns(schema.communityLineupMatchMembers);
     expect(columns.source.name).toBe('source');
-    expect(
-      (columns.source as { enumValues?: string[] }).enumValues,
-    ).toEqual(expect.arrayContaining(['voted', 'bandwagon']));
+    expect((columns.source as { enumValues?: string[] }).enumValues).toEqual(
+      expect.arrayContaining(['voted', 'bandwagon']),
+    );
   });
 
   it('communityLineupScheduleSlots.suggestedBy has system/user enum', () => {
