@@ -209,32 +209,32 @@ async function testExcludeCancelledFromDashboard() {
 
 async function testAttendanceMetrics() {
   const pastEventId = await createPastEvent(testApp, testApp.seed.adminUser.id);
-  const { token: t1 } = await createMemberAndLogin(
+  const { userId: u1 } = await createMemberAndLogin(
     testApp,
     'att_p1',
     'att_p1@test.local',
   );
-  const { token: t2 } = await createMemberAndLogin(
+  const { userId: u2 } = await createMemberAndLogin(
     testApp,
     'att_p2',
     'att_p2@test.local',
   );
-  const s1 = await testApp.request
-    .post(`/events/${pastEventId}/signup`)
-    .set('Authorization', `Bearer ${t1}`)
-    .send({});
-  const s2 = await testApp.request
-    .post(`/events/${pastEventId}/signup`)
-    .set('Authorization', `Bearer ${t2}`)
-    .send({});
+  const [s1] = await testApp.db
+    .insert(schema.eventSignups)
+    .values({ eventId: pastEventId, userId: u1, status: 'signed_up', confirmationStatus: 'pending' })
+    .returning();
+  const [s2] = await testApp.db
+    .insert(schema.eventSignups)
+    .values({ eventId: pastEventId, userId: u2, status: 'signed_up', confirmationStatus: 'pending' })
+    .returning();
   await testApp.request
     .patch(`/events/${pastEventId}/attendance`)
     .set('Authorization', `Bearer ${adminToken}`)
-    .send({ signupId: s1.body.id, attendanceStatus: 'attended' });
+    .send({ signupId: s1.id, attendanceStatus: 'attended' });
   await testApp.request
     .patch(`/events/${pastEventId}/attendance`)
     .set('Authorization', `Bearer ${adminToken}`)
-    .send({ signupId: s2.body.id, attendanceStatus: 'no_show' });
+    .send({ signupId: s2.id, attendanceStatus: 'no_show' });
   const signups = await testApp.db
     .select()
     .from(schema.eventSignups)

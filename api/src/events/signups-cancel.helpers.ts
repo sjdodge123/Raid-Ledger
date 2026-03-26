@@ -22,7 +22,6 @@ export async function fetchEventOrThrow(db: Tx, eventId: number) {
     .limit(1);
   if (!eventRow)
     throw new NotFoundException(`Event with ID ${eventId} not found`);
-  assertEventAcceptingSignups(eventRow);
   return eventRow;
 }
 
