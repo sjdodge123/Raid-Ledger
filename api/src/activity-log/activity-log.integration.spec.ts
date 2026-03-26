@@ -94,7 +94,7 @@ function describeActivityLog() {
       const nomination = timeline(res).data.find(
         (e) => e.action === 'game_nominated',
       );
-      expect(nomination.metadata).toMatchObject({
+      expect(nomination!.metadata).toMatchObject({
         gameId: testApp.seed.game.id,
         gameName: 'Test Game',
       });
