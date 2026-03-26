@@ -30,6 +30,20 @@ import {
   clearDiscordBotKeys,
   bothExist,
 } from './settings-bot.helpers';
+import {
+  getDiscordBotDefaultChannel as _getDiscordBotDefaultChannel,
+  setDiscordBotDefaultChannel as _setDiscordBotDefaultChannel,
+  isDiscordBotSetupCompleted as _isDiscordBotSetupCompleted,
+  markDiscordBotSetupCompleted as _markDiscordBotSetupCompleted,
+  getDiscordBotCommunityName as _getDiscordBotCommunityName,
+  setDiscordBotCommunityName as _setDiscordBotCommunityName,
+  getDiscordBotTimezone as _getDiscordBotTimezone,
+  setDiscordBotTimezone as _setDiscordBotTimezone,
+  getDefaultTimezone as _getDefaultTimezone,
+  setDefaultTimezone as _setDefaultTimezone,
+  getDiscordBotDefaultVoiceChannel as _getDiscordBotDefaultVoiceChannel,
+  setDiscordBotDefaultVoiceChannel as _setDiscordBotDefaultVoiceChannel,
+} from './settings-discord.helpers';
 
 import { SETTINGS_EVENTS } from './settings.types';
 import type {
@@ -76,7 +90,18 @@ export class SettingsService implements OnModuleInit {
   /** Loads all settings from DB, decrypts, and replaces the cache. */
   private async loadCache(): Promise<void> {
     try {
-      await this.loadCacheOrThrow();
+      const rows = await this.db.select().from(appSettings);
+      const fresh = new Map<string, string>();
+      for (const row of rows) {
+        try {
+          fresh.set(row.key, decrypt(row.encryptedValue));
+        } catch {
+          this.logger.error(`Failed to decrypt setting ${row.key}`);
+        }
+      }
+      this.cache = fresh;
+      this.cacheLoadedAt = Date.now();
+      this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
     } catch (err: unknown) {
       this.logger.error('Background cache refresh failed', err);
     } finally {
@@ -290,59 +315,36 @@ export class SettingsService implements OnModuleInit {
       .catch((err: unknown) => this.logger.error('Bot clear error:', err));
   }
 
-  async getDiscordBotDefaultChannel(): Promise<string | null> {
-    return this.get(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL);
-  }
-
-  async setDiscordBotDefaultChannel(channelId: string): Promise<void> {
-    await this.set(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL, channelId);
-  }
-
-  async isDiscordBotSetupCompleted(): Promise<boolean> {
-    return (
-      (await this.get(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED)) === 'true'
-    );
-  }
-
-  async markDiscordBotSetupCompleted(): Promise<void> {
-    await this.set(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED, 'true');
-  }
-
-  async getDiscordBotCommunityName(): Promise<string | null> {
-    return this.get(SETTING_KEYS.DISCORD_BOT_COMMUNITY_NAME);
-  }
-
-  async setDiscordBotCommunityName(name: string): Promise<void> {
-    await this.set(SETTING_KEYS.DISCORD_BOT_COMMUNITY_NAME, name);
-  }
-
-  async getDiscordBotTimezone(): Promise<string | null> {
-    return this.get(SETTING_KEYS.DISCORD_BOT_TIMEZONE);
-  }
-
-  async setDiscordBotTimezone(timezone: string): Promise<void> {
-    await this.set(SETTING_KEYS.DISCORD_BOT_TIMEZONE, timezone);
-  }
-
-  async getDefaultTimezone(): Promise<string | null> {
-    return this.get(SETTING_KEYS.DEFAULT_TIMEZONE);
-  }
-
-  async setDefaultTimezone(timezone: string): Promise<void> {
-    await this.set(SETTING_KEYS.DEFAULT_TIMEZONE, timezone);
-  }
-
-  async getClientUrl(): Promise<string> {
-    return _getClientUrl(this);
-  }
-
-  async getDiscordBotDefaultVoiceChannel(): Promise<string | null> {
-    return this.get(SETTING_KEYS.DISCORD_BOT_DEFAULT_VOICE_CHANNEL);
-  }
-
-  async setDiscordBotDefaultVoiceChannel(channelId: string): Promise<void> {
-    await this.set(SETTING_KEYS.DISCORD_BOT_DEFAULT_VOICE_CHANNEL, channelId);
-  }
+  /** Get the default text channel ID for the Discord bot. */
+  getDiscordBotDefaultChannel = () => _getDiscordBotDefaultChannel(this);
+  /** Set the default text channel ID for the Discord bot. */
+  setDiscordBotDefaultChannel = (id: string) =>
+    _setDiscordBotDefaultChannel(this, id);
+  /** Check if the Discord bot setup wizard has been completed. */
+  isDiscordBotSetupCompleted = () => _isDiscordBotSetupCompleted(this);
+  /** Mark the Discord bot setup wizard as completed. */
+  markDiscordBotSetupCompleted = () => _markDiscordBotSetupCompleted(this);
+  /** Get the Discord bot community name. */
+  getDiscordBotCommunityName = () => _getDiscordBotCommunityName(this);
+  /** Set the Discord bot community name. */
+  setDiscordBotCommunityName = (n: string) =>
+    _setDiscordBotCommunityName(this, n);
+  /** Get the Discord bot timezone. */
+  getDiscordBotTimezone = () => _getDiscordBotTimezone(this);
+  /** Set the Discord bot timezone. */
+  setDiscordBotTimezone = (tz: string) => _setDiscordBotTimezone(this, tz);
+  /** Get the default timezone for events. */
+  getDefaultTimezone = () => _getDefaultTimezone(this);
+  /** Set the default timezone for events. */
+  setDefaultTimezone = (tz: string) => _setDefaultTimezone(this, tz);
+  /** Get the client URL with fallback chain. */
+  getClientUrl = () => _getClientUrl(this);
+  /** Get the default voice channel ID for the Discord bot. */
+  getDiscordBotDefaultVoiceChannel = () =>
+    _getDiscordBotDefaultVoiceChannel(this);
+  /** Set the default voice channel ID for the Discord bot. */
+  setDiscordBotDefaultVoiceChannel = (id: string) =>
+    _setDiscordBotDefaultVoiceChannel(this, id);
 
   // ─── Ad-hoc & Auto-extend ────────────────────────────────────
 

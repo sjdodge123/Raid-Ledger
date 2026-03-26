@@ -58,7 +58,8 @@ async function insertMatch(
   threshold: number,
 ): Promise<void> {
   const pct = (vc.voteCount / totalVoters) * 100;
-  const status: 'scheduling' | 'suggested' = pct >= threshold ? 'scheduling' : 'suggested';
+  const status: 'scheduling' | 'suggested' =
+    pct >= threshold ? 'scheduling' : 'suggested';
   const fitCategory = await computeFitCategory(db, vc.gameId, vc.voteCount);
 
   const [match] = await db

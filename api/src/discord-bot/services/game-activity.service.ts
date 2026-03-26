@@ -63,8 +63,10 @@ export class GameActivityService
       );
     }, FLUSH_INTERVAL_MS);
 
-    await bestEffortInit('GameActivity.closeOrphanedSessions', this.logger, () =>
-      closeOrphanedSessions(this.db, this.logger),
+    await bestEffortInit(
+      'GameActivity.closeOrphanedSessions',
+      this.logger,
+      () => closeOrphanedSessions(this.db, this.logger),
     );
   }
 

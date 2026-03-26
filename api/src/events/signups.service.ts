@@ -65,8 +65,7 @@ export class SignupsService {
     opts?: { skipEndedCheck?: boolean },
   ): Promise<SignupResponseDto> {
     const eventRow = await cancelH.fetchEventOrThrow(this.db, eventId);
-    if (!opts?.skipEndedCheck)
-      cancelH.assertEventAcceptingSignups(eventRow);
+    if (!opts?.skipEndedCheck) cancelH.assertEventAcceptingSignups(eventRow);
     const [user] = await this.db
       .select()
       .from(schema.users)
