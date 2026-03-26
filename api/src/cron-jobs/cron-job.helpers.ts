@@ -81,6 +81,32 @@ export async function pruneExecutions(
     );
 }
 
+/** Record a no-op execution (handler ran but found nothing to do). */
+export async function recordNoOp(
+  db: Db,
+  job: CronJobRow,
+  jobName: string,
+  startedAt: Date,
+  finishedAt: Date,
+): Promise<void> {
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
+  await db.insert(schema.cronJobExecutions).values({
+    cronJobId: job.id,
+    status: 'no-op',
+    startedAt,
+    finishedAt,
+    durationMs,
+  });
+  perfLog('CRON', jobName, durationMs, { status: 'no-op' });
+  const nextRunAt = computeNextRun(job.cronExpression);
+  await db
+    .update(schema.cronJobs)
+    .set({ lastRunAt: finishedAt, nextRunAt, updatedAt: new Date() })
+    .where(eq(schema.cronJobs.id, job.id));
+  job.lastRunAt = finishedAt;
+  if (nextRunAt) job.nextRunAt = nextRunAt;
+}
+
 /** Record a skipped (paused) execution. */
 export async function recordSkipped(
   db: Db,

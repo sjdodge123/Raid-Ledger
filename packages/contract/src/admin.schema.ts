@@ -49,6 +49,10 @@ export const CronJobSchema = z.object({
   nextRunAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Count of 'completed' executions in recent history. */
+  completedCount: z.number().optional(),
+  /** Count of 'no-op' executions in recent history. */
+  noOpCount: z.number().optional(),
 });
 
 export type CronJobDto = z.infer<typeof CronJobSchema>;
@@ -56,7 +60,7 @@ export type CronJobDto = z.infer<typeof CronJobSchema>;
 export const CronJobExecutionSchema = z.object({
   id: z.number(),
   cronJobId: z.number(),
-  status: z.enum(['completed', 'failed', 'skipped']),
+  status: z.enum(['completed', 'failed', 'skipped', 'no-op']),
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
   durationMs: z.number().nullable(),

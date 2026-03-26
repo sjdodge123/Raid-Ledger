@@ -140,7 +140,10 @@ export class RelayService {
   async handleHeartbeat(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'RelayService_handleHeartbeat',
-      async () => this.sendHeartbeat(),
+      async () => {
+        if (!(await this.isConnected())) return false;
+        await this.sendHeartbeat();
+      },
     );
   }
 

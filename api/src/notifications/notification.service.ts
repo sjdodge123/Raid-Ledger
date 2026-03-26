@@ -225,7 +225,8 @@ export class NotificationService {
     await this.cronJobService.executeWithTracking(
       'NotificationService_cleanupExpiredNotifications',
       async () => {
-        await this.cleanupExpired();
+        const deleted = await this.cleanupExpired();
+        if (deleted === 0) return false;
       },
     );
   }

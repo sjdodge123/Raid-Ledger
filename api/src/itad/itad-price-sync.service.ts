@@ -148,12 +148,13 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
   /**
    * Fetch ITAD pricing for all games with an itadGameId and persist to DB.
    * Processes in chunks of 50. Logs errors per chunk and continues.
+   * @returns false if no games need syncing (no-op).
    */
-  async syncPricing(): Promise<void> {
+  async syncPricing(): Promise<void | false> {
     const games = await this.queryGamesWithItadId();
     if (games.length === 0) {
       this.logger.log('No games with ITAD IDs — skipping pricing sync');
-      return;
+      return false;
     }
 
     this.logger.log(`Syncing ITAD pricing for ${games.length} games`);

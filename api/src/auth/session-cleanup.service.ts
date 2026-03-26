@@ -28,9 +28,8 @@ export class SessionCleanupService {
           .where(lt(schema.sessions.expiresAt, new Date()))
           .returning({ id: schema.sessions.id });
 
-        if (result.length > 0) {
-          this.logger.log(`Cleaned up ${result.length} expired sessions`);
-        }
+        if (result.length === 0) return false;
+        this.logger.log(`Cleaned up ${result.length} expired sessions`);
       },
     );
   }
