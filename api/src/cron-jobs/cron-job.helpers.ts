@@ -2,7 +2,6 @@
  * Pure helper functions extracted from CronJobService for size compliance.
  */
 import { Logger } from '@nestjs/common';
-import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronTime } from 'cron';
 import { eq, desc, and, lt, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -81,23 +80,26 @@ export async function pruneExecutions(
     );
 }
 
-/** Record a no-op execution (handler ran but found nothing to do). */
-export async function recordNoOp(
+/** Insert an execution row, log it, and update the job's timestamps. */
+async function recordExecution(
   db: Db,
   job: CronJobRow,
   jobName: string,
+  status: string,
   startedAt: Date,
   finishedAt: Date,
+  error?: string,
 ): Promise<void> {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
   await db.insert(schema.cronJobExecutions).values({
     cronJobId: job.id,
-    status: 'no-op',
+    status,
     startedAt,
     finishedAt,
     durationMs,
+    error,
   });
-  perfLog('CRON', jobName, durationMs, { status: 'no-op' });
+  perfLog('CRON', jobName, durationMs, { status });
   const nextRunAt = computeNextRun(job.cronExpression);
   await db
     .update(schema.cronJobs)
@@ -107,17 +109,29 @@ export async function recordNoOp(
   if (nextRunAt) job.nextRunAt = nextRunAt;
 }
 
+/** Record a no-op execution (handler ran but found nothing to do). */
+export async function recordNoOp(
+  db: Db,
+  job: CronJobRow,
+  jobName: string,
+  startedAt: Date,
+  finishedAt: Date,
+): Promise<void> {
+  await recordExecution(db, job, jobName, 'no-op', startedAt, finishedAt);
+}
+
 /** Record a skipped (paused) execution. */
 export async function recordSkipped(
   db: Db,
   job: CronJobRow,
   jobName: string,
 ): Promise<void> {
+  const now = new Date();
   await db.insert(schema.cronJobExecutions).values({
     cronJobId: job.id,
     status: 'skipped',
-    startedAt: new Date(),
-    finishedAt: new Date(),
+    startedAt: now,
+    finishedAt: now,
     durationMs: 0,
   });
   perfLog('CRON', jobName, 0, { status: 'skipped' });
@@ -131,22 +145,7 @@ export async function recordCompleted(
   startedAt: Date,
   finishedAt: Date,
 ): Promise<void> {
-  const durationMs = finishedAt.getTime() - startedAt.getTime();
-  await db.insert(schema.cronJobExecutions).values({
-    cronJobId: job.id,
-    status: 'completed',
-    startedAt,
-    finishedAt,
-    durationMs,
-  });
-  perfLog('CRON', jobName, durationMs, { status: 'completed' });
-  const nextRunAt = computeNextRun(job.cronExpression);
-  await db
-    .update(schema.cronJobs)
-    .set({ lastRunAt: finishedAt, nextRunAt, updatedAt: new Date() })
-    .where(eq(schema.cronJobs.id, job.id));
-  job.lastRunAt = finishedAt;
-  if (nextRunAt) job.nextRunAt = nextRunAt;
+  await recordExecution(db, job, jobName, 'completed', startedAt, finishedAt);
 }
 
 /** Record a failed execution and update job timestamps. */
@@ -159,23 +158,15 @@ export async function recordFailed(
   errorMessage: string,
   logger: Logger,
 ): Promise<void> {
-  const durationMs = finishedAt.getTime() - startedAt.getTime();
-  await db.insert(schema.cronJobExecutions).values({
-    cronJobId: job.id,
-    status: 'failed',
+  await recordExecution(
+    db,
+    job,
+    jobName,
+    'failed',
     startedAt,
     finishedAt,
-    durationMs,
-    error: errorMessage,
-  });
-  perfLog('CRON', jobName, durationMs, { status: 'failed' });
-  const nextRunAt = computeNextRun(job.cronExpression);
-  await db
-    .update(schema.cronJobs)
-    .set({ lastRunAt: finishedAt, nextRunAt, updatedAt: new Date() })
-    .where(eq(schema.cronJobs.id, job.id));
-  job.lastRunAt = finishedAt;
-  if (nextRunAt) job.nextRunAt = nextRunAt;
+    errorMessage,
+  );
   logger.error(`Cron job "${jobName}" failed: ${errorMessage}`);
 }
 
@@ -262,104 +253,4 @@ export async function recordSkippedTrigger(
     durationMs: 0,
     error: 'Job not in SchedulerRegistry — could not be triggered',
   });
-}
-
-/** Look up a CronJob from the SchedulerRegistry, returning undefined if not found. */
-export function getCronJobSafe(
-  registry: SchedulerRegistry,
-  name: string,
-): ReturnType<SchedulerRegistry['getCronJob']> | undefined {
-  try {
-    return registry.getCronJob(name);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Minimal interface for a plugin CronRegistrar. */
-interface PluginCronSource {
-  getCronJobs(): { name: string; cronExpression: string }[];
-}
-
-/** Sync jobs from a single plugin CronRegistrar. */
-export async function syncOnePluginRegistrar(
-  db: Db,
-  slug: string,
-  reg: PluginCronSource,
-  syncedNames: Set<string>,
-  logger: Logger,
-): Promise<void> {
-  try {
-    for (const pJob of reg.getCronJobs()) {
-      const name = `${slug}:${pJob.name}`;
-      if (syncedNames.has(name)) continue;
-      await upsertPluginJob(db, slug, name, pJob.cronExpression);
-      syncedNames.add(name);
-      logger.log(`Synced plugin cron job: ${name}`);
-    }
-  } catch (err) {
-    logger.error(`Failed to sync plugin cron registrar for ${slug}: ${err}`);
-  }
-}
-
-/** Upsert a plugin cron job with standard defaults. */
-async function upsertPluginJob(
-  db: Db,
-  slug: string,
-  name: string,
-  cronExpression: string,
-): Promise<void> {
-  await upsertJob(db, {
-    name,
-    source: 'plugin',
-    pluginSlug: slug,
-    cronExpression,
-    description: null,
-    category: 'Plugin',
-    nextRunAt: computeNextRun(cronExpression),
-  });
-}
-
-/** Get execution history for a specific job. */
-export async function getExecutionHistory(db: Db, jobId: number, limit = 50) {
-  return db
-    .select()
-    .from(schema.cronJobExecutions)
-    .where(eq(schema.cronJobExecutions.cronJobId, jobId))
-    .orderBy(desc(schema.cronJobExecutions.startedAt))
-    .limit(limit);
-}
-
-/** Apply a schedule change at runtime via SchedulerRegistry. */
-export function applyRuntimeSchedule(
-  registry: SchedulerRegistry,
-  name: string,
-  cron: string,
-  logger: Logger,
-): void {
-  try {
-    const job = registry.getCronJob(name);
-    void job.stop();
-    job.setTime(new CronTime(cron));
-    job.start();
-    logger.log(`Runtime schedule updated for "${name}" → ${cron}`);
-  } catch (err) {
-    logger.warn(
-      `Could not apply runtime schedule for "${name}": ${err instanceof Error ? err.message : err}`,
-    );
-  }
-}
-
-/** Update a job's paused state and return the updated row. */
-export async function setPaused(
-  db: Db,
-  id: number,
-  paused: boolean,
-): Promise<CronJobRow | undefined> {
-  const [updated] = await db
-    .update(schema.cronJobs)
-    .set({ paused, updatedAt: new Date() })
-    .where(eq(schema.cronJobs.id, id))
-    .returning();
-  return updated;
 }

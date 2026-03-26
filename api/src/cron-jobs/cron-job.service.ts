@@ -35,12 +35,14 @@ import {
   extractRegistryJobMeta,
   flushPendingUpdates,
   recordSkippedTrigger,
+} from './cron-job.helpers';
+import {
   getCronJobSafe,
   applyRuntimeSchedule,
   setPaused,
   syncOnePluginRegistrar,
   getExecutionHistory,
-} from './cron-job.helpers';
+} from './cron-job.admin-helpers';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
 
