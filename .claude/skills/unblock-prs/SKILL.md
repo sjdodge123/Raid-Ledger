@@ -1,12 +1,12 @@
 ---
 name: unblock-prs
-description: "Loop through open PRs, rebase onto main, resolve conflicts, fix builds, and merge the queue"
-argument-hint: "[--dry-run]"
+description: "Loop through open PRs, group into a combined branch where possible, and merge as few PRs as possible to minimize CI runs"
+argument-hint: "[--dry-run] [--no-group]"
 ---
 
-# Unblock PRs — Rebase, Fix, Merge Queue
+# Unblock PRs — Group, Rebase, Merge
 
-**Goal:** Get all open PRs rebased onto latest main, CI-green, and merged. Processes PRs one at a time in dependency order — each merge into main changes the base for the next PR.
+**Goal:** Get all open PRs merged with the **fewest CI runs possible**. Default behavior is to combine compatible PRs into a single branch and merge once. Each separate PR triggers its own CI pipeline on push + merge, so grouping saves GitHub Actions minutes.
 
 **References:** Read `CLAUDE.md` for project conventions and `TESTING.md` for test failure rules.
 
@@ -15,7 +15,7 @@ argument-hint: "[--dry-run]"
 ## Step 1: Survey the Queue
 
 ```bash
-gh pr list --state open --json number,headRefName,baseRefName,title,mergeable,autoMergeRequest --limit 30
+gh pr list --state open --json number,headRefName,baseRefName,title,mergeable,autoMergeRequest,labels --limit 30
 ```
 
 Also check for batch branches that aggregate story branches:
@@ -33,27 +33,181 @@ Present the queue:
 | 515 | rok-946-... | ROK-946: ... | MERGEABLE | enabled |
 ```
 
-If `--dry-run` was passed, stop here and report what WOULD be done.
+If `--dry-run` was passed, stop after Step 2 and report what WOULD be done.
 
 ---
 
-## Step 2: Determine Processing Order
+## Step 2: Group PRs for Combined Merge
 
-**Rules:**
-1. Non-batch PRs first (they're independent story branches targeting main)
-2. Batch PRs last (they aggregate story branches and are most likely to conflict)
-3. Within each group, oldest first (lowest PR number)
-4. If a PR's branch is merged INTO a batch branch, skip it — it ships via the batch
+**Default behavior: group as many PRs as possible into a single combined branch.** This is the primary optimization — one CI run instead of N.
 
-**Ask the operator** to confirm the order before proceeding.
+### 2a: Identify groupable PRs
+
+PRs are **groupable** if they ALL meet these criteria:
+- Target `main` (not another feature branch)
+- Are not infrastructure-only PRs (Dockerfile, entrypoint, nginx changes get their own PR per CLAUDE.md rules)
+- Are not blocked by another open PR in the queue
+
+PRs that **must ship individually:**
+- Infrastructure PRs (Dockerfile, docker-entrypoint, nginx config changes)
+- PRs explicitly marked with a `ship-alone` label
+- PRs that are blocked by another PR in the queue (dependency chain)
+
+### 2b: Test for conflicts between grouped PRs
+
+Before committing to a group, verify the branches don't conflict with each other:
+
+```bash
+# Start from main
+git checkout -b test-combine origin/main
+
+# Try merging each branch in order (oldest first)
+git merge --no-commit --no-ff origin/<branch-1> && git reset --hard HEAD
+git merge --no-commit --no-ff origin/<branch-2> && git reset --hard HEAD
+# ... etc
+```
+
+If two branches conflict with each other (not just with main), they cannot be in the same group. Split into separate groups or ship the conflicting one individually.
+
+### 2c: Present the grouping plan
+
+```
+## Merge Plan
+
+### Group 1 — Combined PR (saves N-1 CI runs)
+| # | Branch | Title |
+|---|--------|-------|
+| 515 | rok-946-... | ROK-946: automated lineup phase scheduling |
+| 518 | rok-959-... | ROK-959: suppress ad-hoc Quick Play |
+| 520 | rok-962-... | ROK-962: NaN guards in smoke config |
+
+### Ship Individually
+| # | Branch | Title | Reason |
+|---|--------|-------|--------|
+| 519 | fix/dockerfile-... | fix: allinone entrypoint | Infrastructure PR |
+
+CI runs: 2 (instead of 4)
+```
+
+**Ask the operator** to confirm the plan before proceeding.
+
+If `--no-group` was passed, skip grouping and process PRs one at a time (legacy behavior, Step 3-alt).
 
 ---
 
-## Step 3: Process Each PR (Loop)
+## Step 3: Build the Combined Branch
 
-For each PR in order, run the full cycle. **One PR at a time** — each merge changes main for the next.
+### 3a: Create the combined branch
 
-### 3a: Checkout and Rebase
+```bash
+git fetch origin main
+git checkout -b combined/unblock-$(date +%Y-%m-%d) origin/main
+```
+
+### 3b: Cherry-pick or merge each PR's commits
+
+For each PR in the group, in order (oldest first):
+
+```bash
+# Get the PR's commits (relative to where it branched from main)
+git log --oneline origin/main..origin/<branch>
+
+# Merge the branch into the combined branch
+git merge --no-ff origin/<branch> -m "merge: #<number> <title>"
+```
+
+**Why merge instead of cherry-pick:** Merge preserves the full commit history per PR, which makes the combined PR description clearer and attribution easier. The final PR will be squash-merged anyway.
+
+### 3c: Resolve conflicts
+
+If merging a branch conflicts:
+1. Read each conflicting file
+2. Resolve conflicts intelligently — understand both sides
+3. `git add <resolved-files>` and `git commit`
+
+**If conflicts are too complex:**
+- Abort: `git merge --abort`
+- Remove this PR from the group, note it as "skipped — conflicts with group"
+- Continue with remaining PRs
+
+### 3d: Verify the combined build
+
+Run **full CI locally** since the combined branch touches multiple PRs:
+
+```bash
+npm run build -w packages/contract
+npm run build -w api && npx tsc --noEmit -p api/tsconfig.json && npm run lint -w api && npm run test -w api
+npm run build -w web && npx tsc --noEmit -p web/tsconfig.json && npm run lint -w web && npm run test -w web
+```
+
+If only one workspace is affected across ALL grouped PRs, scope the checks accordingly (same rules as `/push`).
+
+### 3e: Fix failures
+
+If build/lint/tests fail:
+1. Identify whether the failure is from inter-PR conflicts or pre-existing
+2. Fix the issue and commit: `git commit -m "fix: resolve integration issues in combined branch"`
+3. Re-run failing checks to confirm
+
+**If a fix requires significant changes:** report to operator and ask whether to drop that PR from the group.
+
+### 3f: Push and create the combined PR
+
+```bash
+git push -u origin combined/unblock-$(date +%Y-%m-%d)
+```
+
+Create a combined PR that references all included PRs:
+
+```bash
+gh pr create --title "chore: combined merge — #515, #518, #520" --body "$(cat <<'EOF'
+## Summary
+
+Combined merge to reduce CI runs. Includes:
+
+- #515 — ROK-946: automated lineup phase scheduling
+- #518 — ROK-959: suppress ad-hoc Quick Play
+- #520 — ROK-962: NaN guards in smoke config
+
+## Individual PR descriptions
+
+See each PR for details and test plans.
+
+## Test plan
+
+- [x] Local CI passed (contract + api + web)
+- [ ] GitHub CI green
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+Enable auto-merge:
+```bash
+gh pr merge combined/unblock-$(date +%Y-%m-%d) --auto --squash
+```
+
+### 3g: Close the original PRs
+
+Once the combined PR is merged, close the individual PRs with a reference:
+
+```bash
+gh pr close <number> --comment "Shipped via combined PR #<combined-number>"
+```
+
+Delete the now-shipped branches:
+```bash
+git push origin --delete <branch-1> <branch-2> <branch-3>
+```
+
+---
+
+## Step 3-alt: Process Individual PRs (when grouping isn't possible)
+
+For PRs that must ship individually (infrastructure, `--no-group`, or single PR in queue):
+
+### 3-alt-a: Checkout and Rebase
 
 ```bash
 git fetch origin main
@@ -62,7 +216,7 @@ git pull origin <branch>
 git rebase origin/main
 ```
 
-### 3b: Resolve Conflicts (if any)
+### 3-alt-b: Resolve Conflicts (if any)
 
 If rebase conflicts:
 1. Read each conflicting file
@@ -76,9 +230,9 @@ If rebase conflicts:
 - Report to operator: "PR #N has conflicts I can't safely resolve: <description>"
 - Skip this PR and continue to the next
 
-### 3c: Verify Build
+### 3-alt-c: Verify Build
 
-Run the scoped CI checks based on what files changed (same logic as `/push` Step 1.5):
+Run scoped CI checks based on what files changed:
 
 ```bash
 git diff --name-only origin/main
@@ -91,18 +245,7 @@ git diff --name-only origin/main
 | Only `api/src/` | Build contract + api, typecheck api, lint api, test api |
 | `packages/contract/` or mixed | Full CI: build all, typecheck all, lint all, test all |
 
-```bash
-# Always (if code changed):
-npm run build -w packages/contract
-
-# If api changed:
-npm run build -w api && npx tsc --noEmit -p api/tsconfig.json && npm run lint -w api && npm run test -w api
-
-# If web changed:
-npm run build -w web && npx tsc --noEmit -p web/tsconfig.json && npm run lint -w web && npm run test -w web
-```
-
-### 3d: Fix Build/Test Failures
+### 3-alt-d: Fix Build/Test Failures
 
 If build, lint, or tests fail AFTER the rebase:
 1. Identify the failure — is it from the rebase (merge issue) or pre-existing?
@@ -114,14 +257,10 @@ If build, lint, or tests fail AFTER the rebase:
 - Report to operator: "PR #N needs non-trivial fixes after rebase: <description>"
 - Ask whether to proceed or skip
 
-### 3e: Push and Merge
+### 3-alt-e: Push and Merge
 
 ```bash
 git push --force-with-lease origin <branch>
-```
-
-Wait for GitHub CI to start, then enable auto-merge:
-```bash
 gh pr merge <number> --auto --squash
 ```
 
@@ -130,60 +269,54 @@ gh pr merge <number> --auto --squash
 gh pr checks <number> --watch
 ```
 
-If CI fails on GitHub but passed locally, investigate the delta (environment difference, flaky test, etc).
+### 3-alt-f: Wait for Merge, Update Main
 
-### 3f: Wait for Merge, Update Main
-
-Once the PR is merged:
+Once merged:
 ```bash
 git checkout main
 git pull origin main
 ```
 
-### 3g: Post-Merge Main Verification
+---
 
-**After each merge, verify main is healthy before processing the next PR.**
+## Step 4: Post-Merge Verification
 
-Check the CI status of the merge commit on main:
+**After the combined PR (or each individual PR) merges, verify main is healthy.**
+
 ```bash
 gh run list --branch main --limit 1 --json databaseId,status,conclusion
 ```
 
-If CI is still running, wait for it. If CI failed on main:
+If CI is still running, wait. If CI failed on main:
 1. **STOP processing further PRs** — main is broken
-2. Investigate the failure: `gh run view <id> --log-failed`
-3. Fix the issue on a hotfix branch, push, and merge
-4. Only resume the PR queue once main CI is green
-
-**This step is critical** — merging PRs on top of a broken main compounds the problem and makes diagnosis harder.
-
-Now main is updated for the next PR. **Continue the loop from Step 3a with the next PR.**
+2. Investigate: `gh run view <id> --log-failed`
+3. Fix on a hotfix branch, push, and merge
+4. Only resume once main CI is green
 
 ---
 
-## Step 4: Batch Branch Handling
+## Step 5: Batch Branch Handling
 
 If a batch branch exists (e.g., `batch/2026-03-24`):
 
-1. After all non-batch PRs are merged into main, the batch branch likely has heavy conflicts
-2. Check if the batch branch still has unique commits not in main:
+1. Check if the batch branch still has unique commits not in main:
    ```bash
    git log --oneline origin/main..origin/batch/2026-03-24
    ```
-3. If all commits are already in main (story PRs were merged individually), close the batch PR:
+2. If all commits are already in main (shipped via combined or individual PRs), close it:
    ```bash
-   gh pr close <number> --comment "All story branches merged individually. Batch no longer needed."
+   gh pr close <number> --comment "All story branches merged. Batch no longer needed."
    git push origin --delete batch/2026-03-24
    ```
-4. If the batch has unique commits, rebase and process like a normal PR (Step 3)
+3. If the batch has unique commits, include it in the next combined group or process individually
 
 ---
 
-## Step 5: Stale Remote Branch Cleanup
+## Step 6: Stale Remote Branch Cleanup
 
 After all PRs are processed, clean up remote branches whose work is already on main.
 
-### 5a: List all remote branches (excluding main)
+### 6a: List all remote branches (excluding main)
 
 ```bash
 git fetch --prune
@@ -193,18 +326,18 @@ for branch in $(git branch -r | grep -v 'origin/main\|origin/HEAD' | sed 's|orig
 done
 ```
 
-### 5b: Classify each branch
+### 6b: Classify each branch
 
 | Condition | Classification | Action |
 |-----------|---------------|--------|
 | PR exists and state = MERGED | **Stale** — squash-merged, branch leftover | Delete |
-| PR exists and state = CLOSED (not merged) | **Stale** — abandoned | Delete |
+| PR exists and state = CLOSED (not merged) | **Stale** — shipped via combined PR or abandoned | Delete |
 | No PR, 0 commits ahead of main | **Stale** — empty/subsumed | Delete |
 | No PR, commits ahead, last commit > 14 days old | **Dormant** — flag for operator review | Ask |
 | No PR, commits ahead, last commit < 14 days old | **Active WIP** | Keep |
 | PR exists and state = OPEN | **Active** — being processed | Keep |
 
-### 5c: Delete stale branches
+### 6c: Delete stale branches
 
 Present the list and **ask the operator to confirm** before deleting:
 
@@ -214,7 +347,6 @@ Present the list and **ask the operator to confirm** before deleting:
 |--------|--------|-------------|
 | chore/pre-push-playwright-hook-v2 | PR #512 merged | 18 hours ago |
 | fix/batch-2026-03-01-r3 | PR #317 merged | 3 weeks ago |
-| ... | ... | ... |
 
 Delete these N branches? (y/n)
 ```
@@ -224,17 +356,9 @@ If confirmed:
 git push origin --delete <branch1> <branch2> ...
 ```
 
-For **dormant** branches (no PR, old commits), present separately:
-```
-## Dormant Branches (no PR, >14 days old)
-| Branch | Commits ahead | Last commit |
-|--------|--------------|-------------|
-| rok-654-ci-claude-reviewer | 5 | 3 weeks ago |
+For **dormant** branches (no PR, old commits), present separately and ask.
 
-These may contain abandoned work. Delete? (y/n/skip)
-```
-
-### 5d: Local cleanup
+### 6d: Local cleanup
 
 ```bash
 git checkout main
@@ -244,16 +368,22 @@ git fetch --prune
 
 ---
 
-## Step 6: Report
+## Step 7: Report
 
 ```
 ## Unblock PRs — Complete
 
+### Combined PRs
+| Combined PR | Included PRs | Result |
+|-------------|-------------|--------|
+| #525 combined/unblock-2026-03-26 | #515, #518, #520 | Merged |
+
+### Individual PRs
 | PR | Branch | Result |
 |----|--------|--------|
-| #515 | rok-946-... | Merged (no conflicts) |
-| #517 | batch/2026-03-24 | Closed (superseded) |
+| #519 | fix/dockerfile-... | Merged (infrastructure, shipped alone) |
 
+CI runs saved: N (grouped M PRs into 1)
 PRs processed: N
 Merged: N
 Skipped: N (reasons listed above)
@@ -261,7 +391,6 @@ Failed: N (reasons listed above)
 
 Branches deleted: N (stale/merged)
 Branches kept: N (active WIP)
-Branches flagged: N (dormant, operator review)
 
 main is now at: <sha>
 Main CI: ✓ green / ✗ red (details)
