@@ -250,18 +250,15 @@ The push in Step 9 updated it. No action needed unless the PR description needs 
 
 ---
 
-## Step 11: Auto-Merge (ONLY when instructed)
+## Step 11: Enable Auto-Merge
 
-**Do NOT enable auto-merge by default.** Auto-merge is a one-way door.
-
-Only enable auto-merge when:
-- The operator explicitly says to merge
-- All pipeline gates have passed (operator testing, code review, smoke tests)
-- This is the LAST action before the story is "Done"
+**Always enable auto-merge (squash) after creating or pushing to a PR** — this is a project convention from CLAUDE.md.
 
 ```bash
 gh pr merge $(git branch --show-current) --auto --squash
 ```
+
+This is safe to run whether the PR was just created or already existed — it's a no-op if already enabled.
 
 ---
 
