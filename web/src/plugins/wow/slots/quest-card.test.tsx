@@ -3,7 +3,7 @@
  * Verifies that the quest header div[role="button"] responds to Enter/Space.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
 import { QuestCard } from './quest-card';
 import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 
