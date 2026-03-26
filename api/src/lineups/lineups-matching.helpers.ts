@@ -14,7 +14,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 /** Fit category based on voter count vs game capacity. */
 export type FitCategory =
-  | 'perfect_fit'
+  | 'perfect'
   | 'oversubscribed'
   | 'undersubscribed'
   | 'normal';
@@ -58,7 +58,8 @@ async function insertMatch(
   threshold: number,
 ): Promise<void> {
   const pct = (vc.voteCount / totalVoters) * 100;
-  const status = pct >= threshold ? 'scheduling' : 'suggested';
+  const status: 'scheduling' | 'suggested' =
+    pct >= threshold ? 'scheduling' : 'suggested';
   const fitCategory = await computeFitCategory(db, vc.gameId, vc.voteCount);
 
   const [match] = await db
@@ -67,9 +68,10 @@ async function insertMatch(
       lineupId,
       gameId: vc.gameId,
       status,
+      thresholdMet: status === 'scheduling',
       voteCount: vc.voteCount,
-      voterPercentage: pct.toFixed(2),
-      fitCategory,
+      votePercentage: pct.toFixed(2),
+      fitType: fitCategory,
     })
     .returning({ id: schema.communityLineupMatches.id });
 
@@ -92,7 +94,7 @@ async function computeFitCategory(
   const { min, max } = game.playerCount;
   if (voterCount > max) return 'oversubscribed';
   if (voterCount < min) return 'undersubscribed';
-  return 'perfect_fit';
+  return 'perfect';
 }
 
 /** Insert match member rows for all voters of a specific game. */
@@ -117,7 +119,7 @@ async function insertMatchMembers(
     rows.map((r) => ({
       matchId,
       userId: r.userId,
-      source: 'vote' as const,
+      source: 'voted' as const,
     })),
   );
 }
