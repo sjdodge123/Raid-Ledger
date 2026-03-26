@@ -221,11 +221,21 @@ async function testAttendanceMetrics() {
   );
   const [s1] = await testApp.db
     .insert(schema.eventSignups)
-    .values({ eventId: pastEventId, userId: u1, status: 'signed_up', confirmationStatus: 'pending' })
+    .values({
+      eventId: pastEventId,
+      userId: u1,
+      status: 'signed_up',
+      confirmationStatus: 'pending',
+    })
     .returning();
   const [s2] = await testApp.db
     .insert(schema.eventSignups)
-    .values({ eventId: pastEventId, userId: u2, status: 'signed_up', confirmationStatus: 'pending' })
+    .values({
+      eventId: pastEventId,
+      userId: u2,
+      status: 'signed_up',
+      confirmationStatus: 'pending',
+    })
     .returning();
   await testApp.request
     .patch(`/events/${pastEventId}/attendance`)

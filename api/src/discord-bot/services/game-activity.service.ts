@@ -5,6 +5,7 @@ import {
   OnApplicationShutdown,
   OnModuleInit,
 } from '@nestjs/common';
+import { bestEffortInit } from '../../common/lifecycle.util';
 import { Cron } from '@nestjs/schedule';
 import { and, isNull, lt } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -62,7 +63,11 @@ export class GameActivityService
       );
     }, FLUSH_INTERVAL_MS);
 
-    await closeOrphanedSessions(this.db, this.logger);
+    await bestEffortInit(
+      'GameActivity.closeOrphanedSessions',
+      this.logger,
+      () => closeOrphanedSessions(this.db, this.logger),
+    );
   }
 
   onApplicationShutdown(): void {

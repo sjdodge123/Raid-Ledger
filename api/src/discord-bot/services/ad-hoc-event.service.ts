@@ -53,6 +53,7 @@ export class AdHocEventService implements OnModuleInit {
     private readonly voiceAttendanceService: VoiceAttendanceService,
   ) {}
 
+  // STARTUP-CRITICAL: Must recover live ad-hoc events to avoid orphaned voice sessions. @see bestEffortInit
   /** Recover any live ad-hoc events from the database on startup. */
   async onModuleInit(): Promise<void> {
     const liveEvents = await recoverLiveEvents(this.db);
