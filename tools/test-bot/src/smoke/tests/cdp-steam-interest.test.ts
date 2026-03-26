@@ -32,26 +32,42 @@ function buildCdpSteamTests(): SmokeTest[] {
     return p;
   }
 
-  /** Get the logged-in Discord user's ID via CDP. */
+  /** Get the logged-in Discord user's ID via CDP using Discord internals. */
   async function getLoggedInDiscordId(
     page: import('playwright').Page,
   ): Promise<string> {
-    // Discord stores the current user in its webpack modules
     const discordId = await page.evaluate(() => {
-      // Look for the user ID in the bottom-left user panel
-      const el = document.querySelector('[class*="panelTitleContainer"]');
-      // Fallback: extract from the avatar button's aria label or data
-      const avatarBtn = document.querySelector(
-        '[aria-label*="User Settings"], [class*="avatarWrapper"]',
-      );
-      const copyIdEl = avatarBtn?.closest('[data-user-id]');
-      if (copyIdEl) {
-        return copyIdEl.getAttribute('data-user-id') ?? '';
+      // Access Discord's webpack chunk to find the UserStore
+      const wp = (window as Record<string, unknown>)
+        .webpackChunkdiscord_app as unknown[];
+      if (!wp) return '';
+      // Push a fake module to access the require function
+      let req: ((id: string) => Record<string, unknown>) | null = null;
+      wp.push([
+        [Symbol()],
+        {},
+        (r: (id: string) => Record<string, unknown>) => {
+          req = r;
+        },
+      ]);
+      if (!req) return '';
+      // Search through modules for the current user store
+      const cache = (req as unknown as { c: Record<string, { exports: unknown }> }).c;
+      for (const key of Object.keys(cache)) {
+        const mod = cache[key]?.exports as Record<string, unknown> | undefined;
+        if (!mod) continue;
+        // Look for getCurrentUser function
+        const store =
+          (mod as Record<string, unknown>)?.default ??
+          (mod as Record<string, unknown>)?.Z ??
+          mod;
+        const s = store as Record<string, unknown>;
+        if (typeof s?.getCurrentUser === 'function') {
+          const user = (s.getCurrentUser as () => { id: string } | null)();
+          if (user?.id) return user.id;
+        }
       }
-      // Last resort: try to get it from Discord's internal store
-      return (
-        (window as Record<string, unknown>).__DISCORD_USER_ID__ ?? ''
-      ).toString();
+      return '';
     });
     return discordId;
   }
@@ -71,30 +87,11 @@ function buildCdpSteamTests(): SmokeTest[] {
     });
 
     // Get the logged-in user's Discord ID via CDP
-    let discordId = await getLoggedInDiscordId(page);
-
-    // If CDP extraction failed, try getting it from the account section
+    const discordId = await getLoggedInDiscordId(page);
     if (!discordId) {
-      // Navigate to user settings to find the ID
-      discordId = await page.evaluate(() => {
-        // Try the bottom bar which shows the username#discriminator
-        const sections = document.querySelectorAll(
-          '[class*="panelSubtextContainer"], [class*="usernameContainer"]',
-        );
-        for (const s of sections) {
-          const text = s.textContent ?? '';
-          const match = text.match(/(\d{17,20})/);
-          if (match) return match[1];
-        }
-        return '';
-      });
-    }
-
-    // If we still can't get it, use the admin user's Discord ID from DB
-    if (!discordId) {
-      // The admin user (ctx.testUserId) should already be linked
-      // Just use the test bot's Discord ID which is already linked
-      discordId = ctx.testBotDiscordId;
+      throw new Error(
+        'Could not extract Discord user ID from CDP. Is Discord logged in?',
+      );
     }
 
     // Link the Discord ID to the admin user for this test
