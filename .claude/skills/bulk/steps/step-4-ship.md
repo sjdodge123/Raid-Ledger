@@ -4,40 +4,13 @@
 
 ---
 
-## 4a. Create PR
+## 4a. PR (already created by /push in Step 3i)
 
-Create a single PR covering all stories in the batch:
+The PR was created by `/push` in Step 3i. Verify it exists:
 
 ```bash
-gh pr create \
-  --title "chore: batch YYYY-MM-DD" \
-  --body "$(cat <<'EOF'
-## Summary
-
-Batch of tech debt, chores, and performance improvements shipped via bulk pipeline.
-
-| Story | Label | Description |
-|-------|-------|-------------|
-| ROK-XXX | Tech Debt | 1-line summary of what was improved |
-| ROK-YYY | Chore | 1-line summary of what was done |
-
-## Validation
-
-- [x] Build passes (contract + api + web)
-- [x] TypeScript clean
-- [x] Lint clean
-- [x] Unit tests pass (api + web)
-- [x] Integration tests pass
-- [x] Smoke tests pass / skipped (no UI changes)
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-EOF
-)" \
-  --base main \
-  --head batch/YYYY-MM-DD
+gh pr list --head batch/YYYY-MM-DD --json number,url
 ```
-
-Fill in the actual story table from the state file.
 
 ---
 
