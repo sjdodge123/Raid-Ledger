@@ -10,6 +10,11 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 
+// Mock the matching algorithm to avoid extra DB queries in unit tests
+jest.mock('./lineups-matching.helpers', () => ({
+  buildMatchesForLineup: jest.fn().mockResolvedValue(undefined),
+}));
+
 const NOW = new Date('2026-03-22T20:00:00Z');
 
 const mockLineup = {
@@ -20,6 +25,7 @@ const mockLineup = {
   linkedEventId: null as number | null,
   createdBy: 10,
   votingDeadline: null as Date | null,
+  matchThreshold: 35,
   createdAt: NOW,
   updatedAt: NOW,
 };
