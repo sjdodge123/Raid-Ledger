@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { games } from './games';
@@ -42,5 +43,7 @@ export const gameInterests = pgTable(
       table.gameId,
       table.source,
     ),
+    /** L-4: Standalone index for want-to-play count queries filtering by game */
+    index('idx_game_interests_game_id').on(table.gameId),
   ],
 );

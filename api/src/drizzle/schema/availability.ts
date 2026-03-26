@@ -45,6 +45,8 @@ export const availability = pgTable(
   (table) => [
     // Performance index for user-scoped availability queries
     index('idx_availability_user_id').on(table.userId),
+    // L-5: GiST index on timeRange for overlap queries (matchmaking).
+    // Managed in migration 0106 — Drizzle DSL cannot express GiST indexes natively.
   ],
 );
 
