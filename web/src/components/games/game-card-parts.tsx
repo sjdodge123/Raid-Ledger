@@ -172,11 +172,13 @@ export function InfoBar({
 }: {
     rating: number | null | undefined;
     primaryMode: string | null;
-}): JSX.Element {
+}): JSX.Element | null {
+    const hasRating = rating != null && rating > 0;
+    if (!hasRating && !primaryMode) return null;
     return (
         <div className="p-2.5 space-y-1">
             <div className="flex items-center gap-2 text-xs text-muted">
-                {rating != null && rating > 0 && <StarRating rating={rating} />}
+                {hasRating && <StarRating rating={rating!} />}
                 {primaryMode && (
                     <>
                         <span className="text-dim">&middot;</span>
