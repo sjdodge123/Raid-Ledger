@@ -74,8 +74,9 @@ async function archiveActiveLineup(token: string): Promise<void> {
         if (!detail) return;
 
         const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'archived'],
-            voting: ['decided', 'archived'],
+            building: ['voting', 'scheduling', 'decided', 'archived'],
+            voting: ['scheduling', 'decided', 'archived'],
+            scheduling: ['decided', 'archived'],
             decided: ['archived'],
         };
         const steps = transitions[detail.status];
@@ -116,7 +117,8 @@ async function ensureLineupInPhase(token: string, targetPhase: string): Promise<
     const transitions: Record<string, string[]> = {
         building: [],
         voting: ['voting'],
-        decided: ['voting', 'decided'],
+        scheduling: ['voting', 'scheduling'],
+        decided: ['voting', 'scheduling', 'decided'],
     };
     for (const status of transitions[targetPhase] ?? []) {
         const body: Record<string, unknown> = { status };
@@ -159,10 +161,13 @@ test.describe('Phase breadcrumb — operator controls', () => {
             });
             await expect(nominatingSpan.first()).toBeVisible({ timeout: 3_000 });
 
-            // "Decided" is 2 phases ahead — should NOT be a button
+            // "Scheduling" is 2 phases ahead — should NOT be a button
+            await expect(page.getByRole('button', { name: 'Scheduling' })).toHaveCount(0);
+
+            // "Decided" is 3 phases ahead — should NOT be a button
             await expect(page.getByRole('button', { name: 'Decided' })).toHaveCount(0);
 
-            // "Archived" is 3 phases ahead — should NOT be a button
+            // "Archived" is 4 phases ahead — should NOT be a button
             await expect(page.getByRole('button', { name: 'Archived' })).toHaveCount(0);
         }).toPass({ timeout: 30_000 });
     });
@@ -256,16 +261,17 @@ test.describe('Phase breadcrumb — revert', () => {
         await expect(page.locator('span').filter({ hasText: /Nominating/ }).first()).toBeVisible({ timeout: 10_000 });
     });
 
-    test('revert from decided back to voting', async ({ page }) => {
+    test('revert from decided back to scheduling', async ({ page }) => {
         await expect(async () => {
             const lineupId = await ensureLineupInPhase(adminToken, 'decided');
             await gotoLineupDetail(page, lineupId);
 
-            await page.getByRole('button', { name: 'Voting' }).click();
+            await page.getByRole('button', { name: 'Scheduling' }).click();
             await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
             await page.getByRole('button', { name: 'Revert?' }).click();
         }).toPass({ timeout: 30_000 });
 
-        await expect(page.locator('span').filter({ hasText: /Voting/ }).first()).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('span').filter({ hasText: /Scheduling/ }).first()).toBeVisible({ timeout: 10_000 });
     });
 });
+
