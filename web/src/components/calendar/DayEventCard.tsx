@@ -190,9 +190,19 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
         navigate(`/events/${event.id}`);
     }, [navigate, event.id]);
 
+    const handleCardKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if ((e.target as HTMLElement).closest('button, a, [role="dialog"]')) return;
+        e.preventDefault();
+        navigate(`/events/${event.id}`);
+    }, [navigate, event.id]);
+
     return (
         <>
-            <div className="day-event-block" onClick={handleCardClick} style={buildDayEventBgStyle(d.coverUrl, d.colors)}>
+            <div className="day-event-block focus-visible:ring-2 focus-visible:ring-emerald-500"
+                role="button" tabIndex={0} aria-label={event.title}
+                onClick={handleCardClick} onKeyDown={handleCardKeyDown}
+                style={buildDayEventBgStyle(d.coverUrl, d.colors)}>
                 <DayEventBlockContent event={event} d={d} />
                 <div className="day-event-right">
                     <div className="day-event-avatars"><DayEventAvatarsPanel d={d} event={event} /></div>

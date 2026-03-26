@@ -97,7 +97,9 @@ function QuestCardHeader({ quest, isExpanded, hasPrereqs, wowheadVariant, onTogg
 }) {
     return (
         <div className="quest-card__header-wrapper">
-            <div className="quest-card__header" onClick={onToggle} role="button" tabIndex={0}>
+            <div className="quest-card__header" onClick={onToggle}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+                role="button" tabIndex={0}>
                 <span className={`quest-card__chevron ${isExpanded ? 'quest-card__chevron--open' : ''}`}>&#x25B8;</span>
                 <div className="quest-card__info">
                     <span className="quest-card__name">

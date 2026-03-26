@@ -172,6 +172,7 @@ function LinkCard(props: LinkVariantProps): JSX.Element {
         <Link
             to={`/games/${game.id}`}
             className={buildCardClasses(props)}
+            aria-label={game.name}
         >
             <CardCoverContent
                 game={game}
@@ -210,6 +211,7 @@ function ToggleCard(props: ToggleVariantProps): JSX.Element {
             onClick={onToggle}
             onKeyDown={handleKeyDown}
             className={buildCardClasses(props)}
+            aria-label={`${selected ? 'Deselect' : 'Select'} ${game.name}`}
         >
             <CardCoverContent
                 game={game}

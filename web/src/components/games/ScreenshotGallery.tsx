@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 interface ScreenshotGalleryProps {
     screenshots: string[];
@@ -20,6 +20,14 @@ function LightboxNav({ direction, onClick }: { direction: 'prev' | 'next'; onCli
 function Lightbox({ screenshots, index, gameName, onClose, onNav }: {
     screenshots: string[]; index: number; gameName: string; onClose: () => void; onNav: (i: number) => void;
 }) {
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent): void => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleKey);
+        return () => document.removeEventListener('keydown', handleKey);
+    }, [onClose]);
+
     return (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={onClose}>
             <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors" aria-label="Close">

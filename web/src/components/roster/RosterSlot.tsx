@@ -59,13 +59,22 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
         if (onAdminClick) onAdminClick(role, position);
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent): void => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleClick();
+        }
+    };
+
     const isClickable = !!onAdminClick || (!item && !!onJoinClick);
     const isTentative = item?.signupStatus === 'tentative';
     const glowClass = isCurrentUser ? 'ring-2 ring-emerald-400/60 shadow-[0_0_15px_rgba(52,211,153,0.4)] animate-pulse-subtle' : '';
+    const focusClass = isClickable ? 'focus-visible:ring-2 focus-visible:ring-emerald-500' : '';
 
     return (
         <div onClick={handleClick}
-            className={`relative min-h-[60px] rounded-lg border transition-all ${isClickable ? 'cursor-pointer' : ''} ${glowClass} ${slotBorderClass(item, isCurrentUser, isClickable)}`}>
+            {...(isClickable ? { role: 'button', tabIndex: 0, onKeyDown: handleKeyDown } : {})}
+            className={`relative min-h-[60px] rounded-lg border transition-all ${isClickable ? 'cursor-pointer' : ''} ${focusClass} ${glowClass} ${slotBorderClass(item, isCurrentUser, isClickable)}`}>
             <span className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${isTentative ? 'bg-amber-600' : color} text-foreground`}>
                 {isTentative ? `\u23F3 ${position}` : position}
             </span>

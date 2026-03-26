@@ -1,3 +1,4 @@
+import type React from 'react';
 import { toast } from '../../lib/toast';
 
 export const EyeOffIcon = (
@@ -48,12 +49,16 @@ export function TestResultBanner({ result }: { result: { success: boolean; messa
 }
 
 export function CopyableInput({ value, onCopied }: { value: string; onCopied: string }) {
+    const copyValue = async (): Promise<void> => {
+        try { await navigator.clipboard.writeText(value); toast.success(onCopied); }
+        catch { toast.error('Failed to copy'); }
+    };
+    const handleKeyDown = (e: React.KeyboardEvent): void => {
+        if (e.key === 'Enter') { e.preventDefault(); copyValue(); }
+    };
     return (
-        <div className="relative cursor-pointer group" onClick={async () => {
-            try { await navigator.clipboard.writeText(value); toast.success(onCopied); }
-            catch { toast.error('Failed to copy'); }
-        }}>
-            <input type="text" value={value} readOnly
+        <div className="relative cursor-pointer group" onClick={copyValue}>
+            <input type="text" value={value} readOnly onKeyDown={handleKeyDown}
                 className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground cursor-pointer select-all focus:outline-none group-hover:border-dim transition-all text-sm" />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted group-hover:text-foreground transition-colors">{CopyIcon}</div>
         </div>
