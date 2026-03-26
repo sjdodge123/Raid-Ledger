@@ -6,6 +6,18 @@ import * as tables from '../../drizzle/schema';
 // Re-export from extracted file for backward compatibility
 export { autoSignupParticipant } from './ad-hoc-event.signup-helpers';
 
+/** Build the time-window WHERE conditions for scheduled event suppression. */
+function buildTimeConditions(now: Date) {
+  const lookbackMs = 30 * 60 * 1000;
+  const lookbackTime = new Date(now.getTime() - lookbackMs);
+  return [
+    eq(tables.events.isAdHoc, false),
+    sql`${tables.events.cancelledAt} IS NULL`,
+    sql`lower(${tables.events.duration}) <= ${now.toISOString()}::timestamptz`,
+    sql`(upper(${tables.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz OR ${tables.events.extendedUntil} >= ${now.toISOString()}::timestamptz)`,
+  ] as const;
+}
+
 /**
  * Check if a scheduled (non-ad-hoc) event is currently active for the same
  * game/binding, suppressing ad-hoc spawns while scheduled events run.
@@ -18,31 +30,16 @@ export async function findActiveScheduledEvent(
   now: Date,
   channelId?: string,
 ): Promise<{ id: number } | undefined> {
-  const lookbackMs = 30 * 60 * 1000;
-  const lookbackTime = new Date(now.getTime() - lookbackMs);
   const bindingClause = buildBindingClause(
     bindingId,
     effectiveGameId,
     channelId,
   );
-
   const [match] = await db
-    .select({
-      id: tables.events.id,
-      extendedUntil: tables.events.extendedUntil,
-    })
+    .select({ id: tables.events.id })
     .from(tables.events)
-    .where(
-      and(
-        bindingClause,
-        eq(tables.events.isAdHoc, false),
-        sql`${tables.events.cancelledAt} IS NULL`,
-        sql`lower(${tables.events.duration}) <= ${now.toISOString()}::timestamptz`,
-        sql`(upper(${tables.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz OR ${tables.events.extendedUntil} >= ${now.toISOString()}::timestamptz)`,
-      ),
-    )
+    .where(and(bindingClause, ...buildTimeConditions(now)))
     .limit(1);
-
   return match;
 }
 
@@ -55,10 +52,10 @@ function buildBindingClause(
   const siblingSubquery = channelId
     ? sql`${tables.events.channelBindingId} IN (SELECT id FROM channel_bindings WHERE channel_id = ${channelId} AND binding_purpose = 'game-voice-monitor')`
     : undefined;
-  if (effectiveGameId && siblingSubquery) {
+  if (effectiveGameId != null && siblingSubquery) {
     return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${tables.events.gameId} = ${effectiveGameId} OR ${siblingSubquery})`;
   }
-  if (effectiveGameId) {
+  if (effectiveGameId != null) {
     return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${tables.events.gameId} = ${effectiveGameId})`;
   }
   if (siblingSubquery) {

@@ -180,9 +180,13 @@ export async function setup(): Promise<TestContext> {
   // Set default voice channel so Discord Scheduled Events can be created (ROK-944)
   if (voiceChannels.length > 0) {
     console.log(`  Setting default voice channel: ${voiceChannels[0].id}`);
-    await api.put('/admin/settings/discord-bot/voice-channel', {
-      channelId: voiceChannels[0].id,
-    }).catch(() => {});
+    try {
+      await api.put('/admin/settings/discord-bot/voice-channel', {
+        channelId: voiceChannels[0].id,
+      });
+    } catch (err) {
+      console.warn(`  (Failed to set default voice channel: ${err})`);
+    }
   }
 
   console.log('  Cleaning up stale Discord scheduled events...');

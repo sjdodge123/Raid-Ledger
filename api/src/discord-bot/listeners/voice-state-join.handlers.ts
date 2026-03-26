@@ -18,6 +18,25 @@ export interface GameSpawnFns {
   cancelSpawn: () => void;
 }
 
+/** Join an existing ad-hoc event for a game binding. */
+async function joinExistingEvent(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  dm: DiscordMemberInfo,
+  uid: number | null,
+): Promise<void> {
+  const mi: VoiceMemberInfo = { ...dm, userId: uid };
+  await deps.adHocEventService.handleVoiceJoin(
+    binding.bindingId,
+    mi,
+    binding,
+    undefined,
+    undefined,
+    channelId,
+  );
+}
+
 /** Handle join for a game-specific binding. */
 export async function handleGameBindingJoin(
   deps: VoiceHandlerDeps,
@@ -37,15 +56,7 @@ export async function handleGameBindingJoin(
   );
   const state = deps.adHocEventService.getActiveState(binding.bindingId);
   if (state) {
-    const mi: VoiceMemberInfo = { ...dm, userId: uid };
-    await deps.adHocEventService.handleVoiceJoin(
-      binding.bindingId,
-      mi,
-      binding,
-      undefined,
-      undefined,
-      channelId,
-    );
+    await joinExistingEvent(deps, channelId, binding, dm, uid);
     return;
   }
   await checkGameBindingThreshold(deps, channelId, binding, spawnFns);
