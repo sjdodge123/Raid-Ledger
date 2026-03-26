@@ -119,20 +119,14 @@ export async function handleGameSpecificGroupRoster(
   }
 }
 
-/** Handle group detection and event creation for general-lobby channels. */
-export async function handleGeneralLobbyGroupDetection(
+/** Roster all members from detected groups into ad-hoc events. */
+async function rosterGroupMembers(
   deps: VoiceHandlerDeps,
-  channelId: string,
+  channel: VoiceBasedChannel,
+  groups: GameGroup[],
   binding: ResolvedBinding,
+  channelId: string,
 ): Promise<void> {
-  const channel = resolveVoiceChannel(deps.clientService, channelId);
-  if (!channel) return;
-  const voiceMembers = [...channel.members.values()];
-  if (voiceMembers.length === 0) return;
-  const allGroups = await deps.presenceDetector.detectGames(voiceMembers);
-  const allowJustChatting = binding.config?.allowJustChatting ?? false;
-  const groups = filterGroups(allGroups, allowJustChatting);
-  if (groups.length === 0) return;
   const addedMembers = new Set<string>();
   await addDetectedMembers(
     deps,
@@ -150,6 +144,23 @@ export async function handleGeneralLobbyGroupDetection(
     addedMembers,
     channelId,
   );
+}
+
+/** Handle group detection and event creation for general-lobby channels. */
+export async function handleGeneralLobbyGroupDetection(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+): Promise<void> {
+  const channel = resolveVoiceChannel(deps.clientService, channelId);
+  if (!channel) return;
+  const voiceMembers = [...channel.members.values()];
+  if (voiceMembers.length === 0) return;
+  const allGroups = await deps.presenceDetector.detectGames(voiceMembers);
+  const allowJustChatting = binding.config?.allowJustChatting ?? false;
+  const groups = filterGroups(allGroups, allowJustChatting);
+  if (groups.length === 0) return;
+  await rosterGroupMembers(deps, channel, groups, binding, channelId);
 }
 
 /** Filter game groups based on Just Chatting setting. */
