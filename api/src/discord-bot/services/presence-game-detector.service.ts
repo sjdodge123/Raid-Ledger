@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { bestEffortInit } from '../../common/lifecycle.util';
 import { and, eq, ilike, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { ActivityType, type GuildMember } from 'discord.js';
@@ -75,23 +76,24 @@ export class PresenceGameDetectorService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    try {
-      const result = await this.db.execute(
-        sql`SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'`,
-      );
-      if (result.length === 0) {
-        this.logger.warn(
-          'pg_trgm extension is not installed — fuzzy game matching (trigram similarity) will be unavailable. ' +
-            'Install with: CREATE EXTENSION IF NOT EXISTS pg_trgm;',
-        );
-      } else {
-        this.logger.log(
-          'pg_trgm extension detected — fuzzy game matching enabled',
-        );
-      }
-    } catch (err) {
+    await bestEffortInit('PresenceGameDetector', this.logger, () =>
+      this.checkPgTrgm(),
+    );
+  }
+
+  /** Check whether the pg_trgm extension is available. */
+  private async checkPgTrgm(): Promise<void> {
+    const result = await this.db.execute(
+      sql`SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'`,
+    );
+    if (result.length === 0) {
       this.logger.warn(
-        `Failed to check for pg_trgm extension: ${err instanceof Error ? err.message : err}`,
+        'pg_trgm extension is not installed — fuzzy game matching (trigram similarity) will be unavailable. ' +
+          'Install with: CREATE EXTENSION IF NOT EXISTS pg_trgm;',
+      );
+    } else {
+      this.logger.log(
+        'pg_trgm extension detected — fuzzy game matching enabled',
       );
     }
   }

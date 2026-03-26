@@ -1,6 +1,7 @@
 import { Strategy, Profile } from 'passport-discord';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { bestEffortInit } from '../../common/lifecycle.util';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { Request } from 'express';
 import { AuthService } from '../../auth/auth.service';
@@ -34,8 +35,10 @@ export class DiscordAuthStrategy
     });
   }
 
-  async onModuleInit() {
-    await this.reloadConfig();
+  async onModuleInit(): Promise<void> {
+    await bestEffortInit('DiscordAuthStrategy', this.logger, async () => {
+      await this.reloadConfig();
+    });
   }
 
   /**
