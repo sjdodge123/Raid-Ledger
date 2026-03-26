@@ -486,16 +486,12 @@ test.describe('Voting phase', () => {
             votingLineupId = created.id;
         }
 
-        // Ensure the lineup has nominations before advancing to voting
+        // Ensure the lineup has nominations before advancing to voting.
+        // CI seeds game registry (WoW=1, WoW Classic=2, etc.) via db:seed:games.
         const detail = await apiGet(adminToken, `/lineups/${votingLineupId}`);
         if (!detail?.entries?.length) {
-            // Nominate games from Common Ground (seed data)
-            const cg = await apiGet(adminToken, '/lineups/common-ground?limit=3');
-            const games = cg?.data ?? [];
-            for (const g of games.slice(0, 3)) {
-                await apiPost(adminToken, `/lineups/${votingLineupId}/nominate`, {
-                    gameId: g.gameId,
-                });
+            for (const gid of [1, 2, 3]) {
+                await apiPost(adminToken, `/lineups/${votingLineupId}/nominate`, { gameId: gid });
             }
         }
 
