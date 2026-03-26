@@ -302,6 +302,78 @@ describe('OllamaNativeService', () => {
     });
   });
 
+  describe('execQuick stderr capture (ROK-984)', () => {
+    /**
+     * Helper: simulate execFile failing WITH stderr output.
+     * Real execFile callbacks receive (err, stdout, stderr).
+     * The err.message is typically "Command failed: ...", but the real
+     * diagnostic is in stderr (e.g., supervisor config parse errors).
+     */
+    function mockExecErrorWithStderr(message: string, stderr: string) {
+      mockExecFile.mockImplementation(
+        (
+          _cmd: string,
+          _args: string[],
+          _opts: Record<string, unknown>,
+          cb: (err: Error | null, stdout: string, stderr: string) => void,
+        ) => {
+          cb(new Error(message), '', stderr);
+        },
+      );
+    }
+
+    it('includes stderr in error when startService fails', async () => {
+      const errMsg = 'Command failed: supervisorctl reread';
+      const stderr =
+        'error: <class \'FileNotFoundError\'>, [Errno 2] No such file or directory: file: /usr/lib/python3/supervisord/options.py';
+
+      mockExecErrorWithStderr(errMsg, stderr);
+
+      await expect(service.startService()).rejects.toThrow(
+        expect.objectContaining({
+          message: expect.stringContaining(stderr),
+        }),
+      );
+    });
+
+    it('includes stderr in error when stopService fails', async () => {
+      const errMsg = 'Command failed: supervisorctl stop ollama';
+      const stderr = 'ollama: ERROR (not running)';
+
+      mockExecErrorWithStderr(errMsg, stderr);
+
+      await expect(service.stopService()).rejects.toThrow(
+        expect.objectContaining({
+          message: expect.stringContaining(stderr),
+        }),
+      );
+    });
+
+    it('includes stderr in error when getServiceStatus underlying call fails with stderr', async () => {
+      // getServiceStatus catches errors and returns 'not-found', but
+      // we verify the error that execQuick rejects with contains stderr
+      // by testing startService which does NOT catch
+      const errMsg = 'Command failed: supervisorctl reread';
+      const stderr = 'unix:///var/run/supervisor.sock refused connection';
+
+      mockExecErrorWithStderr(errMsg, stderr);
+
+      await expect(service.startService()).rejects.toThrow(
+        expect.objectContaining({
+          message: expect.stringContaining('refused connection'),
+        }),
+      );
+    });
+
+    it('resolves with stdout on success (no regression)', async () => {
+      mockExecResult('ollama   RUNNING   pid 456, uptime 0:05:00');
+
+      const status = await service.getServiceStatus();
+
+      expect(status).toBe('running');
+    });
+  });
+
   describe('adversarial: allinone mode is determined once at construction', () => {
     it('caches allinone mode from constructor — cannot change at runtime', () => {
       // Service was constructed with existsSync returning true (allinone)
