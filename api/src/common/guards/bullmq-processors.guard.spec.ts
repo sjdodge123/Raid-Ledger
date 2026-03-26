@@ -33,6 +33,8 @@ const KNOWN_THROW_SAFE: string[] = [
   'departure-grace.processor.ts',
   // BenchPromotionProcessor: promotion logic, BullMQ retries on failure
   'bench-promotion.service.ts',
+  // LineupPhaseProcessor: onModuleInit uses bestEffortInit (ROK-972), process() delegates to executeTransition, BullMQ retries
+  'lineup-phase.processor.ts',
 ];
 
 /** Recursively collect all `.ts` source files. */
