@@ -133,11 +133,11 @@ RUN mkdir -p /etc/supervisor.d
 # Create all-in-one supervisor config
 COPY <<'EOF' /etc/supervisor.d/raid-ledger.ini
 [unix_http_server]
-file=/run/supervisor.sock
+file=/run/supervisord.sock
 chmod=0700
 
 [supervisorctl]
-serverurl=unix:///run/supervisor.sock
+serverurl=unix:///run/supervisord.sock
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
