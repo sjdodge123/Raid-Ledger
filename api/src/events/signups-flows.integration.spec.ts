@@ -353,11 +353,9 @@ async function testSignupOnEndedQuickPlay() {
     'ended_qp',
     'ended_qp@test.local',
   );
-  const eventId = await createPastEvent(
-    testApp,
-    testApp.seed.adminUser.id,
-    { isAdHoc: true },
-  );
+  const eventId = await createPastEvent(testApp, testApp.seed.adminUser.id, {
+    isAdHoc: true,
+  });
   await testApp.db
     .update(schema.events)
     .set({ adHocStatus: 'ended' })
@@ -376,10 +374,7 @@ async function testSignupOnElapsedEvent() {
     'elapsed_player',
     'elapsed@test.local',
   );
-  const eventId = await createPastEvent(
-    testApp,
-    testApp.seed.adminUser.id,
-  );
+  const eventId = await createPastEvent(testApp, testApp.seed.adminUser.id);
   const res = await testApp.request
     .post(`/events/${eventId}/signup`)
     .set('Authorization', `Bearer ${token}`)
@@ -424,8 +419,7 @@ async function testSignupOnActiveEventStillWorks() {
 describe('Signups — signup on closed events (ROK-970)', () => {
   it('should reject signup on ended Quick Play event', () =>
     testSignupOnEndedQuickPlay());
-  it('should reject signup on elapsed event', () =>
-    testSignupOnElapsedEvent());
+  it('should reject signup on elapsed event', () => testSignupOnElapsedEvent());
   it('should reject signup on cancelled event', () =>
     testSignupOnCancelledEvent());
   it('should still allow signup on active event', () =>
