@@ -273,16 +273,20 @@ function describeLineupsService() {
       expect(result.votingDeadline).toBe(new Date(deadline).toISOString());
     });
 
-    it('should transition voting → decided with decidedGameId', async () => {
-      const votingLineup = { ...mockLineup, status: 'voting' };
+    it('should transition scheduling → decided with decidedGameId', async () => {
+      const schedulingLineup = { ...mockLineup, status: 'scheduling' };
       // findLineupById
-      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+      mockSelects(makeSelectChain({ limitResult: [schedulingLineup] }));
       // validateDecidedGame — entry with gameId 5
       mockSelects(makeSelectChain({ whereResult: [{ gameId: 5 }] }));
       mockUpdate();
       // findGameName for activity log
       mockSelects(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
-      mockBuildDetail({ ...votingLineup, status: 'decided', decidedGameId: 5 });
+      mockBuildDetail({
+        ...schedulingLineup,
+        status: 'decided',
+        decidedGameId: 5,
+      });
 
       const result = await service.transitionStatus(1, {
         status: 'decided',
@@ -330,7 +334,7 @@ function describeLineupsService() {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should allow voting → decided without decidedGameId (force-advance)', async () => {
+    it('should allow voting → scheduling (force-advance)', async () => {
       const votingLineup = { ...mockLineup, status: 'voting' };
       // findLineupById
       mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
@@ -343,7 +347,7 @@ function describeLineupsService() {
       // buildDetailResponse chain (findLineupById + enrichment queries)
       mockSelects(
         makeSelectChain({
-          limitResult: [{ ...votingLineup, status: 'decided' }],
+          limitResult: [{ ...votingLineup, status: 'scheduling' }],
         }),
       );
       mockSelects(makeSelectChain({ whereResult: [] })); // entries
@@ -356,14 +360,16 @@ function describeLineupsService() {
       ); // creator
       mockSelects(makeSelectChain({ whereResult: [{ count: 10 }] })); // totalMembers
 
-      const result = await service.transitionStatus(1, { status: 'decided' });
-      expect(result.status).toBe('decided');
+      const result = await service.transitionStatus(1, {
+        status: 'scheduling',
+      });
+      expect(result.status).toBe('scheduling');
     });
 
     it('should throw BadRequestException if decidedGameId not in entries', async () => {
-      const votingLineup = { ...mockLineup, status: 'voting' };
+      const schedulingLineup = { ...mockLineup, status: 'scheduling' };
       // findLineupById
-      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+      mockSelects(makeSelectChain({ limitResult: [schedulingLineup] }));
       // validateDecidedGame — no entries
       mockSelects(makeSelectChain({ whereResult: [] }));
 
