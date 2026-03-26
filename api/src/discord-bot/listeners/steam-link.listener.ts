@@ -18,6 +18,7 @@ import {
   MessageFlags,
   type Message,
   type ButtonInteraction,
+  type Interaction,
 } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -71,7 +72,7 @@ export class SteamLinkListener {
     timer.unref();
   }
 
-  /** Attach message listener when the Discord bot connects. */
+  /** Attach message + interaction listeners when the Discord bot connects. */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   handleBotConnected(): void {
     const client = this.clientService.getClient();
@@ -81,6 +82,14 @@ export class SteamLinkListener {
       this.handleMessage(message).catch((err: unknown) => {
         this.logger.error('Steam link listener error:', err);
       });
+    });
+
+    client.on('interactionCreate', (interaction: Interaction) => {
+      if (interaction.isButton()) {
+        this.handleButtonInteraction(interaction).catch((err: unknown) => {
+          this.logger.error('Steam interest button error:', err);
+        });
+      }
     });
 
     this.listenerAttached = true;
@@ -165,22 +174,35 @@ export class SteamLinkListener {
     if (!parsed) return;
 
     const { action, gameId } = parsed;
+    const user = await findLinkedRlUser(this.db, interaction.user.id);
+
+    if (action === STEAM_INTEREST_BUTTON_IDS.DISMISS) {
+      await this.handleDismissButton(interaction);
+      return;
+    }
+
+    if (!user) {
+      await interaction.update({
+        content: 'Could not find your linked account.',
+        components: [],
+      });
+      return;
+    }
 
     if (action === STEAM_INTEREST_BUTTON_IDS.HEART) {
-      await this.handleHeartButton(interaction, gameId);
-    } else if (action === STEAM_INTEREST_BUTTON_IDS.DISMISS) {
-      await this.handleDismissButton(interaction);
+      await this.handleHeartButton(interaction, user.id, gameId);
     } else if (action === STEAM_INTEREST_BUTTON_IDS.AUTO) {
-      await this.handleAutoButton(interaction, gameId);
+      await this.handleAutoButton(interaction, user.id, gameId);
     }
   }
 
   /** Handle the "Interested" button click. */
   private async handleHeartButton(
     interaction: ButtonInteraction,
+    userId: number,
     gameId: number,
   ): Promise<void> {
-    await addDiscordInterest(this.db, 0, gameId);
+    await addDiscordInterest(this.db, userId, gameId);
     await interaction.update({
       content: 'Marked as interested!',
       components: [],
@@ -197,10 +219,11 @@ export class SteamLinkListener {
   /** Handle the "Always Auto-Interest" button click. */
   private async handleAutoButton(
     interaction: ButtonInteraction,
+    userId: number,
     gameId: number,
   ): Promise<void> {
-    await addDiscordInterest(this.db, 0, gameId);
-    await setAutoHeartSteamUrlsPref(this.db, 0, true);
+    await addDiscordInterest(this.db, userId, gameId);
+    await setAutoHeartSteamUrlsPref(this.db, userId, true);
     await interaction.update({
       content: 'Auto-interest enabled for future Steam URLs!',
       components: [],

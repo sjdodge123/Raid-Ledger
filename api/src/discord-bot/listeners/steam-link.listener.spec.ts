@@ -187,7 +187,8 @@ function botConnectedTests() {
     listener.handleBotConnected();
     listener.handleBotConnected();
 
-    expect(mockOn).toHaveBeenCalledTimes(1);
+    // 2 listeners per connect (messageCreate + interactionCreate), not 4
+    expect(mockOn).toHaveBeenCalledTimes(2);
   });
 
   it('skips registration when client is null', () => {
@@ -205,7 +206,8 @@ function botDisconnectedTests() {
     listener.handleBotDisconnected();
     listener.handleBotConnected();
 
-    expect(mockOn).toHaveBeenCalledTimes(2);
+    // 2 listeners per connect (messageCreate + interactionCreate), x2 connects = 4
+    expect(mockOn).toHaveBeenCalledTimes(4);
   });
 }
 
@@ -349,6 +351,8 @@ function autoHeartTests() {
 
 function buttonHandlerTests() {
   it('heart button creates game_interests row with source discord', async () => {
+    // Stub user lookup for button handler
+    stubUserLookup({ id: 7, discordId: 'discord-user-1' });
     mockDb.onConflictDoNothing.mockResolvedValueOnce(undefined);
 
     const interaction = makeButtonInteraction('steam_interest_heart:42');
@@ -377,6 +381,8 @@ function buttonHandlerTests() {
   });
 
   it('auto button creates interest AND sets autoHeartSteamUrls preference', async () => {
+    // Stub user lookup for button handler
+    stubUserLookup({ id: 7, discordId: 'discord-user-1' });
     mockDb.onConflictDoNothing.mockResolvedValueOnce(undefined);
     mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
 
@@ -400,6 +406,8 @@ function buttonHandlerTests() {
   });
 
   it('heart button updates the ephemeral message with confirmation', async () => {
+    // Stub user lookup for button handler
+    stubUserLookup({ id: 7, discordId: 'discord-user-1' });
     mockDb.onConflictDoNothing.mockResolvedValueOnce(undefined);
 
     const interaction = makeButtonInteraction('steam_interest_heart:42');
