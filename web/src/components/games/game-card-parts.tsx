@@ -17,7 +17,7 @@ export function CoverImage({
         <img
             src={src}
             alt={alt}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
         />
     );
