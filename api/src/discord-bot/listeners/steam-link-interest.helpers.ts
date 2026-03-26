@@ -8,6 +8,10 @@
 import { eq, and, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import {
+  discoverGameViaItad,
+  type DiscoveryDeps,
+} from '../../steam/steam-itad-discovery.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -144,4 +148,17 @@ export async function setAutoHeartSteamUrlsPref(
       target: [schema.userPreferences.userId, schema.userPreferences.key],
       set: { value: enabled },
     });
+}
+
+/**
+ * Discover and add a game via ITAD when it's not in the DB.
+ * Returns the new game's {id, name} or null if ITAD lookup fails.
+ */
+export async function discoverGameBySteamAppId(
+  deps: DiscoveryDeps,
+  steamAppId: number,
+): Promise<{ id: number; name: string } | null> {
+  const result = await discoverGameViaItad(steamAppId, deps);
+  if (!result) return null;
+  return findGameBySteamAppId(deps.db, steamAppId);
 }

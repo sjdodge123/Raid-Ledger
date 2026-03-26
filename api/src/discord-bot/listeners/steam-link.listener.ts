@@ -7,7 +7,7 @@
  * 2. "Not Interested" -- dismiss the ephemeral prompt
  * 3. "Always Auto-Interest" -- heart + set autoHeartSteamUrls preference
  */
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
@@ -22,6 +22,9 @@ import {
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { ItadService } from '../../itad/itad.service';
+import { SettingsService } from '../../settings/settings.service';
+import { SETTING_KEYS } from '../../settings/settings.types';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DISCORD_BOT_EVENTS,
@@ -35,6 +38,7 @@ import {
   getAutoHeartSteamUrlsPref,
   addDiscordInterest,
   setAutoHeartSteamUrlsPref,
+  discoverGameBySteamAppId,
 } from './steam-link-interest.helpers';
 
 /** Dedup TTL in milliseconds. */
@@ -56,6 +60,8 @@ export class SteamLinkListener {
     @Inject(DrizzleAsyncProvider)
     private db: Db,
     private readonly clientService: DiscordBotClientService,
+    @Optional() private readonly itadService: ItadService,
+    private readonly settingsService: SettingsService,
   ) {
     this.startDedupCleanup();
   }
@@ -130,8 +136,11 @@ export class SteamLinkListener {
     appId: number,
     message: Message,
   ): Promise<void> {
-    const game = await findGameBySteamAppId(this.db, appId);
-    if (!game) return;
+    let game = await findGameBySteamAppId(this.db, appId);
+    if (!game) {
+      game = await this.discoverGame(appId);
+      if (!game) return;
+    }
 
     const user = await findLinkedRlUser(this.db, message.author.id);
     if (!user) return;
@@ -150,6 +159,25 @@ export class SteamLinkListener {
     }
 
     await this.sendInterestPrompt(message, game);
+  }
+
+  /** Discover and add a game via ITAD when it's not in the DB. */
+  private async discoverGame(
+    appId: number,
+  ): Promise<{ id: number; name: string } | null> {
+    if (!this.itadService) return null;
+    const adultFilter =
+      (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===
+      'true';
+    return discoverGameBySteamAppId(
+      {
+        db: this.db,
+        lookupBySteamAppId: (id) =>
+          this.itadService!.lookupBySteamAppId(id),
+        adultFilterEnabled: adultFilter,
+      },
+      appId,
+    );
   }
 
   /** Send the interest prompt as a DM to the message author. */
