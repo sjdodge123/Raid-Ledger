@@ -266,7 +266,9 @@ test.describe('Phase breadcrumb — revert', () => {
             const lineupId = await ensureLineupInPhase(adminToken, 'decided');
             await gotoLineupDetail(page, lineupId);
 
-            await page.getByRole('button', { name: 'Scheduling' }).click();
+            const schedulingBtn = page.getByRole('button', { name: 'Scheduling' });
+            await schedulingBtn.scrollIntoViewIfNeeded();
+            await schedulingBtn.click();
             await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
             await page.getByRole('button', { name: 'Revert?' }).click();
         }).toPass({ timeout: 45_000 });
