@@ -32,44 +32,34 @@ function buildCdpSteamTests(): SmokeTest[] {
     return p;
   }
 
-  /** Get the logged-in Discord user's ID via CDP using Discord internals. */
+  /**
+   * Get the logged-in Discord user's ID by intercepting network traffic.
+   * Reloads the Discord page to trigger API calls with the auth token,
+   * then calls Discord's /users/@me to get the user ID.
+   */
   async function getLoggedInDiscordId(
     page: import('playwright').Page,
   ): Promise<string> {
-    const discordId = await page.evaluate(() => {
-      // Access Discord's webpack chunk to find the UserStore
-      const wp = (window as Record<string, unknown>)
-        .webpackChunkdiscord_app as unknown[];
-      if (!wp) return '';
-      // Push a fake module to access the require function
-      let req: ((id: string) => Record<string, unknown>) | null = null;
-      wp.push([
-        [Symbol()],
-        {},
-        (r: (id: string) => Record<string, unknown>) => {
-          req = r;
-        },
-      ]);
-      if (!req) return '';
-      // Search through modules for the current user store
-      const cache = (req as unknown as { c: Record<string, { exports: unknown }> }).c;
-      for (const key of Object.keys(cache)) {
-        const mod = cache[key]?.exports as Record<string, unknown> | undefined;
-        if (!mod) continue;
-        // Look for getCurrentUser function
-        const store =
-          (mod as Record<string, unknown>)?.default ??
-          (mod as Record<string, unknown>)?.Z ??
-          mod;
-        const s = store as Record<string, unknown>;
-        if (typeof s?.getCurrentUser === 'function') {
-          const user = (s.getCurrentUser as () => { id: string } | null)();
-          if (user?.id) return user.id;
-        }
-      }
-      return '';
+    const cdpSession = await page.context().newCDPSession(page);
+    await cdpSession.send('Network.enable');
+    let token: string | null = null;
+    cdpSession.on(
+      'Network.requestWillBeSent',
+      (ev: { request: { headers: Record<string, string> } }) => {
+        const a = ev.request.headers['Authorization'];
+        if (a && !token) token = a;
+      },
+    );
+    await page.evaluate(() => window.location.reload());
+    await page.waitForTimeout(5000);
+    await cdpSession.detach();
+    if (!token) return '';
+    const res = await fetch('https://discord.com/api/v10/users/@me', {
+      headers: { Authorization: token },
     });
-    return discordId;
+    if (!res.ok) return '';
+    const user = (await res.json()) as { id: string };
+    return user.id;
   }
 
   /** Set up: assign steamAppId to a game AND link the logged-in user. */
@@ -160,10 +150,13 @@ function buildCdpSteamTests(): SmokeTest[] {
       category: 'cdp-command',
       async run(ctx) {
         const p = await getPage(ctx);
+        const { typeMessage, navigateToChannel, dismissEphemeralMessages } =
+          await import('../cdp/discord-page.js');
         const { gameName } = await setupFixtures(ctx, p);
-        const { typeMessage, navigateToChannel } = await import(
-          '../cdp/discord-page.js'
-        );
+        // Re-navigate after the reload in getLoggedInDiscordId
+        await navigateToChannel(p, SMOKE.guildId, ctx.defaultChannelId);
+        await p.waitForTimeout(2000);
+        await dismissEphemeralMessages(p);
 
         // Send the Steam URL in the channel
         const url = `https://store.steampowered.com/app/${TEST_STEAM_APP_ID}/`;
