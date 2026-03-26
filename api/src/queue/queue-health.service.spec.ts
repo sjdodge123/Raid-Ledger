@@ -224,6 +224,50 @@ describe('QueueHealthService — configurable poll interval', () => {
     expect(pollCount).toBe(4);
   });
 
+  it('should fall back to 500ms when QUEUE_POLL_INTERVAL_MS is non-numeric', async () => {
+    process.env.QUEUE_POLL_INTERVAL_MS = 'not-a-number';
+    service = new QueueHealthService();
+
+    let pollCount = 0;
+    const mockQueue = {
+      name: 'test-queue',
+      drain: jest.fn(),
+      getJobCounts: jest.fn().mockImplementation(() => {
+        pollCount++;
+        if (pollCount <= 2) {
+          return {
+            waiting: 1,
+            active: 0,
+            completed: 0,
+            failed: 0,
+            delayed: 0,
+          };
+        }
+        return {
+          waiting: 0,
+          active: 0,
+          completed: 0,
+          failed: 0,
+          delayed: 0,
+        };
+      }),
+    } as unknown as Queue;
+
+    service.register(mockQueue);
+
+    const drainPromise = service.awaitDrained(30_000);
+
+    // First poll is immediate; advance 500ms for second poll
+    await jest.advanceTimersByTimeAsync(500);
+    expect(pollCount).toBe(2);
+
+    // Advance another 500ms for third poll (which finds idle)
+    await jest.advanceTimersByTimeAsync(500);
+
+    await drainPromise;
+    expect(pollCount).toBe(3);
+  });
+
   it('should default to 500ms when QUEUE_POLL_INTERVAL_MS is not set', async () => {
     // Ensure env var is NOT set
     delete process.env.QUEUE_POLL_INTERVAL_MS;

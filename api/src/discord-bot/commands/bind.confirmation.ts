@@ -64,7 +64,7 @@ export async function confirmMultiMonitor(
 export type MultiMonitorCheck =
   | { action: 'proceed' }
   | { action: 'reject'; message: string }
-  | { action: 'confirm'; gameName: string };
+  | { action: 'confirm' };
 
 /** Check if binding a voice monitor would conflict with existing ones. */
 export function checkMultiMonitor(
@@ -82,7 +82,7 @@ export function checkMultiMonitor(
         'This channel is already bound to this game. Use `/unbind` first.',
     };
   }
-  return { action: 'confirm', gameName: '' };
+  return { action: 'confirm' };
 }
 
 /** Show a rejection embed for duplicate game binding. */
@@ -97,15 +97,25 @@ export async function replyReject(
   await interaction.editReply({ embeds: [embed] });
 }
 
+/** Clear embed/buttons and show a cancellation message. */
+async function replyCancelled(
+  interaction: ChatInputCommandInteraction,
+  message: string,
+): Promise<void> {
+  await interaction.editReply({
+    content: message,
+    embeds: [],
+    components: [],
+  });
+}
+
 /** Show warning and wait for Continue/Cancel. Returns true if user confirmed. */
 export async function awaitConfirmation(
   interaction: ChatInputCommandInteraction,
 ): Promise<boolean> {
-  const embed = buildWarningEmbed();
-  const row = buildConfirmButtons();
   const reply = await interaction.editReply({
-    embeds: [embed],
-    components: [row],
+    embeds: [buildWarningEmbed()],
+    components: [buildConfirmButtons()],
   });
   try {
     const btn = await reply.awaitMessageComponent({
@@ -115,20 +125,13 @@ export async function awaitConfirmation(
     });
     await btn.deferUpdate();
     const confirmed = btn.customId === BIND_CONFIRM_BUTTON_IDS.CONTINUE;
-    if (!confirmed) {
-      await interaction.editReply({
-        content: 'Binding cancelled.',
-        embeds: [],
-        components: [],
-      });
-    }
+    if (!confirmed) await replyCancelled(interaction, 'Binding cancelled.');
     return confirmed;
   } catch {
-    await interaction.editReply({
-      content: 'Confirmation timed out. Binding cancelled.',
-      embeds: [],
-      components: [],
-    });
+    await replyCancelled(
+      interaction,
+      'Confirmation timed out. Binding cancelled.',
+    );
     return false;
   }
 }

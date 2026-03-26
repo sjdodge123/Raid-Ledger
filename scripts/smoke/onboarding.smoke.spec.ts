@@ -191,7 +191,13 @@ test.describe('Onboarding wizard final step', () => {
             const nextBtn = dialog.getByRole('button', { name: 'Next' });
             const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
             const hasNext = await nextBtn.isVisible({ timeout: 1_000 }).catch(() => false);
-            if (hasNext) { await nextBtn.click(); } else { await skipBtn.click(); }
+            if (hasNext) {
+                await nextBtn.click();
+            } else {
+                const hasSkip = await skipBtn.isVisible({ timeout: 1_000 }).catch(() => false);
+                if (!hasSkip) break;
+                await skipBtn.click();
+            }
         }
 
         // On final step: Complete button should be visible, Next and Skip All should not
