@@ -486,6 +486,19 @@ test.describe('Voting phase', () => {
             votingLineupId = created.id;
         }
 
+        // Ensure the lineup has nominations before advancing to voting
+        const detail = await apiGet(adminToken, `/lineups/${votingLineupId}`);
+        if (!detail?.entries?.length) {
+            // Nominate games from Common Ground (seed data)
+            const cg = await apiGet(adminToken, '/lineups/common-ground?limit=3');
+            const games = cg?.data ?? [];
+            for (const g of games.slice(0, 3)) {
+                await apiPost(adminToken, `/lineups/${votingLineupId}/nominate`, {
+                    gameId: g.gameId,
+                });
+            }
+        }
+
         // Advance to voting (the detail page needs games to render a leaderboard)
         await apiPatch(adminToken, `/lineups/${votingLineupId}/status`, { status: 'voting' });
     });
