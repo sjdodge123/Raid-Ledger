@@ -5,7 +5,7 @@
  * database: tiered match grouping, bandwagon join, operator advance,
  * and auto-carryover on lineup creation.
  *
- * Endpoints under test (none exist yet — all tests should fail):
+ * Endpoints under test:
  *   GET  /lineups/:id/matches
  *   POST /lineups/:id/matches/:matchId/join
  *   POST /lineups/:id/matches/:matchId/advance

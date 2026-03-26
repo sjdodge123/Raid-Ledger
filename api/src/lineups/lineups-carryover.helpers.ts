@@ -87,12 +87,12 @@ export async function carryOverFromLastDecided(
 
   for (const match of suggestedMatches) {
     const [entry] = await findOriginalNominator(db, prev.id, match.gameId);
-    const nominatedBy = entry?.nominatedBy ?? 0;
+    if (!entry?.nominatedBy) continue; // skip if nominator was deleted
     await insertCarriedEntry(
       db,
       newLineupId,
       match.gameId,
-      nominatedBy,
+      entry.nominatedBy,
       prev.id,
     );
   }
