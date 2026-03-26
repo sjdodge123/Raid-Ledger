@@ -1,9 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
-import {
-  DiscordNotificationProcessor,
-  buildPlaintextContent,
-} from './discord-notification.processor';
+import { DiscordNotificationProcessor } from './discord-notification.processor';
+import { buildPlaintextContent } from './format-helpers';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { DiscordNotificationService } from './discord-notification.service';

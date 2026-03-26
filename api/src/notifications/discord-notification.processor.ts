@@ -12,6 +12,7 @@ import {
   type DiscordNotificationJobData,
 } from './discord-notification.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
+import { buildPlaintextContent } from './format-helpers';
 
 /**
  * Bull queue processor for Discord DM delivery (ROK-180 AC-5).
@@ -102,59 +103,4 @@ export class DiscordNotificationProcessor
       this.discordNotificationService.recordFailure(userId).catch(() => {});
     }
   }
-}
-
-/** Maximum length for mobile push notification content. */
-const MAX_CONTENT_LENGTH = 150;
-
-/**
- * Build a plaintext content string for Discord push notification previews (ROK-756, ROK-822).
- * Discord mobile push notifications show the message `content` field as-is,
- * without rendering Discord-specific tokens (timestamps, channel mentions, markdown).
- * By providing a clean plaintext `content`, the push notification is human-readable
- * while the rich embed still renders normally in the Discord client.
- */
-export function buildPlaintextContent(title: string, message: string): string {
-  const safeTitle = sanitizeValue(title);
-  const safeMessage = sanitizeValue(message);
-  const cleaned = stripDiscordMarkup(`${safeTitle}\n${safeMessage}`).trim();
-  if (cleaned.length <= MAX_CONTENT_LENGTH) return cleaned;
-  return cleaned.slice(0, MAX_CONTENT_LENGTH - 3) + '...';
-}
-
-/** Safely convert a value to a string, guarding against null/undefined/objects. */
-function sanitizeValue(value: unknown): string {
-  if (value == null) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean')
-    return `${value}`;
-  return '';
-}
-
-/** Strip Discord markup, markdown formatting, and collapse whitespace. */
-function stripDiscordMarkup(text: string): string {
-  return text
-    .replace(/<t:(\d+)(?::[a-zA-Z])?>/g, (_, epoch) =>
-      formatEpoch(Number(epoch)),
-    )
-    .replace(/<#\d+>/g, '#channel')
-    .replace(/<@&\d+>/g, '@role')
-    .replace(/<@!?\d+>/g, '@user')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/\(\s*\)/g, '')
-    .replace(/ {2,}/g, ' ');
-}
-
-/** Format a Unix epoch (seconds) into a short, human-readable date string. */
-function formatEpoch(epoch: number): string {
-  const d = new Date(epoch * 1000);
-  return d.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZoneName: 'short',
-  });
 }
