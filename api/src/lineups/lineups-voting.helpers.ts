@@ -9,8 +9,8 @@ import * as schema from '../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Maximum votes a single user may cast per lineup. */
-export const MAX_VOTES = 3;
+/** Default maximum votes a single user may cast per lineup. */
+export const DEFAULT_MAX_VOTES = 3;
 
 /**
  * Find the game IDs a user has voted for in a lineup.
@@ -58,7 +58,8 @@ export async function countUserVotes(
 
 /**
  * Toggle a vote for a game in a lineup.
- * Uses a transaction to prevent race conditions on the 3-vote limit.
+ * Uses a transaction to prevent race conditions on the vote limit.
+ * @param maxVotes - per-lineup vote cap (from lineup.maxVotesPerPlayer).
  * @returns 'added' if the vote was cast, 'removed' if it was toggled off.
  */
 export async function toggleVote(
@@ -66,6 +67,7 @@ export async function toggleVote(
   lineupId: number,
   userId: number,
   gameId: number,
+  maxVotes: number = DEFAULT_MAX_VOTES,
 ): Promise<'added' | 'removed'> {
   return db.transaction(async (tx) => {
     const existing = await findExistingVote(tx, lineupId, userId, gameId);
@@ -74,9 +76,9 @@ export async function toggleVote(
       return 'removed';
     }
     const count = await countUserVotes(tx, lineupId, userId);
-    if (count >= MAX_VOTES) {
+    if (count >= maxVotes) {
       throw new BadRequestException(
-        `Maximum ${MAX_VOTES} votes per lineup reached`,
+        `Maximum ${maxVotes} votes per lineup reached`,
       );
     }
     await insertVote(tx, lineupId, userId, gameId);

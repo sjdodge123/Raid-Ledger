@@ -67,6 +67,7 @@ export function createMockLineupDetail(
         linkedEventId: null,
         createdBy: { id: 1, displayName: 'Admin' },
         votingDeadline: null,
+        maxVotesPerPlayer: 3,
         entries: [createMockEntry()],
         totalVoters: 5,
         totalMembers: 10,

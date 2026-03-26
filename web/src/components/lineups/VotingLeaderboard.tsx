@@ -16,9 +16,11 @@ interface VotingLeaderboardProps {
   myVotes: number[];
   totalVoters: number;
   totalMembers: number;
+  /** Per-lineup vote limit from the server (ROK-976). */
+  maxVotesPerPlayer?: number;
 }
 
-const MAX_VOTES = 3;
+const DEFAULT_MAX_VOTES = 3;
 
 /** Sort entries by voteCount desc, ownerCount desc as tiebreaker. */
 function sortByVotes(entries: LineupEntryResponseDto[]): LineupEntryResponseDto[] {
@@ -28,10 +30,12 @@ function sortByVotes(entries: LineupEntryResponseDto[]): LineupEntryResponseDto[
   });
 }
 
-/** Voting leaderboard with status bar, sorted rows, and pick-3 logic. */
+/** Voting leaderboard with status bar, sorted rows, and configurable vote limit. */
 export function VotingLeaderboard({
   entries, lineupId, myVotes, totalVoters, totalMembers,
+  maxVotesPerPlayer,
 }: VotingLeaderboardProps): JSX.Element {
+  const maxVotes = maxVotesPerPlayer ?? DEFAULT_MAX_VOTES;
   const sorted = useMemo(() => sortByVotes(entries), [entries]);
   const votedSet = useMemo(() => new Set(myVotes), [myVotes]);
   const toggleVote = useToggleVote();
@@ -46,13 +50,13 @@ export function VotingLeaderboard({
     [lineupId, toggleVote],
   );
 
-  const atLimit = myVotes.length >= MAX_VOTES;
+  const atLimit = myVotes.length >= maxVotes;
 
   return (
     <div data-testid="voting-leaderboard">
       <VoteStatusBar
         myVoteCount={myVotes.length}
-        maxVotes={MAX_VOTES}
+        maxVotes={maxVotes}
         totalVoters={totalVoters}
         totalMembers={totalMembers}
       />

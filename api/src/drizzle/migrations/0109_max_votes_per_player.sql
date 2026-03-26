@@ -1,0 +1,1 @@
+ALTER TABLE "community_lineups" ADD COLUMN "max_votes_per_player" smallint DEFAULT 3 NOT NULL;

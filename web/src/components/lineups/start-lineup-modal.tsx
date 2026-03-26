@@ -19,6 +19,7 @@ function useDurationState() {
   const [building, setBuilding] = useState<number | ''>('');
   const [voting, setVoting] = useState<number | ''>('');
   const [matchThreshold, setMatchThreshold] = useState<number>(35);
+  const [votesPerPlayer, setVotesPerPlayer] = useState<number>(3);
   const buildingVal = building === '' ? (defaults?.buildingDurationHours ?? 48) : building;
   const votingVal = voting === '' ? (defaults?.votingDurationHours ?? 24) : voting;
 
@@ -26,9 +27,11 @@ function useDurationState() {
     building: buildingVal,
     voting: votingVal,
     matchThreshold,
+    votesPerPlayer,
     setBuilding,
     setVoting,
     setMatchThreshold,
+    setVotesPerPlayer,
     isLoading: lineupDefaults.isLoading,
   };
 }
@@ -66,6 +69,34 @@ function DurationSlider({ label, name, testId, value, onChange }: {
       <div className="flex justify-between text-xs text-muted/60 mt-1">
         <span>1 day</span>
         <span>30 days</span>
+      </div>
+    </div>
+  );
+}
+
+function VotesPerPlayerSlider({ value, onChange }: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-medium text-secondary">Votes per Player</label>
+        <span className="text-sm text-muted tabular-nums">{value}</span>
+      </div>
+      <input
+        type="range"
+        data-testid="votes-per-player"
+        min={1}
+        max={10}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+      />
+      <div className="flex justify-between text-xs text-muted/60 mt-1">
+        <span>1 vote</span>
+        <span>10 votes</span>
       </div>
     </div>
   );
@@ -110,6 +141,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
         buildingDurationHours: durations.building,
         votingDurationHours: durations.voting,
         matchThreshold: durations.matchThreshold,
+        votesPerPlayer: durations.votesPerPlayer,
       });
       onClose();
       navigate(`/community-lineup/${result.id}`);
@@ -145,6 +177,10 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
             onChange={durations.setMatchThreshold}
           />
         </div>
+        <VotesPerPlayerSlider
+          value={durations.votesPerPlayer}
+          onChange={durations.setVotesPerPlayer}
+        />
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"

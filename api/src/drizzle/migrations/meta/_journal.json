@@ -764,6 +764,13 @@
       "when": 1774600000002,
       "tag": "0108_add_missing_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1774700000000,
+      "tag": "0109_max_votes_per_player",
+      "breakpoints": true
     }
   ]
 }

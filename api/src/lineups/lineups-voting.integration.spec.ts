@@ -585,5 +585,207 @@ function describeVoting() {
     });
   }
   describe('Matching algorithm (voting -> decided)', describeMatchingAlgorithm);
+
+  // -- POST /lineups — votesPerPlayer creation (ROK-976) --------------------
+
+  function describeVotesPerPlayerCreation() {
+    it('should persist votesPerPlayer when creating a lineup with votesPerPlayer: 5', async () => {
+      const res = await createLineup(adminToken, { votesPerPlayer: 5 });
+      expect(res.status).toBe(201);
+
+      const lineupId = res.body.id as number;
+      const detail = await testApp.request
+        .get(`/lineups/${lineupId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(detail.status).toBe(200);
+      expect(detail.body.maxVotesPerPlayer).toBe(5);
+    });
+
+    it('should default maxVotesPerPlayer to 3 when votesPerPlayer is omitted', async () => {
+      const res = await createLineup(adminToken);
+      expect(res.status).toBe(201);
+
+      const lineupId = res.body.id as number;
+      const detail = await testApp.request
+        .get(`/lineups/${lineupId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(detail.status).toBe(200);
+      expect(detail.body.maxVotesPerPlayer).toBe(3);
+    });
+
+    it('should include maxVotesPerPlayer in GET /lineups/:id response', async () => {
+      const res = await createLineup(adminToken, { votesPerPlayer: 8 });
+      expect(res.status).toBe(201);
+
+      const lineupId = res.body.id as number;
+      const detail = await testApp.request
+        .get(`/lineups/${lineupId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(detail.status).toBe(200);
+      expect(detail.body).toHaveProperty('maxVotesPerPlayer');
+      expect(detail.body.maxVotesPerPlayer).toBe(8);
+    });
+  }
+  describe(
+    'POST /lineups — votesPerPlayer creation (ROK-976)',
+    describeVotesPerPlayerCreation,
+  );
+
+  // -- POST /lineups/:id/vote — configurable limit (ROK-976) ---------------
+
+  function describeConfigurableVoteLimit() {
+    it('should allow up to 5 votes when lineup has votesPerPlayer: 5', async () => {
+      const createRes = await createLineup(adminToken, { votesPerPlayer: 5 });
+      expect(createRes.status).toBe(201);
+      const lineupId = createRes.body.id as number;
+
+      const extraGames = await createAdditionalGames(6);
+      const allGames = [testApp.seed.game, ...extraGames];
+      for (const game of allGames) {
+        await addEntry(lineupId, game.id, testApp.seed.adminUser.id);
+      }
+      await advanceToVoting(lineupId, adminToken);
+
+      const { token } = await loginAsMember('voter5limit');
+
+      // Cast 5 votes — all should succeed
+      for (let i = 0; i < 5; i++) {
+        const voteRes = await testApp.request
+          .post(`/lineups/${lineupId}/vote`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ gameId: allGames[i].id });
+        expect(voteRes.status).toBe(200);
+      }
+    });
+
+    it('should reject the 6th vote when lineup has votesPerPlayer: 5', async () => {
+      const createRes = await createLineup(adminToken, { votesPerPlayer: 5 });
+      expect(createRes.status).toBe(201);
+      const lineupId = createRes.body.id as number;
+
+      const extraGames = await createAdditionalGames(6);
+      const allGames = [testApp.seed.game, ...extraGames];
+      for (const game of allGames) {
+        await addEntry(lineupId, game.id, testApp.seed.adminUser.id);
+      }
+      await advanceToVoting(lineupId, adminToken);
+
+      const { token } = await loginAsMember('voter5reject');
+
+      // Cast 5 votes — all must succeed
+      for (let i = 0; i < 5; i++) {
+        const voteRes = await testApp.request
+          .post(`/lineups/${lineupId}/vote`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ gameId: allGames[i].id });
+        expect(voteRes.status).toBe(200);
+      }
+
+      // 6th vote should be rejected with 400
+      const res = await testApp.request
+        .post(`/lineups/${lineupId}/vote`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId: allGames[5].id });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should include dynamic limit number in error message ("Maximum 5 votes per lineup reached")', async () => {
+      const createRes = await createLineup(adminToken, { votesPerPlayer: 5 });
+      expect(createRes.status).toBe(201);
+      const lineupId = createRes.body.id as number;
+
+      const extraGames = await createAdditionalGames(6);
+      const allGames = [testApp.seed.game, ...extraGames];
+      for (const game of allGames) {
+        await addEntry(lineupId, game.id, testApp.seed.adminUser.id);
+      }
+      await advanceToVoting(lineupId, adminToken);
+
+      const { token } = await loginAsMember('voter5msg');
+
+      // Cast 5 votes — all must succeed
+      for (let i = 0; i < 5; i++) {
+        const voteRes = await testApp.request
+          .post(`/lineups/${lineupId}/vote`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ gameId: allGames[i].id });
+        expect(voteRes.status).toBe(200);
+      }
+
+      // 6th vote should return the dynamic error message
+      const res = await testApp.request
+        .post(`/lineups/${lineupId}/vote`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId: allGames[5].id });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('Maximum 5 votes per lineup reached');
+    });
+
+    it('should allow only 1 vote when lineup has votesPerPlayer: 1', async () => {
+      const createRes = await createLineup(adminToken, { votesPerPlayer: 1 });
+      expect(createRes.status).toBe(201);
+      const lineupId = createRes.body.id as number;
+
+      const extraGames = await createAdditionalGames(2);
+      const allGames = [testApp.seed.game, ...extraGames];
+      for (const game of allGames) {
+        await addEntry(lineupId, game.id, testApp.seed.adminUser.id);
+      }
+      await advanceToVoting(lineupId, adminToken);
+
+      const { token } = await loginAsMember('voter1only');
+
+      // First vote should succeed
+      const vote1 = await testApp.request
+        .post(`/lineups/${lineupId}/vote`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId: allGames[0].id });
+      expect(vote1.status).toBe(200);
+
+      // Second vote should fail
+      const vote2 = await testApp.request
+        .post(`/lineups/${lineupId}/vote`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId: allGames[1].id });
+      expect(vote2.status).toBe(400);
+      expect(vote2.body.message).toContain(
+        'Maximum 1 votes per lineup reached',
+      );
+    });
+
+    it('should use the per-lineup limit, not the hardcoded 3', async () => {
+      // Create a lineup with votesPerPlayer: 10
+      const createRes = await createLineup(adminToken, { votesPerPlayer: 10 });
+      expect(createRes.status).toBe(201);
+      const lineupId = createRes.body.id as number;
+
+      const extraGames = await createAdditionalGames(4);
+      const allGames = [testApp.seed.game, ...extraGames];
+      for (const game of allGames) {
+        await addEntry(lineupId, game.id, testApp.seed.adminUser.id);
+      }
+      await advanceToVoting(lineupId, adminToken);
+
+      const { token } = await loginAsMember('voter10');
+
+      // Vote for 4 games — should all succeed (would fail if hardcoded to 3)
+      for (let i = 0; i < 4; i++) {
+        const voteRes = await testApp.request
+          .post(`/lineups/${lineupId}/vote`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ gameId: allGames[i].id });
+        expect(voteRes.status).toBe(200);
+      }
+    });
+  }
+  describe(
+    'POST /lineups/:id/vote — configurable limit (ROK-976)',
+    describeConfigurableVoteLimit,
+  );
 }
 describe('Lineup Voting (integration)', describeVoting);

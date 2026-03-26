@@ -65,6 +65,7 @@ export function LineupDetailPage(): JSX.Element {
           myVotes={lineup.myVotes ?? []}
           totalVoters={lineup.totalVoters}
           totalMembers={lineup.totalMembers}
+          maxVotesPerPlayer={lineup.maxVotesPerPlayer}
         />
       ) : hasEntries ? (
         <NominationGrid entries={lineup.entries} lineupId={lineup.id} />
