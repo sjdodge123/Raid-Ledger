@@ -76,18 +76,7 @@ export class SettingsService implements OnModuleInit {
   /** Loads all settings from DB, decrypts, and replaces the cache. */
   private async loadCache(): Promise<void> {
     try {
-      const rows = await this.db.select().from(appSettings);
-      const fresh = new Map<string, string>();
-      for (const row of rows) {
-        try {
-          fresh.set(row.key, decrypt(row.encryptedValue));
-        } catch {
-          this.logger.error(`Failed to decrypt setting ${row.key}`);
-        }
-      }
-      this.cache = fresh;
-      this.cacheLoadedAt = Date.now();
-      this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
+      await this.loadCacheOrThrow();
     } catch (err: unknown) {
       this.logger.error('Background cache refresh failed', err);
     } finally {
