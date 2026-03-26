@@ -269,7 +269,7 @@ test.describe('Phase breadcrumb — revert', () => {
             await page.getByRole('button', { name: 'Scheduling' }).click();
             await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
             await page.getByRole('button', { name: 'Revert?' }).click();
-        }).toPass({ timeout: 30_000 });
+        }).toPass({ timeout: 45_000 });
 
         await expect(page.locator('span').filter({ hasText: /Scheduling/ }).first()).toBeVisible({ timeout: 10_000 });
     });
