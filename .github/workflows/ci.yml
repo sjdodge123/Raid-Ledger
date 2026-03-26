@@ -359,6 +359,9 @@ jobs:
       - name: Run database migrations
         run: npm run db:migrate -w api
 
+      - name: Seed game registry
+        run: npm run db:seed:games -w api
+
       - name: Bootstrap admin account
         run: npx ts-node api/scripts/bootstrap-admin.ts
 

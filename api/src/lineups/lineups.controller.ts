@@ -22,6 +22,7 @@ import {
   UpdateLineupStatusSchema,
   CommonGroundQuerySchema,
   NominateGameSchema,
+  CastVoteSchema,
   type LineupDetailResponseDto,
   type LineupBannerResponseDto,
   type CommonGroundResponseDto,
@@ -60,8 +61,8 @@ export class LineupsController {
 
   /** GET /lineups/active — current active lineup. */
   @Get('active')
-  async getActive(): Promise<LineupDetailResponseDto> {
-    return this.lineupsService.findActive();
+  async getActive(@Req() req: AuthRequest): Promise<LineupDetailResponseDto> {
+    return this.lineupsService.findActive(req.user.id);
   }
 
   /** GET /lineups/banner — lightweight banner for Games page. */
@@ -86,8 +87,24 @@ export class LineupsController {
   @Get(':id')
   async getById(
     @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthRequest,
   ): Promise<LineupDetailResponseDto> {
-    return this.lineupsService.findById(id);
+    return this.lineupsService.findById(id, req.user.id);
+  }
+
+  /** POST /lineups/:id/vote — toggle a vote on a game (ROK-936). */
+  @Post(':id/vote')
+  @HttpCode(HttpStatus.OK)
+  async vote(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<LineupDetailResponseDto> {
+    const parsed = CastVoteSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.lineupsService.toggleVote(id, parsed.data.gameId, req.user.id);
   }
 
   /** POST /lineups/:id/nominate — add a game to a lineup. */

@@ -18,6 +18,7 @@ import {
   removeNomination,
   createLineup,
   transitionLineupStatus,
+  toggleVote,
 } from '../lib/api-client';
 import type { CreateLineupParams } from '../lib/api/lineups-api';
 
@@ -118,6 +119,22 @@ export function useCreateLineup() {
     CreateLineupParams
   >({
     mutationFn: (params) => createLineup(params),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/** Hook for toggling a vote on a nominated game (ROK-936). */
+export function useToggleVote() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    { lineupId: number; gameId: number }
+  >({
+    mutationFn: ({ lineupId, gameId }) => toggleVote(lineupId, gameId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
     },

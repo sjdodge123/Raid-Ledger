@@ -14,6 +14,7 @@ const mockNominateGame = vi.fn();
 const mockGetLineupBanner = vi.fn();
 const mockGetLineupById = vi.fn();
 const mockRemoveNomination = vi.fn();
+const mockToggleVote = vi.fn();
 
 vi.mock('../lib/api-client', () => ({
     getActiveLineup: (...args: unknown[]) => mockGetActiveLineup(...args),
@@ -22,11 +23,13 @@ vi.mock('../lib/api-client', () => ({
     getLineupBanner: (...args: unknown[]) => mockGetLineupBanner(...args),
     getLineupById: (...args: unknown[]) => mockGetLineupById(...args),
     removeNomination: (...args: unknown[]) => mockRemoveNomination(...args),
+    toggleVote: (...args: unknown[]) => mockToggleVote(...args),
 }));
 
 import {
     useActiveLineup, useCommonGround, useNominateGame,
     useLineupBanner, useLineupDetail, useRemoveNomination,
+    useToggleVote,
 } from './use-lineups';
 
 // --- Helpers ---
@@ -350,5 +353,42 @@ describe('useRemoveNomination', () => {
             await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
         });
         expect(invalidateSpy).toHaveBeenCalled();
+    });
+});
+
+describe('useToggleVote', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('calls toggleVote with lineupId and gameId', async () => {
+        mockToggleVote.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useToggleVote(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        expect(mockToggleVote).toHaveBeenCalledWith(1, 42);
+    });
+
+    it('invalidates lineup queries on success', async () => {
+        mockToggleVote.mockResolvedValue(mockLineupResponse);
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useToggleVote(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, gameId: 42 });
+        });
+        const lineupCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
+        );
+        expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('rejects on failure', async () => {
+        mockToggleVote.mockRejectedValue(new Error('Vote limit'));
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useToggleVote(), { wrapper });
+        await expect(
+            act(() => result.current.mutateAsync({ lineupId: 1, gameId: 99 })),
+        ).rejects.toThrow('Vote limit');
     });
 });

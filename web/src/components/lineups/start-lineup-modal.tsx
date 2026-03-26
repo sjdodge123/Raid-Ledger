@@ -18,7 +18,7 @@ function useDurationState() {
   const defaults = lineupDefaults.data;
   const [building, setBuilding] = useState<number | ''>('');
   const [voting, setVoting] = useState<number | ''>('');
-  const [matchThreshold, setMatchThreshold] = useState<number>(0.35);
+  const [matchThreshold, setMatchThreshold] = useState<number>(35);
   const buildingVal = building === '' ? (defaults?.buildingDurationHours ?? 48) : building;
   const votingVal = voting === '' ? (defaults?.votingDurationHours ?? 24) : voting;
 
@@ -75,21 +75,20 @@ function ThresholdSlider({ value, onChange }: {
   value: number;
   onChange: (v: number) => void;
 }) {
-  const pct = Math.round(value * 100);
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <label className="text-sm font-medium text-secondary">Match Threshold</label>
-        <span className="text-sm text-muted tabular-nums">{pct}%</span>
+        <span className="text-sm text-muted tabular-nums">{value}%</span>
       </div>
       <input
         type="range"
         data-testid="match-threshold"
-        min={10}
-        max={75}
+        min={0}
+        max={100}
         step={5}
-        value={pct}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
         className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
       />
       <div className="flex justify-between text-xs text-muted/60 mt-1">

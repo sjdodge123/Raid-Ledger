@@ -286,35 +286,35 @@ function describePhaseScheduling() {
     it('should accept matchThreshold and return it in detail', async () => {
       const res = await createLineupWithDurations(adminToken, {
         buildingDurationHours: 24,
-        matchThreshold: 0.5,
+        matchThreshold: 50,
       });
 
       expect(res.status).toBe(201);
-      expect(res.body.matchThreshold).toBe(0.5);
+      expect(res.body.matchThreshold).toBe(50);
     });
 
-    it('should default matchThreshold to 0.35 when not provided', async () => {
+    it('should default matchThreshold to 35 when not provided', async () => {
       const res = await createLineupWithDurations(adminToken, {
         buildingDurationHours: 24,
       });
 
       expect(res.status).toBe(201);
-      expect(res.body.matchThreshold).toBe(0.35);
+      expect(res.body.matchThreshold).toBe(35);
     });
 
-    it('should reject matchThreshold below 0.10', async () => {
+    it('should reject matchThreshold below 0', async () => {
       const res = await createLineupWithDurations(adminToken, {
         buildingDurationHours: 24,
-        matchThreshold: 0.05,
+        matchThreshold: -1,
       });
 
       expect(res.status).toBe(400);
     });
 
-    it('should reject matchThreshold above 0.75', async () => {
+    it('should reject matchThreshold above 100', async () => {
       const res = await createLineupWithDurations(adminToken, {
         buildingDurationHours: 24,
-        matchThreshold: 0.9,
+        matchThreshold: 101,
       });
 
       expect(res.status).toBe(400);

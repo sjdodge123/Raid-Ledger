@@ -25,13 +25,9 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import {
   findActiveLineup,
   findLineupById,
-  findGameName,
   findBuildingLineup,
   findNominatedGameIds,
   countDistinctNominators,
-  findEntriesWithGames,
-  countVotesPerGame,
-  countDistinctVoters,
   VALID_TRANSITIONS,
   VALID_REVERSIONS,
 } from './lineups-query.helpers';
@@ -44,14 +40,7 @@ import {
   SCORING_WEIGHTS,
   nominationCap,
 } from './common-ground-scoring.constants';
-import {
-  countOwnersPerGame,
-  countTotalMembers,
-} from './lineups-enrichment.helpers';
-import {
-  findBannerLineup,
-  buildBannerResponse,
-} from './lineups-banner.helpers';
+import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
 import {
   findEntry,
   validateRemoval,
@@ -71,6 +60,8 @@ import {
   buildTransitionValues,
 } from './lineups-phase.helpers';
 import { logTransition, logNomination } from './lineups-activity.helpers';
+import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
+import { buildMatchesForLineup } from './lineups-matching.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -111,15 +102,37 @@ export class LineupsService {
   }
 
   /** Get the currently active lineup (building or voting). */
-  async findActive(): Promise<LineupDetailResponseDto> {
+  async findActive(userId?: number): Promise<LineupDetailResponseDto> {
     const [row] = await findActiveLineup(this.db);
     if (!row) throw new NotFoundException('No active lineup');
-    return buildDetailResponse(this.db, row.id);
+    return buildDetailResponse(this.db, row.id, userId);
   }
 
   /** Get a lineup by ID with full detail. */
-  async findById(id: number): Promise<LineupDetailResponseDto> {
-    return buildDetailResponse(this.db, id);
+  async findById(
+    id: number,
+    userId?: number,
+  ): Promise<LineupDetailResponseDto> {
+    return buildDetailResponse(this.db, id, userId);
+  }
+
+  /** Toggle a vote for a game in a lineup (ROK-936). */
+  async toggleVote(
+    lineupId: number,
+    gameId: number,
+    userId: number,
+  ): Promise<LineupDetailResponseDto> {
+    const [lineup] = await findLineupById(this.db, lineupId);
+    if (!lineup) throw new NotFoundException('Lineup not found');
+    if (lineup.status !== 'voting') {
+      throw new BadRequestException('Voting is only allowed in voting status');
+    }
+    const action = await toggleVoteHelper(this.db, lineupId, userId, gameId);
+    void this.activityLog.log('lineup', lineupId, 'vote_cast', userId, {
+      gameId,
+      action,
+    });
+    return buildDetailResponse(this.db, lineupId, userId);
   }
 
   /** Transition a lineup to a new status. */
@@ -136,6 +149,9 @@ export class LineupsService {
     }
 
     await this.applyStatusUpdate(id, dto, lineup);
+    if (dto.status === 'decided') {
+      await this.runMatchingAlgorithm(id);
+    }
     await logTransition(this.db, this.activityLog, id, dto);
     return buildDetailResponse(this.db, id);
   }
@@ -207,7 +223,7 @@ export class LineupsService {
   async findBanner(): Promise<LineupBannerResponseDto | null> {
     const [lineup] = await findBannerLineup(this.db);
     if (!lineup) return null;
-    return this.buildBannerData(lineup);
+    return buildBannerData(this.db, lineup);
   }
 
   /** Insert a new lineup row with phase scheduling fields. */
@@ -227,7 +243,7 @@ export class LineupsService {
           targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
           phaseDeadline,
           phaseDurationOverride: overrides,
-          matchThreshold: dto.matchThreshold?.toFixed(2) ?? undefined,
+          matchThreshold: dto.matchThreshold ?? undefined,
         })
         .returning();
     });
@@ -260,36 +276,16 @@ export class LineupsService {
     }
   }
 
-  /** Build banner data from a lineup row. */
-  private async buildBannerData(
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ) {
-    const entries = await findEntriesWithGames(this.db, lineup.id);
-    const gameIds = entries.map((e) => e.gameId);
-    const [ownerMap, voteMap, voterCount, totalMembers, decidedGame] =
-      await Promise.all([
-        countOwnersPerGame(this.db, gameIds),
-        countVotesPerGame(this.db, lineup.id),
-        countDistinctVoters(this.db, lineup.id),
-        countTotalMembers(this.db),
-        lineup.decidedGameId
-          ? findGameName(this.db, lineup.decidedGameId)
-          : Promise.resolve([]),
-      ]);
-    const vMap = new Map(voteMap.map((v) => [v.gameId, v.voteCount]));
-    const bannerEntries = entries.map((e) => ({
-      gameId: e.gameId,
-      gameName: e.gameName,
-      gameCoverUrl: e.gameCoverUrl,
-    }));
-    return buildBannerResponse(
-      { ...lineup, decidedGameName: decidedGame[0]?.name ?? null },
-      bannerEntries,
-      ownerMap,
-      vMap,
-      voterCount[0]?.total ?? 0,
-      totalMembers,
-    );
+  /** Run the matching algorithm (wrapped in try/catch so it never blocks). */
+  private async runMatchingAlgorithm(lineupId: number): Promise<void> {
+    try {
+      await buildMatchesForLineup(this.db, lineupId);
+    } catch (err: unknown) {
+      // Log error but don't block the phase transition
+      const msg = err instanceof Error ? err.message : String(err);
+
+      console.error(`Matching failed for lineup ${lineupId}: ${msg}`);
+    }
   }
 
   /** Validate a status transition is legal. */

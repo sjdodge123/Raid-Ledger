@@ -8,6 +8,7 @@ import {
   jsonb,
   numeric,
 } from 'drizzle-orm/pg-core';
+/* numeric import retained for communityLineupMatches.voterPercentage */
 import { users } from './users';
 import { games } from './games';
 import { events } from './events';
@@ -40,11 +41,8 @@ export const communityLineups = pgTable('community_lineups', {
     voting?: number;
     decided?: number;
   } | null>(),
-  /** Match threshold for the matching algorithm (0.10–0.75, default 0.35). */
-  matchThreshold: numeric('match_threshold', {
-    precision: 3,
-    scale: 2,
-  }).default('0.35'),
+  /** Match threshold percentage for the matching algorithm (0–100, default 35). */
+  matchThreshold: integer('match_threshold').notNull().default(35),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -97,4 +95,39 @@ export const communityLineupVotes = pgTable(
       table.gameId,
     ),
   ],
+);
+
+/** Match results computed on voting -> decided transition (ROK-936). */
+export const communityLineupMatches = pgTable('community_lineup_matches', {
+  id: serial('id').primaryKey(),
+  lineupId: integer('lineup_id')
+    .references(() => communityLineups.id, { onDelete: 'cascade' })
+    .notNull(),
+  gameId: integer('game_id')
+    .references(() => games.id, { onDelete: 'cascade' })
+    .notNull(),
+  status: text('status').notNull(),
+  voteCount: integer('vote_count').notNull(),
+  voterPercentage: numeric('voter_percentage', {
+    precision: 5,
+    scale: 2,
+  }).notNull(),
+  fitCategory: text('fit_category').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/** Members associated with each match (voters for that game). */
+export const communityLineupMatchMembers = pgTable(
+  'community_lineup_match_members',
+  {
+    id: serial('id').primaryKey(),
+    matchId: integer('match_id')
+      .references(() => communityLineupMatches.id, { onDelete: 'cascade' })
+      .notNull(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    source: text('source').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
 );
