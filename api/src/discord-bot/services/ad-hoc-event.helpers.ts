@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
@@ -269,4 +269,50 @@ export async function setGracePeriodStatus(
     .update(tables.events)
     .set({ adHocStatus: 'grace_period', updatedAt: new Date() })
     .where(eq(tables.events.id, eventId));
+}
+
+/** Stale threshold: events whose effective end is > 30 minutes ago. */
+const ORPHAN_THRESHOLD_MS = 30 * 60 * 1000;
+
+/**
+ * Find orphaned ad-hoc events: live or grace_period, not cancelled,
+ * whose effective end time is more than 30 minutes in the past.
+ */
+export async function findOrphanedAdHocEvents(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<(typeof tables.events.$inferSelect)[]> {
+  const cutoff = new Date(Date.now() - ORPHAN_THRESHOLD_MS);
+  return db
+    .select()
+    .from(tables.events)
+    .where(
+      and(
+        eq(tables.events.isAdHoc, true),
+        inArray(tables.events.adHocStatus, ['live', 'grace_period']),
+        sql`${tables.events.cancelledAt} IS NULL`,
+        sql`COALESCE(${tables.events.extendedUntil}, upper(${tables.events.duration})) < ${cutoff.toISOString()}::timestamptz`,
+      ),
+    );
+}
+
+/**
+ * Force-claim an orphaned event (live or grace_period -> ended).
+ * Returns the claimed event row, or null if already claimed.
+ */
+export async function forceClaimOrphanedEvent(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  now: Date,
+): Promise<typeof tables.events.$inferSelect | null> {
+  const [claimed] = await db
+    .update(tables.events)
+    .set({ adHocStatus: 'ended', updatedAt: now })
+    .where(
+      and(
+        eq(tables.events.id, eventId),
+        inArray(tables.events.adHocStatus, ['live', 'grace_period']),
+      ),
+    )
+    .returning();
+  return claimed ?? null;
 }

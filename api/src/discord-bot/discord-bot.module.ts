@@ -71,6 +71,7 @@ import { ScheduledEventReconciliationService } from './services/scheduled-event.
 import { PresenceGameDetectorService } from './services/presence-game-detector.service';
 import { VoiceAttendanceService } from './services/voice-attendance.service';
 import { EventAutoExtendService } from './services/event-auto-extend.service';
+import { AdHocReaperService } from './services/ad-hoc-reaper.service';
 import { PlayingCommand } from './commands/playing.command';
 
 @Module({
@@ -128,6 +129,7 @@ import { PlayingCommand } from './commands/playing.command';
     PresenceGameDetectorService,
     VoiceAttendanceService,
     EventAutoExtendService,
+    AdHocReaperService,
     EventLinkListener,
     EmbedPosterService,
     EmbedSchedulerService,

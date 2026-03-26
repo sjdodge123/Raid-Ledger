@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, HttpException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   ButtonInteraction,
@@ -153,6 +153,14 @@ export class SignupInteractionListener {
     try {
       await this.routeButtonAction(parsed.action, interaction, parsed.eventId);
     } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === 409) {
+        await safeReply(
+          interaction,
+          { content: error.message, flags: MessageFlags.Ephemeral },
+          this.logger,
+        );
+        return;
+      }
       this.logger.error(
         `Error handling signup for event ${parsed.eventId}:`,
         error,
