@@ -24,6 +24,7 @@ export async function anonymousDiscordSignup(
   dto: CreateDiscordSignupDto,
 ): Promise<{ response: SignupResponseDto; signupId: number }> {
   const event = await cancelH.fetchEventOrThrow(db, eventId);
+  cancelH.assertEventAcceptingSignups(event);
   const result = await db.transaction((tx) =>
     flowH.discordSignupTxBody(flowDeps, tx, event, eventId, dto),
   );

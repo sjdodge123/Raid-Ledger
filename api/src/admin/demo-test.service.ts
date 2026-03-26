@@ -117,7 +117,9 @@ export class DemoTestService {
     await this.assertDemoMode();
     const svc = this.moduleRef.get(SignupsService, { strict: false });
     const signupDto = this.buildSignupDto(dto);
-    const result = await svc.signup(eventId, userId, signupDto);
+    const result = await svc.signup(eventId, userId, signupDto, {
+      skipEndedCheck: true,
+    });
     if (dto?.linkDiscord) {
       await this.linkSignupDiscordId(result.id, userId);
     }

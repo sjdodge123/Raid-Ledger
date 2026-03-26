@@ -65,7 +65,11 @@ export class EventsController {
       const result = await this.eventsService.create(req.user.id, dto);
       const eventIds = result.allEventIds ?? [result.id];
       await Promise.all(
-        eventIds.map((id) => this.signupsService.signup(id, req.user.id)),
+        eventIds.map((id) =>
+          this.signupsService.signup(id, req.user.id, undefined, {
+            skipEndedCheck: true,
+          }),
+        ),
       );
       const { allEventIds: _, ...event } = result;
       void _;

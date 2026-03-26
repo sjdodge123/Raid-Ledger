@@ -7,8 +7,9 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
-import { eq, and, ne, or } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { Tx } from './signups.service.types';
 import { determineCancelStatus } from './signups-roster.helpers';
@@ -22,6 +23,32 @@ export async function fetchEventOrThrow(db: Tx, eventId: number) {
   if (!eventRow)
     throw new NotFoundException(`Event with ID ${eventId} not found`);
   return eventRow;
+}
+
+/**
+ * Validate that an event is still accepting signups.
+ * Throws ConflictException if the event is cancelled, explicitly ended,
+ * or its effective end time has elapsed.
+ */
+export function assertEventAcceptingSignups(
+  event: typeof schema.events.$inferSelect,
+): void {
+  if (event.cancelledAt) {
+    throw new ConflictException(
+      'This event has been cancelled and is no longer accepting signups.',
+    );
+  }
+  if (event.adHocStatus === 'ended') {
+    throw new ConflictException(
+      'This event has ended and is no longer accepting signups.',
+    );
+  }
+  const effectiveEnd = event.extendedUntil ?? event.duration?.[1];
+  if (effectiveEnd && effectiveEnd < new Date()) {
+    throw new ConflictException(
+      'This event has ended and is no longer accepting signups.',
+    );
+  }
 }
 
 export async function resolveCancelStatus(db: Tx, eventId: number) {
@@ -282,31 +309,5 @@ export async function findSignupForEvent(
   return signup;
 }
 
-export async function cleanupMatchingPugSlots(
-  db: Tx,
-  eventId: number,
-  userId: number,
-): Promise<void> {
-  const [user] = await db
-    .select({
-      discordId: schema.users.discordId,
-      username: schema.users.username,
-    })
-    .from(schema.users)
-    .where(eq(schema.users.id, userId))
-    .limit(1);
-  if (!user?.discordId) return;
-
-  await db
-    .delete(schema.pugSlots)
-    .where(
-      and(
-        eq(schema.pugSlots.eventId, eventId),
-        or(
-          eq(schema.pugSlots.discordUserId, user.discordId),
-          eq(schema.pugSlots.discordUsername, user.username),
-        ),
-      ),
-    )
-    .returning({ id: schema.pugSlots.id });
-}
+// Re-export cleanupMatchingPugSlots from signup-roster.helpers for backward compat
+export { cleanupMatchingPugSlots } from './signup-roster.helpers';

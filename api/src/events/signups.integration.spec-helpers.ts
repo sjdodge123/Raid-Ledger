@@ -98,6 +98,27 @@ export async function createMmoEvent(
 }
 
 /**
+ * Sign up a user via direct DB insert, bypassing HTTP validation.
+ * Use for past events where the signup guard would reject HTTP signups (ROK-970).
+ */
+export async function signupViaDb(
+  testApp: TestApp,
+  eventId: number,
+  userId: number,
+): Promise<typeof schema.eventSignups.$inferSelect> {
+  const [signup] = await testApp.db
+    .insert(schema.eventSignups)
+    .values({
+      eventId,
+      userId,
+      status: 'signed_up',
+      confirmationStatus: 'pending',
+    })
+    .returning();
+  return signup;
+}
+
+/**
  * Helper to sign up a user with preferred roles via HTTP.
  * Throws on non-201 responses to fail fast when used as a precondition.
  */

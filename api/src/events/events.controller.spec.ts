@@ -230,6 +230,8 @@ describe('EventsController', () => {
       expect(mockSignupsService.signup).toHaveBeenCalledWith(
         mockEvent.id,
         mockUser.id,
+        undefined,
+        { skipEndedCheck: true },
       );
     });
 

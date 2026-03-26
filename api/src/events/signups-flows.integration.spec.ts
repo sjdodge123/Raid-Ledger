@@ -1,15 +1,17 @@
 /**
- * Signups Integration Tests — signup flows, status updates, confirm signup, ROK-600.
+ * Signups Integration Tests — signup flows, status updates, confirm signup, ROK-600, ROK-970.
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
+import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import {
   createMemberAndLogin,
   createFutureEvent,
+  createPastEvent,
 } from './signups.integration.spec-helpers';
 
 let testApp: TestApp;
@@ -341,4 +343,85 @@ describe('Signups — character-optional (ROK-600)', () => {
   it('should sign up for non-MMO without char', () => testNonMmoWithoutChar());
   it('should sign up for MMO without char', () => testMmoWithoutChar());
   it('should sign up for MMO with char', () => testMmoWithChar());
+});
+
+// ─── signup on closed events (ROK-970) ──────────────────────────────────────
+
+async function testSignupOnEndedQuickPlay() {
+  const { token } = await createMemberAndLogin(
+    testApp,
+    'ended_qp',
+    'ended_qp@test.local',
+  );
+  const eventId = await createPastEvent(testApp, testApp.seed.adminUser.id, {
+    isAdHoc: true,
+  });
+  await testApp.db
+    .update(schema.events)
+    .set({ adHocStatus: 'ended' })
+    .where(eq(schema.events.id, eventId));
+  const res = await testApp.request
+    .post(`/events/${eventId}/signup`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({});
+  expect(res.status).toBe(409);
+  expect(res.body.message).toMatch(/ended/i);
+}
+
+async function testSignupOnElapsedEvent() {
+  const { token } = await createMemberAndLogin(
+    testApp,
+    'elapsed_player',
+    'elapsed@test.local',
+  );
+  const eventId = await createPastEvent(testApp, testApp.seed.adminUser.id);
+  const res = await testApp.request
+    .post(`/events/${eventId}/signup`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({});
+  expect(res.status).toBe(409);
+  expect(res.body.message).toMatch(/ended/i);
+}
+
+async function testSignupOnCancelledEvent() {
+  const { token } = await createMemberAndLogin(
+    testApp,
+    'cancelled_player',
+    'cancelled@test.local',
+  );
+  const eventId = await createFutureEvent(testApp, adminToken);
+  await testApp.db
+    .update(schema.events)
+    .set({ cancelledAt: new Date() })
+    .where(eq(schema.events.id, eventId));
+  const res = await testApp.request
+    .post(`/events/${eventId}/signup`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({});
+  expect(res.status).toBe(409);
+  expect(res.body.message).toMatch(/cancelled/i);
+}
+
+async function testSignupOnActiveEventStillWorks() {
+  const { token } = await createMemberAndLogin(
+    testApp,
+    'active_player',
+    'active@test.local',
+  );
+  const eventId = await createFutureEvent(testApp, adminToken);
+  const res = await testApp.request
+    .post(`/events/${eventId}/signup`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({});
+  expect(res.status).toBe(201);
+}
+
+describe('Signups — signup on closed events (ROK-970)', () => {
+  it('should reject signup on ended Quick Play event', () =>
+    testSignupOnEndedQuickPlay());
+  it('should reject signup on elapsed event', () => testSignupOnElapsedEvent());
+  it('should reject signup on cancelled event', () =>
+    testSignupOnCancelledEvent());
+  it('should still allow signup on active event', () =>
+    testSignupOnActiveEventStillWorks());
 });
