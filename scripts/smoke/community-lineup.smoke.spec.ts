@@ -525,9 +525,8 @@ test.describe('Voting phase', () => {
         const firstRow = leaderboard.locator('[data-testid="leaderboard-row"]').first();
         await firstRow.click();
 
-        // After voting, the row should show an emerald left accent (via data attribute or visual marker)
-        // The row should have a "voted" state indicator
-        await expect(firstRow.locator('[data-voted="true"]')).toBeVisible({ timeout: 5_000 });
+        // After voting, the row's data-voted attribute should flip to "true"
+        await expect(firstRow).toHaveAttribute('data-voted', 'true', { timeout: 5_000 });
 
         // A filled checkmark icon should be visible on voted rows
         const checkmark = firstRow.locator('[data-testid="vote-checkmark"]');
