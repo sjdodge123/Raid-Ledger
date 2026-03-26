@@ -12,12 +12,12 @@
  * and function-scoped describe blocks.
  */
 import { SteamLinkListener } from './steam-link.listener';
-import { ChannelType, Events, MessageFlags } from 'discord.js';
+import { ChannelType, Events } from 'discord.js';
 
 let listener: SteamLinkListener;
 let mockClientService: Record<string, jest.Mock>;
 let mockDb: Record<string, jest.Mock>;
-let mockReply: jest.Mock;
+let mockDmSend: jest.Mock;
 
 let messageIdCounter = 0;
 
@@ -62,10 +62,13 @@ function createMessage(
   return {
     id: `msg-${messageIdCounter}`,
     content,
-    author: { bot: false, id: 'discord-user-1' },
+    author: {
+      bot: false,
+      id: 'discord-user-1',
+      createDM: jest.fn().mockResolvedValue({ send: mockDmSend }),
+    },
     guild: { id: 'guild-123' },
     channel: { type: ChannelType.GuildText, id: 'chan-1' },
-    reply: mockReply,
     ...overrides,
   };
 }
@@ -130,7 +133,7 @@ function stubAutoHeartPref(enabled: boolean) {
 describe('SteamLinkListener', () => {
   beforeEach(() => {
     setupSteamLinkModule();
-    mockReply = jest.fn().mockResolvedValue({ id: 'reply-1' });
+    mockDmSend = jest.fn().mockResolvedValue({ id: 'dm-1' });
     messageIdCounter = 0;
   });
 
@@ -228,9 +231,9 @@ function steamUrlDetectionTests() {
     await callHandleMessage(msg);
 
     // Should reply with ephemeral prompt
-    expect(mockReply).toHaveBeenCalledWith(
+    expect(mockDmSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        flags: MessageFlags.Ephemeral,
+        content: expect.stringContaining('Raid Ledger'),
       }),
     );
   });
@@ -240,7 +243,7 @@ function steamUrlDetectionTests() {
       author: { bot: true, id: 'bot-1' },
     });
     await callHandleMessage(msg);
-    expect(mockReply).not.toHaveBeenCalled();
+    expect(mockDmSend).not.toHaveBeenCalled();
   });
 
   it('skips DM messages (no guild)', async () => {
@@ -248,13 +251,13 @@ function steamUrlDetectionTests() {
       guild: null,
     });
     await callHandleMessage(msg);
-    expect(mockReply).not.toHaveBeenCalled();
+    expect(mockDmSend).not.toHaveBeenCalled();
   });
 
   it('skips messages with no Steam URLs', async () => {
     const msg = createMessage('Just chatting about games!');
     await callHandleMessage(msg);
-    expect(mockReply).not.toHaveBeenCalled();
+    expect(mockDmSend).not.toHaveBeenCalled();
   });
 }
 
@@ -268,7 +271,7 @@ function ephemeralPromptTests() {
     const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
-    expect(mockReply).toHaveBeenCalledWith(
+    expect(mockDmSend).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Counter-Strike 2'),
       }),
@@ -284,10 +287,9 @@ function ephemeralPromptTests() {
     const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
-    expect(mockReply).toHaveBeenCalledWith(
+    expect(mockDmSend).toHaveBeenCalledWith(
       expect.objectContaining({
         components: expect.arrayContaining([expect.anything()]),
-        flags: MessageFlags.Ephemeral,
       }),
     );
   });
@@ -302,7 +304,7 @@ function silentSkipTests() {
     );
     await callHandleMessage(msg);
 
-    expect(mockReply).not.toHaveBeenCalled();
+    expect(mockDmSend).not.toHaveBeenCalled();
   });
 
   it('silently skips when user is not linked to Raid Ledger', async () => {
@@ -312,7 +314,7 @@ function silentSkipTests() {
     const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
-    expect(mockReply).not.toHaveBeenCalled();
+    expect(mockDmSend).not.toHaveBeenCalled();
   });
 
   it('silently skips when user is already interested in the game', async () => {
@@ -323,7 +325,7 @@ function silentSkipTests() {
     const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
-    expect(mockReply).not.toHaveBeenCalled();
+    expect(mockDmSend).not.toHaveBeenCalled();
   });
 }
 
@@ -430,6 +432,6 @@ function rateLimitTests() {
     await callHandleMessage(msg);
 
     // Should only prompt once
-    expect(mockReply).toHaveBeenCalledTimes(1);
+    expect(mockDmSend).toHaveBeenCalledTimes(1);
   });
 }

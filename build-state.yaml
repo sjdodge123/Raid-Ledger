@@ -1,0 +1,43 @@
+pipeline:
+  current_step: "review"
+  batch: 1
+  next_action: |
+    ALL stories deployed and in "In Review". WAITING for operator to test.
+    When operator updates Linear, read steps/step-4-review.md.
+  stories:
+    ROK-966:
+      title: "feat: Steam URL interest prompt — ephemeral heart this game on Discord paste"
+      linear_id: "ROK-966"
+      scope: full
+      status: "waiting_for_operator"
+      branch: "rok-966-steam-url-interest"
+      worktree: "../Raid-Ledger--rok-966"
+      needs_planner: true
+      needs_architect: true
+      requirements_gathered: true
+      spec_file: "planning-artifacts/specs/ROK-966.md"
+      e2e_test_type: "unit"
+      e2e_test_files:
+        - "api/src/discord-bot/listeners/steam-link.helpers.spec.ts"
+        - "api/src/discord-bot/listeners/steam-link-interest.helpers.spec.ts"
+        - "api/src/discord-bot/listeners/steam-link.listener.spec.ts"
+      gates:
+        e2e_test_first: PASS
+        dev: PASS
+        ci: PASS
+        operator: WAITING
+        reviewer: PENDING
+        architect_final: PENDING
+        smoke_test: PENDING
+      next_action: "Deployed and in In Review. Waiting for operator to test and update Linear."
+      agent_history:
+        - agent: planner
+          status: complete
+        - agent: architect_pre_dev
+          status: complete
+        - agent: tdd_test
+          status: complete
+        - agent: dev
+          status: complete
+        - agent: lead_ac_audit
+          status: complete

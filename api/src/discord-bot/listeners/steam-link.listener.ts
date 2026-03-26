@@ -15,7 +15,6 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  MessageFlags,
   type Message,
   type ButtonInteraction,
   type Interaction,
@@ -153,16 +152,16 @@ export class SteamLinkListener {
     await this.sendInterestPrompt(message, game);
   }
 
-  /** Send the ephemeral interest prompt with 3 buttons. */
+  /** Send the interest prompt as a DM to the message author. */
   private async sendInterestPrompt(
     message: Message,
     game: { id: number; name: string },
   ): Promise<void> {
     const row = buildButtonRow(game.id);
-    await message.reply({
+    const dm = await message.author.createDM();
+    await dm.send({
       content: `Interested in **${game.name}** on Raid Ledger?`,
       components: [row],
-      flags: MessageFlags.Ephemeral as number,
     });
   }
 
