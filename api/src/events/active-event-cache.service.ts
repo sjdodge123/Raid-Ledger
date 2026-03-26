@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { bestEffortInit } from '../common/lifecycle.util';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Cron } from '@nestjs/schedule';
 import { and, isNull, sql } from 'drizzle-orm';
@@ -39,7 +40,9 @@ export class ActiveEventCacheService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.refresh();
+    await bestEffortInit('ActiveEventCache.refresh', this.logger, () =>
+      this.refresh(),
+    );
   }
 
   /** Safety-net refresh every 5 minutes. */

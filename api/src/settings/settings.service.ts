@@ -55,8 +55,9 @@ export class SettingsService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
   ) {}
 
+  // STARTUP-CRITICAL: Settings cache must be available for all downstream services. @see bestEffortInit
   async onModuleInit(): Promise<void> {
-    await this.loadCache();
+    await this.loadCacheOrThrow();
   }
 
   /**
@@ -75,23 +76,32 @@ export class SettingsService implements OnModuleInit {
   /** Loads all settings from DB, decrypts, and replaces the cache. */
   private async loadCache(): Promise<void> {
     try {
-      const rows = await this.db.select().from(appSettings);
-      const fresh = new Map<string, string>();
-      for (const row of rows) {
-        try {
-          fresh.set(row.key, decrypt(row.encryptedValue));
-        } catch {
-          this.logger.error(`Failed to decrypt setting ${row.key}`);
-        }
-      }
-      this.cache = fresh;
-      this.cacheLoadedAt = Date.now();
-      this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
+      await this.loadCacheOrThrow();
     } catch (err: unknown) {
       this.logger.error('Background cache refresh failed', err);
     } finally {
       this.cacheLoadPromise = null;
     }
+  }
+
+  /**
+   * Startup-only variant that re-throws on failure.
+   * Used by onModuleInit so a DB outage at boot crashes fast
+   * rather than leaving an empty cache that causes cascading failures.
+   */
+  private async loadCacheOrThrow(): Promise<void> {
+    const rows = await this.db.select().from(appSettings);
+    const fresh = new Map<string, string>();
+    for (const row of rows) {
+      try {
+        fresh.set(row.key, decrypt(row.encryptedValue));
+      } catch {
+        this.logger.error(`Failed to decrypt setting ${row.key}`);
+      }
+    }
+    this.cache = fresh;
+    this.cacheLoadedAt = Date.now();
+    this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
   }
 
   /** Get a setting value by key (decrypted, from cache). */

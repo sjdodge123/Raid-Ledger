@@ -33,6 +33,7 @@ export class PluginRegistryService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
   ) {}
 
+  // STARTUP-CRITICAL: Plugin registry must be loaded for all plugin modules to register. @see bestEffortInit
   async onModuleInit(): Promise<void> {
     await this.refreshActiveCache();
   }
