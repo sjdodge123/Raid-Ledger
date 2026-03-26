@@ -17,7 +17,7 @@ export function CoverImage({
         <img
             src={src}
             alt={alt}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
         />
     );
@@ -26,7 +26,7 @@ export function CoverImage({
 /** Placeholder icon when no cover image is available. */
 export function CoverPlaceholder(): JSX.Element {
     return (
-        <div className="w-full h-full flex items-center justify-center text-dim">
+        <div className="absolute inset-0 flex items-center justify-center text-dim">
             <svg
                 className="w-12 h-12"
                 fill="none"
@@ -172,11 +172,13 @@ export function InfoBar({
 }: {
     rating: number | null | undefined;
     primaryMode: string | null;
-}): JSX.Element {
+}): JSX.Element | null {
+    const hasRating = rating != null && rating > 0;
+    if (!hasRating && !primaryMode) return null;
     return (
         <div className="p-2.5 space-y-1">
             <div className="flex items-center gap-2 text-xs text-muted">
-                {rating != null && rating > 0 && <StarRating rating={rating} />}
+                {hasRating && <StarRating rating={rating!} />}
                 {primaryMode && (
                     <>
                         <span className="text-dim">&middot;</span>

@@ -85,3 +85,4 @@ bmb-creations/
 
 # Fetched Linear stories
 .stories/
+build-state.yaml

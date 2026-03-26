@@ -160,6 +160,16 @@ export const BIND_CONFIRM_BUTTON_IDS = {
   CANCEL: 'bind_confirm_cancel',
 } as const;
 
+/**
+ * Custom IDs for Steam URL interest prompt buttons (ROK-966).
+ * Format: `{action}:{gameId}` -- e.g. `steam_interest_heart:42`
+ */
+export const STEAM_INTEREST_BUTTON_IDS = {
+  HEART: 'steam_interest_heart',
+  DISMISS: 'steam_interest_dismiss',
+  AUTO: 'steam_interest_auto',
+} as const;
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',

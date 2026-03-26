@@ -112,6 +112,32 @@ export async function dismissEphemeralMessages(
   }
 }
 
+/** Type and send a regular message into Discord's chat input. */
+export async function typeMessage(
+  page: import('playwright').Page,
+  text: string,
+): Promise<{ prevEphemeralCount: number }> {
+  const prevCount = await countEphemeralMessages(page);
+  const inputSelectors = [
+    '[role="textbox"][data-slate-editor="true"]',
+    '[class*="slateTextArea"]',
+    'div[contenteditable="true"]',
+  ];
+  for (const sel of inputSelectors) {
+    const el = page.locator(sel).first();
+    if (await el.isVisible().catch(() => false)) {
+      await el.click();
+      await page.waitForTimeout(200);
+      await page.keyboard.type(text, { delay: 30 });
+      await page.waitForTimeout(300);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(1000);
+      return { prevEphemeralCount: prevCount };
+    }
+  }
+  throw new Error('Could not find Discord chat input');
+}
+
 /** Type a slash command into Discord's chat input. */
 export async function typeSlashCommand(
   page: import('playwright').Page,

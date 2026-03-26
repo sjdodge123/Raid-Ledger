@@ -24,9 +24,10 @@ import {
 } from './demo-test-scheduled-event.helpers';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
 import {
-  classifyEventSessions,
-  autoPopulateAttendance,
-} from '../discord-bot/services/voice-attendance-classify.helpers';
+  injectVoiceSessionForTest as injectVoice,
+  triggerClassifyForTest as triggerClassify,
+  type InjectVoiceSessionParams,
+} from './demo-test-voice.helpers';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -244,53 +245,15 @@ export class DemoTestService {
   }
 
   /** Inject a synthetic voice session — DEMO_MODE only (ROK-943 smoke test). */
-  async injectVoiceSessionForTest(p: {
-    eventId: number;
-    discordUserId: string;
-    userId: number;
-    durationSec: number;
-    firstJoinAt?: string;
-    lastLeaveAt?: string;
-  }): Promise<void> {
+  async injectVoiceSessionForTest(p: InjectVoiceSessionParams): Promise<void> {
     await this.assertDemoMode();
-    const leave = p.lastLeaveAt ? new Date(p.lastLeaveAt) : new Date();
-    const join = p.firstJoinAt
-      ? new Date(p.firstJoinAt)
-      : new Date(leave.getTime() - p.durationSec * 1000);
-    await this.db
-      .insert(schema.eventVoiceSessions)
-      .values({
-        eventId: p.eventId,
-        userId: p.userId,
-        discordUserId: p.discordUserId,
-        discordUsername: 'smoke-test',
-        firstJoinAt: join,
-        lastLeaveAt: leave,
-        totalDurationSec: p.durationSec,
-        segments: [
-          {
-            joinAt: join.toISOString(),
-            leaveAt: leave.toISOString(),
-            durationSec: p.durationSec,
-          },
-        ],
-      })
-      .onConflictDoNothing();
+    await injectVoice(this.db, p);
   }
 
   /** Trigger voice classification + attendance for an event — DEMO_MODE only (ROK-943). */
   async triggerClassifyForTest(eventId: number): Promise<void> {
     await this.assertDemoMode();
-    const logger = { log: () => {}, warn: () => {} };
-    const defaultGraceMs = 5 * 60 * 1000;
-    await classifyEventSessions(
-      this.db,
-      eventId,
-      undefined,
-      defaultGraceMs,
-      logger,
-    );
-    await autoPopulateAttendance(this.db, eventId, logger);
+    await triggerClassify(this.db, eventId);
   }
 
   /** Copy the user's discordId onto their signup row (for voice classification). */
@@ -345,6 +308,34 @@ export class DemoTestService {
   ): Promise<{ success: boolean }> {
     await this.assertDemoMode();
     return setTimes(this.db, eventId, startTime, endTime);
+  }
+
+  /** Clear game interests for a user/game — DEMO_MODE only (ROK-966 smoke test). */
+  async clearGameInterestForTest(
+    userId: number,
+    gameId: number,
+  ): Promise<void> {
+    await this.assertDemoMode();
+    await this.db
+      .delete(schema.gameInterests)
+      .where(
+        and(
+          eq(schema.gameInterests.userId, userId),
+          eq(schema.gameInterests.gameId, gameId),
+        ),
+      );
+  }
+
+  /** Set steamAppId on a game — DEMO_MODE only (ROK-966 smoke test). */
+  async setSteamAppIdForTest(
+    gameId: number,
+    steamAppId: number,
+  ): Promise<void> {
+    await this.assertDemoMode();
+    await this.db
+      .update(schema.games)
+      .set({ steamAppId })
+      .where(eq(schema.games.id, gameId));
   }
 
   /** Build a ChannelPrefs object with all channels enabled for all types. */
