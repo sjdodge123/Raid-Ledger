@@ -145,7 +145,7 @@ export class IgdbController {
     @Query('ids') idsParam: string,
     @Req() req: AuthRequest,
   ): Promise<{ data: Record<string, { wantToPlay: boolean; count: number }> }> {
-    const gameIds = parseBatchIds(idsParam);
+    const gameIds = parseBatchIds(idsParam, 500);
     if (gameIds.length === 0) return { data: {} };
     const data = await batchCheckInterests(
       this.igdbService.database,

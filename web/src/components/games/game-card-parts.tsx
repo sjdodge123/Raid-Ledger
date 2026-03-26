@@ -26,7 +26,7 @@ export function CoverImage({
 /** Placeholder icon when no cover image is available. */
 export function CoverPlaceholder(): JSX.Element {
     return (
-        <div className="w-full h-full flex items-center justify-center text-dim">
+        <div className="absolute inset-0 flex items-center justify-center text-dim">
             <svg
                 className="w-12 h-12"
                 fill="none"
