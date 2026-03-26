@@ -5,7 +5,7 @@
  * game resolution by Steam app ID, user lookup by Discord ID,
  * existing interest checks, and preference management.
  */
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -49,13 +49,17 @@ export async function findLinkedRlUser(
   return user ?? null;
 }
 
+/** Sources that count as "hearted" — matches HEART_SOURCES in igdb-interest.helpers. */
+const HEART_SOURCES = ['manual', 'discord', 'steam'];
+
 /**
  * Check whether a user already has a heart interest for a game.
+ * Only checks HEART_SOURCES — steam_wishlist/steam_library don't count.
  *
  * @param db - Drizzle database instance
  * @param userId - Raid Ledger user ID
  * @param gameId - Game ID
- * @returns true if an interest row exists
+ * @returns true if a heart-source interest row exists
  */
 export async function hasExistingHeartInterest(
   db: Db,
@@ -69,6 +73,7 @@ export async function hasExistingHeartInterest(
       and(
         eq(schema.gameInterests.userId, userId),
         eq(schema.gameInterests.gameId, gameId),
+        inArray(schema.gameInterests.source, HEART_SOURCES),
       ),
     )
     .limit(1);
