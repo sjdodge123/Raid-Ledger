@@ -84,6 +84,36 @@ describe('findActiveScheduledEvent — sibling binding suppression (ROK-959)', (
   });
 });
 
+describe('buildBindingClause — effectiveGameId null safety (ROK-968)', () => {
+  let db: MockDb;
+  const now = new Date('2026-03-24T20:00:00Z');
+
+  beforeEach(() => {
+    db = createDrizzleMock();
+  });
+
+  it('includes gameId clause when effectiveGameId is null', async () => {
+    db.limit.mockResolvedValueOnce([]);
+
+    await findActiveScheduledEvent(db as never, 'binding-A', null, now);
+
+    const whereArg = db.where.mock.calls[0]?.[0];
+    const sqlText = sqlToString(whereArg);
+    // null effectiveGameId should NOT include gameId in OR clause
+    expect(sqlText).not.toContain('game_id');
+  });
+
+  it('includes gameId clause when effectiveGameId is undefined', async () => {
+    db.limit.mockResolvedValueOnce([]);
+
+    await findActiveScheduledEvent(db as never, 'binding-A', undefined, now);
+
+    const whereArg = db.where.mock.calls[0]?.[0];
+    const sqlText = sqlToString(whereArg);
+    expect(sqlText).not.toContain('game_id');
+  });
+});
+
 describe('createAdHocEventRow — title resolution (ROK-817)', () => {
   let db: MockDb;
 

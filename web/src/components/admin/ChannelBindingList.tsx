@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { ChannelBindingDto, UpdateChannelBindingDto } from '@raid-ledger/contract';
 import { BindingConfigForm } from './BindingConfigForm';
+import { useMultiMonitorChannels } from './use-multi-monitor-channels';
 
 const BEHAVIOR_LABELS: Record<string, string> = {
   'game-announcements': 'Event Announcements',
@@ -107,18 +108,7 @@ export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, i
     const [editingId, setEditingId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    const multiMonitorChannels = useMemo(() => {
-        const counts = new Map<string, number>();
-        for (const b of bindings) {
-            if (b.bindingPurpose !== 'game-voice-monitor') continue;
-            counts.set(b.channelId, (counts.get(b.channelId) ?? 0) + 1);
-        }
-        const result = new Set<string>();
-        for (const [chId, count] of counts) {
-            if (count >= 2) result.add(chId);
-        }
-        return result;
-    }, [bindings]);
+    const multiMonitorChannels = useMultiMonitorChannels(bindings);
 
     if (bindings.length === 0) {
         return (
