@@ -1,19 +1,11 @@
 import type { JSX } from 'react';
 import type { LineupDetailResponseDto, LineupStatusDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
+import { PHASES, PHASE_LABELS } from './lineup-phases';
 
 interface Props {
   lineup: LineupDetailResponseDto;
 }
-
-const PHASES: LineupStatusDto[] = ['building', 'voting', 'scheduling', 'decided', 'archived'];
-const PHASE_LABELS: Record<LineupStatusDto, string> = {
-  building: 'Nominating',
-  voting: 'Voting',
-  scheduling: 'Scheduling',
-  decided: 'Decided',
-  archived: 'Archived',
-};
 
 function phaseIndex(status: string): number {
   return PHASES.indexOf(status as LineupStatusDto);
