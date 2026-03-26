@@ -1,11 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
+import { NotificationDedupService } from './notification-dedup.service';
 
 /** TTL for game-alert dedup keys: 30 days in seconds */
 const GAME_ALERT_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -40,9 +39,8 @@ export class GameAffinityNotificationService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-    @Inject(REDIS_CLIENT)
-    private redis: Redis,
     private readonly notificationService: NotificationService,
+    private readonly dedupService: NotificationDedupService,
   ) {}
 
   /**
@@ -53,7 +51,11 @@ export class GameAffinityNotificationService {
     input: GameAffinityNotificationInput,
   ): Promise<void> {
     const dedupKey = `game-alert:event:${input.eventId}`;
-    if (await this.redis.get(dedupKey)) {
+    const alreadySent = await this.dedupService.checkAndMarkSent(
+      dedupKey,
+      GAME_ALERT_TTL_SECONDS,
+    );
+    if (alreadySent) {
       this.logger.debug(
         `Game affinity alerts already sent for event ${input.eventId}, skipping`,
       );
@@ -68,7 +70,6 @@ export class GameAffinityNotificationService {
     }
     recipientIds = await this.excludeAbsentUsers(recipientIds, input);
     if (recipientIds.length === 0) return;
-    await this.redis.set(dedupKey, '1', 'EX', GAME_ALERT_TTL_SECONDS);
     await this.dispatchAffinityNotifications(input, recipientIds);
   }
 

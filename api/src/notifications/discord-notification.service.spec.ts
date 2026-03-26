@@ -8,6 +8,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { NotificationDedupService } from './notification-dedup.service';
 
 describe('DiscordNotificationService', () => {
   let service: DiscordNotificationService;
@@ -49,6 +50,10 @@ describe('DiscordNotificationService', () => {
     expire: jest.fn().mockResolvedValue(1),
   };
 
+  const mockDedupService = {
+    checkAndMarkSent: jest.fn().mockResolvedValue(false),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -70,6 +75,7 @@ describe('DiscordNotificationService', () => {
           useValue: mockEmbedService,
         },
         { provide: SettingsService, useValue: mockSettingsService },
+        { provide: NotificationDedupService, useValue: mockDedupService },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],
     }).compile();
@@ -199,29 +205,33 @@ describe('DiscordNotificationService', () => {
       expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
-    it('should skip when already sent (tracked in Redis)', async () => {
+    it('should skip when already sent (DB-backed dedup)', async () => {
       mockDb.limit.mockResolvedValueOnce([{ discordId: '123456' }]);
-      mockRedis.get.mockResolvedValueOnce('1');
+      mockDedupService.checkAndMarkSent.mockResolvedValueOnce(true);
 
       await service.sendWelcomeDM(1);
 
+      expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+        'discord-notif:welcome:1',
+        null,
+      );
       expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
-    it('should send welcome DM and track in Redis', async () => {
+    it('should send welcome DM and mark via dedup service', async () => {
       mockDb.limit.mockResolvedValueOnce([{ discordId: '123456' }]);
-      mockRedis.get.mockResolvedValueOnce(null);
+      mockDedupService.checkAndMarkSent.mockResolvedValueOnce(false);
 
       await service.sendWelcomeDM(1);
 
+      expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+        'discord-notif:welcome:1',
+        null,
+      );
       expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
         '123456',
         expect.anything(),
         expect.anything(),
-      );
-      expect(mockRedis.set).toHaveBeenCalledWith(
-        'discord-notif:welcome:1',
-        '1',
       );
     });
   });

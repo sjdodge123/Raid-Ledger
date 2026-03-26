@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import Redis from 'ioredis';
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -10,9 +9,9 @@ import {
 } from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
+import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -40,8 +39,8 @@ export class RecruitmentReminderService {
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
-    @Inject(REDIS_CLIENT) private redis: Redis,
     private readonly notificationService: NotificationService,
+    private readonly dedupService: NotificationDedupService,
     private readonly settingsService: SettingsService,
     private readonly discordBotClient: DiscordBotClientService,
     private readonly cronJobService: CronJobService,
@@ -104,8 +103,11 @@ export class RecruitmentReminderService {
   /** Post channel bump if not already done. */
   private async maybeBumpChannel(event: EligibleEvent): Promise<void> {
     const bumpKey = `recruitment-bump:event:${event.id}`;
-    if (!(await this.redis.get(bumpKey))) {
-      await this.redis.set(bumpKey, '1', 'EX', DEDUP_TTL_SECONDS);
+    const alreadySent = await this.dedupService.checkAndMarkSent(
+      bumpKey,
+      DEDUP_TTL_SECONDS,
+    );
+    if (!alreadySent) {
       await this.postChannelBump(event);
     }
   }
@@ -113,7 +115,11 @@ export class RecruitmentReminderService {
   /** Send recruitment DMs if not already done. */
   private async maybeSendDMs(event: EligibleEvent): Promise<void> {
     const dmKey = `recruitment-dm:event:${event.id}`;
-    if (await this.redis.get(dmKey)) {
+    const alreadySent = await this.dedupService.checkAndMarkSent(
+      dmKey,
+      DEDUP_TTL_SECONDS,
+    );
+    if (alreadySent) {
       this.logger.debug(
         `Recruitment DMs already sent for event ${event.id}, skipping`,
       );
@@ -126,7 +132,6 @@ export class RecruitmentReminderService {
       event.id,
     );
     recipientIds = await this.filterAbsentUsers(recipientIds, event);
-    await this.redis.set(dmKey, '1', 'EX', DEDUP_TTL_SECONDS);
     if (recipientIds.length > 0) {
       await this.sendRecruitmentDMs(event, recipientIds);
     } else {

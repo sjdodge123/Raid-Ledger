@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RecruitmentReminderService } from './recruitment-reminder.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import { REDIS_CLIENT } from '../redis/redis.module';
 import { NotificationService } from './notification.service';
+import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -51,7 +51,7 @@ export interface RecruitmentReminderTestMocks {
     set: jest.Mock;
     where: jest.Mock;
   };
-  mockRedis: { get: jest.Mock; set: jest.Mock };
+  mockDedupService: { checkAndMarkSent: jest.Mock };
   mockNotificationService: {
     create: jest.Mock;
     resolveVoiceChannelForEvent: jest.Mock;
@@ -75,9 +75,8 @@ export async function createRecruitmentReminderTestModule(): Promise<{
       set: jest.fn().mockReturnThis(),
       where: jest.fn().mockResolvedValue(undefined),
     },
-    mockRedis: {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue('OK'),
+    mockDedupService: {
+      checkAndMarkSent: jest.fn().mockResolvedValue(false),
     },
     mockNotificationService: {
       create: jest.fn().mockResolvedValue({ id: 'notif-uuid-1' }),
@@ -102,7 +101,10 @@ export async function createRecruitmentReminderTestModule(): Promise<{
     providers: [
       RecruitmentReminderService,
       { provide: DrizzleAsyncProvider, useValue: mocks.mockDb },
-      { provide: REDIS_CLIENT, useValue: mocks.mockRedis },
+      {
+        provide: NotificationDedupService,
+        useValue: mocks.mockDedupService,
+      },
       { provide: NotificationService, useValue: mocks.mockNotificationService },
       { provide: SettingsService, useValue: mocks.mockSettingsService },
       {
