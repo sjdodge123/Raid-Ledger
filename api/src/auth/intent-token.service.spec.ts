@@ -2,10 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { IntentTokenService } from './intent-token.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import type { IntentTokenPayload } from '@raid-ledger/contract';
 
 /**

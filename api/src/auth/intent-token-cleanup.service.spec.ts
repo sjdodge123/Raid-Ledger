@@ -2,10 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IntentTokenCleanupService } from './intent-token-cleanup.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { CronJobService } from '../cron-jobs/cron-job.service';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 /**
  * TDD tests for ROK-979: Intent token cleanup cron service.
@@ -25,9 +22,7 @@ describe('IntentTokenCleanupService', () => {
     mockCronJobService = {
       executeWithTracking: jest
         .fn()
-        .mockImplementation(
-          (_name: string, fn: () => Promise<void>) => fn(),
-        ),
+        .mockImplementation((_name: string, fn: () => Promise<void>) => fn()),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -38,18 +33,12 @@ describe('IntentTokenCleanupService', () => {
       ],
     }).compile();
 
-    service = module.get<IntentTokenCleanupService>(
-      IntentTokenCleanupService,
-    );
+    service = module.get<IntentTokenCleanupService>(IntentTokenCleanupService);
   });
 
   describe('cleanupExpiredTokens', () => {
     it('should delete rows where consumed_at is older than 15 minutes', async () => {
-      mockDb.returning.mockResolvedValueOnce([
-        { id: 1 },
-        { id: 2 },
-        { id: 3 },
-      ]);
+      mockDb.returning.mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }]);
 
       await service.cleanupExpiredTokens();
 
@@ -64,9 +53,7 @@ describe('IntentTokenCleanupService', () => {
 
       await service.cleanupExpiredTokens();
 
-      expect(
-        mockCronJobService.executeWithTracking,
-      ).toHaveBeenCalledWith(
+      expect(mockCronJobService.executeWithTracking).toHaveBeenCalledWith(
         expect.stringContaining('cleanupExpiredTokens'),
         expect.any(Function),
       );
@@ -76,9 +63,7 @@ describe('IntentTokenCleanupService', () => {
       mockDb.returning.mockResolvedValueOnce([]);
 
       // Should not throw
-      await expect(
-        service.cleanupExpiredTokens(),
-      ).resolves.not.toThrow();
+      await expect(service.cleanupExpiredTokens()).resolves.not.toThrow();
     });
 
     it('should only delete tokens older than the 15-minute threshold', async () => {

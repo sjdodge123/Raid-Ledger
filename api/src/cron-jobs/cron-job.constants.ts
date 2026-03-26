@@ -133,4 +133,9 @@ export const CORE_JOB_METADATA: Record<
       'Creates missing Discord scheduled events for future events every 15 minutes',
     category: 'Events',
   },
+  IntentTokenCleanupService_cleanupExpiredTokens: {
+    description:
+      'Purges consumed intent tokens older than 15 minutes every 5 minutes',
+    category: 'Maintenance',
+  },
 };

@@ -1,7 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { REDIS_CLIENT } from '../redis/redis.module';
-import type Redis from 'ioredis';
+import { createHash } from 'node:crypto';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
 import type { IntentTokenPayload } from '@raid-ledger/contract';
 
 /** Intent token TTL: 15 minutes (matches Discord interaction timeout) */
@@ -15,8 +17,8 @@ const INTENT_TOKEN_TTL = 15 * 60;
  * deferred signup flow where an unlinked Discord user creates an RL account
  * and auto-completes a signup.
  *
- * Single-use enforcement backed by Redis for correctness across restarts
- * and multi-instance deployments.
+ * Single-use enforcement backed by Postgres for durability across restarts
+ * (ROK-979 — migrated from Redis SETNX to DB INSERT ON CONFLICT DO NOTHING).
  */
 @Injectable()
 export class IntentTokenService {
@@ -24,7 +26,8 @@ export class IntentTokenService {
 
   constructor(
     private readonly jwtService: JwtService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
 
   /**
@@ -45,7 +48,7 @@ export class IntentTokenService {
 
   /**
    * Validate and consume an intent token (single-use).
-   * Uses Redis SETNX for atomic single-use enforcement.
+   * Uses DB INSERT ON CONFLICT DO NOTHING for atomic single-use enforcement.
    * @param token - The JWT to validate
    * @returns The decoded payload, or null if invalid/expired/already used
    */
@@ -53,18 +56,15 @@ export class IntentTokenService {
     try {
       const payload = this.jwtService.verify<IntentTokenPayload>(token);
 
-      // Atomic single-use check via Redis SETNX (set-if-not-exists)
-      // Key auto-expires after the token TTL to prevent unbounded growth
-      const redisKey = `intent_used:${token}`;
-      const wasSet = await this.redis.set(
-        redisKey,
-        '1',
-        'EX',
-        INTENT_TOKEN_TTL,
-        'NX',
-      );
+      const tokenHash = this.hashToken(token);
 
-      if (!wasSet) {
+      const result = await this.db
+        .insert(schema.consumedIntentTokens)
+        .values({ tokenHash })
+        .onConflictDoNothing()
+        .returning({ id: schema.consumedIntentTokens.id });
+
+      if (result.length === 0) {
         this.logger.warn('Intent token already used');
         return null;
       }
@@ -74,5 +74,14 @@ export class IntentTokenService {
       this.logger.debug('Intent token validation failed');
       return null;
     }
+  }
+
+  /**
+   * Hash a token with SHA-256 for storage (avoids storing raw JWTs).
+   * @param token - The raw JWT string
+   * @returns Hex-encoded SHA-256 hash (64 characters)
+   */
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 }

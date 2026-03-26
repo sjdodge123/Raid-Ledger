@@ -18,6 +18,7 @@ import { NotificationModule } from '../notifications/notification.module';
 import { CharactersModule } from '../characters/characters.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { SessionCleanupService } from './session-cleanup.service';
+import { IntentTokenCleanupService } from './intent-token-cleanup.service';
 
 /**
  * Auth module — core authentication logic (JWT, local auth, intent tokens).
@@ -51,6 +52,7 @@ import { SessionCleanupService } from './session-cleanup.service';
     IntentTokenService,
     JwtStrategy,
     SessionCleanupService,
+    IntentTokenCleanupService,
   ],
   exports: [
     AuthService,
