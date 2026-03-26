@@ -80,6 +80,31 @@ async function archiveLineup(token: string, id: number): Promise<void> {
     }
 }
 
+/**
+ * Ensure an active lineup exists in building phase, creating one if needed.
+ * Returns the lineup ID. Used by beforeEach hooks across describe blocks to
+ * guard against cross-worker archival between tests.
+ */
+async function ensureActiveLineupInBuildingPhase(token: string): Promise<number> {
+    const banner = await apiGet(token, '/lineups/banner');
+    if (banner && typeof banner.id === 'number' && banner.status === 'building') {
+        return banner.id;
+    }
+    if (banner && typeof banner.id === 'number') {
+        await archiveLineup(token, banner.id);
+    }
+    const lineup = (await apiPost(token, '/lineups', {
+        targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    })) as { id?: number };
+    if (lineup?.id) {
+        return lineup.id;
+    }
+    // 409 race — another worker created one; use it
+    const reBanner = await apiGet(token, '/lineups/banner');
+    if (reBanner && typeof reBanner.id === 'number') return reBanner.id;
+    return lineupId; // fallback to last known
+}
+
 test.beforeAll(async () => {
     adminToken = await getAdminToken();
 
@@ -114,23 +139,7 @@ test.beforeAll(async () => {
 test.describe('Community Lineup banner on Games page', () => {
     // Re-verify lineup exists before each test — lineup-creation tests may archive it
     test.beforeEach(async () => {
-        const banner = await apiGet(adminToken, '/lineups/banner');
-        if (banner && typeof banner.id === 'number' && banner.status === 'building') {
-            lineupId = banner.id;
-            return;
-        }
-        if (banner && typeof banner.id === 'number') {
-            await archiveLineup(adminToken, banner.id);
-        }
-        const lineup = (await apiPost(adminToken, '/lineups', {
-            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-        })) as { id?: number };
-        if (lineup?.id) {
-            lineupId = lineup.id;
-        } else {
-            const reBanner = await apiGet(adminToken, '/lineups/banner');
-            if (reBanner && typeof reBanner.id === 'number') lineupId = reBanner.id;
-        }
+        lineupId = await ensureActiveLineupInBuildingPhase(adminToken);
     });
 
     test('banner shows COMMUNITY LINEUP text and status badge', async ({ page }) => {
@@ -259,24 +268,7 @@ test.describe('Community Lineup detail page', () => {
     // Re-verify lineup exists in building phase before each test.
     // Other workers (lineup-creation tests) may archive the lineup between runs.
     test.beforeEach(async () => {
-        const banner = await apiGet(adminToken, '/lineups/banner');
-        if (banner && typeof banner.id === 'number' && banner.status === 'building') {
-            lineupId = banner.id;
-            return;
-        }
-        if (banner && typeof banner.id === 'number') {
-            await archiveLineup(adminToken, banner.id);
-        }
-        const lineup = (await apiPost(adminToken, '/lineups', {
-            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-        })) as { id?: number };
-        if (lineup?.id) {
-            lineupId = lineup.id;
-        } else {
-            // 409 race — another worker created one; use it
-            const reBanner = await apiGet(adminToken, '/lineups/banner');
-            if (reBanner && typeof reBanner.id === 'number') lineupId = reBanner.id;
-        }
+        lineupId = await ensureActiveLineupInBuildingPhase(adminToken);
     });
 
     test('renders header with title and status badge', async ({ page }) => {
@@ -374,23 +366,7 @@ test.describe('Community Lineup responsive layout', () => {
     // Re-verify lineup exists in building phase before each test.
     // Other workers (lineup-creation/phase-breadcrumb tests) may advance or archive the lineup.
     test.beforeEach(async () => {
-        const banner = await apiGet(adminToken, '/lineups/banner');
-        if (banner && typeof banner.id === 'number' && banner.status === 'building') {
-            lineupId = banner.id;
-            return;
-        }
-        if (banner && typeof banner.id === 'number') {
-            await archiveLineup(adminToken, banner.id);
-        }
-        const lineup = (await apiPost(adminToken, '/lineups', {
-            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-        })) as { id?: number };
-        if (lineup?.id) {
-            lineupId = lineup.id;
-        } else {
-            const reBanner = await apiGet(adminToken, '/lineups/banner');
-            if (reBanner && typeof reBanner.id === 'number') lineupId = reBanner.id;
-        }
+        lineupId = await ensureActiveLineupInBuildingPhase(adminToken);
     });
 
     test('nomination grid uses 2-column layout on desktop', async ({ page }, testInfo) => {
