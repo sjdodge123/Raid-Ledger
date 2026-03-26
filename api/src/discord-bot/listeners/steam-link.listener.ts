@@ -24,7 +24,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ItadService } from '../../itad/itad.service';
 import { SettingsService } from '../../settings/settings.service';
-import { SETTING_KEYS } from '../../settings/settings.types';
+import { SETTING_KEYS } from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DISCORD_BOT_EVENTS,
