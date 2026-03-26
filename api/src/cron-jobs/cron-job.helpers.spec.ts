@@ -29,7 +29,13 @@ describe('recordNoOp', () => {
     const startedAt = new Date('2025-01-01T00:00:00Z');
     const finishedAt = new Date('2025-01-01T00:00:00.050Z');
 
-    await recordNoOp(mockDb as any, job as any, 'test-job', startedAt, finishedAt);
+    await recordNoOp(
+      mockDb as any,
+      job as any,
+      'test-job',
+      startedAt,
+      finishedAt,
+    );
 
     expect(mockDb.insert).toHaveBeenCalled();
     expect(mockDb.values).toHaveBeenCalledWith(
