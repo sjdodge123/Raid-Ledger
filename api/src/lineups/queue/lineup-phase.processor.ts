@@ -33,7 +33,14 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    await this.rehydratePendingJobs();
+    try {
+      await this.rehydratePendingJobs();
+    } catch (err) {
+      this.logger.error(
+        'Failed to rehydrate lineup phase jobs on startup',
+        err,
+      );
+    }
   }
 
   /** Process a phase transition job. */
