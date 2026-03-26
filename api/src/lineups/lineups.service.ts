@@ -8,9 +8,11 @@ import {
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  BandwagonJoinResponseDto,
   CommonGroundQueryDto,
   CommonGroundResponseDto,
   CreateLineupDto,
+  GroupedMatchesResponseDto,
   LineupBannerResponseDto,
   LineupDetailResponseDto,
   NominateGameDto,
@@ -62,6 +64,12 @@ import {
 import { logTransition, logNomination } from './lineups-activity.helpers';
 import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
+import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
+import {
+  executeBandwagonJoin,
+  advanceMatch as advanceMatchHelper,
+} from './lineups-bandwagon.helpers';
+import { carryOverFromLastDecided } from './lineups-carryover.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -94,6 +102,7 @@ export class LineupsService {
       overrides,
     );
     void this.activityLog.log('lineup', row.id, 'lineup_created', userId);
+    await carryOverFromLastDecided(this.db, row.id);
 
     const delayMs = phaseDeadline.getTime() - Date.now();
     await this.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
@@ -230,6 +239,28 @@ export class LineupsService {
     const [lineup] = await findBannerLineup(this.db);
     if (!lineup) return null;
     return buildBannerData(this.db, lineup);
+  }
+
+  /** Get grouped matches for decided view (ROK-937). */
+  async getGroupedMatches(id: number): Promise<GroupedMatchesResponseDto> {
+    return buildGroupedMatchesResponse(this.db, id);
+  }
+
+  /** Bandwagon join a match (ROK-937). */
+  async bandwagonJoin(
+    lineupId: number,
+    matchId: number,
+    userId: number,
+  ): Promise<BandwagonJoinResponseDto> {
+    return executeBandwagonJoin(this.db, lineupId, matchId, userId);
+  }
+
+  /** Advance a suggested match to scheduling (ROK-937). */
+  async advanceMatch(
+    lineupId: number,
+    matchId: number,
+  ): Promise<{ promoted: boolean }> {
+    return advanceMatchHelper(this.db, lineupId, matchId);
   }
 
   /** Insert a new lineup row with phase scheduling fields. */

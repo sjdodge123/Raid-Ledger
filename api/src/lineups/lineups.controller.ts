@@ -27,6 +27,8 @@ import {
   type LineupBannerResponseDto,
   type CommonGroundResponseDto,
   type ActivityTimelineResponseDto,
+  type GroupedMatchesResponseDto,
+  type BandwagonJoinResponseDto,
 } from '@raid-ledger/contract';
 import { LineupsService } from './lineups.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -149,6 +151,37 @@ export class LineupsController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.lineupsService.transitionStatus(id, parsed.data);
+  }
+
+  /** GET /lineups/:id/matches — grouped matches for decided view (ROK-937). */
+  @Get(':id/matches')
+  async getMatches(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<GroupedMatchesResponseDto> {
+    return this.lineupsService.getGroupedMatches(id);
+  }
+
+  /** POST /lineups/:id/matches/:matchId/join — bandwagon join (ROK-937). */
+  @Post(':id/matches/:matchId/join')
+  @HttpCode(HttpStatus.OK)
+  async joinMatch(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Req() req: AuthRequest,
+  ): Promise<BandwagonJoinResponseDto> {
+    return this.lineupsService.bandwagonJoin(id, matchId, req.user.id);
+  }
+
+  /** POST /lineups/:id/matches/:matchId/advance — operator advance (ROK-937). */
+  @Post(':id/matches/:matchId/advance')
+  @UseGuards(RolesGuard)
+  @Roles('operator')
+  @HttpCode(HttpStatus.OK)
+  async advanceMatch(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('matchId', ParseIntPipe) matchId: number,
+  ): Promise<{ promoted: boolean }> {
+    return this.lineupsService.advanceMatch(id, matchId);
   }
 
   /** GET /lineups/:id/activity — activity timeline for a lineup. */

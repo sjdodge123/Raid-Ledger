@@ -179,6 +179,16 @@ export async function findNominatedGameIds(
   return rows.map((r) => r.gameId);
 }
 
+/** Count member-role users (excludes operators/admins). */
+export function countMemberUsers(db: PostgresJsDatabase<typeof schema>) {
+  return db
+    .select({
+      total: sql<number>`count(*)::int`.as('total'),
+    })
+    .from(schema.users)
+    .where(eq(schema.users.role, 'member'));
+}
+
 /** Find an active lineup specifically in building status. */
 export function findBuildingLineup(db: PostgresJsDatabase<typeof schema>) {
   return db
