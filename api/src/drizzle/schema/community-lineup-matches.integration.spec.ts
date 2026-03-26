@@ -166,6 +166,7 @@ describe('LineupMatchSchema (ROK-964)', () => {
   });
 
   it('rejects match with missing required fields', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _id, ...incomplete } = validMatch;
     const result = LineupMatchSchema.safeParse(incomplete);
     expect(result.success).toBe(false);
@@ -267,6 +268,7 @@ describe('LineupScheduleVoteSchema (ROK-964)', () => {
   });
 
   it('rejects vote with missing slotId', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { slotId: _slotId, ...incomplete } = validVote;
     const result = LineupScheduleVoteSchema.safeParse(incomplete);
     expect(result.success).toBe(false);
