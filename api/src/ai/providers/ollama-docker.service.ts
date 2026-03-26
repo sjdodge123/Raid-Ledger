@@ -161,10 +161,10 @@ export class OllamaDockerService {
     });
   }
 
-  /** execFile for quick Docker commands (10s timeout). */
+  /** execFile for quick Docker commands (5s timeout). */
   private execQuick(args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      execFile('docker', args, { timeout: 10_000 }, (err, stdout) => {
+      execFile('docker', args, { timeout: 5_000 }, (err, stdout) => {
         if (err) reject(new Error(err.message));
         else resolve(stdout);
       });

@@ -7,7 +7,6 @@ import {
   OnModuleDestroy,
   Optional,
 } from '@nestjs/common';
-import { perfLog } from '../common/perf-logger';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CronTime } from 'cron';
@@ -32,15 +31,18 @@ import {
   recordSkipped,
   recordCompleted,
   recordFailed,
+  recordNoOp,
   extractRegistryJobMeta,
   flushPendingUpdates,
   recordSkippedTrigger,
+} from './cron-job.helpers';
+import {
   getCronJobSafe,
   applyRuntimeSchedule,
   setPaused,
   syncOnePluginRegistrar,
   getExecutionHistory,
-} from './cron-job.helpers';
+} from './cron-job.admin-helpers';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
 
@@ -190,7 +192,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       const result = await fn();
       const finishedAt = new Date();
       if (result === false) {
-        this.deferNoOp(job, jobName, startedAt, finishedAt);
+        await recordNoOp(this.db, job, jobName, startedAt, finishedAt);
       } else {
         await recordCompleted(this.db, job, jobName, startedAt, finishedAt);
       }
@@ -209,21 +211,6 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     } finally {
       await this.maybePrune(job, jobName);
     }
-  }
-
-  /** Defer a no-op run's last_run_at update. */
-  private deferNoOp(
-    job: CronJobRow,
-    jobName: string,
-    startedAt: Date,
-    finishedAt: Date,
-  ): void {
-    this.pendingLastRunUpdates.set(job.id, {
-      lastRunAt: finishedAt,
-      cronExpression: job.cronExpression,
-    });
-    const durationMs = finishedAt.getTime() - startedAt.getTime();
-    perfLog('CRON', jobName, durationMs, { status: 'no-op' });
   }
 
   /** Prune old executions periodically. */

@@ -160,7 +160,7 @@ export class AiProvidersController {
     return status !== 'not-found';
   }
 
-  /** Check availability with 3s timeout, capturing error details. */
+  /** Check availability with 2s timeout, capturing error details. */
   private async checkAvailableWithError(provider: {
     key: string;
     isAvailable: () => Promise<boolean>;
@@ -168,7 +168,7 @@ export class AiProvidersController {
     try {
       const available = await Promise.race([
         provider.isAvailable(),
-        new Promise<false>((r) => setTimeout(() => r(false), 3000)),
+        new Promise<false>((r) => setTimeout(() => r(false), 2000)),
       ]);
       return { available };
     } catch (e) {

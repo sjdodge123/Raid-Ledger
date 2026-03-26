@@ -10,6 +10,7 @@ import {
   varchar,
   unique,
   numeric,
+  index,
 } from 'drizzle-orm/pg-core';
 
 /**
@@ -129,5 +130,7 @@ export const eventTypes = pgTable(
       table.gameId,
       table.slug,
     ),
+    /** L-3: Standalone index for filtering event types by game */
+    gameIdIdx: index('idx_event_types_game_id').on(table.gameId),
   }),
 );

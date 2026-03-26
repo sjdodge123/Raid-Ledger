@@ -29,7 +29,6 @@ import type {
   UpdatePreferencesInput,
 } from './notification.types';
 
-// Re-export types for backward compatibility
 export type {
   ChannelPrefs,
   NotificationType,
@@ -225,7 +224,7 @@ export class NotificationService {
     await this.cronJobService.executeWithTracking(
       'NotificationService_cleanupExpiredNotifications',
       async () => {
-        await this.cleanupExpired();
+        if ((await this.cleanupExpired()) === 0) return false;
       },
     );
   }

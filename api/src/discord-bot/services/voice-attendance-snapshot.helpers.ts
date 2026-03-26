@@ -119,6 +119,7 @@ async function snapshotSingleEvent(
 /**
  * Orchestrate snapshots for recently started events.
  * Skips events already in the `snapshotted` set.
+ * @returns false if no events need snapshotting (no-op).
  */
 export async function runEventSnapshots(
   db: Db,
@@ -128,8 +129,9 @@ export async function runEventSnapshots(
   resolveVoiceChannel: SnapshotDeps['resolveVoiceChannel'],
   snapshotEvent: SnapshotDeps['snapshotEvent'],
   logger: Logger,
-): Promise<void> {
+): Promise<void | false> {
   const events = await fetchRecentlyStartedEvents(db, now, windowMs);
+  if (events.length === 0) return false;
   const deps: SnapshotDeps = { resolveVoiceChannel, snapshotEvent, logger };
   for (const event of events) {
     if (snapshotted.has(event.id)) continue;

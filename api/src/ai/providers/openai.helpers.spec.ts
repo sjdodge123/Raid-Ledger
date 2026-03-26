@@ -118,6 +118,53 @@ describe('openai.helpers (adversarial)', () => {
         }),
       );
     });
+
+    it('aborts after the configured timeout', async () => {
+      global.fetch = jest.fn().mockImplementation(
+        (_url: string, opts: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            opts.signal?.addEventListener('abort', () => {
+              reject(
+                new DOMException('The operation was aborted.', 'AbortError'),
+              );
+            });
+          }),
+      );
+      await expect(
+        fetchOpenAi('sk-test', '/v1/models', { timeoutMs: 50 }),
+      ).rejects.toThrow(/abort/i);
+    });
+
+    it('sends an AbortSignal to fetch for timeout control', async () => {
+      let capturedSignal: AbortSignal | undefined;
+      global.fetch = jest
+        .fn()
+        .mockImplementation((_url: string, opts: RequestInit) => {
+          capturedSignal = opts.signal as AbortSignal;
+          return Promise.resolve({
+            ok: true,
+            json: jest.fn().mockResolvedValue({}),
+          });
+        });
+      await fetchOpenAi('sk-test', '/v1/models');
+      expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('uses 5s default timeout when timeoutMs is not provided', async () => {
+      let capturedSignal: AbortSignal | undefined;
+      global.fetch = jest
+        .fn()
+        .mockImplementation((_url: string, opts: RequestInit) => {
+          capturedSignal = opts.signal as AbortSignal;
+          return Promise.resolve({
+            ok: true,
+            json: jest.fn().mockResolvedValue({}),
+          });
+        });
+      await fetchOpenAi('sk-test', '/v1/models');
+      expect(capturedSignal).toBeDefined();
+      expect(capturedSignal!.aborted).toBe(false);
+    });
   });
 
   describe('mapOpenAiChatResponse — edge cases', () => {

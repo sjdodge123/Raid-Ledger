@@ -90,6 +90,14 @@ describe('UnifiedGameCard — link variant', () => {
         expect(link).toHaveAttribute('href', '/games/42');
     });
 
+    it('has aria-label with game name on the link element', () => {
+        renderCard(
+            <UnifiedGameCard variant="link" game={createBaseGame()} />,
+        );
+        const link = screen.getByRole('link');
+        expect(link).toHaveAttribute('aria-label', 'Elden Ring');
+    });
+
     it('renders the cover image when coverUrl is present', () => {
         renderCard(
             <UnifiedGameCard variant="link" game={createBaseGame()} />,
@@ -183,6 +191,36 @@ describe('UnifiedGameCard — toggle variant', () => {
         );
         expect(screen.getByRole('button')).toBeInTheDocument();
         expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    });
+
+    it('has aria-label reflecting selection state', () => {
+        const { rerender } = renderCard(
+            <UnifiedGameCard
+                variant="toggle"
+                game={createBaseGame()}
+                selected={false}
+                onToggle={vi.fn()}
+            />,
+        );
+        expect(screen.getByRole('button')).toHaveAttribute(
+            'aria-label',
+            'Select Elden Ring',
+        );
+
+        rerender(
+            <MemoryRouter>
+                <UnifiedGameCard
+                    variant="toggle"
+                    game={createBaseGame()}
+                    selected={true}
+                    onToggle={vi.fn()}
+                />
+            </MemoryRouter>,
+        );
+        expect(screen.getByRole('button')).toHaveAttribute(
+            'aria-label',
+            'Deselect Elden Ring',
+        );
     });
 
     it('calls onToggle when clicked', async () => {

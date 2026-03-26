@@ -9,6 +9,7 @@
  * Admin's own unread count is checked for self-affecting notifications.
  */
 import { pollForCondition } from '../../helpers/polling.js';
+import { simulatePlaintextContent } from '../../helpers/discord-markup.js';
 import {
   createEvent,
   signupAs,
@@ -361,35 +362,6 @@ const welcomeDmNotification: SmokeTest = {
 
 // Slow tests gated behind SMOKE_INCLUDE_SLOW=1
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
-
-/**
- * Replicate the DM processor's stripDiscordMarkup + buildPlaintextContent
- * to verify what the actual DM push content would look like (ROK-918).
- * Bot-to-bot DMs fail (50007), so we test the transformation on raw data.
- */
-function simulatePlaintextContent(title: string, message: string): string {
-  const formatEpoch = (epoch: number): string => {
-    const d = new Date(epoch * 1000);
-    return d.toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit', hour12: true,
-      timeZoneName: 'short',
-    });
-  };
-  const raw = `${title}\n${message}`;
-  return raw
-    .replace(/<t:(\d+)(?::[a-zA-Z])?>/g, (_, epoch) =>
-      formatEpoch(Number(epoch)),
-    )
-    .replace(/<#\d+>/g, '#channel')
-    .replace(/<@&\d+>/g, '@role')
-    .replace(/<@!?\d+>/g, '@user')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/\(\s*\)/g, '')
-    .replace(/ {2,}/g, ' ')
-    .trim();
-}
 
 const rescheduleDmHasDate: SmokeTest = {
   name: 'Reschedule DM plaintext includes new date, not empty parens (ROK-918)',

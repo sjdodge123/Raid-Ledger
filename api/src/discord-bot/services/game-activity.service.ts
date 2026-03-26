@@ -215,9 +215,8 @@ export class GameActivityService
           )
           .returning({ id: schema.gameActivitySessions.id });
 
-        if (result.length > 0) {
-          this.logger.log(`Swept ${result.length} stale session(s)`);
-        }
+        if (result.length === 0) return false;
+        this.logger.log(`Swept ${result.length} stale session(s)`);
       },
     );
   }

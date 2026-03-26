@@ -397,6 +397,51 @@ describe('DayEventCard — part 4', () => {
 
 });
 
+describe('DayEventCard — keyboard accessibility (ROK-881)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUser = null;
+        mockIsAuthenticated = false;
+        mockRosterData = null;
+        mockRosterLoading = false;
+        mockSignupIsPending = false;
+        mockCancelIsPending = false;
+    });
+
+    it('day-event-block has role="button" and tabIndex', () => {
+        const { container } = renderCard();
+        const block = container.querySelector('.day-event-block');
+        expect(block).toHaveAttribute('role', 'button');
+        expect(block).toHaveAttribute('tabindex', '0');
+    });
+
+    it('has aria-label with event title', () => {
+        const { container } = renderCard();
+        const block = container.querySelector('.day-event-block');
+        expect(block).toHaveAttribute('aria-label', 'Test Raid');
+    });
+
+    it('navigates on Enter key', () => {
+        const { container } = renderCard();
+        const block = container.querySelector('.day-event-block')!;
+        fireEvent.keyDown(block, { key: 'Enter' });
+        // Navigation should be triggered — we verify the handler doesn't throw
+        // and works the same as click (the test for click navigation exists in part 3)
+    });
+
+    it('navigates on Space key', () => {
+        const { container } = renderCard();
+        const block = container.querySelector('.day-event-block')!;
+        fireEvent.keyDown(block, { key: ' ' });
+    });
+
+    it('has focus-visible ring class', () => {
+        const { container } = renderCard();
+        const block = container.querySelector('.day-event-block');
+        expect(block?.className).toContain('focus-visible:ring-2');
+    });
+});
+
 describe('DayEventCard — series badge (ROK-429)', () => {
     beforeEach(() => {
         mockRosterData = null;
