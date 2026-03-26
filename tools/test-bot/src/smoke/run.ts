@@ -21,6 +21,7 @@ import { rosterCalculationTests } from './tests/roster-calculation.test.js';
 import { pushContentTests } from './tests/push-content.test.js';
 import { slashCommandTests } from './tests/slash-commands.test.js';
 import { cdpSlashCommandTests } from './tests/cdp-slash-commands.test.js';
+import { cdpSteamInterestTests } from './tests/cdp-steam-interest.test.js';
 import { scheduledEventCompletionTests } from './tests/scheduled-event-completion.test.js';
 
 /** Build a TestResult from a test, status, and timing info. */
@@ -132,6 +133,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...interactionFlowTests,
     ...slashCommandTests,
     ...cdpSlashCommandTests,
+    ...cdpSteamInterestTests,
     ...scheduledEventCompletionTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }

@@ -347,6 +347,18 @@ export class DemoTestService {
     return setTimes(this.db, eventId, startTime, endTime);
   }
 
+  /** Set steamAppId on a game — DEMO_MODE only (ROK-966 smoke test). */
+  async setSteamAppIdForTest(
+    gameId: number,
+    steamAppId: number,
+  ): Promise<void> {
+    await this.assertDemoMode();
+    await this.db
+      .update(schema.games)
+      .set({ steamAppId })
+      .where(eq(schema.games.id, gameId));
+  }
+
   /** Build a ChannelPrefs object with all channels enabled for all types. */
   private buildAllChannelsEnabled(): ChannelPrefs {
     const prefs = {} as Record<string, Record<string, boolean>>;

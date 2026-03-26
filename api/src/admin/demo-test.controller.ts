@@ -67,6 +67,11 @@ const AwaitProcessingSchema = z.object({
   timeoutMs: z.number().int().positive().max(60_000).optional(),
 });
 
+const SetSteamAppIdSchema = z.object({
+  gameId: z.number().int().positive(),
+  steamAppId: z.number().int().positive(),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 const CreateTestSignupSchema = z.object({
@@ -304,6 +309,20 @@ export class DemoTestController {
       parsed.startTime,
       parsed.endTime,
     );
+  }
+
+  /** Set steamAppId on a game — DEMO_MODE only (ROK-966 smoke test). */
+  @Post('set-steam-app-id')
+  @HttpCode(HttpStatus.OK)
+  async setSteamAppIdForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(SetSteamAppIdSchema, body);
+    await this.demoTestService.setSteamAppIdForTest(
+      parsed.gameId,
+      parsed.steamAppId,
+    );
+    return { success: true };
   }
 
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */
