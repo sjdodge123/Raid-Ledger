@@ -101,6 +101,13 @@ async function archiveActiveLineup(token: string): Promise<void> {
     }
 }
 
+/** Fetch real game IDs from the admin endpoint (seed data IDs are non-sequential). */
+async function fetchGameIds(token: string, count: number): Promise<number[]> {
+    const data = await apiGet(token, '/admin/settings/games');
+    if (!data?.data?.length) throw new Error('No games in DB — seed data missing');
+    return data.data.slice(0, count).map((g: { id: number }) => g.id);
+}
+
 /**
  * Create a lineup in voting phase with nominated games and a custom votesPerPlayer.
  * Returns the lineup ID.
@@ -110,6 +117,8 @@ async function createVotingLineupWithVotesPerPlayer(
     votesPerPlayer: number,
 ): Promise<number> {
     await archiveActiveLineup(token);
+
+    const gameIds = await fetchGameIds(token, 3);
 
     const createRes = await apiPost(token, '/lineups', {
         buildingDurationHours: 24,
@@ -125,8 +134,8 @@ async function createVotingLineupWithVotesPerPlayer(
     const lineup = (await createRes.json()) as { id: number };
     const lineupId = lineup.id;
 
-    // Nominate at least 3 games for the voting phase
-    for (const gid of [1, 2, 3]) {
+    // Nominate real games from the seed data
+    for (const gid of gameIds) {
         await apiPost(token, `/lineups/${lineupId}/nominate`, { gameId: gid });
     }
 
