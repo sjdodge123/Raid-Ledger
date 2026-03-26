@@ -5,16 +5,12 @@ import { useTransitionLineupStatus } from '../../hooks/use-lineups';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { LineupStatusBadge } from './LineupStatusBadge';
 import { PhaseCountdown } from './phase-countdown';
+import { PHASES, PHASE_LABELS } from './lineup-phases';
 import { toast } from '../../lib/toast';
 
 interface Props {
   lineup: LineupDetailResponseDto;
 }
-
-const PHASES: LineupStatusDto[] = ['building', 'voting', 'scheduling', 'decided', 'archived'];
-const PHASE_LABELS: Record<LineupStatusDto, string> = {
-  building: 'Nominating', voting: 'Voting', scheduling: 'Scheduling', decided: 'Decided', archived: 'Archived',
-};
 
 /** SVG circle progress indicator — fills 33/66/100% with red→yellow→green. */
 function PhaseCircle({ status }: { status: string }): JSX.Element {
