@@ -7,7 +7,6 @@ import { join, relative } from 'path';
  * Each file with `async onModuleInit` must EITHER:
  *   1. Use `bestEffortInit` (best-effort, guarded)
  *   2. Contain a `STARTUP-CRITICAL` comment (intentionally unguarded)
- *   3. Be in the KNOWN_INLINE_GUARDED allowlist (already has try/catch)
  *
  * When this test fails, you added a new onModuleInit hook.
  * Fix: wrap with bestEffortInit or add a STARTUP-CRITICAL comment.

@@ -36,34 +36,32 @@ export class DiscordAuthStrategy
   }
 
   async onModuleInit(): Promise<void> {
-    await bestEffortInit('DiscordAuthStrategy', this.logger, async () => {
-      await this.reloadConfig();
-    });
+    await bestEffortInit('DiscordAuthStrategy', this.logger, () =>
+      this.reloadConfig(),
+    );
   }
 
   /**
    * Reload OAuth configuration from database.
    * Called on startup and when settings are updated.
    */
-  async reloadConfig(): Promise<boolean> {
+  async reloadConfig(): Promise<void> {
     try {
       const config = await this.settingsService.getDiscordOAuthConfig();
 
       if (!config) {
         this.logger.warn('Discord OAuth not configured - strategy disabled');
         this.isStrategyConfigured = false;
-        return false;
+        return;
       }
 
       // Update the passport strategy options
       this.updateStrategyOptions(config);
       this.isStrategyConfigured = true;
       this.logger.log('Discord OAuth strategy reloaded with new configuration');
-      return true;
     } catch (error) {
       this.logger.error('Failed to reload Discord OAuth config:', error);
       this.isStrategyConfigured = false;
-      return false;
     }
   }
 
