@@ -6,10 +6,11 @@ interface Props {
   lineup: LineupDetailResponseDto;
 }
 
-const PHASES: LineupStatusDto[] = ['building', 'voting', 'decided', 'archived'];
+const PHASES: LineupStatusDto[] = ['building', 'voting', 'scheduling', 'decided', 'archived'];
 const PHASE_LABELS: Record<LineupStatusDto, string> = {
   building: 'Nominating',
   voting: 'Voting',
+  scheduling: 'Scheduling',
   decided: 'Decided',
   archived: 'Archived',
 };
