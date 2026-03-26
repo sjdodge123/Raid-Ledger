@@ -325,7 +325,7 @@ describe('OllamaNativeService', () => {
     it('includes stderr in error when startService fails', async () => {
       const errMsg = 'Command failed: supervisorctl reread';
       const stderr =
-        'error: <class \'FileNotFoundError\'>, [Errno 2] No such file or directory: file: /usr/lib/python3/supervisord/options.py';
+        "error: <class 'FileNotFoundError'>, [Errno 2] No such file or directory: file: /usr/lib/python3/supervisord/options.py";
 
       mockExecErrorWithStderr(errMsg, stderr);
 

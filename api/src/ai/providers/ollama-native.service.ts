@@ -102,8 +102,8 @@ export class OllamaNativeService {
   /** Run a command with execFile (10s timeout). */
   private execQuick(cmd: string, args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      execFile(cmd, args, { timeout: 10_000 }, (err, stdout) => {
-        if (err) reject(new Error(err.message));
+      execFile(cmd, args, { timeout: 10_000 }, (err, stdout, stderr) => {
+        if (err) reject(new Error(`${err.message}\n${stderr}`));
         else resolve(stdout);
       });
     });

@@ -135,13 +135,12 @@ COPY <<'EOF' /etc/supervisor.d/raid-ledger.ini
 [unix_http_server]
 file=/run/supervisor.sock
 chmod=0700
-username=admin
-password=admin
 
 [supervisorctl]
 serverurl=unix:///run/supervisor.sock
-username=admin
-password=admin
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisord]
 nodaemon=true
@@ -298,7 +297,7 @@ export NGINX_PORT="${PORT:-80}"
 envsubst '${NGINX_PORT}' < /etc/nginx/http.d/default.conf.template > /etc/nginx/http.d/default.conf
 
 # Start all services via supervisor
-exec supervisord -c /etc/supervisord.conf
+exec supervisord -c /etc/supervisor.d/raid-ledger.ini
 EOF
 RUN chmod +x /app/entrypoint.sh
 
