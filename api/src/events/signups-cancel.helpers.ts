@@ -44,8 +44,8 @@ export function assertEventAcceptingSignups(
       'This event has ended and is no longer accepting signups.',
     );
   }
-  const effectiveEnd = event.extendedUntil ?? event.duration[1];
-  if (effectiveEnd < new Date()) {
+  const effectiveEnd = event.extendedUntil ?? event.duration?.[1];
+  if (effectiveEnd && effectiveEnd < new Date()) {
     throw new ConflictException(
       'This event has ended and is no longer accepting signups.',
     );
