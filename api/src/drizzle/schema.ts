@@ -39,3 +39,4 @@ export * from './schema/ai-request-logs';
 export * from './schema/community-lineups';
 export * from './schema/community-lineup-matches';
 export * from './schema/activity-log';
+export * from './schema/notification-dedup';

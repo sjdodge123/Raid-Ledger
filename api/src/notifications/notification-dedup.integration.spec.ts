@@ -70,10 +70,7 @@ describe('Notification Dedup (integration)', () => {
       const ttlSeconds = 48 * 60 * 60; // 48 hours
 
       // Act
-      const result = await dedupService.checkAndMarkSent(
-        dedupKey,
-        ttlSeconds,
-      );
+      const result = await dedupService.checkAndMarkSent(dedupKey, ttlSeconds);
 
       // Assert: false means "not yet sent, go ahead and send"
       expect(result).toBe(false);
@@ -99,10 +96,7 @@ describe('Notification Dedup (integration)', () => {
       await dedupService.checkAndMarkSent(dedupKey, ttlSeconds);
 
       // Act: second call should hit Redis fast-path
-      const result = await dedupService.checkAndMarkSent(
-        dedupKey,
-        ttlSeconds,
-      );
+      const result = await dedupService.checkAndMarkSent(dedupKey, ttlSeconds);
 
       // Assert: true means "already sent, skip"
       expect(result).toBe(true);
@@ -124,10 +118,7 @@ describe('Notification Dedup (integration)', () => {
       expect(redisValueBefore).toBeNull();
 
       // Act: should fall through to DB lookup
-      const result = await dedupService.checkAndMarkSent(
-        dedupKey,
-        ttlSeconds,
-      );
+      const result = await dedupService.checkAndMarkSent(dedupKey, ttlSeconds);
 
       // Assert: true because DB still has the record
       expect(result).toBe(true);

@@ -40,30 +40,32 @@ describe('RecruitmentReminderService', () => {
 
       await service.checkAndSendReminders();
 
-      expect(mocks.mockRedis.get).not.toHaveBeenCalled();
+      expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
       expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
       expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
     });
   });
 
   describe('checkAndSendReminders — deduplication', () => {
-    it('should skip event when both Redis dedup keys already exist', async () => {
+    it('should skip event when both dedup keys already exist', async () => {
       const event = makeEventRow();
       mocks.mockDb.execute.mockResolvedValueOnce([event]);
-      mocks.mockRedis.get.mockResolvedValue('1'); // both bump and dm keys exist
+      mocks.mockDedupService.checkAndMarkSent.mockResolvedValue(true); // both bump and dm already sent
 
       await service.checkAndSendReminders();
 
-      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+      expect(mocks.mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         'recruitment-bump:event:42',
+        48 * 60 * 60,
       );
-      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+      expect(mocks.mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         'recruitment-dm:event:42',
+        48 * 60 * 60,
       );
       expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
     });
 
-    it('should set Redis DM dedup key with 48h TTL before dispatching DMs', async () => {
+    it('should call checkAndMarkSent for DM dedup key with 48h TTL', async () => {
       const event = makeEventRow();
       mocks.mockDb.execute
         .mockResolvedValueOnce([event]) // findEligibleEvents
@@ -72,10 +74,8 @@ describe('RecruitmentReminderService', () => {
 
       await service.checkAndSendReminders();
 
-      expect(mocks.mockRedis.set).toHaveBeenCalledWith(
+      expect(mocks.mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         'recruitment-dm:event:42',
-        '1',
-        'EX',
         48 * 60 * 60,
       );
     });
@@ -89,15 +89,15 @@ describe('RecruitmentReminderService', () => {
         .mockResolvedValueOnce([]) // findRecipients for event2
         .mockResolvedValueOnce([]); // findAbsentUsers — may not be called when no recipients
 
-      mocks.mockRedis.get.mockResolvedValue(null); // neither event deduplicated
-
       await service.checkAndSendReminders();
 
-      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+      expect(mocks.mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         'recruitment-bump:event:10',
+        48 * 60 * 60,
       );
-      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+      expect(mocks.mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         'recruitment-bump:event:20',
+        48 * 60 * 60,
       );
     });
   });

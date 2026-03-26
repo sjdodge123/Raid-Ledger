@@ -41,7 +41,7 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
     const result = await service.checkAndSendReminders();
 
     expect(result).toBe(false);
-    expect(mocks.mockRedis.get).not.toHaveBeenCalled();
+    expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
     expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
     expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
   });
@@ -184,13 +184,7 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
 
     await service.checkAndSendReminders();
 
-    expect(mocks.mockRedis.set).not.toHaveBeenCalledWith(
-      'recruitment-bump:event:77',
-      '1',
-      'EX',
-      expect.any(Number),
-    );
-    expect(mocks.mockRedis.get).not.toHaveBeenCalled();
+    expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
   });
 
   it('should only process the non-grace event when batch contains both grace and non-grace events', async () => {
@@ -217,11 +211,13 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
 
     await service.checkAndSendReminders();
 
-    expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+    expect(mocks.mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
       'recruitment-bump:event:20',
+      172800,
     );
-    expect(mocks.mockRedis.get).not.toHaveBeenCalledWith(
+    expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalledWith(
       'recruitment-bump:event:10',
+      172800,
     );
     expect(mocks.mockNotificationService.create).toHaveBeenCalledTimes(1);
   });
@@ -246,7 +242,7 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
     const result = await service.checkAndSendReminders();
 
     expect(result).toBe(false);
-    expect(mocks.mockRedis.get).not.toHaveBeenCalled();
+    expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
     expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
     expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
   });
@@ -268,8 +264,9 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
       .mockResolvedValueOnce([]); // findRecipients (>24h away, DMs deferred)
 
     return service.checkAndSendReminders().then(() => {
-      expect(mocks.mockRedis.get).toHaveBeenCalledWith(
+      expect(mocks.mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         'recruitment-bump:event:88',
+        172800,
       );
     });
   });
@@ -291,6 +288,6 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
     const result = await service.checkAndSendReminders();
 
     expect(result).toBe(false);
-    expect(mocks.mockRedis.get).not.toHaveBeenCalled();
+    expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
   });
 });

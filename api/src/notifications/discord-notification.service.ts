@@ -10,6 +10,7 @@ import * as schema from '../drizzle/schema';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
+import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import {
   DISCORD_NOTIFICATION_QUEUE,
@@ -38,6 +39,7 @@ export class DiscordNotificationService {
     @InjectQueue(DISCORD_NOTIFICATION_QUEUE) private queue: Queue,
     private readonly clientService: DiscordBotClientService,
     private readonly embedService: DiscordNotificationEmbedService,
+    private readonly dedupService: NotificationDedupService,
     private readonly settingsService: SettingsService,
     @Inject(REDIS_CLIENT)
     private redis: Redis,
@@ -182,10 +184,10 @@ export class DiscordNotificationService {
       return;
     }
 
-    // Check if we already sent a welcome DM (tracked in Redis)
+    // Check if we already sent a welcome DM (DB-backed dedup, null = no expiry)
     const welcomeKey = `discord-notif:welcome:${userId}`;
-    const alreadySent = await this.redis.get(welcomeKey);
-    if (alreadySent) return;
+    const wasSent = await this.dedupService.checkAndMarkSent(welcomeKey, null);
+    if (wasSent) return;
 
     try {
       const branding = await this.settingsService.getBranding();
@@ -195,9 +197,6 @@ export class DiscordNotificationService {
       );
 
       await this.clientService.sendEmbedDM(user.discordId, embed, row);
-
-      // Mark as sent (no expiry — one-time event)
-      await this.redis.set(welcomeKey, '1');
 
       this.logger.log(`Sent welcome DM to user ${userId}`);
     } catch (error) {

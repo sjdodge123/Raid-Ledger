@@ -15,6 +15,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { NotificationDedupService } from './notification-dedup.service';
 
 describe('DiscordNotificationService — system type & failure TTL (ROK-373)', () => {
   let service: DiscordNotificationService;
@@ -77,6 +78,10 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
           useValue: mockEmbedService,
         },
         { provide: SettingsService, useValue: mockSettingsService },
+        {
+          provide: NotificationDedupService,
+          useValue: { checkAndMarkSent: jest.fn().mockResolvedValue(false) },
+        },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],
     }).compile();
