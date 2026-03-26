@@ -3,6 +3,7 @@
  * Handles automatic phase advancement and rehydration on startup.
  */
 import { Inject, Logger, OnModuleInit } from '@nestjs/common';
+import { bestEffortInit } from '../../common/lifecycle.util';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -33,14 +34,9 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    try {
-      await this.rehydratePendingJobs();
-    } catch (err) {
-      this.logger.error(
-        'Failed to rehydrate lineup phase jobs on startup',
-        err,
-      );
-    }
+    await bestEffortInit('LineupPhaseProcessor', this.logger, () =>
+      this.rehydratePendingJobs(),
+    );
   }
 
   /** Process a phase transition job. */

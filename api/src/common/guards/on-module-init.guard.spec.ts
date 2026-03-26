@@ -16,14 +16,9 @@ import { join, relative } from 'path';
 const SRC_DIR = join(__dirname, '..', '..');
 
 /**
- * Files that already have inline try/catch around their onModuleInit body.
- * These are allowed without bestEffortInit or STARTUP-CRITICAL.
+ * Inline-guarded allowlist cleared in ROK-972 — all hooks now use bestEffortInit.
  */
-const KNOWN_INLINE_GUARDED: string[] = [
-  'presence-game-detector.service.ts',
-  'lineup-phase.processor.ts',
-  'discord-auth.strategy.ts',
-];
+const KNOWN_INLINE_GUARDED: string[] = [];
 
 /** Recursively collect all `.ts` source files. */
 function collectTsFiles(dir: string): string[] {

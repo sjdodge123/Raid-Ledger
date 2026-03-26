@@ -80,14 +80,15 @@ describe('PresenceGameDetectorService', () => {
       );
     });
 
-    it('logs warning when pg_trgm check query fails', async () => {
+    it('logs error via bestEffortInit when pg_trgm check query fails', async () => {
       mockExecuteFn.mockRejectedValueOnce(new Error('connection refused'));
 
-      const warnSpy = jest.spyOn(service['logger'], 'warn');
+      const errorSpy = jest.spyOn(service['logger'], 'error');
       await service.onModuleInit();
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to check for pg_trgm extension'),
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('PresenceGameDetector'),
+        expect.any(String),
       );
     });
   });
