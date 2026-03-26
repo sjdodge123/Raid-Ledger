@@ -347,6 +347,22 @@ export class DemoTestService {
     return setTimes(this.db, eventId, startTime, endTime);
   }
 
+  /** Clear game interests for a user/game — DEMO_MODE only (ROK-966 smoke test). */
+  async clearGameInterestForTest(
+    userId: number,
+    gameId: number,
+  ): Promise<void> {
+    await this.assertDemoMode();
+    await this.db
+      .delete(schema.gameInterests)
+      .where(
+        and(
+          eq(schema.gameInterests.userId, userId),
+          eq(schema.gameInterests.gameId, gameId),
+        ),
+      );
+  }
+
   /** Set steamAppId on a game — DEMO_MODE only (ROK-966 smoke test). */
   async setSteamAppIdForTest(
     gameId: number,

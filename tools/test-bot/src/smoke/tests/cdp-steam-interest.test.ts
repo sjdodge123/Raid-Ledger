@@ -91,6 +91,12 @@ function buildCdpSteamTests(): SmokeTest[] {
       username: 'cdp-test-user',
     });
 
+    // Clear any existing interest from prior test runs
+    await ctx.api.post('/admin/test/clear-game-interest', {
+      userId: ctx.testUserId,
+      gameId: game.id,
+    });
+
     return { gameName: game.name, discordId };
   }
 

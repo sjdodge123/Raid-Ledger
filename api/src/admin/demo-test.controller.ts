@@ -72,6 +72,11 @@ const SetSteamAppIdSchema = z.object({
   steamAppId: z.number().int().positive(),
 });
 
+const ClearGameInterestSchema = z.object({
+  userId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 const CreateTestSignupSchema = z.object({
@@ -309,6 +314,20 @@ export class DemoTestController {
       parsed.startTime,
       parsed.endTime,
     );
+  }
+
+  /** Clear game interests for a user/game — DEMO_MODE only (ROK-966 smoke test). */
+  @Post('clear-game-interest')
+  @HttpCode(HttpStatus.OK)
+  async clearGameInterestForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(ClearGameInterestSchema, body);
+    await this.demoTestService.clearGameInterestForTest(
+      parsed.userId,
+      parsed.gameId,
+    );
+    return { success: true };
   }
 
   /** Set steamAppId on a game — DEMO_MODE only (ROK-966 smoke test). */
