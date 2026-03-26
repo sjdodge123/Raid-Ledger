@@ -100,42 +100,35 @@ function buildCdpSteamTests(): SmokeTest[] {
     return { gameName: game.name, discordId };
   }
 
-  /** Read the last DM content from the Discord DM list via CDP. */
+  /** Navigate to DMs and read the most recent DM message. */
   async function readLastDm(
     page: import('playwright').Page,
     timeoutMs: number,
   ): Promise<string> {
-    // Navigate to Discord home (DM list)
-    await page.click('[aria-label="Direct Messages"]').catch(() =>
-      page.click('a[href="/channels/@me"]').catch(() => {}),
-    );
-    await page.waitForTimeout(2000);
+    // Click the Discord home button (logo with DM badge, top-left)
+    await page.evaluate(() => {
+      window.location.href = 'https://discord.com/channels/@me';
+    });
+    await page.waitForTimeout(3000);
 
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      // Look for any DM with an unread indicator or recent message
-      const found = await page.evaluate(() => {
-        // Find DM entries in the sidebar
-        const links = Array.from(document.querySelectorAll('a[href*="/@me/"]'));
-        for (const link of links) {
-          // Check for unread badge or recent activity
-          const badge = link.querySelector('[class*="numberBadge"]');
-          if (badge) {
-            (link as HTMLElement).click();
-            return true;
-          }
-        }
-        // Fallback: click the first DM entry
-        if (links.length > 0) {
-          (links[0] as HTMLElement).click();
+      // Click the first DM in the list (most recent)
+      const clicked = await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll('a'));
+        const dmLink = links.find(
+          (a) =>
+            a.href?.includes('/@me/') && !a.href?.endsWith('/@me'),
+        );
+        if (dmLink) {
+          dmLink.click();
           return true;
         }
         return false;
       });
 
-      if (found) {
+      if (clicked) {
         await page.waitForTimeout(2000);
-        // Read the last message content
         const lastMsg = await page.evaluate(() => {
           const msgs = document.querySelectorAll(
             '[id^="message-content-"], [class*="messageContent"]',
