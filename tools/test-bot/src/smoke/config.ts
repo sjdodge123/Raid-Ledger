@@ -11,12 +11,18 @@ function required(key: string): string {
   return val;
 }
 
+/** Parse an env var as an integer with a NaN-safe fallback. */
+function intOrDefault(raw: string | undefined, fallback: number): number {
+  const parsed = parseInt(raw ?? String(fallback), 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 export const SMOKE = {
   apiUrl: process.env.API_URL ?? 'http://localhost:3000',
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@local',
   adminPassword: process.env.ADMIN_PASSWORD ?? 'password',
   guildId: required('TEST_GUILD_ID'),
-  timeoutMs: parseInt(process.env.SMOKE_TIMEOUT_MS ?? '60000', 10),
-  concurrency: parseInt(process.env.SMOKE_CONCURRENCY ?? '5', 10),
-  retryCount: parseInt(process.env.SMOKE_RETRY_COUNT ?? '0', 10),
+  timeoutMs: intOrDefault(process.env.SMOKE_TIMEOUT_MS, 60_000),
+  concurrency: intOrDefault(process.env.SMOKE_CONCURRENCY, 5),
+  retryCount: intOrDefault(process.env.SMOKE_RETRY_COUNT, 0),
 };

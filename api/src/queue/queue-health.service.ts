@@ -16,10 +16,8 @@ export class QueueHealthService {
   private readonly pollIntervalMs: number;
 
   constructor() {
-    this.pollIntervalMs = parseInt(
-      process.env.QUEUE_POLL_INTERVAL_MS ?? '500',
-      10,
-    );
+    const parsed = parseInt(process.env.QUEUE_POLL_INTERVAL_MS ?? '500', 10);
+    this.pollIntervalMs = Number.isNaN(parsed) ? 500 : parsed;
   }
 
   /**
