@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   integer,
+  smallint,
   unique,
   jsonb,
 } from 'drizzle-orm/pg-core';
@@ -46,6 +47,8 @@ export const communityLineups = pgTable('community_lineups', {
   } | null>(),
   /** Match threshold percentage for the matching algorithm (0–100, default 35). */
   matchThreshold: integer('match_threshold').notNull().default(35),
+  /** Max votes each player can cast during voting (1–10, default 3, ROK-976). */
+  maxVotesPerPlayer: smallint('max_votes_per_player').notNull().default(3),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

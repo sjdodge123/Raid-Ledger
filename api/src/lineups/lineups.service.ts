@@ -127,7 +127,13 @@ export class LineupsService {
     if (lineup.status !== 'voting') {
       throw new BadRequestException('Voting is only allowed in voting status');
     }
-    const action = await toggleVoteHelper(this.db, lineupId, userId, gameId);
+    const action = await toggleVoteHelper(
+      this.db,
+      lineupId,
+      userId,
+      gameId,
+      lineup.maxVotesPerPlayer ?? 3,
+    );
     void this.activityLog.log('lineup', lineupId, 'vote_cast', userId, {
       gameId,
       action,
@@ -244,6 +250,7 @@ export class LineupsService {
           phaseDeadline,
           phaseDurationOverride: overrides,
           matchThreshold: dto.matchThreshold ?? undefined,
+          maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
         })
         .returning();
     });

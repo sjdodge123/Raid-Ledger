@@ -33,6 +33,8 @@ export const CreateLineupSchema = z.object({
     decidedDurationHours: z.number().int().min(1).max(720).optional(),
     /** Match threshold percentage for grouping algorithm (0–100, default 35). */
     matchThreshold: z.number().int().min(0).max(100).optional(),
+    /** Max votes each player can cast during voting (1–10, default 3). */
+    votesPerPlayer: z.number().int().min(1).max(10).optional(),
 });
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
@@ -101,6 +103,8 @@ export const LineupDetailResponseSchema = z.object({
     votingDeadline: z.string().nullable(),
     phaseDeadline: z.string().nullable(),
     matchThreshold: z.number().nullable(),
+    /** Max votes each player can cast during voting (ROK-976). */
+    maxVotesPerPlayer: z.number(),
     entries: z.array(LineupEntryResponseSchema),
     totalVoters: z.number(),
     totalMembers: z.number(),
