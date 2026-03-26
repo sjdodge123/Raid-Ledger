@@ -12,6 +12,7 @@ interface LineupStatusBadgeProps {
 const STATUS_STYLES: Record<LineupStatusDto, string> = {
     building: 'bg-emerald-500/20 text-emerald-400',
     voting: 'bg-amber-500/20 text-amber-400',
+    scheduling: 'bg-purple-500/20 text-purple-400',
     decided: 'bg-blue-500/20 text-blue-400',
     archived: 'bg-zinc-500/20 text-zinc-400',
 };
@@ -19,6 +20,7 @@ const STATUS_STYLES: Record<LineupStatusDto, string> = {
 const STATUS_LABELS: Record<LineupStatusDto, string> = {
     building: 'Nominating',
     voting: 'Voting',
+    scheduling: 'Scheduling',
     decided: 'Decided',
     archived: 'Archived',
 };

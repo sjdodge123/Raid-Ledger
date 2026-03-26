@@ -187,6 +187,10 @@ function describePhaseScheduling() {
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'scheduling' });
+      await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'decided', decidedGameId: null });
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
@@ -348,7 +352,7 @@ function describePhaseScheduling() {
       expect(res.body.phaseDeadline).toBeTruthy();
     });
 
-    it('should allow reverting decided back to voting', async () => {
+    it('should allow reverting decided back to scheduling', async () => {
       const createRes = await createLineupWithDurations(adminToken, {
         buildingDurationHours: 24,
         votingDurationHours: 48,
@@ -362,16 +366,20 @@ function describePhaseScheduling() {
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'scheduling' });
+      await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'decided', decidedGameId: null });
 
-      // Revert to voting
+      // Revert to scheduling (one step back)
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'voting' });
+        .send({ status: 'scheduling' });
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('voting');
+      expect(res.body.status).toBe('scheduling');
     });
 
     it('should reject skipping phases (building to decided)', async () => {

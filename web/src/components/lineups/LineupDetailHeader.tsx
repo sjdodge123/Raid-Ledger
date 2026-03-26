@@ -11,9 +11,9 @@ interface Props {
   lineup: LineupDetailResponseDto;
 }
 
-const PHASES: LineupStatusDto[] = ['building', 'voting', 'decided', 'archived'];
+const PHASES: LineupStatusDto[] = ['building', 'voting', 'scheduling', 'decided', 'archived'];
 const PHASE_LABELS: Record<LineupStatusDto, string> = {
-  building: 'Nominating', voting: 'Voting', decided: 'Decided', archived: 'Archived',
+  building: 'Nominating', voting: 'Voting', scheduling: 'Scheduling', decided: 'Decided', archived: 'Archived',
 };
 
 /** SVG circle progress indicator — fills 33/66/100% with red→yellow→green. */

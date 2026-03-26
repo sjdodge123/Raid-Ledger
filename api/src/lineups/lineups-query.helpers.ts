@@ -123,7 +123,8 @@ export function findGameName(
 /** Forward transitions (auto-advance / force-advance). */
 export const VALID_TRANSITIONS: Record<LineupStatus, LineupStatus | null> = {
   building: 'voting',
-  voting: 'decided',
+  voting: 'scheduling',
+  scheduling: 'decided',
   decided: 'archived',
   archived: null,
 };
@@ -132,7 +133,8 @@ export const VALID_TRANSITIONS: Record<LineupStatus, LineupStatus | null> = {
 export const VALID_REVERSIONS: Record<LineupStatus, LineupStatus | null> = {
   building: null,
   voting: 'building',
-  decided: 'voting',
+  scheduling: 'voting',
+  decided: 'scheduling',
   archived: 'decided',
 };
 
