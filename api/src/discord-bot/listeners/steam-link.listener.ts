@@ -172,8 +172,7 @@ export class SteamLinkListener {
     return discoverGameBySteamAppId(
       {
         db: this.db,
-        lookupBySteamAppId: (id) =>
-          this.itadService!.lookupBySteamAppId(id),
+        lookupBySteamAppId: (id) => this.itadService.lookupBySteamAppId(id),
         adultFilterEnabled: adultFilter,
       },
       appId,
