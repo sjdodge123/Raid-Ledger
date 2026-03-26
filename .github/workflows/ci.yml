@@ -8,6 +8,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ─── Scope Detection ──────────────────────────────────────────────
   # Determines which jobs need to run based on changed files.
@@ -59,7 +63,6 @@ jobs:
               - 'api/Dockerfile'
               - 'api/scripts/docker-entrypoint.sh'
               - 'nginx/**'
-              - '.github/workflows/ci.yml'
               - 'api/src/ai/providers/ollama-docker*'
               - 'api/src/ai/providers/ollama-setup*'
 
@@ -104,13 +107,13 @@ jobs:
       - name: Lint
         run: npm run lint --workspaces
 
-  # ─── Unit Tests ────────────────────────────────────────────────────
-  unit-tests:
+  # ─── Unit Tests (API) ──────────────────────────────────────────────
+  unit-tests-api:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
-      needs.detect-changes.outputs.code == 'true'
+      needs.detect-changes.outputs.api == 'true'
 
     steps:
       - name: Checkout code
@@ -138,9 +141,56 @@ jobs:
       - name: Test API (with coverage)
         run: npm run test:cov -w api -- --passWithNoTests
 
+  # ─── Unit Tests (Web) ──────────────────────────────────────────────
+  unit-tests-web:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, lint]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.web == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contract
+        run: npm run build -w packages/contract
+
       - name: Test web (with coverage)
         run: npx vitest run --coverage
         working-directory: web
+
+  # ─── Unit Tests (summary — required status check) ─────────────────
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: [unit-tests-api, unit-tests-web]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          API="${{ needs.unit-tests-api.result }}"
+          WEB="${{ needs.unit-tests-web.result }}"
+          if [ "$API" = "failure" ] || [ "$WEB" = "failure" ]; then
+            echo "Unit tests failed (api=$API, web=$WEB)"
+            exit 1
+          fi
+          echo "Unit tests passed (api=$API, web=$WEB)"
 
   # ─── Integration Tests (sharded) ───────────────────────────────────
   integration-test-shard:

@@ -153,15 +153,15 @@ Update state: `gates.smoke: PASS` (or `FAIL`)
 
 ---
 
-## 3i. Push Batch Branch
+## 3i. Push Batch Branch and Create PR
 
-**Use the `/push` skill** — NEVER use raw `git push`. The skill runs full local CI before pushing.
+**Use the `/push` skill** — NEVER use raw `git push`. The skill runs full local CI before pushing AND creates the PR.
 
 ```
-/push --skip-pr
+/push
 ```
 
-The `--skip-pr` flag skips PR creation — the PR is created in Step 4.
+`/push` handles PR creation. When it asks for PR details, use the batch format from Step 4a (story table + validation checklist). Title: `chore: batch YYYY-MM-DD`.
 
 ---
 

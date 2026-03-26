@@ -9,10 +9,39 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: discord-smoke-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      discord: ${{ steps.filter.outputs.discord }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            discord:
+              - 'api/src/discord-bot/**'
+              - 'api/src/notifications/**'
+              - 'api/src/events/signups*'
+              - 'api/src/events/event-lifecycle*'
+              - 'api/src/admin/demo-test*'
+              - 'tools/test-bot/**'
+              - 'packages/contract/**'
+
   discord-smoke:
     runs-on: ubuntu-latest
-    needs: [] # Runs independently — does not block main CI
+    needs: detect-changes
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.discord == 'true'
 
     services:
       postgres:
