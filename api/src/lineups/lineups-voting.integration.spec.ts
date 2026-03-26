@@ -108,6 +108,18 @@ function describeVoting() {
     return { lineupId, games: allGames };
   }
 
+  /** Advance a lineup from voting → scheduling → decided (two-step transition). */
+  async function advanceToDecided(lineupId: number, token: string) {
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'scheduling' });
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'decided' });
+  }
+
   // -- POST /lineups/:id/vote — toggle behavior -----------------------------
 
   function describeVoteToggle() {
@@ -244,11 +256,8 @@ function describeVoting() {
       const { lineupId, games } = await setupVotingLineup();
       const { token } = await loginAsMember();
 
-      // Advance to decided
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+      // Advance to decided (voting → scheduling → decided)
+      await advanceToDecided(lineupId, adminToken);
 
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
@@ -386,8 +395,8 @@ function describeVoting() {
     game_id: number;
     status: string;
     vote_count: number;
-    voter_percentage: string;
-    fit_category: string;
+    vote_percentage: string;
+    fit_type: string;
   }
   interface MatchMemberRow extends Record<string, unknown> {
     id: number;
@@ -424,11 +433,8 @@ function describeVoting() {
         .set('Authorization', `Bearer ${m2}`)
         .send({ gameId: games[0].id });
 
-      // Transition to decided
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+      // Transition to decided (voting → scheduling → decided)
+      await advanceToDecided(lineupId, adminToken);
 
       const matches = await queryMatches(lineupId);
       expect(matches.length).toBeGreaterThan(0);
@@ -463,10 +469,7 @@ function describeVoting() {
         .post(`/lineups/${lid}/vote`)
         .set('Authorization', `Bearer ${v2}`)
         .send({ gameId: testApp.seed.game.id });
-      await testApp.request
-        .patch(`/lineups/${lid}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+      await advanceToDecided(lid, adminToken);
 
       const matches = await queryMatches(lid);
       const above = matches.find((m) => m.game_id === testApp.seed.game.id);
@@ -499,10 +502,7 @@ function describeVoting() {
           .send({ gameId: allGames[i].id });
       }
 
-      await testApp.request
-        .patch(`/lineups/${lid}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+      await advanceToDecided(lid, adminToken);
 
       const matches = await queryMatches(lid);
       for (const match of matches) {
@@ -540,15 +540,12 @@ function describeVoting() {
           .send({ gameId: smallGame.id });
       }
 
-      await testApp.request
-        .patch(`/lineups/${lid}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+      await advanceToDecided(lid, adminToken);
 
       const matches = await queryMatches(lid);
       const sm = matches.find((m) => m.game_id === smallGame.id);
       expect(sm).toBeDefined();
-      expect(sm!.fit_category).toBe('oversubscribed');
+      expect(sm!.fit_type).toBe('oversubscribed');
     });
 
     it('should create match_members for voters of each matched game', async () => {
@@ -565,10 +562,7 @@ function describeVoting() {
         .set('Authorization', `Bearer ${v2}`)
         .send({ gameId: games[0].id });
 
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+      await advanceToDecided(lineupId, adminToken);
 
       const matches = await queryMatches(lineupId);
       const match = matches.find((m) => m.game_id === games[0].id);
@@ -584,10 +578,7 @@ function describeVoting() {
     it('should handle zero voters gracefully (no matches)', async () => {
       const { lineupId } = await setupVotingLineup(2);
 
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+      await advanceToDecided(lineupId, adminToken);
 
       const matches = await queryMatches(lineupId);
       expect(matches).toHaveLength(0);
