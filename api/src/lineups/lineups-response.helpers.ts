@@ -24,6 +24,7 @@ import {
   countTotalMembers,
   type GamePricing,
 } from './lineups-enrichment.helpers';
+import { findUserVotes } from './lineups-voting.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -74,6 +75,7 @@ function mapToDetailResponse(
   creator: Awaited<ReturnType<typeof findUserById>>,
   decidedGame: Awaited<ReturnType<typeof findGameName>>,
   enrichment: EnrichmentMaps,
+  myVotes: number[],
 ): LineupDetailResponseDto {
   const voteMap = new Map(voteCounts.map((v) => [v.gameId, v.voteCount]));
   return {
@@ -86,12 +88,11 @@ function mapToDetailResponse(
     createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
     votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
     phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
-    matchThreshold: lineup.matchThreshold
-      ? Number(lineup.matchThreshold)
-      : null,
+    matchThreshold: lineup.matchThreshold ?? 35,
     entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
     totalVoters: voterCount[0]?.total ?? 0,
     totalMembers: enrichment.totalMembers,
+    myVotes,
     createdAt: lineup.createdAt.toISOString(),
     updatedAt: lineup.updatedAt.toISOString(),
   };
@@ -101,11 +102,12 @@ function mapToDetailResponse(
 export async function buildDetailResponse(
   db: Db,
   lineupId: number,
+  userId?: number,
 ): Promise<LineupDetailResponseDto> {
   const [lineup] = await findLineupById(db, lineupId);
   if (!lineup) throw new NotFoundException('Lineup not found');
 
-  const [entries, voteCounts, voterCount, creator, decidedGame] =
+  const [entries, voteCounts, voterCount, creator, decidedGame, myVotes] =
     await Promise.all([
       findEntriesWithGames(db, lineupId),
       countVotesPerGame(db, lineupId),
@@ -114,6 +116,7 @@ export async function buildDetailResponse(
       lineup.decidedGameId
         ? findGameName(db, lineup.decidedGameId)
         : Promise.resolve([]),
+      findUserVotes(db, lineupId, userId),
     ]);
 
   const gameIds = entries.map((e) => e.gameId);
@@ -132,5 +135,6 @@ export async function buildDetailResponse(
     creator,
     decidedGame,
     { ownerMap, wishlistMap, pricingMap, totalMembers },
+    myVotes,
   );
 }

@@ -7,6 +7,16 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
+import {
+  findEntriesWithGames,
+  countVotesPerGame,
+  countDistinctVoters,
+  findGameName,
+} from './lineups-query.helpers';
+import {
+  countOwnersPerGame,
+  countTotalMembers,
+} from './lineups-enrichment.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -47,6 +57,39 @@ export function findBannerLineup(db: Db) {
  * Build the banner response DTO from pre-fetched data.
  * Returns null for archived lineups (shouldn't happen, but safe).
  */
+/** Assemble full banner data for a lineup (extracted from service). */
+export async function buildBannerData(
+  db: Db,
+  lineup: typeof schema.communityLineups.$inferSelect,
+): Promise<LineupBannerResponseDto | null> {
+  const entries = await findEntriesWithGames(db, lineup.id);
+  const gameIds = entries.map((e) => e.gameId);
+  const [ownerMap, voteMap, voterCount, totalMembers, decidedGame] =
+    await Promise.all([
+      countOwnersPerGame(db, gameIds),
+      countVotesPerGame(db, lineup.id),
+      countDistinctVoters(db, lineup.id),
+      countTotalMembers(db),
+      lineup.decidedGameId
+        ? findGameName(db, lineup.decidedGameId)
+        : Promise.resolve([]),
+    ]);
+  const vMap = new Map(voteMap.map((v) => [v.gameId, v.voteCount]));
+  const bannerEntries = entries.map((e) => ({
+    gameId: e.gameId,
+    gameName: e.gameName,
+    gameCoverUrl: e.gameCoverUrl,
+  }));
+  return buildBannerResponse(
+    { ...lineup, decidedGameName: decidedGame[0]?.name ?? null },
+    bannerEntries,
+    ownerMap,
+    vMap,
+    voterCount[0]?.total ?? 0,
+    totalMembers,
+  );
+}
+
 export function buildBannerResponse(
   lineup: BannerLineup,
   entries: BannerEntry[],

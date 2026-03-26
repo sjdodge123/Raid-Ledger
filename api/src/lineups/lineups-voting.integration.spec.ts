@@ -46,14 +46,15 @@ function describeVoting() {
         role: 'member',
       })
       .returning();
+    const email = `${tag}@test.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
-      email: `${tag}@test.local`,
+      email,
       passwordHash: hash,
       userId: user.id,
     });
     const res = await testApp.request
       .post('/auth/local')
-      .send({ email: `${tag}@test.local`, password: 'MemberPass1!' });
+      .send({ email, password: 'MemberPass1!' });
     return { token: res.body.access_token as string, userId: user.id };
   }
 
@@ -120,7 +121,9 @@ function describeVoting() {
         .send({ gameId: games[0].id });
 
       expect(res.status).toBe(200);
-      const body = res.body as { entries: { gameId: number; voteCount: number }[] };
+      const body = res.body as {
+        entries: { gameId: number; voteCount: number }[];
+      };
       const entry = body.entries.find((e) => e.gameId === games[0].id);
       expect(entry!.voteCount).toBe(1);
     });
@@ -142,7 +145,9 @@ function describeVoting() {
         .send({ gameId: games[0].id });
 
       expect(res.status).toBe(200);
-      const body = res.body as { entries: { gameId: number; voteCount: number }[] };
+      const body = res.body as {
+        entries: { gameId: number; voteCount: number }[];
+      };
       const entry = body.entries.find((e) => e.gameId === games[0].id);
       expect(entry!.voteCount).toBe(0);
     });
@@ -375,7 +380,7 @@ function describeVoting() {
   // We use raw SQL to query these tables. The queries will fail until the
   // migration and matching algorithm are implemented.
 
-  interface MatchRow {
+  interface MatchRow extends Record<string, unknown> {
     id: number;
     lineup_id: number;
     game_id: number;
@@ -384,7 +389,7 @@ function describeVoting() {
     voter_percentage: string;
     fit_category: string;
   }
-  interface MatchMemberRow {
+  interface MatchMemberRow extends Record<string, unknown> {
     id: number;
     match_id: number;
     user_id: number;
@@ -437,6 +442,7 @@ function describeVoting() {
       const createRes = await createLineup(adminToken, {
         matchThreshold: 10,
       });
+      expect(createRes.status).toBe(201);
       const lid = createRes.body.id as number;
       const extraGames = await createAdditionalGames(2);
       const allGames = [testApp.seed.game, ...extraGames];
@@ -457,7 +463,6 @@ function describeVoting() {
         .post(`/lineups/${lid}/vote`)
         .set('Authorization', `Bearer ${v2}`)
         .send({ gameId: testApp.seed.game.id });
-
       await testApp.request
         .patch(`/lineups/${lid}/status`)
         .set('Authorization', `Bearer ${adminToken}`)

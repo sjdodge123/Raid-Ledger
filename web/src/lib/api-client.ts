@@ -175,6 +175,7 @@ export {
     removeNomination,
     createLineup,
     transitionLineupStatus,
+    toggleVote,
 } from './api/lineups-api';
 
 // Activity Log (ROK-930)

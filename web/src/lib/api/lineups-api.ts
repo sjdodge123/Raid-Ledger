@@ -82,6 +82,17 @@ export async function createLineup(
   });
 }
 
+/** Toggle a vote on a nominated game (ROK-936). */
+export async function toggleVote(
+  lineupId: number,
+  gameId: number,
+): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${lineupId}/vote`, {
+    method: 'POST',
+    body: JSON.stringify({ gameId }),
+  });
+}
+
 /** Transition a lineup to a new status. */
 export async function transitionLineupStatus(
   lineupId: number,

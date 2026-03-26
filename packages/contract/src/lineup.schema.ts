@@ -27,8 +27,8 @@ export const CreateLineupSchema = z.object({
     votingDurationHours: z.number().int().min(1).max(720).optional(),
     /** Hours for the decided phase (1-720, default from admin settings). */
     decidedDurationHours: z.number().int().min(1).max(720).optional(),
-    /** Match threshold for grouping algorithm (0.10–0.75, default 0.35). */
-    matchThreshold: z.number().min(0.10).max(0.75).optional(),
+    /** Match threshold percentage for grouping algorithm (0–100, default 35). */
+    matchThreshold: z.number().int().min(0).max(100).optional(),
 });
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
@@ -100,6 +100,8 @@ export const LineupDetailResponseSchema = z.object({
     entries: z.array(LineupEntryResponseSchema),
     totalVoters: z.number(),
     totalMembers: z.number(),
+    /** Game IDs the current user has voted for (ROK-936). */
+    myVotes: z.array(z.number()),
     createdAt: z.string(),
     updatedAt: z.string(),
 });
@@ -162,6 +164,13 @@ export const NominateGameSchema = z.object({
     gameId: z.number().int().positive(),
     note: z.string().max(200).optional(),
 });
+
+/** Body for casting / toggling a vote on a nominated game (ROK-936). */
+export const CastVoteSchema = z.object({
+    gameId: z.number().int().positive(),
+});
+
+export type CastVoteDto = z.infer<typeof CastVoteSchema>;
 
 export type NominateGameDto = z.infer<typeof NominateGameSchema>;
 

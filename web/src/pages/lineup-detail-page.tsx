@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useLineupDetail } from '../hooks/use-lineups';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
 import { NominationGrid } from '../components/lineups/NominationGrid';
+import { VotingLeaderboard } from '../components/lineups/VotingLeaderboard';
 import { LineupEmptyState } from '../components/lineups/LineupEmptyState';
 import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton';
 import { CommonGroundPanel } from '../components/lineups/CommonGroundPanel';
@@ -57,7 +58,15 @@ export function LineupDetailPage(): JSX.Element {
         </div>
       )}
 
-      {hasEntries ? (
+      {lineup.status === 'voting' && hasEntries ? (
+        <VotingLeaderboard
+          entries={lineup.entries}
+          lineupId={lineup.id}
+          myVotes={lineup.myVotes ?? []}
+          totalVoters={lineup.totalVoters}
+          totalMembers={lineup.totalMembers}
+        />
+      ) : hasEntries ? (
         <NominationGrid entries={lineup.entries} lineupId={lineup.id} />
       ) : (
         <LineupEmptyState />

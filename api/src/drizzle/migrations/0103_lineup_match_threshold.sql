@@ -1,1 +1,1 @@
-ALTER TABLE "community_lineups" ADD COLUMN "match_threshold" numeric(3, 2) DEFAULT '0.35';
+ALTER TABLE "community_lineups" ADD COLUMN "match_threshold" integer NOT NULL DEFAULT 35;
