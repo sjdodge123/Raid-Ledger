@@ -1,3 +1,4 @@
+import { pollForCondition } from '../helpers/polling.js';
 import type { ApiClient } from './api.js';
 import type { DiscordChannel, TestContext } from './types.js';
 
@@ -324,4 +325,33 @@ export async function injectVoiceSession(
   },
 ): Promise<void> {
   await api.post('/admin/test/inject-voice-session', p);
+}
+
+/**
+ * Assert that a condition is never met within a time window.
+ * Used for negative tests — verifying that something does NOT happen.
+ * Polls the check function and fails if it ever returns true.
+ * Succeeds if the poll times out (meaning the condition was never met).
+ */
+export async function assertConditionNeverMet(
+  check: () => Promise<boolean>,
+  windowMs: number,
+  errorMsg: string,
+  opts?: { intervalMs?: number },
+): Promise<void> {
+  try {
+    await pollForCondition(
+      async () => {
+        const r = await check();
+        return r ? true : null;
+      },
+      windowMs,
+      { intervalMs: opts?.intervalMs ?? 2000, backoff: false },
+    );
+    throw new Error(errorMsg);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('pollForCondition timed out')) return;
+    throw err;
+  }
 }
