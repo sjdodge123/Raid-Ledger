@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { desc, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -177,6 +178,21 @@ export async function findNominatedGameIds(
     .from(schema.communityLineupEntries)
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));
   return rows.map((r) => r.gameId);
+}
+
+/** Validate the decided game exists in the lineup entries. */
+export async function validateDecidedGame(
+  db: PostgresJsDatabase<typeof schema>,
+  lineupId: number,
+  gameId: number,
+) {
+  const entries = await db
+    .select({ gameId: schema.communityLineupEntries.gameId })
+    .from(schema.communityLineupEntries)
+    .where(eq(schema.communityLineupEntries.lineupId, lineupId));
+  if (!entries.some((e) => e.gameId === gameId)) {
+    throw new BadRequestException('Game must be in lineup entries');
+  }
 }
 
 /** Find an active lineup specifically in building status. */

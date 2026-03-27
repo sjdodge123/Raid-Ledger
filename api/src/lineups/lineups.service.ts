@@ -30,6 +30,7 @@ import {
   findBuildingLineup,
   findNominatedGameIds,
   countDistinctNominators,
+  validateDecidedGame,
   VALID_TRANSITIONS,
   VALID_REVERSIONS,
 } from './lineups-query.helpers';
@@ -160,7 +161,7 @@ export class LineupsService {
 
     this.validateTransition(lineup.status as LineupStatus, dto);
     if (dto.status === 'decided' && dto.decidedGameId) {
-      await this.validateDecidedGame(id, dto.decidedGameId);
+      await validateDecidedGame(this.db, id, dto.decidedGameId);
     }
 
     await this.applyStatusUpdate(id, dto, lineup);
@@ -281,7 +282,6 @@ export class LineupsService {
           phaseDeadline,
           phaseDurationOverride: overrides,
           matchThreshold: dto.matchThreshold ?? undefined,
-          maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
         })
         .returning();
     });
@@ -337,17 +337,6 @@ export class LineupsService {
       throw new BadRequestException(
         `Cannot transition from '${current}' to '${dto.status}'`,
       );
-    }
-  }
-
-  /** Validate the decided game exists in the lineup entries. */
-  private async validateDecidedGame(lineupId: number, gameId: number) {
-    const entries = await this.db
-      .select({ gameId: schema.communityLineupEntries.gameId })
-      .from(schema.communityLineupEntries)
-      .where(eq(schema.communityLineupEntries.lineupId, lineupId));
-    if (!entries.some((e) => e.gameId === gameId)) {
-      throw new BadRequestException('Game must be in lineup entries');
     }
   }
 }
