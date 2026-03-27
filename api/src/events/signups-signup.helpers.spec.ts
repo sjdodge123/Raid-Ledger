@@ -6,10 +6,7 @@
  * will FAIL until the implementation is updated.
  */
 import { insertSignupRow } from './signups-signup.helpers';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 describe('insertSignupRow', () => {
   let mockDb: MockDb;
@@ -22,13 +19,7 @@ describe('insertSignupRow', () => {
     const fakeRow = { id: 1, eventId: 10, userId: 5 };
     mockDb.returning.mockResolvedValueOnce([fakeRow]);
 
-    await insertSignupRow(
-      mockDb as never,
-      10,
-      5,
-      undefined,
-      '123456789',
-    );
+    await insertSignupRow(mockDb as never, 10, 5, undefined, '123456789');
 
     // The .values() call should include discordUserId
     const valuesCall = mockDb.values.mock.calls[0][0];

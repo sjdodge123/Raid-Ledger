@@ -125,7 +125,7 @@ function mapRosterSignup(
 ) {
   const voiceSession = resolveVoiceSession(s, voiceByDiscordId, voiceByUserId);
   return {
-    userId: s.userId ?? 0,
+    userId: s.userId ?? null,
     username: s.username ?? s.discordUsername ?? 'Unknown',
     avatar: s.avatar ?? null,
     attendanceStatus: (s.attendanceStatus as AttendanceStatus | null) ?? null,
@@ -137,6 +137,10 @@ function mapRosterSignup(
   };
 }
 
+/**
+ * Build roster breakdown from signups and voice sessions.
+ * Includes voice-only participants who joined voice but did not sign up (ROK-985).
+ */
 export function buildRosterBreakdown(
   signups: RosterSignupInput[],
   voiceSessions: VoiceSession[],
@@ -149,9 +153,45 @@ export function buildRosterBreakdown(
       .filter((v): v is VoiceSession & { userId: number } => v.userId !== null)
       .map((v) => [v.userId, v]),
   );
-  return signups.map((s) =>
+  const roster = signups.map((s) =>
     mapRosterSignup(s, voiceByDiscordId, voiceByUserId),
   );
+  const voiceOnly = findVoiceOnlySessions(signups, voiceSessions);
+  for (const v of voiceOnly) roster.push(mapVoiceOnlyEntry(v));
+  return roster;
+}
+
+/** Find voice sessions that do not match any signup. */
+function findVoiceOnlySessions(
+  signups: RosterSignupInput[],
+  voiceSessions: VoiceSession[],
+): VoiceSession[] {
+  const signupDiscordIds = new Set(
+    signups.map((s) => s.discordUserId).filter(Boolean) as string[],
+  );
+  const signupUserIds = new Set(
+    signups.map((s) => s.userId).filter((id): id is number => id !== null),
+  );
+  return voiceSessions.filter(
+    (v) =>
+      !signupDiscordIds.has(v.discordUserId) &&
+      (v.userId === null || !signupUserIds.has(v.userId)),
+  );
+}
+
+/** Map a voice-only session to a roster entry with derived attendance. */
+function mapVoiceOnlyEntry(v: VoiceSession) {
+  const status = v.classification === 'no_show' ? 'no_show' : 'attended';
+  return {
+    userId: v.userId ?? null,
+    username: v.discordUsername ?? 'Unknown',
+    avatar: null as string | null,
+    attendanceStatus: status as AttendanceStatus,
+    voiceClassification:
+      (v.classification as VoiceClassification | null) ?? null,
+    voiceDurationSec: v.totalDurationSec,
+    signupStatus: null as string | null,
+  };
 }
 
 export function buildAttendanceSummary(

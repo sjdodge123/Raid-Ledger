@@ -281,7 +281,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     for (const event of pending) {
       await yieldToEventLoop();
-      if (!(await classifyH.shouldClassifyEvent(this.db, event.id))) continue;
+      // eslint-disable-next-line no-continue
+      if (!(await classifyH.shouldClassifyEvent(this.db, event.id, this.logger))) continue;
       this.logger.log(`Classifying voice attendance for event ${event.id}`);
       await this.classifyEvent(event.id, event, graceMs);
       await this.autoPopulateAttendance(event.id);

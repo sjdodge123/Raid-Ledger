@@ -97,9 +97,12 @@ function testNoMatchReturnsNullVoiceData() {
 
   const result = buildRosterBreakdown([signup], [voice]);
 
-  expect(result).toHaveLength(1);
-  expect(result[0].voiceClassification).toBeNull();
-  expect(result[0].voiceDurationSec).toBeNull();
+  // ROK-985: 2 entries — the signup (null voice data) + voice-only participant
+  expect(result).toHaveLength(2);
+  const signupEntry = result.find((r) => r.username === 'lonely');
+  expect(signupEntry).toBeDefined();
+  expect(signupEntry!.voiceClassification).toBeNull();
+  expect(signupEntry!.voiceDurationSec).toBeNull();
 }
 
 // ─── buildAttendanceSummary ─────────────────────────────────────────────────
@@ -158,12 +161,15 @@ function testPreferDiscordUserIdWhenBothPresent() {
   expect(result[0].voiceDurationSec).toBe(7200);
 }
 
-function testEmptySignupsReturnsEmptyArray() {
+function testVoiceOnlyWithNoSignupsAppearsAsEntry() {
   const voice = createVoiceSession({ discordUserId: '123', userId: 5 });
 
   const result = buildRosterBreakdown([], [voice]);
 
-  expect(result).toHaveLength(0);
+  // ROK-985: voice-only participants now appear even with zero signups
+  expect(result).toHaveLength(1);
+  expect(result[0].signupStatus).toBeNull();
+  expect(result[0].voiceClassification).toBe('full');
 }
 
 function testEmptyVoiceSessionsNullsVoiceData() {
@@ -249,8 +255,8 @@ describe('buildRosterBreakdown', () => {
   );
 
   it(
-    'returns empty array when signups array is empty',
-    testEmptySignupsReturnsEmptyArray,
+    'voice-only participants appear when signups array is empty (ROK-985)',
+    testVoiceOnlyWithNoSignupsAppearsAsEntry,
   );
 
   it(
@@ -294,10 +300,7 @@ describe('buildRosterBreakdown', () => {
       totalDurationSec: 3600,
     });
 
-    const result = buildRosterBreakdown(
-      [signup],
-      [signupVoice, voiceOnly],
-    );
+    const result = buildRosterBreakdown([signup], [signupVoice, voiceOnly]);
 
     // Should include 2 entries: the signed-up user + the voice-only user
     expect(result).toHaveLength(2);
@@ -330,18 +333,11 @@ describe('buildRosterBreakdown', () => {
       totalDurationSec: 0,
     });
 
-    const result = buildRosterBreakdown(
-      [],
-      [voiceAttended, voiceNoShow],
-    );
+    const result = buildRosterBreakdown([], [voiceAttended, voiceNoShow]);
 
     expect(result).toHaveLength(2);
-    const attended = result.find(
-      (r) => r.username === 'Attendee#0001',
-    );
-    const noShow = result.find(
-      (r) => r.username === 'NoShowUser#0001',
-    );
+    const attended = result.find((r) => r.username === 'Attendee#0001');
+    const noShow = result.find((r) => r.username === 'NoShowUser#0001');
     expect(attended).toBeDefined();
     expect(attended!.attendanceStatus).toBe('attended');
     expect(noShow).toBeDefined();

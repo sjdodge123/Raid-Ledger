@@ -100,9 +100,7 @@ describe('shouldClassifyEvent', () => {
 
     await shouldClassifyEvent(mockDb as never, 42, mockLogger);
 
-    expect(mockLogger.log).toHaveBeenCalledWith(
-      expect.stringContaining('42'),
-    );
+    expect(mockLogger.log).toHaveBeenCalledWith(expect.stringContaining('42'));
   });
 });
 
@@ -149,17 +147,13 @@ describe('loadAndFilterSessions', () => {
     };
     mockDb.where.mockResolvedValueOnce([session]);
     // Signups: one signup with userId=10 but discordUserId=null
-    mockDb.where.mockResolvedValueOnce([
-      { discordUserId: null, userId: 10 },
-    ]);
+    mockDb.where.mockResolvedValueOnce([{ discordUserId: null, userId: 10 }]);
 
     const result = await loadAndFilterSessions(mockDb as never, 1);
 
     // The session should match via userId fallback
     expect(result.sessions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: 'uuid-1' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ id: 'uuid-1' })]),
     );
   });
 });
