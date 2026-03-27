@@ -199,7 +199,7 @@ describe('ItadPriceSyncService', () => {
       expect(data.itadPriceUpdatedAt).toBe('2026-03-27T12:00:00.000Z');
     });
 
-    it('ItadPricingData.itadPriceUpdatedAt flows as string through executeBulkPricingUpdate', async () => {
+    it('ItadPricingData.itadPriceUpdatedAt flows as string through executeBulkPricingUpdate', () => {
       const now = new Date('2026-03-27T12:00:00.000Z');
       const data = buildUpdateData(sampleEntry, now);
 
