@@ -438,7 +438,7 @@ function buildPricingRow(
     itadCurrentUrl: 'https://steam.com' as string | null,
     itadLowestPrice: '4.99' as string | null,
     itadLowestCut: 80 as number | null,
-    itadPriceUpdatedAt: FIXED_DATE,
+    itadPriceUpdatedAt: FIXED_DATE.toISOString(),
     ...overrides,
   };
 }

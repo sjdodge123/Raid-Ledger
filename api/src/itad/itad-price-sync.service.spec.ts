@@ -105,7 +105,7 @@ describe('ItadPriceSyncService', () => {
         itadCurrentUrl: 'https://store.steampowered.com/app/1',
         itadLowestPrice: '4.99',
         itadLowestCut: 88,
-        itadPriceUpdatedAt: expect.any(Date),
+        itadPriceUpdatedAt: expect.any(String),
       });
     });
 
