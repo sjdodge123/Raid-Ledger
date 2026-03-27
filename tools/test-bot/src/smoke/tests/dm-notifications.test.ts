@@ -23,6 +23,7 @@ import {
   getNotificationsFor,
   futureTime,
   awaitProcessing,
+  assertConditionNeverMet,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -140,17 +141,14 @@ const departureNotifSuppressedNotFull: SmokeTest = {
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-1');
-      // Poll briefly — expect NO notification to appear (negative check)
-      const found = await pollForCondition(
-        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+      await awaitProcessing(ctx.api);
+      // Assert NO notification appears (negative check)
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
         10_000,
+        'slot_vacated notification was sent for a non-full event',
         { intervalMs: 2000 },
-      ).then(() => true).catch(() => false);
-      if (found) {
-        throw new Error(
-          'slot_vacated notification was sent for a non-full event',
-        );
-      }
+      );
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -180,6 +178,7 @@ const departureNotifSentWhenFull: SmokeTest = {
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-depart-2');
+      await awaitProcessing(ctx.api);
       // Poll until slot_vacated notification appears
       await pollForCondition(
         async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
@@ -440,16 +439,13 @@ const departureNotifSuppressedDpsFull: SmokeTest = {
       if (!signupId) throw new Error('No signup ID returned');
       // Depart a DPS — should NOT trigger notification (DPS is not critical)
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-dps-depart');
-      const found = await pollForCondition(
-        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+      await awaitProcessing(ctx.api);
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
         10_000,
+        'slot_vacated notification sent for DPS departure — role filter not applied',
         { intervalMs: 2000 },
-      ).then(() => true).catch(() => false);
-      if (found) {
-        throw new Error(
-          'slot_vacated notification sent for DPS departure — role filter not applied',
-        );
-      }
+      );
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -478,6 +474,7 @@ const departureNotifSentHealerMmo: SmokeTest = {
       if (!signupId) throw new Error('No signup ID returned');
       // Depart healer — should trigger even though event is NOT full
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-heal-depart');
+      await awaitProcessing(ctx.api);
       await pollForCondition(
         async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
         ctx.config.timeoutMs,
@@ -513,6 +510,7 @@ const departureNotifSentGenericFull: SmokeTest = {
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-gen-depart');
+      await awaitProcessing(ctx.api);
       await pollForCondition(
         async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
         ctx.config.timeoutMs,
@@ -547,16 +545,13 @@ const departureNotifSuppressedGenericNotFull: SmokeTest = {
       const signupId = (res as { id?: number }).id;
       if (!signupId) throw new Error('No signup ID returned');
       await triggerDeparture(ctx.api, ev.id, signupId, 'smoke-gen-notfull');
-      const found = await pollForCondition(
-        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+      await awaitProcessing(ctx.api);
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
         10_000,
+        'slot_vacated sent for departure from non-full generic event',
         { intervalMs: 2000 },
-      ).then(() => true).catch(() => false);
-      if (found) {
-        throw new Error(
-          'slot_vacated sent for departure from non-full generic event',
-        );
-      }
+      );
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -585,16 +580,12 @@ const cancelSuppressedGenericNotFull: SmokeTest = {
       await flushNotificationBuffer(ctx.api);
       await awaitProcessing(ctx.api);
       // Verify NO slot_vacated notification (event was NOT full)
-      const found = await pollForCondition(
-        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
         8_000,
+        'slot_vacated sent after cancel from non-full generic event — the Palworld bug is back',
         { intervalMs: 2000 },
-      ).then(() => true).catch(() => false);
-      if (found) {
-        throw new Error(
-          'slot_vacated sent after cancel from non-full generic event — the Palworld bug is back',
-        );
-      }
+      );
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -621,16 +612,12 @@ const cancelSuppressedDpsMmo: SmokeTest = {
       await cancelSignupAs(ctx.api, ev.id, users[2]);
       await flushNotificationBuffer(ctx.api);
       await awaitProcessing(ctx.api);
-      const found = await pollForCondition(
-        async () => await hasSlotVacatedForEvent(ctx, ev.id) || null,
+      await assertConditionNeverMet(
+        () => hasSlotVacatedForEvent(ctx, ev.id),
         8_000,
+        'slot_vacated sent after DPS cancel from MMO event — role filter not applied on cancel path',
         { intervalMs: 2000 },
-      ).then(() => true).catch(() => false);
-      if (found) {
-        throw new Error(
-          'slot_vacated sent after DPS cancel from MMO event — role filter not applied on cancel path',
-        );
-      }
+      );
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }

@@ -12,6 +12,7 @@ import {
   deleteEvent,
   channelForTest,
   channelForGame,
+  awaitProcessing,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -49,7 +50,9 @@ const signupCancelFlow: SmokeTest = {
         ctx.config.timeoutMs,
       );
       await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
+      await awaitProcessing(ctx.api);
       await cancelSignup(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
       await pollForEmbed(
         ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
@@ -77,11 +80,13 @@ const slotVacatedFlow: SmokeTest = {
         ctx.config.timeoutMs,
       );
       const res = await signupAs(ctx.api, ev.id, users[0], ['tank']);
+      await awaitProcessing(ctx.api);
       // Admin removes the signup
       const signupId = (res as { id?: number }).id;
       if (signupId) {
         await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
       }
+      await awaitProcessing(ctx.api);
       await pollForEmbed(
         ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
@@ -116,11 +121,13 @@ const benchPromotionFlow: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[1], ['dps']);
       // 3rd goes to bench
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await awaitProcessing(ctx.api);
       // Remove first player — bench player should auto-promote (5-min delay)
       const signupId = (res1 as { id?: number }).id;
       if (signupId) {
         await ctx.api.delete(`/events/${ev.id}/signups/${signupId}`);
       }
+      await awaitProcessing(ctx.api);
       // Verify embed still exists and reflects roster change
       await pollForEmbed(
         ch.channelId,
@@ -147,6 +154,7 @@ const embedSyncBatchFlush: SmokeTest = {
         ctx.config.timeoutMs,
       );
       await signup(ctx.api, ev.id, { preferredRoles: ['dps'] });
+      await awaitProcessing(ctx.api);
       await pollForEmbed(
         ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
@@ -176,6 +184,7 @@ const multiUserSignupFlow: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
       await signupAs(ctx.api, ev.id, users[1], ['healer']);
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
+      await awaitProcessing(ctx.api);
       const found = await pollForEmbed(
         ch.channelId,
         (m) => {
@@ -208,6 +217,7 @@ const eventDeleteCleansEmbed: SmokeTest = {
       );
       // Delete the event — embed should be removed from channel
       await deleteEvent(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
       // Poll for embed removal — let network/unexpected errors propagate naturally.
       // Only catch the specific timeout error to produce a clear assertion message.
       try {

@@ -12,6 +12,7 @@ import {
   signupAs,
   deleteEvent,
   channelForGame,
+  awaitProcessing,
 } from '../fixtures.js';
 import { assertEmbedHasField } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -38,6 +39,28 @@ function demoUsers(ctx: TestContext) {
   return ctx.demoUserIds ?? [];
 }
 
+/**
+ * Check if a role section in the embed description contains user mentions.
+ * Extracts the text between startMarker and endMarker (or end of string)
+ * and checks for Discord mentions (<@id>) or usernames (4+ word chars).
+ */
+function hasMentionInSection(
+  desc: string,
+  startMarker: string,
+  endMarker: string | null,
+): boolean {
+  const startIdx = desc.search(new RegExp(startMarker, 'i'));
+  if (startIdx === -1) return false;
+  const afterStart = desc.slice(startIdx);
+  const section = endMarker
+    ? afterStart.split(new RegExp(endMarker, 'i'))[0]
+    : afterStart;
+  return (
+    section.includes('<@') ||
+    /\w{4,}/.test(section.replace(/Tank|Heal|DPS|Bench/gi, ''))
+  );
+}
+
 const multiPreferredRoles: SmokeTest = {
   name: 'Multi-preferred-roles assigns to first available',
   category: 'embed',
@@ -52,21 +75,21 @@ const multiPreferredRoles: SmokeTest = {
       await embedInChannel(channelForGame(ctx, ctx.mmoGameId), ev.title, ctx.config.timeoutMs);
       // Sign up with ['tank', 'healer'] — should get tank (first pref)
       await signupAs(ctx.api, ev.id, users[0], ['tank', 'healer']);
+      await awaitProcessing(ctx.api);
       const found = await pollForEmbed(
         channelForGame(ctx, ctx.mmoGameId),
-        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        (m) => {
+          const e = m.embeds.find((x) => x.title?.includes(ev.title));
+          if (!e) return false;
+          return hasMentionInSection(e.description ?? '', 'Tank', 'Heal');
+        },
         ctx.config.timeoutMs,
       );
       const embed = found.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
-      // Roster is in the description, not fields — check for tank assignment
       const desc = embed.description ?? '';
-      if (!desc.includes('Tanks') || !desc.includes('1/1')) {
-        // Check if tank slot has a player (not just "—")
-        const tankSection = desc.split(/Tank/i)[1]?.split(/Heal/i)[0] ?? '';
-        if (tankSection.includes('—') && !tankSection.includes('<@')) {
-          throw new Error('Tank slot still empty after signup with tank pref');
-        }
+      if (!hasMentionInSection(desc, 'Tank', 'Heal')) {
+        throw new Error('Tank slot still empty after signup with tank pref');
       }
     } finally {
       await deleteEvent(ctx.api, ev.id);
@@ -92,30 +115,34 @@ const fullRosterFill: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[2], ['dps']);
       await signupAs(ctx.api, ev.id, users[3], ['dps']);
       await signupAs(ctx.api, ev.id, users[4], ['dps']);
+      await awaitProcessing(ctx.api);
       const rosterMsg = await pollForEmbed(
         channelForGame(ctx, ctx.mmoGameId),
         (m) => {
           const e = m.embeds.find((x) => x.title?.includes(ev.title));
           if (!e) return false;
-          const match = (e.description ?? '').match(/ROSTER:\s*(\d+)/);
-          return match ? parseInt(match[1], 10) >= 5 : false;
+          const desc = e.description ?? '';
+          const rosterMatch = desc.match(/ROSTER:\s*(\d+)/);
+          if (!rosterMatch || parseInt(rosterMatch[1], 10) < 5) return false;
+          // Ensure all role sections have player mentions
+          return (
+            hasMentionInSection(desc, 'Tank', 'Heal') &&
+            hasMentionInSection(desc, 'Heal', 'DPS') &&
+            hasMentionInSection(desc, 'DPS', null)
+          );
         },
         ctx.config.timeoutMs,
       );
       const embed = rosterMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       const desc = embed.description ?? '';
-      // Verify tank, healer, dps slots have players (contain <@ mentions)
-      const tankSection = desc.split(/Tank/i)[1]?.split(/Heal/i)[0] ?? '';
-      const healerSection = desc.split(/Heal/i)[1]?.split(/DPS/i)[0] ?? '';
-      const dpsSection = desc.split(/DPS/i)[1] ?? '';
-      if (!tankSection.includes('<') && !tankSection.match(/\w{3,}/)) {
+      if (!hasMentionInSection(desc, 'Tank', 'Heal')) {
         throw new Error('Tank slot empty in full roster');
       }
-      if (!healerSection.includes('<') && !healerSection.match(/\w{3,}/)) {
+      if (!hasMentionInSection(desc, 'Heal', 'DPS')) {
         throw new Error('Healer slot empty in full roster');
       }
-      if (!dpsSection.includes('<') && !dpsSection.match(/\w{3,}/)) {
+      if (!hasMentionInSection(desc, 'DPS', null)) {
         throw new Error('DPS slots empty in full roster');
       }
     } finally {
@@ -146,21 +173,27 @@ const roleShiftChain: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[2], ['healer', 'dps']);
       // User 3 prefers tank and dps — should get tank
       await signupAs(ctx.api, ev.id, users[3], ['tank', 'dps']);
+      await awaitProcessing(ctx.api);
       const shiftMsg = await pollForEmbed(
         channelForGame(ctx, ctx.mmoGameId),
-        (m) => m.embeds.some((e) => e.title?.includes(ev.title)),
+        (m) => {
+          const e = m.embeds.find((x) => x.title?.includes(ev.title));
+          if (!e) return false;
+          const d = e.description ?? '';
+          return (
+            hasMentionInSection(d, 'Tank', 'Heal') &&
+            hasMentionInSection(d, 'Heal', 'DPS')
+          );
+        },
         ctx.config.timeoutMs,
       );
       const embed = shiftMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
       const desc = embed.description ?? '';
-      // Verify tank and healer slots are filled (not just "—")
-      const tankSection = desc.split(/Tank/i)[1]?.split(/Heal/i)[0] ?? '';
-      const healerSection = desc.split(/Heal/i)[1]?.split(/DPS/i)[0] ?? '';
-      if (!tankSection.match(/\w{4,}/) && !tankSection.includes('<')) {
+      if (!hasMentionInSection(desc, 'Tank', 'Heal')) {
         throw new Error('Tank slot empty — shift chain failed');
       }
-      if (!healerSection.match(/\w{4,}/) && !healerSection.includes('<')) {
+      if (!hasMentionInSection(desc, 'Heal', 'DPS')) {
         throw new Error('Healer slot empty — shift chain failed');
       }
     } finally {
@@ -193,6 +226,7 @@ const tentativeDisplacement: SmokeTest = {
       });
       // User 5 signs up CONFIRMED for dps — tentative should be displaced
       await signupAs(ctx.api, ev.id, users[5], ['dps']);
+      await awaitProcessing(ctx.api);
       const dispMsg = await pollForEmbed(
         channelForGame(ctx, ctx.mmoGameId),
         (m) => {

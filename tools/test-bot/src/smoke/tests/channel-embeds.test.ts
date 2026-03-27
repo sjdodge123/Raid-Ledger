@@ -69,6 +69,7 @@ const embedFilling: SmokeTest = {
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['dps']));
+      await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
         (m) =>
@@ -94,6 +95,7 @@ const embedTentative: SmokeTest = {
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['healer']));
+      await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
         (m) =>
@@ -119,6 +121,7 @@ const embedCancelSignup: SmokeTest = {
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['tank']));
+      await awaitProcessing(ctx.api);
       // Wait for embed to show the signup in the roster
       await waitForEmbedUpdate(
         ch.channelId,
@@ -131,6 +134,7 @@ const embedCancelSignup: SmokeTest = {
         ctx.config.timeoutMs,
       );
       await cancelSignup(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
       // After cancel, roster count drops to 0: MMO shows "ROSTER: 0/",
       // non-MMO removes the roster section entirely
       await waitForEmbedUpdate(
@@ -159,6 +163,7 @@ const embedCancelled: SmokeTest = {
     try {
       await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       await cancelEvent(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
         (m) => m.embeds.some((e) => e.title?.includes('CANCELLED')),
@@ -186,6 +191,7 @@ const embedReschedule: SmokeTest = {
       const originalDesc = original.embeds[0]?.description ?? '';
       const originalTs = originalDesc.match(/<t:(\d+):f>/)?.[1] ?? '';
       await rescheduleEvent(ctx.api, ev.id, 180);
+      await awaitProcessing(ctx.api);
       // Wait for the embed timestamp to change from the original
       await waitForEmbedUpdate(
         ch.channelId,
