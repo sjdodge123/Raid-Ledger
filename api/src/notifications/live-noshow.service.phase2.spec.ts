@@ -513,5 +513,55 @@ describe('LiveNoShowService — phase2', () => {
     });
   });
 
-  // --- Phase sequencing ---
+  // --- Roster capacity suppression (ROK-990) ---
+
+  describe('Phase 2 roster capacity suppression (ROK-990)', () => {
+    it('should suppress Phase 2 when roster is below capacity', async () => {
+      // Full Phase 2 scenario: absent player, Phase 1 already reminded.
+      // Current code sends the nudge — this test asserts it should NOT,
+      // which will pass once the isRosterAtCapacity gate is added.
+      setupPhase2Flow();
+
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
+        }),
+      });
+
+      await service.checkNoShows();
+
+      // ROK-990: Phase 2 should be suppressed when roster is below capacity.
+      // The dev must add a capacity gate in checkPhase2 and update the mock
+      // sequence (setupPhase2Flow + event data) to include capacity fields.
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
+        (call: unknown[]) =>
+          (call[0] as { type: string }).type === 'missed_event_nudge',
+      );
+      expect(nudgeCalls).toHaveLength(0);
+    });
+
+    it('should suppress Phase 2 when event has no capacity set', async () => {
+      // Same scenario but with no capacity limit — should also suppress.
+      setupPhase2Flow();
+
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
+        }),
+      });
+
+      await service.checkNoShows();
+
+      // ROK-990: No capacity set → resolveEventCapacity returns null → suppress.
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
+        (call: unknown[]) =>
+          (call[0] as { type: string }).type === 'missed_event_nudge',
+      );
+      expect(nudgeCalls).toHaveLength(0);
+    });
+  });
 });
