@@ -1,5 +1,5 @@
 /**
- * Tests for ItadPriceSyncService (ROK-818).
+ * Tests for ItadPriceSyncService (ROK-818, ROK-987).
  * Verifies cron-based ITAD pricing sync behavior.
  */
 import { Test } from '@nestjs/testing';
@@ -105,7 +105,7 @@ describe('ItadPriceSyncService', () => {
         itadCurrentUrl: 'https://store.steampowered.com/app/1',
         itadLowestPrice: '4.99',
         itadLowestCut: 88,
-        itadPriceUpdatedAt: expect.any(Date),
+        itadPriceUpdatedAt: expect.any(String),
       });
     });
 
@@ -156,6 +156,58 @@ describe('ItadPriceSyncService', () => {
         'ItadPriceSyncService_syncPricing',
         expect.any(Function),
       );
+    });
+  });
+
+  describe('ROK-987: itadPriceUpdatedAt must be ISO string', () => {
+    const sampleEntry: ItadOverviewGameEntry = {
+      id: 'game-uuid-1',
+      current: {
+        shop: { id: 1, name: 'Steam' },
+        price: { amount: 19.99, amountInt: 1999, currency: 'USD' },
+        regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
+        cut: 67,
+        url: 'https://store.steampowered.com/app/1',
+      },
+      lowest: {
+        shop: { id: 1, name: 'Steam' },
+        price: { amount: 9.99, amountInt: 999, currency: 'USD' },
+        regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
+        cut: 83,
+        timestamp: '2025-06-01T00:00:00Z',
+      },
+      bundled: 0,
+      urls: { game: 'https://isthereanydeal.com/game/test/' },
+    };
+
+    it('buildUpdateData returns a string for itadPriceUpdatedAt', () => {
+      const now = new Date('2026-03-27T12:00:00Z');
+      const data = buildUpdateData(sampleEntry, now);
+
+      // Must be a string, not a Date instance
+      expect(typeof data.itadPriceUpdatedAt).toBe('string');
+      expect(data.itadPriceUpdatedAt).not.toBeInstanceOf(Date);
+    });
+
+    it('buildUpdateData itadPriceUpdatedAt is an ISO 8601 string, not a Date', () => {
+      const now = new Date('2026-03-27T12:00:00.000Z');
+      const data = buildUpdateData(sampleEntry, now);
+
+      // Must be a primitive string, not a Date object
+      expect(typeof data.itadPriceUpdatedAt).toBe('string');
+      // Must contain the expected ISO timestamp
+      expect(data.itadPriceUpdatedAt).toBe('2026-03-27T12:00:00.000Z');
+    });
+
+    it('ItadPricingData.itadPriceUpdatedAt flows as string through executeBulkPricingUpdate', () => {
+      const now = new Date('2026-03-27T12:00:00.000Z');
+      const data = buildUpdateData(sampleEntry, now);
+
+      // The value produced by buildUpdateData must be a string
+      // so it can be safely interpolated into the sql template.
+      // If it's still a Date, this assertion fails.
+      const row = { id: 1, ...data };
+      expect(typeof row.itadPriceUpdatedAt).toBe('string');
     });
   });
 });

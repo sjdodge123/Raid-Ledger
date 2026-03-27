@@ -35,7 +35,7 @@ export interface ItadPricingData {
   itadCurrentUrl: string | null;
   itadLowestPrice: string | null;
   itadLowestCut: number | null;
-  itadPriceUpdatedAt: Date;
+  itadPriceUpdatedAt: string;
 }
 
 /** Build the SET clause data from an ITAD entry. */
@@ -50,7 +50,7 @@ export function buildUpdateData(
     itadCurrentUrl: entry.current?.url ?? null,
     itadLowestPrice: entry.lowest?.price.amount.toFixed(2) ?? null,
     itadLowestCut: entry.lowest?.cut ?? null,
-    itadPriceUpdatedAt: now,
+    itadPriceUpdatedAt: now.toISOString(),
   };
 }
 
