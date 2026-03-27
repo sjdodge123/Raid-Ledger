@@ -12,8 +12,8 @@ const ALLINONE_SENTINEL = '/etc/supervisor.d/raid-ledger.ini';
 /** Path where the Ollama binary is installed. */
 const OLLAMA_BINARY_PATH = '/usr/local/bin/ollama';
 
-/** Supervisor config path for Ollama. */
-const SUPERVISOR_CONFIG_PATH = '/etc/supervisor.d/ollama.ini';
+/** Supervisor config path for Ollama (inside services/ so [include] picks it up). */
+const SUPERVISOR_CONFIG_PATH = '/etc/supervisor.d/services/ollama.ini';
 
 /** Download URL for the Ollama Linux binary archive. */
 export const OLLAMA_DOWNLOAD_URL =
@@ -103,7 +103,7 @@ export class OllamaNativeService {
   private execQuick(cmd: string, args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
       execFile(cmd, args, { timeout: 10_000 }, (err, stdout, stderr) => {
-        if (err) reject(new Error(`${err.message}\n${stderr}`));
+        if (err) reject(new Error(`${err.message}\n${stdout}${stderr}`));
         else resolve(stdout);
       });
     });

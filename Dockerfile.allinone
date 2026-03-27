@@ -72,7 +72,7 @@ WORKDIR /app
 # ==================
 # Persistent data volume — mount as -v raid-ledger-data:/data
 # ==================
-RUN mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /data/logs /run/postgresql /run/redis && \
+RUN mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /data/logs /data/ollama/models /run/postgresql /run/redis && \
   chown -R postgres:postgres /data/postgresql /run/postgresql && \
   chown -R redis:redis /data/redis /run/redis
 VOLUME /data
@@ -128,7 +128,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # ==================
 # Supervisor Config
 # ==================
-RUN mkdir -p /etc/supervisor.d
+RUN mkdir -p /etc/supervisor.d /etc/supervisor.d/services
 
 # Create all-in-one supervisor config
 COPY <<'EOF' /etc/supervisor.d/raid-ledger.ini
@@ -196,6 +196,9 @@ startretries=5
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 redirect_stderr=true
+
+[include]
+files = /etc/supervisor.d/services/*.ini
 
 [program:logrotate]
 command=/bin/bash -c 'while true; do /usr/sbin/logrotate /etc/logrotate.d/raid-ledger --state /data/logs/.logrotate.state; sleep 86400; done'
@@ -285,7 +288,7 @@ set -e
 
 # Ensure /data subdirectories exist and have correct ownership
 # (volume mounts may arrive as root-owned empty dirs)
-mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /data/logs
+mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /data/logs /data/ollama/models
 chown -R postgres:postgres /data/postgresql
 chown -R redis:redis /data/redis
 
