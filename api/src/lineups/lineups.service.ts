@@ -282,6 +282,7 @@ export class LineupsService {
           phaseDeadline,
           phaseDurationOverride: overrides,
           matchThreshold: dto.matchThreshold ?? undefined,
+          maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
         })
         .returning();
     });

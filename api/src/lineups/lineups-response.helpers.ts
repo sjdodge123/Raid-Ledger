@@ -89,6 +89,7 @@ function mapToDetailResponse(
     votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
     phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
     matchThreshold: lineup.matchThreshold ?? 35,
+    maxVotesPerPlayer: lineup.maxVotesPerPlayer ?? 3,
     entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
     totalVoters: voterCount[0]?.total ?? 0,
     totalMembers: enrichment.totalMembers,
