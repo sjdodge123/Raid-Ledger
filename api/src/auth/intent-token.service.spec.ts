@@ -6,13 +6,12 @@ import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import type { IntentTokenPayload } from '@raid-ledger/contract';
 
 /**
- * TDD tests for ROK-979: DB-backed intent token single-use enforcement.
+ * Tests for DB-backed intent token single-use enforcement (ROK-979)
+ * with error handling hardening (ROK-983).
  *
- * These tests expect IntentTokenService to inject DrizzleAsyncProvider
- * instead of REDIS_CLIENT, and use a consumedIntentTokens table for
- * single-use tracking via INSERT ... ON CONFLICT DO NOTHING.
- *
- * Expected to FAIL until the implementation is migrated from Redis to Postgres.
+ * IntentTokenService uses a consumedIntentTokens table for single-use
+ * tracking via INSERT ... ON CONFLICT DO NOTHING. JWT errors return null;
+ * DB errors propagate to the caller.
  */
 describe('IntentTokenService (DB-backed)', () => {
   let service: IntentTokenService;
@@ -183,7 +182,6 @@ describe('IntentTokenService (DB-backed)', () => {
       mockDb.returning.mockRejectedValueOnce(dbError);
 
       // The error must reach the caller — it is NOT a validation failure.
-      // Currently FAILS because the catch-all on line 73 swallows it.
       await expect(service.validate(mockToken)).rejects.toThrow(
         'Connection refused',
       );

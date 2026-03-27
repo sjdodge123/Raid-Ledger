@@ -5,16 +5,10 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 /**
- * TDD tests for ROK-983: Session cleanup uses result.count instead of
- * .returning() + .length for row count logging.
+ * Tests for session cleanup cron service (ROK-983).
  *
- * The service currently chains .returning({ id: ... }) just to get the
- * count via result.length. This is wasteful -- Drizzle's delete().where()
- * returns { count: N } when .returning() is not chained, which gives
- * the row count without fetching row data.
- *
- * The new test asserts .returning() is NOT called. It will FAIL against
- * the current implementation which uses .returning().
+ * SessionCleanupService deletes expired sessions nightly.
+ * Uses result.count for row count logging (no .returning()).
  */
 describe('SessionCleanupService', () => {
   let service: SessionCleanupService;
@@ -78,7 +72,6 @@ describe('SessionCleanupService', () => {
       expect(mockDb.where).toHaveBeenCalled();
       // .returning() should NOT be called -- the row count is available
       // via result.count without fetching full row data.
-      // Currently FAILS because the service chains .returning().
       expect(mockDb.returning).not.toHaveBeenCalled();
     });
   });

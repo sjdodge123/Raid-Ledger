@@ -5,12 +5,11 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 /**
- * TDD tests for ROK-979: Intent token cleanup cron service.
+ * Tests for intent token cleanup cron service (ROK-979, ROK-983).
  *
- * IntentTokenCleanupService should periodically delete rows from
+ * IntentTokenCleanupService periodically deletes rows from
  * the consumedIntentTokens table where consumed_at < now() - 15 minutes.
- *
- * Expected to FAIL until the service is implemented.
+ * Uses result.count for row count logging (no .returning()).
  */
 describe('IntentTokenCleanupService', () => {
   let service: IntentTokenCleanupService;
@@ -88,7 +87,6 @@ describe('IntentTokenCleanupService', () => {
       expect(mockDb.where).toHaveBeenCalled();
       // .returning() should NOT be called — the row count is available
       // via result.count without fetching full row data.
-      // Currently FAILS because the service chains .returning().
       expect(mockDb.returning).not.toHaveBeenCalled();
     });
   });
