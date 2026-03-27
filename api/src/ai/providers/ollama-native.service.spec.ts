@@ -126,12 +126,12 @@ describe('OllamaNativeService', () => {
   });
 
   describe('writeSupervisorConfig', () => {
-    it('writes config to /etc/supervisor.d/ollama.ini', () => {
+    it('writes config to /etc/supervisor.d/services/ollama.ini', () => {
       const mockWriteFileSync = fs.writeFileSync as jest.Mock;
       service.writeSupervisorConfig();
 
       expect(mockWriteFileSync).toHaveBeenCalledWith(
-        '/etc/supervisor.d/ollama.ini',
+        '/etc/supervisor.d/services/ollama.ini',
         expect.stringContaining('[program:ollama]'),
       );
     });
@@ -302,14 +302,18 @@ describe('OllamaNativeService', () => {
     });
   });
 
-  describe('execQuick stderr capture (ROK-984)', () => {
+  describe('execQuick stdout+stderr capture (ROK-984)', () => {
     /**
-     * Helper: simulate execFile failing WITH stderr output.
+     * Helper: simulate execFile failing WITH stdout and/or stderr output.
      * Real execFile callbacks receive (err, stdout, stderr).
-     * The err.message is typically "Command failed: ...", but the real
-     * diagnostic is in stderr (e.g., supervisor config parse errors).
+     * supervisorctl errors go to stdout (e.g., "ollama: ERROR (no such process)"),
+     * while system errors go to stderr.
      */
-    function mockExecErrorWithStderr(message: string, stderr: string) {
+    function mockExecErrorWithOutput(
+      message: string,
+      stdout: string,
+      stderr: string,
+    ) {
       mockExecFile.mockImplementation(
         (
           _cmd: string,
@@ -317,7 +321,7 @@ describe('OllamaNativeService', () => {
           _opts: Record<string, unknown>,
           cb: (err: Error | null, stdout: string, stderr: string) => void,
         ) => {
-          cb(new Error(message), '', stderr);
+          cb(new Error(message), stdout, stderr);
         },
       );
     }
@@ -327,7 +331,7 @@ describe('OllamaNativeService', () => {
       const stderr =
         "error: <class 'FileNotFoundError'>, [Errno 2] No such file or directory: file: /usr/lib/python3/supervisord/options.py";
 
-      mockExecErrorWithStderr(errMsg, stderr);
+      mockExecErrorWithOutput(errMsg, '', stderr);
 
       await expect(service.startService()).rejects.toThrow(
         expect.objectContaining({
@@ -336,27 +340,38 @@ describe('OllamaNativeService', () => {
       );
     });
 
-    it('includes stderr in error when stopService fails', async () => {
-      const errMsg = 'Command failed: supervisorctl stop ollama';
-      const stderr = 'ollama: ERROR (not running)';
+    it('includes stdout in error (supervisor errors go to stdout)', async () => {
+      const errMsg = 'Command failed: supervisorctl start ollama';
+      const stdout = 'ollama: ERROR (no such process)';
 
-      mockExecErrorWithStderr(errMsg, stderr);
+      mockExecErrorWithOutput(errMsg, stdout, '');
 
-      await expect(service.stopService()).rejects.toThrow(
+      await expect(service.startService()).rejects.toThrow(
         expect.objectContaining({
-          message: expect.stringContaining(stderr),
+          message: expect.stringContaining('no such process'),
         }),
       );
     });
 
-    it('includes stderr in error when getServiceStatus underlying call fails with stderr', async () => {
-      // getServiceStatus catches errors and returns 'not-found', but
-      // we verify the error that execQuick rejects with contains stderr
-      // by testing startService which does NOT catch
+    it('includes both stdout and stderr in error when both are present', async () => {
+      const errMsg = 'Command failed: supervisorctl stop ollama';
+      const stdout = 'ollama: ERROR (not running)';
+      const stderr = 'Warning: config parse issue';
+
+      mockExecErrorWithOutput(errMsg, stdout, stderr);
+
+      await expect(service.stopService()).rejects.toThrow(
+        expect.objectContaining({
+          message: expect.stringMatching(/not running.*config parse issue/s),
+        }),
+      );
+    });
+
+    it('includes stderr in error when connection refused', async () => {
       const errMsg = 'Command failed: supervisorctl reread';
       const stderr = 'unix:///var/run/supervisor.sock refused connection';
 
-      mockExecErrorWithStderr(errMsg, stderr);
+      mockExecErrorWithOutput(errMsg, '', stderr);
 
       await expect(service.startService()).rejects.toThrow(
         expect.objectContaining({

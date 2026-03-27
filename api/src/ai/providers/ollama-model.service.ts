@@ -27,7 +27,7 @@ export class OllamaModelService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: modelId, stream: false }),
-      timeoutMs: 300_000, // 5 minutes for large model downloads
+      timeoutMs: 600_000, // 10 minutes for large model downloads on NAS bandwidth
     });
   }
 
