@@ -37,16 +37,32 @@ describe('LineupPhaseProcessor', () => {
   });
 
   describe('onModuleInit', () => {
-    it('resolves without throwing when rehydration fails', async () => {
-      mockDb.where.mockRejectedValueOnce(new Error('DB connection refused'));
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
 
-      await expect(processor.onModuleInit()).resolves.toBeUndefined();
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('resolves without throwing when rehydration fails', async () => {
+      mockDb.where.mockRejectedValue(new Error('DB connection refused'));
+
+      const p = processor.onModuleInit();
+      for (let i = 0; i < 3; i++) {
+        await jest.advanceTimersByTimeAsync(10_000);
+      }
+      await expect(p).resolves.toBeUndefined();
     });
 
     it('logs the error when rehydration fails', async () => {
-      mockDb.where.mockRejectedValueOnce(new Error('DB connection refused'));
+      mockDb.where.mockRejectedValue(new Error('DB connection refused'));
 
-      await processor.onModuleInit();
+      const p = processor.onModuleInit();
+      for (let i = 0; i < 3; i++) {
+        await jest.advanceTimersByTimeAsync(10_000);
+      }
+      await p;
 
       expect(errorSpy).toHaveBeenCalledTimes(1);
       expect(errorSpy).toHaveBeenCalledWith(
