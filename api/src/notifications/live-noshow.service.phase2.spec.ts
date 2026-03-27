@@ -64,6 +64,8 @@ describe('LiveNoShowService — phase2', () => {
       creatorId: number;
       startTime: Date;
       endTime: Date;
+      slotConfig: unknown;
+      maxAttendees: number | null;
     }> = {},
   ) => {
     const startTime =
@@ -76,6 +78,11 @@ describe('LiveNoShowService — phase2', () => {
       creatorId: overrides.creatorId ?? 1,
       startTime,
       endTime,
+      slotConfig: 'slotConfig' in overrides ? overrides.slotConfig : null,
+      maxAttendees:
+        'maxAttendees' in overrides
+          ? (overrides.maxAttendees as number | null)
+          : 10,
     };
   };
 
@@ -128,6 +135,9 @@ describe('LiveNoShowService — phase2', () => {
       dbVoiceDuration?: number | null;
       displayName?: string;
       role?: string | null;
+      maxAttendees?: number | null;
+      slotConfig?: unknown;
+      activeSignupCount?: number;
     } = {},
   ) => {
     const {
@@ -138,11 +148,16 @@ describe('LiveNoShowService — phase2', () => {
       dbVoiceDuration = null,
       displayName = 'PlayerOne',
       role = 'Tank',
+      maxAttendees = 10,
+      slotConfig = null,
+      activeSignupCount = 10,
     } = options;
 
     const event = makeEvent({
       startTime: new Date(Date.now() - 16 * 60 * 1000),
       creatorId: 1,
+      maxAttendees,
+      slotConfig,
     });
 
     const selectMocks: jest.Mock[] = [];
@@ -156,6 +171,8 @@ describe('LiveNoShowService — phase2', () => {
             title: event.title,
             creatorId: event.creatorId,
             duration: [event.startTime, event.endTime],
+            slotConfig: event.slotConfig,
+            maxAttendees: event.maxAttendees,
           },
         ]),
       ),
@@ -172,76 +189,97 @@ describe('LiveNoShowService — phase2', () => {
         ),
     );
 
+    // Determine if capacity is resolvable (mirrors resolveEventCapacity logic)
+    const hasCapacity = slotConfig !== null || maxAttendees !== null;
+    const atCapacity = hasCapacity && activeSignupCount >= (maxAttendees ?? 0);
+
     if (!alreadyEscalated) {
-      // 3. getPhase1RemindedUserIds
-      selectMocks.push(
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhere(phase1Reminded.map((uid) => ({ userId: uid }))),
-          ),
-      );
-
-      if (phase1Reminded.length > 0) {
-        // 4. fetchPhase2Data: batch-fetch discord IDs
+      // 3. isRosterAtCapacity: count active signups -- .limit(1)
+      // Only queried when resolveEventCapacity returns non-null
+      if (hasCapacity) {
         selectMocks.push(
-          jest.fn().mockReturnValue(
-            makeSelectFromWhere(
-              phase1Reminded.map((uid) => ({
-                id: uid,
-                discordId: userDiscordId,
-              })),
+          jest
+            .fn()
+            .mockReturnValue(
+              makeSelectFromWhereLimit([{ count: activeSignupCount }]),
             ),
-          ),
+        );
+      }
+
+      // Remaining Phase 2 mocks only added when capacity gate passes
+      if (atCapacity) {
+        // 4. getPhase1RemindedUserIds
+        selectMocks.push(
+          jest
+            .fn()
+            .mockReturnValue(
+              makeSelectFromWhere(
+                phase1Reminded.map((uid) => ({ userId: uid })),
+              ),
+            ),
         );
 
-        // 5. fetchPhase2Data: batch-fetch voice sessions
-        selectMocks.push(
-          jest.fn().mockReturnValue(
-            makeSelectFromWhere(
-              userDiscordId && dbVoiceDuration !== null
-                ? [
-                    {
-                      discordUserId: userDiscordId,
-                      totalDurationSec: dbVoiceDuration,
-                    },
-                  ]
-                : [],
-            ),
-          ),
-        );
-
-        const isAbsent =
-          userDiscordId === null ||
-          (!voiceActiveForUser &&
-            (dbVoiceDuration === null || dbVoiceDuration < 120));
-
-        if (isAbsent) {
-          // 6. batchFetchPlayerDisplayInfo: batch user lookup
+        if (phase1Reminded.length > 0) {
+          // 5. fetchPhase2Data: batch-fetch discord IDs
           selectMocks.push(
             jest.fn().mockReturnValue(
               makeSelectFromWhere(
                 phase1Reminded.map((uid) => ({
                   id: uid,
-                  username: displayName,
-                  displayName,
+                  discordId: userDiscordId,
                 })),
               ),
             ),
           );
 
-          // 7. batchFetchPlayerDisplayInfo: batch roster assignment
+          // 6. fetchPhase2Data: batch-fetch voice sessions
           selectMocks.push(
-            jest
-              .fn()
-              .mockReturnValue(
-                makeSelectFromJoinWhere(
-                  role
-                    ? phase1Reminded.map((uid) => ({ userId: uid, role }))
-                    : [],
+            jest.fn().mockReturnValue(
+              makeSelectFromWhere(
+                userDiscordId && dbVoiceDuration !== null
+                  ? [
+                      {
+                        discordUserId: userDiscordId,
+                        totalDurationSec: dbVoiceDuration,
+                      },
+                    ]
+                  : [],
+              ),
+            ),
+          );
+
+          const isAbsent =
+            userDiscordId === null ||
+            (!voiceActiveForUser &&
+              (dbVoiceDuration === null || dbVoiceDuration < 120));
+
+          if (isAbsent) {
+            // 7. batchFetchPlayerDisplayInfo: batch user lookup
+            selectMocks.push(
+              jest.fn().mockReturnValue(
+                makeSelectFromWhere(
+                  phase1Reminded.map((uid) => ({
+                    id: uid,
+                    username: displayName,
+                    displayName,
+                  })),
                 ),
               ),
-          );
+            );
+
+            // 8. batchFetchPlayerDisplayInfo: batch roster assignment
+            selectMocks.push(
+              jest
+                .fn()
+                .mockReturnValue(
+                  makeSelectFromJoinWhere(
+                    role
+                      ? phase1Reminded.map((uid) => ({ userId: uid, role }))
+                      : [],
+                  ),
+                ),
+            );
+          }
         }
       }
     }
@@ -428,6 +466,7 @@ describe('LiveNoShowService — phase2', () => {
       const event = makeEvent({
         startTime: new Date(Date.now() - 16 * 60 * 1000),
         creatorId: 1,
+        maxAttendees: 10,
       });
 
       const selectCalls: jest.Mock[] = [
@@ -439,11 +478,15 @@ describe('LiveNoShowService — phase2', () => {
               title: event.title,
               creatorId: 1,
               duration: [event.startTime, event.endTime],
+              slotConfig: event.slotConfig,
+              maxAttendees: event.maxAttendees,
             },
           ]),
         ),
         // hasReminderBeenSent (escalation) -- not sent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
+        // isRosterAtCapacity: count active signups -- at capacity
+        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds -- creator user 1 was reminded
         jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 1 }])),
         // fetchPhase2Data: batch discord IDs
@@ -513,5 +556,35 @@ describe('LiveNoShowService — phase2', () => {
     });
   });
 
-  // --- Phase sequencing ---
+  // --- Roster capacity suppression (ROK-990) ---
+
+  describe('Phase 2 roster capacity suppression (ROK-990)', () => {
+    it('should suppress Phase 2 when roster is below capacity', async () => {
+      // Roster has 3 active signups out of 10 capacity — below threshold.
+      // isRosterAtCapacity returns false, Phase 2 should be suppressed.
+      setupPhase2Flow({ maxAttendees: 10, activeSignupCount: 3 });
+
+      await service.checkNoShows();
+
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
+        (call: unknown[]) =>
+          (call[0] as { type: string }).type === 'missed_event_nudge',
+      );
+      expect(nudgeCalls).toHaveLength(0);
+    });
+
+    it('should suppress Phase 2 when event has no capacity set', async () => {
+      // No capacity set (maxAttendees null, slotConfig null).
+      // resolveEventCapacity returns null, isRosterAtCapacity returns false.
+      setupPhase2Flow({ maxAttendees: null, slotConfig: null });
+
+      await service.checkNoShows();
+
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
+        (call: unknown[]) =>
+          (call[0] as { type: string }).type === 'missed_event_nudge',
+      );
+      expect(nudgeCalls).toHaveLength(0);
+    });
+  });
 });

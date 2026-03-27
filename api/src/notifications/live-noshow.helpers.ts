@@ -3,8 +3,9 @@
  * Extracted from live-noshow.service.ts for file size compliance (ROK-711).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { eq, and, sql, inArray, notInArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { resolveEventCapacity } from '../events/signups-signup.helpers';
 
 /** Minimum voice presence (seconds) to count as "showed up". */
 export const PRESENCE_THRESHOLD_SEC = 120;
@@ -22,6 +23,8 @@ export interface LiveEvent {
   endTime: Date;
   gameId: number | null;
   recurrenceGroupId: string | null;
+  slotConfig: unknown;
+  maxAttendees: number | null;
 }
 
 /** Map a raw event row to the LiveEvent shape. */
@@ -32,6 +35,8 @@ function mapToLiveEvent(r: {
   gameId: number | null;
   recurrenceGroupId: string | null;
   duration: [Date, Date];
+  slotConfig: unknown;
+  maxAttendees: number | null;
 }): LiveEvent {
   return {
     id: r.id,
@@ -41,6 +46,8 @@ function mapToLiveEvent(r: {
     recurrenceGroupId: r.recurrenceGroupId,
     startTime: r.duration[0],
     endTime: r.duration[1],
+    slotConfig: r.slotConfig,
+    maxAttendees: r.maxAttendees,
   };
 }
 
@@ -58,6 +65,8 @@ export async function findLiveEventsInNoShowWindow(
       gameId: schema.events.gameId,
       recurrenceGroupId: schema.events.recurrenceGroupId,
       duration: schema.events.duration,
+      slotConfig: schema.events.slotConfig,
+      maxAttendees: schema.events.maxAttendees,
     })
     .from(schema.events)
     .where(
@@ -69,6 +78,34 @@ export async function findLiveEventsInNoShowWindow(
       ),
     );
   return rows.map(mapToLiveEvent);
+}
+
+/**
+ * Check if the event roster is at capacity.
+ * Returns false when no capacity is configured (suppresses Phase 2).
+ * Uses same exclusion set as wasEventFullBeforeDeparture.
+ */
+export async function isRosterAtCapacity(
+  db: PostgresJsDatabase<typeof schema>,
+  event: LiveEvent,
+): Promise<boolean> {
+  const capacity = resolveEventCapacity(event);
+  if (capacity === null) return false;
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, event.id),
+        notInArray(schema.eventSignups.status, [
+          'departed',
+          'declined',
+          'roached_out',
+        ]),
+      ),
+    )
+    .limit(1);
+  return Number(count) >= capacity;
 }
 
 type AbsentPlayer = {
