@@ -39,11 +39,10 @@ export class IntentTokenCleanupService {
 
         const result = await this.db
           .delete(schema.consumedIntentTokens)
-          .where(lt(schema.consumedIntentTokens.consumedAt, cutoff))
-          .returning({ id: schema.consumedIntentTokens.id });
+          .where(lt(schema.consumedIntentTokens.consumedAt, cutoff));
 
-        if (result.length > 0) {
-          this.logger.log(`Cleaned up ${result.length} expired intent tokens`);
+        if (result.count > 0) {
+          this.logger.log(`Cleaned up ${result.count} expired intent tokens`);
         }
       },
     );

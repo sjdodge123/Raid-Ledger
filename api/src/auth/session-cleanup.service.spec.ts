@@ -42,7 +42,7 @@ describe('SessionCleanupService', () => {
 
   describe('cleanupExpiredSessions', () => {
     it('should delete expired sessions via cron', async () => {
-      mockDb.returning.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
+      mockDb.where.mockResolvedValueOnce({ count: 2 });
 
       await service.cleanupExpiredSessions();
 
@@ -51,7 +51,7 @@ describe('SessionCleanupService', () => {
     });
 
     it('should wrap execution in cronJobService.executeWithTracking', async () => {
-      mockDb.returning.mockResolvedValueOnce([]);
+      mockDb.where.mockResolvedValueOnce({ count: 0 });
 
       await service.cleanupExpiredSessions();
 
@@ -62,17 +62,15 @@ describe('SessionCleanupService', () => {
     });
 
     it('should handle zero expired sessions gracefully', async () => {
-      mockDb.returning.mockResolvedValueOnce([]);
+      mockDb.where.mockResolvedValueOnce({ count: 0 });
 
-      await expect(
-        service.cleanupExpiredSessions(),
-      ).resolves.not.toThrow();
+      await expect(service.cleanupExpiredSessions()).resolves.not.toThrow();
     });
 
     // ROK-983: Use result.count instead of .returning() + .length
     it('should not call .returning() -- use result.count for row count', async () => {
       // Let the chain work normally so the service runs to completion
-      mockDb.returning.mockResolvedValueOnce([{ id: 1 }]);
+      mockDb.where.mockResolvedValueOnce({ count: 1 });
 
       await service.cleanupExpiredSessions();
 

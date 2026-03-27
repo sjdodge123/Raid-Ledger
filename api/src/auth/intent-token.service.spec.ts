@@ -14,7 +14,7 @@ import type { IntentTokenPayload } from '@raid-ledger/contract';
  *
  * Expected to FAIL until the implementation is migrated from Redis to Postgres.
  */
-function describeIntentTokenService() {
+describe('IntentTokenService (DB-backed)', () => {
   let service: IntentTokenService;
   let mockDb: MockDb;
   let mockJwtService: {
@@ -204,5 +204,4 @@ function describeIntentTokenService() {
       );
     });
   });
-}
-describe('IntentTokenService (DB-backed)', () => describeIntentTokenService());
+});
