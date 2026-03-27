@@ -18,6 +18,7 @@ import {
   getPhase1RemindedUserIds,
   batchFetchPlayerDisplayInfo,
   fetchPhase2Data,
+  isRosterAtCapacity,
 } from './live-noshow.helpers';
 
 /**
@@ -114,6 +115,7 @@ export class LiveNoShowService {
       )
     )
       return;
+    if (!(await isRosterAtCapacity(this.db, event))) return;
     const phase1Reminded = await getPhase1RemindedUserIds(this.db, event.id);
     if (phase1Reminded.length === 0) return;
     const stillAbsent = await this.findStillAbsentPlayers(

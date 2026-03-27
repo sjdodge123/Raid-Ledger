@@ -167,11 +167,15 @@ describe('LiveNoShowService — batching', () => {
               title: 'Raid Night',
               creatorId: 1,
               duration: [startTime, endTime],
+              slotConfig: null,
+              maxAttendees: 10,
             },
           ]),
         ),
         // hasReminderBeenSent (escalation) -- not sent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
+        // isRosterAtCapacity: at capacity
+        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds -- two players
         jest
           .fn()
@@ -254,10 +258,14 @@ describe('LiveNoShowService — batching', () => {
               title: 'Raid Night',
               creatorId: 1,
               duration: [startTime, endTime],
+              slotConfig: null,
+              maxAttendees: 10,
             },
           ]),
         ),
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])), // hasReminderBeenSent
+        // isRosterAtCapacity: at capacity
+        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         jest
           .fn()
           .mockReturnValue(
@@ -363,11 +371,15 @@ describe('LiveNoShowService — batching', () => {
               title: 'Raid Night',
               creatorId: 1,
               duration: [startTime, endTime],
+              slotConfig: null,
+              maxAttendees: 10,
             },
           ]),
         ),
         // hasReminderBeenSent -- not sent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
+        // isRosterAtCapacity: at capacity
+        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds
         jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 10 }])),
         // fetchPhase2Data: batch discord IDs -- user has null discordId
@@ -430,11 +442,15 @@ describe('LiveNoShowService — batching', () => {
               title: 'Raid Night',
               creatorId: 1,
               duration: [startTime, endTime],
+              slotConfig: null,
+              maxAttendees: 10,
             },
           ]),
         ),
         // hasReminderBeenSent -- not sent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
+        // isRosterAtCapacity: at capacity
+        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds
         jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 10 }])),
         // fetchPhase2Data: batch discord IDs -- user not found
