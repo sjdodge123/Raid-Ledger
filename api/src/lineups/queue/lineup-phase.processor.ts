@@ -34,8 +34,11 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    await bestEffortInit('LineupPhaseProcessor', this.logger, () =>
-      this.rehydratePendingJobs(),
+    await bestEffortInit(
+      'LineupPhaseProcessor',
+      this.logger,
+      () => this.rehydratePendingJobs(),
+      { retries: 3 },
     );
   }
 

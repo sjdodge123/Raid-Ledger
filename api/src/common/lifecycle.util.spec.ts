@@ -86,7 +86,6 @@ describe('bestEffortInit', () => {
         .mockRejectedValueOnce(new Error('transient'))
         .mockResolvedValueOnce(undefined);
 
-      // @ts-expect-error — 4th param (options) not yet in signature
       const call = bestEffortInit('Retry', logger, fn, { retries: 2 });
       await drainRetryTimers(call, 1);
 
@@ -101,7 +100,6 @@ describe('bestEffortInit', () => {
         .mockRejectedValueOnce(new Error('fail-2'))
         .mockResolvedValueOnce(undefined);
 
-      // @ts-expect-error — 4th param (options) not yet in signature
       const call = bestEffortInit('WarnTest', logger, fn, { retries: 3 });
       await drainRetryTimers(call, 2);
 
@@ -125,7 +123,6 @@ describe('bestEffortInit', () => {
         .mockRejectedValueOnce(new Error('fail-2'))
         .mockRejectedValueOnce(new Error('final-fail'));
 
-      // @ts-expect-error — 4th param (options) not yet in signature
       const call = bestEffortInit('Exhaust', logger, fn, { retries: 2 });
       await drainRetryTimers(call, 2);
 
@@ -146,7 +143,6 @@ describe('bestEffortInit', () => {
         .mockRejectedValueOnce(new Error('fail-3'))
         .mockResolvedValueOnce(undefined);
 
-      // @ts-expect-error — 4th param (options) not yet in signature
       const call = bestEffortInit('Backoff', logger, fn, { retries: 3 });
 
       // After initial failure, first retry should wait 1s
