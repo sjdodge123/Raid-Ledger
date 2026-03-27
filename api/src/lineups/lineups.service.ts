@@ -8,9 +8,11 @@ import {
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  BandwagonJoinResponseDto,
   CommonGroundQueryDto,
   CommonGroundResponseDto,
   CreateLineupDto,
+  GroupedMatchesResponseDto,
   LineupBannerResponseDto,
   LineupDetailResponseDto,
   NominateGameDto,
@@ -28,6 +30,7 @@ import {
   findBuildingLineup,
   findNominatedGameIds,
   countDistinctNominators,
+  validateDecidedGame,
   VALID_TRANSITIONS,
   VALID_REVERSIONS,
 } from './lineups-query.helpers';
@@ -62,6 +65,12 @@ import {
 import { logTransition, logNomination } from './lineups-activity.helpers';
 import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
+import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
+import {
+  executeBandwagonJoin,
+  advanceMatch as advanceMatchHelper,
+} from './lineups-bandwagon.helpers';
+import { carryOverFromLastDecided } from './lineups-carryover.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -94,6 +103,7 @@ export class LineupsService {
       overrides,
     );
     void this.activityLog.log('lineup', row.id, 'lineup_created', userId);
+    await carryOverFromLastDecided(this.db, row.id);
 
     const delayMs = phaseDeadline.getTime() - Date.now();
     await this.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
@@ -151,7 +161,7 @@ export class LineupsService {
 
     this.validateTransition(lineup.status as LineupStatus, dto);
     if (dto.status === 'decided' && dto.decidedGameId) {
-      await this.validateDecidedGame(id, dto.decidedGameId);
+      await validateDecidedGame(this.db, id, dto.decidedGameId);
     }
 
     await this.applyStatusUpdate(id, dto, lineup);
@@ -232,6 +242,28 @@ export class LineupsService {
     return buildBannerData(this.db, lineup);
   }
 
+  /** Get grouped matches for decided view (ROK-937). */
+  async getGroupedMatches(id: number): Promise<GroupedMatchesResponseDto> {
+    return buildGroupedMatchesResponse(this.db, id);
+  }
+
+  /** Bandwagon join a match (ROK-937). */
+  async bandwagonJoin(
+    lineupId: number,
+    matchId: number,
+    userId: number,
+  ): Promise<BandwagonJoinResponseDto> {
+    return executeBandwagonJoin(this.db, lineupId, matchId, userId);
+  }
+
+  /** Advance a suggested match to scheduling (ROK-937). */
+  async advanceMatch(
+    lineupId: number,
+    matchId: number,
+  ): Promise<{ promoted: boolean }> {
+    return advanceMatchHelper(this.db, lineupId, matchId);
+  }
+
   /** Insert a new lineup row with phase scheduling fields. */
   private insertLineup(
     dto: CreateLineupDto,
@@ -306,17 +338,6 @@ export class LineupsService {
       throw new BadRequestException(
         `Cannot transition from '${current}' to '${dto.status}'`,
       );
-    }
-  }
-
-  /** Validate the decided game exists in the lineup entries. */
-  private async validateDecidedGame(lineupId: number, gameId: number) {
-    const entries = await this.db
-      .select({ gameId: schema.communityLineupEntries.gameId })
-      .from(schema.communityLineupEntries)
-      .where(eq(schema.communityLineupEntries.lineupId, lineupId));
-    if (!entries.some((e) => e.gameId === gameId)) {
-      throw new BadRequestException('Game must be in lineup entries');
     }
   }
 }

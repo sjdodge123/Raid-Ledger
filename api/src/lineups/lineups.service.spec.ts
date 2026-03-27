@@ -15,6 +15,11 @@ jest.mock('./lineups-matching.helpers', () => ({
   buildMatchesForLineup: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Mock auto-carryover to avoid extra DB queries in unit tests (ROK-937)
+jest.mock('./lineups-carryover.helpers', () => ({
+  carryOverFromLastDecided: jest.fn().mockResolvedValue(undefined),
+}));
+
 const NOW = new Date('2026-03-22T20:00:00Z');
 
 const mockLineup = {
