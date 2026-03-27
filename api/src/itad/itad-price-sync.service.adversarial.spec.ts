@@ -96,7 +96,7 @@ describe('ItadPriceSyncService — adversarial', () => {
       expect(data.itadCurrentUrl).toBeNull();
       expect(data.itadLowestPrice).toBe('4.99');
       expect(data.itadLowestCut).toBe(88);
-      expect(data.itadPriceUpdatedAt).toBeInstanceOf(Date);
+      expect(typeof data.itadPriceUpdatedAt).toBe('string');
     });
 
     it('writes null lowest columns when lowest is null but current exists', () => {
@@ -120,7 +120,7 @@ describe('ItadPriceSyncService — adversarial', () => {
       expect(data.itadCurrentCut).toBeNull();
       expect(data.itadLowestPrice).toBeNull();
       expect(data.itadLowestCut).toBeNull();
-      expect(data.itadPriceUpdatedAt).toBeInstanceOf(Date);
+      expect(typeof data.itadPriceUpdatedAt).toBe('string');
     });
   });
 
