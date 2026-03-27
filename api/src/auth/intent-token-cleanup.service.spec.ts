@@ -77,5 +77,20 @@ describe('IntentTokenCleanupService', () => {
       // where() should have been called (to filter by consumed_at < threshold)
       expect(mockDb.where).toHaveBeenCalled();
     });
+
+    // ROK-983: Use result.count instead of .returning() + .length
+    it('should not call .returning() — use result.count for row count', async () => {
+      // Let the chain work normally so the service runs to completion
+      mockDb.returning.mockResolvedValueOnce([{ id: 1 }]);
+
+      await service.cleanupExpiredTokens();
+
+      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockDb.where).toHaveBeenCalled();
+      // .returning() should NOT be called — the row count is available
+      // via result.count without fetching full row data.
+      // Currently FAILS because the service chains .returning().
+      expect(mockDb.returning).not.toHaveBeenCalled();
+    });
   });
 });

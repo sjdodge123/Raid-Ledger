@@ -174,6 +174,35 @@ function describeIntentTokenService() {
       expect(valuesCall.tokenHash).toHaveLength(64); // SHA-256 hex = 64 chars
       expect(valuesCall.tokenHash).not.toBe(mockToken); // Not the raw JWT
     });
+
+    // ROK-983: DB errors must propagate — not be swallowed by catch-all
+    it('should propagate DB errors to the caller (not return null)', async () => {
+      const dbError = new Error('Connection refused');
+
+      // JWT verification succeeds, but the DB insert chain throws
+      mockDb.returning.mockRejectedValueOnce(dbError);
+
+      // The error must reach the caller — it is NOT a validation failure.
+      // Currently FAILS because the catch-all on line 73 swallows it.
+      await expect(service.validate(mockToken)).rejects.toThrow(
+        'Connection refused',
+      );
+
+      // JWT was verified successfully before the DB error occurred
+      expect(mockJwtService.verify).toHaveBeenCalledWith(mockToken);
+    });
+
+    it('should propagate DB constraint errors to the caller', async () => {
+      const constraintError = new Error(
+        'duplicate key value violates unique constraint',
+      );
+
+      mockDb.returning.mockRejectedValueOnce(constraintError);
+
+      await expect(service.validate(mockToken)).rejects.toThrow(
+        'duplicate key value violates unique constraint',
+      );
+    });
   });
 }
 describe('IntentTokenService (DB-backed)', () => describeIntentTokenService());
