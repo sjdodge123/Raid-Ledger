@@ -37,7 +37,13 @@ function setupSteamLinkModule() {
   chain.select = jest.fn().mockReturnValue(chain);
   mockDb = chain;
 
-  listener = new SteamLinkListener(mockDb as never, mockClientService as never);
+  listener = new SteamLinkListener(
+    mockDb as never,
+    mockClientService as never,
+    undefined as never,
+    undefined as never,
+    undefined as never,
+  );
 }
 
 function callHandleMessage(message: unknown): Promise<void> {

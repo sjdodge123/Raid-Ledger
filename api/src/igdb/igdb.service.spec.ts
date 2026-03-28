@@ -481,7 +481,8 @@ describe('IgdbService', () => {
             selectCallIndex++;
             // Call 1: Phase 1 — existing games (return empty to skip refresh)
             // Call 2: Phase 3 — games with missing covers
-            const data = selectCallIndex === 1 ? [] : missingCoverGames;
+            // Call 3+: ITAD enrichment + re-enrichment (return empty)
+            const data = selectCallIndex === 2 ? missingCoverGames : [];
             return thenableResult(data);
           }),
         })),

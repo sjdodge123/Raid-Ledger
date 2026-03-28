@@ -61,6 +61,7 @@ function buildItadInsertValues(game: GameDetailDto) {
     itadBoxartUrl: game.itadBoxartUrl,
     itadTags: game.itadTags,
     earlyAccess: game.earlyAccess ?? false,
+    igdbEnrichmentStatus: game.igdbId ? 'enriched' : 'pending',
   };
 }
 
@@ -92,6 +93,9 @@ function buildItadUpdateSet(game: GameDetailDto) {
     itadBoxartUrl: game.itadBoxartUrl,
     itadTags: game.itadTags,
     earlyAccess: game.earlyAccess ?? sql`${schema.games.earlyAccess}`,
+    igdbEnrichmentStatus: game.igdbId
+      ? 'enriched'
+      : sql`CASE WHEN ${schema.games.igdbEnrichmentStatus} = 'enriched' THEN 'enriched' ELSE 'pending' END`,
     cachedAt: new Date(),
   };
 }

@@ -2,6 +2,7 @@
  * ITAD search dependency builder for IgdbService (ROK-773).
  * Constructs the ItadSearchDeps interface used by executeItadSearch.
  */
+import { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -16,12 +17,16 @@ import {
 } from './igdb-itad-enrich.helpers';
 import { upsertItadGame } from './igdb-itad-upsert.helpers';
 
+const logger = new Logger('ItadSearchDeps');
+
 /** Parameters for building ITAD search deps. */
 export interface ItadDepsBuildParams {
   itadService: ItadService;
   db: PostgresJsDatabase<typeof schema>;
   queryIgdb: (body: string) => Promise<IgdbApiGame[]>;
   getAdultFilter: () => Promise<boolean>;
+  /** ROK-986: Callback when a game is upserted without IGDB data. */
+  onUnenriched?: (gameId: number) => void;
 }
 
 /**
@@ -39,6 +44,7 @@ export function buildItadSearchDeps(
     getAdultFilter: params.getAdultFilter,
     isBannedOrHidden: (slug) => checkBannedOrHidden(params.db, slug),
     upsertGame: (game) => upsertItadGame(params.db, game),
+    onUnenriched: params.onUnenriched,
   };
 }
 
@@ -87,7 +93,10 @@ async function enrichViaExternalGames(
     const games = await queryIgdb(query);
     if (games.length === 0) return null;
     return parseIgdbEnrichment(games[0]);
-  } catch {
+  } catch (err) {
+    logger.warn(
+      `IGDB enrichment via external_games failed for steamAppId=${steamAppId}: ${String(err)}`,
+    );
     return null;
   }
 }

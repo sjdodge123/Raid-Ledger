@@ -23,6 +23,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ItadService } from '../../itad/itad.service';
+import { IgdbService } from '../../igdb/igdb.service';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTING_KEYS } from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -61,6 +62,7 @@ export class SteamLinkListener {
     private db: Db,
     private readonly clientService: DiscordBotClientService,
     @Optional() private readonly itadService: ItadService,
+    @Optional() private readonly igdbService: IgdbService,
     private readonly settingsService: SettingsService,
   ) {
     this.startDedupCleanup();
@@ -142,6 +144,12 @@ export class SteamLinkListener {
       if (!game) return;
     }
 
+    if (!game.igdbId && this.igdbService) {
+      this.igdbService.enqueueReenrich(game.id).catch((err: unknown) => {
+        this.logger.warn(`Failed to enqueue re-enrichment: ${String(err)}`);
+      });
+    }
+
     const user = await findLinkedRlUser(this.db, message.author.id);
     if (!user) return;
 
@@ -164,7 +172,7 @@ export class SteamLinkListener {
   /** Discover and add a game via ITAD when it's not in the DB. */
   private async discoverGame(
     appId: number,
-  ): Promise<{ id: number; name: string } | null> {
+  ): Promise<{ id: number; name: string; igdbId: number | null } | null> {
     if (!this.itadService) return null;
     const adultFilter =
       (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===

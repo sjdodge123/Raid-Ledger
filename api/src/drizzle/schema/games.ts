@@ -99,6 +99,14 @@ export const games = pgTable('games', {
   itadPriceUpdatedAt: timestamp('itad_price_updated_at'),
   /** ROK-934: Whether this game is in early access (from ITAD) */
   earlyAccess: boolean('early_access').default(false).notNull(),
+  /** ROK-986: IGDB enrichment tracking status */
+  igdbEnrichmentStatus: varchar('igdb_enrichment_status', {
+    length: 20,
+  }).default('pending'),
+  /** ROK-986: Number of failed IGDB enrichment attempts */
+  igdbEnrichmentRetryCount: integer('igdb_enrichment_retry_count')
+    .default(0)
+    .notNull(),
 });
 
 /**

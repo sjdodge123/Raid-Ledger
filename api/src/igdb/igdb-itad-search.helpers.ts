@@ -26,6 +26,8 @@ export interface ItadSearchDeps {
   getAdultFilter: () => Promise<boolean>;
   isBannedOrHidden: (slug: string) => Promise<boolean>;
   upsertGame: (game: GameDetailDto) => Promise<GameDetailDto>;
+  /** ROK-986: Callback when a game is upserted without IGDB data. */
+  onUnenriched?: (gameId: number) => void;
 }
 
 /**
@@ -173,7 +175,11 @@ async function upsertAll(
   const results: GameDetailDto[] = [];
   for (const game of games) {
     try {
-      results.push(await deps.upsertGame(game));
+      const persisted = await deps.upsertGame(game);
+      results.push(persisted);
+      if (!persisted.igdbId && persisted.id && deps.onUnenriched) {
+        deps.onUnenriched(persisted.id);
+      }
     } catch {
       logger.warn(`Failed to upsert game "${game.slug}", using in-memory`);
       results.push(game);
