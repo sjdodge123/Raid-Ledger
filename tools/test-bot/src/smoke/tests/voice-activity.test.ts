@@ -440,9 +440,12 @@ async function rok943AssertMetrics(ctx: TestContext, eventId: number) {
   // 8 signups: 7 explicit + event creator (admin, auto-signed-up, unmarked)
   const a = m.attendanceSummary;
   if (!a) throw new Error('attendanceSummary null');
+  // ROK-985: event creator (admin) now has discordUserId auto-populated, so
+  // classifyNoShows correctly marks them as no_show instead of leaving unmarked.
+  // Counts: 4 attended, 3 no_show (brief + classifyNoShows + event creator), 1 unmarked (user[5])
   assertEq('attended', a.attended, 4); // full + partial + late + early_leaver
-  assertEq('noShow', a.noShow, 2); // brief voice + classifyNoShows
-  assertEq('unmarked', a.unmarked, 2); // user[5] no discord + event creator
+  assertEq('noShow', a.noShow, 3); // brief voice + classifyNoShows user[4] + event creator
+  assertEq('unmarked', a.unmarked, 1); // user[5] no discord link
   assertEq('total', a.total, 8);
 
   // --- Voice summary ---
@@ -452,7 +455,7 @@ async function rok943AssertMetrics(ctx: TestContext, eventId: number) {
   assertEq('partial', v.partial, 1);
   assertEq('late', v.late, 1);
   assertEq('earlyLeaver', v.earlyLeaver, 1);
-  assertEq('voiceNoShow', v.noShow, 2); // brief + classifyNoShows
+  assertEq('voiceNoShow', v.noShow, 3); // brief + classifyNoShows user[4] + event creator
 
   // --- Roster has all statuses ---
   const statuses = new Set(m.rosterBreakdown.map((r) => r.attendanceStatus));
