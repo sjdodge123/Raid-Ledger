@@ -168,7 +168,7 @@ function buildNoShowRows(
 ) {
   return signups
     .filter((s) => !isTracked(s, trackedDiscordIds, trackedUserIds))
-    .filter((s) => s.discordUserId || s.userId)
+    .filter((s) => !!s.discordUserId) // userId-only signups stay unmarked (no Discord to track)
     .map((s) => buildNoShowRow(s, eventId, event));
 }
 
@@ -192,7 +192,7 @@ function buildNoShowRow(
   return {
     eventId,
     userId: s.userId,
-    discordUserId: s.discordUserId ?? `user-${s.userId}`,
+    discordUserId: s.discordUserId!,
     discordUsername: s.discordUsername ?? 'Unknown',
     firstJoinAt: event.duration[0],
     lastLeaveAt: event.duration[0],

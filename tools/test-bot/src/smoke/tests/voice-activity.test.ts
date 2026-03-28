@@ -612,10 +612,13 @@ const attendancePipelineE2E: SmokeTest = {
         await triggerClassify(ctx.api, ev.id);
         await awaitProcessing(ctx.api);
 
-        // Assert: attendance must be "attended", NOT "unmarked"
+        // Assert: attendance was POPULATED (not left as null/unmarked).
+        // A brief voice join (< 120s) classifies as no_show — that's fine.
+        // The bug was that attendance stayed null (unmarked) despite voice data.
         type Rok985Metrics = {
           attendanceSummary: {
             attended: number;
+            noShow: number;
             unmarked: number;
             total: number;
           };
@@ -628,25 +631,23 @@ const attendancePipelineE2E: SmokeTest = {
         };
         const m = await ctx.api.get<Rok985Metrics>(`/events/${ev.id}/metrics`);
 
-        if (m.attendanceSummary.attended < 1) {
-          throw new Error(
-            `ROK-985 regression: attended=${m.attendanceSummary.attended}, ` +
-            `unmarked=${m.attendanceSummary.unmarked}. ` +
-            'Classification failed to populate attendance from voice data.',
-          );
-        }
-
-        // Verify roster entry has voice data + correct attendance
+        // The signed-up user with voice data must have attendance populated
         const botEntry = m.rosterBreakdown.find(
           (r) => r.voiceDurationSec !== null && r.voiceDurationSec > 0,
         );
         if (!botEntry) {
           throw new Error('No roster entry with voice data after classification');
         }
-        if (botEntry.attendanceStatus !== 'attended') {
+        if (botEntry.attendanceStatus === null) {
           throw new Error(
-            `Expected attendanceStatus="attended", got "${botEntry.attendanceStatus}"`,
+            `ROK-985 regression: attendanceStatus is null (unmarked) despite voice data. ` +
+            `attended=${m.attendanceSummary.attended}, noShow=${m.attendanceSummary.noShow}, ` +
+            `unmarked=${m.attendanceSummary.unmarked}. ` +
+            'Classification failed to populate attendance from voice session.',
           );
+        }
+        if (!botEntry.voiceClassification) {
+          throw new Error('Voice session was not classified after triggerClassify');
         }
       } finally {
         leaveVoice();
