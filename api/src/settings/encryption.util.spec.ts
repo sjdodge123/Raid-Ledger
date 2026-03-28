@@ -84,8 +84,9 @@ function describeEncryptionUtil() {
     it('should throw on tampered ciphertext', () => {
       const encrypted = encrypt('secret');
       const parts = encrypted.split(':');
-      // Tamper with the encrypted data
-      parts[2] = 'ff' + parts[2].slice(2);
+      // Tamper with the encrypted data (ensure byte actually changes)
+      const firstByte = parts[2].slice(0, 2);
+      parts[2] = (firstByte === 'ff' ? '00' : 'ff') + parts[2].slice(2);
       const tampered = parts.join(':');
 
       expect(() => decrypt(tampered)).toThrow();

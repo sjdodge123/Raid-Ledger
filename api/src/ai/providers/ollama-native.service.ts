@@ -15,9 +15,11 @@ const OLLAMA_BINARY_PATH = '/usr/local/bin/ollama';
 /** Supervisor config path for Ollama (inside services/ so [include] picks it up). */
 const SUPERVISOR_CONFIG_PATH = '/etc/supervisor.d/services/ollama.ini';
 
-/** Download URL for the Ollama Linux binary archive. */
-export const OLLAMA_DOWNLOAD_URL =
-  'https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst';
+/** Resolve the Ollama download URL for the current CPU architecture. */
+export function getOllamaDownloadUrl(): string {
+  const arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
+  return `https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${arch}.tar.zst`;
+}
 
 /**
  * Supervisor config template for the Ollama process.
@@ -85,7 +87,7 @@ export class OllamaNativeService {
   /** Download and install the Ollama binary from tar.zst archive. */
   async install(): Promise<void> {
     this.logger.log('Downloading Ollama binary...');
-    await downloadAndExtractBinary(OLLAMA_DOWNLOAD_URL, OLLAMA_BINARY_PATH);
+    await downloadAndExtractBinary(getOllamaDownloadUrl(), OLLAMA_BINARY_PATH);
     this.logger.log('Ollama binary installed');
   }
 
