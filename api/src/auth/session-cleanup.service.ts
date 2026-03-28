@@ -25,11 +25,10 @@ export class SessionCleanupService {
       async () => {
         const result = await this.db
           .delete(schema.sessions)
-          .where(lt(schema.sessions.expiresAt, new Date()))
-          .returning({ id: schema.sessions.id });
+          .where(lt(schema.sessions.expiresAt, new Date()));
 
-        if (result.length === 0) return false;
-        this.logger.log(`Cleaned up ${result.length} expired sessions`);
+        if (result.count === 0) return false;
+        this.logger.log(`Cleaned up ${result.count} expired sessions`);
       },
     );
   }

@@ -53,27 +53,28 @@ export class IntentTokenService {
    * @returns The decoded payload, or null if invalid/expired/already used
    */
   async validate(token: string): Promise<IntentTokenPayload | null> {
+    let payload: IntentTokenPayload;
     try {
-      const payload = this.jwtService.verify<IntentTokenPayload>(token);
-
-      const tokenHash = this.hashToken(token);
-
-      const result = await this.db
-        .insert(schema.consumedIntentTokens)
-        .values({ tokenHash })
-        .onConflictDoNothing()
-        .returning({ id: schema.consumedIntentTokens.id });
-
-      if (result.length === 0) {
-        this.logger.warn('Intent token already used');
-        return null;
-      }
-
-      return payload;
+      payload = this.jwtService.verify<IntentTokenPayload>(token);
     } catch {
       this.logger.debug('Intent token validation failed');
       return null;
     }
+
+    const tokenHash = this.hashToken(token);
+
+    const result = await this.db
+      .insert(schema.consumedIntentTokens)
+      .values({ tokenHash })
+      .onConflictDoNothing()
+      .returning({ id: schema.consumedIntentTokens.id });
+
+    if (result.length === 0) {
+      this.logger.warn('Intent token already used');
+      return null;
+    }
+
+    return payload;
   }
 
   /**

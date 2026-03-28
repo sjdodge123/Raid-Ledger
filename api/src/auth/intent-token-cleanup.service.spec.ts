@@ -5,12 +5,11 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 /**
- * TDD tests for ROK-979: Intent token cleanup cron service.
+ * Tests for intent token cleanup cron service (ROK-979, ROK-983).
  *
- * IntentTokenCleanupService should periodically delete rows from
+ * IntentTokenCleanupService periodically deletes rows from
  * the consumedIntentTokens table where consumed_at < now() - 15 minutes.
- *
- * Expected to FAIL until the service is implemented.
+ * Uses result.count for row count logging (no .returning()).
  */
 describe('IntentTokenCleanupService', () => {
   let service: IntentTokenCleanupService;
@@ -38,18 +37,17 @@ describe('IntentTokenCleanupService', () => {
 
   describe('cleanupExpiredTokens', () => {
     it('should delete rows where consumed_at is older than 15 minutes', async () => {
-      mockDb.returning.mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }]);
+      mockDb.where.mockResolvedValueOnce({ count: 3 });
 
       await service.cleanupExpiredTokens();
 
       // Should call delete on the consumedIntentTokens table
       expect(mockDb.delete).toHaveBeenCalled();
       expect(mockDb.where).toHaveBeenCalled();
-      expect(mockDb.returning).toHaveBeenCalled();
     });
 
     it('should wrap execution in cronJobService.executeWithTracking', async () => {
-      mockDb.returning.mockResolvedValueOnce([]);
+      mockDb.where.mockResolvedValueOnce({ count: 0 });
 
       await service.cleanupExpiredTokens();
 
@@ -60,7 +58,7 @@ describe('IntentTokenCleanupService', () => {
     });
 
     it('should handle zero expired rows gracefully', async () => {
-      mockDb.returning.mockResolvedValueOnce([]);
+      mockDb.where.mockResolvedValueOnce({ count: 0 });
 
       // Should not throw
       await expect(service.cleanupExpiredTokens()).resolves.not.toThrow();
@@ -68,14 +66,28 @@ describe('IntentTokenCleanupService', () => {
 
     it('should only delete tokens older than the 15-minute threshold', async () => {
       // This test verifies the WHERE clause uses the correct threshold.
-      // The mock simulates returning deleted rows so we can verify the
+      // The mock simulates returning a count so we can verify the
       // delete was attempted with a time-based filter via the where() call.
-      mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
+      mockDb.where.mockResolvedValueOnce({ count: 1 });
 
       await service.cleanupExpiredTokens();
 
       // where() should have been called (to filter by consumed_at < threshold)
       expect(mockDb.where).toHaveBeenCalled();
+    });
+
+    // ROK-983: Use result.count instead of .returning() + .length
+    it('should not call .returning() — use result.count for row count', async () => {
+      // Let the chain work normally so the service runs to completion
+      mockDb.where.mockResolvedValueOnce({ count: 1 });
+
+      await service.cleanupExpiredTokens();
+
+      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockDb.where).toHaveBeenCalled();
+      // .returning() should NOT be called — the row count is available
+      // via result.count without fetching full row data.
+      expect(mockDb.returning).not.toHaveBeenCalled();
     });
   });
 });
