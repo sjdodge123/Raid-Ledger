@@ -1,5 +1,8 @@
 import { Test } from '@nestjs/testing';
-import { OllamaNativeService } from './ollama-native.service';
+import {
+  OllamaNativeService,
+  getOllamaDownloadUrl,
+} from './ollama-native.service';
 import * as fs from 'fs';
 import * as childProcess from 'child_process';
 
@@ -178,7 +181,7 @@ describe('OllamaNativeService', () => {
       await service.install();
 
       expect(mockDownloadAndExtract).toHaveBeenCalledWith(
-        expect.stringContaining('ollama-linux-amd64.tar.zst'),
+        expect.stringMatching(/ollama-linux-(amd64|arm64)\.tar\.zst$/),
         '/usr/local/bin/ollama',
       );
     });
@@ -188,7 +191,7 @@ describe('OllamaNativeService', () => {
 
       const [url] = mockDownloadAndExtract.mock.calls[0] as [string, string];
       expect(url).toMatch(/\.tar\.zst$/);
-      expect(url).not.toMatch(/ollama-linux-amd64$/);
+      expect(url).not.toMatch(/ollama-linux-(amd64|arm64)$/);
     });
 
     it('targets the GitHub latest release download URL', async () => {
@@ -386,6 +389,29 @@ describe('OllamaNativeService', () => {
       const status = await service.getServiceStatus();
 
       expect(status).toBe('running');
+    });
+  });
+
+  describe('getOllamaDownloadUrl', () => {
+    const originalArch = process.arch;
+
+    afterEach(() => {
+      Object.defineProperty(process, 'arch', { value: originalArch });
+    });
+
+    it('returns amd64 URL on x64 systems', () => {
+      Object.defineProperty(process, 'arch', { value: 'x64' });
+      expect(getOllamaDownloadUrl()).toContain('ollama-linux-amd64.tar.zst');
+    });
+
+    it('returns arm64 URL on arm64 systems', () => {
+      Object.defineProperty(process, 'arch', { value: 'arm64' });
+      expect(getOllamaDownloadUrl()).toContain('ollama-linux-arm64.tar.zst');
+    });
+
+    it('defaults to amd64 for unknown architectures', () => {
+      Object.defineProperty(process, 'arch', { value: 'ia32' });
+      expect(getOllamaDownloadUrl()).toContain('ollama-linux-amd64.tar.zst');
     });
   });
 
