@@ -40,6 +40,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
     handleVoiceJoin: jest.Mock;
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
+    trySuppressForScheduled: jest.Mock;
   };
   let mockChannelBindingsService: {
     getBindings: jest.Mock;

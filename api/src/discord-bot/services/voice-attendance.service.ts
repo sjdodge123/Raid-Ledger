@@ -19,7 +19,6 @@ import type {
   VoiceSessionsResponseDto,
   VoiceAttendanceSummaryDto,
   AdHocRosterResponseDto,
-  BindingPurpose,
 } from '@raid-ledger/contract';
 import {
   type InMemorySession,
@@ -39,10 +38,6 @@ import { ChannelResolverService } from './channel-resolver.service';
 const FLUSH_INTERVAL_MS = 30_000,
   SNAPSHOT_WINDOW_MS = 120_000,
   CLASSIFY_LOOKBACK_MS = 7_200_000;
-const VOICE_BINDING_PURPOSES: readonly string[] & BindingPurpose[] = [
-  'game-voice-monitor',
-  'general-lobby',
-];
 export { classifyVoiceSession } from './voice-attendance.helpers';
 
 @Injectable()
@@ -132,7 +127,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       this.db,
       channelId,
       bindings,
-      VOICE_BINDING_PURPOSES,
+      flushH.VOICE_BINDING_PURPOSES,
       defaultVoice ?? null,
       this.logger,
     );
@@ -281,8 +276,11 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     for (const event of pending) {
       await yieldToEventLoop();
-      // eslint-disable-next-line no-continue
-      if (!(await classifyH.shouldClassifyEvent(this.db, event.id, this.logger))) continue;
+
+      if (
+        !(await classifyH.shouldClassifyEvent(this.db, event.id, this.logger))
+      )
+        continue;
       this.logger.log(`Classifying voice attendance for event ${event.id}`);
       await this.classifyEvent(event.id, event, graceMs);
       await this.autoPopulateAttendance(event.id);

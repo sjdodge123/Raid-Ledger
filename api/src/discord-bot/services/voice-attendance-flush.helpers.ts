@@ -176,6 +176,12 @@ export async function fetchVoiceSessions(
     .where(eq(schema.eventVoiceSessions.eventId, eventId));
 }
 
+/** Channel binding purposes that map to voice-monitored channels. */
+export const VOICE_BINDING_PURPOSES: readonly string[] = [
+  'game-voice-monitor',
+  'general-lobby',
+];
+
 /** Minimal binding shape for findActiveEventsForChannel. */
 interface BindingSlim {
   channelId: string;
