@@ -111,6 +111,19 @@ export async function repairSignupDiscordId(
   user?: { discordId: string | null } | null,
 ): Promise<void> {
   if (existing.discordUserId || !user?.discordId) return;
+  // Guard: skip if another signup for this event already has this discordUserId
+  // (e.g., user also signed up anonymously via Discord bot)
+  const [conflict] = await tx
+    .select({ id: schema.eventSignups.id })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, existing.eventId),
+        eq(schema.eventSignups.discordUserId, user.discordId),
+      ),
+    )
+    .limit(1);
+  if (conflict) return;
   await tx
     .update(schema.eventSignups)
     .set({ discordUserId: user.discordId })
