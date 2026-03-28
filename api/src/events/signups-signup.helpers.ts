@@ -73,11 +73,17 @@ export function resolveEventCapacity(
   return event.maxAttendees ?? null;
 }
 
+/**
+ * Insert a new signup row for a user.
+ * @param discordId - Optional Discord snowflake to populate discordUserId
+ *   on the signup row (ROK-985). Enables dual-identifier voice matching.
+ */
 export async function insertSignupRow(
   tx: Tx,
   eventId: number,
   userId: number,
   dto?: CreateSignupDto,
+  discordId?: string | null,
 ) {
   const hasCharacter = !!dto?.characterId;
   return tx
@@ -90,11 +96,38 @@ export async function insertSignupRow(
       confirmationStatus: hasCharacter ? 'confirmed' : 'pending',
       status: 'signed_up',
       preferredRoles: dto?.preferredRoles ?? null,
+      ...(discordId ? { discordUserId: discordId } : {}),
     })
     .onConflictDoNothing({
       target: [schema.eventSignups.eventId, schema.eventSignups.userId],
     })
     .returning();
+}
+
+/** Back-fill discordUserId on a signup that predates the user's Discord link (ROK-985). */
+export async function repairSignupDiscordId(
+  tx: Tx,
+  existing: typeof schema.eventSignups.$inferSelect,
+  user?: { discordId: string | null } | null,
+): Promise<void> {
+  if (existing.discordUserId || !user?.discordId) return;
+  // Guard: skip if another signup for this event already has this discordUserId
+  // (e.g., user also signed up anonymously via Discord bot)
+  const [conflict] = await tx
+    .select({ id: schema.eventSignups.id })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, existing.eventId),
+        eq(schema.eventSignups.discordUserId, user.discordId),
+      ),
+    )
+    .limit(1);
+  if (conflict) return;
+  await tx
+    .update(schema.eventSignups)
+    .set({ discordUserId: user.discordId })
+    .where(eq(schema.eventSignups.id, existing.id));
 }
 
 export async function fetchExistingSignup(

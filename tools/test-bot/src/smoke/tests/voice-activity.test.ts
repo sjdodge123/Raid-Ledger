@@ -259,9 +259,7 @@ const metricsVoicePopulated: SmokeTest = {
       });
       try {
         // Sign up the user whose Discord ID = test bot
-        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, undefined, {
-          linkDiscord: true,
-        });
+        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
 
         await joinVoice(vChId);
         // Poll flush+metrics until voice data appears. The API's voice
@@ -378,13 +376,10 @@ async function rok943SignupUsers(
     await linkDiscord(ctx.api, users[i], fakeIds[i], `smoke-user-${i}`);
   }
   // Sign up all 7: dmRecipient + 6 demo users
-  await signupAs(ctx.api, eventId, ctx.dmRecipientUserId, undefined, {
-    linkDiscord: true,
-  });
+  // discordUserId is now auto-populated from users.discordId at signup time (ROK-985)
+  await signupAs(ctx.api, eventId, ctx.dmRecipientUserId);
   for (let i = 0; i < 6; i++) {
-    await signupAs(ctx.api, eventId, users[i], undefined, {
-      linkDiscord: i < 5,
-    });
+    await signupAs(ctx.api, eventId, users[i]);
   }
 }
 
@@ -445,9 +440,12 @@ async function rok943AssertMetrics(ctx: TestContext, eventId: number) {
   // 8 signups: 7 explicit + event creator (admin, auto-signed-up, unmarked)
   const a = m.attendanceSummary;
   if (!a) throw new Error('attendanceSummary null');
+  // ROK-985: event creator (admin) now has discordUserId auto-populated, so
+  // classifyNoShows correctly marks them as no_show instead of leaving unmarked.
+  // Counts: 4 attended, 3 no_show (brief + classifyNoShows + event creator), 1 unmarked (user[5])
   assertEq('attended', a.attended, 4); // full + partial + late + early_leaver
-  assertEq('noShow', a.noShow, 2); // brief voice + classifyNoShows
-  assertEq('unmarked', a.unmarked, 2); // user[5] no discord + event creator
+  assertEq('noShow', a.noShow, 3); // brief voice + classifyNoShows user[4] + event creator
+  assertEq('unmarked', a.unmarked, 1); // user[5] no discord link
   assertEq('total', a.total, 8);
 
   // --- Voice summary ---
@@ -457,7 +455,7 @@ async function rok943AssertMetrics(ctx: TestContext, eventId: number) {
   assertEq('partial', v.partial, 1);
   assertEq('late', v.late, 1);
   assertEq('earlyLeaver', v.earlyLeaver, 1);
-  assertEq('voiceNoShow', v.noShow, 2); // brief + classifyNoShows
+  assertEq('voiceNoShow', v.noShow, 3); // brief + classifyNoShows user[4] + event creator
 
   // --- Roster has all statuses ---
   const statuses = new Set(m.rosterBreakdown.map((r) => r.attendanceStatus));
@@ -563,6 +561,105 @@ const siblingBindingSuppression: SmokeTest = {
 // Run with SMOKE_INCLUDE_SLOW=1 to include.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 
+/**
+ * ROK-985: End-to-end attendance pipeline via real voice join.
+ *
+ * The 5th-time fix for the attendance pipeline. Previous fixes patched
+ * symptoms (boolean inversion, userId fallback in display layer) but never
+ * fixed the root cause: signups never had discordUserId populated for
+ * linked users, so classification deleted their voice sessions as "orphans."
+ *
+ * This test validates the FULL real pipeline — no injected sessions:
+ *   1. Linked user signs up (discordUserId auto-populated via ROK-985)
+ *   2. Real voice join → voice session recorded
+ *   3. Flush + classify → attendance populated
+ *   4. Metrics show "attended" (not "unmarked")
+ */
+const attendancePipelineE2E: SmokeTest = {
+  name: 'Attendance pipeline: signup → real voice → classify → attended (ROK-985)',
+  category: 'voice',
+  async run(ctx) {
+    await withVoiceBinding(ctx, 3, 'game-voice-monitor', async (vChId) => {
+      const gameId = ctx.games[0]?.id;
+      if (!gameId) throw new Error('No games for ROK-985 test');
+
+      // Live event — started 5 min ago, ends in 55 min
+      const ev = await createEvent(ctx.api, 'rok985-e2e', {
+        gameId,
+        startTime: futureTime(-5),
+        endTime: futureTime(55),
+      });
+      try {
+        // Sign up the companion bot user — discordUserId should auto-populate
+        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
+
+        // Real voice join — creates voice session via Discord gateway
+        await joinVoice(vChId);
+
+        // Poll until the voice session is flushed to DB
+        await pollForCondition(
+          async () => {
+            await flushVoiceSessions(ctx.api);
+            const m = await ctx.api.get<{
+              voiceSummary: { totalTracked: number } | null;
+            }>(`/events/${ev.id}/metrics`);
+            return m.voiceSummary && m.voiceSummary.totalTracked >= 1;
+          },
+          30000,
+          { intervalMs: 3000 },
+        );
+
+        // Leave voice + classify
+        leaveVoice();
+        await flushVoiceSessions(ctx.api);
+        await triggerClassify(ctx.api, ev.id);
+        await awaitProcessing(ctx.api);
+
+        // Assert: attendance was POPULATED (not left as null/unmarked).
+        // A brief voice join (< 120s) classifies as no_show — that's fine.
+        // The bug was that attendance stayed null (unmarked) despite voice data.
+        type Rok985Metrics = {
+          attendanceSummary: {
+            attended: number;
+            noShow: number;
+            unmarked: number;
+            total: number;
+          };
+          rosterBreakdown: Array<{
+            userId: number | null;
+            attendanceStatus: string | null;
+            voiceClassification: string | null;
+            voiceDurationSec: number | null;
+          }>;
+        };
+        const m = await ctx.api.get<Rok985Metrics>(`/events/${ev.id}/metrics`);
+
+        // The signed-up user with voice data must have attendance populated
+        const botEntry = m.rosterBreakdown.find(
+          (r) => r.voiceDurationSec !== null && r.voiceDurationSec > 0,
+        );
+        if (!botEntry) {
+          throw new Error('No roster entry with voice data after classification');
+        }
+        if (botEntry.attendanceStatus === null) {
+          throw new Error(
+            `ROK-985 regression: attendanceStatus is null (unmarked) despite voice data. ` +
+            `attended=${m.attendanceSummary.attended}, noShow=${m.attendanceSummary.noShow}, ` +
+            `unmarked=${m.attendanceSummary.unmarked}. ` +
+            'Classification failed to populate attendance from voice session.',
+          );
+        }
+        if (!botEntry.voiceClassification) {
+          throw new Error('Voice session was not classified after triggerClassify');
+        }
+      } finally {
+        leaveVoice();
+        await deleteEvent(ctx.api, ev.id);
+      }
+    });
+  },
+};
+
 // Voice-join tests require real UDP connectivity to Discord voice servers.
 // CI runners can't establish voice connections — skip with SMOKE_SKIP_VOICE_JOIN=1 (ROK-969).
 const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
@@ -571,5 +668,7 @@ export const voiceActivityTests: SmokeTest[] = [
   ...(canJoinVoice ? [voiceJoinDetected, voiceLeaveRecorded] : []),
   classifyPopulatesAttendance,
   ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
-  ...(canJoinVoice ? [voiceMemberList, multiGameVoiceDetected, siblingBindingSuppression] : []),
+  ...(canJoinVoice
+    ? [voiceMemberList, multiGameVoiceDetected, siblingBindingSuppression, attendancePipelineE2E]
+    : []),
 ];

@@ -102,7 +102,7 @@ export type EventAttendanceSummaryDto = z.infer<typeof EventAttendanceSummarySch
 
 /** Single row in the per-event roster breakdown table */
 export const RosterBreakdownEntrySchema = z.object({
-  userId: z.number(),
+  userId: z.number().nullable(),
   username: z.string(),
   avatar: z.string().nullable(),
   attendanceStatus: AttendanceStatusSchema.nullable(),

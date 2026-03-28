@@ -30,6 +30,7 @@ describe('VoiceStateListener', () => {
     handleVoiceJoin: jest.Mock;
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
+    trySuppressForScheduled: jest.Mock;
   };
   let mockChannelBindingsService: {
     getBindings: jest.Mock;
@@ -118,6 +119,7 @@ describe('VoiceStateListener', () => {
       handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
+      trySuppressForScheduled: jest.fn().mockResolvedValue(false),
     };
 
     mockChannelBindingsService = {

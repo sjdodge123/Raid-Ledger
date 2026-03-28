@@ -1,6 +1,7 @@
 /**
  * Voice attendance classification helpers.
  * Extracted from voice-attendance.service.ts for file size compliance (ROK-719).
+ * Population helpers are in voice-attendance-populate.helpers.ts (ROK-985).
  */
 import { eq, and, sql, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -15,46 +16,55 @@ type Logger = {
 };
 type Session = typeof schema.eventVoiceSessions.$inferSelect;
 
-/** Load sessions, filter by signups, and delete orphans. */
+// Re-export autoPopulateAttendance from its new location for callers
+export { autoPopulateAttendance } from './voice-attendance-populate.helpers';
+
+/**
+ * Load all voice sessions for an event and partition by signup match.
+ * Never deletes sessions -- voice presence is ground truth (ROK-985).
+ */
 export async function loadAndFilterSessions(
   db: Db,
   eventId: number,
-): Promise<{ sessions: Session[]; orphanCount: number }> {
+  logger?: Logger,
+): Promise<{ sessions: Session[]; unmatchedCount: number }> {
   const allSessions = await db
     .select()
     .from(schema.eventVoiceSessions)
     .where(eq(schema.eventVoiceSessions.eventId, eventId));
-  const signedUpIds = await getSignedUpDiscordIds(db, eventId);
-  const sessions = allSessions.filter((s) => signedUpIds.has(s.discordUserId));
-  const orphanIds = allSessions
-    .filter((s) => !signedUpIds.has(s.discordUserId))
-    .map((s) => s.id);
-  if (orphanIds.length > 0) {
-    await db
-      .delete(schema.eventVoiceSessions)
-      .where(
-        sql`${schema.eventVoiceSessions.id} IN (${sql.join(orphanIds, sql`, `)})`,
-      );
+  const ids = await getSignupIdentifiers(db, eventId);
+  const isMatched = (s: Session): boolean =>
+    ids.discordIds.has(s.discordUserId) ||
+    (s.userId !== null && ids.userIds.has(s.userId));
+  const matched = allSessions.filter(isMatched);
+  const unmatchedCount = allSessions.length - matched.length;
+  if (unmatchedCount > 0 && logger) {
+    logger.log(
+      `Preserved ${unmatchedCount} voice session(s) for non-signed-up users in event ${eventId}`,
+    );
   }
-  return { sessions, orphanCount: orphanIds.length };
+  return { sessions: allSessions, unmatchedCount };
 }
 
-async function getSignedUpDiscordIds(
+/** Get both discordId and userId sets from all signups for an event. */
+async function getSignupIdentifiers(
   db: Db,
   eventId: number,
-): Promise<Set<string>> {
+): Promise<{ discordIds: Set<string>; userIds: Set<number> }> {
   const signups = await db
-    .select({ discordUserId: schema.eventSignups.discordUserId })
+    .select({
+      discordUserId: schema.eventSignups.discordUserId,
+      userId: schema.eventSignups.userId,
+    })
     .from(schema.eventSignups)
-    .where(
-      and(
-        eq(schema.eventSignups.eventId, eventId),
-        sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
-      ),
-    );
-  return new Set(
+    .where(eq(schema.eventSignups.eventId, eventId));
+  const discordIds = new Set(
     signups.map((s) => s.discordUserId).filter(Boolean) as string[],
   );
+  const userIds = new Set(
+    signups.map((s) => s.userId).filter((id): id is number => id !== null),
+  );
+  return { discordIds, userIds };
 }
 
 /** Build classifications for sessions. */
@@ -117,18 +127,30 @@ export async function classifyNoShows(
   existingSessions: Session[],
   event: typeof schema.events.$inferSelect,
 ): Promise<void> {
-  const trackedIds = new Set(existingSessions.map((s) => s.discordUserId));
+  const trackedDiscordIds = new Set(
+    existingSessions.map((s) => s.discordUserId),
+  );
+  const trackedUserIds = new Set(
+    existingSessions
+      .map((s) => s.userId)
+      .filter((id): id is number => id !== null),
+  );
   const signups = await db
     .select()
     .from(schema.eventSignups)
     .where(
       and(
         eq(schema.eventSignups.eventId, eventId),
-        sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
         sql`${schema.eventSignups.status} IN ('signed_up', 'tentative')`,
       ),
     );
-  const noShowRows = buildNoShowRows(eventId, signups, trackedIds, event);
+  const noShowRows = buildNoShowRows(
+    eventId,
+    signups,
+    trackedDiscordIds,
+    trackedUserIds,
+    event,
+  );
   if (noShowRows.length > 0) {
     await db
       .insert(schema.eventVoiceSessions)
@@ -140,93 +162,48 @@ export async function classifyNoShows(
 function buildNoShowRows(
   eventId: number,
   signups: (typeof schema.eventSignups.$inferSelect)[],
-  trackedIds: Set<string>,
+  trackedDiscordIds: Set<string>,
+  trackedUserIds: Set<number>,
   event: typeof schema.events.$inferSelect,
 ) {
   return signups
-    .filter((s) => s.discordUserId && !trackedIds.has(s.discordUserId))
-    .map((s) => ({
-      eventId,
-      userId: s.userId,
-      discordUserId: s.discordUserId!,
-      discordUsername: s.discordUsername ?? 'Unknown',
-      firstJoinAt: event.duration[0],
-      lastLeaveAt: event.duration[0],
-      totalDurationSec: 0,
-      segments: [] as Array<{
-        joinAt: string;
-        leaveAt: string | null;
-        durationSec: number;
-      }>,
-      classification: 'no_show',
-    }));
+    .filter((s) => !isTracked(s, trackedDiscordIds, trackedUserIds))
+    .filter((s) => !!s.discordUserId) // userId-only signups stay unmarked (no Discord to track)
+    .map((s) => buildNoShowRow(s, eventId, event));
 }
 
-/** Auto-populate attendance from classified sessions. */
-export async function autoPopulateAttendance(
-  db: Db,
-  eventId: number,
-  logger: Logger,
-): Promise<void> {
-  const sessions = await db
-    .select()
-    .from(schema.eventVoiceSessions)
-    .where(
-      and(
-        eq(schema.eventVoiceSessions.eventId, eventId),
-        sql`${schema.eventVoiceSessions.classification} IS NOT NULL`,
-      ),
-    );
-  if (sessions.length === 0) {
-    logger.log(
-      `Auto-populated attendance for event ${eventId} from 0 voice session(s)`,
-    );
-    return;
-  }
-  const now = new Date();
-  await batchUpdateAttendance(db, eventId, sessions, now);
-  logger.log(
-    `Auto-populated attendance for event ${eventId} from ${sessions.length} voice session(s)`,
-  );
+/** Check if a signup is already tracked by either identifier. */
+function isTracked(
+  s: typeof schema.eventSignups.$inferSelect,
+  discordIds: Set<string>,
+  userIds: Set<number>,
+): boolean {
+  if (s.discordUserId && discordIds.has(s.discordUserId)) return true;
+  if (s.userId !== null && userIds.has(s.userId)) return true;
+  return false;
 }
 
-async function batchUpdateAttendance(
-  db: Db,
+/** Build a no_show voice session row from a signup. */
+function buildNoShowRow(
+  s: typeof schema.eventSignups.$inferSelect,
   eventId: number,
-  sessions: Session[],
-  now: Date,
-): Promise<void> {
-  const noShowIds = sessions
-    .filter((s) => s.classification === 'no_show')
-    .map((s) => s.discordUserId);
-  const attendedIds = sessions
-    .filter((s) => s.classification !== 'no_show')
-    .map((s) => s.discordUserId);
-  if (attendedIds.length > 0) {
-    await setAttendanceStatus(db, eventId, attendedIds, 'attended', now);
-  }
-  if (noShowIds.length > 0) {
-    await setAttendanceStatus(db, eventId, noShowIds, 'no_show', now);
-  }
-}
-
-async function setAttendanceStatus(
-  db: Db,
-  eventId: number,
-  discordUserIds: string[],
-  status: string,
-  now: Date,
-): Promise<void> {
-  await db
-    .update(schema.eventSignups)
-    .set({ attendanceStatus: status, attendanceRecordedAt: now })
-    .where(
-      and(
-        eq(schema.eventSignups.eventId, eventId),
-        sql`${schema.eventSignups.discordUserId} IN (${sql.join(discordUserIds, sql`, `)})`,
-        isNull(schema.eventSignups.attendanceStatus),
-      ),
-    );
+  event: typeof schema.events.$inferSelect,
+) {
+  return {
+    eventId,
+    userId: s.userId,
+    discordUserId: s.discordUserId!,
+    discordUsername: s.discordUsername ?? 'Unknown',
+    firstJoinAt: event.duration[0],
+    lastLeaveAt: event.duration[0],
+    totalDurationSec: 0,
+    segments: [] as Array<{
+      joinAt: string;
+      leaveAt: string | null;
+      durationSec: number;
+    }>,
+    classification: 'no_show',
+  };
 }
 
 /** Compute event duration in whole seconds from the event's time range. */
@@ -250,12 +227,7 @@ export async function classifyEventSessions(
   if (!event) return;
   const sec = getEventDurationSec(event);
   if (sec <= 0) return;
-  const { sessions, orphanCount } = await loadAndFilterSessions(db, eventId);
-  if (orphanCount > 0) {
-    logger.log(
-      `Removed ${orphanCount} voice session(s) for non-signed-up users in event ${eventId}`,
-    );
-  }
+  const { sessions } = await loadAndFilterSessions(db, eventId, logger);
   if (sessions.length > 0) {
     await batchClassifySessions(
       db,
@@ -272,10 +244,14 @@ export async function classifyEventSessions(
   );
 }
 
-/** Check if an event should be classified. */
+/**
+ * Check if an event should be classified.
+ * @param logger - Optional logger; logs the reason when returning false.
+ */
 export async function shouldClassifyEvent(
   db: Db,
   eventId: number,
+  logger?: Logger,
 ): Promise<boolean> {
   const [unclassified] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -292,7 +268,12 @@ export async function shouldClassifyEvent(
     .where(eq(schema.eventSignups.eventId, eventId));
   const hasUnclassified = unclassified && unclassified.count > 0;
   const hasSignups = signupCount && signupCount.count > 0;
-  if (!hasUnclassified && !hasSignups) return false;
+  if (!hasUnclassified && !hasSignups) {
+    logger?.log(
+      `Skipping classification for event ${eventId}: no sessions or signups`,
+    );
+    return false;
+  }
   if (!hasUnclassified && hasSignups) {
     const [sessionCount] = await db
       .select({ count: sql<number>`count(*)::int` })

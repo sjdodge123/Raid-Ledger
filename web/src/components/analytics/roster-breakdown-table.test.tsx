@@ -39,9 +39,9 @@ const rosterWithVoice: RosterBreakdownEntryDto[] = [
 ];
 
 describe('RosterBreakdownTable — part 1', () => {
-    it('renders "No signups for this event." when roster is empty', () => {
+    it('renders "No participants for this event." when roster is empty', () => {
         render(<RosterBreakdownTable roster={[]} hasVoiceData={false} />);
-        expect(screen.getByText('No signups for this event.')).toBeInTheDocument();
+        expect(screen.getByText('No participants for this event.')).toBeInTheDocument();
     });
 
     it('renders Roster Breakdown heading', () => {
