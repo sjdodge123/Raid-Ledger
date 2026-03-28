@@ -259,9 +259,7 @@ const metricsVoicePopulated: SmokeTest = {
       });
       try {
         // Sign up the user whose Discord ID = test bot
-        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId, undefined, {
-          linkDiscord: true,
-        });
+        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
 
         await joinVoice(vChId);
         // Poll flush+metrics until voice data appears. The API's voice
@@ -378,13 +376,10 @@ async function rok943SignupUsers(
     await linkDiscord(ctx.api, users[i], fakeIds[i], `smoke-user-${i}`);
   }
   // Sign up all 7: dmRecipient + 6 demo users
-  await signupAs(ctx.api, eventId, ctx.dmRecipientUserId, undefined, {
-    linkDiscord: true,
-  });
+  // discordUserId is now auto-populated from users.discordId at signup time (ROK-985)
+  await signupAs(ctx.api, eventId, ctx.dmRecipientUserId);
   for (let i = 0; i < 6; i++) {
-    await signupAs(ctx.api, eventId, users[i], undefined, {
-      linkDiscord: i < 5,
-    });
+    await signupAs(ctx.api, eventId, users[i]);
   }
 }
 
