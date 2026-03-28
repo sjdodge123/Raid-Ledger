@@ -163,6 +163,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
+      trySuppressForScheduled: jest.fn().mockResolvedValue(false),
     };
 
     mockChannelBindingsService = {
