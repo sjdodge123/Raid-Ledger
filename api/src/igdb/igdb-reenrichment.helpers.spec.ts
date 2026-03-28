@@ -207,9 +207,9 @@ describe('reEnrichGamesWithIgdb', () => {
       const mockQueryIgdb = jest
         .fn<Promise<IgdbApiGame[]>, [string]>()
         .mockResolvedValueOnce([makeIgdbApiGame({ id: 5001 })]) // game 40: success
-        .mockResolvedValueOnce([])                               // game 41: not found
-        .mockResolvedValueOnce([])                               // game 42: exhausted (retry 2->3)
-        .mockRejectedValueOnce(new Error('Network error'));       // game 43: API error
+        .mockResolvedValueOnce([]) // game 41: not found
+        .mockResolvedValueOnce([]) // game 42: exhausted (retry 2->3)
+        .mockRejectedValueOnce(new Error('Network error')); // game 43: API error
 
       const result = await reEnrichGamesWithIgdb(
         mockDb as never,

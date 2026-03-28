@@ -13,6 +13,7 @@ import {
   UsePipes,
   ValidationPipe,
   BadRequestException,
+  NotFoundException,
   ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -26,6 +27,7 @@ import type {
 } from '@raid-ledger/contract';
 import { queryGameList } from './settings-games.helpers';
 import { triggerIgdbSync } from './settings-igdb-sync.helpers';
+import { resetGameEnrichment } from './settings-games-enrichment.helpers';
 
 /**
  * Admin Games & IGDB Sync Controller.
@@ -57,15 +59,28 @@ export class AdminGamesController {
   async listGames(
     @Query('search') search?: string,
     @Query('showHidden') showHidden?: string,
+    @Query('enrichmentStatus') enrichmentStatus?: string,
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 20,
   ): Promise<AdminGameListResponseDto> {
     return queryGameList(this.igdbService.database, {
       search,
       showHidden,
+      enrichmentStatus,
       page,
       limit,
     });
+  }
+
+  /** Reset IGDB enrichment status for a game (admin only). */
+  @Post('games/:id/reset-enrichment')
+  @HttpCode(HttpStatus.OK)
+  async resetEnrichment(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{ success: boolean }> {
+    const found = await resetGameEnrichment(this.igdbService.database, id);
+    if (!found) throw new NotFoundException('Game not found');
+    return { success: true };
   }
 
   @Post('games/:id/ban')

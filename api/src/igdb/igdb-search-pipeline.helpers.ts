@@ -144,3 +144,24 @@ export function startSearchRefresh(
   const deps = buildIgdbSearchDeps(params);
   return doSearchRefresh(deps, query, normalized, cacheKey);
 }
+
+/**
+ * Trigger a search refresh if one isn't already in flight for this cache key.
+ * Manages the in-flight map lifecycle so the service doesn't have to.
+ */
+export function triggerSearchRefreshIfNeeded(
+  inFlightRefreshes: Map<string, Promise<void>>,
+  params: SearchPipelineParams,
+  query: string,
+  normalized: string,
+  cacheKey: string,
+): void {
+  if (inFlightRefreshes.has(cacheKey)) return;
+  const promise = startSearchRefresh(
+    params,
+    query,
+    normalized,
+    cacheKey,
+  ).finally(() => inFlightRefreshes.delete(cacheKey));
+  inFlightRefreshes.set(cacheKey, promise);
+}

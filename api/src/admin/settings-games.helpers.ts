@@ -11,6 +11,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 interface ListGamesParams {
   search?: string;
   showHidden?: string;
+  enrichmentStatus?: string;
   page: number;
   limit: number;
 }
@@ -34,7 +35,12 @@ export async function queryGameList(
   const total = countResult[0]?.count ?? 0;
 
   return {
-    data: rows.map((r) => ({ ...r, cachedAt: r.cachedAt.toISOString() })),
+    data: rows.map((r) => ({
+      ...r,
+      cachedAt: r.cachedAt.toISOString(),
+      igdbEnrichmentStatus:
+        r.igdbEnrichmentStatus as AdminGameListResponseDto['data'][0]['igdbEnrichmentStatus'],
+    })),
     meta: {
       total,
       page: safePage,
@@ -67,6 +73,9 @@ async function fetchGameData(
         cachedAt: schema.games.cachedAt,
         hidden: schema.games.hidden,
         banned: schema.games.banned,
+        igdbEnrichmentStatus: schema.games.igdbEnrichmentStatus,
+        igdbEnrichmentRetryCount: schema.games.igdbEnrichmentRetryCount,
+        steamAppId: schema.games.steamAppId,
       })
       .from(schema.games)
       .where(whereClause)
@@ -81,6 +90,12 @@ function buildGameWhereClause(params: ListGamesParams) {
   const conditions = [];
   if (params.search) {
     conditions.push(...buildWordMatchFilters(schema.games.name, params.search));
+  }
+
+  if (params.enrichmentStatus) {
+    conditions.push(
+      eq(schema.games.igdbEnrichmentStatus, params.enrichmentStatus),
+    );
   }
 
   if (params.showHidden === 'only') {

@@ -16,6 +16,11 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTINGS_EVENTS } from '../settings/settings.types';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.constants';
+import {
+  enqueueSyncJob,
+  enqueueReenrichJob,
+  reEnrichSingleGameById,
+} from './igdb-enqueue.helpers';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { ItadService } from '../itad/itad.service';
 import {
@@ -47,11 +52,12 @@ import {
   buildAdultThemeFilter,
   executeIgdbQuery,
   enrichSyncedGamesWithItad,
+  reEnrichGamesWithIgdb,
 } from './igdb-helpers.barrel';
 import { sortByRelevance } from './igdb-search-sort.helpers';
 import {
   runSearchPipeline,
-  startSearchRefresh,
+  triggerSearchRefreshIfNeeded,
   type SearchPipelineParams,
 } from './igdb-search-pipeline.helpers';
 
@@ -103,13 +109,19 @@ export class IgdbService {
   }
 
   async enqueueSync(trigger: IgdbSyncJobData['trigger']) {
-    const jobId = `igdb-${trigger}-sync`;
-    await this.syncQueue.add(
-      'sync',
-      { trigger },
-      { jobId, removeOnComplete: 100, removeOnFail: 50 },
+    return enqueueSyncJob(this.syncQueue, trigger);
+  }
+
+  async enqueueReenrich(gameId: number): Promise<void> {
+    return enqueueReenrichJob(this.syncQueue, gameId);
+  }
+
+  async reEnrichSingleGame(gameId: number): Promise<void> {
+    return reEnrichSingleGameById(
+      this.db,
+      (body) => this.queryIgdb(body),
+      gameId,
     );
-    return { jobId };
   }
 
   async syncAllGames() {
@@ -135,8 +147,9 @@ export class IgdbService {
         (id) => this.itadService.lookupBySteamAppId(id),
         (itadId) => this.itadService.getGameInfo(itadId),
       );
+      const reEnriched = await reEnrichGamesWithIgdb(this.db, queryFn);
       await clearDiscoveryCache(this.redis);
-      return { refreshed, discovered, backfilled, enriched };
+      return { refreshed, discovered, backfilled, enriched, reEnriched };
     } finally {
       this._syncInProgress = false;
     }
@@ -201,28 +214,12 @@ export class IgdbService {
     if (existing) return existing;
     const params = this.buildPipelineParams();
     const promise = runSearchPipeline(params, query, normalized, (q, n, k) =>
-      this._triggerSearchRefresh(q, n, k),
+      triggerSearchRefreshIfNeeded(this.inFlightRefreshes, params, q, n, k),
     )
       .then((r) => sortByRelevance(this.db, r, normalized))
       .finally(() => this.inFlightSearches.delete(normalized));
     this.inFlightSearches.set(normalized, promise);
     return promise;
-  }
-
-  private _triggerSearchRefresh(
-    query: string,
-    normalized: string,
-    cacheKey: string,
-  ): void {
-    if (this.inFlightRefreshes.has(cacheKey)) return;
-    const params = this.buildPipelineParams();
-    const promise = startSearchRefresh(
-      params,
-      query,
-      normalized,
-      cacheKey,
-    ).finally(() => this.inFlightRefreshes.delete(cacheKey));
-    this.inFlightRefreshes.set(cacheKey, promise);
   }
 
   async searchLocalGames(query: string): Promise<SearchResult> {
@@ -304,16 +301,20 @@ export class IgdbService {
 
   async unbanGame(id: number) {
     const result = await unbanGameHelper(this.db, id);
-    if (!result.success || !result.igdbId) return result;
-    try {
-      const games = await this.queryIgdb(
-        `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = ${result.igdbId}; limit 1;`,
-      );
-      if (games.length > 0)
-        await upsertSingleGameRow(this.db, mapApiGameToDbRow(games[0]));
-    } catch (err) {
-      this.logger.warn(`Failed to refresh after unban: ${err}`);
+    if (result.success && result.igdbId) {
+      await this.refreshSingleGame(result.igdbId);
     }
     return result;
+  }
+  private async refreshSingleGame(igdbId: number) {
+    try {
+      const g = await this.queryIgdb(
+        `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = ${igdbId}; limit 1;`,
+      );
+      if (g.length > 0)
+        await upsertSingleGameRow(this.db, mapApiGameToDbRow(g[0]));
+    } catch {
+      /* non-fatal */
+    }
   }
 }

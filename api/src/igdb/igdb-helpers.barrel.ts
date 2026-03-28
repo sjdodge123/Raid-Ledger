@@ -51,3 +51,4 @@ export {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
 } from './igdb-itad-enrich.helpers';
+export { reEnrichGamesWithIgdb } from './igdb-reenrichment.helpers';

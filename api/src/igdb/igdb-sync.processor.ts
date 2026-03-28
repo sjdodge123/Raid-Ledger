@@ -22,19 +22,29 @@ export class IgdbSyncProcessor extends WorkerHost implements OnModuleInit {
     this.queueHealth.register(this.syncQueue);
   }
 
-  async process(
-    job: Job<IgdbSyncJobData>,
-  ): Promise<{ refreshed: number; discovered: number; backfilled: number }> {
+  async process(job: Job<IgdbSyncJobData>) {
+    if (job.data.trigger === 'reenrich-game') {
+      return this.handleReenrich(job);
+    }
+    return this.handleFullSync(job);
+  }
+
+  /** Handle a single-game re-enrichment job. */
+  private async handleReenrich(job: Job<IgdbSyncJobData>) {
+    const { gameId } = job.data as { trigger: 'reenrich-game'; gameId: number };
+    this.logger.log(`Re-enriching game ${gameId}`);
+    await this.igdbService.reEnrichSingleGame(gameId);
+  }
+
+  /** Handle a full IGDB sync job. */
+  private async handleFullSync(job: Job<IgdbSyncJobData>) {
     this.logger.log(`Starting IGDB sync (trigger: ${job.data.trigger})`);
     await job.updateProgress(0);
-
     const result = await this.igdbService.syncAllGames();
-
     await job.updateProgress(100);
     this.logger.log(
       `IGDB sync complete: refreshed ${result.refreshed}, discovered ${result.discovered}, backfilled ${result.backfilled}`,
     );
-
     return result;
   }
 }

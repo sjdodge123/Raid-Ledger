@@ -157,6 +157,8 @@ export type IgdbHealthStatusDto = z.infer<typeof IgdbHealthStatusSchema>;
 export const AdminGameListQuerySchema = z.object({
     search: z.string().optional(),
     showHidden: z.enum(['only', 'true']).optional(),
+    /** ROK-986: Filter by IGDB enrichment status */
+    enrichmentStatus: z.enum(['pending', 'failed', 'not_found']).optional(),
     page: z.coerce.number().min(1).default(1),
     limit: z.coerce.number().min(1).max(100).default(20),
 });
@@ -174,6 +176,12 @@ export const AdminGameListResponseSchema = z.object({
         cachedAt: z.string(),
         hidden: z.boolean(),
         banned: z.boolean(),
+        /** ROK-986: IGDB enrichment status */
+        igdbEnrichmentStatus: z.enum(['pending', 'enriched', 'failed', 'not_found', 'not_applicable']).nullable().optional(),
+        /** ROK-986: Number of failed IGDB enrichment attempts */
+        igdbEnrichmentRetryCount: z.number().optional(),
+        /** ROK-986: Steam app ID for admin visibility */
+        steamAppId: z.number().nullable().optional(),
     })),
     meta: z.object({
         total: z.number(),

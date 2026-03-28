@@ -20,14 +20,18 @@ type Db = PostgresJsDatabase<typeof schema>;
  *
  * @param db - Drizzle database instance
  * @param steamAppId - Steam store app ID
- * @returns Game with id and name, or null if not found
+ * @returns Game with id, name, and igdbId, or null if not found
  */
 export async function findGameBySteamAppId(
   db: Db,
   steamAppId: number,
-): Promise<{ id: number; name: string } | null> {
+): Promise<{ id: number; name: string; igdbId: number | null } | null> {
   const [game] = await db
-    .select({ id: schema.games.id, name: schema.games.name })
+    .select({
+      id: schema.games.id,
+      name: schema.games.name,
+      igdbId: schema.games.igdbId,
+    })
     .from(schema.games)
     .where(eq(schema.games.steamAppId, steamAppId))
     .limit(1);
@@ -157,7 +161,7 @@ export async function setAutoHeartSteamUrlsPref(
 export async function discoverGameBySteamAppId(
   deps: DiscoveryDeps,
   steamAppId: number,
-): Promise<{ id: number; name: string } | null> {
+): Promise<{ id: number; name: string; igdbId: number | null } | null> {
   const result = await discoverGameViaItad(steamAppId, deps);
   if (!result) return null;
   return findGameBySteamAppId(deps.db, steamAppId);

@@ -477,7 +477,13 @@ describe('AdminGamesController — ROK-231: game hide/ban and adult filter', () 
         })),
       };
 
-      const result = await controller.listGames(undefined, undefined, 2, 10);
+      const result = await controller.listGames(
+        undefined,
+        undefined,
+        undefined,
+        2,
+        10,
+      );
 
       expect(result.meta.page).toBe(2);
       expect(result.meta.limit).toBe(10);
@@ -505,7 +511,13 @@ describe('AdminGamesController — ROK-231: game hide/ban and adult filter', () 
         })),
       };
 
-      const result = await controller.listGames(undefined, undefined, -5, 20);
+      const result = await controller.listGames(
+        undefined,
+        undefined,
+        undefined,
+        -5,
+        20,
+      );
 
       expect(result.meta.page).toBe(1);
     });
@@ -530,7 +542,13 @@ describe('AdminGamesController — ROK-231: game hide/ban and adult filter', () 
         })),
       };
 
-      const result = await controller.listGames(undefined, undefined, 1, 9999);
+      const result = await controller.listGames(
+        undefined,
+        undefined,
+        undefined,
+        1,
+        9999,
+      );
 
       expect(result.meta.limit).toBe(100);
     });
