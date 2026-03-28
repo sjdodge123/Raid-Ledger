@@ -558,6 +558,104 @@ const siblingBindingSuppression: SmokeTest = {
 // Run with SMOKE_INCLUDE_SLOW=1 to include.
 const includeSlow = process.env.SMOKE_INCLUDE_SLOW === '1';
 
+/**
+ * ROK-985: End-to-end attendance pipeline via real voice join.
+ *
+ * The 5th-time fix for the attendance pipeline. Previous fixes patched
+ * symptoms (boolean inversion, userId fallback in display layer) but never
+ * fixed the root cause: signups never had discordUserId populated for
+ * linked users, so classification deleted their voice sessions as "orphans."
+ *
+ * This test validates the FULL real pipeline — no injected sessions:
+ *   1. Linked user signs up (discordUserId auto-populated via ROK-985)
+ *   2. Real voice join → voice session recorded
+ *   3. Flush + classify → attendance populated
+ *   4. Metrics show "attended" (not "unmarked")
+ */
+const attendancePipelineE2E: SmokeTest = {
+  name: 'Attendance pipeline: signup → real voice → classify → attended (ROK-985)',
+  category: 'voice',
+  async run(ctx) {
+    await withVoiceBinding(ctx, 3, 'game-voice-monitor', async (vChId) => {
+      const gameId = ctx.games[0]?.id;
+      if (!gameId) throw new Error('No games for ROK-985 test');
+
+      // Live event — started 5 min ago, ends in 55 min
+      const ev = await createEvent(ctx.api, 'rok985-e2e', {
+        gameId,
+        startTime: futureTime(-5),
+        endTime: futureTime(55),
+      });
+      try {
+        // Sign up the companion bot user — discordUserId should auto-populate
+        await signupAs(ctx.api, ev.id, ctx.dmRecipientUserId);
+
+        // Real voice join — creates voice session via Discord gateway
+        await joinVoice(vChId);
+
+        // Poll until the voice session is flushed to DB
+        await pollForCondition(
+          async () => {
+            await flushVoiceSessions(ctx.api);
+            const m = await ctx.api.get<{
+              voiceSummary: { totalTracked: number } | null;
+            }>(`/events/${ev.id}/metrics`);
+            return m.voiceSummary && m.voiceSummary.totalTracked >= 1;
+          },
+          30000,
+          { intervalMs: 3000 },
+        );
+
+        // Leave voice + classify
+        leaveVoice();
+        await flushVoiceSessions(ctx.api);
+        await triggerClassify(ctx.api, ev.id);
+        await awaitProcessing(ctx.api);
+
+        // Assert: attendance must be "attended", NOT "unmarked"
+        type Rok985Metrics = {
+          attendanceSummary: {
+            attended: number;
+            unmarked: number;
+            total: number;
+          };
+          rosterBreakdown: Array<{
+            userId: number | null;
+            attendanceStatus: string | null;
+            voiceClassification: string | null;
+            voiceDurationSec: number | null;
+          }>;
+        };
+        const m = await ctx.api.get<Rok985Metrics>(`/events/${ev.id}/metrics`);
+
+        if (m.attendanceSummary.attended < 1) {
+          throw new Error(
+            `ROK-985 regression: attended=${m.attendanceSummary.attended}, ` +
+            `unmarked=${m.attendanceSummary.unmarked}. ` +
+            'Classification failed to populate attendance from voice data.',
+          );
+        }
+
+        // Verify roster entry has voice data + correct attendance
+        const botEntry = m.rosterBreakdown.find(
+          (r) => r.voiceDurationSec !== null && r.voiceDurationSec > 0,
+        );
+        if (!botEntry) {
+          throw new Error('No roster entry with voice data after classification');
+        }
+        if (botEntry.attendanceStatus !== 'attended') {
+          throw new Error(
+            `Expected attendanceStatus="attended", got "${botEntry.attendanceStatus}"`,
+          );
+        }
+      } finally {
+        leaveVoice();
+        await deleteEvent(ctx.api, ev.id);
+      }
+    });
+  },
+};
+
 // Voice-join tests require real UDP connectivity to Discord voice servers.
 // CI runners can't establish voice connections — skip with SMOKE_SKIP_VOICE_JOIN=1 (ROK-969).
 const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
@@ -566,5 +664,7 @@ export const voiceActivityTests: SmokeTest[] = [
   ...(canJoinVoice ? [voiceJoinDetected, voiceLeaveRecorded] : []),
   classifyPopulatesAttendance,
   ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
-  ...(canJoinVoice ? [voiceMemberList, multiGameVoiceDetected, siblingBindingSuppression] : []),
+  ...(canJoinVoice
+    ? [voiceMemberList, multiGameVoiceDetected, siblingBindingSuppression, attendancePipelineE2E]
+    : []),
 ];
