@@ -81,7 +81,7 @@ function PollSections({ lineupId, matchId, poll }: {
   const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
   const { toggleVote, suggest, isSuggesting, createEvt } = usePollMutations(lineupId, matchId);
-  const [createdEventId, setCreatedEventId] = useState<number | null>(null);
+  const [createdEventId, setCreatedEventId] = useState<number | null>(poll.match.linkedEventId ?? null);
   const { readOnly, hasVoted } = derivePollState(poll);
 
   const handleCreate = (): void => {
