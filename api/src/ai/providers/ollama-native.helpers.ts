@@ -1,5 +1,5 @@
 import { createWriteStream } from 'fs';
-import { rename, unlink, chmod, mkdtemp, rm } from 'fs/promises';
+import { rename, unlink, chmod, mkdtemp, rm, cp, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -14,8 +14,11 @@ const MAX_REDIRECTS = 5;
 /** Download timeout in milliseconds (5 minutes for large binaries). */
 const DOWNLOAD_TIMEOUT_MS = 300_000;
 
+/** Directory for Ollama runner shared libraries (CPU inference backends). */
+const OLLAMA_LIB_DIR = '/usr/local/lib/ollama';
+
 /**
- * Download a .tar.zst archive, extract the ollama binary, and place it at dest.
+ * Download a .tar.zst archive, extract the ollama binary and runner libs.
  * Cleans up temp files (archive + extract dir) on both success and failure.
  * @param url - URL to the .tar.zst archive
  * @param dest - Final binary destination path (e.g. /usr/local/bin/ollama)
@@ -36,12 +39,20 @@ export async function downloadAndExtractBinary(
     }
     await chmod(binaryPath, 0o755);
     await rename(binaryPath, dest);
+    await installRunnerLibs(join(extractDir, 'lib', 'ollama'));
   } finally {
     await unlink(archivePath).catch(() => {});
     if (extractDir) {
       await rm(extractDir, { recursive: true, force: true }).catch(() => {});
     }
   }
+}
+
+/** Copy runner shared libraries (CPU backends) to the lib directory. */
+async function installRunnerLibs(srcDir: string): Promise<void> {
+  if (!existsSync(srcDir)) return;
+  await mkdir(OLLAMA_LIB_DIR, { recursive: true });
+  await cp(srcDir, OLLAMA_LIB_DIR, { recursive: true, force: true });
 }
 
 /**

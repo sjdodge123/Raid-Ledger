@@ -12,6 +12,12 @@ const ALLINONE_SENTINEL = '/etc/supervisor.d/raid-ledger.ini';
 /** Path where the Ollama binary is installed. */
 const OLLAMA_BINARY_PATH = '/usr/local/bin/ollama';
 
+/** glibc dynamic linker copied from Debian at build time. */
+const GLIBC_LD_LINUX = '/opt/glibc/lib/ld-linux.so';
+
+/** Library search path for the glibc loader (glibc runtime + Ollama runner libs). */
+const GLIBC_LIB_PATH = '/opt/glibc/lib:/usr/local/lib/ollama';
+
 /** Supervisor config path for Ollama (inside services/ so [include] picks it up). */
 const SUPERVISOR_CONFIG_PATH = '/etc/supervisor.d/services/ollama.ini';
 
@@ -23,11 +29,15 @@ export function getOllamaDownloadUrl(): string {
 
 /**
  * Supervisor config template for the Ollama process.
+ * Uses the glibc dynamic linker because Ollama is compiled against glibc
+ * and Alpine's musl cannot run it (fcntl64 symbol missing, segfaults).
  * autostart=false because binary may not exist after image rebuild.
+ * --library-path: for ld-linux.so to resolve Ollama's own deps.
+ * LD_LIBRARY_PATH: inherited by child processes (runner backends).
  */
 const SUPERVISOR_CONFIG = `[program:ollama]
-command=/usr/local/bin/ollama serve
-environment=OLLAMA_MODELS="/data/ollama/models",OLLAMA_HOST="0.0.0.0:11434"
+command=${GLIBC_LD_LINUX} --library-path ${GLIBC_LIB_PATH} ${OLLAMA_BINARY_PATH} serve
+environment=OLLAMA_MODELS="/data/ollama/models",OLLAMA_HOST="0.0.0.0:11434",LD_LIBRARY_PATH="${GLIBC_LIB_PATH}"
 autostart=false
 autorestart=true
 stdout_logfile=/data/logs/ollama.log
