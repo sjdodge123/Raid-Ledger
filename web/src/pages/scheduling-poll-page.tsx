@@ -69,6 +69,24 @@ function toDatetimeLocal(dayOfWeek: number, hour: number): string {
   return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}T${pad(hour)}:00`;
 }
 
+/** Convert suggested slots from the API into preview blocks for the grid. */
+function slotsToPreviewBlocks(
+  slots: SchedulePollPageResponseDto['slots'],
+): GameTimePreviewBlock[] {
+  return slots.map((slot) => {
+    const d = new Date(slot.proposedTime);
+    const voteLabel = slot.votes.length === 1 ? '1 vote' : `${slot.votes.length} votes`;
+    return {
+      dayOfWeek: d.getDay(),
+      startHour: d.getHours(),
+      endHour: d.getHours() + 2,
+      title: voteLabel,
+      label: voteLabel,
+      variant: 'current' as const,
+    };
+  });
+}
+
 /** Derive read-only status and vote state from poll data. */
 function derivePollState(poll: SchedulePollPageResponseDto) {
   const isActive = poll.match.status === 'scheduling' || poll.match.status === 'suggested';
@@ -114,7 +132,11 @@ function PollSections({ lineupId, matchId, poll }: {
       {readOnly && <ReadOnlyBanner />}
       <MatchContextCard match={poll.match} />
       <AvailabilityHeatmapSection data={availability} isLoading={availLoading}
-        readOnly={readOnly} previewBlock={previewBlock}
+        readOnly={readOnly}
+        previewBlocks={[
+          ...slotsToPreviewBlocks(poll.slots),
+          ...(previewBlock ? [previewBlock] : []),
+        ]}
         onCellClick={(day, hour) => {
           setPrefillTime(toDatetimeLocal(day, hour));
           setPreviewBlock({ dayOfWeek: day, startHour: hour, endHour: hour + 2, label: 'Suggested Time', title: 'Suggested Time', variant: 'selected' });
