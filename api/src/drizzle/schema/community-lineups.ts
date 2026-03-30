@@ -12,23 +12,18 @@ import { users } from './users';
 import { games } from './games';
 import { events } from './events';
 
-export type LineupStatus =
-  | 'building'
-  | 'voting'
-  | 'decided'
-  | 'scheduling'
-  | 'archived';
+export type LineupStatus = 'building' | 'voting' | 'decided' | 'archived';
 
 /**
  * Community Lineups — collaborative game selection (ROK-933).
  *
- * Status flow: building → voting → decided → scheduling → archived
+ * Status flow: building → voting → decided → archived
  * Only one lineup may be in `building` or `voting` at a time.
  */
 export const communityLineups = pgTable('community_lineups', {
   id: serial('id').primaryKey(),
   status: text('status', {
-    enum: ['building', 'voting', 'decided', 'scheduling', 'archived'],
+    enum: ['building', 'voting', 'decided', 'archived'],
   })
     .default('building')
     .notNull(),

@@ -204,9 +204,9 @@ describe('SchedulingService', () => {
       // slot lookup returns empty
       mockDb.limit.mockResolvedValueOnce([]);
 
-      await expect(
-        service.createEventFromSlot(10, 999, 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.createEventFromSlot(10, 999, 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

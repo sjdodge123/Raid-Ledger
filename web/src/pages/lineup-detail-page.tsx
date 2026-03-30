@@ -59,7 +59,7 @@ export function LineupDetailPage(): JSX.Element {
         </div>
       )}
 
-      {lineup.status === 'decided' || lineup.status === 'scheduling' ? (
+      {lineup.status === 'decided' ? (
         <DecidedView lineup={lineup} />
       ) : lineup.status === 'voting' && hasEntries ? (
         <VotingLeaderboard

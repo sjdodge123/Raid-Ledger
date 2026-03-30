@@ -292,7 +292,7 @@ function describeLineups() {
       expect(res.body.decidedGameName).toBe('Test Game');
     });
 
-    it('should transition scheduling → archived', async () => {
+    it('should transition decided → archived', async () => {
       const createRes = await createLineup(adminToken);
       const lineupId = createRes.body.id as number;
 
@@ -304,11 +304,7 @@ function describeLineups() {
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
+        .send({ status: 'decided', decidedGameId: testApp.seed.game.id });
 
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
@@ -349,10 +345,11 @@ function describeLineups() {
       expect(res.body.status).toBe('building');
     });
 
-    it('should allow decided → scheduling (advance to scheduling phase)', async () => {
+    it('should allow reversion archived → decided', async () => {
       const createRes = await createLineup(adminToken);
       const lineupId = createRes.body.id as number;
 
+      await addEntry(lineupId, testApp.seed.game.id, testApp.seed.adminUser.id);
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -360,15 +357,19 @@ function describeLineups() {
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+        .send({ status: 'decided', decidedGameId: testApp.seed.game.id });
+      await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'archived' });
 
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
+        .send({ status: 'decided' });
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('scheduling');
+      expect(res.body.status).toBe('decided');
     });
 
     it('should reject decidedGameId not in entries', async () => {
@@ -386,10 +387,6 @@ function describeLineups() {
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'voting' });
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
 
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
@@ -427,7 +424,7 @@ function describeLineups() {
 
   function describeActiveConstraint() {
     it('should allow creating after archiving previous lineup', async () => {
-      // Create → vote → scheduling → decide → archive
+      // Create → vote → decide → archive
       const res1 = await createLineup(adminToken);
       const id = res1.body.id as number;
       await addEntry(id, testApp.seed.game.id, testApp.seed.adminUser.id);
@@ -436,10 +433,6 @@ function describeLineups() {
         .patch(`/lineups/${id}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'voting' });
-      await testApp.request
-        .patch(`/lineups/${id}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
       await testApp.request
         .patch(`/lineups/${id}/status`)
         .set('Authorization', `Bearer ${adminToken}`)

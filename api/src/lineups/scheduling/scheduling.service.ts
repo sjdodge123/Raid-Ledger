@@ -75,7 +75,7 @@ export class SchedulingService {
       slots,
       votes,
       userId,
-      lineup?.status ?? 'scheduling',
+      lineup?.status ?? 'decided',
     );
   }
 
@@ -126,7 +126,10 @@ export class SchedulingService {
 
     const gameName = await this.resolveGameName(match.gameId);
     const dto = this.buildCreateEventDto(
-      gameName, match.gameId, slot.proposedTime, recurring,
+      gameName,
+      match.gameId,
+      slot.proposedTime,
+      recurring,
     );
 
     const event = await this.eventsService.create(userId, dto);
@@ -135,10 +138,7 @@ export class SchedulingService {
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
-  async retractAllVotes(
-    matchId: number,
-    userId: number,
-  ): Promise<void> {
+  async retractAllVotes(matchId: number, userId: number): Promise<void> {
     await deleteAllUserVotesForMatch(this.db, matchId, userId);
   }
 
@@ -267,12 +267,12 @@ export class SchedulingService {
     return { lineupId: activeLineup.id, polls };
   }
 
-  /** Find the active lineup in scheduling status. */
+  /** Find the active lineup in decided status (scheduling happens at match level). */
   private async findActiveSchedulingLineup() {
     const [lineup] = await this.db
       .select({ id: schema.communityLineups.id })
       .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.status, 'scheduling'))
+      .where(eq(schema.communityLineups.status, 'decided'))
       .limit(1);
     return lineup ?? null;
   }

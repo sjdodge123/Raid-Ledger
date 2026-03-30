@@ -37,9 +37,7 @@ describe('scheduling-query.helpers', () => {
     it('completes without error for valid inputs', async () => {
       mockDb.where.mockResolvedValueOnce([]);
 
-      const result = await deleteAllUserVotesForMatch(
-        mockDb as never, 10, 42,
-      );
+      const result = await deleteAllUserVotesForMatch(mockDb as never, 10, 42);
 
       // The function resolves (no throw), result is the resolved where()
       expect(result).toBeDefined();
@@ -86,7 +84,10 @@ describe('scheduling-query.helpers', () => {
       mockDb.returning.mockResolvedValueOnce([{ id: 42 }]);
 
       const result = await insertScheduleSlot(
-        mockDb as never, 10, new Date(), 'user',
+        mockDb as never,
+        10,
+        new Date(),
+        'user',
       );
 
       expect(mockDb.insert).toHaveBeenCalled();
@@ -123,9 +124,7 @@ describe('scheduling-query.helpers', () => {
     it('returns matching vote record', async () => {
       mockDb.limit.mockResolvedValueOnce([{ id: 5 }]);
 
-      const result = await findVoteBySlotAndUser(
-        mockDb as never, 20, 100,
-      );
+      const result = await findVoteBySlotAndUser(mockDb as never, 20, 100);
 
       expect(mockDb.select).toHaveBeenCalled();
       expect(result).toEqual([{ id: 5 }]);
@@ -134,9 +133,7 @@ describe('scheduling-query.helpers', () => {
     it('returns empty array when no vote exists', async () => {
       mockDb.limit.mockResolvedValueOnce([]);
 
-      const result = await findVoteBySlotAndUser(
-        mockDb as never, 20, 100,
-      );
+      const result = await findVoteBySlotAndUser(mockDb as never, 20, 100);
 
       expect(result).toEqual([]);
     });
