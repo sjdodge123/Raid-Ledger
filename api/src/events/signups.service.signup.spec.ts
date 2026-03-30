@@ -433,7 +433,15 @@ describe('SignupsService — signup', () => {
             }),
           }),
         })
-        // 5. getCharacterById called via private method
+        // 5. repairSignupDiscordId: check for conflict (ROK-985)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([]),
+            }),
+          }),
+        })
+        // 6. getCharacterById called via private method
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
