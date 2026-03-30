@@ -174,14 +174,30 @@ function findBestNameMatch(
   return null;
 }
 
-/** Normalize a game name for comparison (lowercase, strip punctuation). */
+/** Roman numeral → Arabic mapping for game title normalization. */
+const ROMAN_TO_ARABIC: [RegExp, string][] = [
+  [/\bviii\b/g, '8'],
+  [/\bvii\b/g, '7'],
+  [/\bvi\b/g, '6'],
+  [/\biv\b/g, '4'],
+  [/\bv\b/g, '5'],
+  [/\biii\b/g, '3'],
+  [/\bii\b/g, '2'],
+  [/\bi\b/g, '1'],
+];
+
+/** Normalize a game name for comparison (lowercase, numerals, strip punctuation). */
 function normalizeName(name: string): string {
-  return name
+  let n = name
     .toLowerCase()
     .replace(/[™®©]/g, '')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+  for (const [roman, arabic] of ROMAN_TO_ARABIC) {
+    n = n.replace(roman, arabic);
+  }
+  return n;
 }
 
 /** Handle a successful IGDB match — update game with enrichment data. */
