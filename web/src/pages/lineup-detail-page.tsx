@@ -10,6 +10,7 @@ import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton
 import { CommonGroundPanel } from '../components/lineups/CommonGroundPanel';
 import { NominateModal } from '../components/lineups/NominateModal';
 import { PastLineups } from '../components/lineups/PastLineups';
+import { DecidedView } from '../components/lineups/decided/DecidedView';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
 
 function LineupNotFound(): JSX.Element {
@@ -58,7 +59,9 @@ export function LineupDetailPage(): JSX.Element {
         </div>
       )}
 
-      {lineup.status === 'voting' && hasEntries ? (
+      {lineup.status === 'decided' ? (
+        <DecidedView lineup={lineup} />
+      ) : lineup.status === 'voting' && hasEntries ? (
         <VotingLeaderboard
           entries={lineup.entries}
           lineupId={lineup.id}

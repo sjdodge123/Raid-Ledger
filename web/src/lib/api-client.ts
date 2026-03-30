@@ -183,3 +183,10 @@ export {
     getLineupActivity,
     getEventActivity,
 } from './api/activity-log-api';
+
+// Lineup Matches (ROK-989)
+export {
+    getLineupMatches,
+    joinMatch,
+    advanceMatch,
+} from './api/lineups-matches-api';

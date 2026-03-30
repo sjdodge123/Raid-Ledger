@@ -301,6 +301,9 @@ describe('MatchDetailResponseSchema (ROK-964)', () => {
         source: 'voted',
         createdAt: '2026-01-01T00:00:00.000Z',
         displayName: 'Player1',
+        avatar: null,
+        discordId: null,
+        customAvatarUrl: null,
       },
     ],
   };

@@ -4,6 +4,7 @@
  */
 import type { JSX } from 'react';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
+import { GameInfoBadges } from './GameInfoBadges';
 
 interface LeaderboardRowProps {
   entry: LineupEntryResponseDto;
@@ -37,15 +38,9 @@ function voteLabel(count: number): string {
 function RowInfo({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
   return (
     <div className="flex-1 min-w-0">
-      <h4 className="text-foreground font-semibold text-sm truncate">{entry.gameName}</h4>
-      <div className="flex items-center gap-2 mt-0.5">
-        <span className="text-emerald-400 text-[11px]">{entry.ownerCount} own</span>
-        {entry.itadCurrentPrice != null && (
-          <>
-            <span className="text-dim text-[10px]">&middot;</span>
-            <span className="text-muted text-[11px]">${entry.itadCurrentPrice.toFixed(2)}</span>
-          </>
-        )}
+      <span className="text-foreground font-semibold text-sm truncate block">{entry.gameName}</span>
+      <div className="mt-0.5">
+        <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} playerCount={entry.playerCount} />
       </div>
     </div>
   );

@@ -39,6 +39,9 @@ function mapMemberRow(m: MatchMemberRow) {
     source: m.source as 'voted' | 'bandwagon',
     createdAt: m.createdAt.toISOString(),
     displayName: m.displayName,
+    avatar: m.avatar,
+    discordId: m.discordId,
+    customAvatarUrl: m.customAvatarUrl,
   };
 }
 

@@ -74,10 +74,10 @@ async function archiveActiveLineup(token: string): Promise<void> {
         if (!detail) return;
 
         const transitions: Record<string, string[]> = {
-            building: ['voting', 'scheduling', 'decided', 'archived'],
-            voting: ['scheduling', 'decided', 'archived'],
-            scheduling: ['decided', 'archived'],
-            decided: ['archived'],
+            building: ['voting', 'decided', 'scheduling', 'archived'],
+            voting: ['decided', 'scheduling', 'archived'],
+            decided: ['scheduling', 'archived'],
+            scheduling: ['archived'],
         };
         const steps = transitions[detail.status];
         if (!steps) return;
@@ -117,8 +117,8 @@ async function ensureLineupInPhase(token: string, targetPhase: string): Promise<
     const transitions: Record<string, string[]> = {
         building: [],
         voting: ['voting'],
-        scheduling: ['voting', 'scheduling'],
-        decided: ['voting', 'scheduling', 'decided'],
+        decided: ['voting', 'decided'],
+        scheduling: ['voting', 'decided', 'scheduling'],
     };
     for (const status of transitions[targetPhase] ?? []) {
         const body: Record<string, unknown> = { status };
@@ -261,21 +261,17 @@ test.describe('Phase breadcrumb — revert', () => {
         await expect(page.locator('span').filter({ hasText: /Nominating/ }).first()).toBeVisible({ timeout: 10_000 });
     });
 
-    // 5 breadcrumb phases overflow the Pixel 5 viewport (393px) — "Scheduling"
-    // is clipped off-screen and not interactable. Tracked as ROK-975.
-    test('revert from decided back to scheduling', async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Breadcrumb overflows mobile viewport (ROK-975)');
-
+    test('revert from decided back to voting', async ({ page }) => {
         await expect(async () => {
             const lineupId = await ensureLineupInPhase(adminToken, 'decided');
             await gotoLineupDetail(page, lineupId);
 
-            await page.getByRole('button', { name: 'Scheduling' }).click();
+            await page.getByRole('button', { name: 'Voting' }).click();
             await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
             await page.getByRole('button', { name: 'Revert?' }).click();
         }).toPass({ timeout: 30_000 });
 
-        await expect(page.locator('span').filter({ hasText: /Scheduling/ }).first()).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('span').filter({ hasText: /Voting/ }).first()).toBeVisible({ timeout: 10_000 });
     });
 });
 
