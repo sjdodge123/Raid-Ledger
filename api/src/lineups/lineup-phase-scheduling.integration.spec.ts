@@ -179,7 +179,7 @@ function describePhaseScheduling() {
       });
       const lineupId = createRes.body.id as number;
 
-      // Walk through all transitions to archived
+      // Walk through all transitions to archived (voting → decided → scheduling → archived)
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -187,11 +187,11 @@ function describePhaseScheduling() {
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
+        .send({ status: 'decided' });
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided', decidedGameId: null });
+        .send({ status: 'scheduling' });
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -352,7 +352,7 @@ function describePhaseScheduling() {
       expect(res.body.phaseDeadline).toBeTruthy();
     });
 
-    it('should allow reverting decided back to scheduling', async () => {
+    it('should allow reverting decided back to voting', async () => {
       const createRes = await createLineupWithDurations(adminToken, {
         buildingDurationHours: 24,
         votingDurationHours: 48,
@@ -366,20 +366,16 @@ function describePhaseScheduling() {
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided', decidedGameId: null });
+        .send({ status: 'decided' });
 
-      // Revert to scheduling (one step back)
+      // Revert to voting (one step back)
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
+        .send({ status: 'voting' });
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('scheduling');
+      expect(res.body.status).toBe('voting');
     });
 
     it('should reject skipping phases (building to decided)', async () => {

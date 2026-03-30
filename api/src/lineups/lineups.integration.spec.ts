@@ -292,7 +292,7 @@ function describeLineups() {
       expect(res.body.decidedGameName).toBe('Test Game');
     });
 
-    it('should transition decided → archived', async () => {
+    it('should transition scheduling → archived', async () => {
       const createRes = await createLineup(adminToken);
       const lineupId = createRes.body.id as number;
 
@@ -304,11 +304,11 @@ function describeLineups() {
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
+        .send({ status: 'decided' });
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided', decidedGameId: testApp.seed.game.id });
+        .send({ status: 'scheduling' });
 
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
