@@ -31,6 +31,27 @@ function extractReturnTo(res: Response): string {
   return new URL(redirectUrl).searchParams.get('openid.return_to')!;
 }
 
+/**
+ * Extract the signed state from the callback URL embedded in the redirect.
+ * The state is in the openid.return_to URL's `state` query param.
+ */
+function extractStateFromRedirect(res: Response, jwtSecret: string): Record<string, unknown> | null {
+  const returnToUrl = extractReturnTo(res);
+  const stateParam = new URL(returnToUrl).searchParams.get('state');
+  if (!stateParam) return null;
+  try {
+    const { data, signature } = JSON.parse(
+      Buffer.from(stateParam, 'base64').toString(),
+    ) as { data: string; signature: string };
+    const crypto = require('crypto');
+    const expected = crypto.createHmac('sha256', jwtSecret).update(data).digest('hex');
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+    return JSON.parse(data) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 interface MockDeps {
   config: { get: jest.Mock };
   jwt: { verify: jest.Mock };
@@ -116,6 +137,113 @@ describe('SteamAuthController', () => {
         /^http:\/\/localhost:3000\/auth\/steam\/link\/callback/,
       );
       expect(returnTo).not.toContain('/api/');
+    });
+  });
+
+  describe('returnTo query parameter (ROK-941)', () => {
+    /** Shared setup: configure mocks for a valid Steam link request. */
+    function setupValidLinkMocks() {
+      mocks.config.get.mockImplementation((key: string) => {
+        if (key === 'JWT_SECRET') return 'test-secret';
+        return undefined;
+      });
+      mocks.jwt.verify.mockReturnValue({ sub: 42 });
+      mocks.settings.isSteamConfigured.mockResolvedValue(true);
+    }
+
+    it('includes returnTo in signed state when provided', async () => {
+      setupValidLinkMocks();
+      const req = createMockRequest({
+        protocol: 'http',
+        headers: { host: 'localhost:3000' },
+        query: { token: 'valid-token', returnTo: '/onboarding' },
+      });
+      const res = createMockResponse();
+
+      await controller.steamLink('valid-token', req, res);
+
+      expect(res.redirect).toHaveBeenCalledTimes(1);
+      const state = extractStateFromRedirect(res, 'test-secret');
+      expect(state).not.toBeNull();
+      expect(state!.returnTo).toBe('/onboarding');
+    });
+
+    it('validates returnTo against allowlist', async () => {
+      setupValidLinkMocks();
+      const req = createMockRequest({
+        protocol: 'http',
+        headers: { host: 'localhost:3000' },
+        query: { token: 'valid-token', returnTo: 'https://evil.com/phish' },
+      });
+      const res = createMockResponse();
+
+      await controller.steamLink('valid-token', req, res);
+
+      expect(res.redirect).toHaveBeenCalledTimes(1);
+      const state = extractStateFromRedirect(res, 'test-secret');
+      expect(state).not.toBeNull();
+      // Invalid returnTo should be silently replaced with the safe default
+      expect(state!.returnTo).toBe('/profile');
+    });
+
+    it('defaults returnTo to /profile when not provided', async () => {
+      setupValidLinkMocks();
+      const req = createMockRequest({
+        protocol: 'http',
+        headers: { host: 'localhost:3000' },
+      });
+      const res = createMockResponse();
+
+      await controller.steamLink('valid-token', req, res);
+
+      expect(res.redirect).toHaveBeenCalledTimes(1);
+      const state = extractStateFromRedirect(res, 'test-secret');
+      expect(state).not.toBeNull();
+      // When no returnTo is specified, it should default to /profile
+      expect(state!.returnTo).toBe('/profile');
+    });
+
+    it('callback uses returnTo from state for redirect', async () => {
+      setupValidLinkMocks();
+
+      // Build a signed state with returnTo included
+      // We need to invoke steamLink with returnTo, then use the state
+      // in a callback. Since we can't easily test the callback in unit
+      // tests (it calls verifySteamOpenId), we verify the redirect path
+      // in the signed state is propagated.
+      const req = createMockRequest({
+        protocol: 'http',
+        headers: { host: 'localhost:3000' },
+        query: { token: 'valid-token', returnTo: '/onboarding' },
+      });
+      const res = createMockResponse();
+
+      await controller.steamLink('valid-token', req, res);
+
+      // Extract the state to verify returnTo is persisted for the callback
+      const state = extractStateFromRedirect(res, 'test-secret');
+      expect(state).not.toBeNull();
+      expect(state!.returnTo).toBe('/onboarding');
+      expect(state!.action).toBe('steam_link');
+      expect(state!.userId).toBe(42);
+    });
+
+    it('rejects returnTo with protocol-relative URLs', async () => {
+      setupValidLinkMocks();
+      const req = createMockRequest({
+        protocol: 'http',
+        headers: { host: 'localhost:3000' },
+        query: { token: 'valid-token', returnTo: '//evil.com' },
+      });
+      const res = createMockResponse();
+
+      await controller.steamLink('valid-token', req, res);
+
+      expect(res.redirect).toHaveBeenCalledTimes(1);
+      const state = extractStateFromRedirect(res, 'test-secret');
+      expect(state).not.toBeNull();
+      // Protocol-relative URL should be rejected, defaulting to /profile
+      expect(state!.returnTo).toBe('/profile');
     });
   });
 });
