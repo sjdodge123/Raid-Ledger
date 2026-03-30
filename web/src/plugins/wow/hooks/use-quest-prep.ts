@@ -13,9 +13,11 @@ import type {
 
 /**
  * Fetch enriched quests for all content instances of an event.
- * Merges results from multiple instances into a single list.
+ * Returns a Map keyed by instance ID with per-instance quest arrays.
+ * Each instance's quests are deduplicated by questId independently.
  *
  * ROK-246: Dungeon Companion — Quest Suggestions UI
+ * ROK-995: Group quests by dungeon for multi-dungeon events
  */
 export function useEnrichedQuests(
     instanceIds: number[],
@@ -29,18 +31,19 @@ export function useEnrichedQuests(
                     fetchEnrichedQuests(id, variant ?? 'classic_era'),
                 ),
             );
-            // Flatten and deduplicate by questId
-            const seen = new Set<number>();
-            const quests: EnrichedDungeonQuestDto[] = [];
-            for (const batch of results) {
-                for (const quest of batch) {
+            const questsByInstance = new Map<number, EnrichedDungeonQuestDto[]>();
+            for (let i = 0; i < instanceIds.length; i++) {
+                const seen = new Set<number>();
+                const deduped: EnrichedDungeonQuestDto[] = [];
+                for (const quest of results[i]) {
                     if (!seen.has(quest.questId)) {
                         seen.add(quest.questId);
-                        quests.push(quest);
+                        deduped.push(quest);
                     }
                 }
+                questsByInstance.set(instanceIds[i], deduped);
             }
-            return quests;
+            return questsByInstance;
         },
         enabled: instanceIds.length > 0 && !!variant,
         staleTime: 1000 * 60 * 5, // 5 min cache
