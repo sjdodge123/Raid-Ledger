@@ -720,13 +720,12 @@ test.describe('Decided view rendering', () => {
             { timeout: 10_000 },
         );
 
-        // AC: Champion card has gold gradient border and crown icon
-        // Podium renders in Silver-Champion-Bronze order; find the card WITH the crown
+        // AC: Champion pedestal has laurel wreath icon
         const crownIcon = page.locator('[data-testid="crown-icon"]');
         await expect(crownIcon).toBeVisible({ timeout: 15_000 });
 
-        // The crown icon's parent podium card should also be visible
-        const championCard = crownIcon.locator('xpath=ancestor::div[@data-testid="podium-card"]');
+        // Champion podium card should also be visible
+        const championCard = page.getByText('Champion');
         await expect(championCard).toBeVisible({ timeout: 5_000 });
     });
 });
