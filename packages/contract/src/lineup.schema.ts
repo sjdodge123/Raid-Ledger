@@ -110,6 +110,10 @@ export const LineupDetailResponseSchema = z.object({
     totalMembers: z.number(),
     /** Game IDs the current user has voted for (ROK-936). */
     myVotes: z.array(z.number()),
+    /** Count of members without a linked Steam account (ROK-993). */
+    unlinkedSteamCount: z.number(),
+    /** Members without a linked Steam account (ROK-993, operator-only). */
+    unlinkedSteamMembers: z.array(z.object({ id: z.number(), displayName: z.string() })),
     createdAt: z.string(),
     updatedAt: z.string(),
 });

@@ -116,3 +116,32 @@ export async function countTotalMembers(db: Db): Promise<number> {
 
   return row?.count ?? 0;
 }
+
+/** Member without a linked Steam account. */
+export interface UnlinkedSteamMember {
+  id: number;
+  displayName: string;
+}
+
+/**
+ * Count members without a linked Steam account (ROK-993).
+ */
+export async function countUnlinkedSteamMembers(db: Db): Promise<number> {
+  const rows = (await db.execute(sql`
+    SELECT count(*)::int AS count FROM users WHERE steam_id IS NULL
+  `)) as unknown as { count: number }[];
+  return Number(rows[0]?.count ?? 0);
+}
+
+/**
+ * Find members without a linked Steam account (ROK-993).
+ */
+export async function findUnlinkedSteamMembers(
+  db: Db,
+): Promise<UnlinkedSteamMember[]> {
+  const rows = (await db.execute(sql`
+    SELECT id, COALESCE(display_name, username) AS display_name
+    FROM users WHERE steam_id IS NULL
+  `)) as unknown as { id: number; display_name: string }[];
+  return rows.map((r) => ({ id: r.id, displayName: r.display_name }));
+}

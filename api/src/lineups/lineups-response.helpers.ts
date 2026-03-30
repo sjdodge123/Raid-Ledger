@@ -22,7 +22,10 @@ import {
   countWishlistPerGame,
   fetchPricingMetadata,
   countTotalMembers,
+  countUnlinkedSteamMembers,
+  findUnlinkedSteamMembers,
   type GamePricing,
+  type UnlinkedSteamMember,
 } from './lineups-enrichment.helpers';
 import { findUserVotes } from './lineups-voting.helpers';
 
@@ -34,6 +37,8 @@ interface EnrichmentMaps {
   wishlistMap: Map<number, number>;
   pricingMap: Map<number, GamePricing>;
   totalMembers: number;
+  unlinkedSteamCount: number;
+  unlinkedSteamMembers: UnlinkedSteamMember[];
 }
 
 /** Map a single entry row to the response shape with enrichment. */
@@ -66,6 +71,29 @@ function mapEntry(
   };
 }
 
+/** Extract core lineup metadata fields. */
+function mapLineupCore(
+  lineup: typeof schema.communityLineups.$inferSelect,
+  creator: Awaited<ReturnType<typeof findUserById>>,
+  decidedGame: Awaited<ReturnType<typeof findGameName>>,
+) {
+  return {
+    id: lineup.id,
+    status: lineup.status,
+    targetDate: lineup.targetDate?.toISOString() ?? null,
+    decidedGameId: lineup.decidedGameId,
+    decidedGameName: decidedGame[0]?.name ?? null,
+    linkedEventId: lineup.linkedEventId,
+    createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
+    votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
+    phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
+    matchThreshold: lineup.matchThreshold ?? 35,
+    maxVotesPerPlayer: lineup.maxVotesPerPlayer ?? 3,
+    createdAt: lineup.createdAt.toISOString(),
+    updatedAt: lineup.updatedAt.toISOString(),
+  };
+}
+
 /** Map raw query results to the detail response shape. */
 function mapToDetailResponse(
   lineup: typeof schema.communityLineups.$inferSelect,
@@ -79,23 +107,37 @@ function mapToDetailResponse(
 ): LineupDetailResponseDto {
   const voteMap = new Map(voteCounts.map((v) => [v.gameId, v.voteCount]));
   return {
-    id: lineup.id,
-    status: lineup.status,
-    targetDate: lineup.targetDate?.toISOString() ?? null,
-    decidedGameId: lineup.decidedGameId,
-    decidedGameName: decidedGame[0]?.name ?? null,
-    linkedEventId: lineup.linkedEventId,
-    createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
-    votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
-    phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
-    matchThreshold: lineup.matchThreshold ?? 35,
-    maxVotesPerPlayer: lineup.maxVotesPerPlayer ?? 3,
+    ...mapLineupCore(lineup, creator, decidedGame),
     entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
     totalVoters: voterCount[0]?.total ?? 0,
     totalMembers: enrichment.totalMembers,
     myVotes,
-    createdAt: lineup.createdAt.toISOString(),
-    updatedAt: lineup.updatedAt.toISOString(),
+    unlinkedSteamCount: enrichment.unlinkedSteamCount,
+    unlinkedSteamMembers: enrichment.unlinkedSteamMembers,
+  };
+}
+
+/** Fetch enrichment data for lineup entries. */
+async function fetchEnrichment(
+  db: Db,
+  gameIds: number[],
+): Promise<EnrichmentMaps> {
+  const [ownerMap, wishlistMap, pricingMap, totalMembers, uc, um] =
+    await Promise.all([
+      countOwnersPerGame(db, gameIds),
+      countWishlistPerGame(db, gameIds),
+      fetchPricingMetadata(db, gameIds),
+      countTotalMembers(db),
+      countUnlinkedSteamMembers(db),
+      findUnlinkedSteamMembers(db),
+    ]);
+  return {
+    ownerMap,
+    wishlistMap,
+    pricingMap,
+    totalMembers,
+    unlinkedSteamCount: uc,
+    unlinkedSteamMembers: um,
   };
 }
 
@@ -120,14 +162,10 @@ export async function buildDetailResponse(
       findUserVotes(db, lineupId, userId),
     ]);
 
-  const gameIds = entries.map((e) => e.gameId);
-  const [ownerMap, wishlistMap, pricingMap, totalMembers] = await Promise.all([
-    countOwnersPerGame(db, gameIds),
-    countWishlistPerGame(db, gameIds),
-    fetchPricingMetadata(db, gameIds),
-    countTotalMembers(db),
-  ]);
-
+  const enrichment = await fetchEnrichment(
+    db,
+    entries.map((e) => e.gameId),
+  );
   return mapToDetailResponse(
     lineup,
     entries,
@@ -135,7 +173,7 @@ export async function buildDetailResponse(
     voterCount,
     creator,
     decidedGame,
-    { ownerMap, wishlistMap, pricingMap, totalMembers },
+    enrichment,
     myVotes,
   );
 }
