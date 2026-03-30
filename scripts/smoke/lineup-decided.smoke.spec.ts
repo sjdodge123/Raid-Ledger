@@ -340,54 +340,46 @@ test.describe('Decided view tiered match cards', () => {
     test('tiered sections render with correct headers', async ({ page }) => {
         await gotoDecidedView(page);
 
-        // AC: Tiered sections render: Scheduling Now (cyan),
-        // Almost There (emerald), Rally Your Crew (amber)
-        // At least one tier section should be visible
-        const schedulingNow = page.getByText('Scheduling Now');
-        const almostThere = page.getByText('Almost There');
-        const rallyYourCrew = page.getByText('Rally Your Crew');
+        // Match tiers load asynchronously via useLineupMatches —
+        // wait for the first tier section to appear before checking
+        if (!matchesData) return;
 
-        const hasScheduling = await schedulingNow
-            .isVisible({ timeout: 10_000 })
-            .catch(() => false);
-        const hasAlmost = await almostThere
-            .isVisible({ timeout: 5_000 })
-            .catch(() => false);
-        const hasRally = await rallyYourCrew
-            .isVisible({ timeout: 5_000 })
-            .catch(() => false);
+        const tierSection = page.locator('[data-testid="match-tier-section"]').first();
+        await expect(tierSection).toBeVisible({ timeout: 15_000 });
 
-        // At least one tier must be visible if matches exist
-        if (matchesData) {
-            expect(hasScheduling || hasAlmost || hasRally).toBe(true);
-        }
+        // Now check which tier headers are present
+        const hasScheduling = await page.getByText('Scheduling Now').isVisible().catch(() => false);
+        const hasAlmost = await page.getByText('Almost There').isVisible().catch(() => false);
+        const hasRally = await page.getByText('Rally Your Crew').isVisible().catch(() => false);
+
+        expect(hasScheduling || hasAlmost || hasRally).toBe(true);
     });
 
     test('empty tiers are hidden', async ({ page }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await gotoDecidedView(page);
 
         // AC: Empty tiers are hidden (section not rendered)
-        // Verify by checking data-testid tier containers
-        const tierSections = page.locator(
-            '[data-testid="match-tier-section"]',
-        );
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        // Wait for match data to load — tier sections appear after the
+        // async useLineupMatches query resolves
+        const tierSections = page.locator('[data-testid="match-tier-section"]');
+        const firstSection = tierSections.first();
+        const hasTiers = await firstSection.isVisible({ timeout: 10_000 }).catch(() => false);
 
-        // Each visible tier section should have at least one match card
-        const visibleCount = await tierSections.count();
-        for (let i = 0; i < visibleCount; i++) {
-            const section = tierSections.nth(i);
-            const cards = section.locator(
-                '[data-testid="match-card"], [data-testid="rally-row"]',
-            );
-            const cardCount = await cards.count();
-            expect(cardCount).toBeGreaterThan(0);
+        if (hasTiers) {
+            // Wait for cards inside the first section to render
+            await expect(
+                firstSection.locator('[data-testid="match-card"], [data-testid="rally-row"]').first(),
+            ).toBeVisible({ timeout: 5_000 });
+
+            // Now verify every visible section has at least one card
+            const count = await tierSections.count();
+            for (let i = 0; i < count; i++) {
+                const section = tierSections.nth(i);
+                const cardCount = await section.locator(
+                    '[data-testid="match-card"], [data-testid="rally-row"]',
+                ).count();
+                expect(cardCount).toBeGreaterThan(0);
+            }
         }
     });
 
@@ -712,16 +704,8 @@ test.describe('Decided view responsive layout', () => {
 
         await gotoDecidedView(page);
 
-        // Match sections should still render (even if layout changes)
+        // Match sections load asynchronously — wait for them
         if (matchesData) {
-            const sections = page.locator(
-                '[data-testid="match-tier-section"]',
-            );
-            const hasAny = await sections.first()
-                .isVisible({ timeout: 10_000 })
-                .catch(() => false);
-
-            // At least one section should be visible if matches exist
             const matchArrays = matchesData as Record<string, unknown[]>;
             const totalMatches =
                 (matchArrays.scheduling?.length ?? 0) +
@@ -729,7 +713,8 @@ test.describe('Decided view responsive layout', () => {
                 (matchArrays.rallyYourCrew?.length ?? 0);
 
             if (totalMatches > 0) {
-                expect(hasAny).toBe(true);
+                const firstSection = page.locator('[data-testid="match-tier-section"]').first();
+                await expect(firstSection).toBeVisible({ timeout: 15_000 });
             }
         }
     });
