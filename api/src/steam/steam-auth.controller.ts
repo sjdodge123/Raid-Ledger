@@ -112,7 +112,8 @@ export class SteamAuthController {
    */
   private getApiBaseUrl(req: Request): string {
     const clientUrl = this.configService.get<string>('CLIENT_URL');
-    if (clientUrl) return `${clientUrl}/api`;
+    const isProxied = !!req.headers['x-forwarded-proto'];
+    if (clientUrl && isProxied) return `${clientUrl}/api`;
     const proto =
       (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ||
       req.protocol ||
