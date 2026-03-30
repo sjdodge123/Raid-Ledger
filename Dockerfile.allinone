@@ -14,6 +14,27 @@
 # ====================
 
 # ====================
+# Stage 0: glibc runtime donor (for Ollama binary compatibility)
+# ====================
+# Ollama is compiled against glibc; Alpine uses musl. We copy the glibc
+# runtime into /opt/glibc/lib/ so the Ollama binary can be launched with
+# the real glibc dynamic linker at runtime.
+FROM debian:bookworm-slim AS glibc-donor
+RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /opt/glibc/lib && \
+    cp /lib/*-linux-gnu*/libc.so.6 /opt/glibc/lib/ && \
+    cp /lib/*-linux-gnu*/libm.so.6 /opt/glibc/lib/ && \
+    cp /lib/*-linux-gnu*/libresolv.so.2 /opt/glibc/lib/ && \
+    cp /lib/*-linux-gnu*/libgcc_s.so.1 /opt/glibc/lib/ && \
+    cp /lib/*-linux-gnu*/libstdc++.so.6 /opt/glibc/lib/ && \
+    (cp /lib/*-linux-gnu*/libpthread.so.0 /opt/glibc/lib/ 2>/dev/null || true) && \
+    (cp /lib/*-linux-gnu*/libdl.so.2 /opt/glibc/lib/ 2>/dev/null || true) && \
+    (cp /lib/*-linux-gnu*/librt.so.1 /opt/glibc/lib/ 2>/dev/null || true) && \
+    (cp /lib64/ld-linux-x86-64.so.2 /opt/glibc/lib/ld-linux.so 2>/dev/null || \
+     cp /lib/ld-linux-aarch64.so.1 /opt/glibc/lib/ld-linux.so 2>/dev/null) && \
+    test -f /opt/glibc/lib/ld-linux.so
+
+# ====================
 # Stage 1: Dependencies
 # ====================
 FROM node:20-alpine AS deps
@@ -59,8 +80,10 @@ RUN apk add --no-cache \
   su-exec \
   gettext \
   logrotate \
-  zstd \
-  gcompat
+  zstd
+
+# Copy glibc runtime for Ollama (replaces gcompat which couldn't provide fcntl64)
+COPY --from=glibc-donor /opt/glibc/lib/ /opt/glibc/lib/
 
 # Create app user and directories
 # Add app user to redis group so API can access Redis Unix socket (ROK-840)

@@ -17,6 +17,8 @@ jest.mock('fs/promises', () => ({
   chmod: jest.fn().mockResolvedValue(undefined),
   mkdtemp: jest.fn().mockResolvedValue('/tmp/ollama-abc123'),
   rm: jest.fn().mockResolvedValue(undefined),
+  cp: jest.fn().mockResolvedValue(undefined),
+  mkdir: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('https');
 jest.mock('http');
@@ -30,6 +32,8 @@ const mockChmod = fsp.chmod as jest.Mock;
 const mockUnlink = fsp.unlink as jest.Mock;
 const mockMkdtemp = fsp.mkdtemp as jest.Mock;
 const mockRm = fsp.rm as jest.Mock;
+const mockCp = fsp.cp as jest.Mock;
+const mockMkdir = fsp.mkdir as jest.Mock;
 const mockExecFile = childProcess.execFile as unknown as jest.Mock;
 
 import { downloadAndExtractBinary } from './ollama-native.helpers';
@@ -119,6 +123,41 @@ describe('downloadAndExtractBinary', () => {
       recursive: true,
       force: true,
     });
+  });
+
+  it('installs runner libs when lib/ollama exists in archive', async () => {
+    mockSuccessfulDownload();
+    mockTarSuccess();
+    mockExistsSync.mockReturnValue(true);
+
+    await downloadAndExtractBinary(
+      'https://example.com/ollama.tar.zst',
+      '/usr/local/bin/ollama',
+    );
+
+    expect(mockMkdir).toHaveBeenCalledWith('/usr/local/lib/ollama', {
+      recursive: true,
+    });
+    expect(mockCp).toHaveBeenCalledWith(
+      '/tmp/ollama-abc123/lib/ollama',
+      '/usr/local/lib/ollama',
+      { recursive: true, force: true },
+    );
+  });
+
+  it('skips runner lib install when lib/ollama is absent', async () => {
+    mockSuccessfulDownload();
+    mockTarSuccess();
+    mockExistsSync.mockImplementation((p: string) =>
+      p.includes('bin/ollama'),
+    );
+
+    await downloadAndExtractBinary(
+      'https://example.com/ollama.tar.zst',
+      '/usr/local/bin/ollama',
+    );
+
+    expect(mockCp).not.toHaveBeenCalled();
   });
 
   it('throws when bin/ollama not found in archive', async () => {

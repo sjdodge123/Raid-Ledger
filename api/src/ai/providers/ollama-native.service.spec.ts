@@ -144,9 +144,11 @@ describe('OllamaNativeService', () => {
       service.writeSupervisorConfig();
 
       const content = mockWriteFileSync.mock.calls[0][1] as string;
-      expect(content).toContain('command=/usr/local/bin/ollama serve');
+      expect(content).toContain('/opt/glibc/lib/ld-linux.so');
+      expect(content).toContain('/usr/local/bin/ollama serve');
       expect(content).toContain('OLLAMA_MODELS="/data/ollama/models"');
       expect(content).toContain('OLLAMA_HOST="0.0.0.0:11434"');
+      expect(content).toContain('LD_LIBRARY_PATH=');
       expect(content).toContain('autostart=false');
       expect(content).toContain('autorestart=true');
     });
