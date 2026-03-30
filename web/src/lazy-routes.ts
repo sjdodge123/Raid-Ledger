@@ -71,6 +71,9 @@ export const GameDetailPage = lazyWithRetry(() =>
 export const LineupDetailPage = lazyWithRetry(() =>
     import('./pages/lineup-detail-page').then((m) => ({ default: m.LineupDetailPage })),
 );
+export const SchedulingPollPage = lazyWithRetry(() =>
+    import('./pages/scheduling-poll-page').then((m) => ({ default: m.SchedulingPollPage })),
+);
 export const CharacterDetailPage = lazyWithRetry(() =>
     import('./pages/character-detail-page').then((m) => ({ default: m.CharacterDetailPage })),
 );

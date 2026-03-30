@@ -121,5 +121,8 @@ export * from './lineup.schema.js';
 // Community Lineup Matches — Decided View (ROK-937)
 export * from './lineup-matches.schema.js';
 
+// Lineup Scheduling Poll (ROK-965)
+export * from './lineup-scheduling.schema.js';
+
 // Activity Log (ROK-930)
 export * from './activity-log.schema.js';
