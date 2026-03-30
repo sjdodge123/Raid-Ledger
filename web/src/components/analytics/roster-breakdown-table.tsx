@@ -104,12 +104,12 @@ export function RosterBreakdownTable({ roster, hasVoiceData }: RosterBreakdownTa
         <div className="bg-surface rounded-lg border border-edge p-6">
             <h3 className="text-lg font-semibold text-foreground mb-4">Roster Breakdown</h3>
             {roster.length === 0 ? (
-                <p className="text-muted text-center py-8">No signups for this event.</p>
+                <p className="text-muted text-center py-8">No participants for this event.</p>
             ) : (
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead><RosterTableHeaders sortField={sortField} sortDir={sortDir} handleSort={handleSort} hasVoiceData={hasVoiceData} /></thead>
-                        <tbody>{sorted.map((entry, idx) => (<RosterRow key={`${entry.userId}-${idx}`} entry={entry} hasVoiceData={hasVoiceData} />))}</tbody>
+                        <tbody>{sorted.map((entry, idx) => (<RosterRow key={`${entry.userId ?? entry.username}-${idx}`} entry={entry} hasVoiceData={hasVoiceData} />))}</tbody>
                     </table>
                 </div>
             )}

@@ -47,7 +47,14 @@ export async function signupTxBody(deps: FlowDeps, p: SignupTxParams) {
   const { tx, eventRow, eventId, userId, dto } = p;
   const autoBench = await signupH.checkAutoBench(tx, eventRow, eventId, dto);
   const hasCharacter = !!dto?.characterId;
-  const rows = await signupH.insertSignupRow(tx, eventId, userId, dto);
+  const discordId = p.user?.discordId ?? null;
+  const rows = await signupH.insertSignupRow(
+    tx,
+    eventId,
+    userId,
+    dto,
+    discordId,
+  );
   if (rows.length === 0) {
     return handleDuplicateSignup(deps, {
       ...p,
@@ -74,6 +81,8 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
   // the reactivation path because existing.characterId is already synced.
   await signupH.reactivateIfCancelled(tx, existing, dto, p.hasCharacter);
   await signupH.updateCharacterIfNeeded(tx, existing, dto);
+  // Opportunistic repair: back-fill discordUserId if user is linked (ROK-985)
+  await signupH.repairSignupDiscordId(tx, existing, user);
   const rolesChanged = await signupH.updatePreferredRolesIfNeeded(
     tx,
     existing,

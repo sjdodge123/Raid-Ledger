@@ -1,8 +1,9 @@
 /**
- * Unit tests for analytics-metrics helper functions (ROK-852).
+ * Unit tests for analytics-metrics helper functions (ROK-852, ROK-985).
  *
  * Covers buildRosterBreakdown (discordUserId match, userId fallback,
- * no-match case) and buildAttendanceSummary status counting.
+ * no-match case, voice-only participants) and buildAttendanceSummary
+ * status counting.
  */
 import {
   buildRosterBreakdown,
@@ -96,9 +97,12 @@ function testNoMatchReturnsNullVoiceData() {
 
   const result = buildRosterBreakdown([signup], [voice]);
 
-  expect(result).toHaveLength(1);
-  expect(result[0].voiceClassification).toBeNull();
-  expect(result[0].voiceDurationSec).toBeNull();
+  // ROK-985: 2 entries — the signup (null voice data) + voice-only participant
+  expect(result).toHaveLength(2);
+  const signupEntry = result.find((r) => r.username === 'lonely');
+  expect(signupEntry).toBeDefined();
+  expect(signupEntry!.voiceClassification).toBeNull();
+  expect(signupEntry!.voiceDurationSec).toBeNull();
 }
 
 // ─── buildAttendanceSummary ─────────────────────────────────────────────────
@@ -157,12 +161,15 @@ function testPreferDiscordUserIdWhenBothPresent() {
   expect(result[0].voiceDurationSec).toBe(7200);
 }
 
-function testEmptySignupsReturnsEmptyArray() {
+function testVoiceOnlyWithNoSignupsAppearsAsEntry() {
   const voice = createVoiceSession({ discordUserId: '123', userId: 5 });
 
   const result = buildRosterBreakdown([], [voice]);
 
-  expect(result).toHaveLength(0);
+  // ROK-985: voice-only participants now appear even with zero signups
+  expect(result).toHaveLength(1);
+  expect(result[0].signupStatus).toBeNull();
+  expect(result[0].voiceClassification).toBe('full');
 }
 
 function testEmptyVoiceSessionsNullsVoiceData() {
@@ -248,8 +255,8 @@ describe('buildRosterBreakdown', () => {
   );
 
   it(
-    'returns empty array when signups array is empty',
-    testEmptySignupsReturnsEmptyArray,
+    'voice-only participants appear when signups array is empty (ROK-985)',
+    testVoiceOnlyWithNoSignupsAppearsAsEntry,
   );
 
   it(
@@ -266,6 +273,76 @@ describe('buildRosterBreakdown', () => {
     'returns null voiceClassification when matched session has classification=null',
     testVoiceSessionWithNullClassification,
   );
+
+  // ─── ROK-985: voice-only participants ───────────────────────────────────
+
+  it('includes voice-only participant with no matching signup (ROK-985)', () => {
+    const signup = createSignup({
+      discordUserId: '111',
+      userId: 1,
+      username: 'signed-up-user',
+      signupStatus: 'accepted',
+    });
+    const signupVoice = createVoiceSession({
+      id: 'uuid-signup',
+      discordUserId: '111',
+      userId: 1,
+      classification: 'full',
+      totalDurationSec: 7200,
+    });
+    // Voice-only: no matching signup exists
+    const voiceOnly = createVoiceSession({
+      id: 'uuid-voice-only',
+      discordUserId: '999',
+      discordUsername: 'VoiceOnlyUser#0001',
+      userId: null,
+      classification: 'partial',
+      totalDurationSec: 3600,
+    });
+
+    const result = buildRosterBreakdown([signup], [signupVoice, voiceOnly]);
+
+    // Should include 2 entries: the signed-up user + the voice-only user
+    expect(result).toHaveLength(2);
+    const voiceOnlyEntry = result.find(
+      (r) => r.username === 'VoiceOnlyUser#0001',
+    );
+    expect(voiceOnlyEntry).toBeDefined();
+    expect(voiceOnlyEntry!.signupStatus).toBeNull();
+    expect(voiceOnlyEntry!.voiceClassification).toBe('partial');
+    expect(voiceOnlyEntry!.voiceDurationSec).toBe(3600);
+  });
+
+  it('derives attendance from classification for voice-only participant (ROK-985)', () => {
+    // Voice-only with non-no_show classification -> attended
+    const voiceAttended = createVoiceSession({
+      id: 'uuid-attended',
+      discordUserId: '777',
+      discordUsername: 'Attendee#0001',
+      userId: null,
+      classification: 'full',
+      totalDurationSec: 7200,
+    });
+    // Voice-only with no_show classification -> no_show
+    const voiceNoShow = createVoiceSession({
+      id: 'uuid-noshow',
+      discordUserId: '888',
+      discordUsername: 'NoShowUser#0001',
+      userId: null,
+      classification: 'no_show',
+      totalDurationSec: 0,
+    });
+
+    const result = buildRosterBreakdown([], [voiceAttended, voiceNoShow]);
+
+    expect(result).toHaveLength(2);
+    const attended = result.find((r) => r.username === 'Attendee#0001');
+    const noShow = result.find((r) => r.username === 'NoShowUser#0001');
+    expect(attended).toBeDefined();
+    expect(attended!.attendanceStatus).toBe('attended');
+    expect(noShow).toBeDefined();
+    expect(noShow!.attendanceStatus).toBe('no_show');
+  });
 });
 
 describe('buildAttendanceSummary', () => {

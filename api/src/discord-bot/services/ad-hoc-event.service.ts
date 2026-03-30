@@ -232,7 +232,8 @@ export class AdHocEventService implements OnModuleInit {
     );
   }
 
-  private async trySuppressForScheduled(
+  /** Check if a scheduled event on a sibling binding suppresses ad-hoc creation. */
+  async trySuppressForScheduled(
     bindingId: string,
     effectiveGameId: number | null | undefined,
     channelId?: string,

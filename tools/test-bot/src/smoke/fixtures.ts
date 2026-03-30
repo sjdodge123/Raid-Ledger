@@ -143,7 +143,7 @@ export async function signupAs(
   eventId: number,
   userId: number,
   preferredRoles?: string[],
-  opts?: { characterId?: string; status?: string; linkDiscord?: boolean },
+  opts?: { characterId?: string; status?: string },
 ) {
   return api.post('/admin/test/signup', {
     eventId,
@@ -151,7 +151,6 @@ export async function signupAs(
     preferredRoles,
     characterId: opts?.characterId,
     status: opts?.status,
-    linkDiscord: opts?.linkDiscord,
   });
 }
 

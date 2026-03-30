@@ -59,6 +59,13 @@ export async function handleGameBindingJoin(
     await joinExistingEvent(deps, channelId, binding, dm, uid);
     return;
   }
+  // ROK-959: suppress ad-hoc if a sibling binding has a scheduled event
+  const suppressed = await deps.adHocEventService.trySuppressForScheduled(
+    binding.bindingId,
+    binding.gameId,
+    channelId,
+  );
+  if (suppressed) return;
   await checkGameBindingThreshold(deps, channelId, binding, spawnFns);
 }
 
