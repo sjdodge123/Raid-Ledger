@@ -119,10 +119,8 @@ function PollSections({ lineupId, matchId, poll }: {
   const [previewBlock, setPreviewBlock] = useState<GameTimePreviewBlock | undefined>();
   const { readOnly, hasVoted } = derivePollState(poll);
 
-  const handleCreate = (): void => {
-    if (poll.slots.length === 0) return;
-    const sorted = [...poll.slots].sort((a, b) => b.votes.length - a.votes.length);
-    createEvt.mutate({ lineupId, matchId, slotId: sorted[0].id, recurring },
+  const handleCreate = (slotId: number): void => {
+    createEvt.mutate({ lineupId, matchId, slotId, recurring },
       { onSuccess: (r) => setCreatedEventId(r.eventId) });
   };
 
