@@ -8,6 +8,7 @@ interface GameInfoBadgesProps {
   ownerCount: number;
   itadCurrentCut?: number | null;
   itadCurrentPrice?: number | null;
+  playerCount?: { min: number; max: number } | null;
 }
 
 /** Emerald badge for library owner count. */
@@ -38,11 +39,24 @@ function DealBadge({ cut, price }: { cut?: number | null; price?: number | null 
   return null;
 }
 
-/** Inline badge row for ownership + deal info. */
-export function GameInfoBadges({ ownerCount, itadCurrentCut, itadCurrentPrice }: GameInfoBadgesProps): JSX.Element {
+/** Purple badge for player count range. */
+function PlayerBadge({ playerCount }: { playerCount?: { min: number; max: number } | null }): JSX.Element | null {
+  if (!playerCount) return null;
+  const { min, max } = playerCount;
+  const label = min === max ? `${min}` : `${min}-${max}`;
+  return (
+    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/90 text-white rounded">
+      {label} players
+    </span>
+  );
+}
+
+/** Inline badge row for ownership + player count + deal info. */
+export function GameInfoBadges({ ownerCount, itadCurrentCut, itadCurrentPrice, playerCount }: GameInfoBadgesProps): JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-1">
       <OwnerBadge count={ownerCount} />
+      <PlayerBadge playerCount={playerCount} />
       <DealBadge cut={itadCurrentCut} price={itadCurrentPrice} />
     </div>
   );

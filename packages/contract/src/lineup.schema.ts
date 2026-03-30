@@ -87,6 +87,8 @@ export const LineupEntryResponseSchema = z.object({
     itadCurrentShop: z.string().nullable(),
     /** URL to the current deal. */
     itadCurrentUrl: z.string().nullable(),
+    /** Min/max player count from IGDB (null if unknown). */
+    playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),
 });
 
 export type LineupEntryResponseDto = z.infer<typeof LineupEntryResponseSchema>;

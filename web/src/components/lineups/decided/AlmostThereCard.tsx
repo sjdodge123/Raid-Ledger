@@ -70,7 +70,7 @@ export function AlmostThereCard({
         />
         <div className="flex-1 min-w-0">
           <Link to={`/games/${match.gameId}`} className="text-sm font-semibold text-foreground truncate hover:text-emerald-400 transition-colors block">{match.gameName}</Link>
-          {entry && <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} />}
+          {entry && <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} playerCount={entry.playerCount} />}
           <span className="text-[11px] text-dim">
             {match.members.length} / {matchThreshold} players
           </span>

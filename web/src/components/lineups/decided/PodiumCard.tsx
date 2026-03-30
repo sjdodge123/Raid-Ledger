@@ -62,7 +62,7 @@ function PodiumCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element 
 function PodiumMeta({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
   return (
     <div className="mt-1">
-      <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} />
+      <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} playerCount={entry.playerCount} />
     </div>
   );
 }

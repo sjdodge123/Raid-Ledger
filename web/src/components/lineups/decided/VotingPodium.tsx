@@ -43,9 +43,9 @@ export function VotingPodium({ entries }: VotingPodiumProps): JSX.Element {
       <h2 className="text-sm font-bold tracking-widest text-muted uppercase mb-6 text-center">
         THIS WEEK&apos;S PODIUM
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
         {ordered.map(({ entry, rank }) => (
-          <div key={entry.id} className={rank === 1 ? 'sm:-mt-8' : rank === 2 ? 'sm:-mt-2' : ''}>
+          <div key={entry.id} className={rank === 1 ? '' : rank === 2 ? 'sm:mt-8' : 'sm:mt-14'}>
             <PodiumCard entry={entry} rank={rank} />
           </div>
         ))}

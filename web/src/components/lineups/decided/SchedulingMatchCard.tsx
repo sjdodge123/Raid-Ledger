@@ -58,7 +58,7 @@ function CardCover({ match }: { match: MatchDetailResponseDto }): JSX.Element {
 function CardBody({ match, totalVoters, entry }: SchedulingMatchCardProps): JSX.Element {
   return (
     <div className="px-4 py-3">
-      {entry && <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} />}
+      {entry && <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} playerCount={entry.playerCount} />}
       <span className="text-xs text-dim mt-1 block">
         {match.voteCount} votes ({match.members.length} players)
       </span>
