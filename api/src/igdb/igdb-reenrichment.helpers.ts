@@ -11,6 +11,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import { games } from '../drizzle/schema';
 import type { IgdbApiGame } from './igdb.constants';
+import { IGDB_CONFIG } from './igdb.constants';
 import {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
@@ -40,6 +41,7 @@ type QueryIgdb = (body: string) => Promise<IgdbApiGame[]>;
 /** Candidate row shape from the SELECT query. */
 interface Candidate {
   id: number;
+  name: string;
   steamAppId: number;
   igdbEnrichmentRetryCount: number;
 }
@@ -69,6 +71,7 @@ async function selectCandidates(db: Db): Promise<Candidate[]> {
   const rows = await db
     .select({
       id: games.id,
+      name: games.name,
       steamAppId: games.steamAppId,
       igdbEnrichmentRetryCount: games.igdbEnrichmentRetryCount,
     })
@@ -126,22 +129,59 @@ function tallySingleResults(
 
 type SingleResult = 'enriched' | 'not_found' | 'exhausted';
 
-/** Attempt IGDB enrichment for a single candidate. */
+/** Attempt IGDB enrichment: Steam ID first, then name-based fallback. */
 async function enrichSingleCandidate(
   db: Db,
   queryIgdb: QueryIgdb,
   candidate: Candidate,
 ): Promise<SingleResult> {
   try {
-    const query = buildExternalGamesQuery(candidate.steamAppId);
-    const igdbGames = await queryIgdb(query);
-    return igdbGames.length > 0
-      ? await handleSuccess(db, candidate, igdbGames[0])
-      : handleNotFound(db, candidate);
+    const byId = await queryIgdb(buildExternalGamesQuery(candidate.steamAppId));
+    if (byId.length > 0) return handleSuccess(db, candidate, byId[0]);
+    const byName = await searchByName(queryIgdb, candidate.name);
+    if (byName) return handleSuccess(db, candidate, byName);
+    return handleNotFound(db, candidate);
   } catch (err) {
     await handleError(db, candidate, err);
     throw err;
   }
+}
+
+/** Fallback: search IGDB by game name when Steam ID lookup fails. */
+async function searchByName(
+  queryIgdb: QueryIgdb,
+  name: string,
+): Promise<IgdbApiGame | null> {
+  const sanitized = name.replace(/"/g, '\\"');
+  const query = `search "${sanitized}"; fields ${IGDB_CONFIG.EXPANDED_FIELDS}; limit 5;`;
+  const results = await queryIgdb(query);
+  if (results.length === 0) return null;
+  const match = findBestNameMatch(results, name);
+  if (match) logger.log(`Name fallback matched "${name}" → IGDB ${match.id}`);
+  return match;
+}
+
+/** Pick the best name match, requiring high similarity. */
+function findBestNameMatch(
+  results: IgdbApiGame[],
+  targetName: string,
+): IgdbApiGame | null {
+  const target = normalizeName(targetName);
+  for (const game of results) {
+    if (!game.name) continue;
+    if (normalizeName(game.name) === target) return game;
+  }
+  return null;
+}
+
+/** Normalize a game name for comparison (lowercase, strip punctuation). */
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[™®©]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** Handle a successful IGDB match — update game with enrichment data. */
