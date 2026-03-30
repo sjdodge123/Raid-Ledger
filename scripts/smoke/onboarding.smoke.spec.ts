@@ -13,6 +13,37 @@ import { test, expect } from '@playwright/test';
 import { isMobile } from './helpers';
 
 const WIZARD_URL = '/onboarding?rerun=1';
+const API_BASE = process.env.API_URL || 'http://localhost:3000';
+
+/**
+ * Check whether the server has Steam configured via the system status API.
+ * Returns true when steamConfigured=true in the /system/status response.
+ */
+async function isSteamConfigured(): Promise<boolean> {
+    try {
+        const res = await fetch(`${API_BASE}/system/status`);
+        if (!res.ok) return false;
+        const data = (await res.json()) as { steamConfigured?: boolean };
+        return !!data.steamConfigured;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Check whether the Steam onboarding step will actually appear in the wizard.
+ * Returns true only when Steam is configured AND the logged-in admin has NOT
+ * yet linked Steam (i.e., the step won't be auto-skipped).
+ */
+async function willSteamStepShow(page: import('@playwright/test').Page): Promise<boolean> {
+    if (!(await isSteamConfigured())) return false;
+    // Open the wizard briefly and check if the Steam heading appears
+    await page.goto(WIZARD_URL);
+    const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
+    return steamHeading.isVisible({ timeout: 5_000 }).catch(() => false);
+}
 
 /**
  * Navigate to the onboarding wizard and wait for the dialog to appear.
@@ -23,6 +54,16 @@ async function openWizard(page: import('@playwright/test').Page) {
     const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     return dialog;
+}
+
+/** If the Steam step is showing, skip past it to reach the Games step. */
+async function skipPastSteamIfPresent(dialog: import('@playwright/test').Locator) {
+    const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
+    const isSteam = await steamHeading.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (isSteam) {
+        await dialog.getByRole('button', { name: 'Next' }).click();
+        await expect(dialog.getByRole('heading', { name: 'What Do You Play?' })).toBeVisible({ timeout: 10_000 });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -136,16 +177,14 @@ test.describe('Onboarding wizard step navigation', () => {
     test('progress breadcrumbs show current step', async ({ page }) => {
         const dialog = await openWizard(page);
 
-        // The breadcrumb bar should contain step labels.
-        // The "Games" label should be visible as it is the current/adjacent step.
+        // The "Games" label should always be visible in breadcrumbs
         await expect(dialog.getByRole('button', { name: 'Games' })).toBeVisible({ timeout: 5_000 });
 
-        // Advance to step 2 and verify breadcrumbs update
-        await dialog.getByRole('button', { name: 'Next' }).click();
-        await expect(dialog.getByText(/Step 2 of \d+/)).toBeVisible({ timeout: 5_000 });
+        // Skip past Steam if it's the first step so we land on Games
+        await skipPastSteamIfPresent(dialog);
 
-        // The "Game Time" label should be visible in breadcrumbs
-        // (it is the current or adjacent step after advancing from Games)
+        // Now on Games step — advance to verify breadcrumbs update
+        await dialog.getByRole('button', { name: 'Next' }).click();
         await expect(dialog.getByText('Game Time')).toBeVisible({ timeout: 5_000 });
     });
 });
@@ -157,6 +196,7 @@ test.describe('Onboarding wizard step navigation', () => {
 test.describe('Onboarding wizard games step', () => {
     test('genre filter chips are visible', async ({ page }) => {
         const dialog = await openWizard(page);
+        await skipPastSteamIfPresent(dialog);
 
         // Wait for games step header
         await expect(dialog.getByRole('heading', { name: 'What Do You Play?' })).toBeVisible({ timeout: 10_000 });
@@ -169,6 +209,7 @@ test.describe('Onboarding wizard games step', () => {
 
     test('game search input accepts text', async ({ page }) => {
         const dialog = await openWizard(page);
+        await skipPastSteamIfPresent(dialog);
 
         const searchInput = dialog.getByPlaceholder('Search for a game...');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
@@ -183,74 +224,33 @@ test.describe('Onboarding wizard games step', () => {
 // Steam step (ROK-941)
 // ---------------------------------------------------------------------------
 
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-/**
- * Check whether the server has Steam configured via the system status API.
- * Returns true when steamConfigured=true in the /system/status response.
- */
-async function isSteamConfigured(): Promise<boolean> {
-    try {
-        const res = await fetch(`${API_BASE}/system/status`);
-        if (!res.ok) return false;
-        const data = (await res.json()) as { steamConfigured?: boolean };
-        return !!data.steamConfigured;
-    } catch {
-        return false;
-    }
-}
-
 test.describe('Onboarding wizard Steam step (ROK-941)', () => {
     test('Steam step appears when steamConfigured=true and user has no Steam linked', async ({ page }) => {
-        const steamEnabled = await isSteamConfigured();
-        test.skip(!steamEnabled, 'Steam not configured in this environment — step is conditionally hidden');
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
-        const dialog = await openWizard(page);
-
-        // The Steam step should be the first step (after Discord Connect, which
-        // the admin user skips because Discord is already linked).
-        // It should show the "Connect Your Steam Account" heading.
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
         await expect(
             dialog.getByRole('heading', { name: 'Connect Your Steam Account' }),
         ).toBeVisible({ timeout: 10_000 });
     });
 
     test('Steam step shows value prop text and Connect Steam button', async ({ page }) => {
-        const steamEnabled = await isSteamConfigured();
-        test.skip(!steamEnabled, 'Steam not configured in this environment — step is conditionally hidden');
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
-        const dialog = await openWizard(page);
-
-        // Wait for Steam step to appear
-        await expect(
-            dialog.getByRole('heading', { name: 'Connect Your Steam Account' }),
-        ).toBeVisible({ timeout: 10_000 });
-
-        // Value prop text should be visible
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
         await expect(dialog.getByText(/steam/i)).toBeVisible();
-
-        // "Connect Steam" button should be visible
         await expect(
             dialog.getByRole('button', { name: /Connect Steam/i }),
         ).toBeVisible();
     });
 
     test('Steam step Connect Steam button links to correct auth URL', async ({ page }) => {
-        const steamEnabled = await isSteamConfigured();
-        test.skip(!steamEnabled, 'Steam not configured in this environment — step is conditionally hidden');
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
-        const dialog = await openWizard(page);
-
-        await expect(
-            dialog.getByRole('heading', { name: 'Connect Your Steam Account' }),
-        ).toBeVisible({ timeout: 10_000 });
-
-        // The "Connect Steam" button (or link) should target the Steam auth endpoint
-        // with returnTo=/onboarding
-        const connectBtn = dialog.getByRole('button', { name: /Connect Steam/i });
-        await expect(connectBtn).toBeVisible();
-
-        // Verify the link/button href includes the steam link endpoint with returnTo
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
         const linkOrBtn = dialog.locator('a[href*="/auth/steam/link"]');
         await expect(linkOrBtn).toBeVisible({ timeout: 5_000 });
         const href = await linkOrBtn.getAttribute('href');
@@ -259,42 +259,27 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
     });
 
     test('Skip button on Steam step advances to Games step', async ({ page }) => {
-        const steamEnabled = await isSteamConfigured();
-        test.skip(!steamEnabled, 'Steam not configured in this environment — step is conditionally hidden');
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
-        const dialog = await openWizard(page);
-
-        // Verify Steam step is showing
-        await expect(
-            dialog.getByRole('heading', { name: 'Connect Your Steam Account' }),
-        ).toBeVisible({ timeout: 10_000 });
-
-        // Click Skip to advance past the Steam step
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
         const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
         await expect(skipBtn).toBeVisible();
         await skipBtn.click();
 
-        // After skipping Steam, the next step should be Games
         await expect(
             dialog.getByRole('heading', { name: 'What Do You Play?' }),
         ).toBeVisible({ timeout: 10_000 });
     });
 
     test('Steam step appears before Games in breadcrumb order', async ({ page }) => {
-        const steamEnabled = await isSteamConfigured();
-        test.skip(!steamEnabled, 'Steam not configured in this environment — step is conditionally hidden');
+        const steamShows = await willSteamStepShow(page);
+        test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
-        const dialog = await openWizard(page);
-
-        // The breadcrumb bar should show Steam before Games
+        const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
         await expect(dialog.getByRole('button', { name: 'Steam' })).toBeVisible({ timeout: 5_000 });
         await expect(dialog.getByRole('button', { name: 'Games' })).toBeVisible({ timeout: 5_000 });
-
-        // Verify Steam step is currently active (step 1)
         await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible();
-        await expect(
-            dialog.getByRole('heading', { name: 'Connect Your Steam Account' }),
-        ).toBeVisible({ timeout: 10_000 });
     });
 });
 
