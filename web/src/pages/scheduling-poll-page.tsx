@@ -55,6 +55,19 @@ function ReadOnlyBanner(): JSX.Element {
   );
 }
 
+/** Convert a dayOfWeek (0=Sun) + hour to the next occurrence as datetime-local value. */
+function toDatetimeLocal(dayOfWeek: number, hour: number): string {
+  const now = new Date();
+  const currentDay = now.getDay(); // 0=Sun
+  let daysAhead = dayOfWeek - currentDay;
+  if (daysAhead < 0 || (daysAhead === 0 && hour <= now.getHours())) daysAhead += 7;
+  const target = new Date(now);
+  target.setDate(target.getDate() + daysAhead);
+  target.setHours(hour, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}T${pad(hour)}:00`;
+}
+
 /** Derive read-only status and vote state from poll data. */
 function derivePollState(poll: SchedulePollPageResponseDto) {
   const isActive = poll.match.status === 'scheduling' || poll.match.status === 'suggested';
@@ -83,6 +96,7 @@ function PollSections({ lineupId, matchId, poll }: {
   const { toggleVote, suggest, isSuggesting, createEvt } = usePollMutations(lineupId, matchId);
   const [createdEventId, setCreatedEventId] = useState<number | null>(poll.match.linkedEventId ?? null);
   const [recurring, setRecurring] = useState(false);
+  const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const { readOnly, hasVoted } = derivePollState(poll);
 
   const handleCreate = (): void => {
@@ -97,9 +111,11 @@ function PollSections({ lineupId, matchId, poll }: {
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
       {readOnly && <ReadOnlyBanner />}
       <MatchContextCard match={poll.match} />
+      <AvailabilityHeatmapSection data={availability} isLoading={availLoading}
+        readOnly={readOnly} onCellClick={(day, hour) => setPrefillTime(toDatetimeLocal(day, hour))} />
       <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
-        readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest} isSuggesting={isSuggesting} />
-      <AvailabilityHeatmapSection data={availability} isLoading={availLoading} />
+        readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
+        isSuggesting={isSuggesting} prefillTime={prefillTime} />
       <CreateEventSection slots={poll.slots} hasVoted={hasVoted} readOnly={readOnly}
         createdEventId={createdEventId} matchStatus={poll.match.status}
         isCreating={createEvt.isPending} recurring={recurring}

@@ -10,6 +10,8 @@ import { GameTimeGrid } from '../../components/features/game-time';
 interface AvailabilityHeatmapSectionProps {
   data: AggregateGameTimeResponse | undefined;
   isLoading: boolean;
+  readOnly?: boolean;
+  onCellClick?: (dayOfWeek: number, hour: number) => void;
 }
 
 /** Loading placeholder for the heatmap section. */
@@ -29,6 +31,8 @@ function HeatmapSkeleton(): JSX.Element {
 export function AvailabilityHeatmapSection({
   data,
   isLoading,
+  readOnly,
+  onCellClick,
 }: AvailabilityHeatmapSectionProps): JSX.Element | null {
   if (isLoading) return <HeatmapSkeleton />;
   if (!data || data.cells.length === 0) return null;
@@ -38,11 +42,15 @@ export function AvailabilityHeatmapSection({
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
         Group Availability
       </h3>
+      <p className="text-xs text-muted">
+        {readOnly ? 'Showing when members are typically online.' : 'Click a time slot to suggest it.'}
+      </p>
       <div data-testid="heatmap-grid">
         <GameTimeGrid
           slots={[]}
           readOnly
           heatmapOverlay={data.cells}
+          onCellClick={readOnly ? undefined : onCellClick}
           compact
           noStickyOffset
         />
