@@ -3,7 +3,7 @@
  * Displays slot cards with vote counts, toggle-vote on click,
  * "You voted" indicator, and a "Suggest Time" button with datetime picker.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 
@@ -14,6 +14,8 @@ interface SuggestedTimesProps {
   onToggleVote: (slotId: number) => void;
   onSuggestSlot: (proposedTime: string) => void;
   isSuggesting: boolean;
+  /** Pre-filled datetime from heatmap grid click (ISO local format for datetime-local input). */
+  prefillTime?: string;
 }
 
 /** Format a datetime string for display. */
@@ -60,10 +62,11 @@ function SlotCard({ slot, isVoted, readOnly, onToggle }: {
 }
 
 /** Inline datetime picker for suggesting a new slot. */
-function SuggestSlotForm({ onSubmit, isSuggesting }: {
-  onSubmit: (time: string) => void; isSuggesting: boolean;
+function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
+  onSubmit: (time: string) => void; isSuggesting: boolean; prefillTime?: string;
 }): JSX.Element {
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(prefillTime ?? '');
+  useEffect(() => { if (prefillTime) setValue(prefillTime); }, [prefillTime]);
   const handleSubmit = (): void => {
     if (!value) return;
     onSubmit(new Date(value).toISOString());
@@ -78,7 +81,7 @@ function SuggestSlotForm({ onSubmit, isSuggesting }: {
       />
       <button type="button" onClick={handleSubmit} disabled={!value || isSuggesting}
         className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50">
-        Submit
+        Suggest Time
       </button>
     </div>
   );
@@ -96,9 +99,10 @@ function SuggestTrigger({ onClick }: { onClick: () => void }): JSX.Element {
 
 /** Section listing all suggested time slots with voting. */
 export function SuggestedTimes({
-  slots, myVotedSlotIds, readOnly, onToggleVote, onSuggestSlot, isSuggesting,
+  slots, myVotedSlotIds, readOnly, onToggleVote, onSuggestSlot, isSuggesting, prefillTime,
 }: SuggestedTimesProps): JSX.Element {
   const [showPicker, setShowPicker] = useState(false);
+  const pickerVisible = showPicker || !!prefillTime;
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
@@ -108,8 +112,10 @@ export function SuggestedTimes({
         <SlotCard key={slot.id} slot={slot} isVoted={myVotedSlotIds.includes(slot.id)}
           readOnly={readOnly} onToggle={() => onToggleVote(slot.id)} />
       ))}
-      {!readOnly && !showPicker && <SuggestTrigger onClick={() => setShowPicker(true)} />}
-      {!readOnly && showPicker && <SuggestSlotForm onSubmit={onSuggestSlot} isSuggesting={isSuggesting} />}
+      {!readOnly && !pickerVisible && <SuggestTrigger onClick={() => setShowPicker(true)} />}
+      {!readOnly && pickerVisible && (
+        <SuggestSlotForm onSubmit={onSuggestSlot} isSuggesting={isSuggesting} prefillTime={prefillTime} />
+      )}
     </div>
   );
 }
