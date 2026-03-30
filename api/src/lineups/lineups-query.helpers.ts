@@ -124,9 +124,9 @@ export function findGameName(
 /** Forward transitions (auto-advance / force-advance). */
 export const VALID_TRANSITIONS: Record<LineupStatus, LineupStatus | null> = {
   building: 'voting',
-  voting: 'scheduling',
-  scheduling: 'decided',
-  decided: 'archived',
+  voting: 'decided',
+  decided: 'scheduling',
+  scheduling: 'archived',
   archived: null,
 };
 
@@ -134,9 +134,9 @@ export const VALID_TRANSITIONS: Record<LineupStatus, LineupStatus | null> = {
 export const VALID_REVERSIONS: Record<LineupStatus, LineupStatus | null> = {
   building: null,
   voting: 'building',
-  scheduling: 'voting',
-  decided: 'scheduling',
-  archived: 'decided',
+  decided: 'voting',
+  scheduling: 'decided',
+  archived: 'scheduling',
 };
 
 /** Count entries in a lineup (for cap enforcement). */

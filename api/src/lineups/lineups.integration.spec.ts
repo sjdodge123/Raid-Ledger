@@ -269,20 +269,16 @@ function describeLineups() {
       expect(res.body.votingDeadline).toBeTruthy();
     });
 
-    it('should transition voting → scheduling → decided with decidedGameId', async () => {
+    it('should transition voting → decided with decidedGameId', async () => {
       const createRes = await createLineup(adminToken);
       const lineupId = createRes.body.id as number;
 
-      // Add entry and move to voting → scheduling
+      // Add entry and move to voting
       await addEntry(lineupId, testApp.seed.game.id, testApp.seed.adminUser.id);
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'voting' });
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
 
       // Now decide
       const res = await testApp.request
@@ -353,7 +349,7 @@ function describeLineups() {
       expect(res.body.status).toBe('building');
     });
 
-    it('should allow scheduling → decided without decidedGameId (force-advance)', async () => {
+    it('should allow decided → scheduling (advance to scheduling phase)', async () => {
       const createRes = await createLineup(adminToken);
       const lineupId = createRes.body.id as number;
 
@@ -364,15 +360,15 @@ function describeLineups() {
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
+        .send({ status: 'decided' });
 
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'decided' });
+        .send({ status: 'scheduling' });
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('decided');
+      expect(res.body.status).toBe('scheduling');
     });
 
     it('should reject decidedGameId not in entries', async () => {

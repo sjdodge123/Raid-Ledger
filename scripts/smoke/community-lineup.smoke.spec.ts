@@ -69,9 +69,9 @@ async function archiveLineup(token: string, id: number): Promise<void> {
     const detail = await apiGet(token, `/lineups/${id}`);
     if (!detail) return;
     const transitions: Record<string, string[]> = {
-        building: ['voting', 'scheduling', 'decided', 'archived'],
-        voting: ['scheduling', 'decided', 'archived'],
-        scheduling: ['decided', 'archived'],
+        building: ['voting', 'decided', 'scheduling', 'archived'],
+        voting: ['decided', 'scheduling', 'archived'],
+        decided: ['scheduling', 'archived'],
         decided: ['archived'],
     };
     const steps = transitions[detail.status];

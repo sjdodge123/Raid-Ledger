@@ -108,12 +108,8 @@ function describeVoting() {
     return { lineupId, games: allGames };
   }
 
-  /** Advance a lineup from voting → scheduling → decided (two-step transition). */
+  /** Advance a lineup from voting → decided (single-step transition). */
   async function advanceToDecided(lineupId: number, token: string) {
-    await testApp.request
-      .patch(`/lineups/${lineupId}/status`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ status: 'scheduling' });
     await testApp.request
       .patch(`/lineups/${lineupId}/status`)
       .set('Authorization', `Bearer ${token}`)

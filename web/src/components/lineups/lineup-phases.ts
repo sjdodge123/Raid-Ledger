@@ -1,11 +1,11 @@
 import type { LineupStatusDto } from '@raid-ledger/contract';
 
-/** Ordered lineup phase progression: building -> voting -> scheduling -> decided -> archived */
+/** Ordered lineup phase progression: building -> voting -> decided -> scheduling -> archived */
 export const PHASES: LineupStatusDto[] = [
   'building',
   'voting',
-  'scheduling',
   'decided',
+  'scheduling',
   'archived',
 ];
 

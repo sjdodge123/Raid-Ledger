@@ -284,17 +284,17 @@ function describeLineupsService() {
       expect(result.votingDeadline).toBe(new Date(deadline).toISOString());
     });
 
-    it('should transition scheduling → decided with decidedGameId', async () => {
-      const schedulingLineup = { ...mockLineup, status: 'scheduling' };
+    it('should transition voting → decided with decidedGameId', async () => {
+      const votingLineup = { ...mockLineup, status: 'voting' };
       // findLineupById
-      mockSelects(makeSelectChain({ limitResult: [schedulingLineup] }));
+      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
       // validateDecidedGame — entry with gameId 5
       mockSelects(makeSelectChain({ whereResult: [{ gameId: 5 }] }));
       mockUpdate();
       // findGameName for activity log
       mockSelects(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
       mockBuildDetail({
-        ...schedulingLineup,
+        ...votingLineup,
         status: 'decided',
         decidedGameId: 5,
       });
@@ -307,11 +307,11 @@ function describeLineupsService() {
       expect(result.status).toBe('decided');
     });
 
-    it('should transition decided → archived', async () => {
-      const decidedLineup = { ...mockLineup, status: 'decided' };
-      mockSelects(makeSelectChain({ limitResult: [decidedLineup] }));
+    it('should transition scheduling → archived', async () => {
+      const schedulingLineup = { ...mockLineup, status: 'scheduling' };
+      mockSelects(makeSelectChain({ limitResult: [schedulingLineup] }));
       mockUpdate();
-      mockBuildDetail({ ...decidedLineup, status: 'archived' });
+      mockBuildDetail({ ...schedulingLineup, status: 'archived' });
 
       const result = await service.transitionStatus(1, { status: 'archived' });
 
@@ -345,7 +345,7 @@ function describeLineupsService() {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should allow voting → scheduling (force-advance)', async () => {
+    it('should allow voting → decided (forward advance)', async () => {
       const votingLineup = { ...mockLineup, status: 'voting' };
       // findLineupById
       mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
@@ -358,7 +358,7 @@ function describeLineupsService() {
       // buildDetailResponse chain (findLineupById + enrichment queries)
       mockSelects(
         makeSelectChain({
-          limitResult: [{ ...votingLineup, status: 'scheduling' }],
+          limitResult: [{ ...votingLineup, status: 'decided' }],
         }),
       );
       mockSelects(makeSelectChain({ whereResult: [] })); // entries
@@ -372,9 +372,9 @@ function describeLineupsService() {
       mockSelects(makeSelectChain({ whereResult: [{ count: 10 }] })); // totalMembers
 
       const result = await service.transitionStatus(1, {
-        status: 'scheduling',
+        status: 'decided',
       });
-      expect(result.status).toBe('scheduling');
+      expect(result.status).toBe('decided');
     });
 
     it('should throw BadRequestException if decidedGameId not in entries', async () => {
