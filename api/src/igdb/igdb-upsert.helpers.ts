@@ -39,13 +39,15 @@ function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
 
 /**
  * Upsert a single game row into the database.
- * @param db - Database connection
- * @param row - Mapped database row
+ * If a game with the same steamAppId already exists (e.g., from ITAD)
+ * but has no igdbId, merge IGDB data into that row instead of inserting
+ * a duplicate (ROK-986).
  */
 export async function upsertSingleGameRow(
   db: PostgresJsDatabase<typeof schema>,
   row: ReturnType<typeof mapApiGameToDbRow>,
 ): Promise<void> {
+  if (row.steamAppId && (await mergeBysteamAppId(db, row))) return;
   await db
     .insert(schema.games)
     .values(row)
@@ -53,6 +55,37 @@ export async function upsertSingleGameRow(
       target: schema.games.igdbId,
       set: buildUpsertSet(row),
     });
+}
+
+/** Merge IGDB data into an existing ITAD-sourced game by steamAppId. */
+async function mergeBysteamAppId(
+  db: PostgresJsDatabase<typeof schema>,
+  row: ReturnType<typeof mapApiGameToDbRow>,
+): Promise<boolean> {
+  const [existing] = await db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(
+      and(
+        eq(schema.games.steamAppId, row.steamAppId!),
+        isNull(schema.games.igdbId),
+      ),
+    )
+    .limit(1);
+  if (!existing) return false;
+  await db
+    .update(schema.games)
+    .set({
+      ...buildUpsertSet(row),
+      igdbId: row.igdbId,
+      igdbEnrichmentStatus: 'enriched',
+      igdbEnrichmentRetryCount: 0,
+    })
+    .where(eq(schema.games.id, existing.id));
+  logger.log(
+    `Merged IGDB ${row.igdbId} into existing game ${existing.id} by steamAppId`,
+  );
+  return true;
 }
 
 /** Filter out banned games from API results. */
