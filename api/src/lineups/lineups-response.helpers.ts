@@ -63,6 +63,7 @@ function mapEntry(
     itadCurrentCut: pricing?.itadCurrentCut ?? null,
     itadCurrentShop: pricing?.itadCurrentShop ?? null,
     itadCurrentUrl: pricing?.itadCurrentUrl ?? null,
+    playerCount: e.playerCount ?? null,
   };
 }
 

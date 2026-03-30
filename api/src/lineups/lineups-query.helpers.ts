@@ -46,6 +46,7 @@ export function findEntriesWithGames(
       note: schema.communityLineupEntries.note,
       carriedOverFrom: schema.communityLineupEntries.carriedOverFrom,
       createdAt: schema.communityLineupEntries.createdAt,
+      playerCount: schema.games.playerCount,
     })
     .from(schema.communityLineupEntries)
     .innerJoin(

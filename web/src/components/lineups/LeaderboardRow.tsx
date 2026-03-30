@@ -41,7 +41,7 @@ function RowInfo({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
     <div className="flex-1 min-w-0">
       <Link to={`/games/${entry.gameId}`} onClick={(e) => e.stopPropagation()} className="text-foreground font-semibold text-sm truncate hover:text-emerald-400 transition-colors block">{entry.gameName}</Link>
       <div className="mt-0.5" onClick={(e) => e.stopPropagation()}>
-        <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} />
+        <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} playerCount={entry.playerCount} />
       </div>
     </div>
   );
