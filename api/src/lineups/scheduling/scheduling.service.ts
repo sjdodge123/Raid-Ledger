@@ -15,7 +15,7 @@ import type {
   SchedulePollPageResponseDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
-  RosterAvailabilityResponse,
+  AggregateGameTimeResponse,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -145,7 +145,7 @@ export class SchedulingService {
   /** Get heatmap availability data for a match's members. */
   async getMatchAvailability(
     matchId: number,
-  ): Promise<RosterAvailabilityResponse> {
+  ): Promise<AggregateGameTimeResponse> {
     const members = await findMatchMembers(this.db, [matchId]);
     const userIds = members.map((m) => m.userId);
     return buildSchedulingAvailability(this.db, userIds, matchId);

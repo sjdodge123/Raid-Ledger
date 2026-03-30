@@ -24,7 +24,7 @@ import {
   type SchedulePollPageResponseDto,
   type SchedulingBannerDto,
   type OtherPollsResponseDto,
-  type RosterAvailabilityResponse,
+  type AggregateGameTimeResponse,
 } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../../auth/optional-jwt.guard';
 import { SchedulingService } from './scheduling.service';
@@ -127,7 +127,7 @@ export class SchedulingController {
   @UseGuards(AuthGuard('jwt'))
   async getMatchAvailability(
     @Param('matchId', ParseIntPipe) matchId: number,
-  ): Promise<RosterAvailabilityResponse> {
+  ): Promise<AggregateGameTimeResponse> {
     return this.schedulingService.getMatchAvailability(matchId);
   }
 

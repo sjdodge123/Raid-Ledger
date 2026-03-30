@@ -1,13 +1,14 @@
 /**
  * Availability heatmap wrapper for the scheduling poll page (ROK-965).
- * Wraps the existing HeatmapGrid component with scheduling-specific test IDs.
+ * Uses GameTimeGrid with heatmapOverlay to show group availability
+ * in the same weekly day×hour grid as the reschedule feature.
  */
 import type { JSX } from 'react';
-import type { RosterAvailabilityResponse } from '@raid-ledger/contract';
-import { HeatmapGrid } from '../../components/features/heatmap/HeatmapGrid';
+import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
+import { GameTimeGrid } from '../../components/features/game-time';
 
 interface AvailabilityHeatmapSectionProps {
-  data: RosterAvailabilityResponse | undefined;
+  data: AggregateGameTimeResponse | undefined;
   isLoading: boolean;
 }
 
@@ -22,23 +23,29 @@ function HeatmapSkeleton(): JSX.Element {
 }
 
 /**
- * Section rendering the availability heatmap for match members.
- * Wraps HeatmapGrid with the data-testid attributes expected by smoke tests.
+ * Section rendering the weekly availability grid for match members.
+ * Uses GameTimeGrid's heatmapOverlay prop for color-intensity cells.
  */
 export function AvailabilityHeatmapSection({
   data,
   isLoading,
 }: AvailabilityHeatmapSectionProps): JSX.Element | null {
   if (isLoading) return <HeatmapSkeleton />;
-  if (!data) return null;
+  if (!data || data.cells.length === 0) return null;
 
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
-        Availability
+        Group Availability
       </h3>
       <div data-testid="heatmap-grid">
-        <HeatmapGrid data={data} />
+        <GameTimeGrid
+          slots={[]}
+          readOnly
+          heatmapOverlay={data.cells}
+          compact
+          noStickyOffset
+        />
       </div>
     </div>
   );

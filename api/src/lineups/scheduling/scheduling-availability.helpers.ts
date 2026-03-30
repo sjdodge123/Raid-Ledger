@@ -1,11 +1,12 @@
 /**
  * Availability helpers for scheduling poll heatmap (ROK-965).
- * Builds heatmap-compatible data from game time templates for match members.
+ * Builds aggregate game-time cells from templates for match members.
+ * Returns AggregateGameTimeResponse shape for GameTimeGrid's heatmapOverlay.
  */
 import { inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import type { RosterAvailabilityResponse } from '@raid-ledger/contract';
+import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -13,29 +14,6 @@ interface TemplateRow {
   userId: number;
   dayOfWeek: number;
   startHour: number;
-}
-
-/** Map a day + hour into an ISO datetime slot for a reference week. */
-function buildSlotFromTemplate(
-  t: TemplateRow,
-  refMonday: Date,
-): { start: string; end: string } {
-  const d = new Date(refMonday);
-  d.setDate(d.getDate() + t.dayOfWeek);
-  d.setHours(t.startHour, 0, 0, 0);
-  const end = new Date(d.getTime() + 60 * 60 * 1000);
-  return { start: d.toISOString(), end: end.toISOString() };
-}
-
-/** Get the Monday of the current week (UTC). */
-function getCurrentMonday(): Date {
-  const now = new Date();
-  const day = now.getUTCDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setUTCDate(monday.getUTCDate() + offset);
-  monday.setUTCHours(0, 0, 0, 0);
-  return monday;
 }
 
 /** Fetch game time templates for given user IDs. */
@@ -54,66 +32,40 @@ async function fetchTemplates(
     .where(inArray(schema.gameTimeTemplates.userId, userIds));
 }
 
-/** Fetch user info for given IDs. */
-async function fetchUsers(db: Db, userIds: number[]) {
-  if (userIds.length === 0) return [];
-  return db
-    .select({
-      id: schema.users.id,
-      username: schema.users.username,
-      avatar: schema.users.avatar,
-      discordId: schema.users.discordId,
-      customAvatarUrl: schema.users.customAvatarUrl,
-    })
-    .from(schema.users)
-    .where(inArray(schema.users.id, userIds));
+/** Aggregate templates into day×hour cells with counts. */
+function aggregateToCells(
+  templates: TemplateRow[],
+  totalUsers: number,
+): AggregateGameTimeResponse['cells'] {
+  const cellMap = new Map<string, number>();
+  for (const t of templates) {
+    const key = `${t.dayOfWeek}:${t.startHour}`;
+    cellMap.set(key, (cellMap.get(key) ?? 0) + 1);
+  }
+  return Array.from(cellMap.entries()).map(([key, count]) => {
+    const [day, hour] = key.split(':').map(Number);
+    return {
+      dayOfWeek: day,
+      hour,
+      availableCount: count,
+      totalCount: totalUsers,
+    };
+  });
 }
 
 /**
- * Build heatmap-compatible availability from game time templates.
- * Uses a synthetic "reference week" time range so the HeatmapGrid
- * can render day-of-week x hour cells.
+ * Build aggregate game-time availability for match members.
+ * Returns shape compatible with GameTimeGrid's heatmapOverlay prop.
  */
 export async function buildSchedulingAvailability(
   db: Db,
   memberUserIds: number[],
   matchId: number,
-): Promise<RosterAvailabilityResponse> {
-  const refMonday = getCurrentMonday();
-  const refEnd = new Date(refMonday);
-  refEnd.setDate(refEnd.getDate() + 7);
-
-  const timeRange = {
-    start: refMonday.toISOString(),
-    end: refEnd.toISOString(),
-  };
-
+): Promise<AggregateGameTimeResponse> {
   if (memberUserIds.length === 0) {
-    return { eventId: matchId, timeRange, users: [] };
+    return { eventId: matchId, totalUsers: 0, cells: [] };
   }
-
-  const [templates, userRows] = await Promise.all([
-    fetchTemplates(db, memberUserIds),
-    fetchUsers(db, memberUserIds),
-  ]);
-
-  const templatesByUser = new Map<number, TemplateRow[]>();
-  for (const t of templates) {
-    const existing = templatesByUser.get(t.userId) ?? [];
-    existing.push(t);
-    templatesByUser.set(t.userId, existing);
-  }
-
-  const users = userRows.map((u) => {
-    const userTemplates = templatesByUser.get(u.id) ?? [];
-    const slots = userTemplates.map((t) => ({
-      ...buildSlotFromTemplate(t, refMonday),
-      status: 'available' as const,
-      gameId: null,
-      sourceEventId: null,
-    }));
-    return { ...u, slots };
-  });
-
-  return { eventId: matchId, timeRange, users };
+  const templates = await fetchTemplates(db, memberUserIds);
+  const cells = aggregateToCells(templates, memberUserIds.length);
+  return { eventId: matchId, totalUsers: memberUserIds.length, cells };
 }
