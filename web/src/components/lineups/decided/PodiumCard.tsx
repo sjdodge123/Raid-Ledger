@@ -34,34 +34,26 @@ const RANK_CONFIG: Record<number, { label: string; border: string; badge: string
 /** Laurel wreath SVG that frames the champion card. */
 function LaurelWreath(): JSX.Element {
   return (
-    <div className="absolute -inset-4 pointer-events-none z-30" data-testid="crown-icon">
-      <svg viewBox="0 0 200 200" className="w-full h-full opacity-70" fill="none">
-        {/* Left branch */}
-        <path d="M30 170 C30 130, 15 110, 20 80 C22 65, 30 55, 25 40 C23 30, 28 20, 35 15" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
-        <path d="M30 150 C20 140, 12 130, 15 115" stroke="#fbbf24" strokeWidth="1.5" />
-        <path d="M28 130 C18 120, 10 112, 14 97" stroke="#fbbf24" strokeWidth="1.5" />
-        <path d="M25 110 C15 100, 10 90, 16 78" stroke="#fbbf24" strokeWidth="1.5" />
-        <path d="M24 90 C16 82, 14 72, 20 60" stroke="#fbbf24" strokeWidth="1.5" />
-        <path d="M25 70 C18 62, 18 52, 24 42" stroke="#fbbf24" strokeWidth="1.5" />
-        {/* Left leaves */}
-        <ellipse cx="14" cy="122" rx="8" ry="4" transform="rotate(-30 14 122)" fill="#fbbf24" opacity="0.4" />
-        <ellipse cx="12" cy="102" rx="8" ry="4" transform="rotate(-25 12 102)" fill="#fbbf24" opacity="0.4" />
-        <ellipse cx="14" cy="82" rx="7" ry="3.5" transform="rotate(-20 14 82)" fill="#fbbf24" opacity="0.4" />
-        <ellipse cx="18" cy="62" rx="7" ry="3.5" transform="rotate(-15 18 62)" fill="#fbbf24" opacity="0.4" />
-        <ellipse cx="22" cy="45" rx="6" ry="3" transform="rotate(-10 22 45)" fill="#fbbf24" opacity="0.4" />
-        {/* Right branch */}
-        <path d="M170 170 C170 130, 185 110, 180 80 C178 65, 170 55, 175 40 C177 30, 172 20, 165 15" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
-        <path d="M170 150 C180 140, 188 130, 185 115" stroke="#fbbf24" strokeWidth="1.5" />
-        <path d="M172 130 C182 120, 190 112, 186 97" stroke="#fbbf24" strokeWidth="1.5" />
-        <path d="M175 110 C185 100, 190 90, 184 78" stroke="#fbbf24" strokeWidth="1.5" />
-        <path d="M176 90 C184 82, 186 72, 180 60" stroke="#fbbf24" strokeWidth="1.5" />
-        <path d="M175 70 C182 62, 182 52, 176 42" stroke="#fbbf24" strokeWidth="1.5" />
-        {/* Right leaves */}
-        <ellipse cx="186" cy="122" rx="8" ry="4" transform="rotate(30 186 122)" fill="#fbbf24" opacity="0.4" />
-        <ellipse cx="188" cy="102" rx="8" ry="4" transform="rotate(25 188 102)" fill="#fbbf24" opacity="0.4" />
-        <ellipse cx="186" cy="82" rx="7" ry="3.5" transform="rotate(20 186 82)" fill="#fbbf24" opacity="0.4" />
-        <ellipse cx="182" cy="62" rx="7" ry="3.5" transform="rotate(15 182 62)" fill="#fbbf24" opacity="0.4" />
-        <ellipse cx="178" cy="45" rx="6" ry="3" transform="rotate(10 178 45)" fill="#fbbf24" opacity="0.4" />
+    <div className="absolute -inset-5 pointer-events-none z-30" data-testid="crown-icon">
+      <svg viewBox="0 0 220 220" className="w-full h-full opacity-70" fill="none">
+        {/* Left branch — hugs the left edge */}
+        <path d="M12 190 C8 150, 4 120, 6 90 C7 70, 5 50, 10 30 C12 22, 18 15, 28 10" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" />
+        {/* Left leaves — pointing inward from the edge */}
+        <ellipse cx="4" cy="165" rx="10" ry="4" transform="rotate(-50 4 165)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="2" cy="140" rx="10" ry="4" transform="rotate(-45 2 140)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="2" cy="115" rx="9" ry="3.5" transform="rotate(-40 2 115)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="3" cy="90" rx="9" ry="3.5" transform="rotate(-35 3 90)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="5" cy="65" rx="8" ry="3" transform="rotate(-30 5 65)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="8" cy="42" rx="7" ry="3" transform="rotate(-20 8 42)" fill="#fbbf24" opacity="0.5" />
+        {/* Right branch — hugs the right edge */}
+        <path d="M208 190 C212 150, 216 120, 214 90 C213 70, 215 50, 210 30 C208 22, 202 15, 192 10" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" />
+        {/* Right leaves — pointing inward from the edge */}
+        <ellipse cx="216" cy="165" rx="10" ry="4" transform="rotate(50 216 165)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="218" cy="140" rx="10" ry="4" transform="rotate(45 218 140)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="218" cy="115" rx="9" ry="3.5" transform="rotate(40 218 115)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="217" cy="90" rx="9" ry="3.5" transform="rotate(35 217 90)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="215" cy="65" rx="8" ry="3" transform="rotate(30 215 65)" fill="#fbbf24" opacity="0.5" />
+        <ellipse cx="212" cy="42" rx="7" ry="3" transform="rotate(20 212 42)" fill="#fbbf24" opacity="0.5" />
       </svg>
     </div>
   );
