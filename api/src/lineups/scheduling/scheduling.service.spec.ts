@@ -117,6 +117,30 @@ describe('SchedulingService', () => {
       );
     });
 
+    it('sets recurrence.until to exactly 28 days after slot time', async () => {
+      const slotTime = '2026-04-01T19:00:00.000Z';
+      const FOUR_WEEKS_MS = 4 * 7 * 24 * 60 * 60 * 1000;
+      const expectedUntil = new Date(
+        new Date(slotTime).getTime() + FOUR_WEEKS_MS,
+      ).toISOString();
+
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 10, lineupId: 1, gameId: 5, linkedEventId: null },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 20, matchId: 10, proposedTime: slotTime },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        { name: 'Test Game', coverUrl: null },
+      ]);
+      mockEventsService.create.mockResolvedValueOnce({ id: 102 });
+
+      await service.createEventFromSlot(10, 20, 1, true);
+
+      const dto = mockEventsService.create.mock.calls[0][1];
+      expect(dto.recurrence.until).toBe(expectedUntil);
+    });
+
     it('does not pass recurrence when recurring is false', async () => {
       const slotTime = '2026-04-01T19:00:00.000Z';
       mockDb.limit.mockResolvedValueOnce([
@@ -135,6 +159,55 @@ describe('SchedulingService', () => {
       const createArg = mockEventsService.create.mock.calls[0][1];
       expect(createArg.recurrence).toBeUndefined();
     });
+
+    it('omits recurrence when recurring param is not provided (default)', async () => {
+      const slotTime = '2026-04-01T19:00:00.000Z';
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 10, lineupId: 1, gameId: 5, linkedEventId: null },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 20, matchId: 10, proposedTime: slotTime },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        { name: 'Test Game', coverUrl: null },
+      ]);
+      mockEventsService.create.mockResolvedValueOnce({ id: 103 });
+
+      await service.createEventFromSlot(10, 20, 1);
+
+      const dto = mockEventsService.create.mock.calls[0][1];
+      expect(dto.recurrence).toBeUndefined();
+    });
+
+    it('returns the created event id', async () => {
+      const slotTime = '2026-04-01T19:00:00.000Z';
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 10, lineupId: 1, gameId: 5, linkedEventId: null },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 20, matchId: 10, proposedTime: slotTime },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        { name: 'Test Game', coverUrl: null },
+      ]);
+      mockEventsService.create.mockResolvedValueOnce({ id: 200 });
+
+      const result = await service.createEventFromSlot(10, 20, 1);
+
+      expect(result).toEqual({ eventId: expect.any(Number) });
+    });
+
+    it('throws NotFoundException when slot does not exist', async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 10, lineupId: 1, gameId: 5, linkedEventId: null },
+      ]);
+      // slot lookup returns empty
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      await expect(
+        service.createEventFromSlot(10, 999, 1),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('retractAllVotes', () => {
@@ -144,6 +217,14 @@ describe('SchedulingService', () => {
       await service.retractAllVotes(10, 1);
 
       expect(mockDb.delete).toHaveBeenCalled();
+    });
+
+    it('returns void without errors', async () => {
+      mockDb.where.mockResolvedValueOnce([]);
+
+      const result = await service.retractAllVotes(10, 42);
+
+      expect(result).toBeUndefined();
     });
   });
 });
