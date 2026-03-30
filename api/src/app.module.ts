@@ -79,8 +79,8 @@ import { SchedulingModule } from './lineups/scheduling/scheduling.module';
     ItadModule,
     LogsModule,
     AiModule,
-    LineupsModule,
     SchedulingModule,
+    LineupsModule,
   ],
   controllers: [AppController],
   providers: [
