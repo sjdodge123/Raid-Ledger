@@ -47,10 +47,22 @@ export async function createEventFromSlot(
   lineupId: number,
   matchId: number,
   slotId: number,
+  recurring?: boolean,
 ): Promise<{ eventId: number }> {
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/create-event`,
-    { method: 'POST', body: JSON.stringify({ slotId }) },
+    { method: 'POST', body: JSON.stringify({ slotId, recurring }) },
+  );
+}
+
+/** Retract all votes for a match. */
+export async function retractAllVotes(
+  lineupId: number,
+  matchId: number,
+): Promise<void> {
+  return fetchApi(
+    `/lineups/${lineupId}/schedule/${matchId}/votes`,
+    { method: 'DELETE' },
   );
 }
 

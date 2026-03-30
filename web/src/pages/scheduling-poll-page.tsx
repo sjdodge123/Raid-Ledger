@@ -82,12 +82,13 @@ function PollSections({ lineupId, matchId, poll }: {
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
   const { toggleVote, suggest, isSuggesting, createEvt } = usePollMutations(lineupId, matchId);
   const [createdEventId, setCreatedEventId] = useState<number | null>(poll.match.linkedEventId ?? null);
+  const [recurring, setRecurring] = useState(false);
   const { readOnly, hasVoted } = derivePollState(poll);
 
   const handleCreate = (): void => {
     if (poll.slots.length === 0) return;
     const sorted = [...poll.slots].sort((a, b) => b.votes.length - a.votes.length);
-    createEvt.mutate({ lineupId, matchId, slotId: sorted[0].id },
+    createEvt.mutate({ lineupId, matchId, slotId: sorted[0].id, recurring },
       { onSuccess: (r) => setCreatedEventId(r.eventId) });
   };
 
@@ -101,7 +102,8 @@ function PollSections({ lineupId, matchId, poll }: {
       <AvailabilityHeatmapSection data={availability} isLoading={availLoading} />
       <CreateEventSection slots={poll.slots} hasVoted={hasVoted} readOnly={readOnly}
         createdEventId={createdEventId} matchStatus={poll.match.status}
-        isCreating={createEvt.isPending} onCreateEvent={handleCreate} />
+        isCreating={createEvt.isPending} recurring={recurring}
+        onRecurringChange={setRecurring} onCreateEvent={handleCreate} />
       <OtherPollsSection lineupId={lineupId} data={otherPolls} isLoading={otherLoading} />
     </div>
   );

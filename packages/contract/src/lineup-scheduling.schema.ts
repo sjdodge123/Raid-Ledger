@@ -25,6 +25,8 @@ export type ToggleScheduleVoteDto = z.infer<typeof ToggleScheduleVoteSchema>;
 /** Body for creating an event from a selected slot. */
 export const CreateEventFromSlotSchema = z.object({
   slotId: z.number().int().positive(),
+  /** When true, creates a weekly recurring series for 4 weeks. */
+  recurring: z.boolean().optional().default(false),
 });
 
 export type CreateEventFromSlotDto = z.infer<typeof CreateEventFromSlotSchema>;

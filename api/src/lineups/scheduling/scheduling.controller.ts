@@ -4,6 +4,7 @@
  */
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Param,
@@ -106,7 +107,19 @@ export class SchedulingController {
       matchId,
       parsed.data.slotId,
       req.user!.id,
+      parsed.data.recurring,
     );
+  }
+
+  /** DELETE /lineups/:lineupId/schedule/:matchId/votes — retract all votes. */
+  @Delete(':lineupId/schedule/:matchId/votes')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async retractAllVotes(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Req() req: AuthRequest,
+  ): Promise<void> {
+    await this.schedulingService.retractAllVotes(matchId, req.user!.id);
   }
 
   /** GET /lineups/:lineupId/schedule/:matchId/availability — heatmap data. */
