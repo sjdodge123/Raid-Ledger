@@ -148,9 +148,7 @@ describe('downloadAndExtractBinary', () => {
   it('skips runner lib install when lib/ollama is absent', async () => {
     mockSuccessfulDownload();
     mockTarSuccess();
-    mockExistsSync.mockImplementation((p: string) =>
-      p.includes('bin/ollama'),
-    );
+    mockExistsSync.mockImplementation((p: string) => p.includes('bin/ollama'));
 
     await downloadAndExtractBinary(
       'https://example.com/ollama.tar.zst',
