@@ -16,17 +16,21 @@ import { NotificationDedupService } from '../notifications/notification-dedup.se
  * Mock user rows returned by findNudgeRecipients-style queries.
  * Shape: { id, discordId, steamId, displayName }
  */
-function makeUser(overrides: Partial<{
-  id: number;
-  discordId: string | null;
-  steamId: string | null;
-  displayName: string;
-}> = {}) {
+function makeUser(
+  overrides: Partial<{
+    id: number;
+    discordId: string | null;
+    steamId: string | null;
+    displayName: string;
+  }> = {},
+) {
   return {
-    id: overrides.id ?? 1,
-    discordId: overrides.discordId ?? '111222333',
-    steamId: overrides.steamId ?? null,
-    displayName: overrides.displayName ?? 'TestUser',
+    id: overrides.id === undefined ? 1 : overrides.id,
+    discordId:
+      overrides.discordId === undefined ? '111222333' : overrides.discordId,
+    steamId: overrides.steamId === undefined ? null : overrides.steamId,
+    displayName:
+      overrides.displayName === undefined ? 'TestUser' : overrides.displayName,
   };
 }
 
@@ -86,7 +90,11 @@ describe('LineupSteamNudgeService', () => {
 
     it('skips users who already have Steam linked', async () => {
       const users = [
-        makeUser({ id: 10, discordId: 'disc-10', steamId: '76561198000000001' }),
+        makeUser({
+          id: 10,
+          discordId: 'disc-10',
+          steamId: '76561198000000001',
+        }),
       ];
       mockDb.execute.mockResolvedValueOnce(users);
 
@@ -96,9 +104,7 @@ describe('LineupSteamNudgeService', () => {
     });
 
     it('skips users without Discord (cannot DM them)', async () => {
-      const users = [
-        makeUser({ id: 10, discordId: null, steamId: null }),
-      ];
+      const users = [makeUser({ id: 10, discordId: null, steamId: null })];
       mockDb.execute.mockResolvedValueOnce(users);
 
       await service.nudgeUnlinkedMembers(42);
@@ -107,9 +113,7 @@ describe('LineupSteamNudgeService', () => {
     });
 
     it('uses permanent dedup key per lineup+user to prevent duplicates', async () => {
-      const users = [
-        makeUser({ id: 10, discordId: 'disc-10', steamId: null }),
-      ];
+      const users = [makeUser({ id: 10, discordId: 'disc-10', steamId: null })];
       mockDb.execute.mockResolvedValueOnce(users);
 
       await service.nudgeUnlinkedMembers(42);
@@ -121,9 +125,7 @@ describe('LineupSteamNudgeService', () => {
     });
 
     it('skips notification when dedup indicates already sent', async () => {
-      const users = [
-        makeUser({ id: 10, discordId: 'disc-10', steamId: null }),
-      ];
+      const users = [makeUser({ id: 10, discordId: 'disc-10', steamId: null })];
       mockDb.execute.mockResolvedValueOnce(users);
       mockDedupService.checkAndMarkSent.mockResolvedValueOnce(true);
 

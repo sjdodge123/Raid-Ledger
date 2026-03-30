@@ -24,6 +24,7 @@ import type { LineupStatus } from '../drizzle/schema';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import {
   findActiveLineup,
   findLineupById,
@@ -86,6 +87,7 @@ export class LineupsService {
     private readonly activityLog: ActivityLogService,
     private readonly settings: SettingsService,
     private readonly phaseQueue: LineupPhaseQueueService,
+    private readonly steamNudge: LineupSteamNudgeService,
   ) {}
 
   /** Create a new lineup. Throws 409 if an active lineup already exists. */
@@ -103,6 +105,7 @@ export class LineupsService {
       overrides,
     );
     void this.activityLog.log('lineup', row.id, 'lineup_created', userId);
+    void this.steamNudge.nudgeUnlinkedMembers(row.id);
     await carryOverFromLastDecided(this.db, row.id);
 
     const delayMs = phaseDeadline.getTime() - Date.now();
