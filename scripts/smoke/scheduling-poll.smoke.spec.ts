@@ -494,6 +494,41 @@ test.describe('Scheduling poll Create Event button', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Recurring event checkbox (ROK-965 coverage gap)
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll recurring checkbox', () => {
+    test('recurring checkbox exists, is unchecked by default, and can be toggled', async ({
+        page,
+    }) => {
+        await page.goto(
+            `/community-lineup/${lineupId}/schedule/${matchId}`,
+        );
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
+
+        // The recurring checkbox should be present on the page
+        const recurringCheckbox = page.getByRole('checkbox', {
+            name: /Repeat weekly|recurring/i,
+        });
+        await expect(recurringCheckbox).toBeVisible({ timeout: 15_000 });
+
+        // It should be unchecked by default
+        await expect(recurringCheckbox).not.toBeChecked();
+
+        // Toggle it on
+        await recurringCheckbox.check();
+        await expect(recurringCheckbox).toBeChecked();
+
+        // Toggle it off
+        await recurringCheckbox.uncheck();
+        await expect(recurringCheckbox).not.toBeChecked();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // AC8: One-click event creation and success state
 // ---------------------------------------------------------------------------
 
