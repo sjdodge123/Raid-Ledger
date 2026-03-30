@@ -9,19 +9,21 @@ import { useSystemStatus } from '../hooks/use-system-status';
 import { toast } from '../lib/toast';
 import { isDiscordLinked } from '../lib/avatar';
 import { ConnectStep } from '../components/onboarding/connect-step';
+import { SteamStep } from '../components/onboarding/steam-step';
 import { DiscordJoinStep } from '../components/onboarding/discord-join-step';
 import { GamesStep } from '../components/onboarding/games-step';
 import { CharacterStep } from '../components/onboarding/character-step';
 import { GameTimeStep } from '../components/onboarding/gametime-step';
 import { AvatarThemeStep } from '../components/onboarding/avatar-theme-step';
 import { useGuildMembership } from '../hooks/use-discord-onboarding';
+import { useSteamLink } from '../hooks/use-steam-link';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 import type { StepDef } from './onboarding-wizard/onboarding-types';
 import { OnboardingBreadcrumbs } from './onboarding-wizard/OnboardingBreadcrumbs';
 
-/** Determines which conditional steps are needed based on user/discord state */
+/** Determines which conditional steps are needed based on user/discord/steam state */
 function useConditionalStepFlags(user: { discordId: string } | null): {
-    needsConnect: boolean; needsDiscordJoin: boolean;
+    needsConnect: boolean; needsDiscordJoin: boolean; needsSteamConnect: boolean;
 } {
     const { data: systemStatus } = useSystemStatus();
     const discordConfigured = systemStatus?.discordConfigured ?? false;
@@ -41,7 +43,14 @@ function useConditionalStepFlags(user: { discordId: string } | null): {
         return !guildMembership.isMember;
     }, [discordConfigured, user, guildMembership]);
 
-    return { needsConnect, needsDiscordJoin };
+    const { steamStatus } = useSteamLink();
+    const needsSteamConnect = useMemo(() => {
+        if (!systemStatus?.steamConfigured) return false;
+        if (steamStatus.isLoading) return false;
+        return steamStatus.data?.linked !== true;
+    }, [systemStatus?.steamConfigured, steamStatus.isLoading, steamStatus.data?.linked]);
+
+    return { needsConnect, needsDiscordJoin, needsSteamConnect };
 }
 
 /** Resolves hearted games against the game registry to find qualifying games */
@@ -60,11 +69,12 @@ function useQualifyingGames(userId: number | undefined): GameRegistryDto[] {
 
 /** Builds the ordered list of wizard steps from flags and qualifying games */
 function buildSteps(
-    needsConnect: boolean, needsDiscordJoin: boolean,
+    needsConnect: boolean, needsDiscordJoin: boolean, needsSteamConnect: boolean,
     qualifyingGames: GameRegistryDto[], extraCharCounts: Record<string, number>,
 ): StepDef[] {
     const s: StepDef[] = [];
     if (needsConnect) s.push({ key: 'connect', label: 'Connect' });
+    if (needsSteamConnect) s.push({ key: 'steam-connect', label: 'Steam' });
     s.push({ key: 'games', label: 'Games' });
     qualifyingGames.forEach((game) => {
         const total = 1 + (extraCharCounts[game.id] ?? 0);
@@ -168,15 +178,15 @@ export function OnboardingWizardPage(): JSX.Element | null {
     const { user } = useAuth();
     const completeOnboarding = useCompleteOnboardingFte();
     const isRerun = searchParams.get('rerun') === '1';
-    const { needsConnect, needsDiscordJoin } = useConditionalStepFlags(user ?? null);
+    const { needsConnect, needsDiscordJoin, needsSteamConnect } = useConditionalStepFlags(user ?? null);
     const qualifyingGames = useQualifyingGames(user?.id);
     const [currentStep, setCurrentStep] = useState(0);
     const [extraCharCounts, setExtraCharCounts] = useState<Record<string, number>>({});
     const stepValidatorRef = useRef<(() => boolean) | null>(null);
 
     const steps = useMemo(
-        () => buildSteps(needsConnect, needsDiscordJoin, qualifyingGames, extraCharCounts),
-        [needsConnect, needsDiscordJoin, qualifyingGames, extraCharCounts],
+        () => buildSteps(needsConnect, needsDiscordJoin, needsSteamConnect, qualifyingGames, extraCharCounts),
+        [needsConnect, needsDiscordJoin, needsSteamConnect, qualifyingGames, extraCharCounts],
     );
     const { goNext, goBack } = useNavCallbacks(stepValidatorRef, setCurrentStep, steps.length - 1);
     const { addCharacterStep, removeCharacterStep } = useCharacterStepActions(setExtraCharCounts, setCurrentStep);
@@ -254,6 +264,7 @@ function WizardContent({ currentStepDef, isCharacterStep, stepValidatorRef, addC
     return (
         <div className="flex-1 overflow-y-auto px-6 pb-6">
             {currentStepDef?.key === 'connect' && <ConnectStep />}
+            {currentStepDef?.key === 'steam-connect' && <SteamStep />}
             {currentStepDef?.key === 'discord-join' && <DiscordJoinStep />}
             {currentStepDef?.key === 'games' && <GamesStep />}
             {isCharacterStep && currentStepDef?.registryGame && (

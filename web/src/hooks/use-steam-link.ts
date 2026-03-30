@@ -61,11 +61,20 @@ function useSyncWishlist() {
     });
 }
 
+/** Build the Steam link URL with optional returnTo path. */
+export function getSteamLinkUrl(returnTo?: string): string | null {
+    const token = getAuthToken();
+    if (!token) return null;
+    let url = `${API_BASE_URL}/auth/steam/link?token=${encodeURIComponent(token)}`;
+    if (returnTo) url += `&returnTo=${encodeURIComponent(returnTo)}`;
+    return url;
+}
+
 export function useSteamLink() {
-    const linkSteam = useCallback(() => {
-        const token = getAuthToken();
-        if (!token) { toast.error('Please log in again to link Steam'); return; }
-        window.location.href = `${API_BASE_URL}/auth/steam/link?token=${encodeURIComponent(token)}`;
+    const linkSteam = useCallback((returnTo?: string) => {
+        const url = getSteamLinkUrl(returnTo);
+        if (!url) { toast.error('Please log in again to link Steam'); return; }
+        window.location.href = url;
     }, []);
 
     const steamStatus = useQuery<SteamLinkStatusDto>({
