@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
+import * as crypto from 'crypto';
 import type { Response, Request } from 'express';
 
 function createMockResponse(): Response {
@@ -46,7 +47,6 @@ function extractStateFromRedirect(
     const { data, signature } = JSON.parse(
       Buffer.from(stateParam, 'base64').toString(),
     ) as { data: string; signature: string };
-    const crypto = require('crypto');
     const expected = crypto
       .createHmac('sha256', jwtSecret)
       .update(data)
