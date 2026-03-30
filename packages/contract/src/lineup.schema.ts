@@ -7,12 +7,11 @@ export * from './lineup-match.schema.js';
 // Community Lineup Schemas (ROK-933)
 // ============================================================
 
-/** Valid lineup statuses. Flow: building -> voting -> decided -> scheduling -> archived */
+/** Valid lineup statuses. Flow: building -> voting -> decided -> archived */
 export const LineupStatusSchema = z.enum([
     'building',
     'voting',
     'decided',
-    'scheduling',
     'archived',
 ]);
 

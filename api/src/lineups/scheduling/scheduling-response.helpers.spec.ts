@@ -65,7 +65,7 @@ describe('buildPollResponse', () => {
       baseSlots,
       baseVotes,
       100,
-      'scheduling',
+      'decided',
     );
 
     expect(result.match.gameName).toBe('Elden Ring');
@@ -73,7 +73,7 @@ describe('buildPollResponse', () => {
     expect(result.slots).toHaveLength(1);
     expect(result.slots[0].votes).toHaveLength(1);
     expect(result.myVotedSlotIds).toEqual([20]);
-    expect(result.lineupStatus).toBe('scheduling');
+    expect(result.lineupStatus).toBe('decided');
   });
 
   it('returns empty myVotedSlotIds for unauthenticated user', () => {
@@ -83,7 +83,7 @@ describe('buildPollResponse', () => {
       baseSlots,
       baseVotes,
       null,
-      'scheduling',
+      'decided',
     );
 
     expect(result.myVotedSlotIds).toEqual([]);

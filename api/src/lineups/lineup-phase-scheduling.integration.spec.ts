@@ -179,7 +179,7 @@ function describePhaseScheduling() {
       });
       const lineupId = createRes.body.id as number;
 
-      // Walk through all transitions to archived (voting → decided → scheduling → archived)
+      // Walk through all transitions to archived
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -188,10 +188,6 @@ function describePhaseScheduling() {
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'decided' });
-      await testApp.request
-        .patch(`/lineups/${lineupId}/status`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'scheduling' });
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -352,10 +348,11 @@ function describePhaseScheduling() {
       expect(res.body.phaseDeadline).toBeTruthy();
     });
 
-    it('should allow reverting decided back to voting', async () => {
+    it('should allow reverting archived back to decided', async () => {
       const createRes = await createLineupWithDurations(adminToken, {
         buildingDurationHours: 24,
         votingDurationHours: 48,
+        decidedDurationHours: 24,
       });
       const lineupId = createRes.body.id as number;
 
@@ -367,15 +364,19 @@ function describePhaseScheduling() {
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'decided' });
+      await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'archived' });
 
-      // Revert to voting (one step back)
+      // Revert to decided (one step back)
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'voting' });
+        .send({ status: 'decided' });
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('voting');
+      expect(res.body.status).toBe('decided');
     });
 
     it('should reject skipping phases (building to decided)', async () => {

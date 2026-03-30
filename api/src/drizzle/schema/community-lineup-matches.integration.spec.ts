@@ -30,23 +30,22 @@ import {
 // ---------------------------------------------------------------------------
 // AC: LineupStatusSchema includes 'scheduling'
 // ---------------------------------------------------------------------------
-describe('LineupStatusSchema — scheduling status (ROK-964)', () => {
-  it('accepts "scheduling" as a valid status', () => {
+describe('LineupStatusSchema — scheduling status removed (ROK-965)', () => {
+  it('rejects "scheduling" as a lineup status', () => {
     const result = LineupStatusSchema.safeParse('scheduling');
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
-  it('includes scheduling in the enum options', () => {
+  it('does not include scheduling in the lineup enum options', () => {
     const options = LineupStatusSchema.options;
-    expect(options).toContain('scheduling');
+    expect(options).not.toContain('scheduling');
   });
 
-  it('Drizzle schema status enum includes scheduling', () => {
+  it('Drizzle schema status enum does not include scheduling', () => {
     const columns = getTableColumns(schema.communityLineups);
     const statusCol = columns.status;
     expect(statusCol).toBeDefined();
-    // The enum array should include 'scheduling'
-    expect((statusCol as { enumValues?: string[] }).enumValues).toContain(
+    expect((statusCol as { enumValues?: string[] }).enumValues).not.toContain(
       'scheduling',
     );
   });

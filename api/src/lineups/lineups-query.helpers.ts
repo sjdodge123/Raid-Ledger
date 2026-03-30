@@ -126,8 +126,7 @@ export function findGameName(
 export const VALID_TRANSITIONS: Record<LineupStatus, LineupStatus | null> = {
   building: 'voting',
   voting: 'decided',
-  decided: 'scheduling',
-  scheduling: 'archived',
+  decided: 'archived',
   archived: null,
 };
 
@@ -136,8 +135,7 @@ export const VALID_REVERSIONS: Record<LineupStatus, LineupStatus | null> = {
   building: null,
   voting: 'building',
   decided: 'voting',
-  scheduling: 'decided',
-  archived: 'scheduling',
+  archived: 'decided',
 };
 
 /** Count entries in a lineup (for cap enforcement). */
