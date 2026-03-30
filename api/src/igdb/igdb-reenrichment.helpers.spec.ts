@@ -22,6 +22,7 @@ import type { IgdbApiGame } from './igdb.constants';
 function createReenrichMockDb(
   candidates: {
     id: number;
+    name?: string;
     steamAppId: number;
     igdbEnrichmentRetryCount: number;
   }[],
@@ -69,8 +70,18 @@ describe('reEnrichGamesWithIgdb', () => {
     it('passes filtered candidates to processing — does not include enriched, not_found, or high-retry games', async () => {
       // Only "pending" and "failed" with retry < 3 should appear
       const validCandidates = [
-        { id: 1, steamAppId: 292030, igdbEnrichmentRetryCount: 0 },
-        { id: 2, steamAppId: 578080, igdbEnrichmentRetryCount: 2 },
+        {
+          id: 1,
+          name: 'The Witcher 3',
+          steamAppId: 292030,
+          igdbEnrichmentRetryCount: 0,
+        },
+        {
+          id: 2,
+          name: 'PUBG',
+          steamAppId: 578080,
+          igdbEnrichmentRetryCount: 2,
+        },
       ];
       const mockDb = createReenrichMockDb(validCandidates);
       const mockQueryIgdb = jest
@@ -91,7 +102,12 @@ describe('reEnrichGamesWithIgdb', () => {
   describe('AC: successful IGDB match sets status to enriched, populates IGDB fields, resets retry count', () => {
     it('updates game with IGDB data and sets enriched status on success', async () => {
       const candidates = [
-        { id: 10, steamAppId: 292030, igdbEnrichmentRetryCount: 1 },
+        {
+          id: 10,
+          name: 'The Witcher 3',
+          steamAppId: 292030,
+          igdbEnrichmentRetryCount: 1,
+        },
       ];
       const mockDb = createReenrichMockDb(candidates);
       const igdbGame = makeIgdbApiGame({
@@ -125,7 +141,12 @@ describe('reEnrichGamesWithIgdb', () => {
   describe('AC: IGDB returning 0 results increments retry count; at 3 retries sets status to not_found', () => {
     it('increments retry count when IGDB returns empty results', async () => {
       const candidates = [
-        { id: 20, steamAppId: 999999, igdbEnrichmentRetryCount: 0 },
+        {
+          id: 20,
+          name: 'Unknown Game',
+          steamAppId: 999999,
+          igdbEnrichmentRetryCount: 0,
+        },
       ];
       const mockDb = createReenrichMockDb(candidates);
       const mockQueryIgdb = jest
@@ -147,7 +168,12 @@ describe('reEnrichGamesWithIgdb', () => {
 
     it('sets status to not_found when retry count reaches 3', async () => {
       const candidates = [
-        { id: 21, steamAppId: 888888, igdbEnrichmentRetryCount: 2 },
+        {
+          id: 21,
+          name: 'Old Game',
+          steamAppId: 888888,
+          igdbEnrichmentRetryCount: 2,
+        },
       ];
       const mockDb = createReenrichMockDb(candidates);
       const mockQueryIgdb = jest
@@ -172,7 +198,12 @@ describe('reEnrichGamesWithIgdb', () => {
   describe('AC: IGDB API error increments retry count and sets status to failed', () => {
     it('sets failed status and increments retry on queryIgdb error', async () => {
       const candidates = [
-        { id: 30, steamAppId: 777777, igdbEnrichmentRetryCount: 0 },
+        {
+          id: 30,
+          name: 'Error Game',
+          steamAppId: 777777,
+          igdbEnrichmentRetryCount: 0,
+        },
       ];
       const mockDb = createReenrichMockDb(candidates);
       const mockQueryIgdb = jest
@@ -198,17 +229,39 @@ describe('reEnrichGamesWithIgdb', () => {
   describe('AC: mixed batch — some succeed, some fail — all counts correct', () => {
     it('tracks enriched, failed, and exhausted counts independently', async () => {
       const candidates = [
-        { id: 40, steamAppId: 100, igdbEnrichmentRetryCount: 0 }, // will succeed
-        { id: 41, steamAppId: 200, igdbEnrichmentRetryCount: 0 }, // IGDB returns 0 results
-        { id: 42, steamAppId: 300, igdbEnrichmentRetryCount: 2 }, // IGDB returns 0, exhausted
-        { id: 43, steamAppId: 400, igdbEnrichmentRetryCount: 1 }, // API error
+        {
+          id: 40,
+          name: 'Good Game',
+          steamAppId: 100,
+          igdbEnrichmentRetryCount: 0,
+        }, // will succeed
+        {
+          id: 41,
+          name: 'No Match',
+          steamAppId: 200,
+          igdbEnrichmentRetryCount: 0,
+        }, // IGDB returns 0 results
+        {
+          id: 42,
+          name: 'Exhausted',
+          steamAppId: 300,
+          igdbEnrichmentRetryCount: 2,
+        }, // IGDB returns 0, exhausted
+        {
+          id: 43,
+          name: 'Error Game',
+          steamAppId: 400,
+          igdbEnrichmentRetryCount: 1,
+        }, // API error
       ];
       const mockDb = createReenrichMockDb(candidates);
       const mockQueryIgdb = jest
         .fn<Promise<IgdbApiGame[]>, [string]>()
-        .mockResolvedValueOnce([makeIgdbApiGame({ id: 5001 })]) // game 40: success
-        .mockResolvedValueOnce([]) // game 41: not found
-        .mockResolvedValueOnce([]) // game 42: exhausted (retry 2->3)
+        .mockResolvedValueOnce([makeIgdbApiGame({ id: 5001 })]) // game 40: steam ID match
+        .mockResolvedValueOnce([]) // game 41: steam ID miss
+        .mockResolvedValueOnce([]) // game 41: name fallback miss
+        .mockResolvedValueOnce([]) // game 42: steam ID miss
+        .mockResolvedValueOnce([]) // game 42: name fallback miss (exhausted)
         .mockRejectedValueOnce(new Error('Network error')); // game 43: API error
 
       const result = await reEnrichGamesWithIgdb(
