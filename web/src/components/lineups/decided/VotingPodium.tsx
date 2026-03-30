@@ -1,6 +1,6 @@
 /**
  * Voting podium showing top 3 games in 2nd-1st-3rd layout (ROK-989).
- * Renders "THIS WEEK'S PODIUM" header with sorted entries.
+ * Renders "THIS WEEK'S PODIUM" header with stepped pedestals.
  */
 import { useMemo } from 'react';
 import type { JSX } from 'react';
@@ -32,7 +32,24 @@ function podiumOrder(
   return result;
 }
 
-/** Podium section with "THIS WEEK'S PODIUM" header and top 3 cards. */
+/** Pedestal config per rank: height, gradient, border accent. */
+const PEDESTAL: Record<number, { height: string; gradient: string; border: string; text: string }> = {
+  1: { height: 'h-20', gradient: 'from-yellow-500/30 to-yellow-700/10', border: 'border-yellow-500/40', text: 'text-yellow-400' },
+  2: { height: 'h-14', gradient: 'from-zinc-400/20 to-zinc-600/10', border: 'border-zinc-400/30', text: 'text-zinc-400' },
+  3: { height: 'h-10', gradient: 'from-amber-700/20 to-amber-900/10', border: 'border-amber-700/30', text: 'text-amber-600' },
+};
+
+/** Podium pedestal block beneath a card. */
+function Pedestal({ rank }: { rank: number }): JSX.Element {
+  const p = PEDESTAL[rank] ?? PEDESTAL[3];
+  return (
+    <div className={`${p.height} bg-gradient-to-b ${p.gradient} border-x border-b ${p.border} rounded-b-lg flex items-center justify-center`}>
+      <span className={`text-3xl font-black ${p.text} opacity-60`}>{rank}</span>
+    </div>
+  );
+}
+
+/** Podium section with header, cards, and pedestals. */
 export function VotingPodium({ entries }: VotingPodiumProps): JSX.Element {
   const sorted = useMemo(() => sortByVoteCount(entries), [entries]);
   const top3 = sorted.slice(0, 3);
@@ -43,10 +60,11 @@ export function VotingPodium({ entries }: VotingPodiumProps): JSX.Element {
       <h2 className="text-sm font-bold tracking-widest text-muted uppercase mb-6 text-center">
         THIS WEEK&apos;S PODIUM
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
         {ordered.map(({ entry, rank }) => (
-          <div key={entry.id} className={rank === 1 ? '' : rank === 2 ? 'sm:mt-8' : 'sm:mt-14'}>
+          <div key={entry.id} className="flex flex-col">
             <PodiumCard entry={entry} rank={rank} />
+            <Pedestal rank={rank} />
           </div>
         ))}
       </div>
