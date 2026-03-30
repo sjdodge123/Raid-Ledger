@@ -1,7 +1,8 @@
 /**
  * Create Event section for the scheduling poll page (ROK-965).
- * Shows the leading slot summary, "Create Event" button, and post-creation success state.
+ * User picks a slot, optionally enables recurring, then creates the event.
  */
+import { useState } from 'react';
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
@@ -15,24 +16,41 @@ interface CreateEventSectionProps {
   isCreating: boolean;
   recurring: boolean;
   onRecurringChange: (value: boolean) => void;
-  onCreateEvent: () => void;
+  onCreateEvent: (slotId: number) => void;
 }
 
-/** Display the leading (most-voted) slot summary. */
-function LeadingSlotSummary({ slots }: {
-  slots: ScheduleSlotWithVotesDto[];
-}): JSX.Element | null {
-  if (slots.length === 0) return null;
-  const sorted = [...slots].sort((a, b) => b.votes.length - a.votes.length);
-  const leading = sorted[0];
-  const time = new Date(leading.proposedTime).toLocaleString('en-US', {
+/** Format a slot for display. */
+function formatSlot(slot: ScheduleSlotWithVotesDto): string {
+  const time = new Date(slot.proposedTime).toLocaleString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
   });
+  const votes = slot.votes.length === 1 ? '1 vote' : `${slot.votes.length} votes`;
+  return `${time} (${votes})`;
+}
+
+/** Sort slots by votes descending, then by date ascending. */
+function sortedSlots(slots: ScheduleSlotWithVotesDto[]) {
+  return [...slots].sort((a, b) =>
+    b.votes.length - a.votes.length || new Date(a.proposedTime).getTime() - new Date(b.proposedTime).getTime(),
+  );
+}
+
+/** Slot selector dropdown. */
+function SlotSelector({ slots, selectedId, onChange }: {
+  slots: ScheduleSlotWithVotesDto[]; selectedId: number | null; onChange: (id: number) => void;
+}): JSX.Element {
+  const sorted = sortedSlots(slots);
   return (
-    <p className="text-sm text-muted">
-      Leading time: <span className="text-foreground font-medium">{time}</span>
-      {' '}({leading.votes.length} {leading.votes.length === 1 ? 'vote' : 'votes'})
-    </p>
+    <select
+      value={selectedId ?? ''}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+    >
+      <option value="" disabled>Select a time slot...</option>
+      {sorted.map((slot) => (
+        <option key={slot.id} value={slot.id}>{formatSlot(slot)}</option>
+      ))}
+    </select>
   );
 }
 
@@ -49,27 +67,9 @@ function CreatedSuccessState({ eventId, matchStatus }: {
       <p className="text-sm text-emerald-400">Event created successfully!</p>
       <Link to={`/events/${eventId}`}
         className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-        View Event
+        View Event &rarr;
       </Link>
     </div>
-  );
-}
-
-/** Create event button with disabled-state hint. */
-function CreateButton({ hasVoted, readOnly, isCreating, slotsEmpty, onCreateEvent }: {
-  hasVoted: boolean; readOnly: boolean; isCreating: boolean; slotsEmpty: boolean; onCreateEvent: () => void;
-}): JSX.Element {
-  return (
-    <>
-      <button type="button" onClick={onCreateEvent}
-        disabled={!hasVoted || readOnly || isCreating || slotsEmpty}
-        className="px-6 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-        {isCreating ? 'Creating...' : 'Create Event'}
-      </button>
-      {!hasVoted && !readOnly && (
-        <p className="text-xs text-muted">Vote on a time slot to enable event creation.</p>
-      )}
-    </>
   );
 }
 
@@ -87,21 +87,35 @@ function RecurringCheckbox({ checked, onChange, disabled }: {
   );
 }
 
-/** Section for creating an event from the winning slot. */
+/** Section for creating an event from a selected slot. */
 export function CreateEventSection({
   slots, hasVoted, readOnly, createdEventId, matchStatus, isCreating,
   recurring, onRecurringChange, onCreateEvent,
 }: CreateEventSectionProps): JSX.Element {
+  const sorted = sortedSlots(slots);
+  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(sorted[0]?.id ?? null);
+
   if (createdEventId) {
     return <CreatedSuccessState eventId={createdEventId} matchStatus={matchStatus} />;
   }
+
+  const canCreate = hasVoted && !readOnly && !isCreating && selectedSlotId !== null;
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Create Event</h3>
-      <LeadingSlotSummary slots={slots} />
+      {slots.length > 0 && (
+        <SlotSelector slots={slots} selectedId={selectedSlotId} onChange={setSelectedSlotId} />
+      )}
       <RecurringCheckbox checked={recurring} onChange={onRecurringChange} disabled={readOnly} />
-      <CreateButton hasVoted={hasVoted} readOnly={readOnly} isCreating={isCreating}
-        slotsEmpty={slots.length === 0} onCreateEvent={onCreateEvent} />
+      <button type="button" onClick={() => selectedSlotId && onCreateEvent(selectedSlotId)}
+        disabled={!canCreate}
+        className="px-6 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        {isCreating ? 'Creating...' : 'Create Event'}
+      </button>
+      {!hasVoted && !readOnly && (
+        <p className="text-xs text-muted">Vote on a time slot to enable event creation.</p>
+      )}
     </div>
   );
 }
