@@ -6,7 +6,7 @@
 import { useMemo } from 'react';
 import type { JSX } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { GroupedMatchesResponseDto } from '@raid-ledger/contract';
+import type { GroupedMatchesResponseDto, LineupEntryResponseDto } from '@raid-ledger/contract';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
 import { MatchTierSection } from './MatchTierSection';
 import { SchedulingMatchCard } from './SchedulingMatchCard';
@@ -14,8 +14,12 @@ import { AlmostThereCard } from './AlmostThereCard';
 import { RallyRow } from './RallyRow';
 import { CarriedForwardSection } from './CarriedForwardSection';
 
+/** Lookup map from gameId → entry for ownership/price badges. */
+type EntryMap = Map<number, LineupEntryResponseDto>;
+
 interface DecidedMatchesViewProps {
   lineupId: number;
+  entries?: LineupEntryResponseDto[];
 }
 
 /** Loading skeleton for the matches area. */
@@ -39,13 +43,13 @@ function MatchesEmpty(): JSX.Element {
 }
 
 /** Scheduling tier grid. */
-function SchedulingTier({ data }: { data: GroupedMatchesResponseDto }): JSX.Element | null {
+function SchedulingTier({ data, entryMap }: { data: GroupedMatchesResponseDto; entryMap: EntryMap }): JSX.Element | null {
   if (data.scheduling.length === 0) return null;
   return (
     <MatchTierSection tier="scheduling">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {data.scheduling.map((m) => (
-          <SchedulingMatchCard key={m.id} match={m} totalVoters={data.totalVoters} />
+          <SchedulingMatchCard key={m.id} match={m} totalVoters={data.totalVoters} entry={entryMap.get(m.gameId)} />
         ))}
       </div>
     </MatchTierSection>
@@ -53,13 +57,13 @@ function SchedulingTier({ data }: { data: GroupedMatchesResponseDto }): JSX.Elem
 }
 
 /** Almost There tier grid. */
-function AlmostThereTier({ data, lineupId }: { data: GroupedMatchesResponseDto; lineupId: number }): JSX.Element | null {
+function AlmostThereTier({ data, lineupId, entryMap }: { data: GroupedMatchesResponseDto; lineupId: number; entryMap: EntryMap }): JSX.Element | null {
   if (data.almostThere.length === 0) return null;
   return (
     <MatchTierSection tier="almostThere">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {data.almostThere.map((m) => (
-          <AlmostThereCard key={m.id} match={m} lineupId={lineupId} matchThreshold={data.matchThreshold} />
+          <AlmostThereCard key={m.id} match={m} lineupId={lineupId} matchThreshold={data.matchThreshold} entry={entryMap.get(m.gameId)} />
         ))}
       </div>
     </MatchTierSection>
@@ -68,15 +72,15 @@ function AlmostThereTier({ data, lineupId }: { data: GroupedMatchesResponseDto; 
 
 /** Rally Your Crew tier list. */
 function RallyTier({
-  data, lineupId, rallyGameId,
+  data, lineupId, rallyGameId, entryMap,
 }: {
-  data: GroupedMatchesResponseDto; lineupId: number; rallyGameId: number | null;
+  data: GroupedMatchesResponseDto; lineupId: number; rallyGameId: number | null; entryMap: EntryMap;
 }): JSX.Element | null {
   if (data.rallyYourCrew.length === 0) return null;
   return (
     <MatchTierSection tier="rallyYourCrew">
       {data.rallyYourCrew.map((m) => (
-        <RallyRow key={m.id} match={m} lineupId={lineupId} matchThreshold={data.matchThreshold} isRallied={rallyGameId === m.gameId} />
+        <RallyRow key={m.id} match={m} lineupId={lineupId} matchThreshold={data.matchThreshold} isRallied={rallyGameId === m.gameId} entry={entryMap.get(m.gameId)} />
       ))}
     </MatchTierSection>
   );
@@ -92,9 +96,14 @@ function useRallyGameId(): number | null {
 }
 
 /** Decided matches view with tiered sections. */
-export function DecidedMatchesView({ lineupId }: DecidedMatchesViewProps): JSX.Element {
+export function DecidedMatchesView({ lineupId, entries }: DecidedMatchesViewProps): JSX.Element {
   const { data, isLoading } = useLineupMatches(lineupId);
   const rallyGameId = useRallyGameId();
+  const entryMap = useMemo(() => {
+    const map: EntryMap = new Map();
+    for (const e of entries ?? []) map.set(e.gameId, e);
+    return map;
+  }, [entries]);
 
   if (isLoading) return <MatchesSkeleton />;
   if (!data) return <MatchesEmpty />;
@@ -104,9 +113,9 @@ export function DecidedMatchesView({ lineupId }: DecidedMatchesViewProps): JSX.E
 
   return (
     <div className="space-y-4 mt-6">
-      <SchedulingTier data={data} />
-      <AlmostThereTier data={data} lineupId={lineupId} />
-      <RallyTier data={data} lineupId={lineupId} rallyGameId={rallyGameId} />
+      <SchedulingTier data={data} entryMap={entryMap} />
+      <AlmostThereTier data={data} lineupId={lineupId} entryMap={entryMap} />
+      <RallyTier data={data} lineupId={lineupId} rallyGameId={rallyGameId} entryMap={entryMap} />
       <CarriedForwardSection entries={data.carriedForward} />
     </div>
   );

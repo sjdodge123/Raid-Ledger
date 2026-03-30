@@ -48,7 +48,7 @@ export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
 
       <AlsoRanList entries={alsoRan} maxVotes={maxVotes} />
 
-      <DecidedMatchesView lineupId={lineup.id} />
+      <DecidedMatchesView lineupId={lineup.id} entries={lineup.entries} />
 
       <LineupStatsPanel
         totalVoters={lineup.totalVoters}

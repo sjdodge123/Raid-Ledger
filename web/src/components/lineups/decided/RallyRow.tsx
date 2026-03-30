@@ -6,7 +6,7 @@
 import { useRef, useEffect } from 'react';
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
-import type { MatchDetailResponseDto } from '@raid-ledger/contract';
+import type { MatchDetailResponseDto, LineupEntryResponseDto } from '@raid-ledger/contract';
 import { MatchProgressRing } from './MatchProgressRing';
 import { useBandwagonJoin, useAdvanceMatch } from '../../../hooks/use-lineup-matches';
 import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
@@ -16,6 +16,7 @@ interface RallyRowProps {
   lineupId: number;
   matchThreshold: number;
   isRallied: boolean;
+  entry?: LineupEntryResponseDto;
 }
 
 /** Copy the rally URL to clipboard. */
@@ -119,7 +120,7 @@ function rallyClassName(isRallied: boolean): string {
 
 /** Compact row for Tier 3 rally matches. */
 export function RallyRow({
-  match, lineupId, matchThreshold, isRallied,
+  match, lineupId, matchThreshold, isRallied, entry,
 }: RallyRowProps): JSX.Element {
   const rowRef = useRallyScroll(isRallied);
   const { user } = useAuth();

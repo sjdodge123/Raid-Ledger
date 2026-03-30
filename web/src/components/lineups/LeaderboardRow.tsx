@@ -5,6 +5,7 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
+import { GameInfoBadges } from './GameInfoBadges';
 
 interface LeaderboardRowProps {
   entry: LineupEntryResponseDto;
@@ -39,14 +40,8 @@ function RowInfo({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
   return (
     <div className="flex-1 min-w-0">
       <Link to={`/games/${entry.gameId}`} onClick={(e) => e.stopPropagation()} className="text-foreground font-semibold text-sm truncate hover:text-emerald-400 transition-colors block">{entry.gameName}</Link>
-      <div className="flex items-center gap-2 mt-0.5">
-        <span className="text-emerald-400 text-[11px]">{entry.ownerCount} own</span>
-        {entry.itadCurrentPrice != null && (
-          <>
-            <span className="text-dim text-[10px]">&middot;</span>
-            <span className="text-muted text-[11px]">${entry.itadCurrentPrice.toFixed(2)}</span>
-          </>
-        )}
+      <div className="mt-0.5" onClick={(e) => e.stopPropagation()}>
+        <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} />
       </div>
     </div>
   );

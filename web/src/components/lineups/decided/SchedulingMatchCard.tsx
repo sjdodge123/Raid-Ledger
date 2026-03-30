@@ -5,12 +5,14 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
-import type { MatchDetailResponseDto } from '@raid-ledger/contract';
+import type { MatchDetailResponseDto, LineupEntryResponseDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from './MemberAvatarGroup';
+import { GameInfoBadges } from '../GameInfoBadges';
 
 interface SchedulingMatchCardProps {
   match: MatchDetailResponseDto;
   totalVoters: number;
+  entry?: LineupEntryResponseDto;
 }
 
 /** Vote percentage bar. */
@@ -53,10 +55,11 @@ function CardCover({ match }: { match: MatchDetailResponseDto }): JSX.Element {
 }
 
 /** Card body with vote stats, members, and schedule CTA. */
-function CardBody({ match, totalVoters }: SchedulingMatchCardProps): JSX.Element {
+function CardBody({ match, totalVoters, entry }: SchedulingMatchCardProps): JSX.Element {
   return (
     <div className="px-4 py-3">
-      <span className="text-xs text-dim">
+      {entry && <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} />}
+      <span className="text-xs text-dim mt-1 block">
         {match.voteCount} votes ({match.members.length} players)
       </span>
       <VoteBar voteCount={match.voteCount} totalVoters={totalVoters} />
@@ -72,11 +75,11 @@ function CardBody({ match, totalVoters }: SchedulingMatchCardProps): JSX.Element
 }
 
 /** Hero card for Tier 1 scheduling matches. */
-export function SchedulingMatchCard({ match, totalVoters }: SchedulingMatchCardProps): JSX.Element {
+export function SchedulingMatchCard({ match, totalVoters, entry }: SchedulingMatchCardProps): JSX.Element {
   return (
     <Link to={`/games/${match.gameId}`} data-testid="match-card" className="block bg-surface border border-cyan-500/30 rounded-lg overflow-hidden hover:border-cyan-400/50 transition-colors">
       <CardCover match={match} />
-      <CardBody match={match} totalVoters={totalVoters} />
+      <CardBody match={match} totalVoters={totalVoters} entry={entry} />
     </Link>
   );
 }
