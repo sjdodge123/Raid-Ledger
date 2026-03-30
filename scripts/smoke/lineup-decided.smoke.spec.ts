@@ -225,19 +225,18 @@ test.beforeAll(async () => {
 // AC: Podium Section — "THIS WEEK'S PODIUM" header, top 3 games, action buttons
 // ---------------------------------------------------------------------------
 
+/** Navigate to the decided lineup and wait for the podium to render. */
+async function gotoDecidedView(page: import('@playwright/test').Page): Promise<void> {
+    await page.goto(`/community-lineup/${decidedLineupId}`);
+    await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+    await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({ timeout: 15_000 });
+}
+
 test.describe('Decided view podium section', () => {
     test('shows "THIS WEEK\'S PODIUM" header when status=decided', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        // AC: "THIS WEEK'S PODIUM" header renders in all-caps
-        const podiumHeader = page.getByText("THIS WEEK'S PODIUM");
-        await expect(podiumHeader).toBeVisible({ timeout: 15_000 });
+        await gotoDecidedView(page);
     });
 
     test('podium shows top 3 games with Champion, Silver, Bronze labels', async ({
@@ -339,16 +338,7 @@ test.describe('Decided view podium section', () => {
 
 test.describe('Decided view tiered match cards', () => {
     test('tiered sections render with correct headers', async ({ page }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        // Wait for the decided view to render
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await gotoDecidedView(page);
 
         // AC: Tiered sections render: Scheduling Now (cyan),
         // Almost There (emerald), Rally Your Crew (amber)
@@ -445,16 +435,7 @@ test.describe('Decided view bandwagon interactions', () => {
     test('bandwagon button is visible on Tier 2 or Tier 3 cards', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        // Wait for the decided view to render
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await gotoDecidedView(page);
 
         // AC: Tier 2 cards show "Join This Match" bandwagon button
         // AC: Tier 3 rows show "I'm interested" button
@@ -481,15 +462,7 @@ test.describe('Decided view bandwagon interactions', () => {
     test('already-joined member sees disabled "Joined" button', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await gotoDecidedView(page);
 
         // AC: Already-member users see disabled "Joined" button instead of join CTA
         // The admin user voted, so their voted matches should show "Joined"
@@ -514,17 +487,9 @@ test.describe('Decided view rally URL', () => {
     }) => {
         // Use the first game ID as the rally target
         const rallyGameId = gameIds[0];
-        await page.goto(
-            `/community-lineup/${decidedLineupId}?rally=${rallyGameId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await page.goto(`/community-lineup/${decidedLineupId}?rally=${rallyGameId}`);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({ timeout: 15_000 });
 
         // AC: Rally URL auto-scrolls to the matching row and highlights it
         const ralliedRow = page.locator('[data-rallied="true"]');
@@ -541,15 +506,7 @@ test.describe('Decided view rally URL', () => {
     test('rally URL share icon is present on Tier 3 rows', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await gotoDecidedView(page);
 
         // AC: Rally URL is copyable from each Tier 3 row via share icon
         const shareIcons = page.locator(
@@ -578,15 +535,7 @@ test.describe('Decided view role-based UI', () => {
     test('operator sees "Advance" link on Tier 3 rows', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await gotoDecidedView(page);
 
         // AC: Operator sees "Advance" link on Tier 3 rows
         const advanceLink = page.getByRole('button', {
@@ -614,15 +563,7 @@ test.describe('Decided view stats panel', () => {
     test('Lineup Stats panel shows Voters, Nominated, and Total Votes', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await gotoDecidedView(page);
 
         // AC: Lineup Stats panel shows Voters, Nominated, and Total Votes counts
         const statsPanel = page.locator(
@@ -769,15 +710,7 @@ test.describe('Decided view responsive layout', () => {
             'Mobile-only test -- verifies match cards render on small screens',
         );
 
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await gotoDecidedView(page);
 
         // Match sections should still render (even if layout changes)
         if (matchesData) {

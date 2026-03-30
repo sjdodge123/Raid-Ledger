@@ -7,6 +7,7 @@ import { useRef, useEffect } from 'react';
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { MatchDetailResponseDto, LineupEntryResponseDto } from '@raid-ledger/contract';
+import { GameInfoBadges } from '../GameInfoBadges';
 import { MatchProgressRing } from './MatchProgressRing';
 import { useBandwagonJoin, useAdvanceMatch } from '../../../hooks/use-lineup-matches';
 import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
@@ -131,6 +132,7 @@ export function RallyRow({
       <MatchProgressRing current={match.members.length} target={matchThreshold} size={36} color="#f59e0b" />
       <div className="flex-1 min-w-0">
         <Link to={`/games/${match.gameId}`} className="text-sm font-medium text-foreground truncate block hover:text-emerald-400 transition-colors">{match.gameName}</Link>
+        {entry && <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} playerCount={entry.playerCount} />}
         <span className="text-[10px] text-dim">{match.members.length} interested</span>
       </div>
       <RallyJoinButton match={match} lineupId={lineupId} userId={user?.id} />
