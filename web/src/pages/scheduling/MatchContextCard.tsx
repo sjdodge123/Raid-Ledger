@@ -1,41 +1,25 @@
 /**
  * Match context card showing game thumbnail, name, member count, and avatars (ROK-965).
- * Displayed at the top of the scheduling poll page.
+ * Uses the shared AvatarWithFallback component for consistent avatar resolution.
  */
 import type { JSX } from 'react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
-import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { toAvatarUser } from '../../lib/avatar';
+import { AvatarWithFallback } from '../../components/shared/AvatarWithFallback';
 
 interface MatchContextCardProps {
   match: MatchDetailResponseDto;
 }
 
-/** Single member avatar with fallback initial. */
-function MemberAvatar({ member }: {
-  member: { userId: number; displayName: string; avatar: string | null; discordId: string | null; customAvatarUrl: string | null };
-}): JSX.Element {
-  const avatarInfo = resolveAvatar(toAvatarUser({
-    id: member.userId,
-    username: member.displayName,
-    avatar: member.avatar,
-  }));
-
-  if (avatarInfo.url) {
-    return (
-      <img
-        src={avatarInfo.url}
-        alt={member.displayName}
-        className="w-8 h-8 rounded-full border-2 border-surface -ml-2 first:ml-0"
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      />
-    );
-  }
-
-  return (
-    <div className="w-8 h-8 rounded-full bg-overlay border-2 border-surface -ml-2 first:ml-0 flex items-center justify-center text-xs font-semibold text-muted">
-      {member.displayName.charAt(0).toUpperCase()}
-    </div>
-  );
+/** Convert a match member to an AvatarUser for the shared component. */
+function toUser(m: MatchDetailResponseDto['members'][number]) {
+  return toAvatarUser({
+    id: m.userId,
+    username: m.displayName,
+    avatar: m.avatar,
+    discordId: m.discordId,
+    customAvatarUrl: m.customAvatarUrl,
+  });
 }
 
 /** Stacked member avatar row (max 8 visible + overflow count). */
@@ -47,12 +31,18 @@ function MemberAvatarStack({ members }: {
   const overflowCount = members.length - maxVisible;
 
   return (
-    <div className="flex items-center" data-testid="member-avatars">
+    <div className="flex -space-x-1.5" data-testid="member-avatars">
       {visible.map((m) => (
-        <MemberAvatar key={m.userId} member={m} />
+        <div key={m.userId} title={m.displayName}>
+          <AvatarWithFallback
+            user={toUser(m)}
+            username={m.displayName}
+            sizeClassName="w-8 h-8"
+          />
+        </div>
       ))}
       {overflowCount > 0 && (
-        <div className="w-8 h-8 rounded-full bg-overlay border-2 border-surface -ml-2 flex items-center justify-center text-xs font-semibold text-muted">
+        <div className="w-8 h-8 rounded-full bg-overlay border-2 border-surface flex items-center justify-center text-xs font-semibold text-muted">
           +{overflowCount}
         </div>
       )}
