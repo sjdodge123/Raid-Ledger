@@ -9,6 +9,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { SettingsService } from '../settings/settings.service';
 
 /** Shape of a member row from the nudge query. */
 interface NudgeMember {
@@ -27,19 +28,23 @@ export class LineupSteamNudgeService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly dedupService: NotificationDedupService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /** Send nudge DMs to members without Steam linked. */
   async nudgeUnlinkedMembers(lineupId: number): Promise<void> {
-    const members = (await this.db.execute(sql`
-      SELECT u.id, u.discord_id AS "discordId", u.steam_id AS "steamId",
-             COALESCE(u.display_name, u.username) AS "displayName"
-      FROM users u
-    `)) as unknown as NudgeMember[];
+    const [clientUrl, members] = await Promise.all([
+      this.settingsService.getClientUrl(),
+      this.db.execute(sql`
+        SELECT u.id, u.discord_id AS "discordId", u.steam_id AS "steamId",
+               COALESCE(u.display_name, u.username) AS "displayName"
+        FROM users u
+      `) as Promise<unknown> as Promise<NudgeMember[]>,
+    ]);
 
     for (const member of members) {
       if (!member.discordId || member.steamId) continue;
-      await this.sendNudge(member, lineupId);
+      await this.sendNudge(member, lineupId, clientUrl);
     }
   }
 
@@ -47,6 +52,7 @@ export class LineupSteamNudgeService {
   private async sendNudge(
     member: NudgeMember,
     lineupId: number,
+    clientUrl: string,
   ): Promise<void> {
     const dedupKey = `lineup-steam-nudge:${lineupId}:${member.id}`;
     const alreadySent = await this.dedupService.checkAndMarkSent(
@@ -55,12 +61,13 @@ export class LineupSteamNudgeService {
     );
     if (alreadySent) return;
 
+    const lineupUrl = `${clientUrl}/community-lineup/${lineupId}`;
     await this.notificationService.create({
       userId: member.id,
       type: 'lineup_steam_nudge',
       title: 'Link your Steam account',
       message:
-        'A new community lineup is being built! Link your Steam account so we can include your library in game suggestions.',
+        `A new community lineup is being built! Link your Steam account so we can include your library in game suggestions.\n\n${lineupUrl}`,
     });
   }
 }

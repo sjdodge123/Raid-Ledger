@@ -11,6 +11,7 @@ import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { SettingsService } from '../settings/settings.service';
 
 /**
  * Mock user rows returned by findNudgeRecipients-style queries.
@@ -39,6 +40,7 @@ describe('LineupSteamNudgeService', () => {
   let mockDb: { execute: jest.Mock; select: jest.Mock };
   let mockNotificationService: { create: jest.Mock };
   let mockDedupService: { checkAndMarkSent: jest.Mock };
+  let mockSettingsService: { getClientUrl: jest.Mock };
 
   beforeEach(async () => {
     mockDb = {
@@ -54,6 +56,10 @@ describe('LineupSteamNudgeService', () => {
       checkAndMarkSent: jest.fn().mockResolvedValue(false),
     };
 
+    mockSettingsService = {
+      getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LineupSteamNudgeService,
@@ -63,6 +69,7 @@ describe('LineupSteamNudgeService', () => {
           provide: NotificationDedupService,
           useValue: mockDedupService,
         },
+        { provide: SettingsService, useValue: mockSettingsService },
       ],
     }).compile();
 
