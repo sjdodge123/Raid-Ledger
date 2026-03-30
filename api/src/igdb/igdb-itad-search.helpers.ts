@@ -31,13 +31,11 @@ export interface ItadSearchDeps {
 }
 
 /**
- * Filter DLC games from ITAD results.
- * @param games - ITAD search results
- * @returns Non-DLC games only (keeps 'game' and 'package' types)
+ * Filter non-game entries from ITAD results.
+ * Excludes DLC, bundles/packages, and soundtracks — only standalone games.
  */
 export function filterDlc(games: ItadSearchGame[]): ItadSearchGame[] {
-  const ALLOWED_TYPES = new Set(['game', 'package']);
-  return games.filter((g) => ALLOWED_TYPES.has(g.type));
+  return games.filter((g) => g.type === 'game');
 }
 
 /**
