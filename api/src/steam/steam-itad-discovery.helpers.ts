@@ -16,12 +16,9 @@ import { checkAdultContent } from './steam-content-filter.helpers';
 
 const logger = new Logger('SteamItadDiscovery');
 
-/** ITAD game types that represent full games (not DLC/expansions). */
-const ALLOWED_GAME_TYPES = new Set(['game', 'package']);
-
-/** Check whether an ITAD game is a full game (not DLC/expansion). */
+/** Check whether an ITAD game is a standalone game (not DLC/bundle/soundtrack). */
 export function isFullGame(itadGame: ItadGame): boolean {
-  return ALLOWED_GAME_TYPES.has(itadGame.type);
+  return itadGame.type === 'game';
 }
 
 /** Type for a games table insert row. */
