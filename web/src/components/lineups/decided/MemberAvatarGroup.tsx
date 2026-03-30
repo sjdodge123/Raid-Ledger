@@ -36,22 +36,9 @@ function avatarColor(userId: number): string {
   return palette[userId % palette.length];
 }
 
-/** Single member avatar with image or initials fallback. */
-function MemberAvatar({ member }: { member: Member }): JSX.Element {
-  const url = memberAvatarUrl(member);
+/** Initials fallback circle. */
+function InitialAvatar({ member }: { member: Member }): JSX.Element {
   const initial = member.displayName[0]?.toUpperCase() ?? '?';
-
-  if (url) {
-    return (
-      <img
-        src={url}
-        alt={member.displayName}
-        title={member.displayName}
-        className="w-7 h-7 rounded-full border-2 border-surface object-cover"
-      />
-    );
-  }
-
   return (
     <div
       title={member.displayName}
@@ -59,6 +46,32 @@ function MemberAvatar({ member }: { member: Member }): JSX.Element {
     >
       {initial}
     </div>
+  );
+}
+
+/** Single member avatar with image or initials fallback. */
+function MemberAvatar({ member }: { member: Member }): JSX.Element {
+  const url = memberAvatarUrl(member);
+  if (!url) return <InitialAvatar member={member} />;
+
+  return (
+    <img
+      src={url}
+      alt={member.displayName}
+      title={member.displayName}
+      className="w-7 h-7 rounded-full border-2 border-surface object-cover"
+      onError={(e) => {
+        const el = e.currentTarget;
+        const parent = el.parentElement;
+        if (!parent) return;
+        el.style.display = 'none';
+        const fallback = document.createElement('div');
+        fallback.title = member.displayName;
+        fallback.className = `w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold text-white border-2 border-surface ${avatarColor(member.userId)}`;
+        fallback.textContent = member.displayName[0]?.toUpperCase() ?? '?';
+        parent.insertBefore(fallback, el);
+      }}
+    />
   );
 }
 
