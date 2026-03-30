@@ -4,6 +4,7 @@
  * Disabled "Joined" state for existing members.
  */
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { MatchProgressRing } from './MatchProgressRing';
 import { MemberAvatarGroup } from './MemberAvatarGroup';
@@ -66,7 +67,7 @@ export function AlmostThereCard({
           color="#10b981"
         />
         <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold text-foreground truncate">{match.gameName}</h4>
+          <Link to={`/games/${match.gameId}`} className="text-sm font-semibold text-foreground truncate hover:text-emerald-400 transition-colors block">{match.gameName}</Link>
           <span className="text-[11px] text-dim">
             {match.members.length} / {matchThreshold} players
           </span>

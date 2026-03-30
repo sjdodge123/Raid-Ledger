@@ -3,6 +3,7 @@
  * Shows rank badge, game cover, ownership info, and price.
  */
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 
 interface PodiumCardProps {
@@ -74,9 +75,10 @@ export function PodiumCard({ entry, rank }: PodiumCardProps): JSX.Element {
   const config = RANK_CONFIG[rank] ?? RANK_CONFIG[3];
 
   return (
-    <div
+    <Link
+      to={`/games/${entry.gameId}`}
       data-testid="podium-card"
-      className={`rounded-lg border ${config.border} bg-surface overflow-hidden flex flex-col`}
+      className={`rounded-lg border ${config.border} bg-surface overflow-hidden flex flex-col hover:border-emerald-500/50 hover:shadow-lg transition-all`}
     >
       <PodiumCover entry={entry} />
       <div className="px-3 py-2 flex-1 flex flex-col">
@@ -90,6 +92,6 @@ export function PodiumCard({ entry, rank }: PodiumCardProps): JSX.Element {
         <span className="text-[11px] text-muted">{entry.voteCount} votes</span>
         <PodiumMeta entry={entry} />
       </div>
-    </div>
+    </Link>
   );
 }

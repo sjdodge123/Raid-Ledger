@@ -8,7 +8,7 @@ import * as schema from '../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Shape of a match member row with display name. */
+/** Shape of a match member row with display name and avatar info. */
 export interface MatchMemberRow {
   id: number;
   matchId: number;
@@ -16,6 +16,9 @@ export interface MatchMemberRow {
   source: string;
   createdAt: Date;
   displayName: string;
+  avatar: string | null;
+  discordId: string | null;
+  customAvatarUrl: string | null;
 }
 
 /** Find all matches for a given lineup with game info. */
@@ -61,6 +64,9 @@ export function findMatchMembers(
         sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`.as(
           'display_name',
         ),
+      avatar: schema.users.avatar,
+      discordId: schema.users.discordId,
+      customAvatarUrl: schema.users.customAvatarUrl,
     })
     .from(schema.communityLineupMatchMembers)
     .innerJoin(

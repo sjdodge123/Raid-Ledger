@@ -99,6 +99,9 @@ export const MatchDetailResponseSchema = LineupMatchSchema.extend({
     members: z.array(
         LineupMatchMemberSchema.extend({
             displayName: z.string(),
+            avatar: z.string().nullable(),
+            discordId: z.string().nullable(),
+            customAvatarUrl: z.string().nullable(),
         }),
     ),
 });

@@ -4,6 +4,7 @@
  * and disabled "Schedule This" CTA.
  */
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from './MemberAvatarGroup';
 
@@ -73,9 +74,9 @@ function CardBody({ match, totalVoters }: SchedulingMatchCardProps): JSX.Element
 /** Hero card for Tier 1 scheduling matches. */
 export function SchedulingMatchCard({ match, totalVoters }: SchedulingMatchCardProps): JSX.Element {
   return (
-    <div data-testid="match-card" className="bg-surface border border-cyan-500/30 rounded-lg overflow-hidden">
+    <Link to={`/games/${match.gameId}`} data-testid="match-card" className="block bg-surface border border-cyan-500/30 rounded-lg overflow-hidden hover:border-cyan-400/50 transition-colors">
       <CardCover match={match} />
       <CardBody match={match} totalVoters={totalVoters} />
-    </div>
+    </Link>
   );
 }
