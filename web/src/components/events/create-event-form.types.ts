@@ -40,6 +40,8 @@ export interface EventFormProps {
     event?: EventResponseDto;
     /** Series scope for bulk edit operations (ROK-429). */
     seriesScope?: SeriesScope;
+    /** Pre-select a game when creating from lineup decided view (ROK-989). */
+    initialGame?: { id: number; name: string; slug: string; coverUrl: string | null } | null;
 }
 
 export const RECURRENCE_OPTIONS = [
