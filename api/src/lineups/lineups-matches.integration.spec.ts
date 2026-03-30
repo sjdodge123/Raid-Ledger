@@ -128,11 +128,7 @@ async function buildDecidedLineup(opts: {
     }
   }
 
-  // Advance to scheduling then decided
-  await testApp.request
-    .patch(`/lineups/${lineupId}/status`)
-    .set('Authorization', `Bearer ${opts.token}`)
-    .send({ status: 'scheduling' });
+  // Advance directly to decided (voting → decided)
   await testApp.request
     .patch(`/lineups/${lineupId}/status`)
     .set('Authorization', `Bearer ${opts.token}`)

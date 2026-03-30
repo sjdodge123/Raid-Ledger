@@ -106,9 +106,9 @@ async function archiveActiveLineup(token: string): Promise<void> {
         if (!detail) return;
 
         const transitions: Record<string, string[]> = {
-            building: ['voting', 'scheduling', 'decided', 'archived'],
-            voting: ['scheduling', 'decided', 'archived'],
-            scheduling: ['decided', 'archived'],
+            building: ['voting', 'decided', 'scheduling', 'archived'],
+            voting: ['decided', 'scheduling', 'archived'],
+            decided: ['scheduling', 'archived'],
             decided: ['archived'],
         };
 
@@ -193,10 +193,7 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
         await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gid });
     }
 
-    // Advance through scheduling to decided
-    await apiPatch(token, `/lineups/${lineupId}/status`, {
-        status: 'scheduling',
-    });
+    // Advance directly to decided (new phase order: voting → decided)
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'decided',
     });
