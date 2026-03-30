@@ -35,7 +35,10 @@ function extractReturnTo(res: Response): string {
  * Extract the signed state from the callback URL embedded in the redirect.
  * The state is in the openid.return_to URL's `state` query param.
  */
-function extractStateFromRedirect(res: Response, jwtSecret: string): Record<string, unknown> | null {
+function extractStateFromRedirect(
+  res: Response,
+  jwtSecret: string,
+): Record<string, unknown> | null {
   const returnToUrl = extractReturnTo(res);
   const stateParam = new URL(returnToUrl).searchParams.get('state');
   if (!stateParam) return null;
@@ -44,8 +47,12 @@ function extractStateFromRedirect(res: Response, jwtSecret: string): Record<stri
       Buffer.from(stateParam, 'base64').toString(),
     ) as { data: string; signature: string };
     const crypto = require('crypto');
-    const expected = crypto.createHmac('sha256', jwtSecret).update(data).digest('hex');
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+    const expected = crypto
+      .createHmac('sha256', jwtSecret)
+      .update(data)
+      .digest('hex');
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected)))
+      return null;
     return JSON.parse(data) as Record<string, unknown>;
   } catch {
     return null;

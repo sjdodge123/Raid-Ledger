@@ -121,6 +121,32 @@ export class SteamAuthController {
     return `${proto}://${host}`;
   }
 
+  /** Allowlist of valid returnTo paths for Steam link redirects. */
+  private static readonly RETURN_TO_ALLOWLIST = ['/onboarding', '/profile'];
+
+  /** Validate returnTo against allowlist; returns safe path or default. */
+  private validateReturnTo(returnTo: string | undefined): string {
+    const defaultPath = '/profile';
+    if (!returnTo || typeof returnTo !== 'string') return defaultPath;
+    if (returnTo.startsWith('//') || /^[a-z]+:\/\//i.test(returnTo))
+      return defaultPath;
+    if (!SteamAuthController.RETURN_TO_ALLOWLIST.includes(returnTo))
+      return defaultPath;
+    return returnTo;
+  }
+
+  /** Redirect to client with Steam-not-configured error. */
+  private redirectSteamNotConfigured(
+    res: Response,
+    clientUrl: string,
+    returnTo: string,
+  ): void {
+    const msg = encodeURIComponent(
+      'Steam integration is not configured. Please ask an admin to set it up.',
+    );
+    res.redirect(`${clientUrl}${returnTo}?steam=error&message=${msg}`);
+  }
+
   /**
    * GET /auth/steam/link
    * Initiates Steam OpenID 2.0 linking.
@@ -142,10 +168,12 @@ export class SteamAuthController {
     const userId = this.verifySteamToken(token, res, clientUrl);
     if (userId === null) return;
 
+    const returnTo = this.validateReturnTo(
+      req.query.returnTo as string | undefined,
+    );
+
     if (!(await this.settingsService.isSteamConfigured())) {
-      res.redirect(
-        `${clientUrl}/profile?steam=error&message=${encodeURIComponent('Steam integration is not configured. Please ask an admin to set it up.')}`,
-      );
+      this.redirectSteamNotConfigured(res, clientUrl, returnTo);
       return;
     }
 
@@ -153,9 +181,10 @@ export class SteamAuthController {
       userId,
       action: 'steam_link',
       timestamp: Date.now(),
+      returnTo,
     });
-    const returnUrl = `${this.getApiBaseUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
-    res.redirect(buildSteamOpenIdUrl(returnUrl));
+    const callbackUrl = `${this.getApiBaseUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
+    res.redirect(buildSteamOpenIdUrl(callbackUrl));
   }
 
   /** Verify JWT token for Steam linking. Returns userId or null on failure. */
@@ -186,17 +215,26 @@ export class SteamAuthController {
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
+    const returnTo = this.extractReturnToFromState(query.state);
     try {
       const { userId, steamId } = await this.processLinkCallback(query);
       const isPublic = await this.checkAndSyncSteam(userId, steamId);
       const privacyParam = isPublic ? '' : '&steam_private=true';
-      res.redirect(`${clientUrl}/profile?steam=success${privacyParam}`);
+      res.redirect(`${clientUrl}${returnTo}?steam=success${privacyParam}`);
     } catch (error) {
       this.logger.error('Steam link error:', error);
       res.redirect(
-        `${clientUrl}/profile?steam=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Steam link failed')}`,
+        `${clientUrl}${returnTo}?steam=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Steam link failed')}`,
       );
     }
+  }
+
+  /** Extract returnTo from signed state, defaulting to /profile. */
+  private extractReturnToFromState(state: string | undefined): string {
+    if (!state) return '/profile';
+    const stateData = this.verifyState(state);
+    if (!stateData) return '/profile';
+    return this.validateReturnTo(stateData.returnTo as string | undefined);
   }
 
   /** Process the Steam link callback: verify state, verify OpenID, link account. */
