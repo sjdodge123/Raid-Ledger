@@ -45,15 +45,15 @@ function LaurelWreath(): JSX.Element {
   return (
     <svg data-testid="crown-icon" viewBox="0 0 120 80" className="absolute inset-0 w-full h-full opacity-50" fill="none">
       {/* Left branch */}
-      <path d="M15 70 C12 50, 10 35, 18 12" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round" />
-      <ellipse cx="10" cy="58" rx="8" ry="3.5" transform="rotate(-40 10 58)" fill="#fbbf24" opacity="0.5" />
-      <ellipse cx="9" cy="42" rx="7" ry="3" transform="rotate(-35 9 42)" fill="#fbbf24" opacity="0.5" />
-      <ellipse cx="12" cy="27" rx="7" ry="3" transform="rotate(-25 12 27)" fill="#fbbf24" opacity="0.5" />
+      <path d="M15 70 C12 50, 10 35, 18 12" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" />
+      <ellipse cx="10" cy="58" rx="8" ry="3.5" transform="rotate(-40 10 58)" fill="#22c55e" opacity="0.5" />
+      <ellipse cx="9" cy="42" rx="7" ry="3" transform="rotate(-35 9 42)" fill="#22c55e" opacity="0.5" />
+      <ellipse cx="12" cy="27" rx="7" ry="3" transform="rotate(-25 12 27)" fill="#22c55e" opacity="0.5" />
       {/* Right branch */}
-      <path d="M105 70 C108 50, 110 35, 102 12" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round" />
-      <ellipse cx="110" cy="58" rx="8" ry="3.5" transform="rotate(40 110 58)" fill="#fbbf24" opacity="0.5" />
-      <ellipse cx="111" cy="42" rx="7" ry="3" transform="rotate(35 111 42)" fill="#fbbf24" opacity="0.5" />
-      <ellipse cx="108" cy="27" rx="7" ry="3" transform="rotate(25 108 27)" fill="#fbbf24" opacity="0.5" />
+      <path d="M105 70 C108 50, 110 35, 102 12" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" />
+      <ellipse cx="110" cy="58" rx="8" ry="3.5" transform="rotate(40 110 58)" fill="#22c55e" opacity="0.5" />
+      <ellipse cx="111" cy="42" rx="7" ry="3" transform="rotate(35 111 42)" fill="#22c55e" opacity="0.5" />
+      <ellipse cx="108" cy="27" rx="7" ry="3" transform="rotate(25 108 27)" fill="#22c55e" opacity="0.5" />
     </svg>
   );
 }
