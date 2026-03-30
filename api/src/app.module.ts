@@ -39,6 +39,7 @@ import { ItadModule } from './itad/itad.module';
 import { LogsModule } from './logs/logs.module';
 import { AiModule } from './ai/ai.module';
 import { LineupsModule } from './lineups/lineups.module';
+import { SchedulingModule } from './lineups/scheduling/scheduling.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { LineupsModule } from './lineups/lineups.module';
     LogsModule,
     AiModule,
     LineupsModule,
+    SchedulingModule,
   ],
   controllers: [AppController],
   providers: [
