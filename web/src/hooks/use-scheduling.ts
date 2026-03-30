@@ -7,7 +7,7 @@ import type {
   SchedulePollPageResponseDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
-  RosterAvailabilityResponse,
+  AggregateGameTimeResponse,
 } from '@raid-ledger/contract';
 import {
   getSchedulePoll,
@@ -98,7 +98,7 @@ export function useCreateEventFromSlot() {
 
 /** Hook for fetching match members' availability heatmap data. */
 export function useMatchAvailability(lineupId: number, matchId: number) {
-  return useQuery<RosterAvailabilityResponse>({
+  return useQuery<AggregateGameTimeResponse>({
     queryKey: [...SCHEDULE_KEY, 'availability', lineupId, matchId],
     queryFn: () => getMatchAvailability(lineupId, matchId),
     enabled: !!lineupId && !!matchId,

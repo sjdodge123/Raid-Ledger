@@ -57,8 +57,8 @@ function ReadOnlyBanner(): JSX.Element {
 
 /** Derive read-only status and vote state from poll data. */
 function derivePollState(poll: SchedulePollPageResponseDto) {
-  const isScheduling = poll.lineupStatus === 'scheduling' && poll.match.status === 'scheduling';
-  return { readOnly: !isScheduling, hasVoted: poll.myVotedSlotIds.length > 0 };
+  const isActive = poll.match.status === 'scheduling' || poll.match.status === 'suggested';
+  return { readOnly: !isActive, hasVoted: poll.myVotedSlotIds.length > 0 };
 }
 
 /** Aggregate mutation hooks for poll interactions. */

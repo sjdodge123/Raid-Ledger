@@ -6,7 +6,7 @@ import type {
   SchedulePollPageResponseDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
-  RosterAvailabilityResponse,
+  AggregateGameTimeResponse,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 
@@ -70,7 +70,7 @@ export async function retractAllVotes(
 export async function getMatchAvailability(
   lineupId: number,
   matchId: number,
-): Promise<RosterAvailabilityResponse> {
+): Promise<AggregateGameTimeResponse> {
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/availability`,
   );
