@@ -8,6 +8,7 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
+import type { GameTimePreviewBlock } from '../components/features/game-time/game-time-grid.types';
 import {
   useSchedulePoll,
   useMatchAvailability,
@@ -97,6 +98,7 @@ function PollSections({ lineupId, matchId, poll }: {
   const [createdEventId, setCreatedEventId] = useState<number | null>(poll.match.linkedEventId ?? null);
   const [recurring, setRecurring] = useState(false);
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
+  const [previewBlock, setPreviewBlock] = useState<GameTimePreviewBlock | undefined>();
   const { readOnly, hasVoted } = derivePollState(poll);
 
   const handleCreate = (): void => {
@@ -112,7 +114,11 @@ function PollSections({ lineupId, matchId, poll }: {
       {readOnly && <ReadOnlyBanner />}
       <MatchContextCard match={poll.match} />
       <AvailabilityHeatmapSection data={availability} isLoading={availLoading}
-        readOnly={readOnly} onCellClick={(day, hour) => setPrefillTime(toDatetimeLocal(day, hour))} />
+        readOnly={readOnly} previewBlock={previewBlock}
+        onCellClick={(day, hour) => {
+          setPrefillTime(toDatetimeLocal(day, hour));
+          setPreviewBlock({ dayOfWeek: day, startHour: hour, endHour: hour + 2, label: 'Suggested', variant: 'selected' });
+        }} />
       <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
         readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
         isSuggesting={isSuggesting} prefillTime={prefillTime} />

@@ -6,12 +6,15 @@
 import type { JSX } from 'react';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import { GameTimeGrid } from '../../components/features/game-time';
+import type { GameTimePreviewBlock } from '../../components/features/game-time/game-time-grid.types';
 
 interface AvailabilityHeatmapSectionProps {
   data: AggregateGameTimeResponse | undefined;
   isLoading: boolean;
   readOnly?: boolean;
   onCellClick?: (dayOfWeek: number, hour: number) => void;
+  /** Preview block to show on the grid (selected time slot). */
+  previewBlock?: GameTimePreviewBlock;
 }
 
 /** Loading placeholder for the heatmap section. */
@@ -33,6 +36,7 @@ export function AvailabilityHeatmapSection({
   isLoading,
   readOnly,
   onCellClick,
+  previewBlock,
 }: AvailabilityHeatmapSectionProps): JSX.Element | null {
   if (isLoading) return <HeatmapSkeleton />;
   if (!data || data.cells.length === 0) return null;
@@ -51,6 +55,7 @@ export function AvailabilityHeatmapSection({
           readOnly
           heatmapOverlay={data.cells}
           onCellClick={readOnly ? undefined : onCellClick}
+          previewBlocks={previewBlock ? [previewBlock] : undefined}
           compact
           noStickyOffset
         />
