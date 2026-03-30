@@ -120,7 +120,7 @@ function rallyClassName(isRallied: boolean): string {
 
 /** Compact row for Tier 3 rally matches. */
 export function RallyRow({
-  match, lineupId, matchThreshold, isRallied, entry,
+  match, lineupId, matchThreshold, isRallied,
 }: RallyRowProps): JSX.Element {
   const rowRef = useRallyScroll(isRallied);
   const { user } = useAuth();
