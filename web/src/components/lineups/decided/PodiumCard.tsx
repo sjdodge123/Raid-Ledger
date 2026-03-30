@@ -34,8 +34,8 @@ const RANK_CONFIG: Record<number, { label: string; border: string; badge: string
 /** Laurel wreath SVG that frames the champion card. */
 function LaurelWreath(): JSX.Element {
   return (
-    <div className="absolute -inset-3 pointer-events-none z-10" data-testid="crown-icon">
-      <svg viewBox="0 0 200 200" className="w-full h-full opacity-30" fill="none">
+    <div className="absolute -inset-4 pointer-events-none z-30" data-testid="crown-icon">
+      <svg viewBox="0 0 200 200" className="w-full h-full opacity-70" fill="none">
         {/* Left branch */}
         <path d="M30 170 C30 130, 15 110, 20 80 C22 65, 30 55, 25 40 C23 30, 28 20, 35 15" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
         <path d="M30 150 C20 140, 12 130, 15 115" stroke="#fbbf24" strokeWidth="1.5" />
@@ -91,7 +91,7 @@ export function PodiumCard({ entry, rank }: PodiumCardProps): JSX.Element {
       <Link
         to={`/games/${entry.gameId}`}
         data-testid="podium-card"
-        className={`relative z-20 rounded-lg border ${config.border} bg-surface overflow-hidden flex flex-col hover:border-emerald-500/50 hover:shadow-lg transition-all`}
+        className={`relative z-20 rounded-t-lg border ${config.border} border-b-0 bg-surface overflow-hidden flex flex-col hover:border-emerald-500/50 hover:shadow-lg transition-all`}
       >
         <PodiumCover entry={entry} />
         <div className="px-3 py-2 flex-1 flex flex-col">

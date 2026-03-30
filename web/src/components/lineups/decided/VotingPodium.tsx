@@ -43,7 +43,7 @@ const PEDESTAL: Record<number, { height: string; gradient: string; border: strin
 function Pedestal({ rank }: { rank: number }): JSX.Element {
   const p = PEDESTAL[rank] ?? PEDESTAL[3];
   return (
-    <div className={`${p.height} bg-gradient-to-b ${p.gradient} border-x border-b ${p.border} rounded-b-lg flex items-center justify-center`}>
+    <div className={`${p.height} bg-gradient-to-b ${p.gradient} border-x border-b border-t ${p.border} rounded-b-lg flex items-center justify-center`}>
       <span className={`text-3xl font-black ${p.text} opacity-60`}>{rank}</span>
     </div>
   );
