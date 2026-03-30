@@ -13,8 +13,8 @@ interface AvailabilityHeatmapSectionProps {
   isLoading: boolean;
   readOnly?: boolean;
   onCellClick?: (dayOfWeek: number, hour: number) => void;
-  /** Preview block to show on the grid (selected time slot). */
-  previewBlock?: GameTimePreviewBlock;
+  /** Preview blocks to show on the grid (existing slots + current selection). */
+  previewBlocks?: GameTimePreviewBlock[];
 }
 
 /** Loading placeholder for the heatmap section. */
@@ -36,7 +36,7 @@ export function AvailabilityHeatmapSection({
   isLoading,
   readOnly,
   onCellClick,
-  previewBlock,
+  previewBlocks,
 }: AvailabilityHeatmapSectionProps): JSX.Element | null {
   if (isLoading) return <HeatmapSkeleton />;
   if (!data || data.cells.length === 0) return null;
@@ -55,7 +55,7 @@ export function AvailabilityHeatmapSection({
           readOnly
           heatmapOverlay={data.cells}
           onCellClick={readOnly ? undefined : onCellClick}
-          previewBlocks={previewBlock ? [previewBlock] : undefined}
+          previewBlocks={previewBlocks?.length ? previewBlocks : undefined}
           compact
           noStickyOffset
         />
