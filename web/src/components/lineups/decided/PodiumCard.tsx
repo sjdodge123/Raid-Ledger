@@ -31,33 +31,6 @@ const RANK_CONFIG: Record<number, { label: string; border: string; badge: string
   },
 };
 
-/** Laurel wreath SVG that frames the champion card. */
-function LaurelWreath(): JSX.Element {
-  return (
-    <div className="absolute -inset-5 pointer-events-none z-30" data-testid="crown-icon">
-      <svg viewBox="0 0 220 220" className="w-full h-full opacity-70" fill="none">
-        {/* Left branch — hugs the left edge */}
-        <path d="M12 190 C8 150, 4 120, 6 90 C7 70, 5 50, 10 30 C12 22, 18 15, 28 10" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" />
-        {/* Left leaves — pointing inward from the edge */}
-        <ellipse cx="4" cy="165" rx="10" ry="4" transform="rotate(-50 4 165)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="2" cy="140" rx="10" ry="4" transform="rotate(-45 2 140)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="2" cy="115" rx="9" ry="3.5" transform="rotate(-40 2 115)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="3" cy="90" rx="9" ry="3.5" transform="rotate(-35 3 90)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="5" cy="65" rx="8" ry="3" transform="rotate(-30 5 65)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="8" cy="42" rx="7" ry="3" transform="rotate(-20 8 42)" fill="#fbbf24" opacity="0.5" />
-        {/* Right branch — hugs the right edge */}
-        <path d="M208 190 C212 150, 216 120, 214 90 C213 70, 215 50, 210 30 C208 22, 202 15, 192 10" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" />
-        {/* Right leaves — pointing inward from the edge */}
-        <ellipse cx="216" cy="165" rx="10" ry="4" transform="rotate(50 216 165)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="218" cy="140" rx="10" ry="4" transform="rotate(45 218 140)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="218" cy="115" rx="9" ry="3.5" transform="rotate(40 218 115)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="217" cy="90" rx="9" ry="3.5" transform="rotate(35 217 90)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="215" cy="65" rx="8" ry="3" transform="rotate(30 215 65)" fill="#fbbf24" opacity="0.5" />
-        <ellipse cx="212" cy="42" rx="7" ry="3" transform="rotate(20 212 42)" fill="#fbbf24" opacity="0.5" />
-      </svg>
-    </div>
-  );
-}
 
 /** Cover image or placeholder. */
 function PodiumCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
@@ -79,7 +52,6 @@ export function PodiumCard({ entry, rank }: PodiumCardProps): JSX.Element {
 
   return (
     <div className="relative">
-      {rank === 1 && <LaurelWreath />}
       <Link
         to={`/games/${entry.gameId}`}
         data-testid="podium-card"
