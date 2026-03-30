@@ -5,6 +5,7 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
+import { GameInfoBadges } from '../GameInfoBadges';
 
 interface PodiumCardProps {
   entry: LineupEntryResponseDto;
@@ -57,15 +58,11 @@ function PodiumCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element 
   );
 }
 
-/** Ownership and price info line. */
+/** Ownership and price badges. */
 function PodiumMeta({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
-  const pct = entry.totalMembers > 0 ? Math.round((entry.ownerCount / entry.totalMembers) * 100) : 0;
-  const price = entry.itadCurrentPrice != null ? `$${entry.itadCurrentPrice.toFixed(2)}` : null;
-
   return (
-    <div className="flex items-center justify-between text-[10px] text-dim mt-1">
-      <span>{entry.ownerCount} own ({pct}%)</span>
-      {price && <span className="text-emerald-400">{price}</span>}
+    <div className="mt-1">
+      <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} />
     </div>
   );
 }

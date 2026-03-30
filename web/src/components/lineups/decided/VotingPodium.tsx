@@ -39,13 +39,13 @@ export function VotingPodium({ entries }: VotingPodiumProps): JSX.Element {
   const ordered = useMemo(() => podiumOrder(top3), [top3]);
 
   return (
-    <section className="mb-6">
-      <h2 className="text-sm font-bold tracking-widest text-muted uppercase mb-4 text-center">
+    <section className="mt-8 mb-6">
+      <h2 className="text-sm font-bold tracking-widest text-muted uppercase mb-6 text-center">
         THIS WEEK&apos;S PODIUM
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
         {ordered.map(({ entry, rank }) => (
-          <div key={entry.id} className={rank === 1 ? 'sm:-mt-4' : ''}>
+          <div key={entry.id} className={rank === 1 ? 'sm:-mt-8' : rank === 2 ? 'sm:-mt-2' : ''}>
             <PodiumCard entry={entry} rank={rank} />
           </div>
         ))}

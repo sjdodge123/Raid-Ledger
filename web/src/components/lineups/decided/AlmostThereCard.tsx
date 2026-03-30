@@ -5,9 +5,10 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
-import type { MatchDetailResponseDto } from '@raid-ledger/contract';
+import type { MatchDetailResponseDto, LineupEntryResponseDto } from '@raid-ledger/contract';
 import { MatchProgressRing } from './MatchProgressRing';
 import { MemberAvatarGroup } from './MemberAvatarGroup';
+import { GameInfoBadges } from '../GameInfoBadges';
 import { useBandwagonJoin } from '../../../hooks/use-lineup-matches';
 import { useAuth } from '../../../hooks/use-auth';
 
@@ -15,6 +16,7 @@ interface AlmostThereCardProps {
   match: MatchDetailResponseDto;
   lineupId: number;
   matchThreshold: number;
+  entry?: LineupEntryResponseDto;
 }
 
 /** Join / Joined button for Tier 2 cards. */
@@ -50,7 +52,7 @@ function JoinButton({
 
 /** Medium card for Tier 2 matches. */
 export function AlmostThereCard({
-  match, lineupId, matchThreshold,
+  match, lineupId, matchThreshold, entry,
 }: AlmostThereCardProps): JSX.Element {
   const { user } = useAuth();
 
@@ -68,6 +70,7 @@ export function AlmostThereCard({
         />
         <div className="flex-1 min-w-0">
           <Link to={`/games/${match.gameId}`} className="text-sm font-semibold text-foreground truncate hover:text-emerald-400 transition-colors block">{match.gameName}</Link>
+          {entry && <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} />}
           <span className="text-[11px] text-dim">
             {match.members.length} / {matchThreshold} players
           </span>
