@@ -13,6 +13,7 @@ import { EventPlansList } from "../components/events/event-plans-list";
 import { InfiniteScrollSentinel } from "../components/ui/infinite-scroll-sentinel";
 import { PullToRefresh } from "../components/ui/pull-to-refresh";
 import { FAB } from "../components/ui/fab";
+import { SchedulingBanner } from "../components/events/SchedulingBanner";
 import type { EventResponseDto, GameTimeSlot } from "@raid-ledger/contract";
 import { eventOverlapsGameTime } from "./events/events-helpers";
 import { EventsPageHeader } from "./events/EventsPageHeader";
@@ -106,6 +107,7 @@ export function EventsPage() {
   return (
     <PullToRefresh onRefresh={refetch}>
       <div className="pb-20 md:pb-0">
+        <SchedulingBanner />
         <EventsMobileToolbar activeTab={state.activeTab} onTabChange={state.setActiveTab} searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery}
           genreOptions={genreOptions} selectedGenre={state.genreFilter} onGenreChange={(key) => handleGenreChange(key, state.searchParams, state.setSearchParams)} />
         <EventsContent activeTab={state.activeTab} setActiveTab={state.setActiveTab} searchQuery={state.searchQuery} setSearchQuery={state.setSearchQuery}
