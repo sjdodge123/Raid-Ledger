@@ -27,14 +27,6 @@ export function PodiumActionButtons({
 }: PodiumActionButtonsProps): JSX.Element {
   return (
     <div className="flex items-center gap-3 mt-4 justify-center">
-      {championEntry && (
-        <Link
-          to={buildCreateEventHref(championEntry.gameId, lineupId)}
-          className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors"
-        >
-          Create Event
-        </Link>
-      )}
       <button
         type="button"
         disabled
