@@ -213,6 +213,10 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 // Shared test state
 // ---------------------------------------------------------------------------
 
+// Increase timeout for all tests and hooks — the beforeAll setup transitions
+// through multiple lineup phases which can be slow.
+test.describe.configure({ timeout: 120_000 });
+
 let adminToken: string;
 let lineupId: number;
 let matchId: number;
@@ -233,10 +237,6 @@ test.beforeAll(async () => {
         proposedTime: tomorrow.toISOString(),
     });
 });
-
-// Increase timeout for all tests — the beforeAll setup transitions through
-// multiple lineup phases which can be slow in CI.
-test.describe.configure({ timeout: 120_000 });
 
 // ---------------------------------------------------------------------------
 // AC1: Route renders the scheduling poll page
