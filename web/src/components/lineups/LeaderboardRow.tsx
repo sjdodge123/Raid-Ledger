@@ -39,7 +39,7 @@ function voteLabel(count: number): string {
 function RowInfo({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
   return (
     <div className="flex-1 min-w-0">
-      <Link to={`/games/${entry.gameId}`} onClick={(e) => e.stopPropagation()} className="text-foreground font-semibold text-sm truncate hover:text-emerald-400 transition-colors block">{entry.gameName}</Link>
+      <Link to={`/games/${entry.gameId}`} onClick={(e) => { if (!e.metaKey && !e.ctrlKey) e.preventDefault(); }} className="text-foreground font-semibold text-sm truncate hover:text-emerald-400 transition-colors block">{entry.gameName}</Link>
       <div className="mt-0.5" onClick={(e) => e.stopPropagation()}>
         <GameInfoBadges ownerCount={entry.ownerCount} itadCurrentCut={entry.itadCurrentCut} itadCurrentPrice={entry.itadCurrentPrice} playerCount={entry.playerCount} />
       </div>

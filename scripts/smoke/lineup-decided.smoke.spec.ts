@@ -109,7 +109,7 @@ async function archiveActiveLineup(token: string): Promise<void> {
             building: ['voting', 'decided', 'scheduling', 'archived'],
             voting: ['decided', 'scheduling', 'archived'],
             decided: ['scheduling', 'archived'],
-            decided: ['archived'],
+            scheduling: ['archived'],
         };
 
         const steps = transitions[detail.status];
