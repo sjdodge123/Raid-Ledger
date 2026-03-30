@@ -164,13 +164,8 @@ describe('discoverGameViaItad', () => {
       expect(result?.gameId).toBe(42);
     });
 
-    it('allows package-type ITAD results through', async () => {
+    it('rejects package-type ITAD results (ROK-986)', async () => {
       const mockDb = buildMockDb();
-      mockDb.query.games.findFirst
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce(undefined);
-      mockDb.insertReturning.mockResolvedValue([{ id: 43 }]);
-
       const packageGame: ItadGame = {
         ...FAKE_ITAD_GAME,
         type: 'package',
@@ -184,8 +179,8 @@ describe('discoverGameViaItad', () => {
 
       const result = await discoverGameViaItad(STEAM_APP_ID, deps);
 
-      expect(result).not.toBeNull();
-      expect(result?.gameId).toBe(43);
+      expect(result).toBeNull();
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
     it('does not query DB when DLC is filtered out', async () => {
@@ -204,7 +199,7 @@ describe('discoverGameViaItad', () => {
   });
 
   describe('isFullGame helper', () => {
-    it.each(['game', 'package'])('returns true for type=%s', (type) => {
+    it.each(['game'])('returns true for type=%s', (type) => {
       expect(isFullGame({ ...FAKE_ITAD_GAME, type })).toBe(true);
     });
 
