@@ -1,5 +1,7 @@
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
+import { useGameRegistry } from '../hooks/use-game-registry';
 import { CreateEventForm } from '../components/events/create-event-form';
 
 /**
@@ -9,6 +11,15 @@ import { CreateEventForm } from '../components/events/create-event-form';
 export function CreateEventPage() {
     const { isAuthenticated, isLoading } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const { games: registryGames } = useGameRegistry();
+
+    const initialGame = useMemo(() => {
+        const rawId = searchParams.get('gameId');
+        if (!rawId) return null;
+        const id = parseInt(rawId, 10);
+        return registryGames.find((g) => g.id === id) ?? null;
+    }, [searchParams, registryGames]);
 
     if (isLoading) return <PageSpinner />;
     if (!isAuthenticated) return <Navigate to="/events" replace />;
@@ -22,7 +33,7 @@ export function CreateEventPage() {
                     <p className="text-muted">Set up a new gaming session for your community</p>
                 </div>
                 <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                    <CreateEventForm />
+                    <CreateEventForm initialGame={initialGame} />
                 </div>
             </div>
         </div>

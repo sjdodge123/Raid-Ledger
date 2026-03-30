@@ -127,10 +127,14 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
     mutate(buildSubmitDto(form, resolved, registryGameId));
 }
 
-function useCreateEventFormState(editEvent?: EventResponseDto, seriesScope?: SeriesScope) {
+function useCreateEventFormState(editEvent?: EventResponseDto, seriesScope?: SeriesScope, initialGame?: EventFormProps['initialGame']) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = getTimezoneAbbr(resolved);
-    const [form, setForm] = useState<FormState>(() => getInitialState(editEvent, resolved));
+    const [form, setForm] = useState<FormState>(() => {
+        const state = getInitialState(editEvent, resolved);
+        if (!editEvent && initialGame) state.game = initialGame as FormState['game'];
+        return state;
+    });
     const [errors, setErrors] = useState<FormErrors>({});
     const registryGameId = useRegistryGameId(form.game);
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
@@ -147,10 +151,10 @@ function useCreateEventFormState(editEvent?: EventResponseDto, seriesScope?: Ser
     return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
 }
 
-export function CreateEventForm({ event: editEvent, seriesScope }: EventFormProps = {}) {
+export function CreateEventForm({ event: editEvent, seriesScope, initialGame }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
-    const s = useCreateEventFormState(editEvent, seriesScope);
+    const s = useCreateEventFormState(editEvent, seriesScope, initialGame);
 
     return (
         <form onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate); }} className="space-y-4 sm:space-y-8">
