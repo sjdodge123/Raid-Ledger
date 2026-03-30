@@ -14,9 +14,10 @@ import { IgdbModule } from '../igdb/igdb.module';
 import { DemoDataService } from './demo-data.service';
 import { DemoTestService } from './demo-test.service';
 import { SlashCommandTestService } from './slash-command-test.service';
+import { LineupsModule } from '../lineups/lineups.module';
 
 @Module({
-  imports: [SettingsModule, AuthModule, IgdbModule],
+  imports: [SettingsModule, AuthModule, IgdbModule, LineupsModule],
   controllers: [
     AdminController,
     AdminSettingsController,

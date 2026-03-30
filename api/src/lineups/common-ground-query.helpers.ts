@@ -17,6 +17,7 @@ export interface CommonGroundFilters {
   minOwners: number;
   maxPlayers?: number;
   genre?: string;
+  search?: string;
   limit: number;
 }
 
@@ -106,6 +107,10 @@ function buildWhereConditions(
         AND (g.player_count->>'max')::int >= ${filters.maxPlayers}
       )`,
     );
+  }
+
+  if (filters.search) {
+    conditions.push(sql`g.name ILIKE ${'%' + filters.search + '%'}`);
   }
 
   return conditions;

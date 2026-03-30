@@ -26,6 +26,6 @@ import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
     LineupPhaseQueueService,
     LineupPhaseProcessor,
   ],
-  exports: [LineupsService],
+  exports: [LineupsService, LineupSteamNudgeService],
 })
 export class LineupsModule {}

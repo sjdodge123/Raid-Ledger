@@ -198,17 +198,6 @@ function PanelContent({
     );
 }
 
-/** Filter results client-side by name search. */
-function filterBySearch(
-    data: CommonGroundResponseDto | undefined,
-    search: string,
-): CommonGroundResponseDto | undefined {
-    if (!data || !search.trim()) return data;
-    const q = search.toLowerCase();
-    const filtered = data.data.filter((g) => g.gameName.toLowerCase().includes(q));
-    return { ...data, data: filtered };
-}
-
 /** Main Common Ground panel. Pass lineupId when the parent already has it. */
 export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: number } = {}): JSX.Element | null {
     const { data: lineup } = useActiveLineup();
@@ -216,9 +205,9 @@ export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: numbe
     const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0, maxPlayers: 2 });
     const [search, setSearch] = useState('');
     const hasBuilding = propLineupId != null || lineup?.status === 'building';
-    const debouncedFilters = useDebouncedValue(filters, 300);
-    const { data, isLoading, isError, refetch } = useCommonGround(debouncedFilters, hasBuilding);
-    const filtered = useMemo(() => filterBySearch(data, search), [data, search]);
+    const apiParams = useMemo(() => ({ ...filters, search: search.trim() || undefined }), [filters, search]);
+    const debouncedParams = useDebouncedValue(apiParams, 300);
+    const { data, isLoading, isError, refetch } = useCommonGround(debouncedParams, hasBuilding);
     const availableTags = useMemo(() => (data?.data ? extractUniqueTags(data.data) : []), [data]);
     const atCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
     const { nominatingId, handleNominate } = useNomination(resolvedId);
@@ -229,7 +218,7 @@ export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: numbe
         <section className="space-y-3">
             <PanelHeader nominated={data?.meta.nominatedCount ?? 0} max={data?.meta.maxNominations ?? 20} />
             <PanelContent
-                data={filtered} filters={filters} setFilters={setFilters} availableTags={availableTags}
+                data={data} filters={filters} setFilters={setFilters} availableTags={availableTags}
                 isLoading={isLoading} isError={isError} refetch={() => void refetch()}
                 onNominate={handleNominate} nominatingId={nominatingId} atCap={atCap}
                 search={search} onSearchChange={setSearch}

@@ -168,6 +168,8 @@ export const CommonGroundQuerySchema = z.object({
     minOwners: z.coerce.number().int().min(0).max(15).default(2),
     maxPlayers: z.coerce.number().int().positive().optional(),
     genre: z.string().optional(),
+    /** Case-insensitive game name search (ILIKE). */
+    search: z.string().max(100).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(50),
 });
 
