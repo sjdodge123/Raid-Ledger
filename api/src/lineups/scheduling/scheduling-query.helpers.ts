@@ -109,6 +109,26 @@ export function updateMatchLinkedEvent(
     .where(eq(schema.communityLineupMatches.id, matchId));
 }
 
+/** Delete all votes by a user on slots belonging to a given match. */
+export function deleteAllUserVotesForMatch(
+  db: Db,
+  matchId: number,
+  userId: number,
+) {
+  return db.delete(schema.communityLineupScheduleVotes).where(
+    and(
+      eq(schema.communityLineupScheduleVotes.userId, userId),
+      inArray(
+        schema.communityLineupScheduleVotes.slotId,
+        db
+          .select({ id: schema.communityLineupScheduleSlots.id })
+          .from(schema.communityLineupScheduleSlots)
+          .where(eq(schema.communityLineupScheduleSlots.matchId, matchId)),
+      ),
+    ),
+  );
+}
+
 /** Find matches in scheduling status for a lineup where a user is a member. */
 export function findUserSchedulingMatches(
   db: Db,

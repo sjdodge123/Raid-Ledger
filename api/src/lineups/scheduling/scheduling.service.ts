@@ -11,6 +11,7 @@ import {
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  CreateEventDto,
   SchedulePollPageResponseDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
@@ -28,6 +29,7 @@ import {
   findVoteBySlotAndUser,
   updateMatchLinkedEvent,
   findUserSchedulingMatches,
+  deleteAllUserVotesForMatch,
 } from './scheduling-query.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
@@ -111,6 +113,7 @@ export class SchedulingService {
     matchId: number,
     slotId: number,
     userId: number,
+    recurring: boolean = false,
   ): Promise<{ eventId: number }> {
     const [match] = await findMatchById(this.db, matchId);
     if (!match) throw new NotFoundException('Match not found');
@@ -118,26 +121,25 @@ export class SchedulingService {
       throw new BadRequestException('Event already created for this match');
     }
 
-    const [slot] = await this.db
-      .select()
-      .from(schema.communityLineupScheduleSlots)
-      .where(eq(schema.communityLineupScheduleSlots.id, slotId))
-      .limit(1);
+    const slot = await this.findSlotById(slotId);
     if (!slot) throw new NotFoundException('Slot not found');
 
     const gameName = await this.resolveGameName(match.gameId);
-    const startTime = new Date(slot.proposedTime);
-    const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
+    const dto = this.buildCreateEventDto(
+      gameName, match.gameId, slot.proposedTime, recurring,
+    );
 
-    const event = await this.eventsService.create(userId, {
-      title: gameName,
-      gameId: match.gameId,
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-    });
-
+    const event = await this.eventsService.create(userId, dto);
     await updateMatchLinkedEvent(this.db, matchId, event.id);
     return { eventId: event.id };
+  }
+
+  /** Retract all votes by a user for slots belonging to a match. */
+  async retractAllVotes(
+    matchId: number,
+    userId: number,
+  ): Promise<void> {
+    await deleteAllUserVotesForMatch(this.db, matchId, userId);
   }
 
   /** Get heatmap availability data for a match's members. */
@@ -178,6 +180,40 @@ export class SchedulingService {
   private async assertMatchExists(matchId: number): Promise<void> {
     const [match] = await findMatchById(this.db, matchId);
     if (!match) throw new NotFoundException('Match not found');
+  }
+
+  /** Find a schedule slot by ID. */
+  private async findSlotById(slotId: number) {
+    const [slot] = await this.db
+      .select()
+      .from(schema.communityLineupScheduleSlots)
+      .where(eq(schema.communityLineupScheduleSlots.id, slotId))
+      .limit(1);
+    return slot ?? null;
+  }
+
+  /** Build CreateEventDto, optionally with weekly recurrence. */
+  private buildCreateEventDto(
+    title: string,
+    gameId: number,
+    proposedTime: Date | string,
+    recurring: boolean,
+  ): CreateEventDto {
+    const startTime = new Date(proposedTime);
+    const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
+    const base = {
+      title,
+      gameId,
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+    };
+    if (!recurring) return base;
+    const FOUR_WEEKS_MS = 4 * 7 * 24 * 60 * 60 * 1000;
+    const until = new Date(startTime.getTime() + FOUR_WEEKS_MS);
+    return {
+      ...base,
+      recurrence: { frequency: 'weekly' as const, until: until.toISOString() },
+    };
   }
 
   /** Resolve game name from game ID. */

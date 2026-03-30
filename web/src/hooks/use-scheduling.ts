@@ -14,6 +14,7 @@ import {
   suggestSlot,
   toggleScheduleVote,
   createEventFromSlot,
+  retractAllVotes,
   getMatchAvailability,
   getSchedulingBanner,
   getOtherPolls,
@@ -74,11 +75,11 @@ export function useToggleScheduleVote() {
   });
 }
 
-/** Hook for retracting all votes on a poll. Not yet wired to backend. */
+/** Hook for retracting all votes on a poll. */
 export function useRetractAllVotes() {
   const qc = useQueryClient();
-  return useMutation<void, Error, void>({
-    mutationFn: async () => { /* placeholder */ },
+  return useMutation<void, Error, { lineupId: number; matchId: number }>({
+    mutationFn: ({ lineupId, matchId }) => retractAllVotes(lineupId, matchId),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
   });
 }

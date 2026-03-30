@@ -13,6 +13,8 @@ interface CreateEventSectionProps {
   createdEventId: number | null;
   matchStatus: string;
   isCreating: boolean;
+  recurring: boolean;
+  onRecurringChange: (value: boolean) => void;
   onCreateEvent: () => void;
 }
 
@@ -71,9 +73,24 @@ function CreateButton({ hasVoted, readOnly, isCreating, slotsEmpty, onCreateEven
   );
 }
 
+/** Recurring series checkbox. */
+function RecurringCheckbox({ checked, onChange, disabled }: {
+  checked: boolean; onChange: (v: boolean) => void; disabled: boolean;
+}): JSX.Element {
+  return (
+    <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+      <input type="checkbox" checked={checked} disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500" />
+      Repeat weekly for 4 weeks
+    </label>
+  );
+}
+
 /** Section for creating an event from the winning slot. */
 export function CreateEventSection({
-  slots, hasVoted, readOnly, createdEventId, matchStatus, isCreating, onCreateEvent,
+  slots, hasVoted, readOnly, createdEventId, matchStatus, isCreating,
+  recurring, onRecurringChange, onCreateEvent,
 }: CreateEventSectionProps): JSX.Element {
   if (createdEventId) {
     return <CreatedSuccessState eventId={createdEventId} matchStatus={matchStatus} />;
@@ -82,6 +99,7 @@ export function CreateEventSection({
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Create Event</h3>
       <LeadingSlotSummary slots={slots} />
+      <RecurringCheckbox checked={recurring} onChange={onRecurringChange} disabled={readOnly} />
       <CreateButton hasVoted={hasVoted} readOnly={readOnly} isCreating={isCreating}
         slotsEmpty={slots.length === 0} onCreateEvent={onCreateEvent} />
     </div>

@@ -197,6 +197,7 @@ export {
     suggestSlot,
     toggleScheduleVote,
     createEventFromSlot,
+    retractAllVotes,
     getMatchAvailability,
     getSchedulingBanner,
     getOtherPolls,

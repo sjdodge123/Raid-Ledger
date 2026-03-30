@@ -88,5 +88,62 @@ describe('SchedulingService', () => {
         NotFoundException,
       );
     });
+
+    it('passes recurrence to EventsService when recurring is true', async () => {
+      const slotTime = '2026-04-01T19:00:00.000Z';
+      // findMatchById
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 10, lineupId: 1, gameId: 5, linkedEventId: null },
+      ]);
+      // slot lookup
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 20, matchId: 10, proposedTime: slotTime },
+      ]);
+      // resolveGameName -> resolveGameInfo
+      mockDb.limit.mockResolvedValueOnce([
+        { name: 'Test Game', coverUrl: null },
+      ]);
+      mockEventsService.create.mockResolvedValueOnce({ id: 100 });
+
+      await service.createEventFromSlot(10, 20, 1, true);
+
+      expect(mockEventsService.create).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          recurrence: expect.objectContaining({
+            frequency: 'weekly',
+          }),
+        }),
+      );
+    });
+
+    it('does not pass recurrence when recurring is false', async () => {
+      const slotTime = '2026-04-01T19:00:00.000Z';
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 10, lineupId: 1, gameId: 5, linkedEventId: null },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 20, matchId: 10, proposedTime: slotTime },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        { name: 'Test Game', coverUrl: null },
+      ]);
+      mockEventsService.create.mockResolvedValueOnce({ id: 101 });
+
+      await service.createEventFromSlot(10, 20, 1, false);
+
+      const createArg = mockEventsService.create.mock.calls[0][1];
+      expect(createArg.recurrence).toBeUndefined();
+    });
+  });
+
+  describe('retractAllVotes', () => {
+    it('calls delete for all user votes on a match', async () => {
+      mockDb.where.mockResolvedValueOnce([]);
+
+      await service.retractAllVotes(10, 1);
+
+      expect(mockDb.delete).toHaveBeenCalled();
+    });
   });
 });
