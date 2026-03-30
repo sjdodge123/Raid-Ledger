@@ -348,6 +348,11 @@ test.describe('Decided view tiered match cards', () => {
             { timeout: 10_000 },
         );
 
+        // Wait for the decided view to render
+        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
+            timeout: 15_000,
+        });
+
         // AC: Tiered sections render: Scheduling Now (cyan),
         // Almost There (emerald), Rally Your Crew (amber)
         // At least one tier section should be visible
@@ -356,7 +361,7 @@ test.describe('Decided view tiered match cards', () => {
         const rallyYourCrew = page.getByText('Rally Your Crew');
 
         const hasScheduling = await schedulingNow
-            .isVisible({ timeout: 15_000 })
+            .isVisible({ timeout: 10_000 })
             .catch(() => false);
         const hasAlmost = await almostThere
             .isVisible({ timeout: 5_000 })
@@ -719,16 +724,13 @@ test.describe('Decided view rendering', () => {
         );
 
         // AC: Champion card has gold gradient border and crown icon
-        const championCard = page
-            .locator('[data-testid="podium-card"]')
-            .first();
-        await expect(championCard).toBeVisible({ timeout: 15_000 });
+        // Podium renders in Silver-Champion-Bronze order; find the card WITH the crown
+        const crownIcon = page.locator('[data-testid="crown-icon"]');
+        await expect(crownIcon).toBeVisible({ timeout: 15_000 });
 
-        // Crown icon should be visible on the champion card
-        const crownIcon = championCard.locator(
-            '[data-testid="crown-icon"]',
-        );
-        await expect(crownIcon).toBeVisible({ timeout: 5_000 });
+        // The crown icon's parent podium card should also be visible
+        const championCard = crownIcon.locator('xpath=ancestor::div[@data-testid="podium-card"]');
+        await expect(championCard).toBeVisible({ timeout: 5_000 });
     });
 });
 
