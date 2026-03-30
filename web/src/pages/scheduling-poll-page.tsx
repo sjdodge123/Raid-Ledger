@@ -117,7 +117,7 @@ function PollSections({ lineupId, matchId, poll }: {
         readOnly={readOnly} previewBlock={previewBlock}
         onCellClick={(day, hour) => {
           setPrefillTime(toDatetimeLocal(day, hour));
-          setPreviewBlock({ dayOfWeek: day, startHour: hour, endHour: hour + 2, label: 'Suggested', variant: 'selected' });
+          setPreviewBlock({ dayOfWeek: day, startHour: hour, endHour: hour + 2, label: 'Suggested Time', title: 'Suggested Time', variant: 'selected' });
         }} />
       <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
         readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
