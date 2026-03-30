@@ -48,10 +48,10 @@ function SteamSuccessMessage() {
 }
 
 /** Error feedback with retry button shown after a failed Steam auth. */
-function SteamErrorMessage({ onRetry }: { onRetry: () => void }) {
+function SteamErrorMessage({ message, onRetry }: { message: string | null; onRetry: () => void }) {
     return (
         <div className="space-y-3 text-center">
-            <p className="text-red-400 text-sm">Something went wrong connecting Steam. Please try again.</p>
+            <p className="text-red-400 text-sm">{message || 'Something went wrong connecting Steam. Please try again.'}</p>
             <button onClick={onRetry}
                 className="px-4 py-2 min-h-[44px] bg-[#171a21] hover:bg-[#2a475e] text-white font-semibold rounded-lg transition-colors text-sm">
                 Retry
@@ -85,7 +85,7 @@ export function SteamStep() {
             <SteamStepHeader />
             <div className="max-w-sm mx-auto space-y-3">
                 {isSuccess && <SteamSuccessMessage />}
-                {isError && <SteamErrorMessage onRetry={handleConnect} />}
+                {isError && <SteamErrorMessage message={searchParams.get('message')} onRetry={handleConnect} />}
                 {!isSuccess && !isError && (
                     <ConnectSteamLink isRedirecting={isRedirecting} href={steamLinkUrl} onClick={handleConnect} />
                 )}
