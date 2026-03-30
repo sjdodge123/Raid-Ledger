@@ -12,6 +12,8 @@ import { NominateModal } from '../components/lineups/NominateModal';
 import { PastLineups } from '../components/lineups/PastLineups';
 import { DecidedView } from '../components/lineups/decided/DecidedView';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
+import { SteamNudgeBanner } from '../components/lineups/SteamNudgeBanner';
+import { useAuth } from '../hooks/use-auth';
 
 function LineupNotFound(): JSX.Element {
   return (
@@ -28,6 +30,7 @@ export function LineupDetailPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const lineupId = id ? parseInt(id, 10) : undefined;
   const { data: lineup, isLoading, error } = useLineupDetail(lineupId);
+  const { user } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
 
   if (isLoading) return <LineupDetailSkeleton />;
@@ -52,6 +55,12 @@ export function LineupDetailPage(): JSX.Element {
       </div>
 
       <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
+
+      {isBuilding && (
+        <div className="mt-3">
+          <SteamNudgeBanner lineupId={lineup.id} lineupStatus={lineup.status} userSteamId={user?.steamId ?? null} />
+        </div>
+      )}
 
       {lineup.status === 'building' && (
         <div className="mt-4">
