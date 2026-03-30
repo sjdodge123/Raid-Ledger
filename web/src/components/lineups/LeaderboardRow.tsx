@@ -3,6 +3,7 @@
  * Shows rank, game info, vote bar, and vote toggle.
  */
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 
 interface LeaderboardRowProps {
@@ -37,7 +38,7 @@ function voteLabel(count: number): string {
 function RowInfo({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
   return (
     <div className="flex-1 min-w-0">
-      <h4 className="text-foreground font-semibold text-sm truncate">{entry.gameName}</h4>
+      <Link to={`/games/${entry.gameId}`} onClick={(e) => e.stopPropagation()} className="text-foreground font-semibold text-sm truncate hover:text-emerald-400 transition-colors block">{entry.gameName}</Link>
       <div className="flex items-center gap-2 mt-0.5">
         <span className="text-emerald-400 text-[11px]">{entry.ownerCount} own</span>
         {entry.itadCurrentPrice != null && (

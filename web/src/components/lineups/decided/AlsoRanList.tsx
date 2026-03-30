@@ -4,6 +4,7 @@
  */
 import { useMemo } from 'react';
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 
 interface AlsoRanListProps {
@@ -50,7 +51,7 @@ function AlsoRanEntry({
     <div data-testid="also-ran-entry" className={`flex items-center gap-3 px-3 py-2 ${opacityClass}`}>
       <span className="text-xs font-bold text-dim w-5 text-right">{rank}</span>
       <EntryThumb url={entry.gameCoverUrl} name={entry.gameName} />
-      <span className="text-sm text-secondary truncate flex-1">{entry.gameName}</span>
+      <Link to={`/games/${entry.gameId}`} className="text-sm text-secondary truncate flex-1 hover:text-emerald-400 transition-colors">{entry.gameName}</Link>
       <div className="w-20 h-1.5 bg-zinc-700 rounded-full overflow-hidden flex-shrink-0">
         <div className="h-full bg-zinc-400 rounded-full" style={{ width: voteBarWidth(entry.voteCount, maxVotes) }} />
       </div>

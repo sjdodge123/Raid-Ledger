@@ -5,6 +5,7 @@
  */
 import { useRef, useEffect } from 'react';
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { MatchProgressRing } from './MatchProgressRing';
 import { useBandwagonJoin, useAdvanceMatch } from '../../../hooks/use-lineup-matches';
@@ -128,7 +129,7 @@ export function RallyRow({
     <div ref={rowRef} data-testid="rally-row" data-rallied={isRallied ? 'true' : undefined} className={rallyClassName(isRallied)}>
       <MatchProgressRing current={match.members.length} target={matchThreshold} size={36} color="#f59e0b" />
       <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium text-foreground truncate block">{match.gameName}</span>
+        <Link to={`/games/${match.gameId}`} className="text-sm font-medium text-foreground truncate block hover:text-emerald-400 transition-colors">{match.gameName}</Link>
         <span className="text-[10px] text-dim">{match.members.length} interested</span>
       </div>
       <RallyJoinButton match={match} lineupId={lineupId} userId={user?.id} />
