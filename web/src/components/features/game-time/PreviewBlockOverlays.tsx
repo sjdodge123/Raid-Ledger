@@ -60,12 +60,15 @@ function PreviewBlock({ block, pos, hasEventUnderneath }: {
 }): JSX.Element {
     const isSelected = block.variant === 'selected';
     const borderStyle = isSelected ? '3px solid rgba(6, 182, 212, 0.95)' : '3px dashed rgba(6, 182, 212, 0.85)';
-    const shadowStyle = '0 0 14px rgba(6, 182, 212, 0.4), inset 0 0 8px rgba(6, 182, 212, 0.1)';
+    const bgStyle = isSelected ? 'rgba(6, 182, 212, 0.25)' : 'rgba(6, 182, 212, 0.08)';
+    const shadowStyle = isSelected
+        ? '0 0 20px rgba(6, 182, 212, 0.5), inset 0 0 12px rgba(6, 182, 212, 0.15)'
+        : '0 0 14px rgba(6, 182, 212, 0.4), inset 0 0 8px rgba(6, 182, 212, 0.1)';
 
     return (
         <div
             className="absolute z-[21] rounded-sm pointer-events-none"
-            style={{ top: pos.top, left: pos.left, width: pos.width, height: pos.height, border: borderStyle, boxShadow: shadowStyle }}
+            style={{ top: pos.top, left: pos.left, width: pos.width, height: pos.height, border: borderStyle, background: bgStyle, boxShadow: shadowStyle }}
             data-testid={`preview-block-${block.dayOfWeek}-${block.startHour}`}
         >
             {!hasEventUnderneath && block.title && (
