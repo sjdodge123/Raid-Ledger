@@ -61,13 +61,13 @@ export class LineupSteamNudgeService {
     );
     if (alreadySent) return;
 
-    const lineupUrl = `${clientUrl}/community-lineup/${lineupId}`;
     await this.notificationService.create({
       userId: member.id,
       type: 'lineup_steam_nudge',
       title: 'Link your Steam account',
       message:
-        `A new community lineup is being built! Link your Steam account so we can include your library in game suggestions.\n\n${lineupUrl}`,
+        'A new community lineup is being built! Link your Steam account so we can include your library in game suggestions.',
+      payload: { lineupId },
     });
   }
 }

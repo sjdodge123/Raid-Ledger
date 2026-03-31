@@ -296,6 +296,9 @@ export function buildPrimaryButton(
   payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ButtonBuilder | null {
+  if (type === 'lineup_steam_nudge') {
+    return buildLineupNudgeButton(payload, clientUrl);
+  }
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
   if (!eventId) return null;
   if (
@@ -314,4 +317,17 @@ export function buildPrimaryButton(
     .setLabel(label)
     .setStyle(ButtonStyle.Link)
     .setURL(`${clientUrl}/events/${eventId}?notif=${notificationId}`);
+}
+
+/** Build the "View Lineup" link button for steam nudge DMs. */
+function buildLineupNudgeButton(
+  payload: Record<string, unknown> | undefined,
+  clientUrl: string,
+): ButtonBuilder | null {
+  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+  if (!lineupId) return null;
+  return new ButtonBuilder()
+    .setLabel('View Lineup')
+    .setStyle(ButtonStyle.Link)
+    .setURL(`${clientUrl}/community-lineup/${lineupId}`);
 }
