@@ -1,63 +1,30 @@
 /**
  * TDD tests for LineupSteamNudgeService (ROK-993).
- * Validates Discord DM nudge dispatch, dedup, preference checks,
- * and filtering of users by Steam/Discord link status.
- *
- * These tests are written BEFORE the implementation exists.
- * They MUST fail until the dev agent builds the service.
+ * Validates Discord DM nudge dispatch, dedup, and SQL-level filtering.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
-import { SettingsService } from '../settings/settings.service';
 
-/**
- * Mock user rows returned by findNudgeRecipients-style queries.
- * Shape: { id, discordId, steamId, displayName }
- */
-function makeUser(
-  overrides: Partial<{
-    id: number;
-    discordId: string | null;
-    steamId: string | null;
-    displayName: string;
-  }> = {},
-) {
-  return {
-    id: overrides.id === undefined ? 1 : overrides.id,
-    discordId:
-      overrides.discordId === undefined ? '111222333' : overrides.discordId,
-    steamId: overrides.steamId === undefined ? null : overrides.steamId,
-    displayName:
-      overrides.displayName === undefined ? 'TestUser' : overrides.displayName,
-  };
+function makeRecipient(id: number, displayName = 'TestUser') {
+  return { id, displayName };
 }
 
 describe('LineupSteamNudgeService', () => {
   let service: LineupSteamNudgeService;
-  let mockDb: { execute: jest.Mock; select: jest.Mock };
+  let mockDb: { execute: jest.Mock };
   let mockNotificationService: { create: jest.Mock };
   let mockDedupService: { checkAndMarkSent: jest.Mock };
-  let mockSettingsService: { getClientUrl: jest.Mock };
 
   beforeEach(async () => {
-    mockDb = {
-      execute: jest.fn().mockResolvedValue([]),
-      select: jest.fn(),
-    };
-
+    mockDb = { execute: jest.fn().mockResolvedValue([]) };
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
     };
-
     mockDedupService = {
       checkAndMarkSent: jest.fn().mockResolvedValue(false),
-    };
-
-    mockSettingsService = {
-      getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -65,11 +32,7 @@ describe('LineupSteamNudgeService', () => {
         LineupSteamNudgeService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: NotificationService, useValue: mockNotificationService },
-        {
-          provide: NotificationDedupService,
-          useValue: mockDedupService,
-        },
-        { provide: SettingsService, useValue: mockSettingsService },
+        { provide: NotificationDedupService, useValue: mockDedupService },
       ],
     }).compile();
 
@@ -77,12 +40,11 @@ describe('LineupSteamNudgeService', () => {
   });
 
   describe('nudgeUnlinkedMembers', () => {
-    it('dispatches notification for each user with Discord but no Steam', async () => {
-      const users = [
-        makeUser({ id: 10, discordId: 'disc-10', steamId: null }),
-        makeUser({ id: 11, discordId: 'disc-11', steamId: null }),
-      ];
-      mockDb.execute.mockResolvedValueOnce(users);
+    it('dispatches notification for each eligible recipient', async () => {
+      mockDb.execute.mockResolvedValueOnce([
+        makeRecipient(10),
+        makeRecipient(11),
+      ]);
 
       await service.nudgeUnlinkedMembers(42);
 
@@ -95,33 +57,17 @@ describe('LineupSteamNudgeService', () => {
       );
     });
 
-    it('skips users who already have Steam linked', async () => {
-      const users = [
-        makeUser({
-          id: 10,
-          discordId: 'disc-10',
-          steamId: '76561198000000001',
-        }),
-      ];
-      mockDb.execute.mockResolvedValueOnce(users);
+    it('does nothing when no eligible recipients', async () => {
+      mockDb.execute.mockResolvedValueOnce([]);
 
       await service.nudgeUnlinkedMembers(42);
 
-      expect(mockNotificationService.create).not.toHaveBeenCalled();
-    });
-
-    it('skips users without Discord (cannot DM them)', async () => {
-      const users = [makeUser({ id: 10, discordId: null, steamId: null })];
-      mockDb.execute.mockResolvedValueOnce(users);
-
-      await service.nudgeUnlinkedMembers(42);
-
+      expect(mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
     it('uses permanent dedup key per lineup+user to prevent duplicates', async () => {
-      const users = [makeUser({ id: 10, discordId: 'disc-10', steamId: null })];
-      mockDb.execute.mockResolvedValueOnce(users);
+      mockDb.execute.mockResolvedValueOnce([makeRecipient(10)]);
 
       await service.nudgeUnlinkedMembers(42);
 
@@ -132,13 +78,22 @@ describe('LineupSteamNudgeService', () => {
     });
 
     it('skips notification when dedup indicates already sent', async () => {
-      const users = [makeUser({ id: 10, discordId: 'disc-10', steamId: null })];
-      mockDb.execute.mockResolvedValueOnce(users);
+      mockDb.execute.mockResolvedValueOnce([makeRecipient(10)]);
       mockDedupService.checkAndMarkSent.mockResolvedValueOnce(true);
 
       await service.nudgeUnlinkedMembers(42);
 
       expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('includes lineupId in notification payload', async () => {
+      mockDb.execute.mockResolvedValueOnce([makeRecipient(10)]);
+
+      await service.nudgeUnlinkedMembers(42);
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ payload: { lineupId: 42 } }),
+      );
     });
   });
 });

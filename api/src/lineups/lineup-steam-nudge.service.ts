@@ -1,6 +1,6 @@
 /**
  * Service to nudge unlinked Steam members during lineup building (ROK-993).
- * Sends Discord DM nudges to lineup members who have Discord but no Steam linked.
+ * Sends Discord DM nudges to all community members who have Discord but no Steam linked.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
@@ -9,15 +9,14 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
-import { SettingsService } from '../settings/settings.service';
 
-/** Shape of a member row from the nudge query. */
-interface NudgeMember {
+/** Shape of an eligible nudge recipient. */
+interface NudgeRecipient {
   id: number;
-  discordId: string | null;
-  steamId: string | null;
   displayName: string;
 }
+
+const BATCH_SIZE = 10;
 
 @Injectable()
 export class LineupSteamNudgeService {
@@ -28,33 +27,36 @@ export class LineupSteamNudgeService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly dedupService: NotificationDedupService,
-    private readonly settingsService: SettingsService,
   ) {}
 
-  /** Send nudge DMs to members without Steam linked. */
+  /** Send nudge DMs to all community members with Discord but no Steam. */
   async nudgeUnlinkedMembers(lineupId: number): Promise<void> {
-    const [clientUrl, members] = await Promise.all([
-      this.settingsService.getClientUrl(),
-      this.db.execute(sql`
-        SELECT u.id, u.discord_id AS "discordId", u.steam_id AS "steamId",
-               COALESCE(u.display_name, u.username) AS "displayName"
-        FROM users u
-      `) as Promise<unknown> as Promise<NudgeMember[]>,
-    ]);
+    const recipients = await this.findNudgeRecipients();
+    if (!recipients.length) return;
 
-    for (const member of members) {
-      if (!member.discordId || member.steamId) continue;
-      await this.sendNudge(member, lineupId, clientUrl);
+    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+      const batch = recipients.slice(i, i + BATCH_SIZE);
+      await Promise.allSettled(
+        batch.map((r) => this.sendNudge(r, lineupId)),
+      );
     }
+  }
+
+  /** Find users with Discord linked but no Steam. */
+  private async findNudgeRecipients(): Promise<NudgeRecipient[]> {
+    return (await this.db.execute(sql`
+      SELECT u.id, COALESCE(u.display_name, u.username) AS "displayName"
+      FROM users u
+      WHERE u.discord_id IS NOT NULL AND u.steam_id IS NULL
+    `)) as unknown as NudgeRecipient[];
   }
 
   /** Send a single nudge, skipping if already sent. */
   private async sendNudge(
-    member: NudgeMember,
+    recipient: NudgeRecipient,
     lineupId: number,
-    clientUrl: string,
   ): Promise<void> {
-    const dedupKey = `lineup-steam-nudge:${lineupId}:${member.id}`;
+    const dedupKey = `lineup-steam-nudge:${lineupId}:${recipient.id}`;
     const alreadySent = await this.dedupService.checkAndMarkSent(
       dedupKey,
       null,
@@ -62,7 +64,7 @@ export class LineupSteamNudgeService {
     if (alreadySent) return;
 
     await this.notificationService.create({
-      userId: member.id,
+      userId: recipient.id,
       type: 'lineup_steam_nudge',
       title: 'Link your Steam account',
       message:
