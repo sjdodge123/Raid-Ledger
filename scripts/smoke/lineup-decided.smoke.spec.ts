@@ -64,6 +64,10 @@ async function apiPost(
         },
         body: body ? JSON.stringify(body) : undefined,
     });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`POST ${path} failed: ${res.status} ${text}`);
+    }
     return res.json();
 }
 
@@ -226,11 +230,12 @@ test.beforeAll(async () => {
 // AC: Podium Section — "THIS WEEK'S PODIUM" header, top 3 games, action buttons
 // ---------------------------------------------------------------------------
 
-/** Navigate to the decided lineup and wait for the podium to render. */
+/** Navigate to the decided lineup and wait for the view to render. */
 async function gotoDecidedView(page: import('@playwright/test').Page): Promise<void> {
     await page.goto(`/community-lineup/${decidedLineupId}`);
     await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
-    await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({ timeout: 15_000 });
+    // Stats panel always renders regardless of entries — use as readiness gate
+    await expect(page.locator('[data-testid="lineup-stats-panel"]')).toBeVisible({ timeout: 15_000 });
 }
 
 test.describe('Decided view podium section', () => {
