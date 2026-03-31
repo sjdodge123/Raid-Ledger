@@ -110,9 +110,10 @@ describe('SchedulingService', () => {
     /** Mock the full happy-path sequence for createEventFromSlot. */
     function mockCreateEventFlow() {
       // Bypass voter check (tested separately)
+
       jest
-        .spyOn(service as never, 'assertUserHasVoted' as never)
-        .mockResolvedValueOnce(undefined as never);
+        .spyOn(service as any, 'assertUserHasVoted')
+        .mockResolvedValueOnce(undefined);
       // 1. findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
       // 2. findSlotOrThrow
@@ -143,7 +144,7 @@ describe('SchedulingService', () => {
 
     it('throws ForbiddenException when user has not voted', async () => {
       jest
-        .spyOn(service as never, 'assertUserHasVoted' as never)
+        .spyOn(service as any, 'assertUserHasVoted')
         .mockRejectedValueOnce(
           new ForbiddenException(
             'You must vote on a slot before creating an event',
