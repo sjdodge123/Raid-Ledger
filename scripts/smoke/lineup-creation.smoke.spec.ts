@@ -219,10 +219,9 @@ test.describe('Lineup creation modal', () => {
 
     test('modal opens with duration fields pre-filled from admin defaults', async ({ page }) => {
         test.setTimeout(60_000);
-        // Archive and navigate — setup runs once, only UI assertion retries
-        await archiveActiveLineup(adminToken);
-        await page.goto('/games');
         await expect(async () => {
+            await archiveActiveLineup(adminToken);
+            await page.goto('/games');
             await expect(page.locator('body')).not.toHaveText(
                 /something went wrong/i,
                 { timeout: 3_000 },
@@ -257,10 +256,9 @@ test.describe('Lineup creation modal', () => {
 
     test('submitting modal creates lineup and navigates to detail page', async ({ page }) => {
         test.setTimeout(60_000);
-        // Archive and navigate — setup runs once, only UI assertion retries
-        await archiveActiveLineup(adminToken);
-        await page.goto('/games');
         await expect(async () => {
+            await archiveActiveLineup(adminToken);
+            await page.goto('/games');
             await expect(page.locator('body')).not.toHaveText(
                 /something went wrong/i,
                 { timeout: 3_000 },
