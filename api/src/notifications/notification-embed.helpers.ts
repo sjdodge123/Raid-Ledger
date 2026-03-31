@@ -188,6 +188,9 @@ export function buildExtraRows(
   payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ActionRowBuilder<ButtonBuilder>[] | undefined {
+  if (type === 'lineup_steam_nudge') {
+    return buildSteamNudgeExtraRow(clientUrl);
+  }
   const eventId = payload?.eventId;
   if (eventId == null) return undefined;
   const eid = toStr(eventId);
@@ -317,6 +320,20 @@ export function buildPrimaryButton(
     .setLabel(label)
     .setStyle(ButtonStyle.Link)
     .setURL(`${clientUrl}/events/${eventId}?notif=${notificationId}`);
+}
+
+/** Build "Link Steam" extra row for steam nudge DMs. */
+function buildSteamNudgeExtraRow(
+  clientUrl: string,
+): ActionRowBuilder<ButtonBuilder>[] {
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('Link Steam')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${clientUrl}/profile/integrations`),
+    ),
+  ];
 }
 
 /** Build the "View Lineup" link button for steam nudge DMs. */
