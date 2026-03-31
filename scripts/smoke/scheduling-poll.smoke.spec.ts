@@ -88,6 +88,22 @@ async function apiPatch(
     return res.json();
 }
 
+async function apiPut(
+    token: string,
+    path: string,
+    body: Record<string, unknown>,
+) {
+    const res = await fetch(`${API_BASE}${path}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+    });
+    return res.json();
+}
+
 // ---------------------------------------------------------------------------
 // Setup helpers
 // ---------------------------------------------------------------------------
@@ -228,6 +244,14 @@ test.beforeAll(async () => {
     lineupId = result.lineupId;
     matchId = result.matchId;
     gameIds = result.gameIds;
+
+    // Seed game-time availability so the heatmap has data to render
+    const slots = [
+        { dayOfWeek: 1, hour: 19 }, { dayOfWeek: 1, hour: 20 },
+        { dayOfWeek: 3, hour: 19 }, { dayOfWeek: 3, hour: 20 },
+        { dayOfWeek: 5, hour: 18 }, { dayOfWeek: 5, hour: 19 },
+    ];
+    await apiPut(adminToken, '/users/me/game-time', { slots });
 
     // Suggest a time slot so voting/create-event tests have something to interact with
     const tomorrow = new Date();
