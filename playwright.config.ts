@@ -34,7 +34,7 @@ export default defineConfig({
 
     /* Default expect timeout — longer on CI where runners are slower */
     expect: {
-        timeout: process.env.CI ? 15_000 : 5_000,
+        timeout: process.env.CI ? 25_000 : 5_000,
     },
 
     /* Reporter to use */

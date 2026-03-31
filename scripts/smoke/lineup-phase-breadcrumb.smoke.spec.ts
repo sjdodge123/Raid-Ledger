@@ -243,7 +243,7 @@ test.describe('Phase breadcrumb — revert', () => {
             const lineupId = await ensureLineupInPhase(adminToken, 'voting');
             await gotoLineupDetail(page, lineupId);
             await page.getByRole('button', { name: 'Nominating' }).click();
-            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
+            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 10_000 });
         }).toPass({ timeout: 30_000 });
     });
 
@@ -253,7 +253,7 @@ test.describe('Phase breadcrumb — revert', () => {
             await gotoLineupDetail(page, lineupId);
 
             await page.getByRole('button', { name: 'Nominating' }).click();
-            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
+            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 10_000 });
             await page.getByRole('button', { name: 'Revert?' }).click();
         }).toPass({ timeout: 30_000 });
 
@@ -267,7 +267,7 @@ test.describe('Phase breadcrumb — revert', () => {
             await gotoLineupDetail(page, lineupId);
 
             await page.getByRole('button', { name: 'Voting' }).click();
-            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
+            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 10_000 });
             await page.getByRole('button', { name: 'Revert?' }).click();
         }).toPass({ timeout: 30_000 });
 

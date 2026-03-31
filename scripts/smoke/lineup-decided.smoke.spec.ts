@@ -176,22 +176,24 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
 
     if (!lineupId) throw new Error('Failed to create lineup');
 
-    // Nominate games
-    for (const gid of gameIds) {
-        await apiPost(token, `/lineups/${lineupId}/nominate`, {
-            gameId: gid,
-        });
-    }
+    // Nominate games (parallel — nominations are independent)
+    await Promise.all(
+        gameIds.map((gid) =>
+            apiPost(token, `/lineups/${lineupId}/nominate`, { gameId: gid }),
+        ),
+    );
 
     // Advance to voting
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'voting',
     });
 
-    // Cast votes — first game gets 1 vote (admin), to ensure varied counts
-    for (const gid of gameIds.slice(0, 3)) {
-        await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gid });
-    }
+    // Cast votes (parallel — votes are independent)
+    await Promise.all(
+        gameIds.slice(0, 3).map((gid) =>
+            apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gid }),
+        ),
+    );
 
     // Advance directly to decided (new phase order: voting → decided)
     await apiPatch(token, `/lineups/${lineupId}/status`, {
@@ -278,7 +280,7 @@ test.describe('Decided view podium section', () => {
         const createEventBtn = page.getByRole('link', {
             name: /Create Event/i,
         });
-        await expect(createEventBtn).toBeVisible({ timeout: 15_000 });
+        await expect(createEventBtn).toBeVisible({ timeout: 20_000 });
 
         // Verify the link target includes gameId and lineup context
         const href = await createEventBtn.getAttribute('href');

@@ -158,9 +158,10 @@ test.describe('Votes-per-player slider on create modal', () => {
     test('create modal contains a votes-per-player slider with data-testid', async ({ page }) => {
         test.setTimeout(60_000);
 
+        // Setup runs once, only UI assertion retries
+        await archiveActiveLineup(adminToken);
+        await page.goto('/games');
         await expect(async () => {
-            await archiveActiveLineup(adminToken);
-            await page.goto('/games');
             await expect(page.locator('body')).not.toHaveText(
                 /something went wrong/i,
                 { timeout: 3_000 },
@@ -184,9 +185,10 @@ test.describe('Votes-per-player slider on create modal', () => {
     test('votes-per-player slider has range 1-10, default 3, and step 1', async ({ page }) => {
         test.setTimeout(60_000);
 
+        // Setup runs once, only UI assertion retries
+        await archiveActiveLineup(adminToken);
+        await page.goto('/games');
         await expect(async () => {
-            await archiveActiveLineup(adminToken);
-            await page.goto('/games');
             await expect(page.locator('body')).not.toHaveText(
                 /something went wrong/i,
                 { timeout: 3_000 },

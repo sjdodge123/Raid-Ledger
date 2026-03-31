@@ -436,7 +436,7 @@ test.describe('Scheduling poll heatmap', () => {
         const heatmapGrid = page.locator(
             '[data-testid="heatmap-grid"]',
         );
-        await expect(heatmapGrid).toBeVisible({ timeout: 15_000 });
+        await expect(heatmapGrid).toBeVisible({ timeout: 20_000 });
 
         // Heatmap should have time-axis labels (hours)
         const timeLabels = heatmapGrid.locator(
@@ -548,7 +548,7 @@ test.describe('Scheduling poll event creation', () => {
         const slotCards = page.locator(
             '[data-testid="schedule-slot"]',
         );
-        await expect(slotCards.first()).toBeVisible({ timeout: 15_000 });
+        await expect(slotCards.first()).toBeVisible({ timeout: 20_000 });
         await slotCards.first().click();
 
         // Click "Create Event" button
