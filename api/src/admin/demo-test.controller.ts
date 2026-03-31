@@ -15,78 +15,20 @@ import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
 import { LineupSteamNudgeService } from '../lineups/lineup-steam-nudge.service';
-
-const LinkDiscordSchema = z.object({
-  userId: z.number().int().positive(),
-  discordId: z.string().regex(/^\d{17,20}$/, 'Invalid Discord ID format'),
-  username: z.string().min(1).max(100),
-});
-
-const EnableNotificationsSchema = z.object({
-  userId: z.number().int().positive(),
-});
-
-const VALID_ROLES = [
-  'tank',
-  'healer',
-  'dps',
-  'flex',
-  'player',
-  'bench',
-] as const;
-
-const AddGameInterestSchema = z.object({
-  userId: z.number().int().positive(),
-  gameId: z.number().int().positive(),
-});
-
-const TriggerDepartureSchema = z.object({
-  eventId: z.number().int().positive(),
-  signupId: z.number().int().positive(),
-  discordUserId: z.string().min(1),
-});
-
-const CancelSignupSchema = z.object({
-  eventId: z.number().int().positive(),
-  userId: z.number().int().positive(),
-});
-
-const TriggerClassifySchema = z.object({
-  eventId: z.number().int().positive(),
-});
-
-const InjectVoiceSessionSchema = z.object({
-  eventId: z.number().int().positive(),
-  discordUserId: z.string().min(1),
-  userId: z.number().int().positive(),
-  durationSec: z.number().int().nonnegative(),
-  firstJoinAt: z.string().datetime().optional(),
-  lastLeaveAt: z.string().datetime().optional(),
-});
-
-const AwaitProcessingSchema = z.object({
-  timeoutMs: z.number().int().positive().max(60_000).optional(),
-});
-
-const SetSteamAppIdSchema = z.object({
-  gameId: z.number().int().positive(),
-  steamAppId: z.number().int().positive(),
-});
-
-const ClearGameInterestSchema = z.object({
-  userId: z.number().int().positive(),
-  gameId: z.number().int().positive(),
-});
-
-const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
-
-const CreateTestSignupSchema = z.object({
-  eventId: z.number().int().positive(),
-  userId: z.number().int().positive(),
-  preferredRoles: z.array(z.enum(VALID_ROLES)).optional(),
-  characterId: z.string().uuid().optional(),
-  status: z.enum(VALID_STATUSES).optional(),
-});
+import {
+  LinkDiscordSchema,
+  EnableNotificationsSchema,
+  AddGameInterestSchema,
+  TriggerDepartureSchema,
+  CancelSignupSchema,
+  TriggerClassifySchema,
+  InjectVoiceSessionSchema,
+  AwaitProcessingSchema,
+  SetSteamAppIdSchema,
+  ClearGameInterestSchema,
+  CreateTestSignupSchema,
+  SetEventTimesSchema,
+} from './demo-test.schemas';
 
 /**
  * Controller for demo/test-only endpoints used by smoke tests.
@@ -303,14 +245,7 @@ export class DemoTestController {
   @Post('set-event-times')
   @HttpCode(HttpStatus.OK)
   async setEventTimesForTest(@Body() body: unknown) {
-    const parsed = this.parseBody(
-      z.object({
-        eventId: z.number().int().positive(),
-        startTime: z.string().datetime(),
-        endTime: z.string().datetime(),
-      }),
-      body,
-    );
+    const parsed = this.parseBody(SetEventTimesSchema, body);
     return this.demoTestService.setEventTimesForTest(
       parsed.eventId,
       parsed.startTime,

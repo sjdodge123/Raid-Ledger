@@ -9,6 +9,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
 jest.mock('./lineups-matching.helpers', () => ({
@@ -163,6 +164,10 @@ function describeLineupsService() {
         {
           provide: LineupPhaseQueueService,
           useValue: { scheduleTransition: jest.fn() },
+        },
+        {
+          provide: LineupSteamNudgeService,
+          useValue: { nudgeUnlinkedMembers: jest.fn() },
         },
       ],
     }).compile();

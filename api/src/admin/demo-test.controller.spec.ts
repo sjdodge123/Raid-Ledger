@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { DemoTestController } from './demo-test.controller';
 import { DemoTestService } from './demo-test.service';
+import { LineupSteamNudgeService } from '../lineups/lineup-steam-nudge.service';
 
 function createMockService() {
   return {
@@ -39,7 +40,10 @@ describe('DemoTestController — new test utility endpoints', () => {
 
     const module = await Test.createTestingModule({
       controllers: [DemoTestController],
-      providers: [{ provide: DemoTestService, useValue: mockService }],
+      providers: [
+        { provide: DemoTestService, useValue: mockService },
+        { provide: LineupSteamNudgeService, useValue: { nudgeUnlinkedMembers: jest.fn() } },
+      ],
     }).compile();
 
     controller = module.get(DemoTestController);
