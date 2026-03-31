@@ -202,7 +202,7 @@ function PanelContent({
 export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: number } = {}): JSX.Element | null {
     const { data: lineup } = useActiveLineup();
     const resolvedId = propLineupId ?? lineup?.id;
-    const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0, maxPlayers: 2 });
+    const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0 });
     const [search, setSearch] = useState('');
     const hasBuilding = propLineupId != null || lineup?.status === 'building';
     const apiParams = useMemo(() => ({ ...filters, search: search.trim() || undefined }), [filters, search]);
