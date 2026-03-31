@@ -6,6 +6,7 @@ import {
 } from './users.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { TokenBlocklistService } from '../auth/token-blocklist.service';
 
 function describeUsersService() {
   let service: UsersService;
@@ -20,6 +21,10 @@ function describeUsersService() {
         {
           provide: DrizzleAsyncProvider,
           useValue: mockDb,
+        },
+        {
+          provide: TokenBlocklistService,
+          useValue: { blockUser: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();

@@ -20,6 +20,7 @@ import {
 import { fetchSteamLibrary } from './users-steam-query.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import { TokenBlocklistService } from '../auth/token-blocklist.service';
 
 export const RECENT_MEMBER_DAYS = 30;
 export const RECENT_MEMBER_LIMIT = 10;
@@ -33,6 +34,7 @@ export class UsersService {
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
+    private readonly tokenBlocklist: TokenBlocklistService,
   ) {}
 
   async findByDiscordId(discordId: string) {
@@ -82,6 +84,7 @@ export class UsersService {
       .where(eq(schema.users.id, userId))
       .returning();
     invalidateAuthUser(userId);
+    await this.tokenBlocklist.blockUser(userId);
     return updated;
   }
 
@@ -337,6 +340,7 @@ export class UsersService {
 
   /** Delete a user and cascade all related data (ROK-405). */
   async deleteUser(userId: number, reassignToUserId: number): Promise<void> {
+    await this.tokenBlocklist.blockUser(userId);
     await deleteUserTransaction(this.db, userId, reassignToUserId);
     this.invalidateCountCache();
     this.logger.log(

@@ -10,6 +10,7 @@ import { UsersMeController } from './users-me.controller';
 import { CharactersModule } from '../characters/characters.module';
 import { EventsModule } from '../events/events.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
+import { TokenBlocklistService } from '../auth/token-blocklist.service';
 
 @Module({
   imports: [
@@ -19,7 +20,13 @@ import { DiscordBotModule } from '../discord-bot/discord-bot.module';
     MulterModule.register({ storage: multer.memoryStorage() }),
   ],
   controllers: [UsersMeController, UsersController],
-  providers: [UsersService, AvatarService, PreferencesService, GameTimeService],
+  providers: [
+    UsersService,
+    AvatarService,
+    PreferencesService,
+    GameTimeService,
+    TokenBlocklistService,
+  ],
   exports: [UsersService, AvatarService, PreferencesService, GameTimeService],
 })
 export class UsersModule {}
