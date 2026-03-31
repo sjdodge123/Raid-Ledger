@@ -139,9 +139,36 @@ function useAllUsableQuests(questMap: Map<number, EnrichedDungeonQuestDto[]> | u
     return useMemo(() => filterUsableQuests(flattenQuestMap(questMap), character), [questMap, character]);
 }
 
+/** Options for building shared quest props from hook state */
+interface BuildSharedPropsOptions {
+    user: ReturnType<typeof useAuth>['user'];
+    coverageMap: Map<number, QuestCoverageEntry>;
+    eventId: number | undefined;
+    wowheadVariant: string;
+    expandedQuests: Set<number>;
+    pendingQuestId: number | null;
+    equippedBySlot: Map<string, EquipmentItemDto>;
+    character: ReturnType<typeof useCharacterDetail>['data'];
+    characterId: string | undefined;
+    toggleExpanded: (id: number) => void;
+    handleTogglePickedUp: (id: number, v: boolean) => void;
+}
+
 /** Assemble shared props from all the individual hooks */
-function buildSharedProps(user: ReturnType<typeof useAuth>['user'], coverageMap: Map<number, QuestCoverageEntry>, eventId: number | undefined, wowheadVariant: string, expandedQuests: Set<number>, pendingQuestId: number | null, equippedBySlot: Map<string, EquipmentItemDto>, character: ReturnType<typeof useCharacterDetail>['data'], characterId: string | undefined, toggleExpanded: (id: number) => void, handleTogglePickedUp: (id: number, v: boolean) => void): SharedQuestProps {
-    return { coverageMap, currentUserId: user?.id, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, charClass: character?.class ?? null, characterId, onToggleExpanded: toggleExpanded, onTogglePickedUp: handleTogglePickedUp };
+function buildSharedProps(opts: BuildSharedPropsOptions): SharedQuestProps {
+    return {
+        coverageMap: opts.coverageMap,
+        currentUserId: opts.user?.id,
+        eventId: opts.eventId,
+        wowheadVariant: opts.wowheadVariant,
+        expandedQuests: opts.expandedQuests,
+        pendingQuestId: opts.pendingQuestId,
+        equippedBySlot: opts.equippedBySlot,
+        charClass: opts.character?.class ?? null,
+        characterId: opts.characterId,
+        onToggleExpanded: opts.toggleExpanded,
+        onTogglePickedUp: opts.handleTogglePickedUp,
+    };
 }
 
 /** Quest Prep Panel main component */
@@ -166,7 +193,7 @@ export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterI
     if (!questMap || allFlat.length === 0) return null;
     if (allUsable.length === 0 && allFlat.length > 0) return <QuestPrepEmpty />;
 
-    const shared = buildSharedProps(user, coverageMap, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, character, characterId, toggleExpanded, handleTogglePickedUp);
+    const shared = buildSharedProps({ user, coverageMap, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, character, characterId, toggleExpanded, handleTogglePickedUp });
     return <QuestPrepBody instances={parsedInstances} questMap={questMap} allUsable={allUsable} character={character} shared={shared} />;
 }
 
@@ -251,7 +278,7 @@ function InstanceQuestSection({ instance, quests, character, ...rest }: {
     if (usable.length === 0) return null;
     return (
         <div className="quest-prep-instance">
-            {instance.name && <h3 className="boss-loot-instance__name">{instance.name}</h3>}
+            {instance.name && <h3 className="quest-prep-instance__name">{instance.name}</h3>}
             <QuestLocationGroups quests={usable} {...rest} />
         </div>
     );
