@@ -24,7 +24,6 @@ interface MemberAvatarGroupProps {
 function toUser(m: Member) {
   return toAvatarUser({
     id: m.userId,
-    username: m.displayName,
     avatar: m.avatar,
     discordId: m.discordId,
     customAvatarUrl: m.customAvatarUrl,
