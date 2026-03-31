@@ -80,6 +80,7 @@ export class SchedulingController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
   async toggleVote(
+    @Param('matchId', ParseIntPipe) matchId: number,
     @Body() body: unknown,
     @Req() req: AuthRequest,
   ): Promise<{ voted: boolean }> {
@@ -87,7 +88,11 @@ export class SchedulingController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.schedulingService.toggleVote(parsed.data.slotId, req.user!.id);
+    return this.schedulingService.toggleVote(
+      parsed.data.slotId,
+      req.user!.id,
+      matchId,
+    );
   }
 
   /** POST /lineups/:lineupId/schedule/:matchId/create-event — create event. */

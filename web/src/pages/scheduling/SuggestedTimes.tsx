@@ -3,7 +3,7 @@
  * Displays slot cards with vote counts, toggle-vote on click,
  * "You voted" indicator, and a "Suggest Time" button with datetime picker.
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 
@@ -66,7 +66,8 @@ function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
   onSubmit: (time: string) => void; isSuggesting: boolean; prefillTime?: string;
 }): JSX.Element {
   const [value, setValue] = useState(prefillTime ?? '');
-  useEffect(() => { if (prefillTime) setValue(prefillTime); }, [prefillTime]);
+  // Sync prefillTime from parent (heatmap click) without useEffect
+  if (prefillTime && prefillTime !== value) setValue(prefillTime);
   const handleSubmit = (): void => {
     if (!value) return;
     onSubmit(new Date(value).toISOString());
