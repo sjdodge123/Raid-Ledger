@@ -96,6 +96,7 @@ function describeLineupsService() {
       select: jest.fn(),
       insert: jest.fn(),
       update: jest.fn(),
+      execute: jest.fn().mockResolvedValue([{ count: 0 }]),
       transaction: jest
         .fn()
         .mockImplementation((fn: (tx: Record<string, jest.Mock>) => unknown) =>

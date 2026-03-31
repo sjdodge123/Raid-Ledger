@@ -83,7 +83,7 @@ function makeSelectChain(overrides: {
 
 describe('buildDetailResponse', () => {
   it('throws NotFoundException when lineup not found', async () => {
-    const mockDb = { select: jest.fn() };
+    const mockDb = { select: jest.fn(), execute: jest.fn().mockResolvedValue([{ count: 0, id: 1, display_name: 'User' }]) };
     mockDb.select.mockReturnValueOnce(makeSelectChain({ limitResult: [] }));
 
     await expect(buildDetailResponse(mockDb as any, 999)).rejects.toThrow(
@@ -92,7 +92,7 @@ describe('buildDetailResponse', () => {
   });
 
   it('returns detail with enrichment fields on entries', async () => {
-    const mockDb = { select: jest.fn() };
+    const mockDb = { select: jest.fn(), execute: jest.fn().mockResolvedValue([{ count: 0, id: 1, display_name: 'User' }]) };
 
     // 1. findLineupById
     mockDb.select.mockReturnValueOnce(
@@ -161,7 +161,7 @@ describe('buildDetailResponse', () => {
   });
 
   it('defaults enrichment fields to 0/null when no data', async () => {
-    const mockDb = { select: jest.fn() };
+    const mockDb = { select: jest.fn(), execute: jest.fn().mockResolvedValue([{ count: 0, id: 1, display_name: 'User' }]) };
 
     // 1. findLineupById
     mockDb.select.mockReturnValueOnce(
