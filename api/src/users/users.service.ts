@@ -2,7 +2,7 @@ import { Inject, Injectable, ConflictException, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql, ilike, and, ne, gte, desc } from 'drizzle-orm';
+import { eq, sql, ilike, and, ne } from 'drizzle-orm';
 import type {
   UserRole,
   ActivityPeriod,
@@ -21,6 +21,7 @@ import { fetchSteamLibrary } from './users-steam-query.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
+import { findRecentUsers } from './users-recent.helpers';
 
 export const RECENT_MEMBER_DAYS = 30;
 export const RECENT_MEMBER_LIMIT = 10;
@@ -239,21 +240,7 @@ export class UsersService {
 
   /** Find recently joined users (last 30 days, max 10) (ROK-298). */
   async findRecent() {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - RECENT_MEMBER_DAYS);
-    return this.db
-      .select({
-        id: schema.users.id,
-        username: schema.users.username,
-        avatar: schema.users.avatar,
-        discordId: schema.users.discordId,
-        customAvatarUrl: schema.users.customAvatarUrl,
-        createdAt: schema.users.createdAt,
-      })
-      .from(schema.users)
-      .where(gte(schema.users.createdAt, cutoff))
-      .orderBy(desc(schema.users.createdAt))
-      .limit(RECENT_MEMBER_LIMIT);
+    return findRecentUsers(this.db, RECENT_MEMBER_DAYS, RECENT_MEMBER_LIMIT);
   }
 
   async setCustomAvatar(userId: number, url: string | null) {
