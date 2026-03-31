@@ -1,30 +1,12 @@
 /**
- * Action buttons below the podium: "Create Event" and "Share to Discord" (ROK-989).
- * Create Event links to event creation with gameId context.
+ * Action buttons below the podium (ROK-989).
  * Share to Discord is disabled with "Coming soon" tooltip.
+ * Create Event removed — events are created via scheduling poll (ROK-965).
  */
 import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
-import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 
-interface PodiumActionButtonsProps {
-  championEntry: LineupEntryResponseDto | undefined;
-  lineupId: number;
-}
-
-/** Build the "Create Event" link target with query params. */
-function buildCreateEventHref(
-  gameId: number,
-  lineupId: number,
-): string {
-  return `/events/new?gameId=${gameId}&from=lineup&lineupId=${lineupId}`;
-}
-
-/** Podium action buttons: Create Event link + disabled Share to Discord. */
-export function PodiumActionButtons({
-  championEntry,
-  lineupId,
-}: PodiumActionButtonsProps): JSX.Element {
+/** Podium action button: disabled Share to Discord. */
+export function PodiumActionButtons(): JSX.Element {
   return (
     <div className="flex items-center gap-3 mt-4 justify-center">
       <button
