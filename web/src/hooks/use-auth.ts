@@ -15,6 +15,7 @@ export interface User {
     avatar: string | null;
     customAvatarUrl: string | null;
     role?: UserRole;
+    steamId: string | null;
     onboardingCompletedAt: string | null;
     avatarPreference?: { type: 'custom' | 'discord' | 'character'; characterName?: string } | null;
     resolvedAvatarUrl?: string | null;

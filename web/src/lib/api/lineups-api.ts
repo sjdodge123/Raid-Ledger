@@ -15,6 +15,7 @@ export interface CommonGroundParams {
   minOwners?: number;
   maxPlayers?: number;
   genre?: string;
+  search?: string;
   limit?: number;
 }
 
@@ -31,6 +32,7 @@ export async function getCommonGround(
   if (params.minOwners != null) search.set('minOwners', String(params.minOwners));
   if (params.maxPlayers != null) search.set('maxPlayers', String(params.maxPlayers));
   if (params.genre) search.set('genre', params.genre);
+  if (params.search) search.set('search', params.search);
   if (params.limit != null) search.set('limit', String(params.limit));
 
   const qs = search.toString();

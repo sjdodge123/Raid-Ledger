@@ -38,6 +38,7 @@ export function getColorForType(type: NotificationType): number {
     missed_event_nudge: EMBED_COLORS.REMINDER,
     role_gap_alert: EMBED_COLORS.REMINDER,
     recruitment_reminder: EMBED_COLORS.ANNOUNCEMENT,
+    lineup_steam_nudge: EMBED_COLORS.ANNOUNCEMENT,
     slot_vacated: EMBED_COLORS.ROSTER_UPDATE,
     member_returned: EMBED_COLORS.ROSTER_UPDATE,
     bench_promoted: EMBED_COLORS.ROSTER_UPDATE,
@@ -64,6 +65,7 @@ export function getEmojiForType(type: NotificationType): string {
     level_up: '⬆️',
     missed_event_nudge: '👋',
     recruitment_reminder: '📢',
+    lineup_steam_nudge: '🔗',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -86,6 +88,7 @@ export function getTypeLabel(type: NotificationType): string {
     level_up: 'Level Up',
     missed_event_nudge: 'Missed Event',
     recruitment_reminder: 'Recruitment Reminder',
+    lineup_steam_nudge: 'Steam Link Nudge',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';
@@ -293,6 +296,9 @@ export function buildPrimaryButton(
   payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ButtonBuilder | null {
+  if (type === 'lineup_steam_nudge') {
+    return buildLineupNudgeButton(payload, clientUrl);
+  }
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
   if (!eventId) return null;
   if (
@@ -311,4 +317,32 @@ export function buildPrimaryButton(
     .setLabel(label)
     .setStyle(ButtonStyle.Link)
     .setURL(`${clientUrl}/events/${eventId}?notif=${notificationId}`);
+}
+
+/** Build the "Link Steam" primary button for steam nudge DMs. */
+function buildLineupNudgeButton(
+  _payload: Record<string, unknown> | undefined,
+  clientUrl: string,
+): ButtonBuilder | null {
+  return new ButtonBuilder()
+    .setLabel('Link Steam')
+    .setStyle(ButtonStyle.Link)
+    .setURL(`${clientUrl}/profile/integrations`);
+}
+
+/** Extra buttons to add to the main action row for specific types. */
+export function buildInlineButtons(
+  type: NotificationType,
+  payload: Record<string, unknown> | undefined,
+  clientUrl: string,
+): ButtonBuilder[] {
+  if (type !== 'lineup_steam_nudge') return [];
+  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+  if (!lineupId) return [];
+  return [
+    new ButtonBuilder()
+      .setLabel('View Lineup')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/community-lineup/${lineupId}`),
+  ];
 }

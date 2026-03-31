@@ -46,6 +46,7 @@ import { SettingsModule } from '../settings/settings.module';
   ],
   exports: [
     NotificationService,
+    NotificationDedupService,
     RosterNotificationBufferService,
     DiscordNotificationService,
     GameAffinityNotificationService,

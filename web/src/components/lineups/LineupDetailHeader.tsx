@@ -7,6 +7,7 @@ import { LineupStatusBadge } from './LineupStatusBadge';
 import { PhaseCountdown } from './phase-countdown';
 import { PHASES, PHASE_LABELS } from './lineup-phases';
 import { toast } from '../../lib/toast';
+import { UnlinkedSteamCount } from './UnlinkedSteamCount';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -122,7 +123,14 @@ function PhaseContextInfo({ lineup }: { lineup: LineupDetailResponseDto }): JSX.
   // Total participants = nominators + voters (unique count provided by API)
   const participants = (lineup.totalVoters ?? 0) + (lineup.status === 'building' ? lineup.entries.length : 0);
   if (lineup.status === 'building') {
-    return <span className="text-xs text-dim">{lineup.entries.length}/20 nominated · {participants} participated</span>;
+    return (
+      <span className="text-xs text-dim">
+        {lineup.entries.length}/20 nominated · {participants} participated
+        {lineup.unlinkedSteamCount > 0 && (
+          <> · <UnlinkedSteamCount count={lineup.unlinkedSteamCount} /></>
+        )}
+      </span>
+    );
   }
   if (lineup.status === 'voting') {
     return <span className="text-xs text-dim">{lineup.totalVoters} participated</span>;

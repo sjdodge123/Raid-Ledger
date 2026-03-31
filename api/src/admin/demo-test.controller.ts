@@ -14,6 +14,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
+import { LineupSteamNudgeService } from '../lineups/lineup-steam-nudge.service';
 
 const LinkDiscordSchema = z.object({
   userId: z.number().int().positive(),
@@ -95,7 +96,10 @@ const CreateTestSignupSchema = z.object({
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class DemoTestController {
-  constructor(private readonly demoTestService: DemoTestService) {}
+  constructor(
+    private readonly demoTestService: DemoTestService,
+    private readonly steamNudge: LineupSteamNudgeService,
+  ) {}
 
   /** Link a Discord ID to a user -- DEMO_MODE only (smoke tests). */
   @Post('link-discord')
@@ -339,6 +343,16 @@ export class DemoTestController {
       parsed.gameId,
       parsed.steamAppId,
     );
+    return { success: true };
+  }
+
+  /** Trigger steam nudge DMs for a lineup — DEMO_MODE only. */
+  @Post('trigger-steam-nudge')
+  @HttpCode(HttpStatus.OK)
+  async triggerSteamNudge(
+    @Body() body: { lineupId: number },
+  ): Promise<{ success: boolean }> {
+    await this.steamNudge.nudgeUnlinkedMembers(body.lineupId);
     return { success: true };
   }
 
