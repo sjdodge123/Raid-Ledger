@@ -352,30 +352,37 @@ test.describe('Decided view tiered match cards', () => {
     });
 
     test('empty tiers are hidden', async ({ page }) => {
+        // AC: Empty tiers are hidden (section not rendered)
+        // Use matchesData from beforeAll to know how many tiers to expect.
+        // If no matches exist at all, the test passes trivially (all tiers hidden).
+        const matchArrays = matchesData as Record<string, unknown[]> | null;
+        const totalMatches =
+            (matchArrays?.scheduling?.length ?? 0) +
+            (matchArrays?.almostThere?.length ?? 0) +
+            (matchArrays?.rallyYourCrew?.length ?? 0);
+
+        if (totalMatches === 0) {
+            // No matches — all tiers should be hidden. Verify no sections render.
+            await gotoDecidedView(page);
+            const tierSections = page.locator('[data-testid="match-tier-section"]');
+            await expect(tierSections).toHaveCount(0, { timeout: 10_000 });
+            return;
+        }
+
         await gotoDecidedView(page);
 
-        // AC: Empty tiers are hidden (section not rendered)
-        // Wait for match data to load — tier sections appear after the
-        // async useLineupMatches query resolves
+        // Wait for match tier sections to appear (async useLineupMatches query)
         const tierSections = page.locator('[data-testid="match-tier-section"]');
-        const firstSection = tierSections.first();
-        const hasTiers = await firstSection.isVisible({ timeout: 10_000 }).catch(() => false);
+        await expect(tierSections.first()).toBeVisible({ timeout: 15_000 });
 
-        if (hasTiers) {
-            // Wait for cards inside the first section to render
-            await expect(
-                firstSection.locator('[data-testid="match-card"], [data-testid="rally-row"]').first(),
-            ).toBeVisible({ timeout: 5_000 });
-
-            // Now verify every visible section has at least one card
-            const count = await tierSections.count();
-            for (let i = 0; i < count; i++) {
-                const section = tierSections.nth(i);
-                const cardCount = await section.locator(
-                    '[data-testid="match-card"], [data-testid="rally-row"]',
-                ).count();
-                expect(cardCount).toBeGreaterThan(0);
-            }
+        // Verify every visible section has at least one card or row inside it
+        const count = await tierSections.count();
+        for (let i = 0; i < count; i++) {
+            const section = tierSections.nth(i);
+            const cards = section.locator(
+                '[data-testid="match-card"], [data-testid="rally-row"]',
+            );
+            await expect(cards.first()).toBeVisible({ timeout: 10_000 });
         }
     });
 
