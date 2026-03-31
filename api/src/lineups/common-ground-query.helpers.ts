@@ -81,7 +81,9 @@ function buildWhereConditions(
   filters: CommonGroundFilters,
   excludeGameIds: number[],
 ): ReturnType<typeof sql>[] {
-  const conditions = [sql`1=1`];
+  const conditions = [
+    sql`(g.steam_app_id IS NOT NULL OR g.igdb_id IS NOT NULL)`,
+  ];
 
   if (excludeGameIds.length > 0) {
     conditions.push(
