@@ -204,9 +204,7 @@ export class DiscordNotificationEmbedService {
       clientUrl,
     );
     if (primaryButton) buttons.push(primaryButton);
-    buttons.push(
-      ...buildInlineButtons(input.type, input.payload, clientUrl),
-    );
+    buttons.push(...buildInlineButtons(input.type, input.payload, clientUrl));
     const discordButton = this.buildDiscordLinkButton(input);
     if (discordButton) buttons.push(discordButton);
     buttons.push(
