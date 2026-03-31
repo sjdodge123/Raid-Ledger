@@ -279,14 +279,18 @@ jobs:
             exit 1
           fi
 
-  # ─── Playwright Smoke Tests ────────────────────────────────────────
+  # ─── Playwright Smoke Tests (sharded) ──────────────────────────────
   # Only runs when web/UI files or Playwright config changed
-  smoke-tests:
+  smoke-test-shard:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
       needs.detect-changes.outputs.smoke_tests == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/3, 2/3, 3/3]
 
     services:
       postgres:
@@ -398,16 +402,33 @@ jobs:
           echo "Web server failed to start within 30s"
           exit 1
 
-      - name: Run Playwright smoke tests
-        run: npx playwright test --reporter=github
+      - name: Run Playwright smoke tests (shard ${{ matrix.shard }})
+        run: npx playwright test --shard=${{ matrix.shard }} --reporter=github
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ strategy.job-index }}
           path: playwright-report/
           retention-days: 7
+
+  smoke-tests:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, smoke-test-shard]
+    if: always()
+    steps:
+      - name: Check shard results
+        run: |
+          RESULT="${{ needs.smoke-test-shard.result }}"
+          if [ "$RESULT" = "skipped" ]; then
+            echo "Smoke tests skipped (no UI changes)"
+            exit 0
+          fi
+          if [ "$RESULT" != "success" ]; then
+            echo "Smoke test shards failed"
+            exit 1
+          fi
 
   # ─── Container Startup Validation ──────────────────────────────────
   # Only runs on PRs that touch Docker, entrypoint, nginx, or CI files
