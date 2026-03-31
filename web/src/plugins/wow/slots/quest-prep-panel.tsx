@@ -57,13 +57,22 @@ interface QuestPrepPanelProps {
     characterId?: string;
 }
 
-function useInstanceIds(contentInstances: Record<string, unknown>[]) {
+interface ParsedInstance { id: number; name?: string }
+
+function useParsedInstances(contentInstances: Record<string, unknown>[]): ParsedInstance[] {
     return useMemo(
         () => contentInstances
-            .map((ci) => { const id = ci.id ?? ci.instanceId; return typeof id === 'number' ? id : Number(id); })
-            .filter((id) => !isNaN(id) && id > 0),
+            .map((ci) => ({
+                id: typeof ci.id === 'number' ? ci.id : Number(ci.id ?? ci.instanceId),
+                name: typeof ci.name === 'string' ? ci.name : undefined,
+            }))
+            .filter((inst) => !isNaN(inst.id) && inst.id > 0),
         [contentInstances],
     );
+}
+
+function useInstanceIds(instances: ParsedInstance[]) {
+    return useMemo(() => instances.map((inst) => inst.id), [instances]);
 }
 
 function useEquippedSlotMap(character: ReturnType<typeof useCharacterDetail>['data']) {
@@ -105,41 +114,76 @@ function useQuestPrepState(eventId: number | undefined) {
     return { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded };
 }
 
-function useUsableQuests(quests: EnrichedDungeonQuestDto[] | undefined, character: ReturnType<typeof useCharacterDetail>['data']) {
-    return useMemo(() => {
-        if (!quests || quests.length === 0) return [];
-        const charClass = character?.class ?? null;
-        const charRace = character?.race ?? null;
-        return deduplicateByName(quests.filter((q) => isQuestUsable(q, charClass, charRace)), charClass, charRace);
-    }, [quests, character]);
+/** Flatten a questsByInstance map into a single array */
+function flattenQuestMap(questMap: Map<number, EnrichedDungeonQuestDto[]> | undefined): EnrichedDungeonQuestDto[] {
+    if (!questMap) return [];
+    const seen = new Set<number>();
+    const result: EnrichedDungeonQuestDto[] = [];
+    for (const batch of questMap.values()) {
+        for (const q of batch) {
+            if (!seen.has(q.questId)) { seen.add(q.questId); result.push(q); }
+        }
+    }
+    return result;
+}
+
+/** Filter and deduplicate quests for a character */
+function filterUsableQuests(quests: EnrichedDungeonQuestDto[], character: ReturnType<typeof useCharacterDetail>['data']) {
+    if (quests.length === 0) return [];
+    const charClass = character?.class ?? null;
+    const charRace = character?.race ?? null;
+    return deduplicateByName(quests.filter((q) => isQuestUsable(q, charClass, charRace)), charClass, charRace);
+}
+
+function useAllUsableQuests(questMap: Map<number, EnrichedDungeonQuestDto[]> | undefined, character: ReturnType<typeof useCharacterDetail>['data']) {
+    return useMemo(() => filterUsableQuests(flattenQuestMap(questMap), character), [questMap, character]);
+}
+
+/** Assemble shared props from all the individual hooks */
+function buildSharedProps(user: ReturnType<typeof useAuth>['user'], coverageMap: Map<number, QuestCoverageEntry>, eventId: number | undefined, wowheadVariant: string, expandedQuests: Set<number>, pendingQuestId: number | null, equippedBySlot: Map<string, EquipmentItemDto>, character: ReturnType<typeof useCharacterDetail>['data'], characterId: string | undefined, toggleExpanded: (id: number) => void, handleTogglePickedUp: (id: number, v: boolean) => void): SharedQuestProps {
+    return { coverageMap, currentUserId: user?.id, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, charClass: character?.class ?? null, characterId, onToggleExpanded: toggleExpanded, onTogglePickedUp: handleTogglePickedUp };
 }
 
 /** Quest Prep Panel main component */
 export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterId }: QuestPrepPanelProps) {
     const { user } = useAuth();
     const variant = useMemo(() => slugToVariant(gameSlug), [gameSlug]);
-    const instanceIds = useInstanceIds(contentInstances);
-    const { data: quests, isLoading } = useEnrichedQuests(instanceIds, variant);
+    const parsedInstances = useParsedInstances(contentInstances);
+    const instanceIds = useInstanceIds(parsedInstances);
+    const { data: questMap, isLoading } = useEnrichedQuests(instanceIds, variant);
     const { data: coverage } = useQuestCoverage(eventId);
     const { data: character } = useCharacterDetail(characterId);
     const wowheadVariant = character?.gameVariant ?? variant;
     const equippedBySlot = useEquippedSlotMap(character);
     const coverageMap = useCoverageMap(coverage);
-    const usableQuests = useUsableQuests(quests, character);
+    const allUsable = useAllUsableQuests(questMap, character);
+    const allFlat = useMemo(() => flattenQuestMap(questMap), [questMap]);
     const { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded } = useQuestPrepState(eventId);
-    useWowheadTooltips(quests ? [quests, character] : []);
+    useWowheadTooltips(questMap ? [allFlat, character] : []);
 
     if (!contentInstances.length || instanceIds.length === 0) return null;
     if (isLoading) return <div className="quest-prep-panel"><div className="quest-prep-loading"><span>Loading quest data…</span></div></div>;
-    if (!quests || quests.length === 0) return null;
-    if (usableQuests.length === 0 && quests.length > 0) return <QuestPrepEmpty />;
+    if (!questMap || allFlat.length === 0) return null;
+    if (allUsable.length === 0 && allFlat.length > 0) return <QuestPrepEmpty />;
 
-    const sharedProps = { coverageMap, currentUserId: user?.id, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, charClass: character?.class ?? null, characterId, onToggleExpanded: toggleExpanded, onTogglePickedUp: handleTogglePickedUp };
+    const shared = buildSharedProps(user, coverageMap, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, character, characterId, toggleExpanded, handleTogglePickedUp);
+    return <QuestPrepBody instances={parsedInstances} questMap={questMap} allUsable={allUsable} character={character} shared={shared} />;
+}
+
+/** Render the panel body — separated to keep main component under 30 lines */
+function QuestPrepBody({ instances, questMap, allUsable, character, shared }: {
+    instances: ParsedInstance[]; questMap: Map<number, EnrichedDungeonQuestDto[]>;
+    allUsable: EnrichedDungeonQuestDto[]; character: ReturnType<typeof useCharacterDetail>['data']; shared: SharedQuestProps;
+}) {
     return (
         <div className="quest-prep-panel">
-            <QuestPrepHeader count={usableQuests.length} />
-            <QuestGroup title="Pick up before you go" icon="🗺️" quests={usableQuests.filter((q) => !q.startsInsideDungeon)} {...sharedProps} />
-            <QuestGroup title="Starts inside the dungeon" icon="🏰" quests={usableQuests.filter((q) => q.startsInsideDungeon)} {...sharedProps} />
+            <QuestPrepHeader count={allUsable.length} />
+            {instances.length > 1
+                ? instances.map((inst) => (
+                    <InstanceQuestSection key={inst.id} instance={inst} quests={questMap.get(inst.id) ?? []} character={character} {...shared} />
+                ))
+                : <QuestLocationGroups quests={allUsable} {...shared} />
+            }
         </div>
     );
 }
@@ -173,11 +217,8 @@ function QuestPrepEmpty() {
     );
 }
 
-/** Shared props for quest group/subgroup rendering */
-interface QuestGroupProps {
-    title: string;
-    icon: string;
-    quests: EnrichedDungeonQuestDto[];
+/** Shared props for quest rendering (passed through from panel) */
+interface SharedQuestProps {
     coverageMap: Map<number, QuestCoverageEntry>;
     currentUserId: number | undefined;
     eventId: number | undefined;
@@ -189,6 +230,38 @@ interface QuestGroupProps {
     characterId: string | undefined;
     onToggleExpanded: (questId: number) => void;
     onTogglePickedUp: (questId: number, currentlyPickedUp: boolean) => void;
+}
+
+/** Render outside/inside location groups for a list of quests */
+function QuestLocationGroups({ quests, ...rest }: { quests: EnrichedDungeonQuestDto[] } & SharedQuestProps) {
+    return (
+        <>
+            <QuestGroup title="Pick up before you go" icon="&#x1F5FA;&#xFE0F;" quests={quests.filter((q) => !q.startsInsideDungeon)} {...rest} />
+            <QuestGroup title="Starts inside the dungeon" icon="&#x1F3F0;" quests={quests.filter((q) => q.startsInsideDungeon)} {...rest} />
+        </>
+    );
+}
+
+/** Render a dungeon instance section with header + location-grouped quests (multi-dungeon) */
+function InstanceQuestSection({ instance, quests, character, ...rest }: {
+    instance: ParsedInstance; quests: EnrichedDungeonQuestDto[];
+    character: ReturnType<typeof useCharacterDetail>['data'];
+} & SharedQuestProps) {
+    const usable = filterUsableQuests(quests, character);
+    if (usable.length === 0) return null;
+    return (
+        <div className="quest-prep-instance">
+            {instance.name && <h3 className="boss-loot-instance__name">{instance.name}</h3>}
+            <QuestLocationGroups quests={usable} {...rest} />
+        </div>
+    );
+}
+
+/** Props for a single quest group (outside/inside) with sub-groups */
+interface QuestGroupProps extends SharedQuestProps {
+    title: string;
+    icon: string;
+    quests: EnrichedDungeonQuestDto[];
 }
 
 /** Render a group of quests (outside/inside) with sub-groups */
