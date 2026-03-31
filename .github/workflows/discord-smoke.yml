@@ -90,8 +90,8 @@ jobs:
       SMOKE_SKIP_VOICE_JOIN: '1'
       # Shared smoke runner config (used by all category steps below)
       SMOKE_TIMEOUT_MS: '90000'
-      SMOKE_CONCURRENCY: '3'
-      SMOKE_RETRY_COUNT: '1'
+      SMOKE_CONCURRENCY: '1'
+      SMOKE_RETRY_COUNT: '2'
 
     steps:
       - name: Checkout code
