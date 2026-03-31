@@ -188,9 +188,6 @@ export function buildExtraRows(
   payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ActionRowBuilder<ButtonBuilder>[] | undefined {
-  if (type === 'lineup_steam_nudge') {
-    return buildSteamNudgeExtraRow(clientUrl);
-  }
   const eventId = payload?.eventId;
   if (eventId == null) return undefined;
   const eid = toStr(eventId);
@@ -322,29 +319,30 @@ export function buildPrimaryButton(
     .setURL(`${clientUrl}/events/${eventId}?notif=${notificationId}`);
 }
 
-/** Build "Link Steam" extra row for steam nudge DMs. */
-function buildSteamNudgeExtraRow(
-  clientUrl: string,
-): ActionRowBuilder<ButtonBuilder>[] {
-  return [
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setLabel('Link Steam')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/profile/integrations`),
-    ),
-  ];
-}
-
-/** Build the "View Lineup" link button for steam nudge DMs. */
+/** Build the "Link Steam" primary button for steam nudge DMs. */
 function buildLineupNudgeButton(
-  payload: Record<string, unknown> | undefined,
+  _payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ButtonBuilder | null {
-  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
-  if (!lineupId) return null;
   return new ButtonBuilder()
-    .setLabel('View Lineup')
+    .setLabel('Link Steam')
     .setStyle(ButtonStyle.Link)
-    .setURL(`${clientUrl}/community-lineup/${lineupId}`);
+    .setURL(`${clientUrl}/profile/integrations`);
+}
+
+/** Extra buttons to add to the main action row for specific types. */
+export function buildInlineButtons(
+  type: NotificationType,
+  payload: Record<string, unknown> | undefined,
+  clientUrl: string,
+): ButtonBuilder[] {
+  if (type !== 'lineup_steam_nudge') return [];
+  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+  if (!lineupId) return [];
+  return [
+    new ButtonBuilder()
+      .setLabel('View Lineup')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/community-lineup/${lineupId}`),
+  ];
 }
