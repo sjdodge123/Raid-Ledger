@@ -81,7 +81,7 @@ function getSlotStatus(
 function UserAvatarHeader({ user }: { user: { id: number; username: string; avatar: string | null } }) {
     const userAvatar = resolveAvatar(toAvatarUser(user));
     return (
-        <div className="flex flex-col items-center justify-center h-10" title={user.username}>
+        <div className="flex flex-col items-center justify-center h-10" title={user.username} data-testid="heatmap-day-label">
             {userAvatar.url ? (
                 <img src={userAvatar.url} alt={user.username} className="w-6 h-6 rounded-full" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             ) : (
@@ -99,7 +99,7 @@ function SlotRow({ slot, slotIndex, users, onHover, onLeave }: {
 }) {
     return (
         <React.Fragment key={`row-${slotIndex}`}>
-            <div className="flex items-center justify-end pr-2 text-xs text-muted">{slot.label}</div>
+            <div className="flex items-center justify-end pr-2 text-xs text-muted" {...(slot.label ? { 'data-testid': 'heatmap-time-label' } : {})}>{slot.label}</div>
             {users.map((user) => {
                 const status = getSlotStatus(user.slots, slot.start, slot.end);
                 return (

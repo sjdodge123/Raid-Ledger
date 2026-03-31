@@ -38,13 +38,12 @@ export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
   const alsoRan = sorted.slice(3);
   const maxVotes = top3[0]?.voteCount ?? 0;
   const totalVotes = useMemo(() => sumVotes(lineup.entries), [lineup.entries]);
-  const champion = top3[0];
 
   return (
     <div>
       {top3.length > 0 && <VotingPodium entries={top3} />}
 
-      <PodiumActionButtons championEntry={champion} lineupId={lineup.id} />
+      <PodiumActionButtons />
 
       <AlsoRanList entries={alsoRan} maxVotes={maxVotes} />
 

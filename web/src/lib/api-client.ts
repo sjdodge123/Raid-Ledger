@@ -190,3 +190,15 @@ export {
     joinMatch,
     advanceMatch,
 } from './api/lineups-matches-api';
+
+// Lineup Scheduling (ROK-965)
+export {
+    getSchedulePoll,
+    suggestSlot,
+    toggleScheduleVote,
+    createEventFromSlot,
+    retractAllVotes,
+    getMatchAvailability,
+    getSchedulingBanner,
+    getOtherPolls,
+} from './api/scheduling-api';

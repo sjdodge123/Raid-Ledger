@@ -1,7 +1,7 @@
 /**
  * Tier 1 ("Scheduling Now") hero match card (ROK-989).
  * Full card with cover art, vote bar, member avatars,
- * and disabled "Schedule This" CTA.
+ * and "Schedule This" CTA linking to the scheduling poll page.
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -66,10 +66,11 @@ function CardBody({ match, totalVoters, entry }: SchedulingMatchCardProps): JSX.
       <div className="mt-3 mb-3">
         <MemberAvatarGroup members={match.members} />
       </div>
-      <button type="button" disabled title="Scheduling features coming soon"
-        className="w-full py-2 text-sm font-medium text-zinc-400 bg-zinc-700 rounded-lg cursor-not-allowed">
+      <Link to={`/community-lineup/${match.lineupId}/schedule/${match.id}`}
+        onClick={(e) => e.stopPropagation()}
+        className="block w-full py-2 text-sm font-medium text-center text-emerald-300 bg-emerald-600/20 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition-colors">
         Schedule This &rarr;
-      </button>
+      </Link>
     </div>
   );
 }

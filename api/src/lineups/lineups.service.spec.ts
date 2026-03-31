@@ -307,11 +307,11 @@ function describeLineupsService() {
       expect(result.status).toBe('decided');
     });
 
-    it('should transition scheduling → archived', async () => {
-      const schedulingLineup = { ...mockLineup, status: 'scheduling' };
-      mockSelects(makeSelectChain({ limitResult: [schedulingLineup] }));
+    it('should transition decided → archived', async () => {
+      const decidedLineup = { ...mockLineup, status: 'decided' };
+      mockSelects(makeSelectChain({ limitResult: [decidedLineup] }));
       mockUpdate();
-      mockBuildDetail({ ...schedulingLineup, status: 'archived' });
+      mockBuildDetail({ ...decidedLineup, status: 'archived' });
 
       const result = await service.transitionStatus(1, { status: 'archived' });
 
@@ -377,16 +377,15 @@ function describeLineupsService() {
       expect(result.status).toBe('decided');
     });
 
-    it('should throw BadRequestException if decidedGameId not in entries', async () => {
-      const schedulingLineup = { ...mockLineup, status: 'scheduling' };
-      // findLineupById
-      mockSelects(makeSelectChain({ limitResult: [schedulingLineup] }));
-      // validateDecidedGame — no entries
-      mockSelects(makeSelectChain({ whereResult: [] }));
+    it('should allow reversion archived → decided', async () => {
+      const archivedLineup = { ...mockLineup, status: 'archived' };
+      mockSelects(makeSelectChain({ limitResult: [archivedLineup] }));
+      mockUpdate();
+      mockBuildDetail({ ...archivedLineup, status: 'decided' });
 
-      await expect(
-        service.transitionStatus(1, { status: 'decided', decidedGameId: 999 }),
-      ).rejects.toThrow(BadRequestException);
+      const result = await service.transitionStatus(1, { status: 'decided' });
+
+      expect(result.status).toBe('decided');
     });
 
     it('should throw NotFoundException for missing lineup', async () => {
