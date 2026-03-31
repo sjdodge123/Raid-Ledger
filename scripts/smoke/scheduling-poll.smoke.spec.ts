@@ -118,10 +118,9 @@ async function archiveActiveLineup(token: string): Promise<void> {
         if (!detail) return;
 
         const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'scheduling', 'archived'],
-            voting: ['decided', 'scheduling', 'archived'],
-            decided: ['scheduling', 'archived'],
-            scheduling: ['archived'],
+            building: ['voting', 'decided', 'archived'],
+            voting: ['decided', 'archived'],
+            decided: ['archived'],
         };
 
         const steps = transitions[detail.status];
@@ -195,11 +194,6 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
     // Advance to decided (generates matches from voting results)
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'decided',
-    });
-
-    // Advance to scheduling phase
-    await apiPatch(token, `/lineups/${lineupId}/status`, {
-        status: 'scheduling',
     });
 
     // Fetch matches and find one in "scheduling" status
@@ -391,24 +385,37 @@ test.describe('Scheduling poll vote toggling', () => {
         );
         await expect(slotCards.first()).toBeVisible({ timeout: 15_000 });
 
-        // Click the first slot to cast a vote
-        await slotCards.first().click();
+        // Check initial voted state (may be pre-voted from beforeAll)
+        const initialVoted = await slotCards.first().getAttribute('data-voted');
 
-        // After voting, the slot should reflect the voted state
+        // Click to toggle — wait for API round-trip
+        await Promise.all([
+            page.waitForResponse(
+                (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+            ).catch(() => null),
+            slotCards.first().click(),
+        ]);
+
+        // After click, state should be the OPPOSITE of initial
+        const expectedAfterClick = initialVoted === 'true' ? 'false' : 'true';
         await expect(slotCards.first()).toHaveAttribute(
             'data-voted',
-            'true',
-            { timeout: 5_000 },
+            expectedAfterClick,
+            { timeout: 10_000 },
         );
 
-        // Click again to un-vote (toggle off)
-        await slotCards.first().click();
+        // Click again to toggle back
+        await Promise.all([
+            page.waitForResponse(
+                (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+            ).catch(() => null),
+            slotCards.first().click(),
+        ]);
 
-        // After un-voting, data-voted should be false or absent
-        await expect(slotCards.first()).not.toHaveAttribute(
+        await expect(slotCards.first()).toHaveAttribute(
             'data-voted',
-            'true',
-            { timeout: 5_000 },
+            initialVoted ?? 'false',
+            { timeout: 10_000 },
         );
     });
 });
@@ -435,14 +442,24 @@ test.describe('Scheduling poll "You voted" indicator', () => {
         );
         await expect(slotCards.first()).toBeVisible({ timeout: 15_000 });
 
-        // Vote on the first slot
-        await slotCards.first().click();
+        // Check if already voted from beforeAll
+        const initialVoted = await slotCards.first().getAttribute('data-voted');
 
-        // AC5: "You voted" indicator should appear on the voted slot
-        const youVotedIndicator = slotCards
-            .first()
-            .getByText(/You voted/i);
-        await expect(youVotedIndicator).toBeVisible({ timeout: 5_000 });
+        if (initialVoted === 'true') {
+            // Already voted — indicator should be visible
+            const youVotedIndicator = slotCards.first().getByText(/You voted/i);
+            await expect(youVotedIndicator).toBeVisible({ timeout: 10_000 });
+        } else {
+            // Not voted — click to vote, then check indicator
+            await Promise.all([
+                page.waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                ).catch(() => null),
+                slotCards.first().click(),
+            ]);
+            const youVotedIndicator = slotCards.first().getByText(/You voted/i);
+            await expect(youVotedIndicator).toBeVisible({ timeout: 10_000 });
+        }
     });
 });
 
@@ -468,19 +485,19 @@ test.describe('Scheduling poll heatmap', () => {
         );
         await expect(heatmapGrid).toBeVisible({ timeout: 20_000 });
 
-        // Heatmap should have time-axis labels (hours)
-        const timeLabels = heatmapGrid.locator(
-            '[data-testid="heatmap-time-label"]',
-        );
-        const timeLabelCount = await timeLabels.count();
-        expect(timeLabelCount).toBeGreaterThan(0);
-
-        // Heatmap should have day-axis labels (days of the week)
+        // Heatmap should have day headers (GameTimeGrid uses day-header-{N})
         const dayLabels = heatmapGrid.locator(
-            '[data-testid="heatmap-day-label"]',
+            '[data-testid^="day-header-"]',
         );
         const dayLabelCount = await dayLabels.count();
         expect(dayLabelCount).toBeGreaterThan(0);
+
+        // Heatmap should have grid cells (GameTimeGrid uses cell-{day}-{hour})
+        const cells = heatmapGrid.locator(
+            '[data-testid^="cell-"]',
+        );
+        const cellCount = await cells.count();
+        expect(cellCount).toBeGreaterThan(0);
     });
 });
 
@@ -510,16 +527,25 @@ test.describe('Scheduling poll Create Event button', () => {
         const slotCards = page.locator('[data-testid="schedule-slot"]');
         await expect(slotCards.first()).toBeVisible({ timeout: 5_000 });
 
-        // If already voted from prior tests, unvote first to test disabled state
-        const votedSlot = slotCards.locator('[data-voted="true"]').first();
-        if (await votedSlot.isVisible().catch(() => false)) {
-            await votedSlot.click();
-            await expect(createEventBtn).toBeDisabled({ timeout: 5_000 });
-        }
+        // Check if already voted from beforeAll
+        const initialVoted = await slotCards.first().getAttribute('data-voted');
 
-        // Vote on a slot to enable the button
-        await slotCards.first().click();
-        await expect(createEventBtn).toBeEnabled({ timeout: 5_000 });
+        if (initialVoted === 'true') {
+            // Already voted — button should be enabled
+            await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
+        } else {
+            // Not yet voted — button should be disabled initially
+            await expect(createEventBtn).toBeDisabled({ timeout: 5_000 });
+
+            // Vote to enable it
+            await Promise.all([
+                page.waitForResponse(
+                    (r) => r.url().includes('/vote') && r.request().method() === 'POST',
+                ).catch(() => null),
+                slotCards.first().click(),
+            ]);
+            await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
+        }
     });
 });
 

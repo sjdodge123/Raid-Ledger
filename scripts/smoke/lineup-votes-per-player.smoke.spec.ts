@@ -79,10 +79,9 @@ async function archiveActiveLineup(token: string): Promise<void> {
         if (!detail) return;
 
         const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'scheduling', 'archived'],
-            voting: ['decided', 'scheduling', 'archived'],
-            decided: ['scheduling', 'archived'],
-            scheduling: ['archived'],
+            building: ['voting', 'decided', 'archived'],
+            voting: ['decided', 'archived'],
+            decided: ['archived'],
         };
         const steps = transitions[detail.status];
         if (!steps) return;
