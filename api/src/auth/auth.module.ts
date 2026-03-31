@@ -19,6 +19,7 @@ import { CharactersModule } from '../characters/characters.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { SessionCleanupService } from './session-cleanup.service';
 import { IntentTokenCleanupService } from './intent-token-cleanup.service';
+import { TokenBlocklistService } from './token-blocklist.service';
 
 /**
  * Auth module — core authentication logic (JWT, local auth, intent tokens).
@@ -53,12 +54,14 @@ import { IntentTokenCleanupService } from './intent-token-cleanup.service';
     JwtStrategy,
     SessionCleanupService,
     IntentTokenCleanupService,
+    TokenBlocklistService,
   ],
   exports: [
     AuthService,
     LocalAuthService,
     MagicLinkService,
     IntentTokenService,
+    TokenBlocklistService,
   ],
 })
 export class AuthModule {}

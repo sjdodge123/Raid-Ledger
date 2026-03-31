@@ -6,10 +6,12 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { getCachedAuthUser, setCachedAuthUser } from './auth-user-cache';
+import { TokenBlocklistService } from './token-blocklist.service';
 
 interface JwtPayload {
   sub: number;
   username: string;
+  iat: number;
   impersonatedBy?: number | null;
 }
 
@@ -18,6 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly tokenBlocklist: TokenBlocklistService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -27,6 +30,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    if (await this.tokenBlocklist.isBlocked(payload.sub, payload.iat)) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
     const cached = getCachedAuthUser(payload.sub);
     if (cached) {
       return buildAuthResult(payload, cached.role, cached.discordId);

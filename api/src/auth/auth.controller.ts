@@ -120,6 +120,7 @@ export class AuthController {
       avatar: user.avatar,
       customAvatarUrl: user.customAvatarUrl,
       role: user.role,
+      steamId: user.steamId ?? null,
       onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
       avatarPreference: avatarPref?.value ?? null,
       resolvedAvatarUrl,

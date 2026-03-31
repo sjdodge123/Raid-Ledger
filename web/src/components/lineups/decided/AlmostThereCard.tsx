@@ -30,6 +30,15 @@ function JoinButton({
   const bandwagon = useBandwagonJoin();
   const isMember = match.members.some((m) => m.userId === userId);
 
+  if (match.linkedEventId) {
+    return (
+      <Link to={`/events/${match.linkedEventId}`}
+        className="block w-full py-2 text-sm font-medium text-center text-emerald-300 bg-emerald-600/20 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition-colors">
+        View Event &rarr;
+      </Link>
+    );
+  }
+
   if (isMember) {
     return (
       <button type="button" disabled className="w-full py-2 text-sm font-medium text-zinc-400 bg-zinc-700 rounded-lg cursor-not-allowed">

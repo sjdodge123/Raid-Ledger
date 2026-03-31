@@ -87,10 +87,9 @@ async function archiveActiveLineup(token: string): Promise<void> {
         if (!detail) return;
 
         const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'scheduling', 'archived'],
-            voting: ['decided', 'scheduling', 'archived'],
-            decided: ['scheduling', 'archived'],
-            scheduling: ['archived'],
+            building: ['voting', 'decided', 'archived'],
+            voting: ['decided', 'archived'],
+            decided: ['archived'],
         };
 
         const steps = transitions[detail.status];
@@ -219,7 +218,6 @@ test.describe('Lineup creation modal', () => {
 
     test('modal opens with duration fields pre-filled from admin defaults', async ({ page }) => {
         test.setTimeout(60_000);
-        // Archive and navigate — retry to handle cross-project races
         await expect(async () => {
             await archiveActiveLineup(adminToken);
             await page.goto('/games');
@@ -257,7 +255,6 @@ test.describe('Lineup creation modal', () => {
 
     test('submitting modal creates lineup and navigates to detail page', async ({ page }) => {
         test.setTimeout(60_000);
-        // Archive and navigate — retry to handle cross-project races
         await expect(async () => {
             await archiveActiveLineup(adminToken);
             await page.goto('/games');

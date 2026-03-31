@@ -266,7 +266,12 @@ export class SteamAuthController {
     if (isPublic) {
       this.steamService.syncLibrary(userId).catch((err: unknown) => {
         this.logger.warn(
-          `Auto-sync after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          `Auto-sync library after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+      this.steamWishlistService.syncWishlist(userId).catch((err: unknown) => {
+        this.logger.warn(
+          `Auto-sync wishlist after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
         );
       });
     }

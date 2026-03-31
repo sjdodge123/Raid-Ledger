@@ -9,6 +9,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
 jest.mock('./lineups-matching.helpers', () => ({
@@ -95,6 +96,7 @@ function describeLineupsService() {
       select: jest.fn(),
       insert: jest.fn(),
       update: jest.fn(),
+      execute: jest.fn().mockResolvedValue([{ count: 0 }]),
       transaction: jest
         .fn()
         .mockImplementation((fn: (tx: Record<string, jest.Mock>) => unknown) =>
@@ -163,6 +165,10 @@ function describeLineupsService() {
         {
           provide: LineupPhaseQueueService,
           useValue: { scheduleTransition: jest.fn() },
+        },
+        {
+          provide: LineupSteamNudgeService,
+          useValue: { nudgeUnlinkedMembers: jest.fn() },
         },
       ],
     }).compile();
@@ -307,11 +313,11 @@ function describeLineupsService() {
       expect(result.status).toBe('decided');
     });
 
-    it('should transition scheduling → archived', async () => {
-      const schedulingLineup = { ...mockLineup, status: 'scheduling' };
-      mockSelects(makeSelectChain({ limitResult: [schedulingLineup] }));
+    it('should transition decided → archived', async () => {
+      const decidedLineup = { ...mockLineup, status: 'decided' };
+      mockSelects(makeSelectChain({ limitResult: [decidedLineup] }));
       mockUpdate();
-      mockBuildDetail({ ...schedulingLineup, status: 'archived' });
+      mockBuildDetail({ ...decidedLineup, status: 'archived' });
 
       const result = await service.transitionStatus(1, { status: 'archived' });
 
@@ -377,16 +383,15 @@ function describeLineupsService() {
       expect(result.status).toBe('decided');
     });
 
-    it('should throw BadRequestException if decidedGameId not in entries', async () => {
-      const schedulingLineup = { ...mockLineup, status: 'scheduling' };
-      // findLineupById
-      mockSelects(makeSelectChain({ limitResult: [schedulingLineup] }));
-      // validateDecidedGame — no entries
-      mockSelects(makeSelectChain({ whereResult: [] }));
+    it('should allow reversion archived → decided', async () => {
+      const archivedLineup = { ...mockLineup, status: 'archived' };
+      mockSelects(makeSelectChain({ limitResult: [archivedLineup] }));
+      mockUpdate();
+      mockBuildDetail({ ...archivedLineup, status: 'decided' });
 
-      await expect(
-        service.transitionStatus(1, { status: 'decided', decidedGameId: 999 }),
-      ).rejects.toThrow(BadRequestException);
+      const result = await service.transitionStatus(1, { status: 'decided' });
+
+      expect(result.status).toBe('decided');
     });
 
     it('should throw NotFoundException for missing lineup', async () => {

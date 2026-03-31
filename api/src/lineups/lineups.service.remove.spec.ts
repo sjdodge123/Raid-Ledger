@@ -13,6 +13,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 
 const NOW = new Date('2026-03-22T20:00:00Z');
 
@@ -126,6 +127,10 @@ describe('LineupsService.removeNomination', () => {
         {
           provide: LineupPhaseQueueService,
           useValue: { scheduleTransition: jest.fn() },
+        },
+        {
+          provide: LineupSteamNudgeService,
+          useValue: { nudgeUnlinkedMembers: jest.fn() },
         },
       ],
     }).compile();

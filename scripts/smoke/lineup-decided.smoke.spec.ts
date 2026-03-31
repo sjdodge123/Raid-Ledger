@@ -106,10 +106,9 @@ async function archiveActiveLineup(token: string): Promise<void> {
         if (!detail) return;
 
         const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'scheduling', 'archived'],
-            voting: ['decided', 'scheduling', 'archived'],
-            decided: ['scheduling', 'archived'],
-            scheduling: ['archived'],
+            building: ['voting', 'decided', 'archived'],
+            voting: ['decided', 'archived'],
+            decided: ['archived'],
         };
 
         const steps = transitions[detail.status];
@@ -176,22 +175,24 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
 
     if (!lineupId) throw new Error('Failed to create lineup');
 
-    // Nominate games
-    for (const gid of gameIds) {
-        await apiPost(token, `/lineups/${lineupId}/nominate`, {
-            gameId: gid,
-        });
-    }
+    // Nominate games (parallel — nominations are independent)
+    await Promise.all(
+        gameIds.map((gid) =>
+            apiPost(token, `/lineups/${lineupId}/nominate`, { gameId: gid }),
+        ),
+    );
 
     // Advance to voting
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'voting',
     });
 
-    // Cast votes — first game gets 1 vote (admin), to ensure varied counts
-    for (const gid of gameIds.slice(0, 3)) {
-        await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gid });
-    }
+    // Cast votes (parallel — votes are independent)
+    await Promise.all(
+        gameIds.slice(0, 3).map((gid) =>
+            apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gid }),
+        ),
+    );
 
     // Advance directly to decided (new phase order: voting → decided)
     await apiPatch(token, `/lineups/${lineupId}/status`, {
@@ -265,7 +266,7 @@ test.describe('Decided view podium section', () => {
         expect(cardCount).toBeLessThanOrEqual(3);
     });
 
-    test('"Create Event" button is visible and navigates to event creation', async ({
+    test('podium action buttons are visible (Create Event removed per ROK-965)', async ({
         page,
     }) => {
         await page.goto(`/community-lineup/${decidedLineupId}`);
@@ -274,17 +275,12 @@ test.describe('Decided view podium section', () => {
             { timeout: 10_000 },
         );
 
-        // AC: "Create Event" button navigates to event creation page with gameId
-        const createEventBtn = page.getByRole('link', {
-            name: /Create Event/i,
+        // Create Event was removed — events are created via scheduling poll (ROK-965).
+        // Verify the "Share to Discord" button exists as the sole action button.
+        const shareBtn = page.getByRole('button', {
+            name: /Share to Discord/i,
         });
-        await expect(createEventBtn).toBeVisible({ timeout: 15_000 });
-
-        // Verify the link target includes gameId and lineup context
-        const href = await createEventBtn.getAttribute('href');
-        expect(href).toContain('/events/new');
-        expect(href).toContain('gameId=');
-        expect(href).toContain('lineupId=');
+        await expect(shareBtn).toBeVisible({ timeout: 20_000 });
     });
 
     test('"Share to Discord" button is visible but disabled', async ({

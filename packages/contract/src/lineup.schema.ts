@@ -7,12 +7,11 @@ export * from './lineup-match.schema.js';
 // Community Lineup Schemas (ROK-933)
 // ============================================================
 
-/** Valid lineup statuses. Flow: building -> voting -> decided -> scheduling -> archived */
+/** Valid lineup statuses. Flow: building -> voting -> decided -> archived */
 export const LineupStatusSchema = z.enum([
     'building',
     'voting',
     'decided',
-    'scheduling',
     'archived',
 ]);
 
@@ -112,6 +111,10 @@ export const LineupDetailResponseSchema = z.object({
     totalMembers: z.number(),
     /** Game IDs the current user has voted for (ROK-936). */
     myVotes: z.array(z.number()),
+    /** Count of members without a linked Steam account (ROK-993). */
+    unlinkedSteamCount: z.number(),
+    /** Members without a linked Steam account (ROK-993, operator-only). */
+    unlinkedSteamMembers: z.array(z.object({ id: z.number(), displayName: z.string() })),
     createdAt: z.string(),
     updatedAt: z.string(),
 });
@@ -164,6 +167,8 @@ export const CommonGroundQuerySchema = z.object({
     minOwners: z.coerce.number().int().min(0).max(15).default(2),
     maxPlayers: z.coerce.number().int().positive().optional(),
     genre: z.string().optional(),
+    /** Case-insensitive game name search (ILIKE). */
+    search: z.string().max(100).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(50),
 });
 

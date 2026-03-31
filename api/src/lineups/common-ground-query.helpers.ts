@@ -17,6 +17,7 @@ export interface CommonGroundFilters {
   minOwners: number;
   maxPlayers?: number;
   genre?: string;
+  search?: string;
   limit: number;
 }
 
@@ -80,7 +81,9 @@ function buildWhereConditions(
   filters: CommonGroundFilters,
   excludeGameIds: number[],
 ): ReturnType<typeof sql>[] {
-  const conditions = [sql`1=1`];
+  const conditions = [
+    sql`(g.steam_app_id IS NOT NULL OR g.igdb_id IS NOT NULL)`,
+  ];
 
   if (excludeGameIds.length > 0) {
     conditions.push(
@@ -106,6 +109,10 @@ function buildWhereConditions(
         AND (g.player_count->>'max')::int >= ${filters.maxPlayers}
       )`,
     );
+  }
+
+  if (filters.search) {
+    conditions.push(sql`g.name ILIKE ${'%' + filters.search + '%'}`);
   }
 
   return conditions;

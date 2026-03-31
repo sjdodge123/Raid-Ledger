@@ -15,6 +15,7 @@ import {
   addTypeSpecificFields,
   buildExtraRows,
   buildPrimaryButton,
+  buildInlineButtons,
 } from './notification-embed.helpers';
 
 interface NotificationEmbedInput {
@@ -203,6 +204,7 @@ export class DiscordNotificationEmbedService {
       clientUrl,
     );
     if (primaryButton) buttons.push(primaryButton);
+    buttons.push(...buildInlineButtons(input.type, input.payload, clientUrl));
     const discordButton = this.buildDiscordLinkButton(input);
     if (discordButton) buttons.push(discordButton);
     buttons.push(
