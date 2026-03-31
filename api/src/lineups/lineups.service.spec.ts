@@ -10,6 +10,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { LineupNotificationService } from './lineup-notification.service';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
 jest.mock('./lineups-matching.helpers', () => ({
@@ -19,6 +20,17 @@ jest.mock('./lineups-matching.helpers', () => ({
 // Mock auto-carryover to avoid extra DB queries in unit tests (ROK-937)
 jest.mock('./lineups-carryover.helpers', () => ({
   carryOverFromLastDecided: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock notification hooks to avoid extra DB queries (ROK-932)
+jest.mock('./lineups-notify-hooks.helpers', () => ({
+  fireLineupCreated: jest.fn(),
+  fireNominationMilestone: jest.fn(),
+  fireVotingOpen: jest.fn(),
+  fireDecidedNotifications: jest.fn(),
+  fireNominationRemoved: jest.fn(),
+  fireSchedulingOpen: jest.fn(),
+  fireEventCreated: jest.fn(),
 }));
 
 const NOW = new Date('2026-03-22T20:00:00Z');
@@ -169,6 +181,18 @@ function describeLineupsService() {
         {
           provide: LineupSteamNudgeService,
           useValue: { nudgeUnlinkedMembers: jest.fn() },
+        },
+        {
+          provide: LineupNotificationService,
+          useValue: {
+            notifyLineupCreated: jest.fn().mockResolvedValue(undefined),
+            notifyNominationMilestone: jest.fn().mockResolvedValue(undefined),
+            notifyVotingOpen: jest.fn().mockResolvedValue(undefined),
+            notifyMatchesFound: jest.fn().mockResolvedValue(undefined),
+            notifySchedulingOpen: jest.fn().mockResolvedValue(undefined),
+            notifyNominationRemoved: jest.fn().mockResolvedValue(undefined),
+            notifyEventCreated: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();

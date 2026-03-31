@@ -42,7 +42,10 @@ describe('DemoTestController — new test utility endpoints', () => {
       controllers: [DemoTestController],
       providers: [
         { provide: DemoTestService, useValue: mockService },
-        { provide: LineupSteamNudgeService, useValue: { nudgeUnlinkedMembers: jest.fn() } },
+        {
+          provide: LineupSteamNudgeService,
+          useValue: { nudgeUnlinkedMembers: jest.fn() },
+        },
       ],
     }).compile();
 

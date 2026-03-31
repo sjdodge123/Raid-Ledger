@@ -14,6 +14,18 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { LineupNotificationService } from './lineup-notification.service';
+
+// Mock notification hooks to avoid extra DB queries (ROK-932)
+jest.mock('./lineups-notify-hooks.helpers', () => ({
+  fireLineupCreated: jest.fn(),
+  fireNominationMilestone: jest.fn(),
+  fireNominationRemoved: jest.fn(),
+  fireVotingOpen: jest.fn(),
+  fireDecidedNotifications: jest.fn(),
+  fireSchedulingOpen: jest.fn(),
+  fireEventCreated: jest.fn(),
+}));
 
 const NOW = new Date('2026-03-22T20:00:00Z');
 
@@ -131,6 +143,12 @@ describe('LineupsService.removeNomination', () => {
         {
           provide: LineupSteamNudgeService,
           useValue: { nudgeUnlinkedMembers: jest.fn() },
+        },
+        {
+          provide: LineupNotificationService,
+          useValue: {
+            notifyNominationRemoved: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();

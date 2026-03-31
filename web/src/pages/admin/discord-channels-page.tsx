@@ -60,6 +60,16 @@ function VoiceChannelSelector({ settings }: { settings: ReturnType<typeof useAdm
         onError={() => toast.error('Failed to update default voice channel')} />;
 }
 
+function LineupChannelSelector({ settings }: { settings: ReturnType<typeof useAdminSettings> }) {
+    const { discordChannels, discordLineupChannel, setDiscordLineupChannel } = settings;
+    if (!discordChannels.data?.length) return null;
+    return <ChannelSelector id="discordLineupChannel" label="Lineup Channel" channels={discordChannels.data}
+        value={discordLineupChannel.data?.channelId ?? ''} isPending={setDiscordLineupChannel.isPending} prefix="#"
+        hint="Dedicated channel for Community Lineup embeds. Falls back to the default notification channel if not set."
+        onChange={async (v) => { await setDiscordLineupChannel.mutateAsync(v); toast.success('Lineup channel updated'); }}
+        onError={() => toast.error('Failed to update lineup channel')} />;
+}
+
 function DiscordChannelsContent() {
     const settings = useAdminSettings();
     const isBotConnected = settings.discordBotStatus.data?.connected ?? false;
@@ -72,6 +82,7 @@ function DiscordChannelsContent() {
             {!isBotConnected && <ChannelsBotWarning />}
             {isBotConnected && <TextChannelSelector settings={settings} />}
             {isBotConnected && <VoiceChannelSelector settings={settings} />}
+            {isBotConnected && <LineupChannelSelector settings={settings} />}
             <RoutingPriorityInfo />
             <ChannelBindingsSection bindings={bindings} onUpdate={handleUpdate} onDelete={handleDelete} isUpdating={isUpdating} isDeleting={isDeleting} />
         </div>

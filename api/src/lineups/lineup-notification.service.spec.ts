@@ -165,7 +165,9 @@ describe('LineupNotificationService', () => {
 
       await service.notifyLineupCreated(makeLineup());
 
-      expect(mockSettingsService.getDiscordBotDefaultChannel).toHaveBeenCalled();
+      expect(
+        mockSettingsService.getDiscordBotDefaultChannel,
+      ).toHaveBeenCalled();
     });
 
     it('silently skips when no channel is configured', async () => {
@@ -343,13 +345,7 @@ describe('LineupNotificationService', () => {
     });
 
     it('uses dedup key lineup-match-dm:{matchId}:{userId}', async () => {
-      await service.notifyMatchMember(
-        MATCH_ID,
-        7,
-        GAME_NAME,
-        [],
-        LINEUP_ID,
-      );
+      await service.notifyMatchMember(MATCH_ID, 7, GAME_NAME, [], LINEUP_ID);
 
       expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         `lineup-match-dm:${MATCH_ID}:7`,
@@ -360,13 +356,7 @@ describe('LineupNotificationService', () => {
     it('skips DM when dedup indicates already sent', async () => {
       mockDedupService.checkAndMarkSent.mockResolvedValueOnce(true);
 
-      await service.notifyMatchMember(
-        MATCH_ID,
-        7,
-        GAME_NAME,
-        [],
-        LINEUP_ID,
-      );
+      await service.notifyMatchMember(MATCH_ID, 7, GAME_NAME, [], LINEUP_ID);
 
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
@@ -377,12 +367,7 @@ describe('LineupNotificationService', () => {
   // -----------------------------------------------------------------------
   describe('notifyRallyInterest', () => {
     it('sends DM with bandwagon link to non-match user', async () => {
-      await service.notifyRallyInterest(
-        MATCH_ID,
-        12,
-        GAME_NAME,
-        LINEUP_ID,
-      );
+      await service.notifyRallyInterest(MATCH_ID, 12, GAME_NAME, LINEUP_ID);
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -397,12 +382,7 @@ describe('LineupNotificationService', () => {
     });
 
     it('uses dedup key lineup-rally-dm:{matchId}:{userId}', async () => {
-      await service.notifyRallyInterest(
-        MATCH_ID,
-        12,
-        GAME_NAME,
-        LINEUP_ID,
-      );
+      await service.notifyRallyInterest(MATCH_ID, 12, GAME_NAME, LINEUP_ID);
 
       expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         `lineup-rally-dm:${MATCH_ID}:12`,
@@ -588,13 +568,7 @@ describe('LineupNotificationService', () => {
         { ...makeMember(20), communityLineupDisabled: true },
       ]);
 
-      await service.notifyMatchMember(
-        MATCH_ID,
-        20,
-        GAME_NAME,
-        [],
-        LINEUP_ID,
-      );
+      await service.notifyMatchMember(MATCH_ID, 20, GAME_NAME, [], LINEUP_ID);
 
       // Preference filtering uses NotificationService.create which checks
       // internally, but the service should pass type: 'community_lineup'
@@ -634,13 +608,7 @@ describe('LineupNotificationService', () => {
       mockDedupService.checkAndMarkSent.mockResolvedValue(true);
       mockDb.execute.mockResolvedValueOnce([makeMember(1)]);
 
-      await service.notifyMatchMember(
-        MATCH_ID,
-        1,
-        GAME_NAME,
-        [],
-        LINEUP_ID,
-      );
+      await service.notifyMatchMember(MATCH_ID, 1, GAME_NAME, [], LINEUP_ID);
 
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });

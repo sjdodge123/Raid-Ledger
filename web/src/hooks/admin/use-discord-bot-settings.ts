@@ -150,6 +150,27 @@ function useBotVoiceChannels(botConnected: boolean) {
     return { discordVoiceChannels, discordDefaultVoiceChannel, setDiscordVoiceChannel };
 }
 
+function useBotLineupChannel(botConnected: boolean) {
+    const queryClient = useQueryClient();
+
+    const discordLineupChannel = useQuery<{ channelId: string | null }>({
+        queryKey: [...BOT_KEY, 'lineup-channel'],
+        queryFn: () => adminFetch('/admin/settings/discord-bot/lineup-channel'),
+        enabled: !!getAuthToken() && botConnected,
+        staleTime: 30_000,
+    });
+
+    const setDiscordLineupChannel = useMutation<ApiResponse, Error, string>({
+        mutationFn: (channelId) =>
+            adminFetch('/admin/settings/discord-bot/lineup-channel', {
+                method: 'PUT', body: JSON.stringify({ channelId }),
+            }, 'Failed to set lineup channel'),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: [...BOT_KEY, 'lineup-channel'] }),
+    });
+
+    return { discordLineupChannel, setDiscordLineupChannel };
+}
+
 function useBotAdHocEvents(botConnected: boolean) {
     const queryClient = useQueryClient();
 
@@ -182,6 +203,7 @@ export function useDiscordBotSettings() {
         ...useBotChannelQueries(botConnected),
         ...useBotSetupActions(botConfigSavedAtRef),
         ...useBotVoiceChannels(botConnected),
+        ...useBotLineupChannel(botConnected),
         ...useBotAdHocEvents(botConnected),
     };
 }

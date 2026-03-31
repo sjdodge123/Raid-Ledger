@@ -61,6 +61,11 @@ const NOTIFICATION_TYPE_META: {
         label: 'Tentative Displaced',
         description: 'When a confirmed player takes your tentative slot',
     },
+    {
+        type: 'community_lineup',
+        label: 'Community Lineup',
+        description: 'Updates about community lineup voting, matches, and scheduling',
+    },
 ];
 
 /** All possible channel metadata */

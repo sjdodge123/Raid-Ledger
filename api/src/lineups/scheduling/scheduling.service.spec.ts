@@ -15,6 +15,11 @@ import {
   type MockDb,
 } from '../../common/testing/drizzle-mock';
 import { EventsService } from '../../events/events.service';
+import { LineupNotificationService } from '../lineup-notification.service';
+
+jest.mock('../lineups-notify-hooks.helpers', () => ({
+  fireEventCreated: jest.fn(),
+}));
 
 const SCHEDULING_MATCH = {
   id: 10,
@@ -40,6 +45,7 @@ describe('SchedulingService', () => {
         SchedulingService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: EventsService, useValue: mockEventsService },
+        { provide: LineupNotificationService, useValue: { notifyEventCreated: jest.fn() } },
       ],
     }).compile();
 
