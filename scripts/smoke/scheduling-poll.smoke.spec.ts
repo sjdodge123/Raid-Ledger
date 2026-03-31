@@ -257,9 +257,15 @@ test.beforeAll(async () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(19, 0, 0, 0);
-    await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/suggest`, {
+    const suggestRes = await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/suggest`, {
         proposedTime: tomorrow.toISOString(),
     });
+
+    // Pre-vote on the slot via API so Create Event button is enabled
+    const slotId = suggestRes?.data?.id ?? suggestRes?.id;
+    if (slotId) {
+        await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/vote`, { slotId });
+    }
 });
 
 // ---------------------------------------------------------------------------
@@ -568,17 +574,11 @@ test.describe('Scheduling poll event creation', () => {
             { timeout: 10_000 },
         );
 
-        // Vote on a slot first (required to enable Create Event)
-        const slotCards = page.locator(
-            '[data-testid="schedule-slot"]',
-        );
-        await expect(slotCards.first()).toBeVisible({ timeout: 20_000 });
-        await slotCards.first().click();
-
-        // Wait for vote to register — button enables after API round-trip
+        // Vote was pre-registered via API in beforeAll — button should be enabled
         const createEventBtn = page.getByRole('button', {
             name: /Create Event/i,
         });
+        await expect(createEventBtn).toBeVisible({ timeout: 20_000 });
         await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
         await createEventBtn.click();
 
