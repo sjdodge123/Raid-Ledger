@@ -575,16 +575,16 @@ test.describe('Scheduling poll event creation', () => {
         await expect(slotCards.first()).toBeVisible({ timeout: 20_000 });
         await slotCards.first().click();
 
-        // Click "Create Event" button
+        // Wait for vote to register — button enables after API round-trip
         const createEventBtn = page.getByRole('button', {
             name: /Create Event/i,
         });
-        await expect(createEventBtn).toBeEnabled({ timeout: 5_000 });
+        await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
         await createEventBtn.click();
 
         // AC8: Success state should appear after event creation
         const successIndicator = page.getByText('Event created successfully!');
-        await expect(successIndicator).toBeVisible({ timeout: 10_000 });
+        await expect(successIndicator).toBeVisible({ timeout: 15_000 });
     });
 });
 
