@@ -157,7 +157,7 @@ export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterI
     const equippedBySlot = useEquippedSlotMap(character);
     const coverageMap = useCoverageMap(coverage);
     const allUsable = useAllUsableQuests(questMap, character);
-    const allFlat = flattenQuestMap(questMap);
+    const allFlat = useMemo(() => flattenQuestMap(questMap), [questMap]);
     const { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded } = useQuestPrepState(eventId);
     useWowheadTooltips(questMap ? [allFlat, character] : []);
 
