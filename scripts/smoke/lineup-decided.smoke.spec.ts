@@ -266,7 +266,7 @@ test.describe('Decided view podium section', () => {
         expect(cardCount).toBeLessThanOrEqual(3);
     });
 
-    test('"Create Event" button is visible and navigates to event creation', async ({
+    test('podium action buttons are visible (Create Event removed per ROK-965)', async ({
         page,
     }) => {
         await page.goto(`/community-lineup/${decidedLineupId}`);
@@ -275,17 +275,12 @@ test.describe('Decided view podium section', () => {
             { timeout: 10_000 },
         );
 
-        // AC: "Create Event" button navigates to event creation page with gameId
-        const createEventBtn = page.getByRole('link', {
-            name: /Create Event/i,
+        // Create Event was removed — events are created via scheduling poll (ROK-965).
+        // Verify the "Share to Discord" button exists as the sole action button.
+        const shareBtn = page.getByRole('button', {
+            name: /Share to Discord/i,
         });
-        await expect(createEventBtn).toBeVisible({ timeout: 20_000 });
-
-        // Verify the link target includes gameId and lineup context
-        const href = await createEventBtn.getAttribute('href');
-        expect(href).toContain('/events/new');
-        expect(href).toContain('gameId=');
-        expect(href).toContain('lineupId=');
+        await expect(shareBtn).toBeVisible({ timeout: 20_000 });
     });
 
     test('"Share to Discord" button is visible but disabled', async ({
