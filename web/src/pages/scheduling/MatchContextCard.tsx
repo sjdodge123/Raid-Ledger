@@ -15,7 +15,6 @@ interface MatchContextCardProps {
 function toUser(m: MatchDetailResponseDto['members'][number]) {
   return toAvatarUser({
     id: m.userId,
-    username: m.displayName,
     avatar: m.avatar,
     discordId: m.discordId,
     customAvatarUrl: m.customAvatarUrl,

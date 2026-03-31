@@ -65,7 +65,8 @@ export function useSuggestSlot() {
 /** Hook for toggling a vote on a schedule slot with optimistic update. */
 export function useToggleScheduleVote() {
   const qc = useQueryClient();
-  return useMutation<{ voted: boolean }, Error, { lineupId: number; matchId: number; slotId: number }>({
+  type Ctx = { prev: SchedulePollPageResponseDto | undefined };
+  return useMutation<{ voted: boolean }, Error, { lineupId: number; matchId: number; slotId: number }, Ctx>({
     mutationFn: ({ lineupId, matchId, slotId }) => toggleScheduleVote(lineupId, matchId, slotId),
     onMutate: ({ lineupId, matchId, slotId }) => optimisticToggle(qc, lineupId, matchId, slotId),
     onError: (_err, { lineupId, matchId }, ctx) => {
@@ -87,8 +88,8 @@ export function useRetractAllVotes() {
 /** Hook for creating an event from a selected slot. */
 export function useCreateEventFromSlot() {
   const qc = useQueryClient();
-  return useMutation<{ eventId: number }, Error, { lineupId: number; matchId: number; slotId: number }>({
-    mutationFn: ({ lineupId, matchId, slotId }) => createEventFromSlot(lineupId, matchId, slotId),
+  return useMutation<{ eventId: number }, Error, { lineupId: number; matchId: number; slotId: number; recurring?: boolean }>({
+    mutationFn: ({ lineupId, matchId, slotId, recurring }) => createEventFromSlot(lineupId, matchId, slotId, recurring),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
       void qc.invalidateQueries({ queryKey: ['events'] });
