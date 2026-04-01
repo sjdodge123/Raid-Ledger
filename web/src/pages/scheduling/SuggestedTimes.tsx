@@ -3,7 +3,7 @@
  * Displays slot cards with vote counts, toggle-vote on click,
  * "You voted" indicator, and a "Suggest Time" button with datetime picker.
  */
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 
@@ -86,7 +86,11 @@ function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
   onSubmit: (time: string) => void; isSuggesting: boolean; prefillTime?: string;
 }): JSX.Element {
   const [value, setValue] = useState(prefillTime ?? '');
-  if (prefillTime && prefillTime !== value) setValue(prefillTime);
+  const lastPrefill = useRef(prefillTime);
+  if (prefillTime && prefillTime !== lastPrefill.current) {
+    lastPrefill.current = prefillTime;
+    setValue(prefillTime);
+  }
   const handleSubmit = (): void => {
     if (!value) return;
     onSubmit(new Date(value).toISOString());
