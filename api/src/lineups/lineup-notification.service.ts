@@ -239,7 +239,7 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const ctx = await this.resolveCtx(match.lineupId, 'scheduling');
+    const ctx = await this.resolveCtx(match.lineupId, 'decided');
     const { embed, row } = buildSchedulingEmbed(ctx, match.gameName, match.id);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
@@ -255,7 +255,7 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const ctx = await this.resolveCtx(match.lineupId, 'scheduling');
+    const ctx = await this.resolveCtx(match.lineupId, 'decided');
     const { embed, row } = buildEventCreatedEmbed(ctx, match.gameName, eventDate);
     await this.botClient.sendEmbed(channelId, embed, row);
   }

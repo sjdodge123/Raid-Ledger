@@ -12,7 +12,7 @@ import {
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 
 /** Lineup phase for breadcrumb rendering. */
-export type LineupPhase = 'nominations' | 'voting' | 'decided' | 'scheduling';
+export type LineupPhase = 'nominations' | 'voting' | 'decided';
 
 /** Shared context for embed building — resolved once by the service. */
 export interface EmbedContext {
@@ -64,7 +64,6 @@ const PHASE_LABELS: [LineupPhase, string][] = [
   ['nominations', 'Nominations'],
   ['voting', 'Voting'],
   ['decided', 'Decided'],
-  ['scheduling', 'Scheduling'],
 ];
 
 /** Build a breadcrumb with completed phases struck through. */
@@ -105,9 +104,8 @@ export function buildCreatedEmbed(
       + 'advances automatically when its deadline expires:'
       + '\n\n'
       + '1. \u{1F539} **Nominations** *(current)* — suggest games to play\n'
-      + '2. \u26AA **Voting** — pick your favorites from the nominees\n'
-      + '3. \u26AA **Decided** — top picks are matched into player groups\n'
-      + '4. \u26AA **Scheduling** — each group votes on a time and plays!'
+      + '2. \u{1F518} **Voting** — pick your favorites from the nominees\n'
+      + '3. \u{1F518} **Decided** — top picks are matched, scheduled, and played!'
       + deadline,
     )
     .addFields({
