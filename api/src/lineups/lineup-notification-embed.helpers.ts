@@ -67,11 +67,11 @@ const PHASE_LABELS: [LineupPhase, string][] = [
   ['scheduling', 'Scheduling'],
 ];
 
-/** Build a breadcrumb like: ● Nominations ▸ ○ Voting ▸ ○ Decided ▸ ○ Scheduling */
+/** Build a breadcrumb like: 🟣 Nominations › ⚪ Voting › ⚪ Decided › ⚪ Scheduling */
 function phaseBreadcrumb(current: LineupPhase): string {
   return PHASE_LABELS.map(([key, name]) =>
-    key === current ? `**\u25CF ${name}**` : `\u25CB ${name}`,
-  ).join('  \u25B8  ');
+    key === current ? `\u{1F7E3} **${name}**` : `\u26AA ${name}`,
+  ).join('  \u203A  ');
 }
 
 /** Apply shared author + phase breadcrumb + footer to an embed. */
