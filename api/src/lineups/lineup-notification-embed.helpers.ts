@@ -20,6 +20,7 @@ export interface EmbedContext {
 
 /** Nomination entry for milestone embeds. */
 export interface NominationEntry {
+  gameId: number;
   gameName: string;
   nominatorName: string;
   coverUrl: string | null;
@@ -95,7 +96,10 @@ export function buildMilestoneEmbed(
 ): EmbedWithRow {
   const lines = entries
     .slice(0, 15)
-    .map((e) => `\u{1F3AE} **${e.gameName}** — nominated by ${e.nominatorName}`);
+    .map((e) => {
+      const link = `${ctx.baseUrl}/game-library/${e.gameId}`;
+      return `\u{1F3AE} [**${e.gameName}**](${link}) — nominated by ${e.nominatorName}`;
+    });
   const overflow = entries.length > 15 ? `\n*...and ${entries.length - 15} more*` : '';
   const cover = entries.find((e) => e.coverUrl)?.coverUrl;
 

@@ -58,6 +58,7 @@ export async function checkNominationMilestone(
 
 /** Entry detail for milestone embeds. */
 export interface EntryDetail {
+  gameId: number;
   gameName: string;
   nominatorName: string;
   coverUrl: string | null;
@@ -70,6 +71,7 @@ export async function getEntryDetails(
 ): Promise<EntryDetail[]> {
   const rows = await db
     .select({
+      gameId: schema.games.id,
       gameName: schema.games.name,
       nominatorName: schema.users.displayName,
       coverUrl: schema.games.coverUrl,
@@ -79,6 +81,7 @@ export async function getEntryDetails(
     .innerJoin(schema.users, eq(schema.communityLineupEntries.nominatedBy, schema.users.id))
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));
   return rows.map((r) => ({
+    gameId: r.gameId,
     gameName: r.gameName,
     nominatorName: r.nominatorName ?? 'Unknown',
     coverUrl: r.coverUrl,

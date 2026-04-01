@@ -185,7 +185,7 @@ describe('LineupNotificationService', () => {
   // AC-2: Channel embed updated at nomination milestones
   // -----------------------------------------------------------------------
   describe('notifyNominationMilestone', () => {
-    const entry = (name: string) => ({ gameName: name, nominatorName: 'User', coverUrl: null });
+    const entry = (name: string, id = 1) => ({ gameId: id, gameName: name, nominatorName: 'User', coverUrl: null });
 
     it('posts embed at 25% threshold', async () => {
       await service.notifyNominationMilestone(LINEUP_ID, 25, [entry('Game A')]);
