@@ -105,9 +105,9 @@ export class LineupNotificationService {
   }
 
   /** AC-3: Post channel embed + DMs when voting opens. */
-  async notifyVotingOpen(lineup: LineupInfo, gameNames: string[]): Promise<void> {
-    await this.postVotingChannelEmbed(lineup, gameNames);
-    await this.sendVotingDMs(lineup, gameNames.length);
+  async notifyVotingOpen(lineup: LineupInfo, games: { id: number; name: string }[]): Promise<void> {
+    await this.postVotingChannelEmbed(lineup, games);
+    await this.sendVotingDMs(lineup, games.length);
   }
 
   /** AC-5: Post combined tier embed when matches are found. */
@@ -218,7 +218,7 @@ export class LineupNotificationService {
   /** Post the voting-open channel embed. */
   private async postVotingChannelEmbed(
     lineup: LineupInfo,
-    gameNames: string[],
+    games: { id: number; name: string }[],
   ): Promise<void> {
     const key = `lineup-voting:${lineup.id}`;
     if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
@@ -227,7 +227,7 @@ export class LineupNotificationService {
     if (!channelId) return;
 
     const ctx = await this.resolveCtx(lineup.id, 'voting');
-    const { embed, row } = buildVotingOpenEmbed(ctx, gameNames, lineup.votingDeadline);
+    const { embed, row } = buildVotingOpenEmbed(ctx, games, lineup.votingDeadline);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
 

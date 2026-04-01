@@ -159,7 +159,7 @@ export function buildMilestoneEmbed(
 /** Voting opened (AC-3). */
 export function buildVotingOpenEmbed(
   ctx: EmbedContext,
-  gameNames: string[],
+  games: { id: number; name: string }[],
   deadline?: Date,
 ): EmbedWithRow {
   const deadlineStr = deadline
@@ -177,10 +177,12 @@ export function buildVotingOpenEmbed(
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
-  if (gameNames.length > 0) {
-    const lines = gameNames.slice(0, 15).map((n) => `\u{1F3AE} ${n}`);
-    const overflow = gameNames.length > 15 ? `\n*...and ${gameNames.length - 15} more*` : '';
-    embed.addFields({ name: `Games on the Ballot (${gameNames.length})`, value: lines.join('\n') + overflow });
+  if (games.length > 0) {
+    const lines = games.slice(0, 15).map(
+      (g) => `\u{1F3AE} [${g.name}](${ctx.baseUrl}/games/${g.id})`,
+    );
+    const overflow = games.length > 15 ? `\n*...and ${games.length - 15} more*` : '';
+    embed.addFields({ name: `Games on the Ballot (${games.length})`, value: lines.join('\n') + overflow });
   }
 
   applyChrome(embed, ctx, 'Voting Open');

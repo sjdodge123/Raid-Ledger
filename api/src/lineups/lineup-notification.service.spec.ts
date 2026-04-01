@@ -228,7 +228,7 @@ describe('LineupNotificationService', () => {
   // -----------------------------------------------------------------------
   describe('notifyVotingOpen', () => {
     const deadline = new Date('2026-04-10T20:00:00Z');
-    const games = ['Game A', 'Game B', 'Game C', 'Game D', 'Game E'];
+    const games = [{ id: 1, name: 'Game A' }, { id: 2, name: 'Game B' }, { id: 3, name: 'Game C' }, { id: 4, name: 'Game D' }, { id: 5, name: 'Game E' }];
 
     it('posts channel embed with voting info', async () => {
       await service.notifyVotingOpen(
