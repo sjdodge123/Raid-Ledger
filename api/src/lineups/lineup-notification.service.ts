@@ -12,7 +12,7 @@ import { NotificationDedupService } from '../notifications/notification-dedup.se
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { resolveLineupChannel } from './lineup-notification-channel.helpers';
-import type { EmbedContext, NominationEntry } from './lineup-notification-embed.helpers';
+import type { EmbedContext, NominationEntry, LineupPhase } from './lineup-notification-embed.helpers';
 import {
   buildCreatedEmbed,
   buildMilestoneEmbed,
@@ -67,11 +67,11 @@ export class LineupNotificationService {
     private readonly settingsService: SettingsService,
   ) {}
 
-  /** Resolve shared embed context (baseUrl, community name). */
-  private async resolveCtx(lineupId: number): Promise<EmbedContext> {
+  /** Resolve shared embed context (baseUrl, community name, phase). */
+  private async resolveCtx(lineupId: number, phase: LineupPhase): Promise<EmbedContext> {
     const baseUrl = (await this.settingsService.getClientUrl()) ?? '';
     const community = await this.settingsService.get('community_name');
-    return { baseUrl, lineupId, communityName: community ?? 'Raid Ledger' };
+    return { baseUrl, lineupId, communityName: community ?? 'Raid Ledger', phase };
   }
 
   /** AC-1: Post channel embed when lineup is created. */
@@ -82,7 +82,7 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const ctx = await this.resolveCtx(lineup.id);
+    const ctx = await this.resolveCtx(lineup.id, 'nominations');
     const { embed, row } = buildCreatedEmbed(ctx, lineup.targetDate);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
@@ -99,7 +99,7 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const ctx = await this.resolveCtx(lineupId);
+    const ctx = await this.resolveCtx(lineupId, 'nominations');
     const { embed, row } = buildMilestoneEmbed(ctx, threshold, entries);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
@@ -121,7 +121,7 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const ctx = await this.resolveCtx(lineupId);
+    const ctx = await this.resolveCtx(lineupId, 'decided');
     const { embed, row } = buildDecidedEmbed(ctx, matches);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
@@ -226,7 +226,7 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const ctx = await this.resolveCtx(lineup.id);
+    const ctx = await this.resolveCtx(lineup.id, 'voting');
     const { embed, row } = buildVotingOpenEmbed(ctx, gameCount, lineup.votingDeadline);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
@@ -239,7 +239,7 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const ctx = await this.resolveCtx(match.lineupId);
+    const ctx = await this.resolveCtx(match.lineupId, 'scheduling');
     const { embed, row } = buildSchedulingEmbed(ctx, match.gameName, match.id);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
@@ -255,7 +255,7 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const ctx = await this.resolveCtx(match.lineupId);
+    const ctx = await this.resolveCtx(match.lineupId, 'scheduling');
     const { embed, row } = buildEventCreatedEmbed(ctx, match.gameName, eventDate);
     await this.botClient.sendEmbed(channelId, embed, row);
   }

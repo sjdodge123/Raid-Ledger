@@ -11,11 +11,15 @@ import {
 } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 
+/** Lineup phase for breadcrumb rendering. */
+export type LineupPhase = 'nominations' | 'voting' | 'decided' | 'scheduling';
+
 /** Shared context for embed building — resolved once by the service. */
 export interface EmbedContext {
   baseUrl: string;
   lineupId: number;
   communityName: string;
+  phase: LineupPhase;
 }
 
 /** Nomination entry for milestone embeds. */
@@ -56,10 +60,25 @@ function viewButton(ctx: EmbedContext): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
-/** Apply shared author + footer to an embed. */
+const PHASE_LABELS: [LineupPhase, string][] = [
+  ['nominations', 'Nominations'],
+  ['voting', 'Voting'],
+  ['decided', 'Decided'],
+  ['scheduling', 'Scheduling'],
+];
+
+/** Build a breadcrumb like: ● Nominations ▸ ○ Voting ▸ ○ Decided ▸ ○ Scheduling */
+function phaseBreadcrumb(current: LineupPhase): string {
+  return PHASE_LABELS.map(([key, name]) =>
+    key === current ? `**\u25CF ${name}**` : `\u25CB ${name}`,
+  ).join('  \u25B8  ');
+}
+
+/** Apply shared author + phase breadcrumb + footer to an embed. */
 function applyChrome(embed: EmbedBuilder, ctx: EmbedContext, label: string) {
   embed
     .setAuthor({ name: ctx.communityName || 'Raid Ledger' })
+    .addFields({ name: '\u200B', value: phaseBreadcrumb(ctx.phase), inline: false })
     .setFooter({ text: `${ctx.communityName || 'Raid Ledger'} \u00B7 ${label}` })
     .setTimestamp();
 }
