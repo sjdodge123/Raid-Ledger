@@ -16,6 +16,10 @@ interface SuggestedTimesProps {
   isSuggesting: boolean;
   /** Pre-filled datetime from heatmap grid click (ISO local format for datetime-local input). */
   prefillTime?: string;
+  /** Sunday of the currently selected week. */
+  weekStart: Date;
+  /** Shift the selected week by +1 or -1. */
+  onWeekChange: (delta: number) => void;
 }
 
 /** Format a datetime string for display. */
@@ -61,29 +65,18 @@ function SlotCard({ slot, isVoted, readOnly, onToggle }: {
   );
 }
 
-/** Shift a datetime-local string by N days. */
-function shiftDays(value: string, days: number): string {
-  const d = value ? new Date(value) : new Date();
-  d.setDate(d.getDate() + days);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** Format a datetime-local string as a readable week label. */
-function weekLabel(value: string): string {
-  if (!value) return '';
-  const d = new Date(value);
-  const sun = new Date(d);
-  sun.setDate(d.getDate() - d.getDay());
+/** Format a week range label from a Sunday date. */
+function weekLabel(sun: Date): string {
   const sat = new Date(sun);
   sat.setDate(sun.getDate() + 6);
-  const fmt = (dt: Date) => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   return `${fmt(sun)} – ${fmt(sat)}`;
 }
 
 /** Date picker with week navigation for suggesting a new slot. */
-function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
+function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime, weekStart, onWeekChange }: {
   onSubmit: (time: string) => void; isSuggesting: boolean; prefillTime?: string;
+  weekStart: Date; onWeekChange: (delta: number) => void;
 }): JSX.Element {
   const [value, setValue] = useState(prefillTime ?? '');
   const lastPrefill = useRef(prefillTime);
@@ -99,12 +92,12 @@ function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
   return (
     <div className="space-y-2 mt-3">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => setValue(shiftDays(value, -7))}
+        <button type="button" onClick={() => onWeekChange(-1)}
           className="px-2 py-1 text-xs text-muted hover:text-foreground border border-edge rounded transition-colors">
           ← Prev Week
         </button>
-        <span className="text-xs text-muted">{weekLabel(value)}</span>
-        <button type="button" onClick={() => setValue(shiftDays(value, 7))}
+        <span className="text-xs text-muted">{weekLabel(weekStart)}</span>
+        <button type="button" onClick={() => onWeekChange(1)}
           className="px-2 py-1 text-xs text-muted hover:text-foreground border border-edge rounded transition-colors">
           Next Week →
         </button>
@@ -126,7 +119,8 @@ function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
 
 /** Section listing all suggested time slots with voting. */
 export function SuggestedTimes({
-  slots, myVotedSlotIds, readOnly, onToggleVote, onSuggestSlot, isSuggesting, prefillTime,
+  slots, myVotedSlotIds, readOnly, onToggleVote, onSuggestSlot,
+  isSuggesting, prefillTime, weekStart, onWeekChange,
 }: SuggestedTimesProps): JSX.Element {
   return (
     <div className="space-y-3">
@@ -138,7 +132,8 @@ export function SuggestedTimes({
           readOnly={readOnly} onToggle={() => onToggleVote(slot.id)} />
       ))}
       {!readOnly && (
-        <SuggestSlotForm onSubmit={onSuggestSlot} isSuggesting={isSuggesting} prefillTime={prefillTime} />
+        <SuggestSlotForm onSubmit={onSuggestSlot} isSuggesting={isSuggesting}
+          prefillTime={prefillTime} weekStart={weekStart} onWeekChange={onWeekChange} />
       )}
     </div>
   );

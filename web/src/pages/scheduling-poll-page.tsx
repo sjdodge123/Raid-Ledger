@@ -56,17 +56,22 @@ function ReadOnlyBanner(): JSX.Element {
   );
 }
 
-/** Convert a dayOfWeek (0=Sun) + hour to the next occurrence as datetime-local value. */
-function toDatetimeLocal(dayOfWeek: number, hour: number): string {
-  const now = new Date();
-  const currentDay = now.getDay(); // 0=Sun
-  let daysAhead = dayOfWeek - currentDay;
-  if (daysAhead < 0 || (daysAhead === 0 && hour <= now.getHours())) daysAhead += 7;
-  const target = new Date(now);
-  target.setDate(target.getDate() + daysAhead);
+/** Convert a dayOfWeek (0=Sun) + hour to a datetime-local in the given week. */
+function toDatetimeLocal(dayOfWeek: number, hour: number, weekStart: Date): string {
+  const target = new Date(weekStart);
+  // weekStart is a Sunday — add dayOfWeek offset
+  target.setDate(target.getDate() + dayOfWeek);
   target.setHours(hour, 0, 0, 0);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}T${pad(hour)}:00`;
+}
+
+/** Get the Sunday that starts the week containing the given date. */
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() - d.getDay());
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 /** Convert suggested slots from the API into preview blocks for the grid. */
@@ -115,6 +120,7 @@ function PollSections({ lineupId, matchId, poll }: {
   const { toggleVote, suggest, isSuggesting, createEvt } = usePollMutations(lineupId, matchId);
   const [createdEventId, setCreatedEventId] = useState<number | null>(poll.match.linkedEventId ?? null);
   const [recurring, setRecurring] = useState(false);
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const [previewBlock, setPreviewBlock] = useState<GameTimePreviewBlock | undefined>();
   const { readOnly, hasVoted } = derivePollState(poll);
@@ -122,6 +128,12 @@ function PollSections({ lineupId, matchId, poll }: {
   const handleCreate = (slotId: number): void => {
     createEvt.mutate({ lineupId, matchId, slotId, recurring },
       { onSuccess: (r) => setCreatedEventId(r.eventId) });
+  };
+
+  const handleWeekChange = (delta: number): void => {
+    const next = new Date(weekStart);
+    next.setDate(next.getDate() + delta * 7);
+    setWeekStart(next);
   };
 
   return (
@@ -136,12 +148,13 @@ function PollSections({ lineupId, matchId, poll }: {
           ...(previewBlock ? [previewBlock] : []),
         ]}
         onCellClick={(day, hour) => {
-          setPrefillTime(toDatetimeLocal(day, hour));
+          setPrefillTime(toDatetimeLocal(day, hour, weekStart));
           setPreviewBlock({ dayOfWeek: day, startHour: hour, endHour: hour + 2, label: 'Suggested Time', title: 'Suggested Time', variant: 'selected' });
         }} />
       <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
         readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
-        isSuggesting={isSuggesting} prefillTime={prefillTime} />
+        isSuggesting={isSuggesting} prefillTime={prefillTime}
+        weekStart={weekStart} onWeekChange={handleWeekChange} />
       <CreateEventSection slots={poll.slots} hasVoted={hasVoted} readOnly={readOnly}
         createdEventId={createdEventId} matchStatus={poll.match.status}
         isCreating={createEvt.isPending} recurring={recurring}
