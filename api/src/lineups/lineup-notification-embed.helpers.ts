@@ -79,12 +79,13 @@ export function buildCreatedEmbed(
     .setTitle('\u{1F3B2} Community Lineup — Nominations Open!')
     .setDescription(
       'A new **Community Lineup** has started! The lineup is how we decide '
-      + 'what to play together. Here\'s how it works:'
+      + 'what to play together. It runs in **timed phases** — each phase '
+      + 'advances automatically when its deadline expires:'
       + '\n\n'
-      + '1. \u{1F3AE} **Nominate** games you want to play\n'
-      + '2. \u{1F5F3}\u{FE0F} **Vote** on your favorites when voting opens\n'
-      + '3. \u{1F91D} **Get matched** into groups based on votes\n'
-      + '4. \u{1F4C5} **Schedule** a time and play!'
+      + '1. \u{1F3AE} **Nominations** *(current)* — suggest games to play\n'
+      + '2. \u{1F5F3}\u{FE0F} **Voting** — pick your favorites from the nominees\n'
+      + '3. \u{1F91D} **Decided** — top picks are matched into player groups\n'
+      + '4. \u{1F4C5} **Scheduling** — each group votes on a time and plays!'
       + deadline,
     )
     .addFields({
