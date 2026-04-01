@@ -11,7 +11,7 @@ import type { LineupNotificationService } from './lineup-notification.service';
 import type { LineupInfo, MatchInfo } from './lineup-notification.service';
 import {
   checkNominationMilestone,
-  getEntryGameNames,
+  getEntryDetails,
 } from './lineups-milestone.helpers';
 import { findNominatedGameIds, findGameName } from './lineups-query.helpers';
 import type { CallerIdentity } from './lineups.service';
@@ -45,8 +45,8 @@ export function fireNominationMilestone(
   checkNominationMilestone(db, lineupId)
     .then(async (result) => {
       if (!result) return;
-      const names = await getEntryGameNames(db, lineupId);
-      await svc.notifyNominationMilestone(lineupId, result.threshold, names);
+      const entries = await getEntryDetails(db, lineupId);
+      await svc.notifyNominationMilestone(lineupId, result.threshold, entries);
     })
     .catch(logError(logger, 'nomination-milestone'));
 }

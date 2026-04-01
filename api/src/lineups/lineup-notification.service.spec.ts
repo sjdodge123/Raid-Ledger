@@ -185,26 +185,28 @@ describe('LineupNotificationService', () => {
   // AC-2: Channel embed updated at nomination milestones
   // -----------------------------------------------------------------------
   describe('notifyNominationMilestone', () => {
+    const entry = (name: string) => ({ gameName: name, nominatorName: 'User', coverUrl: null });
+
     it('posts embed at 25% threshold', async () => {
-      await service.notifyNominationMilestone(LINEUP_ID, 25, ['Game A']);
+      await service.notifyNominationMilestone(LINEUP_ID, 25, [entry('Game A')]);
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
 
     it('posts embed at 50% threshold', async () => {
-      await service.notifyNominationMilestone(LINEUP_ID, 50, ['A', 'B']);
+      await service.notifyNominationMilestone(LINEUP_ID, 50, [entry('A'), entry('B')]);
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
 
     it('posts embed at 100% threshold', async () => {
-      await service.notifyNominationMilestone(LINEUP_ID, 100, ['A', 'B', 'C']);
+      await service.notifyNominationMilestone(LINEUP_ID, 100, [entry('A'), entry('B'), entry('C')]);
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
 
     it('uses dedup key with threshold to prevent duplicates', async () => {
-      await service.notifyNominationMilestone(LINEUP_ID, 50, ['A']);
+      await service.notifyNominationMilestone(LINEUP_ID, 50, [entry('A')]);
 
       expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
         `lineup-milestone:${LINEUP_ID}:50`,
@@ -215,7 +217,7 @@ describe('LineupNotificationService', () => {
     it('skips embed when dedup indicates already sent', async () => {
       mockDedupService.checkAndMarkSent.mockResolvedValueOnce(true);
 
-      await service.notifyNominationMilestone(LINEUP_ID, 50, ['A']);
+      await service.notifyNominationMilestone(LINEUP_ID, 50, [entry('A')]);
 
       expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
     });

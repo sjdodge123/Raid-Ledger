@@ -56,24 +56,31 @@ export async function checkNominationMilestone(
   return null;
 }
 
-/**
- * Get game names for all entries in a lineup.
- *
- * @param db - Database connection
- * @param lineupId - The lineup to query
- * @returns Array of game names
- */
-export async function getEntryGameNames(
+/** Entry detail for milestone embeds. */
+export interface EntryDetail {
+  gameName: string;
+  nominatorName: string;
+  coverUrl: string | null;
+}
+
+/** Get game + nominator details for all entries in a lineup. */
+export async function getEntryDetails(
   db: Db,
   lineupId: number,
-): Promise<string[]> {
+): Promise<EntryDetail[]> {
   const rows = await db
-    .select({ name: schema.games.name })
+    .select({
+      gameName: schema.games.name,
+      nominatorName: schema.users.displayName,
+      coverUrl: schema.games.coverUrl,
+    })
     .from(schema.communityLineupEntries)
-    .innerJoin(
-      schema.games,
-      eq(schema.communityLineupEntries.gameId, schema.games.id),
-    )
+    .innerJoin(schema.games, eq(schema.communityLineupEntries.gameId, schema.games.id))
+    .innerJoin(schema.users, eq(schema.communityLineupEntries.nominatedBy, schema.users.id))
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));
-  return rows.map((r) => r.name);
+  return rows.map((r) => ({
+    gameName: r.gameName,
+    nominatorName: r.nominatorName ?? 'Unknown',
+    coverUrl: r.coverUrl,
+  }));
 }

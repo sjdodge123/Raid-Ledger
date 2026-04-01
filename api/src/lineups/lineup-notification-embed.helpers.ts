@@ -18,6 +18,13 @@ export interface EmbedContext {
   communityName: string;
 }
 
+/** Nomination entry for milestone embeds. */
+export interface NominationEntry {
+  gameName: string;
+  nominatorName: string;
+  coverUrl: string | null;
+}
+
 /** Shape of a match for embed building. */
 export interface MatchSummary {
   id: number;
@@ -84,20 +91,24 @@ export function buildCreatedEmbed(
 export function buildMilestoneEmbed(
   ctx: EmbedContext,
   threshold: number,
-  gameNames: string[],
+  entries: NominationEntry[],
 ): EmbedWithRow {
-  const list = gameNames.slice(0, 10).join(', ');
-  const overflow = gameNames.length > 10 ? ` and ${gameNames.length - 10} more` : '';
+  const lines = entries
+    .slice(0, 15)
+    .map((e) => `\u{1F3AE} **${e.gameName}** — nominated by ${e.nominatorName}`);
+  const overflow = entries.length > 15 ? `\n*...and ${entries.length - 15} more*` : '';
+  const cover = entries.find((e) => e.coverUrl)?.coverUrl;
 
   const embed = new EmbedBuilder()
     .setTitle(`\u{1F389} ${threshold}% of nominations filled!`)
     .setDescription(
-      `The lineup now has **${gameNames.length}** games nominated. `
+      `The lineup now has **${entries.length}** games nominated. `
       + 'Keep adding games before voting opens!',
     )
-    .addFields({ name: 'Games', value: list + overflow || 'None', inline: false })
+    .addFields({ name: 'Nominated Games', value: lines.join('\n') + overflow || 'None' })
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
+  if (cover) embed.setThumbnail(cover);
   applyChrome(embed, ctx, 'Nomination Milestone');
   return { embed, row: viewButton(ctx) };
 }

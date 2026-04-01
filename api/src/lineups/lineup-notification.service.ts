@@ -12,7 +12,7 @@ import { NotificationDedupService } from '../notifications/notification-dedup.se
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { resolveLineupChannel } from './lineup-notification-channel.helpers';
-import type { EmbedContext } from './lineup-notification-embed.helpers';
+import type { EmbedContext, NominationEntry } from './lineup-notification-embed.helpers';
 import {
   buildCreatedEmbed,
   buildMilestoneEmbed,
@@ -91,7 +91,7 @@ export class LineupNotificationService {
   async notifyNominationMilestone(
     lineupId: number,
     threshold: number,
-    gameNames: string[],
+    entries: NominationEntry[],
   ): Promise<void> {
     const key = `lineup-milestone:${lineupId}:${threshold}`;
     if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
@@ -100,7 +100,7 @@ export class LineupNotificationService {
     if (!channelId) return;
 
     const ctx = await this.resolveCtx(lineupId);
-    const { embed, row } = buildMilestoneEmbed(ctx, threshold, gameNames);
+    const { embed, row } = buildMilestoneEmbed(ctx, threshold, entries);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
 
