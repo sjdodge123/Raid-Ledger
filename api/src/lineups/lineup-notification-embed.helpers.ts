@@ -104,10 +104,10 @@ export function buildCreatedEmbed(
       + 'what to play together. It runs in **timed phases** — each phase '
       + 'advances automatically when its deadline expires:'
       + '\n\n'
-      + '1. \u{1F3AE} **Nominations** *(current)* — suggest games to play\n'
-      + '2. \u{1F5F3}\u{FE0F} **Voting** — pick your favorites from the nominees\n'
-      + '3. \u{1F91D} **Decided** — top picks are matched into player groups\n'
-      + '4. \u{1F4C5} **Scheduling** — each group votes on a time and plays!'
+      + '1. \u{1F539} **Nominations** *(current)* — suggest games to play\n'
+      + '2. \u26AA **Voting** — pick your favorites from the nominees\n'
+      + '3. \u26AA **Decided** — top picks are matched into player groups\n'
+      + '4. \u26AA **Scheduling** — each group votes on a time and plays!'
       + deadline,
     )
     .addFields({
