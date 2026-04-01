@@ -71,17 +71,29 @@ export function buildCreatedEmbed(
   ctx: EmbedContext,
   targetDate?: Date,
 ): EmbedWithRow {
-  const dateField = targetDate
-    ? `\n\n\u{1F4C5} **Target date:** ${discordTs(targetDate, 'f')}`
+  const deadline = targetDate
+    ? `\n\n\u{1F4C5} **Target date:** ${discordTs(targetDate, 'f')} (${discordTs(targetDate)})`
     : '';
 
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F3B2} Community Lineup is open!')
+    .setTitle('\u{1F3B2} Community Lineup — Nominations Open!')
     .setDescription(
-      'A new Community Lineup has started! Nominate the games you want '
-      + 'to play — the community will vote on the best picks.'
-      + dateField,
+      'A new **Community Lineup** has started! The lineup is how we decide '
+      + 'what to play together. Here\'s how it works:'
+      + '\n\n'
+      + '\u{1F3AE} **Nominate** games you want to play\n'
+      + '\u{1F5F3}\u{FE0F} **Vote** on your favorites when voting opens\n'
+      + '\u{1F91D} **Get matched** into groups based on votes\n'
+      + '\u{1F4C5} **Schedule** a time and play!'
+      + deadline,
     )
+    .addFields({
+      name: '\u{1F4DD} How to Nominate',
+      value:
+        '\u2022 Browse the lineup page and add games from your library\n'
+        + '\u2022 Paste a **Steam store URL** in this channel to auto-nominate\n'
+        + '\u2022 Use Common Ground to find games the group already owns',
+    })
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
   applyChrome(embed, ctx, 'Nominations Open');
