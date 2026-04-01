@@ -66,7 +66,7 @@ export function AvailabilityHeatmapSection({
           heatmapOverlay={data.cells}
           onCellClick={readOnly ? undefined : onCellClick}
           previewBlocks={previewBlocks?.length ? previewBlocks : undefined}
-          weekStart={weekStart}
+          weekStart={weekStart.toISOString()}
           compact
           noStickyOffset
         />
