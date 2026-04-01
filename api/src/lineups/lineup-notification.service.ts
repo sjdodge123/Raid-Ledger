@@ -183,8 +183,10 @@ export class LineupNotificationService {
   }
 
   /** AC-10: Post channel embed + DMs when event is created. */
-  async notifyEventCreated(match: MatchInfo, eventDate: Date): Promise<void> {
-    await this.postEventCreatedChannelEmbed(match, eventDate);
+  async notifyEventCreated(match: MatchInfo, eventDate: Date, eventId?: number): Promise<void> {
+    const members = await findMatchMemberUsers(this.db, match.id);
+    const names = members.map((m) => m.displayName);
+    await this.postEventCreatedChannelEmbed(match, eventDate, eventId, names);
     await this.sendEventCreatedDMs(match, eventDate);
   }
 
@@ -248,6 +250,8 @@ export class LineupNotificationService {
   private async postEventCreatedChannelEmbed(
     match: MatchInfo,
     eventDate: Date,
+    eventId: number | undefined,
+    memberNames: string[],
   ): Promise<void> {
     const key = `lineup-event:${match.id}`;
     if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
@@ -256,7 +260,9 @@ export class LineupNotificationService {
     if (!channelId) return;
 
     const ctx = await this.resolveCtx(match.lineupId, 'decided');
-    const { embed, row } = buildEventCreatedEmbed(ctx, match.gameName, eventDate);
+    const { embed, row } = buildEventCreatedEmbed(
+      ctx, match.gameName, match.gameId, eventDate, eventId, memberNames,
+    );
     await this.botClient.sendEmbed(channelId, embed, row);
   }
 

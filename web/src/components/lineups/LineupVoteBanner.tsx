@@ -25,6 +25,10 @@ export function LineupVoteBanner({ gameId }: Props): JSX.Element | null {
     return <VotingBanner lineupId={banner.id} gameId={gameId} gameName={entry.gameName} />;
   }
 
+  if (banner.status === 'decided') {
+    return <DecidedBadge lineupId={banner.id} gameName={entry.gameName} />;
+  }
+
   return null;
 }
 
@@ -81,6 +85,22 @@ function VotingBanner({ lineupId, gameId, gameName }: {
           View Lineup →
         </Link>
       </div>
+    </div>
+  );
+}
+
+function DecidedBadge({ lineupId, gameName }: { lineupId: number; gameName: string }): JSX.Element {
+  return (
+    <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 flex items-center justify-between gap-3">
+      <span className="text-sm text-amber-300">
+        🎯 <strong>{gameName}</strong> is matched — schedule a time to play!
+      </span>
+      <Link
+        to={`/community-lineup/${lineupId}`}
+        className="text-sm font-medium text-amber-400 hover:text-amber-300 whitespace-nowrap"
+      >
+        View Lineup →
+      </Link>
     </div>
   );
 }

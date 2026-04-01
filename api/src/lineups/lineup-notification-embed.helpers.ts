@@ -33,6 +33,7 @@ export interface NominationEntry {
 /** Shape of a match for embed building. */
 export interface MatchSummary {
   id: number;
+  gameId: number;
   gameName: string;
   thresholdMet: boolean;
   voteCount: number;
@@ -192,6 +193,7 @@ export function buildDecidedEmbed(
   ctx: EmbedContext,
   matches: MatchSummary[],
 ): EmbedWithRow {
+  const sorted = [...matches].sort((a, b) => b.voteCount - a.voteCount);
   const scheduling = matches.filter((m) => m.thresholdMet);
   const rally = matches.filter((m) => !m.thresholdMet);
 
@@ -205,21 +207,34 @@ export function buildDecidedEmbed(
     )
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 
+  addPodiumField(embed, sorted, ctx);
   if (scheduling.length > 0) {
-    const lines = scheduling.map(
-      (m) => `\u{1F3AE} **${m.gameName}** — ${m.voteCount} votes`,
-    );
+    const lines = scheduling.map((m) => gameLink(m, ctx));
     embed.addFields({ name: '\u2705 Ready to Schedule', value: lines.join('\n') });
   }
   if (rally.length > 0) {
-    const lines = rally.map(
-      (m) => `\u{1F4E3} **${m.gameName}** — ${m.voteCount} votes`,
-    );
+    const lines = rally.map((m) => gameLink(m, ctx));
     embed.addFields({ name: '\u{1F91D} Almost There — Rally More Players', value: lines.join('\n') });
   }
 
   applyChrome(embed, ctx, 'Matches Decided');
   return { embed, row: viewButton(ctx) };
+}
+
+/** Format a match as a linked game line with vote count. */
+function gameLink(m: MatchSummary, ctx: EmbedContext): string {
+  return `\u{1F3AE} [**${m.gameName}**](${ctx.baseUrl}/games/${m.gameId}) — ${m.voteCount} votes`;
+}
+
+/** Add a podium field showing top 3 by votes. */
+function addPodiumField(embed: EmbedBuilder, sorted: MatchSummary[], ctx: EmbedContext) {
+  const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+  const top = sorted.slice(0, 3);
+  if (top.length === 0) return;
+  const lines = top.map(
+    (m, i) => `${medals[i]} [**${m.gameName}**](${ctx.baseUrl}/games/${m.gameId}) — ${m.voteCount} votes`,
+  );
+  embed.addFields({ name: '\u{1F3C6} Top Voted', value: lines.join('\n') });
 }
 
 /** Scheduling opened for a match (AC-8). */
@@ -254,19 +269,45 @@ export function buildSchedulingEmbed(
 export function buildEventCreatedEmbed(
   ctx: EmbedContext,
   gameName: string,
+  gameId: number,
   eventDate: Date,
+  eventId?: number,
+  memberNames?: string[],
 ): EmbedWithRow {
+  const gameUrl = `${ctx.baseUrl}/games/${gameId}`;
   const embed = new EmbedBuilder()
     .setTitle(`\u2705 ${gameName} is locked in!`)
     .setDescription(
-      `**${gameName}** is officially scheduled! The event has been created `
-      + 'and is open for signups. Head to the event page to confirm your spot.'
+      `[**${gameName}**](${gameUrl}) is officially scheduled! The event has been `
+      + 'created and is open for signups. Head to the event page to confirm your spot.'
       + `\n\n\u{1F4C5} **When:** ${discordTs(eventDate, 'f')} (${discordTs(eventDate)})`,
     )
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 
+  if (memberNames && memberNames.length > 0) {
+    embed.addFields({
+      name: `\u{1F465} Players (${memberNames.length})`,
+      value: memberNames.join(', '),
+    });
+  }
+
   applyChrome(embed, ctx, 'Event Created');
-  return { embed, row: viewButton(ctx) };
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  if (eventId) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setLabel('View Event')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${ctx.baseUrl}/events/${eventId}`),
+    );
+  }
+  row.addComponents(
+    new ButtonBuilder()
+      .setLabel('View Lineup')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${ctx.baseUrl}/community-lineup/${ctx.lineupId}`),
+  );
+  return { embed, row };
 }
 
 /** Stub for future tiebreaker notification (M8). */

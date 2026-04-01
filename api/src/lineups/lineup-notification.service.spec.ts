@@ -465,7 +465,8 @@ describe('LineupNotificationService', () => {
 
     it('dispatches DMs to match members', async () => {
       const members = [makeMember(1), makeMember(2)];
-      mockDb.execute.mockResolvedValueOnce(members);
+      mockDb.execute.mockResolvedValueOnce(members); // embed member names
+      mockDb.execute.mockResolvedValueOnce(members); // DM targets
 
       await service.notifyEventCreated(
         makeMatch({ status: 'scheduled', linkedEventId: 200 }),
@@ -476,7 +477,8 @@ describe('LineupNotificationService', () => {
     });
 
     it('DMs use subtype lineup_event_created', async () => {
-      mockDb.execute.mockResolvedValueOnce([makeMember(9)]);
+      mockDb.execute.mockResolvedValueOnce([makeMember(9)]); // embed member names
+      mockDb.execute.mockResolvedValueOnce([makeMember(9)]); // DM targets
 
       await service.notifyEventCreated(
         makeMatch({ status: 'scheduled', linkedEventId: 200 }),
@@ -506,7 +508,8 @@ describe('LineupNotificationService', () => {
     });
 
     it('DMs use dedup key lineup-event-dm:{matchId}:{userId}', async () => {
-      mockDb.execute.mockResolvedValueOnce([makeMember(9)]);
+      mockDb.execute.mockResolvedValueOnce([makeMember(9)]); // embed member names
+      mockDb.execute.mockResolvedValueOnce([makeMember(9)]); // DM targets
 
       await service.notifyEventCreated(
         makeMatch({ status: 'scheduled', linkedEventId: 200 }),

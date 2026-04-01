@@ -148,7 +148,7 @@ export class SchedulingService {
     );
     const event = await this.eventsService.create(userId, dto);
     await updateMatchLinkedEvent(this.db, matchId, event.id);
-    fireEventCreated(this.lineupNotifications, this.logger, this.db, matchId, slot.proposedTime);
+    fireEventCreated(this.lineupNotifications, this.logger, this.db, matchId, slot.proposedTime, event.id);
     return { eventId: event.id };
   }
 

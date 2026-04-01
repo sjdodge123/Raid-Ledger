@@ -133,10 +133,11 @@ export function fireEventCreated(
   db: Db,
   matchId: number,
   eventDate: Date,
+  eventId?: number,
 ): void {
   loadSingleMatch(db, matchId)
     .then((match) => {
-      if (match) return svc.notifyEventCreated(match, eventDate);
+      if (match) return svc.notifyEventCreated(match, eventDate, eventId);
     })
     .catch(logError(logger, 'event-created'));
 }
