@@ -136,7 +136,7 @@ export function buildMilestoneEmbed(
   const lines = entries
     .slice(0, 15)
     .map((e) => {
-      const link = `${ctx.baseUrl}/game-library/${e.gameId}`;
+      const link = `${ctx.baseUrl}/games/${e.gameId}`;
       return `\u{1F3AE} [**${e.gameName}**](${link}) — nominated by ${e.nominatorName}`;
     });
   const overflow = entries.length > 15 ? `\n*...and ${entries.length - 15} more*` : '';
