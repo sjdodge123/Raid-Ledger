@@ -79,6 +79,8 @@ export interface LlmRequestContext {
   feature: string;
   userId?: number;
   maxResponseLength?: number;
+  /** Override the default timeout for this request (e.g. admin test-chat). */
+  timeoutMs?: number;
 }
 
 /** Provider-agnostic interface for LLM backends. */
