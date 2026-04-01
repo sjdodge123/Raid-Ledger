@@ -159,7 +159,7 @@ export function buildMilestoneEmbed(
 /** Voting opened (AC-3). */
 export function buildVotingOpenEmbed(
   ctx: EmbedContext,
-  gameCount: number,
+  gameNames: string[],
   deadline?: Date,
 ): EmbedWithRow {
   const deadlineStr = deadline
@@ -169,11 +169,19 @@ export function buildVotingOpenEmbed(
   const embed = new EmbedBuilder()
     .setTitle('\u{1F5F3}\u{FE0F} Vote on the Community Lineup!')
     .setDescription(
-      `**${gameCount}** games are on the lineup — vote for your favorites! `
-      + 'The top picks will be matched into groups for scheduling.'
+      'Nominations are closed — it\'s time to vote! Pick the games you '
+      + 'most want to play. Each member gets a limited number of votes, '
+      + 'so choose wisely. When voting ends, the top picks will be grouped '
+      + 'into matches based on who voted for what.'
       + deadlineStr,
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
+
+  if (gameNames.length > 0) {
+    const lines = gameNames.slice(0, 15).map((n) => `\u{1F3AE} ${n}`);
+    const overflow = gameNames.length > 15 ? `\n*...and ${gameNames.length - 15} more*` : '';
+    embed.addFields({ name: `Games on the Ballot (${gameNames.length})`, value: lines.join('\n') + overflow });
+  }
 
   applyChrome(embed, ctx, 'Voting Open');
   return { embed, row: viewButton(ctx) };
@@ -190,8 +198,10 @@ export function buildDecidedEmbed(
   const embed = new EmbedBuilder()
     .setTitle('\u{1F3AF} Community Lineup — Matches Found!')
     .setDescription(
-      'Voting is complete! Games have been grouped into matches '
-      + 'based on votes. Schedule a time to play!',
+      'Voting is complete! Players have been grouped into matches '
+      + 'based on their votes. Games that hit the vote threshold are '
+      + '**ready to schedule** — pick a time and play. Games that are '
+      + 'close can still make it if more players join.',
     )
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 
@@ -223,8 +233,10 @@ export function buildSchedulingEmbed(
   const embed = new EmbedBuilder()
     .setTitle(`\u{1F4C5} ${gameName} — Scheduling Open!`)
     .setDescription(
-      `The **${gameName}** match is ready to schedule! `
-      + 'Suggest times or vote on existing slots to lock in a date.',
+      `The **${gameName}** match has enough players! Now it\'s time to `
+      + 'find a time that works. Suggest time slots or vote on ones '
+      + 'already proposed. Once a slot has enough votes, any member '
+      + 'can create the event.',
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
@@ -247,8 +259,9 @@ export function buildEventCreatedEmbed(
   const embed = new EmbedBuilder()
     .setTitle(`\u2705 ${gameName} is locked in!`)
     .setDescription(
-      `**${gameName}** is happening ${discordTs(eventDate, 'f')} `
-      + `(${discordTs(eventDate)}). Sign up now!`,
+      `**${gameName}** is officially scheduled! The event has been created `
+      + 'and is open for signups. Head to the event page to confirm your spot.'
+      + `\n\n\u{1F4C5} **When:** ${discordTs(eventDate, 'f')} (${discordTs(eventDate)})`,
     )
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 

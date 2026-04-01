@@ -228,11 +228,12 @@ describe('LineupNotificationService', () => {
   // -----------------------------------------------------------------------
   describe('notifyVotingOpen', () => {
     const deadline = new Date('2026-04-10T20:00:00Z');
+    const games = ['Game A', 'Game B', 'Game C', 'Game D', 'Game E'];
 
     it('posts channel embed with voting info', async () => {
       await service.notifyVotingOpen(
         makeLineup({ status: 'voting', votingDeadline: deadline }),
-        5,
+        games,
       );
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
@@ -244,7 +245,7 @@ describe('LineupNotificationService', () => {
 
       await service.notifyVotingOpen(
         makeLineup({ status: 'voting', votingDeadline: deadline }),
-        5,
+        games,
       );
 
       expect(mockNotificationService.create).toHaveBeenCalledTimes(3);
@@ -255,7 +256,7 @@ describe('LineupNotificationService', () => {
 
       await service.notifyVotingOpen(
         makeLineup({ status: 'voting', votingDeadline: deadline }),
-        5,
+        games,
       );
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
@@ -273,7 +274,7 @@ describe('LineupNotificationService', () => {
 
       await service.notifyVotingOpen(
         makeLineup({ status: 'voting', votingDeadline: deadline }),
-        5,
+        games,
       );
 
       expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
@@ -285,7 +286,7 @@ describe('LineupNotificationService', () => {
     it('channel embed uses dedup key lineup-voting:{lineupId}', async () => {
       await service.notifyVotingOpen(
         makeLineup({ status: 'voting', votingDeadline: deadline }),
-        5,
+        games,
       );
 
       expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(

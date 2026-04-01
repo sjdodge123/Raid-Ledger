@@ -13,7 +13,7 @@ import {
   checkNominationMilestone,
   getEntryDetails,
 } from './lineups-milestone.helpers';
-import { findNominatedGameIds, findGameName } from './lineups-query.helpers';
+import { findNominatedGameNames, findGameName } from './lineups-query.helpers';
 import type { CallerIdentity } from './lineups.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -59,11 +59,11 @@ export function fireVotingOpen(
   lineupId: number,
   phaseDeadline: Date | null,
 ): void {
-  findNominatedGameIds(db, lineupId)
-    .then((ids) =>
+  findNominatedGameNames(db, lineupId)
+    .then((names) =>
       svc.notifyVotingOpen(
         { id: lineupId, votingDeadline: phaseDeadline ?? undefined },
-        ids.length,
+        names,
       ),
     )
     .catch(logError(logger, 'voting-open'));
