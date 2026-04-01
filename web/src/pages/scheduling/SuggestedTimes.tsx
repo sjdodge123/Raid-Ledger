@@ -16,10 +16,6 @@ interface SuggestedTimesProps {
   isSuggesting: boolean;
   /** Pre-filled datetime from heatmap grid click (ISO local format for datetime-local input). */
   prefillTime?: string;
-  /** Sunday of the currently selected week. */
-  weekStart: Date;
-  /** Shift the selected week by +1 or -1. */
-  onWeekChange: (delta: number) => void;
 }
 
 /** Format a datetime string for display. */
@@ -65,18 +61,9 @@ function SlotCard({ slot, isVoted, readOnly, onToggle }: {
   );
 }
 
-/** Format a week range label from a Sunday date. */
-function weekLabel(sun: Date): string {
-  const sat = new Date(sun);
-  sat.setDate(sun.getDate() + 6);
-  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return `${fmt(sun)} – ${fmt(sat)}`;
-}
-
-/** Date picker with week navigation for suggesting a new slot. */
-function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime, weekStart, onWeekChange }: {
+/** Date picker for suggesting a new slot. */
+function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
   onSubmit: (time: string) => void; isSuggesting: boolean; prefillTime?: string;
-  weekStart: Date; onWeekChange: (delta: number) => void;
 }): JSX.Element {
   const [value, setValue] = useState(prefillTime ?? '');
   const lastPrefill = useRef(prefillTime);
@@ -90,29 +77,16 @@ function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime, weekStart, onWee
     setValue('');
   };
   return (
-    <div className="space-y-2 mt-3">
-      <div className="flex items-center justify-between">
-        <button type="button" onClick={() => onWeekChange(-1)}
-          className="px-2 py-1 text-xs text-muted hover:text-foreground border border-edge rounded transition-colors">
-          ← Prev Week
-        </button>
-        <span className="text-xs text-muted">{weekLabel(weekStart)}</span>
-        <button type="button" onClick={() => onWeekChange(1)}
-          className="px-2 py-1 text-xs text-muted hover:text-foreground border border-edge rounded transition-colors">
-          Next Week →
-        </button>
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          type="datetime-local" data-testid="slot-datetime-picker" value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="flex-1 px-3 py-2 bg-panel border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-        />
-        <button type="button" onClick={handleSubmit} disabled={!value || isSuggesting}
-          className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50">
-          Suggest
-        </button>
-      </div>
+    <div className="flex items-center gap-2 mt-3">
+      <input
+        type="datetime-local" data-testid="slot-datetime-picker" value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="flex-1 px-3 py-2 bg-panel border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+      />
+      <button type="button" onClick={handleSubmit} disabled={!value || isSuggesting}
+        className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50">
+        Suggest
+      </button>
     </div>
   );
 }
@@ -120,7 +94,7 @@ function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime, weekStart, onWee
 /** Section listing all suggested time slots with voting. */
 export function SuggestedTimes({
   slots, myVotedSlotIds, readOnly, onToggleVote, onSuggestSlot,
-  isSuggesting, prefillTime, weekStart, onWeekChange,
+  isSuggesting, prefillTime,
 }: SuggestedTimesProps): JSX.Element {
   return (
     <div className="space-y-3">
@@ -132,8 +106,7 @@ export function SuggestedTimes({
           readOnly={readOnly} onToggle={() => onToggleVote(slot.id)} />
       ))}
       {!readOnly && (
-        <SuggestSlotForm onSubmit={onSuggestSlot} isSuggesting={isSuggesting}
-          prefillTime={prefillTime} weekStart={weekStart} onWeekChange={onWeekChange} />
+        <SuggestSlotForm onSubmit={onSuggestSlot} isSuggesting={isSuggesting} prefillTime={prefillTime} />
       )}
     </div>
   );

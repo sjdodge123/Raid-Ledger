@@ -143,6 +143,7 @@ function PollSections({ lineupId, matchId, poll }: {
       <MatchContextCard match={poll.match} />
       <AvailabilityHeatmapSection data={availability} isLoading={availLoading}
         readOnly={readOnly}
+        weekStart={weekStart} onWeekChange={handleWeekChange}
         previewBlocks={[
           ...slotsToPreviewBlocks(poll.slots),
           ...(previewBlock ? [previewBlock] : []),
@@ -153,8 +154,7 @@ function PollSections({ lineupId, matchId, poll }: {
         }} />
       <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
         readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
-        isSuggesting={isSuggesting} prefillTime={prefillTime}
-        weekStart={weekStart} onWeekChange={handleWeekChange} />
+        isSuggesting={isSuggesting} prefillTime={prefillTime} />
       <CreateEventSection slots={poll.slots} hasVoted={hasVoted} readOnly={readOnly}
         createdEventId={createdEventId} matchStatus={poll.match.status}
         isCreating={createEvt.isPending} recurring={recurring}
