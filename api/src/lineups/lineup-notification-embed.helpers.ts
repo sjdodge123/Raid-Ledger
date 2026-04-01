@@ -73,7 +73,7 @@ function phaseBreadcrumb(current: LineupPhase): string {
   return PHASE_LABELS.map(([key, name], i) => {
     if (i < idx) return `\u2705 ${name}`;
     if (key === current) return `\u{1F539} **${name}**`;
-    return `\u26AA ${name}`;
+    return `\u{1F518} ${name}`;
   }).join('  \u203A  ');
 }
 
