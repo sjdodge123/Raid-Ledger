@@ -12,6 +12,7 @@ import { NotificationDedupService } from '../notifications/notification-dedup.se
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { resolveLineupChannel } from './lineup-notification-channel.helpers';
+import type { EmbedContext } from './lineup-notification-embed.helpers';
 import {
   buildCreatedEmbed,
   buildMilestoneEmbed,
@@ -66,6 +67,13 @@ export class LineupNotificationService {
     private readonly settingsService: SettingsService,
   ) {}
 
+  /** Resolve shared embed context (baseUrl, community name). */
+  private async resolveCtx(lineupId: number): Promise<EmbedContext> {
+    const baseUrl = (await this.settingsService.getClientUrl()) ?? '';
+    const community = await this.settingsService.get('community_name');
+    return { baseUrl, lineupId, communityName: community ?? 'Raid Ledger' };
+  }
+
   /** AC-1: Post channel embed when lineup is created. */
   async notifyLineupCreated(lineup: LineupInfo): Promise<void> {
     const key = `lineup-created:${lineup.id}`;
@@ -74,7 +82,8 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const { embed, row } = buildCreatedEmbed(lineup);
+    const ctx = await this.resolveCtx(lineup.id);
+    const { embed, row } = buildCreatedEmbed(ctx, lineup.targetDate);
     await this.botClient.sendEmbed(channelId, embed, row);
   }
 
@@ -90,8 +99,9 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const embed = buildMilestoneEmbed(threshold, gameNames);
-    await this.botClient.sendEmbed(channelId, embed);
+    const ctx = await this.resolveCtx(lineupId);
+    const { embed, row } = buildMilestoneEmbed(ctx, threshold, gameNames);
+    await this.botClient.sendEmbed(channelId, embed, row);
   }
 
   /** AC-3: Post channel embed + DMs when voting opens. */
@@ -111,8 +121,9 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const embed = buildDecidedEmbed(matches);
-    await this.botClient.sendEmbed(channelId, embed);
+    const ctx = await this.resolveCtx(lineupId);
+    const { embed, row } = buildDecidedEmbed(ctx, matches);
+    await this.botClient.sendEmbed(channelId, embed, row);
   }
 
   /** AC-6: Send DM to a match member with game + co-players. */
@@ -215,8 +226,9 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const embed = buildVotingOpenEmbed(gameCount, lineup.votingDeadline);
-    await this.botClient.sendEmbed(channelId, embed);
+    const ctx = await this.resolveCtx(lineup.id);
+    const { embed, row } = buildVotingOpenEmbed(ctx, gameCount, lineup.votingDeadline);
+    await this.botClient.sendEmbed(channelId, embed, row);
   }
 
   /** Post the scheduling-open channel embed for a match. */
@@ -227,8 +239,9 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const embed = buildSchedulingEmbed(match.gameName);
-    await this.botClient.sendEmbed(channelId, embed);
+    const ctx = await this.resolveCtx(match.lineupId);
+    const { embed, row } = buildSchedulingEmbed(ctx, match.gameName, match.id);
+    await this.botClient.sendEmbed(channelId, embed, row);
   }
 
   /** Post the event-created channel embed. */
@@ -242,8 +255,9 @@ export class LineupNotificationService {
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
 
-    const embed = buildEventCreatedEmbed(match.gameName, eventDate);
-    await this.botClient.sendEmbed(channelId, embed);
+    const ctx = await this.resolveCtx(match.lineupId);
+    const { embed, row } = buildEventCreatedEmbed(ctx, match.gameName, eventDate);
+    await this.botClient.sendEmbed(channelId, embed, row);
   }
 
   // ─── Private: DM dispatch (delegates to helpers) ──────────

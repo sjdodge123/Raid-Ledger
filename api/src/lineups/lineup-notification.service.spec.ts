@@ -40,6 +40,7 @@ function makeMockBotClient() {
 function makeMockSettingsService() {
   return {
     get: jest.fn().mockResolvedValue(null),
+    getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
     getDiscordBotDefaultChannel: jest.fn().mockResolvedValue('chan-default'),
   };
 }
