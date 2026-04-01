@@ -92,7 +92,11 @@ export function buildCreatedEmbed(
       value:
         '\u2022 Browse the lineup page and add games from your library\n'
         + '\u2022 Paste a **Steam store URL** in this channel to auto-nominate\n'
-        + '\u2022 Use the **Common Ground game filter** to find games the group already owns',
+        + '\u2022 Use the **Common Ground game filter** to find games the group already owns\n'
+        + '\n'
+        + 'The lineup has a **nomination cap** that grows with the number of '
+        + 'unique nominators — the more people who participate, the more '
+        + 'games can be added.',
     })
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
