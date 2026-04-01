@@ -59,7 +59,7 @@ export class LlmService {
       try {
         const response = await executeWithTimeout(
           () => provider.chat(prepared),
-          AI_DEFAULTS.timeoutMs,
+          context.timeoutMs ?? AI_DEFAULTS.timeoutMs,
         );
         this.circuitBreaker.recordSuccess();
         const sanitized = this.sanitizeChatResponse(response, context);

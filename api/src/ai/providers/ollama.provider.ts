@@ -82,7 +82,7 @@ export class OllamaProvider implements LlmProvider {
         stream: false,
         options: { num_predict: options.maxTokens },
       }),
-      timeoutMs: AI_DEFAULTS.timeoutMs,
+      timeoutMs: AI_DEFAULTS.maxTimeoutMs,
     });
     return mapOllamaChatResponse(raw, Date.now() - start);
   }
@@ -101,7 +101,7 @@ export class OllamaProvider implements LlmProvider {
         stream: false,
         options: { num_predict: options.maxTokens },
       }),
-      timeoutMs: AI_DEFAULTS.timeoutMs,
+      timeoutMs: AI_DEFAULTS.maxTimeoutMs,
     });
     return mapOllamaGenerateResponse(raw, Date.now() - start);
   }
