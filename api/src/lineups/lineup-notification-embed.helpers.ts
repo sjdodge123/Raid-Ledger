@@ -81,10 +81,10 @@ export function buildCreatedEmbed(
       'A new **Community Lineup** has started! The lineup is how we decide '
       + 'what to play together. Here\'s how it works:'
       + '\n\n'
-      + '\u{1F3AE} **Nominate** games you want to play\n'
-      + '\u{1F5F3}\u{FE0F} **Vote** on your favorites when voting opens\n'
-      + '\u{1F91D} **Get matched** into groups based on votes\n'
-      + '\u{1F4C5} **Schedule** a time and play!'
+      + '1. \u{1F3AE} **Nominate** games you want to play\n'
+      + '2. \u{1F5F3}\u{FE0F} **Vote** on your favorites when voting opens\n'
+      + '3. \u{1F91D} **Get matched** into groups based on votes\n'
+      + '4. \u{1F4C5} **Schedule** a time and play!'
       + deadline,
     )
     .addFields({
@@ -92,7 +92,7 @@ export function buildCreatedEmbed(
       value:
         '\u2022 Browse the lineup page and add games from your library\n'
         + '\u2022 Paste a **Steam store URL** in this channel to auto-nominate\n'
-        + '\u2022 Use Common Ground to find games the group already owns',
+        + '\u2022 Use the **Common Ground game filter** to find games the group already owns',
     })
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
