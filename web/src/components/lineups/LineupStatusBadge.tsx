@@ -19,7 +19,7 @@ const STATUS_STYLES: Record<LineupStatusDto, string> = {
 const STATUS_LABELS: Record<LineupStatusDto, string> = {
     building: 'Nominating',
     voting: 'Voting',
-    decided: 'Decided',
+    decided: 'Scheduling',
     archived: 'Archived',
 };
 

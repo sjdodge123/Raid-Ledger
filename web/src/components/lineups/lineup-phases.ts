@@ -12,6 +12,6 @@ export const PHASES: LineupStatusDto[] = [
 export const PHASE_LABELS: Record<LineupStatusDto, string> = {
   building: 'Nominating',
   voting: 'Voting',
-  decided: 'Decided',
+  decided: 'Scheduling',
   archived: 'Archived',
 };
