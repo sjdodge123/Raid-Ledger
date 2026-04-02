@@ -123,6 +123,9 @@ export function buildPrimaryButton(
       .setStyle(ButtonStyle.Link)
       .setURL(`${clientUrl}/profile/integrations`);
   }
+  if (type === 'community_lineup') {
+    return buildLineupButton(payload, clientUrl);
+  }
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
   if (!eventId) return null;
   if (
@@ -143,13 +146,44 @@ export function buildPrimaryButton(
     .setURL(`${clientUrl}/events/${eventId}?notif=${notificationId}`);
 }
 
+/** Build the primary button for community_lineup DMs based on subtype. */
+function buildLineupButton(
+  payload: Record<string, unknown> | undefined,
+  clientUrl: string,
+): ButtonBuilder | null {
+  const sub = payload?.subtype as string | undefined;
+  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+  const matchId = payload?.matchId != null ? toStr(payload.matchId) : null;
+  const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
+
+  if (sub === 'lineup_event_created' && eventId) {
+    return new ButtonBuilder()
+      .setLabel('View Event')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/events/${eventId}`);
+  }
+  if (matchId && lineupId) {
+    return new ButtonBuilder()
+      .setLabel('Vote on a Time')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`);
+  }
+  if (lineupId) {
+    return new ButtonBuilder()
+      .setLabel('View Lineup')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/community-lineup/${lineupId}`);
+  }
+  return null;
+}
+
 /** Extra buttons to add to the main action row for specific types. */
 export function buildInlineButtons(
   type: NotificationType,
   payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ButtonBuilder[] {
-  if (type !== 'lineup_steam_nudge') return [];
+  if (type !== 'lineup_steam_nudge' && type !== 'community_lineup') return [];
   const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
   if (!lineupId) return [];
   return [

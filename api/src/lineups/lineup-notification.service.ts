@@ -201,7 +201,7 @@ export class LineupNotificationService {
     const members = await findMatchMemberUsers(this.db, match.id);
     const names = members.map((m) => m.displayName);
     await this.postEventCreatedChannelEmbed(match, eventDate, eventId, names);
-    await this.sendEventCreatedDMs(match, eventDate);
+    await this.sendEventCreatedDMs(match, eventDate, eventId);
   }
 
   /** AC-16: DM to nominator when operator removes their nomination. */
@@ -316,6 +316,7 @@ export class LineupNotificationService {
   private async sendEventCreatedDMs(
     match: MatchInfo,
     eventDate: Date,
+    eventId?: number,
   ): Promise<void> {
     const members = await findMatchMemberUsers(this.db, match.id);
     for (const member of members) {
@@ -325,6 +326,7 @@ export class LineupNotificationService {
         match,
         member,
         eventDate,
+        eventId,
       );
     }
   }

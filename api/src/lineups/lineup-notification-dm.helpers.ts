@@ -82,6 +82,7 @@ export async function sendEventCreatedDM(
   match: MatchDmInfo,
   member: DiscordMember,
   eventDate: Date,
+  eventId?: number,
 ): Promise<void> {
   const key = `lineup-event-dm:${match.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
@@ -95,6 +96,7 @@ export async function sendEventCreatedDM(
       subtype: 'lineup_event_created',
       matchId: match.id,
       lineupId: match.lineupId,
+      eventId,
     },
   });
 }
