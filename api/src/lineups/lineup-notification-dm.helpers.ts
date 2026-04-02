@@ -90,7 +90,7 @@ export async function sendEventCreatedDM(
     userId: member.userId,
     type: 'community_lineup',
     title: `${match.gameName} is happening!`,
-    message: `${match.gameName} is locked in for ${eventDate.toISOString()}. Sign up!`,
+    message: `${match.gameName} is locked in for ${eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. Sign up!`,
     payload: {
       subtype: 'lineup_event_created',
       matchId: match.id,
