@@ -183,13 +183,31 @@ export function buildInlineButtons(
   payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ButtonBuilder[] {
-  if (type !== 'lineup_steam_nudge' && type !== 'community_lineup') return [];
-  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
-  if (!lineupId) return [];
-  return [
-    new ButtonBuilder()
-      .setLabel('View Lineup')
-      .setStyle(ButtonStyle.Link)
-      .setURL(`${clientUrl}/community-lineup/${lineupId}`),
-  ];
+  if (type === 'lineup_steam_nudge') {
+    const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+    if (!lineupId) return [];
+    return [
+      new ButtonBuilder()
+        .setLabel('View Lineup')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${clientUrl}/community-lineup/${lineupId}`),
+    ];
+  }
+  if (type === 'community_lineup') {
+    const sub = payload?.subtype as string | undefined;
+    const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+    if (!lineupId) return [];
+    // Only add View Lineup inline when primary button goes elsewhere
+    const needsInline = sub === 'lineup_match_member'
+      || sub === 'lineup_event_created'
+      || sub === 'lineup_scheduling_open';
+    if (!needsInline) return [];
+    return [
+      new ButtonBuilder()
+        .setLabel('View Lineup')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${clientUrl}/community-lineup/${lineupId}`),
+    ];
+  }
+  return [];
 }
