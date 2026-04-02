@@ -105,8 +105,8 @@ export function buildCreatedEmbed(
       + 'advances automatically when its deadline expires:'
       + '\n\n'
       + '1. \u{1F539} **Nominations** *(current)* — suggest games to play\n'
-      + '2. \u2B1C **Voting** — pick your favorites from the nominees\n'
-      + '3. \u2B1C **Decided** — top picks are matched, scheduled, and played!'
+      + '2. \u2796 **Voting** — pick your favorites from the nominees\n'
+      + '3. \u2796 **Decided** — top picks are matched, scheduled, and played!'
       + deadline,
     )
     .addFields({
