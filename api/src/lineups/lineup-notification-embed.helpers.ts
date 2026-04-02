@@ -150,7 +150,6 @@ export function buildMilestoneEmbed(
     .addFields({ name: 'Nominated Games', value: lines.join('\n') + overflow || 'None' })
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
-  if (cover) embed.setThumbnail(cover);
   applyChrome(embed, ctx, 'Nomination Milestone');
   return { embed, row: viewButton(ctx) };
 }
