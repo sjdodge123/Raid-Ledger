@@ -45,7 +45,10 @@ describe('SchedulingService', () => {
         SchedulingService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: EventsService, useValue: mockEventsService },
-        { provide: LineupNotificationService, useValue: { notifyEventCreated: jest.fn() } },
+        {
+          provide: LineupNotificationService,
+          useValue: { notifyEventCreated: jest.fn() },
+        },
       ],
     }).compile();
 

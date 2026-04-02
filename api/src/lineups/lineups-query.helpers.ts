@@ -187,7 +187,10 @@ export async function findNominatedGames(
   return db
     .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.communityLineupEntries)
-    .innerJoin(schema.games, eq(schema.communityLineupEntries.gameId, schema.games.id))
+    .innerJoin(
+      schema.games,
+      eq(schema.communityLineupEntries.gameId, schema.games.id),
+    )
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));
 }
 

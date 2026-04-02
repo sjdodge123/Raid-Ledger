@@ -3,8 +3,6 @@
  * Validates Discord channel embeds and player DM dispatch across the full
  * Community Lineup lifecycle: creation, nominations, voting, decided,
  * scheduling, event creation, and operator removal.
- *
- * These tests are written BEFORE implementation -- they must all FAIL.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { LineupNotificationService } from './lineup-notification.service';
@@ -185,7 +183,12 @@ describe('LineupNotificationService', () => {
   // AC-2: Channel embed updated at nomination milestones
   // -----------------------------------------------------------------------
   describe('notifyNominationMilestone', () => {
-    const entry = (name: string, id = 1) => ({ gameId: id, gameName: name, nominatorName: 'User', coverUrl: null });
+    const entry = (name: string, id = 1) => ({
+      gameId: id,
+      gameName: name,
+      nominatorName: 'User',
+      coverUrl: null,
+    });
 
     it('posts embed at 25% threshold', async () => {
       await service.notifyNominationMilestone(LINEUP_ID, 25, [entry('Game A')]);
@@ -194,13 +197,20 @@ describe('LineupNotificationService', () => {
     });
 
     it('posts embed at 50% threshold', async () => {
-      await service.notifyNominationMilestone(LINEUP_ID, 50, [entry('A'), entry('B')]);
+      await service.notifyNominationMilestone(LINEUP_ID, 50, [
+        entry('A'),
+        entry('B'),
+      ]);
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
 
     it('posts embed at 100% threshold', async () => {
-      await service.notifyNominationMilestone(LINEUP_ID, 100, [entry('A'), entry('B'), entry('C')]);
+      await service.notifyNominationMilestone(LINEUP_ID, 100, [
+        entry('A'),
+        entry('B'),
+        entry('C'),
+      ]);
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
@@ -228,7 +238,13 @@ describe('LineupNotificationService', () => {
   // -----------------------------------------------------------------------
   describe('notifyVotingOpen', () => {
     const deadline = new Date('2026-04-10T20:00:00Z');
-    const games = [{ id: 1, name: 'Game A' }, { id: 2, name: 'Game B' }, { id: 3, name: 'Game C' }, { id: 4, name: 'Game D' }, { id: 5, name: 'Game E' }];
+    const games = [
+      { id: 1, name: 'Game A' },
+      { id: 2, name: 'Game B' },
+      { id: 3, name: 'Game C' },
+      { id: 4, name: 'Game D' },
+      { id: 5, name: 'Game E' },
+    ];
 
     it('posts channel embed with voting info', async () => {
       await service.notifyVotingOpen(
@@ -465,8 +481,7 @@ describe('LineupNotificationService', () => {
 
     it('dispatches DMs to match members', async () => {
       const members = [makeMember(1), makeMember(2)];
-      mockDb.execute.mockResolvedValueOnce(members); // embed member names
-      mockDb.execute.mockResolvedValueOnce(members); // DM targets
+      mockDb.execute.mockResolvedValueOnce(members);
 
       await service.notifyEventCreated(
         makeMatch({ status: 'scheduled', linkedEventId: 200 }),
@@ -477,8 +492,7 @@ describe('LineupNotificationService', () => {
     });
 
     it('DMs use subtype lineup_event_created', async () => {
-      mockDb.execute.mockResolvedValueOnce([makeMember(9)]); // embed member names
-      mockDb.execute.mockResolvedValueOnce([makeMember(9)]); // DM targets
+      mockDb.execute.mockResolvedValueOnce([makeMember(9)]);
 
       await service.notifyEventCreated(
         makeMatch({ status: 'scheduled', linkedEventId: 200 }),
@@ -508,8 +522,7 @@ describe('LineupNotificationService', () => {
     });
 
     it('DMs use dedup key lineup-event-dm:{matchId}:{userId}', async () => {
-      mockDb.execute.mockResolvedValueOnce([makeMember(9)]); // embed member names
-      mockDb.execute.mockResolvedValueOnce([makeMember(9)]); // DM targets
+      mockDb.execute.mockResolvedValueOnce([makeMember(9)]);
 
       await service.notifyEventCreated(
         makeMatch({ status: 'scheduled', linkedEventId: 200 }),

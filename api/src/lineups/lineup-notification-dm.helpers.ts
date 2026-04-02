@@ -5,6 +5,7 @@
  */
 import type { NotificationService } from '../notifications/notification.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { DEDUP_TTL } from './lineup-notification.constants';
 
 /** Shape of a Discord-linked member returned from queries. */
 export interface DiscordMember {
@@ -25,9 +26,6 @@ export interface MatchDmInfo {
 export interface LineupDmInfo {
   id: number;
 }
-
-/** TTL for dedup records (7 days). */
-const DEDUP_TTL = 7 * 24 * 3600;
 
 /** Send a single voting-open DM to a member. */
 export async function sendVotingDM(

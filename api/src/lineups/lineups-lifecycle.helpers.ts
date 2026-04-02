@@ -2,7 +2,11 @@
  * Lifecycle helpers extracted from LineupsService to stay
  * under the 300-line file limit (ROK-932).
  */
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  type Logger,
+} from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -86,12 +90,13 @@ export async function applyStatusUpdate(
 export async function runMatchingAlgorithm(
   db: Db,
   lineupId: number,
+  logger: Logger,
 ): Promise<void> {
   try {
     await buildMatchesForLineup(db, lineupId);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`Matching failed for lineup ${lineupId}: ${msg}`);
+    logger.error(`Matching failed for lineup ${lineupId}: ${msg}`);
   }
 }
 

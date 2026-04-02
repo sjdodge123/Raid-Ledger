@@ -2,8 +2,6 @@
  * TDD tests for LineupReminderService (ROK-932).
  * Validates cron-driven vote reminders (24h + 1h before voting deadline)
  * and scheduling reminders (24h + 1h before decided phase end).
- *
- * These tests are written BEFORE implementation -- they must all FAIL.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { LineupReminderService } from './lineup-reminder.service';

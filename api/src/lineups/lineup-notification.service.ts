@@ -12,7 +12,11 @@ import { NotificationDedupService } from '../notifications/notification-dedup.se
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { resolveLineupChannel } from './lineup-notification-channel.helpers';
-import type { EmbedContext, NominationEntry, LineupPhase } from './lineup-notification-embed.helpers';
+import type {
+  EmbedContext,
+  NominationEntry,
+  LineupPhase,
+} from './lineup-notification-embed.helpers';
 import {
   buildCreatedEmbed,
   buildMilestoneEmbed,
@@ -30,6 +34,7 @@ import {
   findDiscordLinkedMembers,
   findMatchMemberUsers,
 } from './lineup-notification-targets.helpers';
+import { DEDUP_TTL } from './lineup-notification.constants';
 
 /** Shape of a lineup passed to notification methods. */
 export interface LineupInfo {
@@ -51,9 +56,6 @@ export interface MatchInfo {
   linkedEventId?: number;
 }
 
-/** TTL for dedup records (7 days). */
-const DEDUP_TTL = 7 * 24 * 3600;
-
 @Injectable()
 export class LineupNotificationService {
   private readonly logger = new Logger(LineupNotificationService.name);
@@ -67,11 +69,18 @@ export class LineupNotificationService {
     private readonly settingsService: SettingsService,
   ) {}
 
-  /** Resolve shared embed context (baseUrl, community name, phase). */
-  private async resolveCtx(lineupId: number, phase: LineupPhase): Promise<EmbedContext> {
+  private async resolveCtx(
+    lineupId: number,
+    phase: LineupPhase,
+  ): Promise<EmbedContext> {
     const baseUrl = (await this.settingsService.getClientUrl()) ?? '';
     const community = await this.settingsService.get('community_name');
-    return { baseUrl, lineupId, communityName: community ?? 'Raid Ledger', phase };
+    return {
+      baseUrl,
+      lineupId,
+      communityName: community ?? 'Raid Ledger',
+      phase,
+    };
   }
 
   /** AC-1: Post channel embed when lineup is created. */
@@ -105,7 +114,10 @@ export class LineupNotificationService {
   }
 
   /** AC-3: Post channel embed + DMs when voting opens. */
-  async notifyVotingOpen(lineup: LineupInfo, games: { id: number; name: string }[]): Promise<void> {
+  async notifyVotingOpen(
+    lineup: LineupInfo,
+    games: { id: number; name: string }[],
+  ): Promise<void> {
     await this.postVotingChannelEmbed(lineup, games);
     await this.sendVotingDMs(lineup, games.length);
   }
@@ -128,14 +140,20 @@ export class LineupNotificationService {
     await this.sendMatchMemberDMs(lineupId, matches);
   }
 
-  /** Send DMs to each member of each match. */
+  /** Send DMs to each member of each match (M is typically 3-5). */
   private async sendMatchMemberDMs(lineupId: number, matches: MatchInfo[]) {
     for (const match of matches) {
       const members = await findMatchMemberUsers(this.db, match.id);
       const names = members.map((m) => m.displayName);
       for (const member of members) {
         const coPlayers = names.filter((n) => n !== member.displayName);
-        await this.notifyMatchMember(match.id, member.userId, match.gameName, coPlayers, lineupId);
+        await this.notifyMatchMember(
+          match.id,
+          member.userId,
+          match.gameName,
+          coPlayers,
+          lineupId,
+        );
       }
     }
   }
@@ -193,15 +211,27 @@ export class LineupNotificationService {
   /** AC-8: Post per-match channel embed + DMs when scheduling opens. */
   async notifySchedulingOpen(match: MatchInfo): Promise<void> {
     await this.postSchedulingChannelEmbed(match);
-    await this.sendSchedulingDMs(match);
+    const members = await findMatchMemberUsers(this.db, match.id);
+    for (const m of members) {
+      await sendSchedulingDM(
+        this.notificationService,
+        this.dedupService,
+        match,
+        m,
+      );
+    }
   }
 
   /** AC-10: Post channel embed + DMs when event is created. */
-  async notifyEventCreated(match: MatchInfo, eventDate: Date, eventId?: number): Promise<void> {
+  async notifyEventCreated(
+    match: MatchInfo,
+    eventDate: Date,
+    eventId?: number,
+  ): Promise<void> {
     const members = await findMatchMemberUsers(this.db, match.id);
     const names = members.map((m) => m.displayName);
     await this.postEventCreatedChannelEmbed(match, eventDate, eventId, names);
-    await this.sendEventCreatedDMs(match, eventDate, eventId);
+    await this.sendEventCreatedDMs(match, eventDate, eventId, members);
   }
 
   /** AC-16: DM to nominator when operator removes their nomination. */
@@ -229,8 +259,6 @@ export class LineupNotificationService {
     });
   }
 
-  // ─── Private: channel embeds ────────────────────────────────
-
   /** Post the voting-open channel embed. */
   private async postVotingChannelEmbed(
     lineup: LineupInfo,
@@ -243,7 +271,11 @@ export class LineupNotificationService {
     if (!channelId) return;
 
     const ctx = await this.resolveCtx(lineup.id, 'voting');
-    const { embed, row } = buildVotingOpenEmbed(ctx, games, lineup.votingDeadline);
+    const { embed, row } = buildVotingOpenEmbed(
+      ctx,
+      games,
+      lineup.votingDeadline,
+    );
     await this.botClient.sendEmbed(channelId, embed, row);
   }
 
@@ -275,12 +307,15 @@ export class LineupNotificationService {
 
     const ctx = await this.resolveCtx(match.lineupId, 'decided');
     const { embed, row } = buildEventCreatedEmbed(
-      ctx, match.gameName, match.gameId, eventDate, eventId, memberNames,
+      ctx,
+      match.gameName,
+      match.gameId,
+      eventDate,
+      eventId,
+      memberNames,
     );
     await this.botClient.sendEmbed(channelId, embed, row);
   }
-
-  // ─── Private: DM dispatch (delegates to helpers) ──────────
 
   /** Send voting-open DMs to all Discord-linked members. */
   private async sendVotingDMs(
@@ -299,26 +334,13 @@ export class LineupNotificationService {
     }
   }
 
-  /** Send scheduling-open DMs to match members. */
-  private async sendSchedulingDMs(match: MatchInfo): Promise<void> {
-    const members = await findMatchMemberUsers(this.db, match.id);
-    for (const member of members) {
-      await sendSchedulingDM(
-        this.notificationService,
-        this.dedupService,
-        match,
-        member,
-      );
-    }
-  }
-
-  /** Send event-created DMs to match members. */
+  /** Send event-created DMs to prefetched match members. */
   private async sendEventCreatedDMs(
     match: MatchInfo,
     eventDate: Date,
-    eventId?: number,
+    eventId: number | undefined,
+    members: Awaited<ReturnType<typeof findMatchMemberUsers>>,
   ): Promise<void> {
-    const members = await findMatchMemberUsers(this.db, match.id);
     for (const member of members) {
       await sendEventCreatedDM(
         this.notificationService,

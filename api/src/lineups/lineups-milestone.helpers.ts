@@ -77,8 +77,14 @@ export async function getEntryDetails(
       coverUrl: schema.games.coverUrl,
     })
     .from(schema.communityLineupEntries)
-    .innerJoin(schema.games, eq(schema.communityLineupEntries.gameId, schema.games.id))
-    .innerJoin(schema.users, eq(schema.communityLineupEntries.nominatedBy, schema.users.id))
+    .innerJoin(
+      schema.games,
+      eq(schema.communityLineupEntries.gameId, schema.games.id),
+    )
+    .innerJoin(
+      schema.users,
+      eq(schema.communityLineupEntries.nominatedBy, schema.users.id),
+    )
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));
   return rows.map((r) => ({
     gameId: r.gameId,

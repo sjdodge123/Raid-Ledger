@@ -81,8 +81,14 @@ function phaseBreadcrumb(current: LineupPhase): string {
 function applyChrome(embed: EmbedBuilder, ctx: EmbedContext, label: string) {
   embed
     .setAuthor({ name: ctx.communityName || 'Raid Ledger' })
-    .addFields({ name: '\u200B', value: phaseBreadcrumb(ctx.phase), inline: false })
-    .setFooter({ text: `${ctx.communityName || 'Raid Ledger'} \u00B7 ${label}` })
+    .addFields({
+      name: '\u200B',
+      value: phaseBreadcrumb(ctx.phase),
+      inline: false,
+    })
+    .setFooter({
+      text: `${ctx.communityName || 'Raid Ledger'} \u00B7 ${label}`,
+    })
     .setTimestamp();
 }
 
@@ -100,25 +106,25 @@ export function buildCreatedEmbed(
   const embed = new EmbedBuilder()
     .setTitle('\u{1F3B2} Community Lineup — Nominations Open!')
     .setDescription(
-      'A new **Community Lineup** has started! The lineup is how we decide '
-      + 'what to play together. It runs in **timed phases** — each phase '
-      + 'advances automatically when its deadline expires:'
-      + '\n\n'
-      + '1. \u{1F539} **Nominations** *(current)* — suggest games to play\n'
-      + '2. \u2796 **Voting** — pick your favorites from the nominees\n'
-      + '3. \u2796 **Scheduling** — top picks are matched, scheduled, and played!'
-      + deadline,
+      'A new **Community Lineup** has started! The lineup is how we decide ' +
+        'what to play together. It runs in **timed phases** — each phase ' +
+        'advances automatically when its deadline expires:' +
+        '\n\n' +
+        '1. \u{1F539} **Nominations** *(current)* — suggest games to play\n' +
+        '2. \u2796 **Voting** — pick your favorites from the nominees\n' +
+        '3. \u2796 **Scheduling** — top picks are matched, scheduled, and played!' +
+        deadline,
     )
     .addFields({
       name: '\u{1F4DD} How to Nominate',
       value:
-        '\u2022 Browse the lineup page and add games from your library\n'
-        + '\u2022 Paste a **Steam store URL** in this channel to auto-nominate\n'
-        + '\u2022 Use the **Common Ground game filter** to find games the group already owns\n'
-        + '\n'
-        + 'The lineup has a **nomination cap** that grows with the number of '
-        + 'unique nominators — the more people who participate, the more '
-        + 'games can be added.',
+        '\u2022 Browse the lineup page and add games from your library\n' +
+        '\u2022 Paste a **Steam store URL** in this channel to auto-nominate\n' +
+        '\u2022 Use the **Common Ground game filter** to find games the group already owns\n' +
+        '\n' +
+        'The lineup has a **nomination cap** that grows with the number of ' +
+        'unique nominators — the more people who participate, the more ' +
+        'games can be added.',
     })
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
@@ -132,22 +138,22 @@ export function buildMilestoneEmbed(
   threshold: number,
   entries: NominationEntry[],
 ): EmbedWithRow {
-  const lines = entries
-    .slice(0, 15)
-    .map((e) => {
-      const link = `${ctx.baseUrl}/games/${e.gameId}`;
-      return `\u{1F3AE} [**${e.gameName}**](${link}) — nominated by ${e.nominatorName}`;
-    });
-  const overflow = entries.length > 15 ? `\n*...and ${entries.length - 15} more*` : '';
-  const cover = entries.find((e) => e.coverUrl)?.coverUrl;
-
+  const lines = entries.slice(0, 15).map((e) => {
+    const link = `${ctx.baseUrl}/games/${e.gameId}`;
+    return `\u{1F3AE} [**${e.gameName}**](${link}) — nominated by ${e.nominatorName}`;
+  });
+  const overflow =
+    entries.length > 15 ? `\n*...and ${entries.length - 15} more*` : '';
   const embed = new EmbedBuilder()
     .setTitle(`\u{1F389} ${threshold}% of nominations filled!`)
     .setDescription(
-      `The lineup now has **${entries.length}** games nominated. `
-      + 'Keep adding games before voting opens!',
+      `The lineup now has **${entries.length}** games nominated. ` +
+        'Keep adding games before voting opens!',
     )
-    .addFields({ name: 'Nominated Games', value: lines.join('\n') + overflow || 'None' })
+    .addFields({
+      name: 'Nominated Games',
+      value: lines.join('\n') + overflow || 'None',
+    })
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
   applyChrome(embed, ctx, 'Nomination Milestone');
@@ -167,20 +173,24 @@ export function buildVotingOpenEmbed(
   const embed = new EmbedBuilder()
     .setTitle('\u{1F5F3}\u{FE0F} Vote on the Community Lineup!')
     .setDescription(
-      'Nominations are closed — it\'s time to vote! Pick the games you '
-      + 'most want to play. Each member gets a limited number of votes, '
-      + 'so choose wisely. When voting ends, the top picks will be grouped '
-      + 'into matches based on who voted for what.'
-      + deadlineStr,
+      "Nominations are closed — it's time to vote! Pick the games you " +
+        'most want to play. Each member gets a limited number of votes, ' +
+        'so choose wisely. When voting ends, the top picks will be grouped ' +
+        'into matches based on who voted for what.' +
+        deadlineStr,
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
   if (games.length > 0) {
-    const lines = games.slice(0, 15).map(
-      (g) => `\u{1F3AE} [${g.name}](${ctx.baseUrl}/games/${g.id})`,
-    );
-    const overflow = games.length > 15 ? `\n*...and ${games.length - 15} more*` : '';
-    embed.addFields({ name: `Games on the Ballot (${games.length})`, value: lines.join('\n') + overflow });
+    const lines = games
+      .slice(0, 15)
+      .map((g) => `\u{1F3AE} [${g.name}](${ctx.baseUrl}/games/${g.id})`);
+    const overflow =
+      games.length > 15 ? `\n*...and ${games.length - 15} more*` : '';
+    embed.addFields({
+      name: `Games on the Ballot (${games.length})`,
+      value: lines.join('\n') + overflow,
+    });
   }
 
   applyChrome(embed, ctx, 'Voting Open');
@@ -199,21 +209,27 @@ export function buildDecidedEmbed(
   const embed = new EmbedBuilder()
     .setTitle('\u{1F3AF} Community Lineup — Matches Found!')
     .setDescription(
-      'Voting is complete! Players have been grouped into matches '
-      + 'based on their votes. Games that hit the vote threshold are '
-      + '**ready to schedule** — pick a time and play. Games that are '
-      + 'close can still make it if more players join.',
+      'Voting is complete! Players have been grouped into matches ' +
+        'based on their votes. Games that hit the vote threshold are ' +
+        '**ready to schedule** — pick a time and play. Games that are ' +
+        'close can still make it if more players join.',
     )
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 
   addPodiumField(embed, sorted, ctx);
   if (scheduling.length > 0) {
     const lines = scheduling.map((m) => gameLink(m, ctx));
-    embed.addFields({ name: '\u2705 Ready to Schedule', value: lines.join('\n') });
+    embed.addFields({
+      name: '\u2705 Ready to Schedule',
+      value: lines.join('\n'),
+    });
   }
   if (rally.length > 0) {
     const lines = rally.map((m) => gameLink(m, ctx));
-    embed.addFields({ name: '\u{1F91D} Almost There — Rally More Players', value: lines.join('\n') });
+    embed.addFields({
+      name: '\u{1F91D} Almost There — Rally More Players',
+      value: lines.join('\n'),
+    });
   }
 
   applyChrome(embed, ctx, 'Matches Decided');
@@ -226,12 +242,17 @@ function gameLink(m: MatchSummary, ctx: EmbedContext): string {
 }
 
 /** Add a podium field showing top 3 by votes. */
-function addPodiumField(embed: EmbedBuilder, sorted: MatchSummary[], ctx: EmbedContext) {
+function addPodiumField(
+  embed: EmbedBuilder,
+  sorted: MatchSummary[],
+  ctx: EmbedContext,
+) {
   const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
   const top = sorted.slice(0, 3);
   if (top.length === 0) return;
   const lines = top.map(
-    (m, i) => `${medals[i]} [**${m.gameName}**](${ctx.baseUrl}/games/${m.gameId}) — ${m.voteCount} votes`,
+    (m, i) =>
+      `${medals[i]} [**${m.gameName}**](${ctx.baseUrl}/games/${m.gameId}) — ${m.voteCount} votes`,
   );
   embed.addFields({ name: '\u{1F3C6} Top Voted', value: lines.join('\n') });
 }
@@ -247,10 +268,10 @@ export function buildSchedulingEmbed(
   const embed = new EmbedBuilder()
     .setTitle(`\u{1F4C5} ${gameName} — Scheduling Open!`)
     .setDescription(
-      `The **${gameName}** match has enough players! Now it\'s time to `
-      + 'find a time that works. Suggest time slots or vote on ones '
-      + 'already proposed. Once a slot has enough votes, any member '
-      + 'can create the event.',
+      `The **${gameName}** match has enough players! Now it's time to ` +
+        'find a time that works. Suggest time slots or vote on ones ' +
+        'already proposed. Once a slot has enough votes, any member ' +
+        'can create the event.',
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
@@ -277,9 +298,9 @@ export function buildEventCreatedEmbed(
   const embed = new EmbedBuilder()
     .setTitle(`\u2705 ${gameName} is locked in!`)
     .setDescription(
-      `[**${gameName}**](${gameUrl}) is officially scheduled! The event has been `
-      + 'created and is open for signups. Head to the event page to confirm your spot.'
-      + `\n\n\u{1F4C5} **When:** ${discordTs(eventDate, 'f')} (${discordTs(eventDate)})`,
+      `[**${gameName}**](${gameUrl}) is officially scheduled! The event has been ` +
+        'created and is open for signups. Head to the event page to confirm your spot.' +
+        `\n\n\u{1F4C5} **When:** ${discordTs(eventDate, 'f')} (${discordTs(eventDate)})`,
     )
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 
@@ -310,14 +331,12 @@ export function buildEventCreatedEmbed(
 }
 
 /** Stub for future tiebreaker notification (M8). */
-export function buildTiebreakerStartedEmbed(
-  ctx: EmbedContext,
-): EmbedWithRow {
+export function buildTiebreakerStartedEmbed(ctx: EmbedContext): EmbedWithRow {
   const embed = new EmbedBuilder()
     .setTitle('\u2694\u{FE0F} Tiebreaker Round Started')
     .setDescription(
-      'It\'s a tie! An operator has started a tiebreaker round '
-      + 'to determine the final picks.',
+      "It's a tie! An operator has started a tiebreaker round " +
+        'to determine the final picks.',
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 

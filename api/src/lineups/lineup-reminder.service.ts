@@ -10,6 +10,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { DEDUP_TTL } from './lineup-notification.constants';
 
 /** Shape of a lineup returned from reminder queries. */
 interface ReminderLineup {
@@ -35,8 +36,6 @@ interface SchedulingNonVoter {
   matchId: number;
 }
 
-/** TTL for dedup records (7 days). */
-const DEDUP_TTL = 7 * 24 * 3600;
 const MS_PER_HOUR = 3600_000;
 
 @Injectable()
@@ -160,7 +159,7 @@ export class LineupReminderService {
     return (await this.db.execute(sql`
       SELECT id, status, phase_deadline AS "phaseDeadline",
              phase_deadline AS "votingDeadline"
-      FROM lineups
+      FROM community_lineups
       WHERE status = 'voting'
     `)) as unknown as ReminderLineup[];
   }
@@ -169,7 +168,7 @@ export class LineupReminderService {
   private async getDecidedLineups(): Promise<ReminderLineup[]> {
     return (await this.db.execute(sql`
       SELECT id, status, phase_deadline AS "phaseDeadline"
-      FROM lineups
+      FROM community_lineups
       WHERE status = 'decided'
     `)) as unknown as ReminderLineup[];
   }
@@ -183,7 +182,7 @@ export class LineupReminderService {
       FROM users u
       WHERE u.discord_id IS NOT NULL
         AND u.id NOT IN (
-          SELECT user_id FROM lineup_votes WHERE lineup_id = ${lineupId}
+          SELECT user_id FROM community_lineup_votes WHERE lineup_id = ${lineupId}
         )
     `)) as unknown as NonVoter[];
   }
@@ -196,11 +195,19 @@ export class LineupReminderService {
       SELECT u.id, u.id AS "userId",
              COALESCE(u.display_name, u.username) AS "displayName",
              lmm.match_id AS "matchId"
-      FROM lineup_match_members lmm
-      JOIN lineup_matches lm ON lm.id = lmm.match_id
+      FROM community_lineup_match_members lmm
+      JOIN community_lineup_matches lm ON lm.id = lmm.match_id
       JOIN users u ON u.id = lmm.user_id
       WHERE lm.lineup_id = ${lineupId}
         AND lm.status = 'scheduling'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM community_lineup_schedule_votes csv
+          JOIN community_lineup_schedule_slots css
+            ON css.id = csv.slot_id
+          WHERE css.match_id = lmm.match_id
+            AND csv.user_id = lmm.user_id
+        )
     `)) as unknown as SchedulingNonVoter[];
   }
 }

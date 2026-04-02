@@ -198,9 +198,10 @@ export function buildInlineButtons(
     const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
     if (!lineupId) return [];
     // Only add View Lineup inline when primary button goes elsewhere
-    const needsInline = sub === 'lineup_match_member'
-      || sub === 'lineup_event_created'
-      || sub === 'lineup_scheduling_open';
+    const needsInline =
+      sub === 'lineup_match_member' ||
+      sub === 'lineup_event_created' ||
+      sub === 'lineup_scheduling_open';
     if (!needsInline) return [];
     return [
       new ButtonBuilder()

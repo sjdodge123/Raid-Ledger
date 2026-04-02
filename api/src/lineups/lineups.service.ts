@@ -186,7 +186,7 @@ export class LineupsService {
       lineup,
     );
     if (dto.status === 'decided') {
-      await runMatchingAlgorithm(this.db, id);
+      await runMatchingAlgorithm(this.db, id, this.logger);
     }
     await logTransition(this.db, this.activityLog, id, dto);
 
