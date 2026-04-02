@@ -64,7 +64,7 @@ function viewButton(ctx: EmbedContext): ActionRowBuilder<ButtonBuilder> {
 const PHASE_LABELS: [LineupPhase, string][] = [
   ['nominations', 'Nominations'],
   ['voting', 'Voting'],
-  ['decided', 'Decided'],
+  ['decided', 'Scheduling'],
 ];
 
 /** Build a breadcrumb with completed phases struck through. */
@@ -106,7 +106,7 @@ export function buildCreatedEmbed(
       + '\n\n'
       + '1. \u{1F539} **Nominations** *(current)* — suggest games to play\n'
       + '2. \u2796 **Voting** — pick your favorites from the nominees\n'
-      + '3. \u2796 **Decided** — top picks are matched, scheduled, and played!'
+      + '3. \u2796 **Scheduling** — top picks are matched, scheduled, and played!'
       + deadline,
     )
     .addFields({
