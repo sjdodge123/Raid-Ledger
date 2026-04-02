@@ -43,8 +43,8 @@ export async function sendVotingDM(
   await notificationService.create({
     userId: member.userId,
     type: 'community_lineup',
-    title: 'Community Lineup voting is open',
-    message: `Vote on the Community Lineup -- ${gameCount} games, voting closes soon!`,
+    title: 'Time to vote on the Community Lineup!',
+    message: `${gameCount} games are on the ballot — pick your favorites before voting closes.`,
     payload: {
       subtype: 'lineup_voting_open',
       lineupId: lineup.id,

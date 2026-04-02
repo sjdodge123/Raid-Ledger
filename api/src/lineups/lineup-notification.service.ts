@@ -110,7 +110,7 @@ export class LineupNotificationService {
     await this.sendVotingDMs(lineup, games.length);
   }
 
-  /** AC-5: Post combined tier embed when matches are found. */
+  /** AC-5: Post combined tier embed + per-member DMs when matches are found. */
   async notifyMatchesFound(
     lineupId: number,
     matches: MatchInfo[],
@@ -119,11 +119,25 @@ export class LineupNotificationService {
     if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
 
     const channelId = await resolveLineupChannel(this.settingsService);
-    if (!channelId) return;
+    if (channelId) {
+      const ctx = await this.resolveCtx(lineupId, 'decided');
+      const { embed, row } = buildDecidedEmbed(ctx, matches);
+      await this.botClient.sendEmbed(channelId, embed, row);
+    }
 
-    const ctx = await this.resolveCtx(lineupId, 'decided');
-    const { embed, row } = buildDecidedEmbed(ctx, matches);
-    await this.botClient.sendEmbed(channelId, embed, row);
+    await this.sendMatchMemberDMs(lineupId, matches);
+  }
+
+  /** Send DMs to each member of each match. */
+  private async sendMatchMemberDMs(lineupId: number, matches: MatchInfo[]) {
+    for (const match of matches) {
+      const members = await findMatchMemberUsers(this.db, match.id);
+      const names = members.map((m) => m.displayName);
+      for (const member of members) {
+        const coPlayers = names.filter((n) => n !== member.displayName);
+        await this.notifyMatchMember(match.id, member.userId, match.gameName, coPlayers, lineupId);
+      }
+    }
   }
 
   /** AC-6: Send DM to a match member with game + co-players. */

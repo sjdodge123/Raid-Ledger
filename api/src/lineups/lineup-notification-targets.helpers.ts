@@ -31,7 +31,7 @@ export async function findMatchMemberUsers(
     SELECT u.id, u.id AS "userId",
            COALESCE(u.display_name, u.username) AS "displayName",
            u.discord_id AS "discordId"
-    FROM lineup_match_members lmm
+    FROM community_lineup_match_members lmm
     JOIN users u ON u.id = lmm.user_id
     WHERE lmm.match_id = ${matchId}
       AND u.discord_id IS NOT NULL
