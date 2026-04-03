@@ -5,10 +5,12 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
-import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
+import type { ScheduleSlotWithVotesDto, MatchDetailResponseDto } from '@raid-ledger/contract';
+import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 
 interface CreateEventSectionProps {
   slots: ScheduleSlotWithVotesDto[];
+  match: MatchDetailResponseDto;
   hasVoted: boolean;
   readOnly: boolean;
   createdEventId: number | null;
@@ -87,13 +89,36 @@ function RecurringCheckbox({ checked, onChange, disabled }: {
   );
 }
 
+/** Compute how many match members have participated (voted on any slot). */
+function getParticipation(match: MatchDetailResponseDto, slots: ScheduleSlotWithVotesDto[]) {
+  const voterIds = new Set(slots.flatMap((s) => s.votes.map((v) => v.userId)));
+  const total = match.members.length;
+  const voted = match.members.filter((m) => voterIds.has(m.userId)).length;
+  return { voted, total, allVoted: voted >= total };
+}
+
+/** Participation banner shown when not all members have voted. */
+function ParticipationBanner({ voted, total }: { voted: number; total: number }): JSX.Element {
+  const remaining = total - voted;
+  return (
+    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
+      {remaining} of {total} {remaining === 1 ? 'member hasn\u2019t' : 'members haven\u2019t'} voted yet.
+    </div>
+  );
+}
+
 /** Section for creating an event from a selected slot. */
 export function CreateEventSection({
-  slots, hasVoted, readOnly, createdEventId, matchStatus, isCreating,
+  slots, match, hasVoted, readOnly, createdEventId, matchStatus, isCreating,
   recurring, onRecurringChange, onCreateEvent,
 }: CreateEventSectionProps): JSX.Element {
   const sorted = sortedSlots(slots);
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(sorted[0]?.id ?? null);
+  const [confirmed, setConfirmed] = useState(false);
+  const { user } = useAuth();
+  const canBypass = isOperatorOrAdmin(user);
+  const { voted, total, allVoted } = getParticipation(match, slots);
+  const needsConfirm = !allVoted && !canBypass && !confirmed;
 
   if (createdEventId) {
     return <CreatedSuccessState eventId={createdEventId} matchStatus={matchStatus} />;
@@ -101,18 +126,41 @@ export function CreateEventSection({
 
   const canCreate = hasVoted && !readOnly && !isCreating && selectedSlotId !== null;
 
+  const handleCreate = () => {
+    if (!selectedSlotId) return;
+    if (needsConfirm) { setConfirmed(true); return; }
+    onCreateEvent(selectedSlotId);
+  };
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Create Event</h3>
+      {!allVoted && <ParticipationBanner voted={voted} total={total} />}
       {slots.length > 0 && (
         <SlotSelector slots={slots} selectedId={selectedSlotId} onChange={setSelectedSlotId} />
       )}
       <RecurringCheckbox checked={recurring} onChange={onRecurringChange} disabled={readOnly} />
-      <button type="button" onClick={() => selectedSlotId && onCreateEvent(selectedSlotId)}
-        disabled={!canCreate}
-        className="px-6 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-        {isCreating ? 'Creating...' : 'Create Event'}
-      </button>
+      {confirmed && !allVoted && (
+        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
+          Not all members have voted. Create the event anyway?
+          <div className="flex gap-2 mt-2">
+            <button type="button" onClick={() => { if (selectedSlotId) onCreateEvent(selectedSlotId); }}
+              className="px-4 py-1.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors">
+              Yes, Create
+            </button>
+            <button type="button" onClick={() => setConfirmed(false)}
+              className="px-4 py-1.5 text-sm font-medium bg-panel text-muted rounded-lg hover:bg-overlay transition-colors">
+              Wait
+            </button>
+          </div>
+        </div>
+      )}
+      {!confirmed && (
+        <button type="button" onClick={handleCreate} disabled={!canCreate}
+          className="px-6 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          {isCreating ? 'Creating...' : 'Create Event'}
+        </button>
+      )}
       {!hasVoted && !readOnly && (
         <p className="text-xs text-muted">Vote on a time slot to enable event creation.</p>
       )}
