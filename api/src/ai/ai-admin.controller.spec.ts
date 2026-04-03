@@ -253,3 +253,135 @@ describe('AiAdminController (adversarial)', () => {
     });
   });
 });
+
+// --- ROK-1000: Test-chat timeout and diagnostic logging ---
+
+describe('ROK-1000: testChat timeout and diagnostics', () => {
+  let controller: AiAdminController;
+  let mockLlmService: {
+    isAvailable: jest.Mock;
+    listModels: jest.Mock;
+    chat: jest.Mock;
+  };
+  let mockRegistry: { resolveActive: jest.Mock };
+  let mockLogService: { getUsageStats: jest.Mock };
+  let mockSettings: { get: jest.Mock };
+
+  beforeEach(async () => {
+    mockLlmService = {
+      isAvailable: jest.fn().mockResolvedValue(true),
+      listModels: jest.fn().mockResolvedValue([]),
+      chat: jest.fn().mockResolvedValue({
+        content: 'Hello!',
+        latencyMs: 150,
+      }),
+    };
+    mockRegistry = {
+      resolveActive: jest.fn().mockResolvedValue({
+        key: 'ollama',
+        displayName: 'Ollama (Local)',
+        requiresApiKey: false,
+        selfHosted: true,
+        isAvailable: jest.fn().mockResolvedValue(true),
+        listModels: jest.fn().mockResolvedValue([]),
+        chat: jest.fn(),
+        generate: jest.fn(),
+      }),
+    };
+    mockLogService = {
+      getUsageStats: jest.fn().mockResolvedValue({
+        totalRequests: 0,
+        requestsToday: 0,
+        avgLatencyMs: 0,
+        errorRate: 0,
+        byFeature: [],
+      }),
+    };
+    mockSettings = { get: jest.fn().mockResolvedValue('llama3.2:3b') };
+
+    const module = await Test.createTestingModule({
+      controllers: [AiAdminController],
+      providers: [
+        { provide: LlmService, useValue: mockLlmService },
+        { provide: LlmProviderRegistry, useValue: mockRegistry },
+        { provide: AiRequestLogService, useValue: mockLogService },
+        { provide: SettingsService, useValue: mockSettings },
+        { provide: PluginRegistryService, useValue: { isActive: jest.fn() } },
+        { provide: Reflector, useValue: new Reflector() },
+      ],
+    }).compile();
+    controller = module.get(AiAdminController);
+  });
+
+  // --- AC6: Test-chat uses 30s timeout ---
+
+  it('AC6: calls llmService.chat with 30_000ms timeout, not 120_000ms', async () => {
+    await controller.testChat();
+
+    expect(mockLlmService.chat).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ timeoutMs: 30_000 }),
+    );
+  });
+
+  it('AC6: timeout is exactly 30_000 (not AI_DEFAULTS.maxTimeoutMs)', async () => {
+    await controller.testChat();
+
+    const context = mockLlmService.chat.mock.calls[0][1];
+    expect(context.timeoutMs).toBe(30_000);
+    // Verify it's NOT 120_000 (the old value)
+    expect(context.timeoutMs).not.toBe(120_000);
+  });
+
+  // --- AC7: Timeout error includes provider, model, and elapsed time ---
+
+  it('AC7: timeout error response includes provider, model, and elapsed time', async () => {
+    mockLlmService.chat.mockRejectedValue(new Error('LLM request timed out'));
+
+    const result = await controller.testChat();
+
+    expect(result.success).toBe(false);
+    // The error message should mention provider and model for diagnostics
+    expect(result.response).toMatch(/provider/i);
+    expect(result.response).toMatch(/model/i);
+    expect(result.response).toMatch(/\d+/); // elapsed time in ms or seconds
+  });
+
+  it('AC7: includes provider name (e.g. "ollama") in timeout error', async () => {
+    mockLlmService.chat.mockRejectedValue(new Error('LLM request timed out'));
+
+    const result = await controller.testChat();
+
+    expect(result.success).toBe(false);
+    expect(result.response.toLowerCase()).toContain('ollama');
+  });
+
+  it('AC7: includes model name in timeout error', async () => {
+    mockLlmService.chat.mockRejectedValue(new Error('LLM request timed out'));
+
+    const result = await controller.testChat();
+
+    expect(result.success).toBe(false);
+    expect(result.response).toContain('llama3.2:3b');
+  });
+
+  // --- AC7: non-timeout errors still work ---
+
+  it('returns generic error message for non-timeout failures', async () => {
+    mockLlmService.chat.mockRejectedValue(new Error('Connection refused'));
+
+    const result = await controller.testChat();
+
+    expect(result.success).toBe(false);
+    expect(result.response).toBeTruthy();
+  });
+
+  it('returns not-available message when provider is down', async () => {
+    mockLlmService.isAvailable.mockResolvedValue(false);
+
+    const result = await controller.testChat();
+
+    expect(result.success).toBe(false);
+    expect(result.response).toContain('No AI provider');
+  });
+});

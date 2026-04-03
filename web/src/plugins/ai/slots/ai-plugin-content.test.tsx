@@ -145,3 +145,91 @@ describe('AiPluginContent (adversarial)', () => {
         expect(document.body).toBeTruthy();
     });
 });
+
+// --- ROK-1000: AC9 — TestChatSection surfaces actual error message ---
+
+describe('ROK-1000: TestChatSection error message', () => {
+    beforeEach(() => {
+        mockAiStatus(true);
+        mockAiProviders();
+        mockAiUsage();
+    });
+
+    it('AC9: surfaces actual error message from mutation, not hardcoded "Request failed"', async () => {
+        const { default: userEvent } = await import('@testing-library/user-event');
+
+        // Override the test-chat endpoint to return a network error
+        server.use(
+            http.post(`${API}/admin/ai/test-chat`, () =>
+                HttpResponse.json(
+                    { message: 'LLM timed out after 30s — provider: ollama, model: llama3.2:3b' },
+                    { status: 500 },
+                ),
+            ),
+        );
+
+        renderWithProviders(<AiPluginContent />);
+
+        // Wait for the Test LLM section to render (only shows when available=true)
+        const button = await screen.findByRole('button', { name: /send test message/i });
+        const user = userEvent.setup();
+        await user.click(button);
+
+        // The catch block should show the actual error, not "Request failed"
+        const errorEl = await screen.findByText(/LLM timed out/i, {}, { timeout: 5000 });
+        expect(errorEl).toBeInTheDocument();
+        // Verify the hardcoded "Request failed" is NOT shown
+        expect(screen.queryByText('Request failed')).not.toBeInTheDocument();
+    });
+
+    it('AC9: shows specific error text from a server error response', async () => {
+        const { default: userEvent } = await import('@testing-library/user-event');
+
+        server.use(
+            http.post(`${API}/admin/ai/test-chat`, () =>
+                HttpResponse.json(
+                    { message: 'Connection refused to Ollama on port 11434' },
+                    { status: 503 },
+                ),
+            ),
+        );
+
+        renderWithProviders(<AiPluginContent />);
+
+        const button = await screen.findByRole('button', { name: /send test message/i });
+        const user = userEvent.setup();
+        await user.click(button);
+
+        const errorEl = await screen.findByText(/Connection refused/i, {}, { timeout: 5000 });
+        expect(errorEl).toBeInTheDocument();
+    });
+
+    it('AC9: shows error from network failure (not server JSON)', async () => {
+        const { default: userEvent } = await import('@testing-library/user-event');
+
+        server.use(
+            http.post(`${API}/admin/ai/test-chat`, () =>
+                HttpResponse.error(),
+            ),
+        );
+
+        renderWithProviders(<AiPluginContent />);
+
+        const button = await screen.findByRole('button', { name: /send test message/i });
+        const user = userEvent.setup();
+        await user.click(button);
+
+        // Should show some error message, not the hardcoded "Request failed"
+        // The adminFetch wrapper throws with "Failed to test LLM" for non-ok responses,
+        // so it should surface that or the network error, not "Request failed"
+        const errorResult = await screen.findByText(
+            (content) => {
+                const text = content.toLowerCase();
+                return text.includes('fail') || text.includes('error') || text.includes('network');
+            },
+            {},
+            { timeout: 5000 },
+        );
+        expect(errorResult).toBeInTheDocument();
+    });
+});
