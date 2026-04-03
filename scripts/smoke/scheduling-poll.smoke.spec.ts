@@ -227,13 +227,14 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 async function goToPoll(page: import('@playwright/test').Page, lid: number, mid: number): Promise<void> {
     await page.goto(`/community-lineup/${lid}/schedule/${mid}`);
     const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-    // If the full poll is already visible (wizard auto-skipped to step 3), we're done.
-    if (await pollHeading.isVisible({ timeout: 5_000 }).catch(() => false)) return;
-    // Otherwise click through wizard steps. Each "Continue" advances one step.
-    for (let i = 0; i < 3; i++) {
-        const btn = page.locator('button', { hasText: /Continue|Save & Continue/ }).first();
-        if (await btn.isVisible({ timeout: 3_000 }).catch(() => false)) await btn.click();
+    // Click through up to 4 wizard steps until the full poll heading is visible.
+    for (let i = 0; i < 4; i++) {
         if (await pollHeading.isVisible({ timeout: 5_000 }).catch(() => false)) return;
+        // Try Skip first (faster — doesn't trigger save), then Continue/Save & Continue
+        const skip = page.locator('button', { hasText: /^Skip$/ }).first();
+        if (await skip.isVisible({ timeout: 1_000 }).catch(() => false)) { await skip.click(); continue; }
+        const btn = page.locator('button', { hasText: /Continue|Save & Continue/ }).first();
+        if (await btn.isVisible({ timeout: 2_000 }).catch(() => false)) await btn.click();
     }
     await expect(pollHeading).toBeVisible({ timeout: 15_000 });
 }
