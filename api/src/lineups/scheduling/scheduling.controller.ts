@@ -64,6 +64,7 @@ export class SchedulingController {
   async suggestSlot(
     @Param('matchId', ParseIntPipe) matchId: number,
     @Body() body: unknown,
+    @Req() req: AuthRequest,
   ): Promise<{ id: number }> {
     const parsed = SuggestSlotSchema.safeParse(body);
     if (!parsed.success) {
@@ -72,6 +73,7 @@ export class SchedulingController {
     return this.schedulingService.suggestSlot(
       matchId,
       parsed.data.proposedTime,
+      req.user?.id,
     );
   }
 

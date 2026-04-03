@@ -1,8 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameTimeTemplateInput } from '@raid-ledger/contract';
-import { getMyGameTime, saveMyGameTime, saveMyGameTimeOverrides, createGameTimeAbsence, deleteGameTimeAbsence } from '../lib/api-client';
+import { getMyGameTime, saveMyGameTime, saveMyGameTimeOverrides, createGameTimeAbsence, deleteGameTimeAbsence, getGameTimeAbsences } from '../lib/api-client';
 
 export const GAME_TIME_QUERY_KEY = ['me', 'game-time'];
+export const GAME_TIME_ABSENCES_KEY = ['me', 'game-time', 'absences-all'];
 
 /**
  * Fetch current user's game time (composite view: template + event commitments).
@@ -47,6 +48,19 @@ export function useSaveGameTimeOverrides() {
 }
 
 /**
+ * Fetch ALL absences regardless of week (ROK-998).
+ * Sorted by startDate ascending.
+ */
+export function useGameTimeAbsences(options?: { enabled?: boolean }) {
+    return useQuery({
+        queryKey: GAME_TIME_ABSENCES_KEY,
+        queryFn: getGameTimeAbsences,
+        enabled: options?.enabled ?? true,
+        staleTime: 30_000,
+    });
+}
+
+/**
  * Create an absence range.
  */
 export function useCreateAbsence() {
@@ -57,6 +71,7 @@ export function useCreateAbsence() {
             createGameTimeAbsence(input),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: GAME_TIME_ABSENCES_KEY });
         },
     });
 }
@@ -71,6 +86,7 @@ export function useDeleteAbsence() {
         mutationFn: (id: number) => deleteGameTimeAbsence(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: GAME_TIME_ABSENCES_KEY });
         },
     });
 }

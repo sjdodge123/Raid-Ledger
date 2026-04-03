@@ -9,6 +9,7 @@ import type {
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
 } from '@raid-ledger/contract';
+import { toast } from '../lib/toast';
 import {
   getSchedulePoll,
   suggestSlot,
@@ -59,6 +60,7 @@ export function useSuggestSlot() {
   return useMutation<{ id: number }, Error, { lineupId: number; matchId: number; proposedTime: string }>({
     mutationFn: ({ lineupId, matchId, proposedTime }) => suggestSlot(lineupId, matchId, proposedTime),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] }); },
+    onError: (err) => { toast.error(err.message || 'Failed to suggest time'); },
   });
 }
 

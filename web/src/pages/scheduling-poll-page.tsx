@@ -17,11 +17,14 @@ import {
   useCreateEventFromSlot,
   useOtherPolls,
 } from '../hooks/use-scheduling';
+import { useGameTime } from '../hooks/use-game-time';
 import { MatchContextCard } from './scheduling/MatchContextCard';
 import { SuggestedTimes } from './scheduling/SuggestedTimes';
 import { AvailabilityHeatmapSection } from './scheduling/AvailabilityHeatmapSection';
 import { CreateEventSection } from './scheduling/CreateEventSection';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
+import { SchedulingWizard } from './scheduling/SchedulingWizard';
+import { isWizardSkipped } from './scheduling/scheduling-wizard-utils';
 
 /** Loading skeleton for the scheduling poll page. */
 function SchedulePollSkeleton(): JSX.Element {
@@ -155,7 +158,7 @@ function PollSections({ lineupId, matchId, poll }: {
       <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
         readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
         isSuggesting={isSuggesting} prefillTime={prefillTime} />
-      <CreateEventSection slots={poll.slots} hasVoted={hasVoted} readOnly={readOnly}
+      <CreateEventSection slots={poll.slots} match={poll.match} hasVoted={hasVoted} readOnly={readOnly}
         createdEventId={createdEventId} matchStatus={poll.match.status}
         isCreating={createEvt.isPending} recurring={recurring}
         onRecurringChange={setRecurring} onCreateEvent={handleCreate} />
@@ -164,14 +167,22 @@ function PollSections({ lineupId, matchId, poll }: {
   );
 }
 
-/** Data-fetching wrapper with loading/error states. */
+/** Data-fetching wrapper with loading/error states + wizard gate (ROK-999). */
 function SchedulePollContent({ lineupId, matchId }: {
   lineupId: number; matchId: number;
 }): JSX.Element {
   const { data: poll, isLoading, error } = useSchedulePoll(lineupId, matchId);
-  if (isLoading) return <SchedulePollSkeleton />;
+  const { data: gameTime, isLoading: gtLoading } = useGameTime();
+
+  if (isLoading || gtLoading) return <SchedulePollSkeleton />;
   if (error || !poll) return <SchedulePollNotFound />;
-  return <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />;
+
+  const stale = !!gameTime?.gameTimeStale && !isWizardSkipped();
+  return (
+    <SchedulingWizard poll={poll} lineupId={lineupId} matchId={matchId} gameTimeStale={stale}>
+      <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />
+    </SchedulingWizard>
+  );
 }
 
 /** Top-level page component extracting route params. */

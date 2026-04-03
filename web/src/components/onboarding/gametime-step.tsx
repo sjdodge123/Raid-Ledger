@@ -1,8 +1,9 @@
+import { useEffect, useRef } from 'react';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
 import { GameTimeMobileEditor } from '../features/game-time/GameTimeMobileEditor';
+import { AbsenceSection } from '../features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
 import { useMediaQuery } from '../../hooks/use-media-query';
-import { useEffect, useRef } from 'react';
 
 /**
  * Step 4: When Do You Play? (ROK-219).
@@ -65,7 +66,12 @@ export function GameTimeStep() {
         <div>
             <GameTimeStepHeader isMobile={isMobile} />
             <div className="max-w-2xl mx-auto">
-                {isLoading ? <GameTimeStepLoading /> : <GameTimeStepGrid isMobile={isMobile} slots={slots} handleChange={handleChange} tzLabel={tzLabel} />}
+                {isLoading ? <GameTimeStepLoading /> : (
+                    <>
+                        <GameTimeStepGrid isMobile={isMobile} slots={slots} handleChange={handleChange} tzLabel={tzLabel} />
+                        <div className="mt-3"><AbsenceSection /></div>
+                    </>
+                )}
             </div>
         </div>
     );

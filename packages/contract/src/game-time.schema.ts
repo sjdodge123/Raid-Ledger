@@ -129,5 +129,7 @@ export const GameTimeResponseSchema = z.object({
     )
     .optional(),
   absences: z.array(GameTimeAbsenceSchema).optional(),
+  /** True if game_time_confirmed_at is null or > 7 days old (ROK-999). */
+  gameTimeStale: z.boolean().optional(),
 });
 export type GameTimeResponse = z.infer<typeof GameTimeResponseSchema>;

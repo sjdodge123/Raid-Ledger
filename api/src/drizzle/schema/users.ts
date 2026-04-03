@@ -22,6 +22,8 @@ export const users = pgTable(
       .default('member')
       .notNull(),
     onboardingCompletedAt: timestamp('onboarding_completed_at'),
+    /** Timestamp of last game time template confirmation (ROK-999). Null = never confirmed. */
+    gameTimeConfirmedAt: timestamp('game_time_confirmed_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

@@ -317,6 +317,15 @@ export class DemoTestService {
       .where(eq(schema.games.id, gameId));
   }
 
+  /** Clear game_time_confirmed_at for a user -- DEMO_MODE only (ROK-999). */
+  async clearGameTimeConfirmationForTest(userId: number): Promise<void> {
+    await this.assertDemoMode();
+    await this.db
+      .update(schema.users)
+      .set({ gameTimeConfirmedAt: null })
+      .where(eq(schema.users.id, userId));
+  }
+
   /** Build a ChannelPrefs object with all channels enabled for all types. */
   private buildAllChannelsEnabled(): ChannelPrefs {
     const prefs = {} as Record<string, Record<string, boolean>>;

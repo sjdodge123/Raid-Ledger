@@ -1,4 +1,5 @@
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
+import { AbsenceSection } from '../features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
 
 interface AvailabilityStepProps {
@@ -40,7 +41,10 @@ export function AvailabilityStep({ onNext, onBack, onSkip }: AvailabilityStepPro
                 {isLoading ? (
                     <div className="text-center py-8"><div className="w-8 h-8 mx-auto mb-2 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /><p className="text-dim text-sm">Loading...</p></div>
                 ) : (
-                    <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[6, 24]} fullDayNames />
+                    <>
+                        <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[6, 24]} fullDayNames />
+                        <div className="mt-3"><AbsenceSection /></div>
+                    </>
                 )}
             </div>
             <AvailabilityNavigation onBack={onBack} onSkip={onSkip} onNext={handleNext} isSaving={isSaving} />
