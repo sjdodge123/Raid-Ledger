@@ -223,14 +223,19 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 // Wizard bypass helper (ROK-999)
 // ---------------------------------------------------------------------------
 
-/** Navigate to the scheduling poll and skip past the wizard to the full poll view. */
+/** Navigate to the scheduling poll and advance past wizard steps to the full poll view. */
 async function goToPoll(page: import('@playwright/test').Page, lid: number, mid: number): Promise<void> {
     await page.goto(`/community-lineup/${lid}/schedule/${mid}`);
-    // The wizard may show Step 2 (Vote) since game time is seeded. Click "Suggest a Time" step to jump to Step 3 (full poll).
-    const step3 = page.locator('[data-testid="wizard-step-3"]');
-    const isWizard = await step3.isVisible({ timeout: 5_000 }).catch(() => false);
-    if (isWizard) await step3.click();
-    await expect(page.locator('h1', { hasText: 'Scheduling Poll' })).toBeVisible({ timeout: 15_000 });
+    const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
+    // If the full poll is already visible (wizard auto-skipped to step 3), we're done.
+    if (await pollHeading.isVisible({ timeout: 5_000 }).catch(() => false)) return;
+    // Otherwise click through wizard steps. Each "Continue" advances one step.
+    for (let i = 0; i < 3; i++) {
+        const btn = page.locator('button', { hasText: /Continue|Save & Continue/ }).first();
+        if (await btn.isVisible({ timeout: 3_000 }).catch(() => false)) await btn.click();
+        if (await pollHeading.isVisible({ timeout: 5_000 }).catch(() => false)) return;
+    }
+    await expect(pollHeading).toBeVisible({ timeout: 15_000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -344,8 +349,8 @@ test.describe('Scheduling poll suggest time slot', () => {
         );
         await expect(dateTimeInput).toBeVisible({ timeout: 15_000 });
 
-        // Suggest button is visible next to the picker
-        const suggestBtn = page.getByRole('button', { name: /Suggest/i });
+        // Suggest button is visible next to the picker (exact match to avoid wizard step button)
+        const suggestBtn = page.getByRole('button', { name: 'Suggest', exact: true });
         await expect(suggestBtn).toBeVisible({ timeout: 5_000 });
     });
 });
