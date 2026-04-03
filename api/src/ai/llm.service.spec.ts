@@ -367,3 +367,138 @@ describe('LlmService (adversarial)', () => {
     });
   });
 });
+
+// --- ROK-1000: Diagnostic logging in LlmService.chat() ---
+
+describe('ROK-1000: LlmService diagnostic logging', () => {
+  let service: LlmService;
+  let mockRegistry: { resolveActive: jest.Mock; list: jest.Mock };
+  let mockLogService: { log: jest.Mock };
+  let mockProvider: LlmProvider;
+
+  function createLoggingMockProvider(): LlmProvider {
+    return {
+      key: 'ollama',
+      displayName: 'Ollama',
+      requiresApiKey: false,
+      selfHosted: true,
+      isAvailable: jest.fn().mockResolvedValue(true),
+      listModels: jest.fn().mockResolvedValue([]),
+      chat: jest.fn().mockResolvedValue({
+        content: 'Hello!',
+        usage: { promptTokens: 10, completionTokens: 5 },
+        latencyMs: 100,
+      }),
+      generate: jest.fn().mockResolvedValue({
+        content: 'Generated',
+        latencyMs: 200,
+      }),
+    };
+  }
+
+  beforeEach(async () => {
+    mockProvider = createLoggingMockProvider();
+    mockRegistry = {
+      resolveActive: jest.fn().mockResolvedValue(mockProvider),
+      list: jest.fn().mockReturnValue([mockProvider]),
+    };
+    mockLogService = { log: jest.fn().mockResolvedValue(undefined) };
+
+    const module = await Test.createTestingModule({
+      providers: [
+        LlmService,
+        { provide: LlmProviderRegistry, useValue: mockRegistry },
+        { provide: AiRequestLogService, useValue: mockLogService },
+      ],
+    }).compile();
+    service = module.get(LlmService);
+  });
+
+  // --- AC8: LlmService.chat() logs on entry ---
+
+  it('AC8: logs on entry with provider, model, feature, and timeout', async () => {
+    const logSpy = jest.spyOn((service as any).logger, 'log');
+
+    await service.chat(
+      { messages: [{ role: 'user', content: 'Hi' }] },
+      { feature: 'admin-test', timeoutMs: 30_000 },
+    );
+
+    // At least one log call should mention the provider
+    const logMessages = logSpy.mock.calls.map((c) => String(c[0]));
+    const entryLog = logMessages.find(
+      (msg) => msg.includes('ollama') || msg.includes('chat'),
+    );
+    expect(entryLog).toBeDefined();
+    // Should include feature, model, and timeout
+    expect(entryLog).toMatch(/admin-test/);
+    expect(entryLog).toMatch(/llama3\.2/);
+    expect(entryLog).toMatch(/30000|30_000|30s/);
+  });
+
+  // --- AC8: LlmService.chat() warns on failure ---
+
+  it('AC8: warns on failure with provider, model, elapsed, and error', async () => {
+    const warnSpy = jest.spyOn((service as any).logger, 'warn');
+    (mockProvider.chat as jest.Mock).mockRejectedValue(
+      new Error('LLM request timed out'),
+    );
+
+    await expect(
+      service.chat(
+        { messages: [{ role: 'user', content: 'Hi' }] },
+        { feature: 'admin-test', timeoutMs: 30_000 },
+      ),
+    ).rejects.toThrow();
+
+    const warnMessages = warnSpy.mock.calls.map((c) => String(c[0]));
+    const failLog = warnMessages.find(
+      (msg) =>
+        msg.includes('ollama') ||
+        msg.toLowerCase().includes('fail') ||
+        msg.toLowerCase().includes('error') ||
+        msg.toLowerCase().includes('timed out'),
+    );
+    expect(failLog).toBeDefined();
+    // Should include provider and model
+    expect(failLog).toMatch(/ollama/);
+    expect(failLog).toMatch(/llama3\.2/);
+    // Should include elapsed time (a number)
+    expect(failLog).toMatch(/\d+/);
+  });
+
+  it('AC8: entry log includes the feature name', async () => {
+    const logSpy = jest.spyOn((service as any).logger, 'log');
+
+    await service.chat(
+      { messages: [{ role: 'user', content: 'Hi' }] },
+      { feature: 'dynamic-categories', timeoutMs: 60_000 },
+    );
+
+    const logMessages = logSpy.mock.calls.map((c) => String(c[0]));
+    const hasFeature = logMessages.some((msg) =>
+      msg.includes('dynamic-categories'),
+    );
+    expect(hasFeature).toBe(true);
+  });
+
+  it('AC8: failure warn includes error message text', async () => {
+    const warnSpy = jest.spyOn((service as any).logger, 'warn');
+    (mockProvider.chat as jest.Mock).mockRejectedValue(
+      new Error('Connection refused'),
+    );
+
+    await expect(
+      service.chat(
+        { messages: [{ role: 'user', content: 'Hi' }] },
+        { feature: 'test' },
+      ),
+    ).rejects.toThrow();
+
+    const warnMessages = warnSpy.mock.calls.map((c) => String(c[0]));
+    const hasError = warnMessages.some((msg) =>
+      msg.includes('Connection refused'),
+    );
+    expect(hasError).toBe(true);
+  });
+});

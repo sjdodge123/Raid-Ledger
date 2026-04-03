@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { SettingsService } from '../../settings/settings.service';
 import { OllamaDockerService } from './ollama-docker.service';
 import { OllamaModelService } from './ollama-model.service';
 import { OllamaNativeService } from './ollama-native.service';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from '../llm.constants';
+import { bestEffortInit } from '../../common/lifecycle.util';
 import type { SettingKey } from '../../drizzle/schema';
 import type { AiOllamaSetupDto } from '@raid-ledger/contract';
 import { fetchOllama } from './ollama.helpers';
@@ -29,7 +30,7 @@ export interface OllamaSetupState {
  * Persists setup progress to app_settings so state survives restarts.
  */
 @Injectable()
-export class OllamaSetupService {
+export class OllamaSetupService implements OnModuleInit {
   private readonly logger = new Logger(OllamaSetupService.name);
 
   constructor(
@@ -38,6 +39,45 @@ export class OllamaSetupService {
     private readonly ollamaModel: OllamaModelService,
     private readonly native: OllamaNativeService,
   ) {}
+
+  /** Auto-recover Ollama after container rebuild (non-blocking). */
+  async onModuleInit(): Promise<void> {
+    await bestEffortInit('OllamaAutoRecovery', this.logger, async () => {
+      if (!this.native.isAllinoneMode()) return;
+      const provider = await this.getSetting(AI_SETTING_KEYS.PROVIDER);
+      const step = await this.getSetting(AI_SETTING_KEYS.OLLAMA_SETUP_STEP);
+      if (provider !== 'ollama' || step !== 'ready') return;
+      await this.recoverIfNeeded();
+    });
+  }
+
+  /** Check binary/service state and dispatch the appropriate recovery. */
+  private async recoverIfNeeded(): Promise<void> {
+    if (!this.native.isBinaryInstalled()) {
+      this.logger.log(
+        'Ollama binary missing after container rebuild — auto-recovering',
+      );
+      this.fireAndForgetSetup();
+      return;
+    }
+    const status = await this.native.getServiceStatus();
+    if (status !== 'running') {
+      this.logger.log('Ollama service stopped — restarting');
+      void this.restartService();
+      return;
+    }
+  }
+
+  /** Restart the supervisor service without re-downloading. */
+  private async restartService(): Promise<void> {
+    try {
+      this.native.writeSupervisorConfig();
+      await this.native.startService();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Ollama restart failed: ${msg}`);
+    }
+  }
 
   /** Read persisted setup state from DB. */
   async getSetupState(): Promise<OllamaSetupState> {

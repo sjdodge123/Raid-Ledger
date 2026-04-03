@@ -19,10 +19,15 @@ export async function adminFetch<T>(
     options?: RequestInit,
     errorMessage = 'Request failed',
 ): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...options,
-        headers: getHeaders(),
-    });
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE_URL}${path}`, {
+            ...options,
+            headers: getHeaders(),
+        });
+    } catch {
+        throw new Error(errorMessage);
+    }
 
     if (!response.ok) {
         if (options?.method && options.method !== 'GET') {
