@@ -54,18 +54,22 @@ export class LlmService {
     this.applyPreChecks(context);
     const prepared = this.prepareChatOptions(options);
     const model = options.model ?? AI_DEFAULTS.model;
+    const timeoutMs = context.timeoutMs ?? AI_DEFAULTS.timeoutMs;
+    this.logChatEntry(provider.key, model, context.feature, timeoutMs);
+    const start = Date.now();
 
     return this.concurrencyLimiter.withLimit(async () => {
       try {
         const response = await executeWithTimeout(
           () => provider.chat(prepared),
-          context.timeoutMs ?? AI_DEFAULTS.timeoutMs,
+          timeoutMs,
         );
         this.circuitBreaker.recordSuccess();
         const sanitized = this.sanitizeChatResponse(response, context);
         await this.logSuccess(context, provider.key, sanitized, model);
         return sanitized;
       } catch (err) {
+        this.logChatFailure(provider.key, model, start, err);
         this.circuitBreaker.recordFailure();
         await this.logFailure(context, provider.key, err, model);
         throw err;
@@ -123,6 +127,32 @@ export class LlmService {
       throw new NotFoundException('No AI provider configured');
     }
     return provider;
+  }
+
+  /** Log diagnostic info on chat entry. */
+  private logChatEntry(
+    providerKey: string,
+    model: string,
+    feature: string,
+    timeoutMs: number,
+  ): void {
+    this.logger.log(
+      `LLM chat | provider=${providerKey} model=${model} feature=${feature} timeout=${timeoutMs}ms`,
+    );
+  }
+
+  /** Log diagnostic warning on chat failure. */
+  private logChatFailure(
+    providerKey: string,
+    model: string,
+    start: number,
+    err: unknown,
+  ): void {
+    const elapsed = Date.now() - start;
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    this.logger.warn(
+      `LLM chat failed | provider=${providerKey} model=${model} elapsed=${elapsed}ms error=${message}`,
+    );
   }
 
   private applyPreChecks(context: LlmRequestContext): void {

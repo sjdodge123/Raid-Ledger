@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Logger, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import {
@@ -9,7 +9,7 @@ import { LlmService } from './llm.service';
 import { LlmProviderRegistry } from './llm-provider-registry';
 import { AiRequestLogService } from './ai-request-log.service';
 import { SettingsService } from '../settings/settings.service';
-import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
+import { AI_SETTING_KEYS } from './llm.constants';
 import { buildStatusResponse, buildUsageResponse } from './ai-admin.helpers';
 import type {
   AiStatusDto,
@@ -26,6 +26,8 @@ import type { SettingKey } from '../drizzle/schema';
 @UseGuards(AuthGuard('jwt'), AdminGuard, PluginActiveGuard)
 @RequirePlugin('ai')
 export class AiAdminController {
+  private readonly logger = new Logger(AiAdminController.name);
+
   constructor(
     private readonly llmService: LlmService,
     private readonly registry: LlmProviderRegistry,
@@ -103,31 +105,49 @@ export class AiAdminController {
     latencyMs: number;
   }> {
     const isUp = await this.withTimeout(this.llmService.isAvailable(), false);
-    if (!isUp) {
-      return {
-        success: false,
-        response:
-          'No AI provider is currently available. Start or configure a provider first.',
-        latencyMs: 0,
-      };
-    }
+    if (!isUp) return this.notAvailableResult();
+    const provider = await this.registry.resolveActive();
+    const model = await this.settings.get(AI_SETTING_KEYS.MODEL as SettingKey);
+    const start = Date.now();
+    this.logger.log(
+      `test-chat start | provider=${provider?.key} model=${model}`,
+    );
     try {
       const result = await this.llmService.chat(
         { messages: [{ role: 'user', content: 'Say hello in one sentence.' }] },
-        {
-          feature: 'admin-test',
-          maxResponseLength: 200,
-          timeoutMs: AI_DEFAULTS.maxTimeoutMs,
-        },
+        { feature: 'admin-test', maxResponseLength: 200, timeoutMs: 30_000 },
       );
+      this.logger.log(`test-chat ok | latency=${result.latencyMs}ms`);
       return {
         success: true,
         response: result.content,
         latencyMs: result.latencyMs,
       };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      return { success: false, response: msg, latencyMs: 0 };
+      return this.buildTestChatError(e, start, provider?.key, model);
     }
+  }
+
+  private notAvailableResult() {
+    return {
+      success: false,
+      response:
+        'No AI provider is currently available. Start or configure a provider first.',
+      latencyMs: 0,
+    };
+  }
+
+  /** Build a diagnostic error response for test-chat failures. */
+  private buildTestChatError(
+    e: unknown,
+    start: number,
+    providerKey?: string,
+    model?: string | null,
+  ) {
+    const elapsed = Date.now() - start;
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    this.logger.warn(`test-chat failed | elapsed=${elapsed}ms error=${msg}`);
+    const detail = `${msg} — provider: ${providerKey ?? 'unknown'}, model: ${model ?? 'unknown'}, elapsed: ${elapsed}ms`;
+    return { success: false, response: detail, latencyMs: elapsed };
   }
 }
