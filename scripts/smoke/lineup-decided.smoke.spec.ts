@@ -288,7 +288,7 @@ test.describe('Decided view podium section', () => {
         await expect(shareBtn).toBeVisible({ timeout: 20_000 });
     });
 
-    test('"Share to Discord" button is visible but disabled', async ({
+    test('"Share" button is visible and enabled', async ({
         page,
     }) => {
         await page.goto(`/community-lineup/${decidedLineupId}`);
@@ -297,12 +297,10 @@ test.describe('Decided view podium section', () => {
             { timeout: 10_000 },
         );
 
-        // AC: "Share to Discord" button renders disabled with "Coming soon" tooltip
-        const shareBtn = page.getByRole('button', {
-            name: /Share to Discord/i,
-        });
+        // AC: "Share" button copies lineup URL to clipboard (ROK-932)
+        const shareBtn = page.getByRole('button', { name: /^Share$/i });
         await expect(shareBtn).toBeVisible({ timeout: 15_000 });
-        await expect(shareBtn).toBeDisabled();
+        await expect(shareBtn).toBeEnabled();
     });
 
     test('Also Ran section shows remaining games with vote bars', async ({

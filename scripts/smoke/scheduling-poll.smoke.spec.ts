@@ -348,20 +348,15 @@ test.describe('Scheduling poll suggest time slot', () => {
             { timeout: 10_000 },
         );
 
-        // AC3: A "Suggest Time" or equivalent button/UI is present
-        const suggestBtn = page.getByRole('button', {
-            name: /Suggest.*Time|Add.*Slot|Suggest.*Slot/i,
-        });
-        await expect(suggestBtn).toBeVisible({ timeout: 15_000 });
-
-        // Clicking should open a date/time picker or inline form
-        await suggestBtn.click();
-
-        // After clicking, a date/time input or picker should appear
+        // AC3: Date/time picker is always visible for suggesting slots
         const dateTimeInput = page.locator(
             'input[type="datetime-local"], [data-testid="slot-datetime-picker"]',
         );
-        await expect(dateTimeInput).toBeVisible({ timeout: 5_000 });
+        await expect(dateTimeInput).toBeVisible({ timeout: 15_000 });
+
+        // Suggest button is visible next to the picker
+        const suggestBtn = page.getByRole('button', { name: /Suggest/i });
+        await expect(suggestBtn).toBeVisible({ timeout: 5_000 });
     });
 });
 
