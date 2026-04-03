@@ -45,6 +45,8 @@ Evaluate the changed files and classify the changeset:
 | **Only** `packages/contract/` | Contract + both: build all, typecheck all, lint all, test all |
 | **Only** test files (`*.spec.ts`, `*.test.tsx`) | Tests only: run tests for affected workspace(s), skip build/lint |
 | **Only** config/tooling (`.eslintrc`, `tsconfig`, `package.json`, CI workflows) | Full CI — config changes can break anything |
+| `api/src/drizzle/migrations/**` | Full CI + migration validation (`validate-migrations.sh`) |
+| `Dockerfile*`, `docker-entrypoint*`, `nginx/` | Full CI + container startup validation |
 | **Mixed** (api + web, or contract + anything) | Full CI |
 
 **Present your assessment** before running checks:
@@ -93,72 +95,21 @@ git fetch origin main && git rebase origin/main
 
 ---
 
-## Steps 4–8: CI Checks (scoped by Step 1.5)
+## Steps 4–7: CI Checks (unified via validate-ci.sh)
 
-**Only run the checks identified in your scope assessment.** Skip steps that don't apply.
+If Step 1.5 determined "docs-only" → skip steps 4–8, jump to Step 9.
 
-If Step 1.5 determined "docs-only" → skip ALL of steps 4–8, jump to Step 9.
+### Steps 4–7: Build, Typecheck, Lint, Tests, Migration & Container Validation
 
-### Step 4: Build (affected workspaces)
-
-Build order matters — contract first, then downstream:
+Run the unified validation script. It handles build, typecheck, lint, unit tests with coverage, integration tests, and conditionally runs migration validation and container startup checks based on changed files.
 
 ```bash
-# Always build contract if ANY code changed (it's fast)
-npm run build -w packages/contract
-
-# Only if api files changed:
-npm run build -w api
-
-# Only if web files changed:
-npm run build -w web
+./scripts/validate-ci.sh --full
 ```
 
-**STOP** and fix any build errors before continuing.
+**STOP** and fix any failures before continuing. **NEVER dismiss failures as "pre-existing"** — investigate and fix them, or create a Linear story with root cause.
 
----
-
-### Step 5: TypeScript (affected workspaces)
-
-```bash
-# Only if api files changed:
-npx tsc --noEmit -p api/tsconfig.json
-
-# Only if web files changed:
-npx tsc --noEmit -p web/tsconfig.json
-```
-
-**STOP** and fix any type errors before continuing.
-
----
-
-### Step 6: Lint (affected workspaces)
-
-```bash
-# Only if api files changed:
-npm run lint -w api
-
-# Only if web files changed:
-npm run lint -w web
-```
-
-**STOP** if there are any **errors** (warnings are acceptable). Fix errors before continuing.
-
----
-
-### Step 7: Tests (affected workspaces)
-
-```bash
-# Only if api files changed:
-npm run test -w api
-
-# Only if web files changed:
-npm run test -w web
-```
-
-**STOP** and fix any test failures before continuing. **NEVER dismiss failures as "pre-existing"** — investigate and fix them, or create a Linear story with root cause.
-
-**If only test files changed** (e.g., fixing a flaky test), you can skip build/typecheck/lint and just run the tests.
+The script auto-detects scope (migration files, Dockerfile changes) and runs the appropriate conditional checks. You do NOT need to manually decide which checks to run — the script handles it.
 
 ---
 
@@ -231,10 +182,9 @@ gh pr create \
 ROK-<num>
 
 ## Test plan
-- [x] Build passes (contract + api + web)
-- [x] TypeScript clean
-- [x] Lint clean
-- [x] Unit tests pass (api + web)
+- [x] `validate-ci.sh --full` passes (build, typecheck, lint, tests+coverage, integration)
+- [x] Migration validation passes (if applicable)
+- [x] Container startup passes (if applicable)
 - [x] Playwright smoke tests pass (if applicable)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
@@ -277,6 +227,11 @@ Print a summary showing which checks ran and which were skipped (with reason):
 | Lint | ✓ / skipped | <reason if skipped> |
 | Tests (api) | ✓ <count> passed / skipped | <reason if skipped> |
 | Tests (web) | ✓ <count> passed / skipped | <reason if skipped> |
+| Integration tests (api) | ✓ <count> passed / skipped | <reason if skipped> |
+| Coverage (api) | ✓ N% / skipped | <reason if skipped> |
+| Coverage (web) | ✓ N% / skipped | <reason if skipped> |
+| Migration validation | ✓ / skipped | no migration files changed |
+| Container startup | ✓ / skipped | no Dockerfile changes |
 | Playwright | ✓ / skipped | <reason if skipped> |
 | Push | ✓ origin/<branch> | |
 | PR | #<number> / existing / skipped | |

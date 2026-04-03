@@ -73,6 +73,13 @@ Three custom MCP servers provide tools for environment management, story trackin
 - One fix per outage attempt. If a hotfix fails, REVERT to last known good state — do not stack more fixes
 - The allinone entrypoint runs as root (supervisor manages child process users) — do NOT add privilege dropping to `docker-entrypoint.sh`
 
+### Migration Generation Rules
+
+- **Always run `./scripts/fix-migration-order.sh --check`** after generating a migration to verify journal timestamps are monotonically increasing. Concurrent branches can produce out-of-order timestamps that Drizzle silently skips.
+- **Validate against a real Postgres instance** before pushing: `./scripts/validate-migrations.sh` spins up a temporary container, runs all migrations, and tears down. This is also run automatically by `validate-ci.sh` when migration files appear in the diff.
+- **Never hand-edit migration SQL** unless fixing a known Drizzle codegen bug. If you must, document the edit in the commit message.
+- **One migration per schema change.** Do not combine unrelated schema changes into a single migration file.
+
 ## Testing
 
 - **Backend:** `npm run test -w api` (Jest). Coverage: `npm run test:cov -w api`
@@ -80,6 +87,23 @@ Three custom MCP servers provide tools for environment management, story trackin
 - **Smoke tests:** `npx playwright test` (Playwright, requires DEMO_MODE=true for auth flows)
 - **Read `TESTING.md` before writing or modifying any test file.**
 - Shared test infra: `api/src/common/testing/` (drizzle-mock, factories), `web/src/test/` (MSW handlers, render helpers, factories)
+
+### Local CI
+
+Run `./scripts/validate-ci.sh --full` before pushing any branch. This replaces manual per-step checks.
+
+| GitHub CI Job | Local Equivalent | Script |
+|---------------|------------------|--------|
+| Build | `npm run build` (all workspaces) | `validate-ci.sh` |
+| TypeScript | `npx tsc --noEmit` (api + web) | `validate-ci.sh` |
+| Lint | `npm run lint` (api + web) | `validate-ci.sh` |
+| Unit tests | `npm run test:cov -w api`, `vitest run --coverage` (web) | `validate-ci.sh` |
+| Integration tests | `npm run test:integration -w api` | `validate-ci.sh` |
+| Migration validation | Postgres container + `drizzle-kit migrate` | `validate-migrations.sh` (conditional) |
+| Container startup | Build + start allinone image, health checks | `validate-ci.sh` (conditional) |
+| Playwright | `npx playwright test` (desktop + mobile) | Manual (after deploy) |
+
+Migration and container checks run conditionally based on `git diff` against `origin/main`. Playwright remains a separate step because it requires a running dev environment.
 
 ### Smoke Test Verification (STRICT — learned from ROK-935 incident)
 
