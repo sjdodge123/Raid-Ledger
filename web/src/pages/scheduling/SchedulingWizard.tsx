@@ -14,7 +14,7 @@ import { AbsenceForm, AbsenceList, ABSENCE_INITIAL } from '../../components/feat
 import type { AbsenceState } from '../../components/features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
 import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences, GAME_TIME_QUERY_KEY } from '../../hooks/use-game-time';
-import { useToggleScheduleVote, useSuggestSlot } from '../../hooks/use-scheduling';
+import { useToggleScheduleVote } from '../../hooks/use-scheduling';
 import { setWizardSkipped } from './scheduling-wizard-utils';
 import { toast } from '../../lib/toast';
 
@@ -197,38 +197,6 @@ function VoteStep({ poll, lineupId, matchId, onNext }: {
 }
 
 // ---------------------------------------------------------------------------
-// Step 3: Suggest a new time
-// ---------------------------------------------------------------------------
-
-function SuggestStep({ lineupId, matchId, onDone }: {
-  lineupId: number; matchId: number; onDone: () => void;
-}): JSX.Element {
-  const [value, setValue] = useState('');
-  const suggest = useSuggestSlot();
-  const handleSubmit = () => {
-    if (!value) return;
-    suggest.mutate({ lineupId, matchId, proposedTime: new Date(value).toISOString() }, { onSuccess: () => { setValue(''); toast.success('Time suggested'); onDone(); } });
-  };
-  return (
-    <div data-testid="scheduling-wizard-step-3" className="space-y-4">
-      <div className="text-center">
-        <h2 className="text-lg font-bold text-foreground">Suggest a New Time</h2>
-        <p className="text-muted text-sm mt-1">Have a better time in mind? Suggest it for the group.</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <input type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)}
-          className="flex-1 px-3 py-2 bg-panel border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-        <button type="button" onClick={handleSubmit} disabled={!value || suggest.isPending}
-          className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50">
-          {suggest.isPending ? 'Adding...' : 'Suggest'}
-        </button>
-      </div>
-      <WizardNav onContinue={onDone} continueLabel="Done" onSkip={onDone} skipLabel="Skip" />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Wizard Shell
 // ---------------------------------------------------------------------------
 
@@ -250,25 +218,22 @@ function computeInitialStep(gameTimeStale: boolean, hasSlots: boolean): number {
 export function SchedulingWizard({ children, poll, lineupId, matchId, gameTimeStale }: SchedulingWizardProps): JSX.Element {
   const hasSlots = poll.slots.length > 0;
   const [step, setStep] = useState(() => computeInitialStep(gameTimeStale, hasSlots));
-  const done = step >= STEPS.length;
 
   const advance = () => {
     const next = step + 1;
     if (next === 1 && !hasSlots) { setStep(2); return; }
-    setStep(next);
+    setStep(Math.min(next, STEPS.length - 1));
   };
 
-  const goTo = (target: number) => { if (target < step) setStep(target); };
+  const goTo = (target: number) => { if (target <= step) setStep(target); };
   const skipStep1 = () => { setWizardSkipped(); advance(); };
-
-  if (done) return <>{children}</>;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
       <WizardStepIndicator currentStep={step} onGoTo={goTo} />
       {step === 0 && <GameTimeWizardStep onNext={advance} onSkip={skipStep1} />}
       {step === 1 && <VoteStep poll={poll} lineupId={lineupId} matchId={matchId} onNext={advance} />}
-      {step === 2 && <SuggestStep lineupId={lineupId} matchId={matchId} onDone={advance} />}
+      {step === 2 && children}
     </div>
   );
 }
