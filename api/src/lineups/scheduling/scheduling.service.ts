@@ -107,7 +107,7 @@ export class SchedulingService {
   /** Auto-vote for a newly suggested slot. */
   private async autoVoteForSlot(slotId: number, userId: number): Promise<void> {
     try { await insertScheduleVote(this.db, slotId, userId); }
-    catch { /* non-critical — slot was created, vote is best-effort */ }
+    catch (err) { this.logger.warn('Auto-vote failed for slot %d user %d: %s', slotId, userId, err); }
   }
 
   /** Toggle a vote on a schedule slot. Returns voted state. */

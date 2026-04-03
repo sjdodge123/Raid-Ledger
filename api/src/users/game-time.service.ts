@@ -270,6 +270,7 @@ export class GameTimeService {
       fetchWeekSignedUpEvents(this.db, userId, weekStart, weekEnd),
       fetchOverrides(this.db, userId, startDate, endDate),
       fetchAbsences(this.db, userId, startDate, endDate),
+      this.fetchGameTimeConfirmedAt(userId),
     ]);
   }
 
@@ -281,9 +282,8 @@ export class GameTimeService {
   ): Promise<CompositeViewResult> {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
-    const [template, signedUpEvents, overrideRows, absenceRows] =
+    const [template, signedUpEvents, overrideRows, absenceRows, confirmedAt] =
       await this.fetchAllCompositeData(userId, weekStart, weekEnd);
-    const confirmedAt = await this.fetchGameTimeConfirmedAt(userId);
     const remapped = template.slots.map((s) => ({
       ...s,
       dayOfWeek: (s.dayOfWeek + 1) % 7,
@@ -313,7 +313,7 @@ export class GameTimeService {
   }
 
   /** Update game_time_confirmed_at to NOW for a user (ROK-999). */
-  async updateGameTimeConfirmedAt(userId: number): Promise<void> {
+  private async updateGameTimeConfirmedAt(userId: number): Promise<void> {
     await this.db
       .update(schema.users)
       .set({ gameTimeConfirmedAt: new Date() })
@@ -321,7 +321,7 @@ export class GameTimeService {
   }
 
   /** Fetch game_time_confirmed_at for a user (ROK-999). */
-  async fetchGameTimeConfirmedAt(userId: number): Promise<Date | null> {
+  private async fetchGameTimeConfirmedAt(userId: number): Promise<Date | null> {
     const [row] = await this.db
       .select({ gameTimeConfirmedAt: schema.users.gameTimeConfirmedAt })
       .from(schema.users)

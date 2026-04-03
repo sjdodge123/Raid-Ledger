@@ -10,13 +10,11 @@ import type { JSX, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import { GameTimeGrid } from '../../components/features/game-time/GameTimeGrid';
-import { AbsenceForm, AbsenceList, ABSENCE_INITIAL } from '../../components/features/game-time/game-time-absence';
-import type { AbsenceState } from '../../components/features/game-time/game-time-absence';
+import { AbsenceSection } from '../../components/features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
-import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences, GAME_TIME_QUERY_KEY } from '../../hooks/use-game-time';
+import { GAME_TIME_QUERY_KEY } from '../../hooks/use-game-time';
 import { useToggleScheduleVote } from '../../hooks/use-scheduling';
 import { setWizardSkipped } from './scheduling-wizard-utils';
-import { toast } from '../../lib/toast';
 
 const STEPS = [
   { key: 'gametime', label: 'Set Gametime', number: 1 },
@@ -100,37 +98,9 @@ function WizardNav({ onContinue, onSkip, continueLabel, skipLabel, disabled, isP
 // Step 1: Set Gametime
 // ---------------------------------------------------------------------------
 
-function useWizardAbsence() {
-  const [absence, setAbsence] = useState<AbsenceState>(ABSENCE_INITIAL);
-  const create = useCreateAbsence();
-  const del = useDeleteAbsence();
-  const { data: all } = useGameTimeAbsences();
-  const sorted = [...(all ?? [])].sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const handleCreate = async () => {
-    if (!absence.startDate || !absence.endDate) return;
-    try { await create.mutateAsync({ startDate: absence.startDate, endDate: absence.endDate, reason: absence.reason || undefined }); setAbsence(ABSENCE_INITIAL); toast.success('Absence created'); }
-    catch { toast.error('Failed to create absence'); }
-  };
-  return { absence, setAbsence, handleCreate, handleDelete: (id: number) => del.mutate(id), isPending: create.isPending, isDeleting: del.isPending, absences: sorted };
-}
-
-function WizardAbsenceSection({ abs }: { abs: ReturnType<typeof useWizardAbsence> }): JSX.Element {
-  return (
-    <div className="space-y-2">
-      <button type="button" onClick={() => abs.setAbsence((s) => ({ ...s, show: !s.show }))}
-        className="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-red-600 text-foreground hover:bg-red-500">
-        {abs.absence.show ? 'Cancel' : 'Add Absence'}
-      </button>
-      {abs.absence.show && <AbsenceForm state={abs.absence} onChange={(p) => abs.setAbsence((s) => ({ ...s, ...p }))} onSubmit={abs.handleCreate} isPending={abs.isPending} />}
-      {abs.absences.length > 0 && <AbsenceList absences={abs.absences} onDelete={abs.handleDelete} isDeleting={abs.isDeleting} />}
-    </div>
-  );
-}
-
 function GameTimeWizardStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }): JSX.Element {
   const editor = useGameTimeEditor();
   const qc = useQueryClient();
-  const abs = useWizardAbsence();
   const handleSave = async () => {
     await editor.save();
     qc.invalidateQueries({ queryKey: ['scheduling'] });
@@ -147,7 +117,7 @@ function GameTimeWizardStep({ onNext, onSkip }: { onNext: () => void; onSkip: ()
       <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
         <GameTimeGrid slots={editor.slots} onChange={editor.handleChange} tzLabel={editor.tzLabel} hourRange={[6, 24]} compact noStickyOffset fullDayNames />
       </div>
-      <WizardAbsenceSection abs={abs} />
+      <AbsenceSection />
       <WizardNav onContinue={handleSave} onSkip={onSkip} continueLabel="Save & Continue" skipLabel="Skip" isPending={editor.isSaving} disabled={editor.isSaving || (!editor.isDirty && editor.slots.length === 0)} />
     </div>
   );
@@ -165,10 +135,14 @@ function VoteStep({ poll, lineupId, matchId, onNext }: {
   poll: SchedulePollPageResponseDto; lineupId: number; matchId: number; onNext: () => void;
 }): JSX.Element {
   const toggle = useToggleScheduleVote();
-  const [voted, setVoted] = useState<number[]>(poll.myVotedSlotIds);
+  const [optimistic, setOptimistic] = useState<Set<number>>(new Set());
+  const voted = poll.myVotedSlotIds.includes.bind(poll.myVotedSlotIds);
+  const isVoted = (id: number) => optimistic.has(id) !== voted(id);
   const handleToggle = (slotId: number) => {
-    toggle.mutate({ lineupId, matchId, slotId });
-    setVoted((ids) => ids.includes(slotId) ? ids.filter((id) => id !== slotId) : [...ids, slotId]);
+    toggle.mutate({ lineupId, matchId, slotId }, {
+      onError: () => setOptimistic((s) => { const n = new Set(s); n.delete(slotId); return n; }),
+    });
+    setOptimistic((s) => { const n = new Set(s); if (n.has(slotId)) n.delete(slotId); else n.add(slotId); return n; });
   };
   return (
     <div data-testid="scheduling-wizard-step-2" className="space-y-4">
@@ -178,15 +152,15 @@ function VoteStep({ poll, lineupId, matchId, onNext }: {
       </div>
       <div className="space-y-2">
         {poll.slots.map((slot) => {
-          const isVoted = voted.includes(slot.id);
+          const slotVoted = isVoted(slot.id);
           return (
             <button key={slot.id} type="button" onClick={() => handleToggle(slot.id)}
-              className={`w-full text-left p-3 rounded-lg border transition-colors ${isVoted ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-panel border-edge text-foreground hover:border-dim'}`}>
+              className={`w-full text-left p-3 rounded-lg border transition-colors ${slotVoted ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-panel border-edge text-foreground hover:border-dim'}`}>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{formatSlotTime(slot.proposedTime)}</span>
                 <span className="text-xs text-muted">{slot.votes.length} {slot.votes.length === 1 ? 'vote' : 'votes'}</span>
               </div>
-              {isVoted && <p className="text-xs text-emerald-400 mt-1">You voted</p>}
+              {slotVoted && <p className="text-xs text-emerald-400 mt-1">You voted</p>}
             </button>
           );
         })}

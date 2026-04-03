@@ -1,8 +1,11 @@
 /**
- * Shared absence components for game time (ROK-999).
- * Used by GameTimePanel (profile settings) and SchedulingWizard.
+ * Shared absence components and hook for game time (ROK-999).
+ * Used by GameTimePanel (profile), SchedulingWizard, and FTE onboarding.
  */
+import { useState, useCallback } from 'react';
 import type { JSX } from 'react';
+import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences } from '../../../hooks/use-game-time';
+import { toast } from '../../../lib/toast';
 
 const DATE_INPUT_CLS = 'px-2 py-1.5 text-sm bg-surface border border-edge-strong rounded-lg text-foreground focus:border-emerald-500 focus:outline-none';
 
@@ -52,6 +55,44 @@ export function AbsenceList({ absences, onDelete, isDeleting }: {
       {absences.map((absence) => (
         <AbsencePill key={absence.id} absence={absence} onDelete={onDelete} isDeleting={isDeleting} />
       ))}
+    </div>
+  );
+}
+
+/** Shared hook for absence CRUD with all-absences query, sorted by startDate. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAbsenceSection() {
+  const [absence, setAbsence] = useState<AbsenceState>(ABSENCE_INITIAL);
+  const create = useCreateAbsence();
+  const del = useDeleteAbsence();
+  const { data: all } = useGameTimeAbsences();
+  const sorted = [...(all ?? [])].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const handleCreate = useCallback(async () => {
+    if (!absence.startDate || !absence.endDate) return;
+    try {
+      await create.mutateAsync({ startDate: absence.startDate, endDate: absence.endDate, reason: absence.reason || undefined });
+      setAbsence(ABSENCE_INITIAL);
+      toast.success('Absence created');
+    } catch { toast.error('Failed to create absence'); }
+  }, [absence, create]);
+
+  const handleDelete = useCallback((id: number) => del.mutate(id), [del]);
+
+  return { absence, setAbsence, handleCreate, handleDelete, isPending: create.isPending, isDeleting: del.isPending, absences: sorted };
+}
+
+/** Drop-in absence section: toggle button + form + chip list. */
+export function AbsenceSection(): JSX.Element {
+  const abs = useAbsenceSection();
+  return (
+    <div className="space-y-2">
+      <button type="button" onClick={() => abs.setAbsence((s) => ({ ...s, show: !s.show }))}
+        className="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-red-600 text-foreground hover:bg-red-500">
+        {abs.absence.show ? 'Cancel' : 'Add Absence'}
+      </button>
+      {abs.absence.show && <AbsenceForm state={abs.absence} onChange={(p) => abs.setAbsence((s) => ({ ...s, ...p }))} onSubmit={abs.handleCreate} isPending={abs.isPending} />}
+      {abs.absences.length > 0 && <AbsenceList absences={abs.absences} onDelete={abs.handleDelete} isDeleting={abs.isDeleting} />}
     </div>
   );
 }

@@ -1,11 +1,6 @@
-import { useState } from 'react';
-import type { JSX } from 'react';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
-import { AbsenceForm, AbsenceList, ABSENCE_INITIAL } from '../features/game-time/game-time-absence';
-import type { AbsenceState } from '../features/game-time/game-time-absence';
+import { AbsenceSection } from '../features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
-import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences } from '../../hooks/use-game-time';
-import { toast } from '../../lib/toast';
 
 interface AvailabilityStepProps {
     onNext: () => void;
@@ -31,34 +26,6 @@ function AvailabilityNavigation({ onBack, onSkip, onNext, isSaving }: { onBack: 
     );
 }
 
-function AvailabilityAbsence(): JSX.Element {
-    const [absence, setAbsence] = useState<AbsenceState>(ABSENCE_INITIAL);
-    const createAbsence = useCreateAbsence();
-    const deleteAbsence = useDeleteAbsence();
-    const { data: allAbsences } = useGameTimeAbsences();
-    const sorted = [...(allAbsences ?? [])].sort((a, b) => a.startDate.localeCompare(b.startDate));
-
-    const handleCreate = async () => {
-        if (!absence.startDate || !absence.endDate) return;
-        try {
-            await createAbsence.mutateAsync({ startDate: absence.startDate, endDate: absence.endDate, reason: absence.reason || undefined });
-            setAbsence(ABSENCE_INITIAL);
-            toast.success('Absence created');
-        } catch { toast.error('Failed to create absence'); }
-    };
-
-    return (
-        <div className="space-y-2 mt-3">
-            <button type="button" onClick={() => setAbsence((s) => ({ ...s, show: !s.show }))}
-                className="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-red-600 text-foreground hover:bg-red-500">
-                {absence.show ? 'Cancel' : 'Add Absence'}
-            </button>
-            {absence.show && <AbsenceForm state={absence} onChange={(p) => setAbsence((s) => ({ ...s, ...p }))} onSubmit={handleCreate} isPending={createAbsence.isPending} />}
-            {sorted.length > 0 && <AbsenceList absences={sorted} onDelete={(id) => deleteAbsence.mutate(id)} isDeleting={deleteAbsence.isPending} />}
-        </div>
-    );
-}
-
 export function AvailabilityStep({ onNext, onBack, onSkip }: AvailabilityStepProps) {
     const { slots, isLoading, isDirty, handleChange, save, isSaving, tzLabel } = useGameTimeEditor({ enabled: true, rolling: false });
 
@@ -76,7 +43,7 @@ export function AvailabilityStep({ onNext, onBack, onSkip }: AvailabilityStepPro
                 ) : (
                     <>
                         <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[6, 24]} fullDayNames />
-                        <AvailabilityAbsence />
+                        <div className="mt-3"><AbsenceSection /></div>
                     </>
                 )}
             </div>
