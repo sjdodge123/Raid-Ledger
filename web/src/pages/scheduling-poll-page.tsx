@@ -172,22 +172,17 @@ function SchedulePollContent({ lineupId, matchId }: {
   lineupId: number; matchId: number;
 }): JSX.Element {
   const { data: poll, isLoading, error } = useSchedulePoll(lineupId, matchId);
-  const { data: gameTime } = useGameTime();
-  const [wizardDone, setWizardDone] = useState(false);
+  const { data: gameTime, isLoading: gtLoading } = useGameTime();
 
-  if (isLoading) return <SchedulePollSkeleton />;
+  if (isLoading || gtLoading) return <SchedulePollSkeleton />;
   if (error || !poll) return <SchedulePollNotFound />;
 
-  const showWizard = gameTime?.gameTimeStale && !wizardDone && !isWizardSkipped();
-  if (showWizard) {
-    return (
-      <SchedulingWizard onSkip={() => setWizardDone(true)}>
-        <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />
-      </SchedulingWizard>
-    );
-  }
-
-  return <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />;
+  const stale = !!gameTime?.gameTimeStale && !isWizardSkipped();
+  return (
+    <SchedulingWizard poll={poll} lineupId={lineupId} matchId={matchId} gameTimeStale={stale}>
+      <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />
+    </SchedulingWizard>
+  );
 }
 
 /** Top-level page component extracting route params. */
