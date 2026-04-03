@@ -545,53 +545,42 @@ test.describe('Scheduling poll recurring checkbox', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC8: One-click event creation and success state
+// AC8 + AC9: Event creation → success state → scheduled badge + event link
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll event creation', () => {
-    test('one-click event creation creates event and shows success state', async ({
+test.describe('Scheduling poll event creation and post-creation status', () => {
+    test('creates event, shows success state, scheduled badge, and event link', async ({
         page,
     }) => {
         await goToPoll(page, lineupId, matchId);
 
-        // Vote was pre-registered via API in beforeAll — button should be enabled
-        const createEventBtn = page.getByRole('button', {
-            name: /Create Event/i,
-        });
-        await expect(createEventBtn).toBeVisible({ timeout: 20_000 });
-        await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
-        await createEventBtn.click();
+        // If event was already created (by another viewport), check post-creation state directly
+        const scheduledBadge = page.locator('[data-testid="match-status-badge"]');
+        const alreadyCreated = await scheduledBadge.isVisible({ timeout: 3_000 }).catch(() => false);
 
-        // AC8: Success state should appear after event creation
-        const successIndicator = page.getByText('Event created successfully!');
-        await expect(successIndicator).toBeVisible({ timeout: 15_000 });
-    });
-});
+        if (!alreadyCreated) {
+            // AC8: Vote was pre-registered via API in beforeAll — button should be enabled
+            const createEventBtn = page.getByRole('button', { name: /Create Event/i });
+            await expect(createEventBtn).toBeVisible({ timeout: 20_000 });
+            await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
 
-// ---------------------------------------------------------------------------
-// AC9: Post-creation — match status shows scheduled with event link
-// ---------------------------------------------------------------------------
+            // Soft gate may show confirmation — handle it
+            await createEventBtn.click();
+            const confirmBtn = page.getByRole('button', { name: /Yes, Create/i });
+            if (await confirmBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+                await confirmBtn.click();
+            }
 
-test.describe('Scheduling poll post-creation status', () => {
-    test('after event creation, match status shows scheduled with link to event', async ({
-        page,
-    }) => {
-        await goToPoll(page, lineupId, matchId);
+            // Success state should appear
+            await expect(page.getByText('Event created successfully!')).toBeVisible({ timeout: 15_000 });
+        }
 
-        // AC9: After event creation, the match should show "Scheduled" status
-        const scheduledBadge = page.locator(
-            '[data-testid="match-status-badge"]',
-        );
+        // AC9: Scheduled badge and event link visible
         await expect(scheduledBadge).toBeVisible({ timeout: 15_000 });
         await expect(scheduledBadge).toHaveText(/Scheduled/i);
 
-        // A link to the created event should be present
-        const eventLink = page.getByRole('link', {
-            name: /View Event|Go to Event/i,
-        });
+        const eventLink = page.getByRole('link', { name: /View Event|Go to Event/i });
         await expect(eventLink).toBeVisible({ timeout: 5_000 });
-
-        // The link should point to an event detail page
         const href = await eventLink.getAttribute('href');
         expect(href).toMatch(/\/events\/\d+/);
     });
