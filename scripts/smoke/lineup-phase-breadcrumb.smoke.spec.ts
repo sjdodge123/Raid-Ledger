@@ -164,8 +164,8 @@ test.describe('Phase breadcrumb — operator controls', () => {
             // "Scheduling" is 2 phases ahead — should NOT be a button
             await expect(page.getByRole('button', { name: 'Scheduling' })).toHaveCount(0);
 
-            // "Decided" is 3 phases ahead — should NOT be a button
-            await expect(page.getByRole('button', { name: 'Decided' })).toHaveCount(0);
+            // "Scheduling" (decided) is 3 phases ahead — should NOT be a button
+            await expect(page.getByRole('button', { name: 'Scheduling' })).toHaveCount(0);
 
             // "Archived" is 4 phases ahead — should NOT be a button
             await expect(page.getByRole('button', { name: 'Archived' })).toHaveCount(0);

@@ -281,9 +281,9 @@ test.describe('Decided view podium section', () => {
         );
 
         // Create Event was removed — events are created via scheduling poll (ROK-965).
-        // Verify the "Share to Discord" button exists as the sole action button.
+        // Verify the "Share" button exists as the sole action button.
         const shareBtn = page.getByRole('button', {
-            name: /Share to Discord/i,
+            name: /^Share$/i,
         });
         await expect(shareBtn).toBeVisible({ timeout: 20_000 });
     });

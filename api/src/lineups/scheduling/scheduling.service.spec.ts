@@ -28,7 +28,7 @@ const SCHEDULING_MATCH = {
   status: 'scheduling',
   linkedEventId: null,
 };
-const SLOT_TIME = '2026-04-01T19:00:00.000Z';
+const SLOT_TIME = '2026-12-01T19:00:00.000Z';
 const GAME_ROW = { name: 'Test Game', coverUrl: null };
 
 describe('SchedulingService', () => {
