@@ -47,7 +47,7 @@ function StepCircle({ step, status, onClick }: {
     ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/50'
     : status === 'completed' ? 'bg-emerald-600/30 text-emerald-400'
       : 'bg-surface/50 text-muted border border-edge/50';
-  const clickable = status === 'completed' && onClick;
+  const clickable = status !== 'active' && onClick;
   return (
     <button type="button" onClick={clickable ? onClick : undefined} disabled={!clickable}
       className={`flex items-center gap-2 ${clickable ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}>
@@ -225,7 +225,7 @@ export function SchedulingWizard({ children, poll, lineupId, matchId, gameTimeSt
     setStep(Math.min(next, STEPS.length - 1));
   };
 
-  const goTo = (target: number) => { if (target <= step) setStep(target); };
+  const goTo = (target: number) => { if (target !== step) setStep(target); };
   const skipStep1 = () => { setWizardSkipped(); advance(); };
 
   return (
