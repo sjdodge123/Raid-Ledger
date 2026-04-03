@@ -282,7 +282,7 @@ test.describe('Community Lineup detail page', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // Status badge shows one of the valid statuses
-        const badge = page.locator('span').filter({ hasText: /Building|Voting|Decided|Archived/ });
+        const badge = page.locator('span').filter({ hasText: /Building|Nominating|Voting|Scheduling|Archived/ });
         await expect(badge.first()).toBeVisible({ timeout: 5_000 });
     });
 

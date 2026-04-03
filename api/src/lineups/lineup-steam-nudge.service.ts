@@ -36,9 +36,7 @@ export class LineupSteamNudgeService {
 
     for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
       const batch = recipients.slice(i, i + BATCH_SIZE);
-      await Promise.allSettled(
-        batch.map((r) => this.sendNudge(r, lineupId)),
-      );
+      await Promise.allSettled(batch.map((r) => this.sendNudge(r, lineupId)));
     }
   }
 

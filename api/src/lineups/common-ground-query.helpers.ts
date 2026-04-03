@@ -4,13 +4,21 @@
  */
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { CommonGroundGameDto } from '@raid-ledger/contract';
+import type {
+  CommonGroundGameDto,
+  CommonGroundQueryDto,
+  CommonGroundResponseDto,
+} from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import {
   OWNER_WEIGHT,
   SALE_BONUS,
   FULL_PRICE_PENALTY,
+  SCORING_WEIGHTS,
+  nominationCap,
 } from './common-ground-scoring.constants';
+
+type Db = PostgresJsDatabase<typeof schema>;
 
 /** Filters applied to the common ground query. */
 export interface CommonGroundFilters {
@@ -141,5 +149,28 @@ export function mapCommonGroundRow(row: CommonGroundRow): CommonGroundGameDto {
     itadTags: Array.isArray(row.itadTags) ? row.itadTags : [],
     playerCount: row.playerCount as { min: number; max: number } | null,
     score: computeScore(row.ownerCount, row.itadCurrentCut),
+  };
+}
+
+/** Build the full Common Ground response from DB. */
+export async function buildCommonGroundResponse(
+  db: Db,
+  lineupId: number,
+  nominatedIds: number[],
+  nominatorCount: number,
+  filters: CommonGroundQueryDto,
+): Promise<CommonGroundResponseDto> {
+  const rows = await queryCommonGround(db, filters, nominatedIds);
+  const scored = rows.map(mapCommonGroundRow);
+  scored.sort((a, b) => b.score - a.score);
+  return {
+    data: scored,
+    meta: {
+      total: scored.length,
+      appliedWeights: { ...SCORING_WEIGHTS },
+      activeLineupId: lineupId,
+      nominatedCount: nominatedIds.length,
+      maxNominations: nominationCap(nominatorCount),
+    },
   };
 }

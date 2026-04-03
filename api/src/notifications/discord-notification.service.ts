@@ -122,7 +122,10 @@ export class DiscordNotificationService {
     type: NotificationType;
     payload?: Record<string, unknown>;
   }): Promise<boolean> {
-    const subType = (input.payload?.reminderWindow as string | undefined) ?? '';
+    const subType =
+      (input.payload?.reminderWindow as string | undefined) ??
+      (input.payload?.subtype as string | undefined) ??
+      '';
     const rateLimitKey = `discord-notif:rate:${input.userId}:${input.type}${subType ? `:${subType}` : ''}`;
     const recentCount = await this.redis.get(rateLimitKey);
     if (recentCount && parseInt(recentCount, 10) > 0) {

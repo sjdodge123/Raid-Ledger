@@ -17,7 +17,7 @@ interface Props {
 const STATUS_LABELS: Record<string, string> = {
   building: 'Building',
   voting: 'Voting',
-  decided: 'Decided',
+  decided: 'Scheduling',
 };
 
 function computeRemaining(deadline: string): number {

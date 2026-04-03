@@ -79,6 +79,21 @@ export async function setDefaultTimezone(
   await svc.set(SETTING_KEYS.DEFAULT_TIMEZONE, timezone);
 }
 
+/** Get the lineup channel ID for the Discord bot (ROK-932). */
+export async function getDiscordBotLineupChannel(
+  svc: SettingsCore,
+): Promise<string | null> {
+  return svc.get(SETTING_KEYS.DISCORD_BOT_LINEUP_CHANNEL);
+}
+
+/** Set the lineup channel ID for the Discord bot (ROK-932). */
+export async function setDiscordBotLineupChannel(
+  svc: SettingsCore,
+  channelId: string,
+): Promise<void> {
+  await svc.set(SETTING_KEYS.DISCORD_BOT_LINEUP_CHANNEL, channelId);
+}
+
 /** Get the default voice channel ID for the Discord bot. */
 export async function getDiscordBotDefaultVoiceChannel(
   svc: SettingsCore,

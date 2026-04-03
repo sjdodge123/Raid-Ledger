@@ -17,9 +17,9 @@ describe('LineupStatusBadge', () => {
         expect(screen.getByText('Voting')).toBeInTheDocument();
     });
 
-    it('renders "Decided" text for decided status', () => {
+    it('renders "Scheduling" text for decided status', () => {
         render(<LineupStatusBadge status="decided" />);
-        expect(screen.getByText('Decided')).toBeInTheDocument();
+        expect(screen.getByText('Scheduling')).toBeInTheDocument();
     });
 
     it('renders "Archived" text for archived status', () => {

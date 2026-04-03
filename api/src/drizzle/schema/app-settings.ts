@@ -102,6 +102,8 @@ export const SETTING_KEYS = {
   AI_OLLAMA_SETUP_STEP: 'ai_ollama_setup_step',
   /** ROK-840: Ollama Docker setup error message */
   AI_OLLAMA_SETUP_ERROR: 'ai_ollama_setup_error',
+  /** ROK-932: Dedicated Discord channel for Community Lineup embeds */
+  DISCORD_BOT_LINEUP_CHANNEL: 'discord_bot_lineup_channel',
   /** ROK-946: Default hours for lineup building phase */
   LINEUP_DEFAULT_BUILDING_HOURS: 'lineup_default_building_hours',
   /** ROK-946: Default hours for lineup voting phase */

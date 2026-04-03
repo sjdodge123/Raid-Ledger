@@ -29,6 +29,7 @@ export function getColorForType(type: NotificationType): number {
     role_gap_alert: EMBED_COLORS.REMINDER,
     recruitment_reminder: EMBED_COLORS.ANNOUNCEMENT,
     lineup_steam_nudge: EMBED_COLORS.ANNOUNCEMENT,
+    community_lineup: EMBED_COLORS.ANNOUNCEMENT,
     slot_vacated: EMBED_COLORS.ROSTER_UPDATE,
     member_returned: EMBED_COLORS.ROSTER_UPDATE,
     bench_promoted: EMBED_COLORS.ROSTER_UPDATE,
@@ -56,6 +57,7 @@ export function getEmojiForType(type: NotificationType): string {
     missed_event_nudge: '👋',
     recruitment_reminder: '📢',
     lineup_steam_nudge: '🔗',
+    community_lineup: '🎯',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -79,6 +81,7 @@ export function getTypeLabel(type: NotificationType): string {
     missed_event_nudge: 'Missed Event',
     recruitment_reminder: 'Recruitment Reminder',
     lineup_steam_nudge: 'Steam Link Nudge',
+    community_lineup: 'Community Lineup',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';

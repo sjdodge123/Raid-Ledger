@@ -179,6 +179,21 @@ export async function findNominatedGameIds(
   return rows.map((r) => r.gameId);
 }
 
+/** Get game id + name for all entries in a lineup. */
+export async function findNominatedGames(
+  db: PostgresJsDatabase<typeof schema>,
+  lineupId: number,
+): Promise<{ id: number; name: string }[]> {
+  return db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.communityLineupEntries)
+    .innerJoin(
+      schema.games,
+      eq(schema.communityLineupEntries.gameId, schema.games.id),
+    )
+    .where(eq(schema.communityLineupEntries.lineupId, lineupId));
+}
+
 /** Validate the decided game exists in the lineup entries. */
 export async function validateDecidedGame(
   db: PostgresJsDatabase<typeof schema>,

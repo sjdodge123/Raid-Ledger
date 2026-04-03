@@ -7,6 +7,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { eq, and, gte, lte } from 'drizzle-orm';
@@ -39,6 +40,8 @@ import {
 } from '../lineups-match-query.helpers';
 import { buildPollResponse } from './scheduling-response.helpers';
 import { buildBannerForUser } from './scheduling-banner.helpers';
+import { fireEventCreated } from '../lineups-notify-hooks.helpers';
+import { LineupNotificationService } from '../lineup-notification.service';
 
 const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const EVENT_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -46,10 +49,13 @@ const FOUR_WEEKS_MS = 4 * 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class SchedulingService {
+  private readonly logger = new Logger(SchedulingService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly eventsService: EventsService,
+    private readonly lineupNotifications: LineupNotificationService,
   ) {}
 
   /** Get the full scheduling poll page data for a match. */
@@ -142,6 +148,14 @@ export class SchedulingService {
     );
     const event = await this.eventsService.create(userId, dto);
     await updateMatchLinkedEvent(this.db, matchId, event.id);
+    fireEventCreated(
+      this.lineupNotifications,
+      this.logger,
+      this.db,
+      matchId,
+      slot.proposedTime,
+      event.id,
+    );
     return { eventId: event.id };
   }
 

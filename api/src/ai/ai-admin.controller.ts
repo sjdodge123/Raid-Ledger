@@ -114,7 +114,11 @@ export class AiAdminController {
     try {
       const result = await this.llmService.chat(
         { messages: [{ role: 'user', content: 'Say hello in one sentence.' }] },
-        { feature: 'admin-test', maxResponseLength: 200, timeoutMs: AI_DEFAULTS.maxTimeoutMs },
+        {
+          feature: 'admin-test',
+          maxResponseLength: 200,
+          timeoutMs: AI_DEFAULTS.maxTimeoutMs,
+        },
       );
       return {
         success: true,

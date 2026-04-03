@@ -15,6 +15,7 @@ import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
 import { GamePricingSummary } from './game-detail/GamePricingSummary';
 import { PriceBadge } from '../components/games/PriceBadge';
+import { LineupVoteBanner } from '../components/lineups/LineupVoteBanner';
 import { useGamePricing } from '../hooks/use-games-discover';
 import type { EventResponseDto, ItadGamePricingDto } from '@raid-ledger/contract';
 
@@ -82,6 +83,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
     return (
         <div className="max-w-5xl mx-auto px-4 py-8">
             <BackButton navigate={navigate} />
+            {gameId && <LineupVoteBanner gameId={gameId} />}
             <GameBanner game={game} rating={rating} genres={genres} platforms={platforms} modes={modes} pricing={pricing} />
             {isAuthenticated && (
                 <div className="flex flex-wrap items-center gap-6 mb-8" data-testid="player-stats-row">

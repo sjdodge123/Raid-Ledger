@@ -80,7 +80,8 @@ function describeCommonGround() {
       .values({
         name: 'Some Game',
         slug,
-        steamAppId: overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
+        steamAppId:
+          overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
         ...overrides,
       })
       .returning();

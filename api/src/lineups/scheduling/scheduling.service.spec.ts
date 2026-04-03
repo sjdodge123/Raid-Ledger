@@ -15,6 +15,11 @@ import {
   type MockDb,
 } from '../../common/testing/drizzle-mock';
 import { EventsService } from '../../events/events.service';
+import { LineupNotificationService } from '../lineup-notification.service';
+
+jest.mock('../lineups-notify-hooks.helpers', () => ({
+  fireEventCreated: jest.fn(),
+}));
 
 const SCHEDULING_MATCH = {
   id: 10,
@@ -23,7 +28,7 @@ const SCHEDULING_MATCH = {
   status: 'scheduling',
   linkedEventId: null,
 };
-const SLOT_TIME = '2026-04-01T19:00:00.000Z';
+const SLOT_TIME = '2026-12-01T19:00:00.000Z';
 const GAME_ROW = { name: 'Test Game', coverUrl: null };
 
 describe('SchedulingService', () => {
@@ -40,6 +45,10 @@ describe('SchedulingService', () => {
         SchedulingService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: EventsService, useValue: mockEventsService },
+        {
+          provide: LineupNotificationService,
+          useValue: { notifyEventCreated: jest.fn() },
+        },
       ],
     }).compile();
 

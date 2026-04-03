@@ -39,6 +39,7 @@ export const notifications = pgTable(
         'recruitment_reminder',
         'role_gap_alert',
         'lineup_steam_nudge',
+        'community_lineup',
         'system',
       ],
     }).notNull(),

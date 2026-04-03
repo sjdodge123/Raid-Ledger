@@ -1,11 +1,10 @@
 import {
   BadRequestException,
-  ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   BandwagonJoinResponseDto,
@@ -25,6 +24,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { LineupNotificationService } from './lineup-notification.service';
 import {
   findActiveLineup,
   findLineupById,
@@ -32,18 +32,15 @@ import {
   findNominatedGameIds,
   countDistinctNominators,
   validateDecidedGame,
-  VALID_TRANSITIONS,
-  VALID_REVERSIONS,
 } from './lineups-query.helpers';
+import {
+  insertLineup,
+  applyStatusUpdate,
+  runMatchingAlgorithm,
+  validateTransition,
+} from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
-import {
-  queryCommonGround,
-  mapCommonGroundRow,
-} from './common-ground-query.helpers';
-import {
-  SCORING_WEIGHTS,
-  nominationCap,
-} from './common-ground-scoring.constants';
+import { buildCommonGroundResponse } from './common-ground-query.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
 import {
   findEntry,
@@ -59,19 +56,23 @@ import {
   hasDurationParams,
   buildOverrides,
   computeInitialDeadline,
-  computeTransitionDeadline,
-  getNextPhase,
-  buildTransitionValues,
 } from './lineups-phase.helpers';
 import { logTransition, logNomination } from './lineups-activity.helpers';
 import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
-import { buildMatchesForLineup } from './lineups-matching.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
 import {
   executeBandwagonJoin,
   advanceMatch as advanceMatchHelper,
 } from './lineups-bandwagon.helpers';
 import { carryOverFromLastDecided } from './lineups-carryover.helpers';
+import {
+  fireLineupCreated,
+  fireNominationMilestone,
+  fireVotingOpen,
+  fireDecidedNotifications,
+  fireNominationRemoved,
+  fireSchedulingOpen,
+} from './lineups-notify-hooks.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -81,6 +82,8 @@ export interface CallerIdentity {
 
 @Injectable()
 export class LineupsService {
+  private readonly logger = new Logger(LineupsService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
@@ -88,6 +91,7 @@ export class LineupsService {
     private readonly settings: SettingsService,
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly steamNudge: LineupSteamNudgeService,
+    private readonly lineupNotifications: LineupNotificationService,
   ) {}
 
   /** Create a new lineup. Throws 409 if an active lineup already exists. */
@@ -98,7 +102,8 @@ export class LineupsService {
     const overrides = hasDurationParams(dto) ? buildOverrides(dto) : null;
     const phaseDeadline = await computeInitialDeadline(dto, this.settings);
 
-    const [row] = await this.insertLineup(
+    const [row] = await insertLineup(
+      this.db,
       dto,
       userId,
       phaseDeadline,
@@ -110,6 +115,11 @@ export class LineupsService {
 
     const delayMs = phaseDeadline.getTime() - Date.now();
     await this.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
+
+    fireLineupCreated(this.lineupNotifications, this.logger, {
+      id: row.id,
+      targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
+    });
 
     return buildDetailResponse(this.db, row.id);
   }
@@ -162,16 +172,41 @@ export class LineupsService {
     const [lineup] = await findLineupById(this.db, id);
     if (!lineup) throw new NotFoundException('Lineup not found');
 
-    this.validateTransition(lineup.status as LineupStatus, dto);
+    validateTransition(lineup.status as LineupStatus, dto);
     if (dto.status === 'decided' && dto.decidedGameId) {
       await validateDecidedGame(this.db, id, dto.decidedGameId);
     }
 
-    await this.applyStatusUpdate(id, dto, lineup);
+    await applyStatusUpdate(
+      this.db,
+      this.settings,
+      this.phaseQueue,
+      id,
+      dto,
+      lineup,
+    );
     if (dto.status === 'decided') {
-      await this.runMatchingAlgorithm(id);
+      await runMatchingAlgorithm(this.db, id, this.logger);
     }
     await logTransition(this.db, this.activityLog, id, dto);
+
+    if (dto.status === 'voting') {
+      fireVotingOpen(
+        this.lineupNotifications,
+        this.logger,
+        this.db,
+        id,
+        lineup.phaseDeadline,
+      );
+    }
+    if (dto.status === 'decided') {
+      fireDecidedNotifications(
+        this.lineupNotifications,
+        this.logger,
+        this.db,
+        id,
+      );
+    }
     return buildDetailResponse(this.db, id);
   }
 
@@ -182,23 +217,15 @@ export class LineupsService {
     const [lineup] = await findBuildingLineup(this.db);
     if (!lineup)
       throw new NotFoundException('No active lineup in building status');
-
     const nominated = await findNominatedGameIds(this.db, lineup.id);
     const [nominators] = await countDistinctNominators(this.db, lineup.id);
-    const rows = await queryCommonGround(this.db, filters, nominated);
-    const scored = rows.map(mapCommonGroundRow);
-    scored.sort((a, b) => b.score - a.score);
-
-    return {
-      data: scored,
-      meta: {
-        total: scored.length,
-        appliedWeights: { ...SCORING_WEIGHTS },
-        activeLineupId: lineup.id,
-        nominatedCount: nominated.length,
-        maxNominations: nominationCap(nominators?.count ?? 0),
-      },
-    };
+    return buildCommonGroundResponse(
+      this.db,
+      lineup.id,
+      nominated,
+      nominators?.count ?? 0,
+      filters,
+    );
   }
 
   /** Nominate a game into a lineup. */
@@ -212,6 +239,14 @@ export class LineupsService {
     await validateGameExists(this.db, dto.gameId);
     await insertNomination(this.db, lineupId, dto, userId);
     await logNomination(this.db, this.activityLog, lineupId, dto, userId);
+
+    fireNominationMilestone(
+      this.lineupNotifications,
+      this.logger,
+      this.db,
+      lineupId,
+    );
+
     return buildDetailResponse(this.db, lineupId);
   }
 
@@ -236,6 +271,16 @@ export class LineupsService {
       caller.id,
       { gameId },
     );
+
+    fireNominationRemoved(
+      this.lineupNotifications,
+      this.logger,
+      this.db,
+      lineupId,
+      gameId,
+      entry,
+      caller,
+    );
   }
 
   /** Get banner data for the Games page. Returns null if no eligible lineup. */
@@ -256,7 +301,21 @@ export class LineupsService {
     matchId: number,
     userId: number,
   ): Promise<BandwagonJoinResponseDto> {
-    return executeBandwagonJoin(this.db, lineupId, matchId, userId);
+    const result = await executeBandwagonJoin(
+      this.db,
+      lineupId,
+      matchId,
+      userId,
+    );
+    if (result.promoted) {
+      fireSchedulingOpen(
+        this.lineupNotifications,
+        this.logger,
+        this.db,
+        matchId,
+      );
+    }
+    return result;
   }
 
   /** Advance a suggested match to scheduling (ROK-937). */
@@ -264,83 +323,15 @@ export class LineupsService {
     lineupId: number,
     matchId: number,
   ): Promise<{ promoted: boolean }> {
-    return advanceMatchHelper(this.db, lineupId, matchId);
-  }
-
-  /** Insert a new lineup row with phase scheduling fields. */
-  private insertLineup(
-    dto: CreateLineupDto,
-    userId: number,
-    phaseDeadline: Date | null,
-    overrides: Record<string, number | undefined> | null,
-  ) {
-    return this.db.transaction(async (tx) => {
-      const [existing] = await findActiveLineup(tx);
-      if (existing) throw new ConflictException('A lineup is already active');
-      return tx
-        .insert(schema.communityLineups)
-        .values({
-          createdBy: userId,
-          targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
-          phaseDeadline,
-          phaseDurationOverride: overrides,
-          matchThreshold: dto.matchThreshold ?? undefined,
-          maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
-        })
-        .returning();
-    });
-  }
-
-  /** Apply the status update with phase scheduling. */
-  private async applyStatusUpdate(
-    id: number,
-    dto: UpdateLineupStatusDto,
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ) {
-    const phaseDeadline = await computeTransitionDeadline(
-      dto.status,
-      lineup,
-      this.settings,
-    );
-    const values = buildTransitionValues(dto, phaseDeadline);
-    await this.db
-      .update(schema.communityLineups)
-      .set(values)
-      .where(eq(schema.communityLineups.id, id));
-
-    const nextPhase = getNextPhase(dto.status);
-    if (nextPhase && phaseDeadline) {
-      await this.phaseQueue.scheduleTransition(
-        id,
-        nextPhase,
-        phaseDeadline.getTime() - Date.now(),
+    const result = await advanceMatchHelper(this.db, lineupId, matchId);
+    if (result.promoted) {
+      fireSchedulingOpen(
+        this.lineupNotifications,
+        this.logger,
+        this.db,
+        matchId,
       );
     }
-  }
-
-  /** Run the matching algorithm (wrapped in try/catch so it never blocks). */
-  private async runMatchingAlgorithm(lineupId: number): Promise<void> {
-    try {
-      await buildMatchesForLineup(this.db, lineupId);
-    } catch (err: unknown) {
-      // Log error but don't block the phase transition
-      const msg = err instanceof Error ? err.message : String(err);
-
-      console.error(`Matching failed for lineup ${lineupId}: ${msg}`);
-    }
-  }
-
-  /** Validate a status transition is legal. */
-  private validateTransition(
-    current: LineupStatus,
-    dto: UpdateLineupStatusDto,
-  ) {
-    const isForward = VALID_TRANSITIONS[current] === dto.status;
-    const isReverse = VALID_REVERSIONS[current] === dto.status;
-    if (!isForward && !isReverse) {
-      throw new BadRequestException(
-        `Cannot transition from '${current}' to '${dto.status}'`,
-      );
-    }
+    return result;
   }
 }

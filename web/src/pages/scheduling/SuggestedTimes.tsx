@@ -61,13 +61,13 @@ function SlotCard({ slot, isVoted, readOnly, onToggle }: {
   );
 }
 
-/** Inline datetime picker for suggesting a new slot. */
+/** Date picker for suggesting a new slot. */
 function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
   onSubmit: (time: string) => void; isSuggesting: boolean; prefillTime?: string;
 }): JSX.Element {
-  const [value, setValue] = useState(prefillTime ?? '');
-  // Sync prefillTime from parent (heatmap click) without useEffect
-  if (prefillTime && prefillTime !== value) setValue(prefillTime);
+  const [localValue, setLocalValue] = useState('');
+  const value = prefillTime || localValue;
+  const setValue = (v: string) => setLocalValue(v);
   const handleSubmit = (): void => {
     if (!value) return;
     onSubmit(new Date(value).toISOString());
@@ -82,28 +82,17 @@ function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
       />
       <button type="button" onClick={handleSubmit} disabled={!value || isSuggesting}
         className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50">
-        Suggest Time
+        Suggest
       </button>
     </div>
   );
 }
 
-/** "Suggest Another Time" trigger button. */
-function SuggestTrigger({ onClick }: { onClick: () => void }): JSX.Element {
-  return (
-    <button type="button" onClick={onClick}
-      className="w-full p-3 rounded-lg border border-dashed border-edge text-sm text-muted hover:text-foreground hover:border-dim transition-colors">
-      Suggest Another Time
-    </button>
-  );
-}
-
 /** Section listing all suggested time slots with voting. */
 export function SuggestedTimes({
-  slots, myVotedSlotIds, readOnly, onToggleVote, onSuggestSlot, isSuggesting, prefillTime,
+  slots, myVotedSlotIds, readOnly, onToggleVote, onSuggestSlot,
+  isSuggesting, prefillTime,
 }: SuggestedTimesProps): JSX.Element {
-  const [showPicker, setShowPicker] = useState(false);
-  const pickerVisible = showPicker || !!prefillTime;
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
@@ -113,8 +102,7 @@ export function SuggestedTimes({
         <SlotCard key={slot.id} slot={slot} isVoted={myVotedSlotIds.includes(slot.id)}
           readOnly={readOnly} onToggle={() => onToggleVote(slot.id)} />
       ))}
-      {!readOnly && !pickerVisible && <SuggestTrigger onClick={() => setShowPicker(true)} />}
-      {!readOnly && pickerVisible && (
+      {!readOnly && (
         <SuggestSlotForm onSubmit={onSuggestSlot} isSuggesting={isSuggesting} prefillTime={prefillTime} />
       )}
     </div>

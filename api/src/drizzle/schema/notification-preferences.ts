@@ -21,6 +21,7 @@ export const NOTIFICATION_TYPES = [
   'recruitment_reminder',
   'role_gap_alert',
   'lineup_steam_nudge',
+  'community_lineup',
   'system',
 ] as const;
 
@@ -56,6 +57,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   recruitment_reminder: { inApp: true, push: true, discord: true },
   role_gap_alert: { inApp: true, push: true, discord: true },
   lineup_steam_nudge: { inApp: true, push: false, discord: true },
+  community_lineup: { inApp: true, push: true, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 
