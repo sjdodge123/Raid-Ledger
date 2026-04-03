@@ -182,10 +182,9 @@ gh pr create \
 ROK-<num>
 
 ## Test plan
-- [x] Build passes (contract + api + web)
-- [x] TypeScript clean
-- [x] Lint clean
-- [x] Unit tests pass (api + web)
+- [x] `validate-ci.sh --full` passes (build, typecheck, lint, tests+coverage, integration)
+- [x] Migration validation passes (if applicable)
+- [x] Container startup passes (if applicable)
 - [x] Playwright smoke tests pass (if applicable)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

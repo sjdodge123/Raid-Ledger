@@ -48,12 +48,20 @@ run_step() {
   shift
   echo ""
   echo -e "${YELLOW}========== $name ==========${NC}"
-  if "$@"; then
+  local rc=0
+  "$@" || rc=$?
+  if [ "$rc" -eq 0 ]; then
     echo -e "${GREEN}$name: PASS${NC}"
     record_result "$name" "PASS"
+  elif [ "$rc" -eq 2 ]; then
+    echo -e "${YELLOW}$name: SKIPPED${NC}"
+    record_result "$name" "SKIPPED"
   else
     echo -e "${RED}$name: FAIL${NC}"
     record_result "$name" "FAIL"
+    print_summary
+    echo -e "${RED}Stopping on first failure.${NC}"
+    exit 1
   fi
 }
 
@@ -113,23 +121,22 @@ run_integration_tests() {
 }
 
 run_migration_validation() {
-  if $migrations_changed; then
-    "$REPO_ROOT/scripts/validate-migrations.sh"
-  else
+  if ! $migrations_changed; then
     echo -e "No migration files changed — skipping"
-    record_result "Migration validation" "SKIPPED"
-    return 0
+    return 2  # SKIPPED
   fi
+  "$REPO_ROOT/scripts/validate-migrations.sh"
 }
 
 run_container_validation() {
   if ! $container_changed; then
     echo -e "No container files changed — skipping"
-    record_result "Container startup" "SKIPPED"
-    return 0
+    return 2  # SKIPPED
   fi
 
   local cname="rl-ci-test-$$"
+  # Ensure cleanup on any exit path
+  trap "docker stop '$cname' >/dev/null 2>&1 || true" RETURN
 
   docker build -f Dockerfile.allinone -t rl:ci-test .
   docker run --rm -d \
@@ -138,43 +145,41 @@ run_container_validation() {
     -e ADMIN_PASSWORD=ci-test \
     rl:ci-test
 
-  _container_cleanup() {
-    docker stop "$cname" >/dev/null 2>&1 || true
-  }
-
-  if ! _wait_for_container_health "$cname"; then
-    _container_cleanup
-    return 1
-  fi
-
-  _container_cleanup
+  _wait_for_container_health "$cname"
 }
 
 _wait_for_container_health() {
   local cname="$1"
   local elapsed=0
 
-  # Wait for API health
-  while ! docker exec "$cname" wget -qO- http://127.0.0.1:80/api/health 2>/dev/null | grep -q '"ok"'; do
+  # Wait for API health (port 3000 direct — matches GitHub CI)
+  while ! docker exec "$cname" \
+    wget -qO- http://127.0.0.1:3000/health 2>/dev/null \
+    | grep -q '"status":"ok"'; do
     sleep 2
     elapsed=$((elapsed + 2))
     if [ "$elapsed" -ge 120 ]; then
       echo -e "${RED}API health check failed after 120s${NC}"
+      docker logs "$cname" --tail 30
       return 1
     fi
   done
   echo -e "${GREEN}API healthy after ${elapsed}s${NC}"
 
-  # Verify Redis
-  if ! docker exec "$cname" redis-cli -s /tmp/redis.sock ping | grep -q PONG; then
+  # Verify Redis via Unix socket
+  if ! docker exec "$cname" redis-cli -s /tmp/redis.sock ping \
+    | grep -q PONG; then
     echo -e "${RED}Redis ping failed${NC}"
     return 1
   fi
   echo -e "${GREEN}Redis: PONG${NC}"
 
-  # Verify nginx
-  if ! curl -sf http://127.0.0.1:8080/api/health | grep -q '"ok"'; then
-    echo -e "${RED}Nginx health check failed${NC}"
+  # Verify nginx proxy (from host, matches GitHub CI)
+  local http_code
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+    http://127.0.0.1:8080/api/health)
+  if [ "$http_code" != "200" ]; then
+    echo -e "${RED}Nginx proxy returned $http_code${NC}"
     return 1
   fi
   echo -e "${GREEN}Nginx proxy: healthy${NC}"
@@ -223,45 +228,12 @@ main() {
   run_step "Unit tests + coverage" run_unit_tests
   run_step "Integration tests (api)" run_integration_tests
 
-  # Migration validation (conditional — records its own SKIPPED result)
-  echo ""
-  echo -e "${YELLOW}========== Migration validation ==========${NC}"
-  if $migrations_changed; then
-    if run_migration_validation; then
-      echo -e "${GREEN}Migration validation: PASS${NC}"
-      record_result "Migration validation" "PASS"
-    else
-      echo -e "${RED}Migration validation: FAIL${NC}"
-      record_result "Migration validation" "FAIL"
-    fi
-  else
-    run_migration_validation
-  fi
-
-  # Container validation (conditional — records its own SKIPPED result)
-  echo ""
-  echo -e "${YELLOW}========== Container startup ==========${NC}"
-  if $container_changed; then
-    if run_container_validation; then
-      echo -e "${GREEN}Container startup: PASS${NC}"
-      record_result "Container startup" "PASS"
-    else
-      echo -e "${RED}Container startup: FAIL${NC}"
-      record_result "Container startup" "FAIL"
-    fi
-  else
-    run_container_validation
-  fi
+  # Migration and container checks handle their own SKIPPED/PASS/FAIL recording
+  run_step "Migration validation" run_migration_validation
+  run_step "Container startup" run_container_validation
 
   print_summary
-
-  if [ "$FAILURES" -gt 0 ]; then
-    echo -e "${RED}$FAILURES check(s) FAILED${NC}"
-    exit 1
-  fi
-
   echo -e "${GREEN}All checks passed!${NC}"
-  exit 0
 }
 
 main "$@"
