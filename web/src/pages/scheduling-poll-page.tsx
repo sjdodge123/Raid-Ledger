@@ -17,11 +17,14 @@ import {
   useCreateEventFromSlot,
   useOtherPolls,
 } from '../hooks/use-scheduling';
+import { useGameTime } from '../hooks/use-game-time';
 import { MatchContextCard } from './scheduling/MatchContextCard';
 import { SuggestedTimes } from './scheduling/SuggestedTimes';
 import { AvailabilityHeatmapSection } from './scheduling/AvailabilityHeatmapSection';
 import { CreateEventSection } from './scheduling/CreateEventSection';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
+import { SchedulingWizard } from './scheduling/SchedulingWizard';
+import { isWizardSkipped } from './scheduling/scheduling-wizard-utils';
 
 /** Loading skeleton for the scheduling poll page. */
 function SchedulePollSkeleton(): JSX.Element {
@@ -164,13 +167,26 @@ function PollSections({ lineupId, matchId, poll }: {
   );
 }
 
-/** Data-fetching wrapper with loading/error states. */
+/** Data-fetching wrapper with loading/error states + wizard gate (ROK-999). */
 function SchedulePollContent({ lineupId, matchId }: {
   lineupId: number; matchId: number;
 }): JSX.Element {
   const { data: poll, isLoading, error } = useSchedulePoll(lineupId, matchId);
+  const { data: gameTime } = useGameTime();
+  const [wizardDone, setWizardDone] = useState(false);
+
   if (isLoading) return <SchedulePollSkeleton />;
   if (error || !poll) return <SchedulePollNotFound />;
+
+  const showWizard = gameTime?.gameTimeStale && !wizardDone && !isWizardSkipped();
+  if (showWizard) {
+    return (
+      <SchedulingWizard onSkip={() => setWizardDone(true)}>
+        <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />
+      </SchedulingWizard>
+    );
+  }
+
   return <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />;
 }
 

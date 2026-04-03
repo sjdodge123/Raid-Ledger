@@ -73,4 +73,6 @@ export interface CompositeViewResult {
   weekStart: string;
   overrides: OverrideRecord[];
   absences: AbsenceRecord[];
+  /** True if game_time_confirmed_at is null or > 7 days old (ROK-999). */
+  gameTimeStale?: boolean;
 }

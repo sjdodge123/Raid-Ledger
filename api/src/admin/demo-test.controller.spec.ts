@@ -28,6 +28,7 @@ function createMockService() {
       .mockResolvedValue({ success: true }),
     pauseReconciliationForTest: jest.fn().mockResolvedValue({ success: true }),
     setEventTimesForTest: jest.fn().mockResolvedValue({ success: true }),
+    clearGameTimeConfirmationForTest: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -139,5 +140,22 @@ describe('DemoTestController — new test utility endpoints', () => {
         endTime: '2026-04-01T02:00:00Z',
       }),
     ).rejects.toThrow(/Validation failed/);
+  });
+
+  it('clearGameTimeConfirmation delegates to service (ROK-999)', async () => {
+    const req = {
+      user: {
+        id: 1,
+        username: 'test',
+        role: 'admin' as const,
+        discordId: null,
+        impersonatedBy: null,
+      },
+    };
+    const result = await controller.clearGameTimeConfirmationForTest(req);
+    expect(result).toEqual({ success: true });
+    expect(mockService.clearGameTimeConfirmationForTest).toHaveBeenCalledWith(
+      1,
+    );
   });
 });

@@ -4,6 +4,7 @@ import {
   Get,
   Body,
   Query,
+  Request,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -15,6 +16,7 @@ import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
 import { LineupSteamNudgeService } from '../lineups/lineup-steam-nudge.service';
+import type { AuthenticatedRequest } from '../auth/types';
 import {
   LinkDiscordSchema,
   EnableNotificationsSchema,
@@ -288,6 +290,16 @@ export class DemoTestController {
     @Body() body: { lineupId: number },
   ): Promise<{ success: boolean }> {
     await this.steamNudge.nudgeUnlinkedMembers(body.lineupId);
+    return { success: true };
+  }
+
+  /** Clear game_time_confirmed_at for the authenticated user -- DEMO_MODE only (ROK-999). */
+  @Post('clear-game-time-confirmation')
+  @HttpCode(HttpStatus.OK)
+  async clearGameTimeConfirmationForTest(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    await this.demoTestService.clearGameTimeConfirmationForTest(req.user.id);
     return { success: true };
   }
 

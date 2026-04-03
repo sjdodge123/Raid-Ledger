@@ -107,6 +107,7 @@ export class GameTimeService {
       .map((k) => ({ dayOfWeek: k.dayOfWeek, hour: k.hour }));
     const mergedDbSlots = [...dbSlots, ...preservedSlots];
     await this.performTemplateSave(userId, mergedDbSlots);
+    await this.updateGameTimeConfirmedAt(userId);
     this.invalidateUserCache(userId);
     const preservedDisplay = preservedSlots.map((s) => ({
       dayOfWeek: (s.dayOfWeek + 1) % 7,
@@ -282,6 +283,7 @@ export class GameTimeService {
     weekEnd.setDate(weekEnd.getDate() + 7);
     const [template, signedUpEvents, overrideRows, absenceRows] =
       await this.fetchAllCompositeData(userId, weekStart, weekEnd);
+    const confirmedAt = await this.fetchGameTimeConfirmedAt(userId);
     const remapped = template.slots.map((s) => ({
       ...s,
       dayOfWeek: (s.dayOfWeek + 1) % 7,
@@ -289,7 +291,7 @@ export class GameTimeService {
     const signupsMap = await fetchSignupsPreview(this.db, [
       ...new Set(signedUpEvents.map((e) => e.eventId)),
     ]);
-    return assembleCompositeView(
+    const view = assembleCompositeView(
       remapped,
       signedUpEvents,
       overrideRows,
@@ -299,6 +301,7 @@ export class GameTimeService {
       weekEnd,
       tzOffset,
     );
+    return { ...view, gameTimeStale: this.isGameTimeStale(confirmedAt) };
   }
 
   /** Compute week date range strings for override/absence queries. */
@@ -307,5 +310,31 @@ export class GameTimeService {
       weekStart.toISOString().split('T')[0],
       new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
     ];
+  }
+
+  /** Update game_time_confirmed_at to NOW for a user (ROK-999). */
+  async updateGameTimeConfirmedAt(userId: number): Promise<void> {
+    await this.db
+      .update(schema.users)
+      .set({ gameTimeConfirmedAt: new Date() })
+      .where(eq(schema.users.id, userId));
+  }
+
+  /** Fetch game_time_confirmed_at for a user (ROK-999). */
+  async fetchGameTimeConfirmedAt(userId: number): Promise<Date | null> {
+    const [row] = await this.db
+      .select({ gameTimeConfirmedAt: schema.users.gameTimeConfirmedAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return row?.gameTimeConfirmedAt ?? null;
+  }
+
+  /** Determine if game time is stale (null or > 7 days old) (ROK-999). */
+  private isGameTimeStale(confirmedAt: Date | null): boolean {
+    if (!confirmedAt) return true;
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    return confirmedAt < sevenDaysAgo;
   }
 }

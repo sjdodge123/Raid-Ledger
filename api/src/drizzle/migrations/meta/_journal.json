@@ -785,6 +785,13 @@
       "when": 1774800100000,
       "tag": "0111_backfill_signup_discord_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1775225497716,
+      "tag": "0112_lovely_miracleman",
+      "breakpoints": true
     }
   ]
 }
