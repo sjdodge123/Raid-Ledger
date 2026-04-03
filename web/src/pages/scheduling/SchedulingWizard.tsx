@@ -7,12 +7,15 @@ import { useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { GameTimeGrid } from '../../components/features/game-time/GameTimeGrid';
+import { AbsenceForm, AbsenceList, ABSENCE_INITIAL } from '../../components/features/game-time/game-time-absence';
+import type { AbsenceState } from '../../components/features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
-import { GAME_TIME_QUERY_KEY } from '../../hooks/use-game-time';
+import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences, GAME_TIME_QUERY_KEY } from '../../hooks/use-game-time';
 import { setWizardSkipped } from './scheduling-wizard-utils';
+import { toast } from '../../lib/toast';
 
 const STEPS = [
-  { key: 'availability', label: 'Set Availability', number: 1 },
+  { key: 'gametime', label: 'Set Gametime', number: 1 },
   { key: 'vote', label: 'Vote on Times', number: 2 },
 ] as const;
 
@@ -101,20 +104,60 @@ function WizardActions({ onSave, onSkip, isSaving, disabled }: {
   );
 }
 
+function useWizardAbsence() {
+  const [absence, setAbsence] = useState<AbsenceState>(ABSENCE_INITIAL);
+  const createAbsence = useCreateAbsence();
+  const deleteAbsence = useDeleteAbsence();
+  const { data: allAbsences } = useGameTimeAbsences();
+  const sorted = [...(allAbsences ?? [])].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const handleCreate = async () => {
+    if (!absence.startDate || !absence.endDate) return;
+    try {
+      await createAbsence.mutateAsync({ startDate: absence.startDate, endDate: absence.endDate, reason: absence.reason || undefined });
+      setAbsence(ABSENCE_INITIAL);
+      toast.success('Absence created');
+    } catch { toast.error('Failed to create absence'); }
+  };
+
+  const handleDelete = async (id: number) => {
+    try { await deleteAbsence.mutateAsync(id); toast.success('Absence removed'); }
+    catch { toast.error('Failed to remove absence'); }
+  };
+
+  return { absence, setAbsence, handleCreate, handleDelete, isPending: createAbsence.isPending, isDeleting: deleteAbsence.isPending, absences: sorted };
+}
+
+function WizardAbsenceSection({ abs }: { abs: ReturnType<typeof useWizardAbsence> }): JSX.Element {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => abs.setAbsence((s) => ({ ...s, show: !s.show }))}
+          className="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-red-600 text-foreground hover:bg-red-500">
+          {abs.absence.show ? 'Cancel' : 'Add Absence'}
+        </button>
+      </div>
+      {abs.absence.show && <AbsenceForm state={abs.absence} onChange={(p) => abs.setAbsence((s) => ({ ...s, ...p }))} onSubmit={abs.handleCreate} isPending={abs.isPending} />}
+      {abs.absences.length > 0 && <AbsenceList absences={abs.absences} onDelete={abs.handleDelete} isDeleting={abs.isDeleting} />}
+    </div>
+  );
+}
+
 function GameTimeWizardStep({ onSave, onSkip }: {
   onSave: () => void; onSkip: () => void;
 }): JSX.Element {
-  const { slots, isLoading, isDirty, handleChange, save, isSaving, tzLabel } = useGameTimeEditor();
+  const editor = useGameTimeEditor();
   const qc = useQueryClient();
+  const abs = useWizardAbsence();
 
   const handleSaveAndContinue = async () => {
-    await save();
+    await editor.save();
     qc.invalidateQueries({ queryKey: ['scheduling'] });
     qc.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
     onSave();
   };
 
-  if (isLoading) return <WizardLoading />;
+  if (editor.isLoading) return <WizardLoading />;
 
   return (
     <div data-testid="scheduling-wizard-step-1" className="space-y-4">
@@ -126,12 +169,13 @@ function GameTimeWizardStep({ onSave, onSkip }: {
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
         <GameTimeGrid
-          slots={slots} onChange={handleChange} tzLabel={tzLabel}
+          slots={editor.slots} onChange={editor.handleChange} tzLabel={editor.tzLabel}
           hourRange={[6, 24]} compact noStickyOffset fullDayNames
         />
       </div>
+      <WizardAbsenceSection abs={abs} />
       <WizardActions onSave={handleSaveAndContinue} onSkip={onSkip}
-        isSaving={isSaving} disabled={isSaving || (!isDirty && slots.length === 0)} />
+        isSaving={editor.isSaving} disabled={editor.isSaving || (!editor.isDirty && editor.slots.length === 0)} />
     </div>
   );
 }
