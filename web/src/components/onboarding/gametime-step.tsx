@@ -1,8 +1,13 @@
+import { useState, useEffect, useRef } from 'react';
+import type { JSX } from 'react';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
 import { GameTimeMobileEditor } from '../features/game-time/GameTimeMobileEditor';
+import { AbsenceForm, AbsenceList, ABSENCE_INITIAL } from '../features/game-time/game-time-absence';
+import type { AbsenceState } from '../features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
+import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences } from '../../hooks/use-game-time';
 import { useMediaQuery } from '../../hooks/use-media-query';
-import { useEffect, useRef } from 'react';
+import { toast } from '../../lib/toast';
 
 /**
  * Step 4: When Do You Play? (ROK-219).
@@ -56,6 +61,34 @@ function GameTimeStepGrid({ isMobile, slots, handleChange, tzLabel }: {
     return <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[6, 24]} fullDayNames compact noStickyOffset />;
 }
 
+function GameTimeStepAbsence(): JSX.Element {
+    const [absence, setAbsence] = useState<AbsenceState>(ABSENCE_INITIAL);
+    const createAbsence = useCreateAbsence();
+    const deleteAbsence = useDeleteAbsence();
+    const { data: allAbsences } = useGameTimeAbsences();
+    const sorted = [...(allAbsences ?? [])].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+    const handleCreate = async () => {
+        if (!absence.startDate || !absence.endDate) return;
+        try {
+            await createAbsence.mutateAsync({ startDate: absence.startDate, endDate: absence.endDate, reason: absence.reason || undefined });
+            setAbsence(ABSENCE_INITIAL);
+            toast.success('Absence created');
+        } catch { toast.error('Failed to create absence'); }
+    };
+
+    return (
+        <div className="space-y-2 mt-3">
+            <button type="button" onClick={() => setAbsence((s) => ({ ...s, show: !s.show }))}
+                className="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-red-600 text-foreground hover:bg-red-500">
+                {absence.show ? 'Cancel' : 'Add Absence'}
+            </button>
+            {absence.show && <AbsenceForm state={absence} onChange={(p) => setAbsence((s) => ({ ...s, ...p }))} onSubmit={handleCreate} isPending={createAbsence.isPending} />}
+            {sorted.length > 0 && <AbsenceList absences={sorted} onDelete={(id) => deleteAbsence.mutate(id)} isDeleting={deleteAbsence.isPending} />}
+        </div>
+    );
+}
+
 export function GameTimeStep() {
     const { slots, isLoading, isDirty, handleChange, save, tzLabel } = useGameTimeEditor({ enabled: true, rolling: false });
     const isMobile = useMediaQuery('(max-width: 767px)');
@@ -65,7 +98,12 @@ export function GameTimeStep() {
         <div>
             <GameTimeStepHeader isMobile={isMobile} />
             <div className="max-w-2xl mx-auto">
-                {isLoading ? <GameTimeStepLoading /> : <GameTimeStepGrid isMobile={isMobile} slots={slots} handleChange={handleChange} tzLabel={tzLabel} />}
+                {isLoading ? <GameTimeStepLoading /> : (
+                    <>
+                        <GameTimeStepGrid isMobile={isMobile} slots={slots} handleChange={handleChange} tzLabel={tzLabel} />
+                        <GameTimeStepAbsence />
+                    </>
+                )}
             </div>
         </div>
     );
