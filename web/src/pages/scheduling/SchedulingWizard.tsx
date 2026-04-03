@@ -40,34 +40,36 @@ function CheckIcon(): JSX.Element {
   );
 }
 
-function StepCircle({ step, status }: {
-  step: typeof STEPS[number]; status: 'active' | 'completed' | 'upcoming';
+function StepCircle({ step, status, onClick }: {
+  step: typeof STEPS[number]; status: 'active' | 'completed' | 'upcoming'; onClick?: () => void;
 }): JSX.Element {
   const cls = status === 'active'
     ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/50'
     : status === 'completed' ? 'bg-emerald-600/30 text-emerald-400'
       : 'bg-surface/50 text-muted border border-edge/50';
+  const clickable = status === 'completed' && onClick;
   return (
-    <div className="flex items-center gap-2">
+    <button type="button" onClick={clickable ? onClick : undefined} disabled={!clickable}
+      className={`flex items-center gap-2 ${clickable ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}>
       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${cls}`}>
         {status === 'completed' ? <CheckIcon /> : step.number}
       </div>
       <span className={`text-sm font-medium ${status === 'active' ? 'text-foreground' : 'text-muted'}`}>{step.label}</span>
-    </div>
+    </button>
   );
 }
 
-function WizardStepIndicator({ currentStep }: { currentStep: number }): JSX.Element {
+function WizardStepIndicator({ currentStep, onGoTo }: { currentStep: number; onGoTo: (step: number) => void }): JSX.Element {
   return (
     <div data-testid="wizard-step-indicator">
       <div className="flex items-center justify-between md:hidden">
         <span className="text-sm text-muted">Step {Math.min(currentStep + 1, STEPS.length)} of {STEPS.length}</span>
         <span className="text-sm font-medium text-foreground">{STEPS[Math.min(currentStep, STEPS.length - 1)].label}</span>
       </div>
-      <div className="hidden md:flex items-center gap-2">
+      <div className="hidden md:flex items-center justify-center gap-2">
         {STEPS.map((step, idx) => (
           <div key={step.key} className="flex items-center" data-testid={`wizard-step-${idx + 1}`} data-status={stepStatus(idx, currentStep)}>
-            <StepCircle step={step} status={stepStatus(idx, currentStep)} />
+            <StepCircle step={step} status={stepStatus(idx, currentStep)} onClick={() => onGoTo(idx)} />
             {idx < STEPS.length - 1 && <div className={`w-8 h-px ml-2 ${idx < currentStep ? 'bg-emerald-600/50' : 'bg-edge/50'}`} />}
           </div>
         ))}
@@ -252,18 +254,18 @@ export function SchedulingWizard({ children, poll, lineupId, matchId, gameTimeSt
 
   const advance = () => {
     const next = step + 1;
-    // Auto-skip Step 2 if no slots
     if (next === 1 && !hasSlots) { setStep(2); return; }
     setStep(next);
   };
 
+  const goTo = (target: number) => { if (target < step) setStep(target); };
   const skipStep1 = () => { setWizardSkipped(); advance(); };
 
   if (done) return <>{children}</>;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-      <WizardStepIndicator currentStep={step} />
+      <WizardStepIndicator currentStep={step} onGoTo={goTo} />
       {step === 0 && <GameTimeWizardStep onNext={advance} onSkip={skipStep1} />}
       {step === 1 && <VoteStep poll={poll} lineupId={lineupId} matchId={matchId} onNext={advance} />}
       {step === 2 && <SuggestStep lineupId={lineupId} matchId={matchId} onDone={advance} />}
