@@ -86,10 +86,11 @@ export class SchedulingService {
     );
   }
 
-  /** Suggest a new time slot for a match. */
+  /** Suggest a new time slot for a match and auto-vote for it. */
   async suggestSlot(
     matchId: number,
     proposedTime: string,
+    userId?: number,
   ): Promise<{ id: number }> {
     const match = await this.findMatchOrThrow(matchId);
     this.assertSchedulable(match);
@@ -99,7 +100,14 @@ export class SchedulingService {
     }
     await this.assertNoDuplicateSlot(matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
+    if (userId) await this.autoVoteForSlot(slot.id, userId);
     return { id: slot.id };
+  }
+
+  /** Auto-vote for a newly suggested slot. */
+  private async autoVoteForSlot(slotId: number, userId: number): Promise<void> {
+    try { await insertScheduleVote(this.db, slotId, userId); }
+    catch { /* non-critical — slot was created, vote is best-effort */ }
   }
 
   /** Toggle a vote on a schedule slot. Returns voted state. */
