@@ -719,7 +719,8 @@ describe('ROK-1000: onModuleInit auto-recovery', () => {
     configureContainerRebuild(mocks);
     service = await buildRecoveryModule(mocks);
 
-    const logger = (service as unknown as { logger: { log: jest.Mock } }).logger;
+    const logger = (service as unknown as { logger: { log: jest.Mock } })
+      .logger;
     const logSpy = jest.spyOn(logger, 'log');
     jest.spyOn(service, 'runSetup').mockResolvedValue();
 
