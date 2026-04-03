@@ -220,6 +220,20 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// Wizard bypass helper (ROK-999)
+// ---------------------------------------------------------------------------
+
+/** Navigate to the scheduling poll and skip past the wizard to the full poll view. */
+async function goToPoll(page: import('@playwright/test').Page, lid: number, mid: number): Promise<void> {
+    await page.goto(`/community-lineup/${lid}/schedule/${mid}`);
+    // The wizard may show Step 2 (Vote) since game time is seeded. Click "Suggest a Time" step to jump to Step 3 (full poll).
+    const step3 = page.locator('[data-testid="wizard-step-3"]');
+    const isWizard = await step3.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (isWizard) await step3.click();
+    await expect(page.locator('h1', { hasText: 'Scheduling Poll' })).toBeVisible({ timeout: 15_000 });
+}
+
+// ---------------------------------------------------------------------------
 // Shared test state
 // ---------------------------------------------------------------------------
 
@@ -270,19 +284,7 @@ test.describe('Scheduling poll page route', () => {
     test('route /community-lineup/:lineupId/schedule/:matchId renders the scheduling poll page', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-
-        // The page should render without errors and show a scheduling-specific heading
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        // AC1: The scheduling poll page renders with identifiable content
-        const heading = page.locator('h1', { hasText: 'Scheduling Poll' });
-        await expect(heading).toBeVisible({ timeout: 15_000 });
+        await goToPoll(page, lineupId, matchId);
     });
 });
 
@@ -294,13 +296,7 @@ test.describe('Scheduling poll match context card', () => {
     test('displays game thumbnail, name, member count, and member avatars', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // AC2: Match context card shows game details
         const contextCard = page.locator(
@@ -340,13 +336,7 @@ test.describe('Scheduling poll match context card', () => {
 
 test.describe('Scheduling poll suggest time slot', () => {
     test('suggest slot UI exists and is interactive', async ({ page }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // AC3: Date/time picker is always visible for suggesting slots
         const dateTimeInput = page.locator(
@@ -366,13 +356,7 @@ test.describe('Scheduling poll suggest time slot', () => {
 
 test.describe('Scheduling poll vote toggling', () => {
     test('clicking a time slot toggles the vote', async ({ page }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // AC4: Time slot cards/rows are visible and clickable
         const slotCards = page.locator(
@@ -423,13 +407,7 @@ test.describe('Scheduling poll "You voted" indicator', () => {
     test('"You voted" indicator appears on voted slots', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // Wait for slot cards to render
         const slotCards = page.locator(
@@ -466,13 +444,7 @@ test.describe('Scheduling poll heatmap', () => {
     test('HeatmapGrid renders with match members availability data', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // AC6: The existing HeatmapGrid component renders with availability data
         const heatmapGrid = page.locator(
@@ -504,13 +476,7 @@ test.describe('Scheduling poll Create Event button', () => {
     test('"Create Event" button exists and is enabled only for users who have voted', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // AC7: "Create Event" button should be present
         const createEventBtn = page.getByRole('button', {
@@ -552,13 +518,7 @@ test.describe('Scheduling poll recurring checkbox', () => {
     test('recurring checkbox exists, is unchecked by default, and can be toggled', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // The recurring checkbox should be present on the page
         const recurringCheckbox = page.getByRole('checkbox', {
@@ -587,13 +547,7 @@ test.describe('Scheduling poll event creation', () => {
     test('one-click event creation creates event and shows success state', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // Vote was pre-registered via API in beforeAll — button should be enabled
         const createEventBtn = page.getByRole('button', {
@@ -617,13 +571,7 @@ test.describe('Scheduling poll post-creation status', () => {
     test('after event creation, match status shows scheduled with link to event', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // AC9: After event creation, the match should show "Scheduled" status
         const scheduledBadge = page.locator(
@@ -693,13 +641,7 @@ test.describe('Scheduling poll other polls section', () => {
     test('"Your Other Scheduling Polls" section shows for multi-match users', async ({
         page,
     }) => {
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         // AC11: "Your Other Scheduling Polls" section should be present
         // for users who are members of multiple matches
@@ -759,13 +701,7 @@ test.describe('Scheduling poll read-only mode', () => {
             }).catch(() => {/* Already created — ignore */});
         }
 
-        await page.goto(
-            `/community-lineup/${lineupId}/schedule/${matchId}`,
-        );
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await goToPoll(page, lineupId, matchId);
 
         const heading = page.locator('h1', { hasText: 'Scheduling Poll' });
         await expect(heading).toBeVisible({ timeout: 15_000 });
