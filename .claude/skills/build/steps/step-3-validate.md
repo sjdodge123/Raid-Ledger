@@ -15,26 +15,11 @@ For each story at `ready_for_validate`, run the **complete** CI suite in its wor
 ```bash
 WORKTREE="../Raid-Ledger--rok-<num>"
 cd $WORKTREE
-
-# 1. Build ALL workspaces (order matters)
-npm run build -w packages/contract
-npm run build -w api
-npm run build -w web
-
-# 2. Type check ALL workspaces
-npx tsc --noEmit -p api/tsconfig.json
-npx tsc --noEmit -p web/tsconfig.json
-
-# 3. Lint ALL workspaces
-npm run lint -w api
-npm run lint -w web
-
-# 4. Test ALL workspaces
-npm run test -w api -- --passWithNoTests
-npm run test -w web
-
+./scripts/validate-ci.sh --full
 cd -
 ```
+
+This script runs ALL checks (build, typecheck, lint, unit tests with coverage, integration tests, plus conditional migration validation and container startup). Agents cannot cherry-pick individual checks.
 
 **DO NOT scope-reduce these checks.** Even if the story only touched `web/`, run API tests too — contract changes, shared types, and transitive dependencies can break either workspace.
 
@@ -161,6 +146,11 @@ stories:
 | Lint (all) | PASS |
 | Tests — api | PASS (N suites, M tests) |
 | Tests — web | PASS (N suites, M tests) |
+| Integration tests — api | PASS (N suites, M tests) |
+| Coverage — api | PASS (N%) |
+| Coverage — web | PASS (N%) |
+| Migration validation | PASS / SKIPPED |
+| Container startup | PASS / SKIPPED |
 | Playwright (desktop + mobile) | PASS (N tests) / N/A |
 
 ### Gate Summary

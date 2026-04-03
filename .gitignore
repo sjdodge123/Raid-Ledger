@@ -32,6 +32,8 @@ scripts/*
 !scripts/deploy_prod.sh
 !scripts/deploy_dev.sh
 !scripts/fix-migration-order.sh
+!scripts/validate-ci.sh
+!scripts/validate-migrations.sh
 !scripts/setup-branch-protection.sh
 !scripts/smoke/
 !scripts/playwright-global-setup.ts
