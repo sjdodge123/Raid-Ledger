@@ -2,7 +2,7 @@
  * Database query helpers for standalone scheduling polls (ROK-977).
  * Keeps the service layer thin by extracting all DB operations here.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -109,6 +109,30 @@ export async function insertMatchMembers(
       source: 'voted' as const,
     })),
   );
+}
+
+/** Find all active standalone polls (scheduling matches in standalone lineups). */
+export async function findActiveStandalonePolls(
+  db: Db,
+): Promise<{ matchId: number; lineupId: number; gameName: string; gameCoverUrl: string | null; memberCount: number; slotCount: number }[]> {
+  const rows = await db.execute<{
+    matchId: number; lineupId: number; gameName: string;
+    gameCoverUrl: string | null; memberCount: number; slotCount: number;
+  }>(sql`
+    SELECT m.id AS "matchId", m.lineup_id AS "lineupId",
+           g.name AS "gameName", g.cover_url AS "gameCoverUrl",
+           COALESCE(mem.cnt, 0)::int AS "memberCount",
+           COALESCE(sl.cnt, 0)::int AS "slotCount"
+    FROM community_lineup_matches m
+    JOIN community_lineups l ON l.id = m.lineup_id
+    JOIN games g ON g.id = m.game_id
+    LEFT JOIN (SELECT match_id, COUNT(*)::int AS cnt FROM community_lineup_match_members GROUP BY match_id) mem ON mem.match_id = m.id
+    LEFT JOIN (SELECT match_id, COUNT(*)::int AS cnt FROM community_lineup_schedule_slots GROUP BY match_id) sl ON sl.match_id = m.id
+    WHERE m.status = 'scheduling'
+      AND l.phase_duration_override->>'standalone' = 'true'
+    ORDER BY m.created_at DESC
+  `);
+  return [...rows];
 }
 
 /** Count members for a given match. */

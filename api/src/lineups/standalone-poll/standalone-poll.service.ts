@@ -18,6 +18,7 @@ import {
   insertSchedulingMatch,
   insertMatchMembers,
   countMatchMembers,
+  findActiveStandalonePolls,
 } from './standalone-poll-query.helpers';
 
 /** Input DTO after Zod validation. */
@@ -38,6 +39,11 @@ export class StandalonePollService {
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly notifications: StandalonePollNotificationService,
   ) {}
+
+  /** List all active standalone scheduling polls. */
+  async listActive() {
+    return findActiveStandalonePolls(this.db);
+  }
 
   /**
    * Create a standalone scheduling poll.

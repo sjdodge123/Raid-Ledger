@@ -4,6 +4,7 @@
  */
 import {
   Controller,
+  Get,
   Post,
   Body,
   UseGuards,
@@ -27,6 +28,12 @@ interface AuthRequest extends Request {
 @UseGuards(AuthGuard('jwt'))
 export class StandalonePollController {
   constructor(private readonly service: StandalonePollService) {}
+
+  /** List active standalone scheduling polls. */
+  @Get('active')
+  async listActive() {
+    return this.service.listActive();
+  }
 
   /**
    * Create a standalone scheduling poll.

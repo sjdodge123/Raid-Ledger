@@ -206,4 +206,5 @@ export {
 // Standalone Scheduling Polls (ROK-977)
 export {
     createSchedulingPoll,
+    getActiveStandalonePolls,
 } from './api/standalone-poll-api';
