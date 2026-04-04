@@ -7,6 +7,7 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { ScheduleSlotWithVotesDto, MatchDetailResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
+import { useRescheduleEvent } from '../../hooks/use-reschedule';
 
 interface CreateEventSectionProps {
   slots: ScheduleSlotWithVotesDto[];
@@ -14,6 +15,7 @@ interface CreateEventSectionProps {
   hasVoted: boolean;
   readOnly: boolean;
   createdEventId: number | null;
+  linkedEventId: number | null;
   matchStatus: string;
   isCreating: boolean;
   recurring: boolean;
@@ -107,11 +109,89 @@ function ParticipationBanner({ voted, total }: { voted: number; total: number })
   );
 }
 
-/** Section for creating an event from a selected slot. */
+/** Section for creating an event or rescheduling from a selected slot. */
 export function CreateEventSection({
-  slots, match, hasVoted, readOnly, createdEventId, matchStatus, isCreating,
-  recurring, onRecurringChange, onCreateEvent,
+  slots, match, hasVoted, readOnly, createdEventId, linkedEventId,
+  matchStatus, isCreating, recurring, onRecurringChange, onCreateEvent,
 }: CreateEventSectionProps): JSX.Element {
+  const isReschedule = linkedEventId !== null;
+
+  if (createdEventId) {
+    return <CreatedSuccessState eventId={createdEventId} matchStatus={matchStatus} />;
+  }
+
+  if (isReschedule) {
+    return <RescheduleFromSlot slots={slots} linkedEventId={linkedEventId}
+      hasVoted={hasVoted} readOnly={readOnly} />;
+  }
+
+  return <CreateFromSlot slots={slots} match={match} hasVoted={hasVoted}
+    readOnly={readOnly} isCreating={isCreating} recurring={recurring}
+    onRecurringChange={onRecurringChange} onCreateEvent={onCreateEvent} />;
+}
+
+/** Reschedule the linked event to the selected slot's time. */
+function RescheduleFromSlot({ slots, linkedEventId, hasVoted, readOnly }: {
+  slots: ScheduleSlotWithVotesDto[]; linkedEventId: number;
+  hasVoted: boolean; readOnly: boolean;
+}): JSX.Element {
+  const sorted = sortedSlots(slots);
+  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(sorted[0]?.id ?? null);
+  const [done, setDone] = useState(false);
+  const reschedule = useRescheduleEvent(linkedEventId);
+  const selectedSlot = slots.find((s) => s.id === selectedSlotId);
+  const canAct = hasVoted && !readOnly && !reschedule.isPending && selectedSlotId !== null;
+
+  const handleReschedule = () => {
+    if (!selectedSlot) return;
+    const start = new Date(selectedSlot.proposedTime);
+    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+    reschedule.mutate(
+      { startTime: start.toISOString(), endTime: end.toISOString() },
+      { onSuccess: () => setDone(true) },
+    );
+  };
+
+  if (done) {
+    return (
+      <div className="space-y-3">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+          Rescheduled
+        </div>
+        <p className="text-sm text-emerald-400">Event rescheduled successfully!</p>
+        <Link to={`/events/${linkedEventId}`}
+          className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+          View Event &rarr;
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Reschedule Event</h3>
+      {slots.length > 0 && (
+        <SlotSelector slots={slots} selectedId={selectedSlotId} onChange={setSelectedSlotId} />
+      )}
+      <button type="button" onClick={handleReschedule} disabled={!canAct}
+        className="px-6 py-2.5 text-sm font-medium bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        {reschedule.isPending ? 'Rescheduling...' : 'Reschedule Event'}
+      </button>
+      {!hasVoted && !readOnly && (
+        <p className="text-xs text-muted">Vote on a time slot to enable rescheduling.</p>
+      )}
+    </div>
+  );
+}
+
+/** Original create-event flow (no linked event). */
+function CreateFromSlot({ slots, match, hasVoted, readOnly, isCreating,
+  recurring, onRecurringChange, onCreateEvent }: {
+  slots: ScheduleSlotWithVotesDto[]; match: MatchDetailResponseDto;
+  hasVoted: boolean; readOnly: boolean; isCreating: boolean;
+  recurring: boolean; onRecurringChange: (v: boolean) => void;
+  onCreateEvent: (slotId: number) => void;
+}): JSX.Element {
   const sorted = sortedSlots(slots);
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(sorted[0]?.id ?? null);
   const [confirmed, setConfirmed] = useState(false);
@@ -119,11 +199,6 @@ export function CreateEventSection({
   const canBypass = isOperatorOrAdmin(user);
   const { voted, total, allVoted } = getParticipation(match, slots);
   const needsConfirm = !allVoted && !canBypass && !confirmed;
-
-  if (createdEventId) {
-    return <CreatedSuccessState eventId={createdEventId} matchStatus={matchStatus} />;
-  }
-
   const canCreate = hasVoted && !readOnly && !isCreating && selectedSlotId !== null;
 
   const handleCreate = () => {

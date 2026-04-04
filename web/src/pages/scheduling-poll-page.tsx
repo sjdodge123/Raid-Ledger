@@ -170,7 +170,8 @@ function PollSections({ lineupId, matchId, poll }: {
         readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
         isSuggesting={isSuggesting} prefillTime={prefillTime} />
       <CreateEventSection slots={poll.slots} match={poll.match} hasVoted={hasVoted} readOnly={readOnly}
-        createdEventId={createdEventId} matchStatus={poll.match.status}
+        createdEventId={createdEventId} linkedEventId={poll.match.linkedEventId ?? null}
+        matchStatus={poll.match.status}
         isCreating={createEvt.isPending} recurring={recurring}
         onRecurringChange={setRecurring} onCreateEvent={handleCreate} />
       <OtherPollsSection lineupId={lineupId} data={otherPolls} isLoading={otherLoading} />
