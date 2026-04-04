@@ -130,7 +130,9 @@ function PollSections({ lineupId, matchId, poll }: {
   const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
   const { toggleVote, suggest, isSuggesting, createEvt } = usePollMutations(lineupId, matchId);
-  const [createdEventId, setCreatedEventId] = useState<number | null>(poll.match.linkedEventId ?? null);
+  /* linkedEventId is a back-reference to the rescheduled event, NOT a newly
+     created event. Only set createdEventId when the user creates from this poll. */
+  const [createdEventId, setCreatedEventId] = useState<number | null>(null);
   const [recurring, setRecurring] = useState(false);
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
