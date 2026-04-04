@@ -65,6 +65,17 @@ async function apiDelete(token: string, path: string) {
     });
 }
 
+/** Get a valid gameId from seeded data. */
+async function getFirstGameId(token: string): Promise<number> {
+    const res = await fetch(`${API_BASE}/games/configured`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch games: ${res.status}`);
+    const body = (await res.json()) as { data: { id: number }[] };
+    if (!body.data?.length) throw new Error('No configured games');
+    return body.data[0].id;
+}
+
 // ---------------------------------------------------------------------------
 // AC7: "Schedule a Game" button on events page
 // ---------------------------------------------------------------------------
@@ -138,7 +149,7 @@ test.describe('CreatePollModal — game and member picker', () => {
 
         // AC8: Game picker (search input) should be visible
         const gameSearch = modal.locator(
-            'input[placeholder*="Search"], input[aria-label*="game"], [data-testid="game-search-input"]',
+            '[data-testid="game-search-input"]',
         );
         await expect(gameSearch).toBeVisible({ timeout: 5_000 });
     });
@@ -165,7 +176,7 @@ test.describe('CreatePollModal — game and member picker', () => {
 
         // AC8: Member picker should be visible for multi-select
         const memberPicker = modal.locator(
-            '[data-testid="member-picker"], input[placeholder*="member"], input[aria-label*="member"]',
+            '[data-testid="member-picker"]',
         );
         await expect(memberPicker).toBeVisible({ timeout: 5_000 });
     });
@@ -192,7 +203,7 @@ test.describe('CreatePollModal — game and member picker', () => {
 
         // Type into game search — should show results from game library
         const gameSearch = modal.locator(
-            'input[placeholder*="Search"], input[aria-label*="game"], [data-testid="game-search-input"]',
+            '[data-testid="game-search-input"]',
         );
         await gameSearch.fill('Test');
 
@@ -232,7 +243,7 @@ test.describe('Events page poll creation navigates to scheduling poll', () => {
 
         // Select a game in the picker
         const gameSearch = modal.locator(
-            'input[placeholder*="Search"], input[aria-label*="game"], [data-testid="game-search-input"]',
+            '[data-testid="game-search-input"]',
         );
         await gameSearch.fill('Test');
         const firstResult = modal.locator(
@@ -389,6 +400,7 @@ test.describe('Standalone poll — scheduling poll page', () => {
         );
 
         const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
 
         // Create a standalone poll via the API endpoint
         const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
@@ -397,7 +409,7 @@ test.describe('Standalone poll — scheduling poll page', () => {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ gameId: 1 }),
+            body: JSON.stringify({ gameId }),
         });
 
         // If the endpoint doesn't exist yet, this will fail (expected for TDD)
