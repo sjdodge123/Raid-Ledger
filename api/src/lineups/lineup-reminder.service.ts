@@ -164,12 +164,13 @@ export class LineupReminderService {
     `)) as unknown as ReminderLineup[];
   }
 
-  /** Get active lineups in decided status. */
+  /** Get active community lineups in decided status (excludes standalone polls). */
   private async getDecidedLineups(): Promise<ReminderLineup[]> {
     return (await this.db.execute(sql`
       SELECT id, status, phase_deadline AS "phaseDeadline"
       FROM community_lineups
       WHERE status = 'decided'
+        AND (phase_duration_override IS NULL OR phase_duration_override->>'standalone' IS NULL)
     `)) as unknown as ReminderLineup[];
   }
 

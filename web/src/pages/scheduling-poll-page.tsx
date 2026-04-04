@@ -77,22 +77,31 @@ function getWeekStart(date: Date): Date {
   return d;
 }
 
-/** Convert suggested slots from the API into preview blocks for the grid. */
+/** Convert suggested slots from the API into preview blocks for the grid,
+ *  filtered to the visible week so blocks don't persist across week nav. */
 function slotsToPreviewBlocks(
   slots: SchedulePollPageResponseDto['slots'],
+  weekStart: Date,
 ): GameTimePreviewBlock[] {
-  return slots.map((slot) => {
-    const d = new Date(slot.proposedTime);
-    const voteLabel = slot.votes.length === 1 ? '1 vote' : `${slot.votes.length} votes`;
-    return {
-      dayOfWeek: d.getDay(),
-      startHour: d.getHours(),
-      endHour: d.getHours() + 2,
-      title: voteLabel,
-      label: voteLabel,
-      variant: 'current' as const,
-    };
-  });
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  return slots
+    .filter((slot) => {
+      const d = new Date(slot.proposedTime);
+      return d >= weekStart && d < weekEnd;
+    })
+    .map((slot) => {
+      const d = new Date(slot.proposedTime);
+      const voteLabel = slot.votes.length === 1 ? '1 vote' : `${slot.votes.length} votes`;
+      return {
+        dayOfWeek: d.getDay(),
+        startHour: d.getHours(),
+        endHour: d.getHours() + 2,
+        title: voteLabel,
+        label: voteLabel,
+        variant: 'current' as const,
+      };
+    });
 }
 
 /** Derive read-only status and vote state from poll data. */
@@ -148,7 +157,7 @@ function PollSections({ lineupId, matchId, poll }: {
         readOnly={readOnly}
         weekStart={weekStart} onWeekChange={handleWeekChange}
         previewBlocks={[
-          ...slotsToPreviewBlocks(poll.slots),
+          ...slotsToPreviewBlocks(poll.slots, weekStart),
           ...(previewBlock ? [previewBlock] : []),
         ]}
         onCellClick={(day, hour) => {

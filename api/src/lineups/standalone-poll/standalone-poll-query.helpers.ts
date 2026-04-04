@@ -65,6 +65,9 @@ export async function insertDecidedLineup(
       createdBy: userId,
       linkedEventId: linkedEventId ?? null,
       phaseDeadline,
+      /* Mark as standalone so community lineup queries exclude it.
+         Uses existing JSONB column — no migration needed. */
+      phaseDurationOverride: { standalone: true } as unknown as Record<string, number>,
     })
     .returning({ id: schema.communityLineups.id });
   return row;
