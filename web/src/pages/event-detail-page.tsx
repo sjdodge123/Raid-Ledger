@@ -144,7 +144,7 @@ function EventDetailModals({ event, eventId, derived, handlers, showCancelModal,
             <CancelModalSection show={showCancelModal || (canDeepLink && deepLinkAction === 'cancel')} eventId={eventId} eventTitle={event.title} signupCount={event.signupCount} initialReason={deepLinkReason ?? undefined}
                 onClose={() => { setShowCancelModal(false); clearDeepLink(); }} />
             <RescheduleModalSection show={showRescheduleModal || (canDeepLink && deepLinkAction === 'reschedule')} eventId={eventId} currentStartTime={event.startTime} currentEndTime={event.endTime}
-                eventTitle={event.title} gameSlug={event.game?.slug} gameName={event.game?.name} coverUrl={event.game?.coverUrl} description={event.description}
+                eventTitle={event.title} gameId={event.game?.id} gameSlug={event.game?.slug} gameName={event.game?.name} coverUrl={event.game?.coverUrl} description={event.description}
                 creatorUsername={event.creator?.username} signupCount={event.signupCount} initialReason={deepLinkReason ?? undefined}
                 onClose={() => { setShowRescheduleModal(false); clearDeepLink(); }} />
             <RemoveConfirmModal removeConfirm={handlers.removeConfirm} onClose={() => handlers.setRemoveConfirm(null)} onConfirm={handlers.handleConfirmRemoveFromEvent} isPending={handlers.adminRemoveUser.isPending} />

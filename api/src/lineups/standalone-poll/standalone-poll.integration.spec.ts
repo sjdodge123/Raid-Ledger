@@ -90,10 +90,7 @@ async function createEvent(title: string, gameId: number) {
   return event;
 }
 
-function postSchedulingPoll(
-  token: string,
-  body: Record<string, unknown>,
-) {
+function postSchedulingPoll(token: string, body: Record<string, unknown>) {
   return testApp.request
     .post('/scheduling-polls')
     .set('Authorization', `Bearer ${token}`)
@@ -229,10 +226,7 @@ function describeMembers() {
     expect(res.body.memberCount).toBeGreaterThanOrEqual(1);
   });
 }
-describe(
-  'POST /scheduling-polls — match members',
-  describeMembers,
-);
+describe('POST /scheduling-polls — match members', describeMembers);
 
 // ── AC3: Phase timer scheduled when durationHours provided ───
 
@@ -257,8 +251,7 @@ function describePhaseDuration() {
 
     // Deadline should be roughly 48h from now
     const deadline = new Date(lineup.phaseDeadline!);
-    const hoursUntil =
-      (deadline.getTime() - Date.now()) / (1000 * 60 * 60);
+    const hoursUntil = (deadline.getTime() - Date.now()) / (1000 * 60 * 60);
     expect(hoursUntil).toBeGreaterThan(46);
     expect(hoursUntil).toBeLessThan(50);
   });
@@ -282,10 +275,7 @@ function describePhaseDuration() {
     expect(lineup.phaseDeadline).toBeNull();
   });
 }
-describe(
-  'POST /scheduling-polls — phase duration',
-  describePhaseDuration,
-);
+describe('POST /scheduling-polls — phase duration', describePhaseDuration);
 
 // ── AC4: 404 when gameId doesn't exist ───────────────────────
 
@@ -299,10 +289,7 @@ function describeInvalidGame() {
     expect(res.body.message).toMatch(/game|not found/i);
   });
 }
-describe(
-  'POST /scheduling-polls — invalid gameId',
-  describeInvalidGame,
-);
+describe('POST /scheduling-polls — invalid gameId', describeInvalidGame);
 
 // ── AC5: 404 when linkedEventId doesn't exist ────────────────
 
@@ -338,10 +325,7 @@ function describeLinkedEvent() {
     expect(match.linkedEventId).toBe(event.id);
   });
 }
-describe(
-  'POST /scheduling-polls — linkedEventId',
-  describeLinkedEvent,
-);
+describe('POST /scheduling-polls — linkedEventId', describeLinkedEvent);
 
 // ── AC6: Any authenticated user can create ───────────────────
 
@@ -376,7 +360,4 @@ function describeAuth() {
     expect(res.status).toBe(201);
   });
 }
-describe(
-  'POST /scheduling-polls — authentication',
-  describeAuth,
-);
+describe('POST /scheduling-polls — authentication', describeAuth);

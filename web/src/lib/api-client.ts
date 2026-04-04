@@ -202,3 +202,8 @@ export {
     getSchedulingBanner,
     getOtherPolls,
 } from './api/scheduling-api';
+
+// Standalone Scheduling Polls (ROK-977)
+export {
+    createSchedulingPoll,
+} from './api/standalone-poll-api';

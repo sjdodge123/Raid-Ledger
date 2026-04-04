@@ -89,6 +89,7 @@ interface RescheduleModalProps {
     currentStartTime: string;
     currentEndTime: string;
     eventTitle: string;
+    gameId?: number;
     gameSlug?: string;
     gameName?: string;
     coverUrl?: string | null;
@@ -110,6 +111,7 @@ export function RescheduleModalSection(props: RescheduleModalProps): JSX.Element
                 currentStartTime={props.currentStartTime}
                 currentEndTime={props.currentEndTime}
                 eventTitle={props.eventTitle}
+                gameId={props.gameId}
                 gameSlug={props.gameSlug}
                 gameName={props.gameName}
                 coverUrl={props.coverUrl}
