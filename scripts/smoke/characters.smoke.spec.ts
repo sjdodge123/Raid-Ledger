@@ -4,7 +4,7 @@
  * ROK-921: On mobile, tapping a WoW equipment item should open only the
  * carousel modal — the Wowhead tooltip popup must not appear.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import fs from 'fs';
 import path from 'path';
 

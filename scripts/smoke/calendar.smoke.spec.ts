@@ -2,7 +2,7 @@
  * Calendar smoke tests — month view, quick actions, events, and filters.
  * Desktop and mobile viewports.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 // ---------------------------------------------------------------------------
 // Desktop

@@ -4,7 +4,8 @@
  * Uses navigateToFirstEvent to find a seeded event, then appends /edit.
  * IMPORTANT: Tests do NOT submit changes to avoid mutating seed data.
  */
-import { test, expect, type Page, type TestInfo } from '@playwright/test';
+import { test, expect } from './base';
+import type { Page, TestInfo } from '@playwright/test';
 import { navigateToFirstEvent } from './helpers';
 
 // ---------------------------------------------------------------------------

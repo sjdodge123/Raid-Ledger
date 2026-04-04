@@ -5,7 +5,7 @@
  * render correctly at both desktop and mobile viewports. Does NOT modify any
  * user preferences — read-only UI assertions only.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import { isMobile } from './helpers';
 
 // ---------------------------------------------------------------------------

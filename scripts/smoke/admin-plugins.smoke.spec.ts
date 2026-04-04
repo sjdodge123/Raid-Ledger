@@ -2,7 +2,7 @@
  * Admin plugins panel smoke tests — plugin list, card details, action buttons.
  * Tests both desktop and mobile viewports via Playwright projects.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 test.describe('Admin plugins panel', () => {
     test('renders plugin list with heading and description', async ({ page }) => {

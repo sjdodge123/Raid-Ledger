@@ -7,7 +7,7 @@
  *
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 const API_BASE = process.env.API_URL || 'http://localhost:3000';
 

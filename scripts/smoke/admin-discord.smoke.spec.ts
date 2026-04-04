@@ -9,7 +9,7 @@
  *   /admin/settings/discord/channels  (Channels)
  *   /admin/settings/discord/features  (Features)
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import { isMobile } from './helpers';
 
 // ---------------------------------------------------------------------------

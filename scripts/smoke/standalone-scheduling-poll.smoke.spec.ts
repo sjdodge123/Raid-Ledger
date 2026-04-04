@@ -13,7 +13,7 @@
  *   AC11: After creating poll from reschedule, navigate to scheduling poll page
  *   AC12: Existing scheduling poll page works for standalone polls
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import { navigateToFirstEvent, isMobile } from './helpers';
 
 const API_BASE = process.env.API_URL || 'http://localhost:3000';

@@ -4,7 +4,7 @@
  * Creates a fresh event via the API (which triggers activity logging),
  * then navigates to that event's detail page and verifies the timeline renders.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 const API_BASE = 'http://localhost:3000';
 

@@ -9,7 +9,7 @@
  * Note: No password-change section exists on this page — the account panel
  * is exclusively the "Danger Zone" / delete-account flow.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 // ---------------------------------------------------------------------------
 // Profile Account — Desktop

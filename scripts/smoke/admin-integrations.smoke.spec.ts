@@ -5,7 +5,8 @@
  *
  * These tests do NOT submit forms or change API keys.
  */
-import { test, expect, type TestInfo } from '@playwright/test';
+import { test, expect } from './base';
+import type { TestInfo } from '@playwright/test';
 
 function isMobile(testInfo: TestInfo) { return testInfo.project.name === 'mobile'; }
 

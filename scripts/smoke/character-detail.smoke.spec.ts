@@ -5,7 +5,7 @@
  * desktop and mobile viewports.  Uses the same API-driven character
  * lookup pattern as characters.smoke.spec.ts.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import fs from 'fs';
 import path from 'path';
 

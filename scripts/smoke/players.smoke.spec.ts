@@ -6,7 +6,7 @@
  * desktop and mobile Playwright projects without skips.  Verified at
  * 375×812 via MCP exploration (ROK-892).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 test.describe('Players page', () => {
     test('renders heading and player list from seed data', async ({ page }) => {

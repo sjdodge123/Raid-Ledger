@@ -5,7 +5,7 @@
  * and the lineup detail page. Creates a lineup via the API in beforeAll
  * and cleans up afterward.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 const API_BASE = process.env.API_URL || 'http://localhost:3000';
 
