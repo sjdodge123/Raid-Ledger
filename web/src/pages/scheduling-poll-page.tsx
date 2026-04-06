@@ -123,8 +123,44 @@ function usePollMutations(lineupId: number, matchId: number) {
   };
 }
 
+/** Completed poll state — shown when the match is scheduled and has a linked event. */
+function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
+  const eventId = poll.match.linkedEventId;
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
+      <MatchContextCard match={poll.match} />
+      <div className="p-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+          Poll Complete
+        </div>
+        <p className="text-sm text-emerald-400">
+          {eventId ? 'The event has been rescheduled.' : 'An event has been created from this poll.'}
+        </p>
+        {eventId && (
+          <a href={`/events/${eventId}`}
+            className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+            View Event &rarr;
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Render loaded poll page sections. */
 function PollSections({ lineupId, matchId, poll }: {
+  lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
+}): JSX.Element {
+  if (poll.match.status === 'scheduled') {
+    return <CompletedPollState poll={poll} />;
+  }
+
+  return <ActivePollSections lineupId={lineupId} matchId={matchId} poll={poll} />;
+}
+
+/** Active poll — hooks live here to avoid conditional hook calls in PollSections. */
+function ActivePollSections({ lineupId, matchId, poll }: {
   lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
 }): JSX.Element {
   const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
