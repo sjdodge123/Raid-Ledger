@@ -12,7 +12,7 @@ export function CreateEventPage() {
     const { isAuthenticated, isLoading } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const { games: registryGames } = useGameRegistry();
+    const { games: registryGames, isLoading: registryLoading } = useGameRegistry();
 
     const initialGame = useMemo(() => {
         const rawId = searchParams.get('gameId');
@@ -24,7 +24,8 @@ export function CreateEventPage() {
     const initialStartTime = searchParams.get('startTime');
     const schedulingMatchId = searchParams.get('matchId') ? parseInt(searchParams.get('matchId')!, 10) : null;
 
-    if (isLoading) return <PageSpinner />;
+    const hasGameParam = !!searchParams.get('gameId');
+    if (isLoading || (hasGameParam && registryLoading)) return <PageSpinner />;
     if (!isAuthenticated) return <Navigate to="/events" replace />;
 
     return (
