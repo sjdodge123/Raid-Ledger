@@ -5,7 +5,7 @@
  *
  * IMPORTANT: Tests never click destructive buttons (Delete, Reset, Clear).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import { isMobile } from './helpers';
 
 // ---------------------------------------------------------------------------

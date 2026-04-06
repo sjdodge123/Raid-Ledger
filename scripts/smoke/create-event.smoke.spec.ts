@@ -2,7 +2,7 @@
  * Create event form smoke tests — form rendering, validation, game search,
  * roster slot type switching, and successful event creation with cleanup.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 const API_BASE = process.env.API_URL || 'http://localhost:3000';
 

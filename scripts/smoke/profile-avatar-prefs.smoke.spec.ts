@@ -4,7 +4,7 @@
  * Verifies that the avatar and preferences panels render correctly
  * at both desktop and mobile viewports.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 // ---------------------------------------------------------------------------
 // Avatar Panel — Desktop

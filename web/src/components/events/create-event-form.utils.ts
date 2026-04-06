@@ -45,8 +45,20 @@ function getDefaultState(): FormState {
     };
 }
 
-export function getInitialState(editEvent: EventResponseDto | undefined, resolved: string): FormState {
-    return editEvent ? getEditModeState(editEvent, resolved) : getDefaultState();
+export function getInitialState(
+    editEvent: EventResponseDto | undefined,
+    resolved: string,
+    initialStartTime?: string | null,
+): FormState {
+    const state = editEvent ? getEditModeState(editEvent, resolved) : getDefaultState();
+    if (!editEvent && initialStartTime) {
+        const d = new Date(initialStartTime);
+        const dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: resolved, year: 'numeric', month: '2-digit', day: '2-digit' });
+        const timeFmt = new Intl.DateTimeFormat('en-GB', { timeZone: resolved, hour: '2-digit', minute: '2-digit', hour12: false });
+        state.startDate = dateFmt.format(d);
+        state.startTime = timeFmt.format(d);
+    }
+    return state;
 }
 
 function validateRecurrence(form: FormState, errors: FormErrors) {

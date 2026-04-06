@@ -52,8 +52,9 @@ export async function computeTransitionDeadline(
   const overrides = lineup.phaseDurationOverride;
   if (overrides && typeof overrides === 'object') {
     const key = newStatus as keyof typeof overrides;
-    if (key in overrides && overrides[key] != null) {
-      return new Date(Date.now() + overrides[key] * 3_600_000);
+    const val = key !== 'standalone' ? overrides[key] : undefined;
+    if (typeof val === 'number') {
+      return new Date(Date.now() + val * 3_600_000);
     }
   }
 

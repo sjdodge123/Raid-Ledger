@@ -1,7 +1,7 @@
 /**
  * Notifications smoke tests — bell icon, dropdown, mark all read.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 test.describe('Notifications', () => {
     test('bell icon is visible in header', async ({ page }) => {

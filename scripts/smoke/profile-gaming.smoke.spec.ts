@@ -2,7 +2,7 @@
  * Profile gaming panels smoke tests — Characters, Game Time, Watched Games.
  * Tests both desktop and mobile viewports.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 // ---------------------------------------------------------------------------
 // Characters panel — desktop

@@ -40,6 +40,7 @@ import { LogsModule } from './logs/logs.module';
 import { AiModule } from './ai/ai.module';
 import { LineupsModule } from './lineups/lineups.module';
 import { SchedulingModule } from './lineups/scheduling/scheduling.module';
+import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { SchedulingModule } from './lineups/scheduling/scheduling.module';
     AiModule,
     SchedulingModule,
     LineupsModule,
+    StandalonePollModule,
   ],
   controllers: [AppController],
   providers: [

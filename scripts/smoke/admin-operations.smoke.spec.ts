@@ -3,7 +3,7 @@
  * Verifies panels render correctly at desktop and mobile viewports.
  * Read-only checks only — no destructive actions (pause/resume/delete).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import { isMobile } from './helpers';
 
 // ---------------------------------------------------------------------------

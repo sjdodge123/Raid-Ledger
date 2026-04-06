@@ -1,0 +1,166 @@
+/**
+ * Service for standalone scheduling polls (ROK-977).
+ * Creates a minimal lineup (decided) + match (scheduling) behind the scenes,
+ * exposing a simplified API that skips the full lineup flow.
+ */
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { SchedulingPollResponseDto } from '@raid-ledger/contract';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
+import { StandalonePollNotificationService } from './standalone-poll-notification.service';
+import {
+  findGameById,
+  eventExists,
+  filterValidUserIds,
+  insertDecidedLineup,
+  insertSchedulingMatch,
+  insertMatchMembers,
+  countMatchMembers,
+  findActiveStandalonePolls,
+  completeStandalonePoll,
+} from './standalone-poll-query.helpers';
+
+/** Input DTO after Zod validation. */
+export interface CreatePollInput {
+  gameId: number;
+  linkedEventId?: number;
+  durationHours?: number;
+  memberUserIds?: number[];
+}
+
+@Injectable()
+export class StandalonePollService {
+  private readonly logger = new Logger(StandalonePollService.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly phaseQueue: LineupPhaseQueueService,
+    private readonly notifications: StandalonePollNotificationService,
+  ) {}
+
+  /** List all active standalone scheduling polls. */
+  async listActive() {
+    return findActiveStandalonePolls(this.db);
+  }
+
+  /** Mark a standalone poll as completed (match → scheduled, lineup → archived). */
+  async complete(matchId: number): Promise<boolean> {
+    return completeStandalonePoll(this.db, matchId);
+  }
+
+  /**
+   * Create a standalone scheduling poll.
+   * Inserts a decided lineup + scheduling match, adds members,
+   * optionally schedules auto-archive, and notifies interested users.
+   */
+  async create(
+    input: CreatePollInput,
+    userId: number,
+  ): Promise<SchedulingPollResponseDto> {
+    const game = await this.validateGame(input.gameId);
+    if (input.linkedEventId) {
+      await this.validateEvent(input.linkedEventId);
+    }
+    const phaseDeadline = this.computeDeadline(input.durationHours);
+    const lineup = await insertDecidedLineup(
+      this.db,
+      userId,
+      input.linkedEventId,
+      phaseDeadline,
+    );
+    const match = await insertSchedulingMatch(
+      this.db,
+      lineup.id,
+      input.gameId,
+      input.linkedEventId,
+    );
+    await this.addMembers(match.id, userId, input.memberUserIds);
+    if (phaseDeadline) {
+      await this.scheduleArchive(lineup.id, phaseDeadline);
+    }
+    this.fireNotifications(game, lineup.id, match.id, userId);
+    const memberCount = await countMatchMembers(this.db, match.id);
+    return this.buildResponse(match.id, lineup.id, game, memberCount);
+  }
+
+  /** Validate game exists, throw 404 if not. */
+  private async validateGame(
+    gameId: number,
+  ): Promise<{ id: number; name: string; coverUrl: string | null }> {
+    const game = await findGameById(this.db, gameId);
+    if (!game) throw new NotFoundException('Game not found');
+    return game;
+  }
+
+  /** Validate linked event exists, throw 404 if not. */
+  private async validateEvent(eventId: number): Promise<void> {
+    const exists = await eventExists(this.db, eventId);
+    if (!exists) throw new NotFoundException('Event not found');
+  }
+
+  /** Compute phase deadline from optional durationHours. */
+  private computeDeadline(durationHours?: number): Date | null {
+    if (!durationHours) return null;
+    return new Date(Date.now() + durationHours * 60 * 60 * 1000);
+  }
+
+  /** Add creator + provided members to the match. */
+  private async addMembers(
+    matchId: number,
+    creatorId: number,
+    memberUserIds?: number[],
+  ): Promise<void> {
+    const validIds = memberUserIds?.length
+      ? await filterValidUserIds(this.db, memberUserIds)
+      : [];
+    const allIds = [creatorId, ...validIds];
+    await insertMatchMembers(this.db, matchId, allIds);
+  }
+
+  /** Schedule decided->archived transition via phase queue. */
+  private async scheduleArchive(
+    lineupId: number,
+    deadline: Date,
+  ): Promise<void> {
+    const delayMs = deadline.getTime() - Date.now();
+    await this.phaseQueue.scheduleTransition(lineupId, 'archived', delayMs);
+  }
+
+  /** Fire-and-forget: notify game-interested users. */
+  private fireNotifications(
+    game: { id: number; name: string },
+    lineupId: number,
+    matchId: number,
+    creatorId: number,
+  ): void {
+    void this.notifications.notifyInterestedUsers(
+      game.id,
+      game.name,
+      lineupId,
+      matchId,
+      creatorId,
+    );
+  }
+
+  /** Build the API response DTO. */
+  private buildResponse(
+    matchId: number,
+    lineupId: number,
+    game: { id: number; name: string; coverUrl: string | null },
+    memberCount: number,
+  ): SchedulingPollResponseDto {
+    return {
+      id: matchId,
+      lineupId,
+      gameId: game.id,
+      gameName: game.name,
+      gameCoverUrl: game.coverUrl,
+      memberCount,
+      status: 'scheduling',
+      createdAt: new Date().toISOString(),
+    };
+  }
+}

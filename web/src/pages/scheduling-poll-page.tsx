@@ -14,7 +14,6 @@ import {
   useMatchAvailability,
   useToggleScheduleVote,
   useSuggestSlot,
-  useCreateEventFromSlot,
   useOtherPolls,
 } from '../hooks/use-scheduling';
 import { useGameTime } from '../hooks/use-game-time';
@@ -77,22 +76,31 @@ function getWeekStart(date: Date): Date {
   return d;
 }
 
-/** Convert suggested slots from the API into preview blocks for the grid. */
+/** Convert suggested slots from the API into preview blocks for the grid,
+ *  filtered to the visible week so blocks don't persist across week nav. */
 function slotsToPreviewBlocks(
   slots: SchedulePollPageResponseDto['slots'],
+  weekStart: Date,
 ): GameTimePreviewBlock[] {
-  return slots.map((slot) => {
-    const d = new Date(slot.proposedTime);
-    const voteLabel = slot.votes.length === 1 ? '1 vote' : `${slot.votes.length} votes`;
-    return {
-      dayOfWeek: d.getDay(),
-      startHour: d.getHours(),
-      endHour: d.getHours() + 2,
-      title: voteLabel,
-      label: voteLabel,
-      variant: 'current' as const,
-    };
-  });
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  return slots
+    .filter((slot) => {
+      const d = new Date(slot.proposedTime);
+      return d >= weekStart && d < weekEnd;
+    })
+    .map((slot) => {
+      const d = new Date(slot.proposedTime);
+      const voteLabel = slot.votes.length === 1 ? '1 vote' : `${slot.votes.length} votes`;
+      return {
+        dayOfWeek: d.getDay(),
+        startHour: d.getHours(),
+        endHour: d.getHours() + 2,
+        title: voteLabel,
+        label: voteLabel,
+        variant: 'current' as const,
+      };
+    });
 }
 
 /** Derive read-only status and vote state from poll data. */
@@ -105,33 +113,64 @@ function derivePollState(poll: SchedulePollPageResponseDto) {
 function usePollMutations(lineupId: number, matchId: number) {
   const toggleVote = useToggleScheduleVote();
   const suggest = useSuggestSlot();
-  const createEvt = useCreateEventFromSlot();
   return {
     toggleVote: (slotId: number) => toggleVote.mutate({ lineupId, matchId, slotId }),
     suggest: (t: string) => suggest.mutate({ lineupId, matchId, proposedTime: t }),
     isSuggesting: suggest.isPending,
-    createEvt,
   };
+}
+
+/** Completed poll state — shown when the match is scheduled and has a linked event. */
+function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
+  const eventId = poll.match.linkedEventId;
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
+      <MatchContextCard match={poll.match} />
+      <div className="p-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
+        <div data-testid="match-status-badge"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+          Poll Complete
+        </div>
+        <p className="text-sm text-emerald-400">
+          {eventId ? 'The event has been rescheduled.' : 'An event has been created from this poll.'}
+        </p>
+        {eventId && (
+          <Link to={`/events/${eventId}`}
+            className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+            View Event &rarr;
+          </Link>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** Render loaded poll page sections. */
 function PollSections({ lineupId, matchId, poll }: {
   lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
 }): JSX.Element {
+  if (poll.match.status === 'scheduled') {
+    return <CompletedPollState poll={poll} />;
+  }
+
+  return <ActivePollSections lineupId={lineupId} matchId={matchId} poll={poll} />;
+}
+
+/** Active poll — hooks live here to avoid conditional hook calls in PollSections. */
+function ActivePollSections({ lineupId, matchId, poll }: {
+  lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
+}): JSX.Element {
   const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
-  const { toggleVote, suggest, isSuggesting, createEvt } = usePollMutations(lineupId, matchId);
-  const [createdEventId, setCreatedEventId] = useState<number | null>(poll.match.linkedEventId ?? null);
-  const [recurring, setRecurring] = useState(false);
+  const { toggleVote, suggest, isSuggesting } = usePollMutations(lineupId, matchId);
+  /* linkedEventId is a back-reference to the rescheduled event, NOT a newly
+     created event. Only set createdEventId when the user creates from this poll. */
+  const [createdEventId] = useState<number | null>(null);
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const [previewBlock, setPreviewBlock] = useState<GameTimePreviewBlock | undefined>();
   const { readOnly, hasVoted } = derivePollState(poll);
-
-  const handleCreate = (slotId: number): void => {
-    createEvt.mutate({ lineupId, matchId, slotId, recurring },
-      { onSuccess: (r) => setCreatedEventId(r.eventId) });
-  };
 
   const handleWeekChange = (delta: number): void => {
     const next = new Date(weekStart);
@@ -148,7 +187,7 @@ function PollSections({ lineupId, matchId, poll }: {
         readOnly={readOnly}
         weekStart={weekStart} onWeekChange={handleWeekChange}
         previewBlocks={[
-          ...slotsToPreviewBlocks(poll.slots),
+          ...slotsToPreviewBlocks(poll.slots, weekStart),
           ...(previewBlock ? [previewBlock] : []),
         ]}
         onCellClick={(day, hour) => {
@@ -158,10 +197,10 @@ function PollSections({ lineupId, matchId, poll }: {
       <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
         readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
         isSuggesting={isSuggesting} prefillTime={prefillTime} />
-      <CreateEventSection slots={poll.slots} match={poll.match} hasVoted={hasVoted} readOnly={readOnly}
-        createdEventId={createdEventId} matchStatus={poll.match.status}
-        isCreating={createEvt.isPending} recurring={recurring}
-        onRecurringChange={setRecurring} onCreateEvent={handleCreate} />
+      <CreateEventSection slots={poll.slots} match={poll.match} matchId={matchId}
+        hasVoted={hasVoted} readOnly={readOnly}
+        createdEventId={createdEventId} linkedEventId={poll.match.linkedEventId ?? null}
+        matchStatus={poll.match.status} />
       <OtherPollsSection lineupId={lineupId} data={otherPolls} isLoading={otherLoading} />
     </div>
   );

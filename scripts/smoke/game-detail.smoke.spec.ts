@@ -5,7 +5,8 @@
  * Navigates from /games to the first game card link so we don't
  * hard-code a DB row ID that may differ across seed runs.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './base';
+import type { Page } from '@playwright/test';
 
 /**
  * Navigate to the first game detail page by clicking the first

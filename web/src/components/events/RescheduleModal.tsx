@@ -5,7 +5,7 @@ import { Modal } from '../ui/modal';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
 import { useAggregateGameTime, useRescheduleEvent } from '../../hooks/use-reschedule';
-import { useConvertEventToPlan } from '../../hooks/use-event-plans';
+import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DAYS, DURATION_PRESETS, formatHour, toLocalInput, nextOccurrence } from './reschedule-utils';
 import { PollBanner, GridLegend, StartTimeInput, DurationSelector, ConfirmationBar } from './reschedule-controls';
@@ -18,6 +18,7 @@ interface RescheduleModalProps {
     currentStartTime: string;
     currentEndTime: string;
     eventTitle: string;
+    gameId?: number;
     gameSlug?: string | null;
     gameName?: string | null;
     coverUrl?: string | null;
@@ -138,32 +139,37 @@ async function handleRescheduleConfirm(
     catch (err) { toast.error('Failed to reschedule', { description: err instanceof Error ? err.message : 'Please try again.' }); }
 }
 
-function RescheduleContent({ d, eventId, eventTitle, onClose, navigate }: {
+function RescheduleContent({ d, eventId, eventTitle, gameId, onClose, navigate }: {
     d: ReturnType<typeof useRescheduleModalData>; eventId: number; eventTitle?: string;
-    onClose: () => void; navigate: ReturnType<typeof useNavigate>;
+    gameId?: number; onClose: () => void; navigate: ReturnType<typeof useNavigate>;
 }) {
     const reschedule = useRescheduleEvent(eventId);
-    const convertToPlan = useConvertEventToPlan();
+    const createPoll = useCreateSchedulingPoll();
     const handleClose = () => { d.s.setNewStartTime(null); d.s.setGridSelection(null); onClose(); };
     const handlePoll = async () => {
-        try { await convertToPlan.mutateAsync({ eventId, options: { cancelOriginal: true } }); handleClose(); navigate('/events?tab=plans'); }
-        catch { /* Error toast handled by mutation */ }
+        if (!gameId) return;
+        try {
+            const result = await createPoll.mutateAsync({ gameId, linkedEventId: eventId });
+            handleClose();
+            navigate(`/community-lineup/${result.lineupId}/schedule/${result.id}`);
+        } catch { /* Error toast handled by mutation */ }
     };
 
     return (
         <RescheduleContentBody d={d} eventTitle={eventTitle} reschedule={reschedule}
-            convertToPlan={convertToPlan} handleClose={handleClose} handlePoll={handlePoll} />
+            createPoll={createPoll} handleClose={handleClose} handlePoll={handlePoll}
+            pollDisabled={!gameId} />
     );
 }
 
-function RescheduleContentBody({ d, eventTitle, reschedule, convertToPlan, handleClose, handlePoll }: {
+function RescheduleContentBody({ d, eventTitle, reschedule, createPoll, handleClose, handlePoll, pollDisabled }: {
     d: ReturnType<typeof useRescheduleModalData>; eventTitle?: string;
-    reschedule: ReturnType<typeof useRescheduleEvent>; convertToPlan: ReturnType<typeof useConvertEventToPlan>;
-    handleClose: () => void; handlePoll: () => void;
+    reschedule: ReturnType<typeof useRescheduleEvent>; createPoll: ReturnType<typeof useCreateSchedulingPoll>;
+    handleClose: () => void; handlePoll: () => void; pollDisabled: boolean;
 }) {
     return (
         <div className="flex flex-col gap-3 min-h-0 h-full">
-            <PollBanner onPoll={handlePoll} isPending={convertToPlan.isPending} />
+            <PollBanner onPoll={handlePoll} isPending={createPoll.isPending || pollDisabled} />
             <GridLegend hasSelection={!!d.s.gridSelection} />
             <GridBody isLoading={d.isLoading} signupCount={d.signupCount} currentEventBlocks={d.currentEventBlocks}
                 previewBlocks={d.previewBlocks} heatmapOverlay={d.gameTimeData?.cells}
@@ -181,13 +187,13 @@ function RescheduleContentBody({ d, eventTitle, reschedule, convertToPlan, handl
 
 export function RescheduleModal({
     isOpen, onClose, eventId, currentStartTime, currentEndTime, eventTitle,
-    gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount,
+    gameId, gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount,
 }: RescheduleModalProps) {
     const navigate = useNavigate();
     const isMobile = useMediaQuery('(max-width: 767px)');
     const d = useRescheduleModalData(eventId, isOpen, currentStartTime, currentEndTime, { eventTitle, gameSlug, gameName, coverUrl, description, creatorUsername, signupCount: eventSignupCount });
     const handleClose = () => { d.s.setNewStartTime(null); d.s.setGridSelection(null); onClose(); };
-    const content = <RescheduleContent d={d} eventId={eventId} eventTitle={eventTitle} onClose={onClose} navigate={navigate} />;
+    const content = <RescheduleContent d={d} eventId={eventId} eventTitle={eventTitle} gameId={gameId} onClose={onClose} navigate={navigate} />;
 
     if (isMobile) return <BottomSheet isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxHeight="85vh">{content}</BottomSheet>;
     return <Modal isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxWidth="max-w-4xl" bodyClassName="p-4 flex flex-col max-h-[calc(90vh-4rem)]">{content}</Modal>;

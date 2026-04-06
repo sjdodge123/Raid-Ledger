@@ -2,7 +2,7 @@
  * Navigation smoke tests — nav links, header, console errors.
  * Desktop tests use the header nav; mobile tests use the bottom tab bar.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import { isMobile } from './helpers';
 
 test.describe('Navigation (desktop)', () => {

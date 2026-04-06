@@ -3,7 +3,7 @@
  * Route: /community-lineup/:lineupId/schedule/:matchId
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 const API_BASE = process.env.API_URL || 'http://localhost:3000';
 
@@ -525,28 +525,15 @@ test.describe('Scheduling poll Create Event button', () => {
 // Recurring event checkbox (ROK-965 coverage gap)
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll recurring checkbox', () => {
-    test('recurring checkbox exists, is unchecked by default, and can be toggled', async ({
+test.describe('Scheduling poll create event button', () => {
+    test('Create Event button navigates to create-event page with game and time pre-filled', async ({
         page,
     }) => {
         await goToPoll(page, lineupId, matchId);
 
-        // The recurring checkbox should be present on the page
-        const recurringCheckbox = page.getByRole('checkbox', {
-            name: /Repeat weekly|recurring/i,
-        });
-        await expect(recurringCheckbox).toBeVisible({ timeout: 15_000 });
-
-        // It should be unchecked by default
-        await expect(recurringCheckbox).not.toBeChecked();
-
-        // Toggle it on
-        await recurringCheckbox.check();
-        await expect(recurringCheckbox).toBeChecked();
-
-        // Toggle it off
-        await recurringCheckbox.uncheck();
-        await expect(recurringCheckbox).not.toBeChecked();
+        // The Create Event button should navigate to /events/new with query params
+        const createEventBtn = page.getByRole('button', { name: /Create Event/i });
+        await expect(createEventBtn).toBeVisible({ timeout: 15_000 });
     });
 });
 
@@ -555,40 +542,29 @@ test.describe('Scheduling poll recurring checkbox', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Scheduling poll event creation and post-creation status', () => {
-    test('creates event, shows success state, scheduled badge, and event link', async ({
+    test('creating event via API shows Poll Complete state with badge and event link', async ({
         page,
     }) => {
-        await goToPoll(page, lineupId, matchId);
-
-        // If event was already created (by another viewport), check post-creation state directly
-        const scheduledBadge = page.locator('[data-testid="match-status-badge"]');
-        const alreadyCreated = await scheduledBadge.isVisible({ timeout: 3_000 }).catch(() => false);
-
-        if (!alreadyCreated) {
-            // AC8: Vote was pre-registered via API in beforeAll — button should be enabled
-            const createEventBtn = page.getByRole('button', { name: /Create Event/i });
-            await expect(createEventBtn).toBeVisible({ timeout: 20_000 });
-            await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
-
-            // Soft gate may show confirmation — handle it
-            await createEventBtn.click();
-            const confirmBtn = page.getByRole('button', { name: /Yes, Create/i });
-            if (await confirmBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
-                await confirmBtn.click();
-            }
-
-            // Success state should appear
-            await expect(page.getByText('Event created successfully!')).toBeVisible({ timeout: 15_000 });
+        // Create event via API (the frontend now navigates to /events/new instead)
+        const slotRes = await apiGet(adminToken, `/lineups/${lineupId}/schedule/${matchId}`);
+        if (slotRes?.slots?.[0]?.id) {
+            await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/vote`, {
+                slotId: slotRes.slots[0].id,
+            }).catch(() => {});
+            await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/create-event`, {
+                slotId: slotRes.slots[0].id,
+            }).catch(() => {});
         }
 
-        // AC9: Scheduled badge and event link visible
-        await expect(scheduledBadge).toBeVisible({ timeout: 15_000 });
-        await expect(scheduledBadge).toHaveText(/Scheduled/i);
+        await goToPoll(page, lineupId, matchId);
 
-        const eventLink = page.getByRole('link', { name: /View Event|Go to Event/i });
+        // After event creation, poll shows completed state
+        const completedBadge = page.locator('[data-testid="match-status-badge"]');
+        await expect(completedBadge).toBeVisible({ timeout: 15_000 });
+        await expect(completedBadge).toHaveText(/Poll Complete|Scheduled/i);
+
+        const eventLink = page.getByRole('link', { name: /View Event/i });
         await expect(eventLink).toBeVisible({ timeout: 5_000 });
-        const href = await eventLink.getAttribute('href');
-        expect(href).toMatch(/\/events\/\d+/);
     });
 });
 

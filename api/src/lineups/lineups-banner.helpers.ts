@@ -2,7 +2,7 @@
  * Banner helpers for the lineup Games-page banner (ROK-935).
  * Builds lightweight banner data for building/voting/decided lineups.
  */
-import { desc, inArray } from 'drizzle-orm';
+import { and, desc, inArray, or, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -41,14 +41,22 @@ interface BannerLineup {
 }
 
 /**
- * Find the most recent lineup eligible for the banner.
- * Returns the newest building, voting, or decided lineup.
+ * Find the most recent community lineup eligible for the banner.
+ * Excludes standalone scheduling poll lineups (phaseDurationOverride.standalone).
  */
 export function findBannerLineup(db: Db) {
   return db
     .select()
     .from(schema.communityLineups)
-    .where(inArray(schema.communityLineups.status, BANNER_STATUSES))
+    .where(
+      and(
+        inArray(schema.communityLineups.status, BANNER_STATUSES),
+        or(
+          isNull(schema.communityLineups.phaseDurationOverride),
+          sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' IS NULL`,
+        ),
+      ),
+    )
     .orderBy(desc(schema.communityLineups.createdAt))
     .limit(1);
 }

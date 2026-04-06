@@ -126,3 +126,6 @@ export * from './lineup-scheduling.schema.js';
 
 // Activity Log (ROK-930)
 export * from './activity-log.schema.js';
+
+// Standalone Scheduling Poll (ROK-977)
+export * from './standalone-poll.schema.js';

@@ -1,7 +1,7 @@
 /**
  * Events smoke tests — events list, event detail, reschedule modal, regressions.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import { navigateToFirstEvent } from './helpers';
 
 // ---------------------------------------------------------------------------

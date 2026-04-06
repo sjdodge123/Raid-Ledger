@@ -9,7 +9,7 @@
  * IMPORTANT: These tests do NOT complete onboarding or modify guild
  * configuration — they only verify rendering and navigation.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 import { isMobile } from './helpers';
 
 const WIZARD_URL = '/onboarding?rerun=1';

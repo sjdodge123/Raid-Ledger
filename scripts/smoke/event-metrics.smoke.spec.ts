@@ -6,7 +6,8 @@
  * Playwright projects. No viewport-specific selectors needed — the metrics
  * page uses responsive CSS that renders the same content at both sizes.
  */
-import { test, expect, type TestInfo } from '@playwright/test';
+import { test, expect } from './base';
+import type { TestInfo } from '@playwright/test';
 
 function isMobile(testInfo: TestInfo) { return testInfo.project.name === 'mobile'; }
 

@@ -6,7 +6,7 @@
  * Tests focus on form rendering and validation without actually submitting
  * (to avoid creating data that affects other tests).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 // ---------------------------------------------------------------------------
 // Plan Event Form — Rendering

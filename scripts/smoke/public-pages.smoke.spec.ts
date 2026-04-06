@@ -8,7 +8,7 @@
  *  - Community branding (header link) is visible
  *  - Unauthenticated visitors can reach the pages
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 // ---------------------------------------------------------------------------
 // Join page — /join

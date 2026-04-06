@@ -5,9 +5,20 @@
  * and the lineup detail page. Creates a lineup via the API in beforeAll
  * and cleans up afterward.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 const API_BASE = process.env.API_URL || 'http://localhost:3000';
+
+/** Fetch real game IDs from the configured-games endpoint. */
+async function fetchGameIds(token: string, count: number): Promise<number[]> {
+    const res = await fetch(`${API_BASE}/games/configured`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`fetchGameIds failed: ${res.status}`);
+    const body = (await res.json()) as { data: { id: number }[] };
+    if (!body.data?.length) throw new Error('No configured games in DB');
+    return body.data.slice(0, count).map((g) => g.id);
+}
 
 async function getAdminToken(): Promise<string> {
     const res = await fetch(`${API_BASE}/auth/local`, {
@@ -464,10 +475,10 @@ test.describe('Voting phase', () => {
         }
 
         // Ensure the lineup has nominations before advancing to voting.
-        // CI seeds game registry (WoW=1, WoW Classic=2, etc.) via db:seed:games.
         const detail = await apiGet(adminToken, `/lineups/${votingLineupId}`);
         if (!detail?.entries?.length) {
-            for (const gid of [1, 2, 3]) {
+            const gameIds = await fetchGameIds(adminToken, 3);
+            for (const gid of gameIds) {
                 await apiPost(adminToken, `/lineups/${votingLineupId}/nominate`, { gameId: gid });
             }
         }

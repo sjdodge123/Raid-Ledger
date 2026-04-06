@@ -39,6 +39,7 @@ export const communityLineups = pgTable('community_lineups', {
     building?: number;
     voting?: number;
     decided?: number;
+    standalone?: boolean;
   } | null>(),
   /** Match threshold percentage for the matching algorithm (0–100, default 35). */
   matchThreshold: integer('match_threshold').notNull().default(35),

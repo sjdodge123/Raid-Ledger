@@ -10,7 +10,7 @@
  * mobile Playwright projects without skips.  Verified via MCP exploration
  * (ROK-903).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 /**
  * Navigate to the Players page and follow the first user link to reach

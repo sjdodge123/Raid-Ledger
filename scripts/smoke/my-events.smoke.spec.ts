@@ -2,7 +2,7 @@
  * My Events / Event Metrics dashboard smoke tests — page load, stats,
  * dashboard tab, analytics tab at desktop and mobile viewports.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 // ---------------------------------------------------------------------------
 // Dashboard Tab (default view)

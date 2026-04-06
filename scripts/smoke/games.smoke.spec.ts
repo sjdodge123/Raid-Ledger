@@ -1,7 +1,7 @@
 /**
  * Games page smoke tests — page load, mobile card spacing, mobile search styling.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './base';
 
 test.describe('Games page', () => {
     test('page loads without crashing', async ({ page }) => {
