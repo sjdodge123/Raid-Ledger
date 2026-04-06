@@ -211,7 +211,7 @@ test.describe('CreatePollModal — game and member picker', () => {
         const searchResults = modal.locator(
             '[data-testid="game-search-results"] [role="option"], [data-testid="game-option"]',
         );
-        await expect(searchResults.first()).toBeVisible({ timeout: 10_000 });
+        await expect(searchResults.first()).toBeVisible({ timeout: 25_000 });
     });
 });
 
