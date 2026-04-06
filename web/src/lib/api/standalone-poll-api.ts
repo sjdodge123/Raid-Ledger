@@ -23,6 +23,11 @@ export async function getActiveStandalonePolls(): Promise<ActiveStandalonePoll[]
   return fetchApi('/scheduling-polls/active');
 }
 
+/** Complete a standalone poll (archive after reschedule/event creation). */
+export async function completeStandalonePoll(matchId: number): Promise<void> {
+  await fetchApi(`/scheduling-polls/${matchId}/complete`, { method: 'POST' });
+}
+
 /** Create a standalone scheduling poll. */
 export async function createSchedulingPoll(
   dto: CreateSchedulingPollDto,

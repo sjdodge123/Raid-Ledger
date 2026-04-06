@@ -111,6 +111,26 @@ export async function insertMatchMembers(
   );
 }
 
+/** Complete a standalone poll: set match to 'scheduled' and archive the lineup. */
+export async function completeStandalonePoll(
+  db: Db,
+  matchId: number,
+): Promise<boolean> {
+  const [match] = await db
+    .select({ id: schema.communityLineupMatches.id, lineupId: schema.communityLineupMatches.lineupId })
+    .from(schema.communityLineupMatches)
+    .where(eq(schema.communityLineupMatches.id, matchId))
+    .limit(1);
+  if (!match) return false;
+  await db.update(schema.communityLineupMatches)
+    .set({ status: 'scheduled' })
+    .where(eq(schema.communityLineupMatches.id, matchId));
+  await db.update(schema.communityLineups)
+    .set({ status: 'archived' })
+    .where(eq(schema.communityLineups.id, match.lineupId));
+  return true;
+}
+
 /** Find all active standalone polls (scheduling matches in standalone lineups). */
 export async function findActiveStandalonePolls(
   db: Db,

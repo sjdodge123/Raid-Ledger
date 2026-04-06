@@ -207,4 +207,5 @@ export {
 export {
     createSchedulingPoll,
     getActiveStandalonePolls,
+    completeStandalonePoll,
 } from './api/standalone-poll-api';

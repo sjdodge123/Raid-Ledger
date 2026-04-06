@@ -8,10 +8,12 @@ import { Link } from 'react-router-dom';
 import type { ScheduleSlotWithVotesDto, MatchDetailResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useRescheduleEvent } from '../../hooks/use-reschedule';
+import { completeStandalonePoll } from '../../lib/api-client';
 
 interface CreateEventSectionProps {
   slots: ScheduleSlotWithVotesDto[];
   match: MatchDetailResponseDto;
+  matchId: number;
   hasVoted: boolean;
   readOnly: boolean;
   createdEventId: number | null;
@@ -111,7 +113,7 @@ function ParticipationBanner({ voted, total }: { voted: number; total: number })
 
 /** Section for creating an event or rescheduling from a selected slot. */
 export function CreateEventSection({
-  slots, match, hasVoted, readOnly, createdEventId, linkedEventId,
+  slots, match, matchId, hasVoted, readOnly, createdEventId, linkedEventId,
   matchStatus, isCreating, recurring, onRecurringChange, onCreateEvent,
 }: CreateEventSectionProps): JSX.Element {
   const isReschedule = linkedEventId !== null;
@@ -121,8 +123,8 @@ export function CreateEventSection({
   }
 
   if (isReschedule) {
-    return <RescheduleFromSlot slots={slots} linkedEventId={linkedEventId}
-      hasVoted={hasVoted} readOnly={readOnly} />;
+    return <RescheduleFromSlot slots={slots} matchId={matchId}
+      linkedEventId={linkedEventId} hasVoted={hasVoted} readOnly={readOnly} />;
   }
 
   return <CreateFromSlot slots={slots} match={match} hasVoted={hasVoted}
@@ -131,8 +133,8 @@ export function CreateEventSection({
 }
 
 /** Reschedule the linked event to the selected slot's time. */
-function RescheduleFromSlot({ slots, linkedEventId, hasVoted, readOnly }: {
-  slots: ScheduleSlotWithVotesDto[]; linkedEventId: number;
+function RescheduleFromSlot({ slots, matchId, linkedEventId, hasVoted, readOnly }: {
+  slots: ScheduleSlotWithVotesDto[]; matchId: number; linkedEventId: number;
   hasVoted: boolean; readOnly: boolean;
 }): JSX.Element {
   const sorted = sortedSlots(slots);
@@ -148,7 +150,7 @@ function RescheduleFromSlot({ slots, linkedEventId, hasVoted, readOnly }: {
     const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
     reschedule.mutate(
       { startTime: start.toISOString(), endTime: end.toISOString() },
-      { onSuccess: () => setDone(true) },
+      { onSuccess: () => { void completeStandalonePoll(matchId); setDone(true); } },
     );
   };
 

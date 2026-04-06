@@ -6,12 +6,15 @@ import {
   Controller,
   Get,
   Post,
+  Param,
   Body,
   UseGuards,
   Req,
   HttpCode,
   HttpStatus,
   BadRequestException,
+  NotFoundException,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -33,6 +36,15 @@ export class StandalonePollController {
   @Get('active')
   async listActive() {
     return this.service.listActive();
+  }
+
+  /** Mark a standalone poll as completed (after reschedule or event creation). */
+  @Post(':matchId/complete')
+  @HttpCode(HttpStatus.OK)
+  async complete(@Param('matchId', ParseIntPipe) matchId: number) {
+    const ok = await this.service.complete(matchId);
+    if (!ok) throw new NotFoundException('Poll not found');
+    return { ok: true };
   }
 
   /**

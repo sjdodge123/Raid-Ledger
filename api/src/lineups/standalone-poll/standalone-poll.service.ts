@@ -19,6 +19,7 @@ import {
   insertMatchMembers,
   countMatchMembers,
   findActiveStandalonePolls,
+  completeStandalonePoll,
 } from './standalone-poll-query.helpers';
 
 /** Input DTO after Zod validation. */
@@ -43,6 +44,11 @@ export class StandalonePollService {
   /** List all active standalone scheduling polls. */
   async listActive() {
     return findActiveStandalonePolls(this.db);
+  }
+
+  /** Mark a standalone poll as completed (match → scheduled, lineup → archived). */
+  async complete(matchId: number): Promise<boolean> {
+    return completeStandalonePoll(this.db, matchId);
   }
 
   /**
