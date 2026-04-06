@@ -95,7 +95,7 @@ test.describe('Events page — Schedule a Game button', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // AC7: The "Schedule a Game" button should be visible in the events toolbar
-        const scheduleBtn = page.getByRole('link', { name: /Schedule a Game/i });
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
         await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
     });
 
@@ -113,7 +113,7 @@ test.describe('Events page — Schedule a Game button', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // AC7: On mobile, the "Schedule a Game" action should still be accessible
-        const scheduleBtn = page.getByRole('link', { name: /Schedule a Game/i });
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
         await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
     });
 });
@@ -137,7 +137,7 @@ test.describe('CreatePollModal — game and member picker', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // Click the "Schedule a Game" button
-        const scheduleBtn = page.getByRole('link', { name: /Schedule a Game/i });
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
         await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
         await scheduleBtn.click();
 
@@ -167,7 +167,7 @@ test.describe('CreatePollModal — game and member picker', () => {
             page.getByRole('heading', { name: /Events/i }).first(),
         ).toBeVisible({ timeout: 15_000 });
 
-        const scheduleBtn = page.getByRole('link', { name: /Schedule a Game/i });
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
         await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
         await scheduleBtn.click();
 
@@ -194,7 +194,7 @@ test.describe('CreatePollModal — game and member picker', () => {
             page.getByRole('heading', { name: /Events/i }).first(),
         ).toBeVisible({ timeout: 15_000 });
 
-        const scheduleBtn = page.getByRole('link', { name: /Schedule a Game/i });
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
         await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
         await scheduleBtn.click();
 
@@ -234,7 +234,7 @@ test.describe('Events page poll creation navigates to scheduling poll', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // Open CreatePollModal
-        const scheduleBtn = page.getByRole('link', { name: /Schedule a Game/i });
+        const scheduleBtn = page.getByRole('button', { name: /Schedule a Game/i });
         await expect(scheduleBtn).toBeVisible({ timeout: 10_000 });
         await scheduleBtn.click();
 
@@ -439,7 +439,7 @@ test.describe('Standalone poll — scheduling poll page', () => {
                     const btn = page.locator('button', { hasText: label }).first();
                     if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
                         await btn.click();
-                        await page.waitForTimeout(500);
+                        await page.waitForLoadState('domcontentloaded');
                         break;
                     }
                 }

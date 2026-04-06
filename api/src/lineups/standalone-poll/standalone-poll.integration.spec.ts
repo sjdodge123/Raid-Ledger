@@ -65,14 +65,6 @@ async function loginAsMember(
   return { token: res.body.access_token as string, userId: user.id };
 }
 
-async function createGame(name: string, slug: string) {
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({ name, slug })
-    .returning();
-  return game;
-}
-
 async function createEvent(title: string, gameId: number) {
   const now = new Date();
   const start = new Date(now.getTime() + 86_400_000);

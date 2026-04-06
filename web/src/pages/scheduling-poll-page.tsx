@@ -14,7 +14,6 @@ import {
   useMatchAvailability,
   useToggleScheduleVote,
   useSuggestSlot,
-  useCreateEventFromSlot,
   useOtherPolls,
 } from '../hooks/use-scheduling';
 import { useGameTime } from '../hooks/use-game-time';
@@ -114,12 +113,10 @@ function derivePollState(poll: SchedulePollPageResponseDto) {
 function usePollMutations(lineupId: number, matchId: number) {
   const toggleVote = useToggleScheduleVote();
   const suggest = useSuggestSlot();
-  const createEvt = useCreateEventFromSlot();
   return {
     toggleVote: (slotId: number) => toggleVote.mutate({ lineupId, matchId, slotId }),
     suggest: (t: string) => suggest.mutate({ lineupId, matchId, proposedTime: t }),
     isSuggesting: suggest.isPending,
-    createEvt,
   };
 }
 
@@ -138,10 +135,10 @@ function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JS
           {eventId ? 'The event has been rescheduled.' : 'An event has been created from this poll.'}
         </p>
         {eventId && (
-          <a href={`/events/${eventId}`}
+          <Link to={`/events/${eventId}`}
             className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
             View Event &rarr;
-          </a>
+          </Link>
         )}
       </div>
     </div>
@@ -165,20 +162,14 @@ function ActivePollSections({ lineupId, matchId, poll }: {
 }): JSX.Element {
   const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
-  const { toggleVote, suggest, isSuggesting, createEvt } = usePollMutations(lineupId, matchId);
+  const { toggleVote, suggest, isSuggesting } = usePollMutations(lineupId, matchId);
   /* linkedEventId is a back-reference to the rescheduled event, NOT a newly
      created event. Only set createdEventId when the user creates from this poll. */
-  const [createdEventId, setCreatedEventId] = useState<number | null>(null);
-  const [recurring, setRecurring] = useState(false);
+  const [createdEventId] = useState<number | null>(null);
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const [previewBlock, setPreviewBlock] = useState<GameTimePreviewBlock | undefined>();
   const { readOnly, hasVoted } = derivePollState(poll);
-
-  const handleCreate = (slotId: number): void => {
-    createEvt.mutate({ lineupId, matchId, slotId, recurring },
-      { onSuccess: (r) => setCreatedEventId(r.eventId) });
-  };
 
   const handleWeekChange = (delta: number): void => {
     const next = new Date(weekStart);
@@ -208,9 +199,7 @@ function ActivePollSections({ lineupId, matchId, poll }: {
       <CreateEventSection slots={poll.slots} match={poll.match} matchId={matchId}
         hasVoted={hasVoted} readOnly={readOnly}
         createdEventId={createdEventId} linkedEventId={poll.match.linkedEventId ?? null}
-        matchStatus={poll.match.status}
-        isCreating={createEvt.isPending} recurring={recurring}
-        onRecurringChange={setRecurring} onCreateEvent={handleCreate} />
+        matchStatus={poll.match.status} />
       <OtherPollsSection lineupId={lineupId} data={otherPolls} isLoading={otherLoading} />
     </div>
   );

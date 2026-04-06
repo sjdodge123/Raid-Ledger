@@ -15,10 +15,10 @@ interface PollGameSearchProps {
 function usePollGameSearchState(
   value: IgdbGameDto | null,
   onChange: (game: IgdbGameDto | null) => void,
+  containerRef: React.RefObject<HTMLDivElement | null>,
 ) {
   const [query, setQuery] = useState(value?.name ?? '');
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
   const { data: searchResult, isLoading } = useGameSearch(query, isOpen);
   const games = searchResult?.data ?? [];
 
@@ -37,7 +37,7 @@ function usePollGameSearchState(
     if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
       setIsOpen(false);
     }
-  }, []);
+  }, [containerRef]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -46,17 +46,18 @@ function usePollGameSearchState(
   }, [isOpen, closeOnOutsideClick]);
 
   return {
-    query, setQuery, isOpen, setIsOpen, containerRef,
+    query, setQuery, isOpen, setIsOpen,
     isLoading, games, handleSelect, handleClear,
   };
 }
 
 /** Game search with inline dropdown (not portal-based). */
 export function PollGameSearch({ value, onChange }: PollGameSearchProps) {
-  const s = usePollGameSearchState(value, onChange);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const s = usePollGameSearchState(value, onChange, containerRef);
 
   return (
-    <div ref={s.containerRef} className="relative">
+    <div ref={containerRef} className="relative">
       <label className="block text-sm font-medium text-secondary mb-2">Game</label>
       <SearchInput
         query={s.query}

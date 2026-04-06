@@ -6,7 +6,6 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ScheduleSlotWithVotesDto, MatchDetailResponseDto } from '@raid-ledger/contract';
-import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useRescheduleEvent } from '../../hooks/use-reschedule';
 import { completeStandalonePoll } from '../../lib/api-client';
 import { toast } from '../../lib/toast';
@@ -20,10 +19,6 @@ interface CreateEventSectionProps {
   createdEventId: number | null;
   linkedEventId: number | null;
   matchStatus: string;
-  isCreating: boolean;
-  recurring: boolean;
-  onRecurringChange: (value: boolean) => void;
-  onCreateEvent: (slotId: number) => void;
 }
 
 /** Format a slot for display, marking past slots. */
@@ -82,42 +77,10 @@ function CreatedSuccessState({ eventId, matchStatus }: {
   );
 }
 
-/** Recurring series checkbox. */
-function RecurringCheckbox({ checked, onChange, disabled }: {
-  checked: boolean; onChange: (v: boolean) => void; disabled: boolean;
-}): JSX.Element {
-  return (
-    <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
-      <input type="checkbox" checked={checked} disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500" />
-      Repeat weekly for 4 weeks
-    </label>
-  );
-}
-
-/** Compute how many match members have participated (voted on any slot). */
-function getParticipation(match: MatchDetailResponseDto, slots: ScheduleSlotWithVotesDto[]) {
-  const voterIds = new Set(slots.flatMap((s) => s.votes.map((v) => v.userId)));
-  const total = match.members.length;
-  const voted = match.members.filter((m) => voterIds.has(m.userId)).length;
-  return { voted, total, allVoted: voted >= total };
-}
-
-/** Participation banner shown when not all members have voted. */
-function ParticipationBanner({ voted, total }: { voted: number; total: number }): JSX.Element {
-  const remaining = total - voted;
-  return (
-    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
-      {remaining} of {total} {remaining === 1 ? 'member hasn\u2019t' : 'members haven\u2019t'} voted yet.
-    </div>
-  );
-}
-
 /** Section for creating an event or rescheduling from a selected slot. */
 export function CreateEventSection({
   slots, match, matchId, hasVoted, readOnly, createdEventId, linkedEventId,
-  matchStatus, isCreating, recurring, onRecurringChange, onCreateEvent,
+  matchStatus,
 }: CreateEventSectionProps): JSX.Element {
   const isReschedule = linkedEventId !== null;
 

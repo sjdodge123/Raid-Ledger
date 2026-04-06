@@ -122,7 +122,8 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     const overrides = lineup.phaseDurationOverride;
     if (overrides && typeof overrides === 'object') {
       const key = targetStatus as keyof typeof overrides;
-      if (key in overrides && overrides[key] != null) return overrides[key];
+      const val = key !== 'standalone' ? overrides[key] : undefined;
+      if (typeof val === 'number') return val;
     }
     const defaults = await getLineupDurationDefaults(this.settingsService);
     const key = targetStatus as keyof typeof defaults;

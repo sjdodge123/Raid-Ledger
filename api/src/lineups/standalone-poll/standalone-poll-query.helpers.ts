@@ -2,7 +2,7 @@
  * Database query helpers for standalone scheduling polls (ROK-977).
  * Keeps the service layer thin by extracting all DB operations here.
  */
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -67,7 +67,7 @@ export async function insertDecidedLineup(
       phaseDeadline,
       /* Mark as standalone so community lineup queries exclude it.
          Uses existing JSONB column — no migration needed. */
-      phaseDurationOverride: { standalone: true } as unknown as Record<string, number>,
+      phaseDurationOverride: { standalone: true },
     })
     .returning({ id: schema.communityLineups.id });
   return row;
@@ -111,33 +111,64 @@ export async function insertMatchMembers(
   );
 }
 
-/** Complete a standalone poll: set match to 'scheduled' and archive the lineup. */
+/** Complete a standalone poll: set match to 'scheduled' and archive the lineup.
+ *  Only acts on matches whose parent lineup is marked standalone. */
 export async function completeStandalonePoll(
   db: Db,
   matchId: number,
 ): Promise<boolean> {
   const [match] = await db
-    .select({ id: schema.communityLineupMatches.id, lineupId: schema.communityLineupMatches.lineupId })
+    .select({
+      id: schema.communityLineupMatches.id,
+      lineupId: schema.communityLineupMatches.lineupId,
+    })
     .from(schema.communityLineupMatches)
-    .where(eq(schema.communityLineupMatches.id, matchId))
+    .innerJoin(
+      schema.communityLineups,
+      eq(schema.communityLineups.id, schema.communityLineupMatches.lineupId),
+    )
+    .where(
+      and(
+        eq(schema.communityLineupMatches.id, matchId),
+        sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' = 'true'`,
+      ),
+    )
     .limit(1);
   if (!match) return false;
-  await db.update(schema.communityLineupMatches)
-    .set({ status: 'scheduled' })
-    .where(eq(schema.communityLineupMatches.id, matchId));
-  await db.update(schema.communityLineups)
-    .set({ status: 'archived' })
-    .where(eq(schema.communityLineups.id, match.lineupId));
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.communityLineupMatches)
+      .set({ status: 'scheduled' })
+      .where(eq(schema.communityLineupMatches.id, matchId));
+    await tx
+      .update(schema.communityLineups)
+      .set({ status: 'archived' })
+      .where(eq(schema.communityLineups.id, match.lineupId));
+  });
   return true;
 }
 
 /** Find all active standalone polls (scheduling matches in standalone lineups). */
 export async function findActiveStandalonePolls(
   db: Db,
-): Promise<{ matchId: number; lineupId: number; gameName: string; gameCoverUrl: string | null; memberCount: number; slotCount: number }[]> {
+): Promise<
+  {
+    matchId: number;
+    lineupId: number;
+    gameName: string;
+    gameCoverUrl: string | null;
+    memberCount: number;
+    slotCount: number;
+  }[]
+> {
   const rows = await db.execute<{
-    matchId: number; lineupId: number; gameName: string;
-    gameCoverUrl: string | null; memberCount: number; slotCount: number;
+    matchId: number;
+    lineupId: number;
+    gameName: string;
+    gameCoverUrl: string | null;
+    memberCount: number;
+    slotCount: number;
   }>(sql`
     SELECT m.id AS "matchId", m.lineup_id AS "lineupId",
            g.name AS "gameName", g.cover_url AS "gameCoverUrl",
@@ -160,9 +191,9 @@ export async function countMatchMembers(
   db: Db,
   matchId: number,
 ): Promise<number> {
-  const rows = await db
-    .select({ id: schema.communityLineupMatchMembers.id })
+  const [row] = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
     .from(schema.communityLineupMatchMembers)
     .where(eq(schema.communityLineupMatchMembers.matchId, matchId));
-  return rows.length;
+  return row?.count ?? 0;
 }

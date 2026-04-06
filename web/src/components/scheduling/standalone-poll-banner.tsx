@@ -4,10 +4,10 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
+import type { ActiveStandalonePollDto } from '@raid-ledger/contract';
 import { useActiveStandalonePolls } from '../../hooks/use-standalone-poll';
-import type { ActiveStandalonePoll } from '../../lib/api/standalone-poll-api';
 
-function PollLink({ poll }: { poll: ActiveStandalonePoll }): JSX.Element {
+function PollLink({ poll }: { poll: ActiveStandalonePollDto }): JSX.Element {
   return (
     <Link
       to={`/community-lineup/${poll.lineupId}/schedule/${poll.matchId}`}

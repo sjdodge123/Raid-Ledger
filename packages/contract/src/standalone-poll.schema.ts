@@ -47,3 +47,24 @@ export const SchedulingPollResponseSchema = z.object({
 });
 
 export type SchedulingPollResponseDto = z.infer<typeof SchedulingPollResponseSchema>;
+
+/**
+ * Shape returned by GET /scheduling-polls/active.
+ * Each entry represents an in-progress standalone scheduling poll.
+ */
+export const ActiveStandalonePollSchema = z.object({
+    /** The match ID (primary identifier for the scheduling poll). */
+    matchId: z.number(),
+    /** The lineup ID (needed for URL routing). */
+    lineupId: z.number(),
+    /** Display name of the game being scheduled. */
+    gameName: z.string(),
+    /** Cover image URL for the game (null if none). */
+    gameCoverUrl: z.string().nullable(),
+    /** Number of members in the match. */
+    memberCount: z.number(),
+    /** Number of proposed time slots. */
+    slotCount: z.number(),
+});
+
+export type ActiveStandalonePollDto = z.infer<typeof ActiveStandalonePollSchema>;

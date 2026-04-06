@@ -157,18 +157,19 @@ function RescheduleContent({ d, eventId, eventTitle, gameId, onClose, navigate }
 
     return (
         <RescheduleContentBody d={d} eventTitle={eventTitle} reschedule={reschedule}
-            createPoll={createPoll} handleClose={handleClose} handlePoll={handlePoll} />
+            createPoll={createPoll} handleClose={handleClose} handlePoll={handlePoll}
+            pollDisabled={!gameId} />
     );
 }
 
-function RescheduleContentBody({ d, eventTitle, reschedule, createPoll, handleClose, handlePoll }: {
+function RescheduleContentBody({ d, eventTitle, reschedule, createPoll, handleClose, handlePoll, pollDisabled }: {
     d: ReturnType<typeof useRescheduleModalData>; eventTitle?: string;
     reschedule: ReturnType<typeof useRescheduleEvent>; createPoll: ReturnType<typeof useCreateSchedulingPoll>;
-    handleClose: () => void; handlePoll: () => void;
+    handleClose: () => void; handlePoll: () => void; pollDisabled: boolean;
 }) {
     return (
         <div className="flex flex-col gap-3 min-h-0 h-full">
-            <PollBanner onPoll={handlePoll} isPending={createPoll.isPending} />
+            <PollBanner onPoll={handlePoll} isPending={createPoll.isPending || pollDisabled} />
             <GridLegend hasSelection={!!d.s.gridSelection} />
             <GridBody isLoading={d.isLoading} signupCount={d.signupCount} currentEventBlocks={d.currentEventBlocks}
                 previewBlocks={d.previewBlocks} heatmapOverlay={d.gameTimeData?.cells}
