@@ -9,7 +9,7 @@ import { LlmService } from './llm.service';
 import { LlmProviderRegistry } from './llm-provider-registry';
 import { AiRequestLogService } from './ai-request-log.service';
 import { SettingsService } from '../settings/settings.service';
-import { AI_SETTING_KEYS } from './llm.constants';
+import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
 import { buildStatusResponse, buildUsageResponse } from './ai-admin.helpers';
 import type {
   AiStatusDto,
@@ -115,7 +115,11 @@ export class AiAdminController {
     try {
       const result = await this.llmService.chat(
         { messages: [{ role: 'user', content: 'Say hello in one sentence.' }] },
-        { feature: 'admin-test', maxResponseLength: 200, timeoutMs: 30_000 },
+        {
+          feature: 'admin-test',
+          maxResponseLength: 200,
+          timeoutMs: AI_DEFAULTS.maxTimeoutMs,
+        },
       );
       this.logger.log(`test-chat ok | latency=${result.latencyMs}ms`);
       return {
