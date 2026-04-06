@@ -42,6 +42,10 @@ export interface EventFormProps {
     seriesScope?: SeriesScope;
     /** Pre-select a game when creating from lineup decided view (ROK-989). */
     initialGame?: { id: number; name: string; slug: string; coverUrl: string | null } | null;
+    /** Pre-fill start time from scheduling poll slot (ROK-977). ISO datetime string. */
+    initialStartTime?: string | null;
+    /** Scheduling poll match to complete after event creation (ROK-977). */
+    schedulingMatchId?: number | null;
 }
 
 export const RECURRENCE_OPTIONS = [

@@ -21,6 +21,9 @@ export function CreateEventPage() {
         return registryGames.find((g) => g.id === id) ?? null;
     }, [searchParams, registryGames]);
 
+    const initialStartTime = searchParams.get('startTime');
+    const schedulingMatchId = searchParams.get('matchId') ? parseInt(searchParams.get('matchId')!, 10) : null;
+
     if (isLoading) return <PageSpinner />;
     if (!isAuthenticated) return <Navigate to="/events" replace />;
 
@@ -33,7 +36,7 @@ export function CreateEventPage() {
                     <p className="text-muted">Set up a new gaming session for your community</p>
                 </div>
                 <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                    <CreateEventForm initialGame={initialGame} />
+                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} />
                 </div>
             </div>
         </div>

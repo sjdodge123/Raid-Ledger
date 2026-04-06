@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { ScheduleSlotWithVotesDto, MatchDetailResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useRescheduleEvent } from '../../hooks/use-reschedule';
@@ -130,9 +130,8 @@ export function CreateEventSection({
       linkedEventId={linkedEventId} hasVoted={hasVoted} readOnly={readOnly} />;
   }
 
-  return <CreateFromSlot slots={slots} match={match} hasVoted={hasVoted}
-    readOnly={readOnly} isCreating={isCreating} recurring={recurring}
-    onRecurringChange={onRecurringChange} onCreateEvent={onCreateEvent} />;
+  return <CreateFromSlot slots={slots} match={match} matchId={matchId}
+    hasVoted={hasVoted} readOnly={readOnly} />;
 }
 
 /** Reschedule the linked event to the selected slot's time. */
@@ -196,58 +195,38 @@ function RescheduleFromSlot({ slots, matchId, linkedEventId, hasVoted, readOnly 
   );
 }
 
-/** Original create-event flow (no linked event). */
-function CreateFromSlot({ slots, match, hasVoted, readOnly, isCreating,
-  recurring, onRecurringChange, onCreateEvent }: {
+/** Navigate to create-event page with pre-filled data from the selected slot. */
+function CreateFromSlot({ slots, match, matchId, hasVoted, readOnly }: {
   slots: ScheduleSlotWithVotesDto[]; match: MatchDetailResponseDto;
-  hasVoted: boolean; readOnly: boolean; isCreating: boolean;
-  recurring: boolean; onRecurringChange: (v: boolean) => void;
-  onCreateEvent: (slotId: number) => void;
+  matchId: number; hasVoted: boolean; readOnly: boolean;
 }): JSX.Element {
+  const navigate = useNavigate();
   const sorted = sortedSlots(slots);
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(sorted[0]?.id ?? null);
-  const [confirmed, setConfirmed] = useState(false);
-  const { user } = useAuth();
-  const canBypass = isOperatorOrAdmin(user);
-  const { voted, total, allVoted } = getParticipation(match, slots);
-  const needsConfirm = !allVoted && !canBypass && !confirmed;
-  const canCreate = hasVoted && !readOnly && !isCreating && selectedSlotId !== null;
+  const selectedSlot = slots.find((s) => s.id === selectedSlotId);
+  const canCreate = hasVoted && !readOnly && selectedSlotId !== null;
 
   const handleCreate = () => {
-    if (!selectedSlotId) return;
-    if (needsConfirm) { setConfirmed(true); return; }
-    onCreateEvent(selectedSlotId);
+    if (!selectedSlot) return;
+    const start = new Date(selectedSlot.proposedTime);
+    if (start <= new Date()) { toast.error('Cannot create event for a past time slot'); return; }
+    const params = new URLSearchParams();
+    if (match.game?.id) params.set('gameId', String(match.game.id));
+    params.set('startTime', selectedSlot.proposedTime);
+    params.set('matchId', String(matchId));
+    navigate(`/events/new?${params.toString()}`);
   };
 
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Create Event</h3>
-      {!allVoted && <ParticipationBanner voted={voted} total={total} />}
       {slots.length > 0 && (
         <SlotSelector slots={slots} selectedId={selectedSlotId} onChange={setSelectedSlotId} />
       )}
-      <RecurringCheckbox checked={recurring} onChange={onRecurringChange} disabled={readOnly} />
-      {confirmed && !allVoted && (
-        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
-          Not all members have voted. Create the event anyway?
-          <div className="flex gap-2 mt-2">
-            <button type="button" onClick={() => { if (selectedSlotId) onCreateEvent(selectedSlotId); }}
-              className="px-4 py-1.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors">
-              Yes, Create
-            </button>
-            <button type="button" onClick={() => setConfirmed(false)}
-              className="px-4 py-1.5 text-sm font-medium bg-panel text-muted rounded-lg hover:bg-overlay transition-colors">
-              Wait
-            </button>
-          </div>
-        </div>
-      )}
-      {!confirmed && (
-        <button type="button" onClick={handleCreate} disabled={!canCreate}
-          className="px-6 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          {isCreating ? 'Creating...' : 'Create Event'}
-        </button>
-      )}
+      <button type="button" onClick={handleCreate} disabled={!canCreate}
+        className="px-6 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        Create Event
+      </button>
       {!hasVoted && !readOnly && (
         <p className="text-xs text-muted">Vote on a time slot to enable event creation.</p>
       )}
