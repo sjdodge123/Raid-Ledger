@@ -7,6 +7,7 @@ import { SettingsService } from '../settings/settings.service';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { Reflector } from '@nestjs/core';
 import type { LlmProvider } from './llm-provider.interface';
+import { AI_DEFAULTS } from './llm.constants';
 
 function createMockProvider(): LlmProvider {
   return {
@@ -313,24 +314,22 @@ describe('ROK-1000: testChat timeout and diagnostics', () => {
     controller = module.get(AiAdminController);
   });
 
-  // --- AC6: Test-chat uses 30s timeout ---
+  // --- AC6: Test-chat uses 120s timeout (ROK-1006: cold-start on CPU-only NAS) ---
 
-  it('AC6: calls llmService.chat with 30_000ms timeout, not 120_000ms', async () => {
+  it('AC6: calls llmService.chat with maxTimeoutMs for cold-start tolerance', async () => {
     await controller.testChat();
 
     expect(mockLlmService.chat).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ timeoutMs: 30_000 }),
+      expect.objectContaining({ timeoutMs: AI_DEFAULTS.maxTimeoutMs }),
     );
   });
 
-  it('AC6: timeout is exactly 30_000 (not AI_DEFAULTS.maxTimeoutMs)', async () => {
+  it('AC6: timeout is AI_DEFAULTS.maxTimeoutMs (120_000)', async () => {
     await controller.testChat();
 
     const context = mockLlmService.chat.mock.calls[0][1];
-    expect(context.timeoutMs).toBe(30_000);
-    // Verify it's NOT 120_000 (the old value)
-    expect(context.timeoutMs).not.toBe(120_000);
+    expect(context.timeoutMs).toBe(AI_DEFAULTS.maxTimeoutMs);
   });
 
   // --- AC7: Timeout error includes provider, model, and elapsed time ---
