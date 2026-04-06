@@ -9,6 +9,7 @@ import type { ScheduleSlotWithVotesDto, MatchDetailResponseDto } from '@raid-led
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useRescheduleEvent } from '../../hooks/use-reschedule';
 import { completeStandalonePoll } from '../../lib/api-client';
+import { toast } from '../../lib/toast';
 
 interface CreateEventSectionProps {
   slots: ScheduleSlotWithVotesDto[];
@@ -25,13 +26,15 @@ interface CreateEventSectionProps {
   onCreateEvent: (slotId: number) => void;
 }
 
-/** Format a slot for display. */
+/** Format a slot for display, marking past slots. */
 function formatSlot(slot: ScheduleSlotWithVotesDto): string {
-  const time = new Date(slot.proposedTime).toLocaleString('en-US', {
+  const d = new Date(slot.proposedTime);
+  const isPast = d <= new Date();
+  const time = d.toLocaleString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
   });
   const votes = slot.votes.length === 1 ? '1 vote' : `${slot.votes.length} votes`;
-  return `${time} (${votes})`;
+  return isPast ? `${time} (${votes}) — past` : `${time} (${votes})`;
 }
 
 /** Sort slots by votes descending, then by date ascending. */
@@ -147,10 +150,17 @@ function RescheduleFromSlot({ slots, matchId, linkedEventId, hasVoted, readOnly 
   const handleReschedule = () => {
     if (!selectedSlot) return;
     const start = new Date(selectedSlot.proposedTime);
+    if (start <= new Date()) {
+      toast.error('Cannot reschedule to a time in the past');
+      return;
+    }
     const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
     reschedule.mutate(
       { startTime: start.toISOString(), endTime: end.toISOString() },
-      { onSuccess: () => { void completeStandalonePoll(matchId); setDone(true); } },
+      {
+        onSuccess: () => { void completeStandalonePoll(matchId); setDone(true); },
+        onError: (err) => { toast.error(err instanceof Error ? err.message : 'Failed to reschedule'); },
+      },
     );
   };
 
