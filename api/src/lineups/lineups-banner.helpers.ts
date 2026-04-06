@@ -48,13 +48,15 @@ export function findBannerLineup(db: Db) {
   return db
     .select()
     .from(schema.communityLineups)
-    .where(and(
-      inArray(schema.communityLineups.status, BANNER_STATUSES),
-      or(
-        isNull(schema.communityLineups.phaseDurationOverride),
-        sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' IS NULL`,
+    .where(
+      and(
+        inArray(schema.communityLineups.status, BANNER_STATUSES),
+        or(
+          isNull(schema.communityLineups.phaseDurationOverride),
+          sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' IS NULL`,
+        ),
       ),
-    ))
+    )
     .orderBy(desc(schema.communityLineups.createdAt))
     .limit(1);
 }

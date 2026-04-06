@@ -128,7 +128,8 @@ function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JS
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
       <MatchContextCard match={poll.match} />
       <div className="p-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+        <div data-testid="match-status-badge"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
           Poll Complete
         </div>
         <p className="text-sm text-emerald-400">

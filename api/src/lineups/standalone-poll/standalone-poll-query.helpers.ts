@@ -150,9 +150,7 @@ export async function completeStandalonePoll(
 }
 
 /** Find all active standalone polls (scheduling matches in standalone lineups). */
-export async function findActiveStandalonePolls(
-  db: Db,
-): Promise<
+export async function findActiveStandalonePolls(db: Db): Promise<
   {
     matchId: number;
     lineupId: number;

@@ -19,13 +19,15 @@ export async function findActiveDecidedLineup(db: Db) {
   const [lineup] = await db
     .select({ id: schema.communityLineups.id })
     .from(schema.communityLineups)
-    .where(and(
-      eq(schema.communityLineups.status, 'decided'),
-      or(
-        isNull(schema.communityLineups.phaseDurationOverride),
-        sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' IS NULL`,
+    .where(
+      and(
+        eq(schema.communityLineups.status, 'decided'),
+        or(
+          isNull(schema.communityLineups.phaseDurationOverride),
+          sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' IS NULL`,
+        ),
       ),
-    ))
+    )
     .limit(1);
   return lineup ?? null;
 }
