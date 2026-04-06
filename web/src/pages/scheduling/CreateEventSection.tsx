@@ -211,7 +211,7 @@ function CreateFromSlot({ slots, match, matchId, hasVoted, readOnly }: {
     const start = new Date(selectedSlot.proposedTime);
     if (start <= new Date()) { toast.error('Cannot create event for a past time slot'); return; }
     const params = new URLSearchParams();
-    if (match.game?.id) params.set('gameId', String(match.game.id));
+    if (match.gameId) params.set('gameId', String(match.gameId));
     params.set('startTime', selectedSlot.proposedTime);
     params.set('matchId', String(matchId));
     navigate(`/events/new?${params.toString()}`);
