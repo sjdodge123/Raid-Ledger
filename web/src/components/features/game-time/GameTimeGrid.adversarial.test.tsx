@@ -134,16 +134,16 @@ describe('GameTimeGrid — keyboard accessibility on day headers (ROK-619)', () 
     });
 });
 
-describe('GameTimeGrid — whole-day toggle with hourRange (ROK-619)', () => {
-    it('day header selects all 24 hours even when hourRange limits visible cells', () => {
-        // hourRange only affects which cells are visible, not what gets toggled
+describe('GameTimeGrid — whole-day toggle with hourRange (ROK-619 / ROK-1011)', () => {
+    it('day header selects only visible hours when hourRange is set', () => {
+        // ROK-1011: toggle respects hourRange — only visible hours are toggled
         const onChange = vi.fn();
         render(<GameTimeGrid slots={[]} onChange={onChange} hourRange={[18, 24]} />);
         fireEvent.click(screen.getByTestId('day-header-0'));
         const result = onChange.mock.calls[0][0] as GameTimeSlot[];
-        expect(result).toHaveLength(24);
+        expect(result).toHaveLength(6);
         const hours = result.map((s) => s.hour).sort((a, b) => a - b);
-        expect(hours).toEqual(Array.from({ length: 24 }, (_, i) => i));
+        expect(hours).toEqual([18, 19, 20, 21, 22, 23]);
     });
 });
 
