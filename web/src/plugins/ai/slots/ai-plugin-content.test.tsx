@@ -207,11 +207,14 @@ describe('ROK-1000: TestChatSection error message', () => {
     it('AC9: shows error from network failure (not server JSON)', async () => {
         const { default: userEvent } = await import('@testing-library/user-event');
 
-        server.use(
-            http.post(`${API}/admin/ai/test-chat`, () =>
-                HttpResponse.error(),
-            ),
-        );
+        // HttpResponse.error() doesn't reliably simulate network errors in MSW v2 Node.
+        // Intercept fetch to throw TypeError only for the test-chat endpoint.
+        const realFetch = globalThis.fetch;
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args) => {
+            const url = String(args[0]);
+            if (url.includes('/admin/ai/test-chat')) throw new TypeError('Failed to fetch');
+            return realFetch(...args);
+        });
 
         renderWithProviders(<AiPluginContent />);
 
@@ -219,17 +222,11 @@ describe('ROK-1000: TestChatSection error message', () => {
         const user = userEvent.setup();
         await user.click(button);
 
-        // Should show some error message, not the hardcoded "Request failed"
-        // The adminFetch wrapper throws with "Failed to test LLM" for non-ok responses,
-        // so it should surface that or the network error, not "Request failed"
-        const errorResult = await screen.findByText(
-            (content) => {
-                const text = content.toLowerCase();
-                return text.includes('fail') || text.includes('error') || text.includes('network');
-            },
-            {},
-            { timeout: 5000 },
-        );
+        // adminFetch catches the TypeError and throws Error('Failed to test LLM'),
+        // which the component catches and displays
+        const errorResult = await screen.findByText(/failed to test llm/i, {}, { timeout: 5000 });
         expect(errorResult).toBeInTheDocument();
+
+        fetchSpy.mockRestore();
     });
 });

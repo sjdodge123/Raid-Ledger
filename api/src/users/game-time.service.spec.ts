@@ -568,5 +568,66 @@ function describeGameTimeService() {
     });
   }
   describe('getCompositeView', () => describeGetCompositeView());
+
+  function describeIsGameTimeStale() {
+    /**
+     * Set up mocks for getCompositeView to test isGameTimeStale
+     * via the gameTimeStale field in the response.
+     * confirmedAt controls the fetchGameTimeConfirmedAt result.
+     */
+    function setupStaleCheckMocks(confirmedAt: Date | null) {
+      whereCallIndex = 0;
+      whereResults = [
+        [], // template
+        [], // events
+        [], // overrides
+        [], // absences
+        // fetchGameTimeConfirmedAt
+        confirmedAt ? [{ gameTimeConfirmedAt: confirmedAt }] : [],
+      ];
+    }
+
+    const weekStart = new Date('2026-02-08T00:00:00.000Z');
+
+    it('returns gameTimeStale=true when confirmedAt is null', async () => {
+      setupStaleCheckMocks(null);
+      const result = await service.getCompositeView(1, weekStart);
+      expect(result.gameTimeStale).toBe(true);
+    });
+
+    it('returns gameTimeStale=true when confirmedAt is 8 days ago', async () => {
+      const eightDaysAgo = new Date();
+      eightDaysAgo.setDate(eightDaysAgo.getDate() - 8);
+      setupStaleCheckMocks(eightDaysAgo);
+      const result = await service.getCompositeView(2, weekStart);
+      expect(result.gameTimeStale).toBe(true);
+    });
+
+    it('returns gameTimeStale=false when confirmedAt is 6 days ago', async () => {
+      const sixDaysAgo = new Date();
+      sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
+      setupStaleCheckMocks(sixDaysAgo);
+      const result = await service.getCompositeView(3, weekStart);
+      expect(result.gameTimeStale).toBe(false);
+    });
+
+    it('returns gameTimeStale=true at the 7-day boundary', async () => {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // Subtract 1ms to ensure we are past the boundary
+      sevenDaysAgo.setTime(sevenDaysAgo.getTime() - 1);
+      setupStaleCheckMocks(sevenDaysAgo);
+      const result = await service.getCompositeView(4, weekStart);
+      expect(result.gameTimeStale).toBe(true);
+    });
+
+    it('returns gameTimeStale=false when just confirmed', async () => {
+      setupStaleCheckMocks(new Date());
+      const result = await service.getCompositeView(5, weekStart);
+      expect(result.gameTimeStale).toBe(false);
+    });
+  }
+  describe('isGameTimeStale (via getCompositeView)', () =>
+    describeIsGameTimeStale());
 }
 describe('GameTimeService', () => describeGameTimeService());

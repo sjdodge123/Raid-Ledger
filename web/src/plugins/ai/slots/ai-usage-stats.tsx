@@ -35,7 +35,7 @@ export function AiUsageStats() {
             <div className="grid grid-cols-3 gap-2">
                 <StatCard label="Requests Today" value={String(usage.requestsToday)} />
                 <StatCard label="Avg Latency" value={`${usage.avgLatencyMs}ms`} />
-                <StatCard label="Err. Rate" value={`${(usage.errorRate * 100).toFixed(1)}%`} />
+                <StatCard label="Error Rate" value={`${(usage.errorRate * 100).toFixed(1)}%`} />
             </div>
             {usage.byFeature.length > 0 && (
                 <FeatureBreakdown features={usage.byFeature} />
