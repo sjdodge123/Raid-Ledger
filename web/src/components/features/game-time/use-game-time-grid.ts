@@ -228,7 +228,11 @@ export function useHoverGlow(
 /** Visible hours filtered by range */
 export function useVisibleHours(hourRange?: [number, number]): { HOURS: number[]; rangeStart: number; rangeEnd: number } {
     const [rangeStart, rangeEnd] = hourRange ?? [0, 24];
-    const HOURS = useMemo(() => ALL_HOURS.filter((h) => h >= rangeStart && h < rangeEnd), [rangeStart, rangeEnd]);
+    const HOURS = useMemo(() => {
+        if (rangeStart < rangeEnd) return ALL_HOURS.filter((h) => h >= rangeStart && h < rangeEnd);
+        // Wrapping range (e.g. [9, 2] = 9 AM → 1 AM): show rangeStart..23 then 0..rangeEnd-1
+        return [...ALL_HOURS.filter((h) => h >= rangeStart), ...ALL_HOURS.filter((h) => h < rangeEnd)];
+    }, [rangeStart, rangeEnd]);
     return { HOURS, rangeStart, rangeEnd };
 }
 

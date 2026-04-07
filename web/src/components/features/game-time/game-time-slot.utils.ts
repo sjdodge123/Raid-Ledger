@@ -12,11 +12,18 @@ function getLockedHours(slots: GameTimeSlot[], dayIndex: number): Set<number> {
     return new Set(slots.filter((s) => s.dayOfWeek === dayIndex && s.status && !isSlotActive(s)).map((s) => s.hour));
 }
 
+/** Compute visible hours from a range, supporting wrapping (e.g. [9, 2] = 9..23, 0..1) */
+function visibleHours(hourRange?: [number, number]): number[] {
+    if (!hourRange) return ALL_HOURS;
+    const [start, end] = hourRange;
+    if (start < end) return ALL_HOURS.filter((h) => h >= start && h < end);
+    return [...ALL_HOURS.filter((h) => h >= start), ...ALL_HOURS.filter((h) => h < end)];
+}
+
 /** Visible hours minus locked (blocked/committed) ones */
 function getToggleableHours(slots: GameTimeSlot[], dayIndex: number, hourRange?: [number, number]): number[] {
-    const hours = hourRange ? ALL_HOURS.filter((h) => h >= hourRange[0] && h < hourRange[1]) : ALL_HOURS;
     const locked = getLockedHours(slots, dayIndex);
-    return hours.filter((h) => !locked.has(h));
+    return visibleHours(hourRange).filter((h) => !locked.has(h));
 }
 
 /**
@@ -39,7 +46,7 @@ export function toggleAllDaySlots(
     const allActive = toggleable.every((h) => dayActiveHours.has(h));
 
     if (allActive) {
-        const visibleSet = new Set(hourRange ? ALL_HOURS.filter((h) => h >= hourRange[0] && h < hourRange[1]) : ALL_HOURS);
+        const visibleSet = new Set(visibleHours(hourRange));
         return slots.filter(
             (s) => !(s.dayOfWeek === dayIndex && visibleSet.has(s.hour) && isSlotActive(s)),
         );
