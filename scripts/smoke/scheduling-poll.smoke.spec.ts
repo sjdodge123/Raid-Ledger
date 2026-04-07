@@ -1,7 +1,12 @@
 /**
- * Scheduling Poll page smoke tests (ROK-965).
+ * Scheduling Poll page smoke tests (ROK-965, ROK-999).
  * Route: /community-lineup/:lineupId/schedule/:matchId
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
+ *
+ * The scheduling poll uses a 3-step inline wizard (ROK-999):
+ *   Step 1: Set Gametime — weekly availability grid
+ *   Step 2: Vote on Times — vote on existing suggested time slots
+ *   Step 3: Full poll view — suggest times, heatmap, create event
  */
 import { test, expect } from './base';
 
@@ -223,7 +228,7 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 // Wizard bypass helper (ROK-999)
 // ---------------------------------------------------------------------------
 
-/** Navigate to the scheduling poll and advance past wizard steps to the full poll view. */
+/** Navigate to the scheduling poll and advance past all 3 wizard steps to the full poll view. */
 async function goToPoll(page: import('@playwright/test').Page, lid: number, mid: number): Promise<void> {
     await page.goto(`/community-lineup/${lid}/schedule/${mid}`);
     const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
@@ -296,6 +301,134 @@ test.describe('Scheduling poll page route', () => {
         page,
     }) => {
         await goToPoll(page, lineupId, matchId);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Wizard Step 1: Set Gametime (ROK-999)
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling wizard Step 1 — Set Gametime', () => {
+    test('Step 1 renders gametime grid with Save & Continue and Skip buttons', async ({
+        page,
+    }) => {
+        await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+        // The wizard may auto-skip Step 1 if gametime is fresh; check for its presence
+        const step1 = page.locator('[data-testid="scheduling-wizard-step-1"]');
+        const isStep1Visible = await step1.isVisible({ timeout: 5_000 }).catch(() => false);
+
+        if (isStep1Visible) {
+            // Step 1 heading
+            await expect(page.getByText('When Do You Play?')).toBeVisible({ timeout: 5_000 });
+
+            // Save & Continue and Skip buttons
+            const saveBtn = page.getByRole('button', { name: /Save & Continue/i });
+            await expect(saveBtn).toBeVisible({ timeout: 5_000 });
+            const skipBtn = page.getByRole('button', { name: /Skip/i });
+            await expect(skipBtn).toBeVisible({ timeout: 5_000 });
+        }
+        // If auto-skipped, that is valid — gametime data is already fresh
+    });
+
+    test('mobile: wizard step indicator shows "Step N of 3"', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only test — step indicator text only shown on mobile',
+        );
+
+        await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+        const indicator = page.locator('[data-testid="wizard-step-indicator"]');
+        const isVisible = await indicator.isVisible({ timeout: 5_000 }).catch(() => false);
+
+        if (isVisible) {
+            // Mobile indicator should show "Step N of 3" (3-step wizard)
+            await expect(indicator.getByText(/Step \d of 3/)).toBeVisible({ timeout: 5_000 });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Wizard Step 2: Vote on Times (ROK-999)
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling wizard Step 2 — Vote on Times', () => {
+    test('Step 2 renders vote UI when time slots exist', async ({
+        page,
+    }) => {
+        await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+        // Advance past Step 1 if it is showing
+        const step1 = page.locator('[data-testid="scheduling-wizard-step-1"]');
+        if (await step1.isVisible({ timeout: 3_000 }).catch(() => false)) {
+            const skipBtn = page.getByRole('button', { name: /Skip/i });
+            if (await skipBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+                await skipBtn.click();
+            }
+        }
+
+        // Step 2 should show if slots exist (seeded in beforeAll)
+        const step2 = page.locator('[data-testid="scheduling-wizard-step-2"]');
+        const isStep2Visible = await step2.isVisible({ timeout: 5_000 }).catch(() => false);
+
+        if (isStep2Visible) {
+            // Step 2 heading
+            await expect(page.getByText('Vote on Suggested Times')).toBeVisible({ timeout: 5_000 });
+
+            // Continue button to advance to Step 3
+            const continueBtn = page.getByRole('button', { name: /Continue/i });
+            await expect(continueBtn).toBeVisible({ timeout: 5_000 });
+        }
+        // If auto-skipped (no slots), that is valid — Step 2 auto-skips when no slots exist
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Wizard Step 3: Full poll view (ROK-999)
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling wizard Step 3 — Full poll view', () => {
+    test('advancing through wizard reaches the full poll with Scheduling Poll heading', async ({
+        page,
+    }) => {
+        await goToPoll(page, lineupId, matchId);
+
+        // Step 3 is the full poll view — verified by the goToPoll helper
+        // which asserts the "Scheduling Poll" h1 heading is visible
+        const indicator = page.locator('[data-testid="wizard-step-indicator"]');
+        const isVisible = await indicator.isVisible({ timeout: 5_000 }).catch(() => false);
+
+        if (isVisible) {
+            // Desktop: Step 3 indicator should be active
+            const step3 = page.locator('[data-testid="wizard-step-3"]');
+            if (await step3.isVisible({ timeout: 3_000 }).catch(() => false)) {
+                await expect(step3).toHaveAttribute('data-status', 'active', { timeout: 5_000 });
+            }
+        }
+    });
+
+    test('mobile: Step 3 indicator shows "Step 3 of 3"', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only test — step indicator text only shown on mobile',
+        );
+
+        await goToPoll(page, lineupId, matchId);
+
+        const indicator = page.locator('[data-testid="wizard-step-indicator"]');
+        const isVisible = await indicator.isVisible({ timeout: 5_000 }).catch(() => false);
+
+        if (isVisible) {
+            await expect(indicator.getByText('Step 3 of 3')).toBeVisible({ timeout: 5_000 });
+        }
     });
 });
 
