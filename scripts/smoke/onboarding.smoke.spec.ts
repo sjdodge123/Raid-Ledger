@@ -284,6 +284,30 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Game Time step — compact grid (ROK-1011)
+// ---------------------------------------------------------------------------
+
+test.describe('Onboarding wizard game-time step (ROK-1011)', () => {
+    test('game-time step renders compact GameTimeGrid on all viewports', async ({ page }) => {
+        const dialog = await openWizard(page);
+
+        // Navigate directly to Game Time via breadcrumb (skips dynamic character steps)
+        const gameTimeBreadcrumb = dialog.getByRole('button', { name: 'Game Time' });
+        await expect(gameTimeBreadcrumb).toBeVisible({ timeout: 10_000 });
+        await gameTimeBreadcrumb.click();
+        await expect(dialog.getByRole('heading', { name: 'When Do You Play?' })).toBeVisible({ timeout: 10_000 });
+
+        // ROK-1011: Should render GameTimeGrid, not the old accordion editor
+        await expect(dialog.getByTestId('game-time-grid')).toBeVisible();
+        await expect(dialog.getByTestId('game-time-mobile-editor')).not.toBeVisible();
+
+        // Instruction text should mention drag-to-paint (not "tap days to expand")
+        await expect(dialog.getByText(/paint your weekly availability/i)).toBeVisible();
+        await expect(dialog.getByText(/tap days to expand/i)).not.toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Final step
 // ---------------------------------------------------------------------------
 

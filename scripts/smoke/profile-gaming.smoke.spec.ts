@@ -83,27 +83,43 @@ test.describe('Profile gaming — Game Time (desktop)', () => {
         await expect(page.getByRole('button', { name: 'Friday' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Sunday' })).toBeVisible();
 
-        // Action buttons
-        await expect(page.getByRole('button', { name: 'Absence' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+        // Action buttons (exact: true to avoid matching "Remove absence" buttons)
+        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
     });
 });
 
 // ---------------------------------------------------------------------------
-// Game Time panel — mobile
+// Game Time panel — mobile (ROK-1011: compact GameTimeGrid replaces accordion)
 // ---------------------------------------------------------------------------
 
 test.describe('Profile gaming — Game Time (mobile)', () => {
-    test('renders availability grid with day buttons', async ({ page }) => {
+    test('renders compact GameTimeGrid instead of accordion editor', async ({ page }) => {
         test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
 
         await page.goto('/profile/gaming/game-time');
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
 
-        // Day-of-week buttons should be visible on mobile
-        await expect(page.getByRole('button', { name: 'Monday' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Sunday' })).toBeVisible();
+        // ROK-1011: GameTimeGrid (compact) should be rendered, not the old accordion
+        await expect(page.getByTestId('game-time-grid')).toBeVisible();
+        await expect(page.getByTestId('game-time-mobile-editor')).not.toBeVisible();
+
+        // Day-of-week buttons should be visible in the grid header (short names on mobile)
+        await expect(page.getByRole('button', { name: /Mon/ })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Sun/ })).toBeVisible();
+    });
+
+    test('action buttons remain accessible above grid', async ({ page }) => {
+        test.skip(test.info().project.name === 'desktop', 'Mobile-only test');
+
+        await page.goto('/profile/gaming/game-time');
+        await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
+
+        // Absence, Clear, Save buttons should be visible above the grid
+        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
     });
 });
 

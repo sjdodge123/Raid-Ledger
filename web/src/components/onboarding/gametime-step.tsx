@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
-import { GameTimeMobileEditor } from '../features/game-time/GameTimeMobileEditor';
 import { AbsenceSection } from '../features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
-import { useMediaQuery } from '../../hooks/use-media-query';
 
 /**
  * Step 4: When Do You Play? (ROK-219).
@@ -25,15 +23,11 @@ function useAutoSaveOnUnmount(save: () => void, isDirty: boolean) {
     }, []);
 }
 
-function GameTimeStepHeader({ isMobile }: { isMobile: boolean }) {
+function GameTimeStepHeader() {
     return (
         <div className="text-center mb-2">
             <h2 className="text-lg font-bold text-foreground">When Do You Play?</h2>
-            <p className="text-muted text-sm mt-1">
-                {isMobile
-                    ? 'Tap days to expand and toggle hours you\'re free.'
-                    : 'Paint your weekly availability. Click and drag to mark hours you\'re free.'}
-            </p>
+            <p className="text-muted text-sm mt-1">Paint your weekly availability. Click and drag to mark hours you&apos;re free.</p>
         </div>
     );
 }
@@ -47,28 +41,24 @@ function GameTimeStepLoading() {
     );
 }
 
-function GameTimeStepGrid({ isMobile, slots, handleChange, tzLabel }: {
-    isMobile: boolean; slots: ReturnType<typeof useGameTimeEditor>['slots'];
+function GameTimeStepGrid({ slots, handleChange, tzLabel }: {
+    slots: ReturnType<typeof useGameTimeEditor>['slots'];
     handleChange: ReturnType<typeof useGameTimeEditor>['handleChange']; tzLabel: string;
 }) {
-    if (isMobile) {
-        return <GameTimeMobileEditor slots={slots} onChange={handleChange} tzLabel={tzLabel} />;
-    }
-    return <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[6, 24]} fullDayNames compact noStickyOffset />;
+    return <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[9, 2]} compact noStickyOffset />;
 }
 
 export function GameTimeStep() {
     const { slots, isLoading, isDirty, handleChange, save, tzLabel } = useGameTimeEditor({ enabled: true, rolling: false });
-    const isMobile = useMediaQuery('(max-width: 767px)');
     useAutoSaveOnUnmount(save, isDirty);
 
     return (
         <div>
-            <GameTimeStepHeader isMobile={isMobile} />
+            <GameTimeStepHeader />
             <div className="max-w-2xl mx-auto">
                 {isLoading ? <GameTimeStepLoading /> : (
                     <>
-                        <GameTimeStepGrid isMobile={isMobile} slots={slots} handleChange={handleChange} tzLabel={tzLabel} />
+                        <GameTimeStepGrid slots={slots} handleChange={handleChange} tzLabel={tzLabel} />
                         <div className="mt-3"><AbsenceSection /></div>
                     </>
                 )}
