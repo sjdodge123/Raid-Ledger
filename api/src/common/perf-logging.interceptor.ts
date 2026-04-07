@@ -8,6 +8,21 @@ import { Observable, tap, catchError } from 'rxjs';
 import type { Request, Response } from 'express';
 import { isPerfEnabled, perfLog } from './perf-logger';
 
+type AuthRequest = Request & { user?: { sub?: number } };
+
+/** Extract HTTP status from an error, defaulting to 500 for non-HttpException errors. */
+function getErrorStatus(err: unknown): number {
+  if (
+    err != null &&
+    typeof err === 'object' &&
+    'getStatus' in err &&
+    typeof (err as { getStatus: unknown }).getStatus === 'function'
+  ) {
+    return (err as { getStatus: () => number }).getStatus();
+  }
+  return 500;
+}
+
 /**
  * Global HTTP request/response timing interceptor (ROK-563).
  * Logs method, URL, status, duration, and userId when DEBUG=true.
@@ -25,7 +40,7 @@ export class PerfLoggingInterceptor implements NestInterceptor {
       tap(() => {
         const res = httpCtx.getResponse<Response>();
         const durationMs = performance.now() - start;
-        const userId = (req as Request & { user?: { sub?: number } }).user?.sub;
+        const userId = (req as AuthRequest).user?.sub;
 
         perfLog('HTTP', `${req.method} ${req.url}`, durationMs, {
           status: res.statusCode,
@@ -34,17 +49,10 @@ export class PerfLoggingInterceptor implements NestInterceptor {
       }),
       catchError((err: unknown) => {
         const durationMs = performance.now() - start;
-        const userId = (req as Request & { user?: { sub?: number } }).user?.sub;
-        const status =
-          err != null &&
-          typeof err === 'object' &&
-          'getStatus' in err &&
-          typeof (err as { getStatus: unknown }).getStatus === 'function'
-            ? (err as { getStatus: () => number }).getStatus()
-            : 500;
+        const userId = (req as AuthRequest).user?.sub;
 
         perfLog('HTTP', `${req.method} ${req.url}`, durationMs, {
-          status,
+          status: getErrorStatus(err),
           userId: userId ?? undefined,
         });
 
