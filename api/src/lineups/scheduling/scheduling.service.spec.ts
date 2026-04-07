@@ -21,6 +21,11 @@ jest.mock('../lineups-notify-hooks.helpers', () => ({
   fireEventCreated: jest.fn(),
 }));
 
+/* eslint-disable @typescript-eslint/no-require-imports */
+const queryHelpers =
+  require('./scheduling-query.helpers') as typeof import('./scheduling-query.helpers');
+/* eslint-enable @typescript-eslint/no-require-imports */
+
 const SCHEDULING_MATCH = {
   id: 10,
   lineupId: 1,
@@ -82,6 +87,44 @@ describe('SchedulingService', () => {
       await expect(service.suggestSlot(10, SLOT_TIME)).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    describe('auto-vote', () => {
+      let voteSpy: jest.SpyInstance;
+
+      beforeEach(() => {
+        voteSpy = jest.spyOn(queryHelpers, 'insertScheduleVote');
+      });
+
+      afterEach(() => {
+        voteSpy.mockRestore();
+      });
+
+      function mockSuggestSlotFlow() {
+        mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+        mockDb.limit.mockResolvedValueOnce([]);
+        mockDb.returning.mockResolvedValueOnce([{ id: 42 }]);
+      }
+
+      it('calls insertScheduleVote when userId is provided', async () => {
+        mockSuggestSlotFlow();
+        voteSpy.mockResolvedValueOnce([{ id: 1 }]);
+        await service.suggestSlot(10, SLOT_TIME, 7);
+        expect(voteSpy).toHaveBeenCalledWith(mockDb, 42, 7);
+      });
+
+      it('succeeds even if auto-vote throws', async () => {
+        mockSuggestSlotFlow();
+        voteSpy.mockRejectedValueOnce(new Error('DB constraint'));
+        const result = await service.suggestSlot(10, SLOT_TIME, 7);
+        expect(result).toMatchObject({ id: 42 });
+      });
+
+      it('does not call insertScheduleVote when userId is undefined', async () => {
+        mockSuggestSlotFlow();
+        await service.suggestSlot(10, SLOT_TIME);
+        expect(voteSpy).not.toHaveBeenCalled();
+      });
     });
   });
 
