@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GameTimePanel } from './GameTimePanel';
 
@@ -57,18 +57,6 @@ function createDefaultEditorMock(overrides = {}) {
         absences: [],
         ...overrides,
     };
-}
-
-function setupMatchMediaMock(mobile = false) {
-    Object.defineProperty(window, 'matchMedia', {
-        writable: true,
-        value: vi.fn().mockImplementation(query => ({
-            matches: mobile ? query === '(max-width: 767px)' : false,
-            media: query,
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-        })),
-    });
 }
 
 function setupDefaultEditorMock(overrides = {}) {
@@ -421,231 +409,68 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 7', () => {
         setupDefaultEditorMock();
     });
 
-    describe('Mobile Responsive Behavior (ROK-340) — part 1', () => {
-        beforeEach(() => {
-            // Mock window.matchMedia for responsive tests
-            Object.defineProperty(window, 'matchMedia', {
-                writable: true,
-                value: vi.fn().mockImplementation(query => ({
-                    matches: false,
-                    media: query,
-                    addEventListener: vi.fn(),
-                    removeEventListener: vi.fn(),
-                })),
-            });
-        });
-
-        it('renders GameTimeGrid on desktop (>= 768px)', () => {
-            // Mock desktop viewport
-            window.matchMedia = vi.fn().mockImplementation(query => ({
-                matches: query === '(max-width: 767px)' ? false : true,
-                media: query,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-            }));
-
+    describe('Compact Grid Rendering (ROK-1011)', () => {
+        it('always renders GameTimeGrid with compact mode', () => {
             renderPanel({ mode: 'profile' });
 
-            // GameTimeGrid should be rendered
             expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
-            // GameTimeMobileEditor should not be rendered
             expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
         });
-
-        it('renders GameTimeMobileEditor on mobile (< 768px)', () => {
-            // Mock mobile viewport
-            window.matchMedia = vi.fn().mockImplementation(query => ({
-                matches: query === '(max-width: 767px)' ? true : false,
-                media: query,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-            }));
-
-            renderPanel({ mode: 'profile' });
-
-            // GameTimeMobileEditor should be rendered
-            expect(screen.getByTestId('game-time-mobile-editor')).toBeInTheDocument();
-            // GameTimeGrid should not be rendered
-            expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
-        });
-
     });
 
 });
 
-describe('Mobile Responsive Behavior (ROK-340) — part 2', () => {
+describe('Grid receives correct props in profile mode (ROK-1011)', () => {
     beforeEach(() => {
         setupDefaultEditorMock();
     });
-    beforeEach(() => {
-        setupMatchMediaMock();
-    });
 
-    it('mobile editor receives correct props in profile mode', () => {
-        setupMatchMediaMock(true);
-
-        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+    it('renders GameTimeGrid with slots in profile mode', () => {
+        vi.mocked(mockUseGameTimeEditor).mockReturnValue(createDefaultEditorMock({
             slots: [{ dayOfWeek: 0, hour: 6, status: 'available' }],
-            handleChange: vi.fn(),
-            applyPreset: vi.fn(),
-            clear: vi.fn(),
-            discard: vi.fn(),
-            save: vi.fn(),
-            isDirty: false,
-            isSaving: false,
-            isLoading: false,
-            tzLabel: 'PST',
-            events: [],
-            todayIndex: 0,
-            currentHour: 12,
-            nextWeekEvents: [],
-            nextWeekSlots: [],
-            weekStart: '2026-02-08',
-            overrides: [],
-            absences: [],
-        });
+        }));
 
         renderPanel({ mode: 'profile' });
 
-        const mobileEditor = screen.getByTestId('game-time-mobile-editor');
-        expect(mobileEditor).toBeInTheDocument();
+        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
     });
 
 });
 
-describe('GameTimePanel - Profile Mode (ROK-301) — part 9', () => {
+describe('GameTimePanel - Picker Mode read-only (ROK-1011)', () => {
     beforeEach(() => {
         setupDefaultEditorMock();
     });
 
-    describe('Mobile Responsive Behavior (ROK-340) — part 3', () => {
-        beforeEach(() => {
-            // Mock window.matchMedia for responsive tests
-            Object.defineProperty(window, 'matchMedia', {
-                writable: true,
-                value: vi.fn().mockImplementation(query => ({
-                    matches: false,
-                    media: query,
-                    addEventListener: vi.fn(),
-                    removeEventListener: vi.fn(),
-                })),
-            });
-        });
+    it('renders read-only GameTimeGrid in picker mode', () => {
+        renderPanel({ mode: 'picker' });
 
-        it('mobile editor is read-only in picker mode', () => {
-            // Mock mobile viewport
-            window.matchMedia = vi.fn().mockImplementation(query => ({
-                matches: query === '(max-width: 767px)' ? true : false,
-                media: query,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-            }));
-
-            renderPanel({ mode: 'picker' });
-
-            const mobileEditor = screen.getByTestId('game-time-mobile-editor');
-            expect(mobileEditor).toBeInTheDocument();
-
-            // Expand a day section
-            const sundayHeader = screen.getByText(/Sunday/).closest('button');
-            if (sundayHeader) {
-                fireEvent.click(sundayHeader);
-            }
-
-            // Presets should not be visible in read-only mode
-            expect(screen.queryByText('Morning')).not.toBeInTheDocument();
-        });
-
+        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
     });
 
 });
 
-describe('Mobile Responsive Behavior (ROK-340) — part 4', () => {
+describe('Timezone label display (ROK-1011)', () => {
     beforeEach(() => {
         setupDefaultEditorMock();
     });
-    beforeEach(() => {
-        setupMatchMediaMock();
-    });
 
-    it('mobile editor displays timezone label', () => {
-        setupMatchMediaMock(true);
-
-        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
-            slots: [],
-            handleChange: vi.fn(),
-            applyPreset: vi.fn(),
-            clear: vi.fn(),
-            discard: vi.fn(),
-            save: vi.fn(),
-            isDirty: false,
-            isSaving: false,
-            isLoading: false,
-            tzLabel: 'PST',
-            events: [],
-            todayIndex: 0,
-            currentHour: 12,
-            nextWeekEvents: [],
-            nextWeekSlots: [],
-            weekStart: '2026-02-08',
-            overrides: [],
-            absences: [],
-        });
-
+    it('displays timezone label in profile mode', () => {
         renderPanel({ mode: 'profile' });
-
         expect(screen.getByText('PST')).toBeInTheDocument();
     });
 
 });
 
-describe('GameTimePanel - Profile Mode (ROK-301) — part 11', () => {
+describe('GameTimePanel - always renders GameTimeGrid (ROK-1011)', () => {
     beforeEach(() => {
         setupDefaultEditorMock();
     });
 
-    describe('Mobile Responsive Behavior (ROK-340) — part 5', () => {
-        beforeEach(() => {
-            // Mock window.matchMedia for responsive tests
-            Object.defineProperty(window, 'matchMedia', {
-                writable: true,
-                value: vi.fn().mockImplementation(query => ({
-                    matches: false,
-                    media: query,
-                    addEventListener: vi.fn(),
-                    removeEventListener: vi.fn(),
-                })),
-            });
-        });
-
-        it('breakpoint is exactly 767px (mobile) vs 768px (desktop)', () => {
-            // The breakpoint should use max-width: 767px
-            // This means 767px and below = mobile, 768px and above = desktop
-
-            // Test mobile (767px)
-            window.matchMedia = vi.fn().mockImplementation(query => ({
-                matches: query === '(max-width: 767px)',
-                media: query,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-            }));
-
-            const { unmount } = renderPanel({ mode: 'profile' });
-            expect(screen.queryByTestId('game-time-mobile-editor')).toBeInTheDocument();
-            unmount();
-
-            // Test desktop (768px)
-            window.matchMedia = vi.fn().mockImplementation(query => ({
-                matches: query === '(max-width: 767px)' ? false : true,
-                media: query,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-            }));
-
-            renderPanel({ mode: 'profile' });
-            expect(screen.queryByTestId('game-time-grid')).toBeInTheDocument();
-        });
-
+    it('renders GameTimeGrid regardless of viewport', () => {
+        renderPanel({ mode: 'profile' });
+        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
     });
 
 });

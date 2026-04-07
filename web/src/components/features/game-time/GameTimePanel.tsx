@@ -1,9 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useGameTimeEditor } from '../../../hooks/use-game-time-editor';
-import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences } from '../../../hooks/use-game-time';
 import { GameTimeGrid } from './GameTimeGrid';
-import { GameTimeMobileEditor } from './GameTimeMobileEditor';
 import type { GameTimePreviewBlock } from './GameTimeGrid';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { EventBlockPopover } from './EventBlockPopover';
@@ -110,7 +108,6 @@ export function GameTimePanel({
 }: GameTimePanelProps) {
     const effectiveRolling = mode === 'profile' ? false : rolling;
     const editor = useGameTimeEditor({ enabled, rolling: effectiveRolling });
-    const isMobile = useMediaQuery('(max-width: 767px)');
     const [popoverEvent, setPopoverEvent] = useState<{ event: GameTimeEventBlock; anchorRect: DOMRect } | null>(null);
     const [absence, setAbsence] = useState<AbsenceState>({ show: false, startDate: '', endDate: '', reason: '' });
     const absenceActions = useAbsenceActions();
@@ -123,14 +120,14 @@ export function GameTimePanel({
     }
 
     return (
-        <GameTimePanelContent mode={mode} editor={editor} isMobile={isMobile} hourRange={hourRange}
+        <GameTimePanelContent mode={mode} editor={editor} hourRange={hourRange}
             previewBlocks={previewBlocks} absence={absence} setAbsence={setAbsence} absenceActions={absenceActions}
             handleEventClick={handleEventClick} popoverEvent={popoverEvent} setPopoverEvent={setPopoverEvent} />
     );
 }
 
-function GameTimePanelContent({ mode, editor, isMobile, hourRange, previewBlocks, absence, setAbsence, absenceActions, handleEventClick, popoverEvent, setPopoverEvent }: {
-    mode: string; editor: ReturnType<typeof useGameTimeEditor>; isMobile: boolean; hourRange?: [number, number];
+function GameTimePanelContent({ mode, editor, hourRange, previewBlocks, absence, setAbsence, absenceActions, handleEventClick, popoverEvent, setPopoverEvent }: {
+    mode: string; editor: ReturnType<typeof useGameTimeEditor>; hourRange?: [number, number];
     previewBlocks?: GameTimePreviewBlock[]; absence: AbsenceState; setAbsence: React.Dispatch<React.SetStateAction<AbsenceState>>;
     absenceActions: ReturnType<typeof useAbsenceActions>;
     handleEventClick: (event: GameTimeEventBlock, anchorRect: DOMRect) => void;
@@ -141,13 +138,9 @@ function GameTimePanelContent({ mode, editor, isMobile, hourRange, previewBlocks
     return (
         <div>
             {mode === 'profile' && <ProfileAbsenceSection editor={editor} absence={absence} setAbsence={setAbsence} createAbsence={absenceActions.createAbsence} deleteAbsence={absenceActions.deleteAbsence} handleCreate={absenceActions.handleCreate} handleDelete={absenceActions.handleDelete} />}
-            {isMobile ? (
-                <GameTimeMobileEditor slots={editor.slots} onChange={editor.handleChange} readOnly={isReadOnly} tzLabel={editor.tzLabel} />
-            ) : (
-                <GameTimeGrid slots={editor.slots} onChange={isReadOnly ? undefined : editor.handleChange} readOnly={isReadOnly}
-                    tzLabel={editor.tzLabel} hourRange={hourRange} fullDayNames={mode === 'profile'} noStickyOffset={mode === 'profile'}
-                    {...(mode !== 'profile' ? { events: editor.events, onEventClick: handleEventClick, previewBlocks, todayIndex: editor.todayIndex, currentHour: editor.currentHour, nextWeekEvents: editor.nextWeekEvents, nextWeekSlots: editor.nextWeekSlots, weekStart: editor.weekStart } : {})} />
-            )}
+            <GameTimeGrid slots={editor.slots} onChange={isReadOnly ? undefined : editor.handleChange} readOnly={isReadOnly}
+                tzLabel={editor.tzLabel} hourRange={hourRange} fullDayNames={mode === 'profile'} noStickyOffset={mode === 'profile'} compact
+                {...(mode !== 'profile' ? { events: editor.events, onEventClick: handleEventClick, previewBlocks, todayIndex: editor.todayIndex, currentHour: editor.currentHour, nextWeekEvents: editor.nextWeekEvents, nextWeekSlots: editor.nextWeekSlots, weekStart: editor.weekStart } : {})} />
             {mode !== 'profile' && popoverEvent && <EventBlockPopover event={popoverEvent.event} anchorRect={popoverEvent.anchorRect} onClose={() => setPopoverEvent(null)} />}
         </div>
     );
