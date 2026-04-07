@@ -8,30 +8,32 @@ export function isSlotActive(s: GameTimeSlot): boolean {
 }
 
 /**
- * Toggle all 24 hours for a given day.
- * If all available-status hours are present, deselects them.
- * Otherwise, fills in missing hours as available.
+ * Toggle hours for a given day within the visible range.
+ * If all visible hours are active, deselects them.
+ * Otherwise, fills in missing visible hours as available.
  * Does not modify committed or blocked slots.
  */
 export function toggleAllDaySlots(
     slots: GameTimeSlot[],
     dayIndex: number,
+    hourRange?: [number, number],
 ): GameTimeSlot[] {
+    const hours = hourRange ? ALL_HOURS.filter((h) => h >= hourRange[0] && h < hourRange[1]) : ALL_HOURS;
     const dayActiveHours = new Set(
         slots.filter((s) => s.dayOfWeek === dayIndex && isSlotActive(s)).map((s) => s.hour),
     );
-    const allActive = ALL_HOURS.every((h) => dayActiveHours.has(h));
+    const allActive = hours.every((h) => dayActiveHours.has(h));
 
     if (allActive) {
         return slots.filter(
-            (s) => !(s.dayOfWeek === dayIndex && isSlotActive(s)),
+            (s) => !(s.dayOfWeek === dayIndex && hours.includes(s.hour) && isSlotActive(s)),
         );
     }
 
     const existingHours = new Set(
         slots.filter((s) => s.dayOfWeek === dayIndex).map((s) => s.hour),
     );
-    const toAdd = ALL_HOURS
+    const toAdd = hours
         .filter((h) => !existingHours.has(h))
         .map((h) => ({ dayOfWeek: dayIndex, hour: h, status: 'available' as const }));
 
@@ -39,14 +41,16 @@ export function toggleAllDaySlots(
 }
 
 /**
- * Check if all 24 hours are active (available) for a given day.
+ * Check if all hours in the visible range are active (available) for a given day.
  */
 export function isAllDayActive(
     slots: GameTimeSlot[],
     dayIndex: number,
+    hourRange?: [number, number],
 ): boolean {
+    const hours = hourRange ? ALL_HOURS.filter((h) => h >= hourRange[0] && h < hourRange[1]) : ALL_HOURS;
     const dayActiveHours = new Set(
         slots.filter((s) => s.dayOfWeek === dayIndex && isSlotActive(s)).map((s) => s.hour),
     );
-    return ALL_HOURS.every((h) => dayActiveHours.has(h));
+    return hours.every((h) => dayActiveHours.has(h));
 }

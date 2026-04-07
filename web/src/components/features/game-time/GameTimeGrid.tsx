@@ -19,8 +19,8 @@ function useGridHooks(props: GameTimeGridProps) {
     const displayEvents = useDisplayEvents(events, nextWeekEvents, todayIndex, currentHour);
     const isHeaderHidden = useScrollDirection() === 'down';
     const isInteractive = !readOnly && !!onChange;
-    const handleDayClick = useCallback((dayIndex: number): void => { if (isInteractive && onChange) onChange(toggleAllDaySlots(slots, dayIndex)); }, [isInteractive, onChange, slots]);
-    const isDayAllActive = useCallback((dayIndex: number): boolean => isAllDayActive(slots, dayIndex), [slots]);
+    const handleDayClick = useCallback((dayIndex: number): void => { if (isInteractive && onChange) onChange(toggleAllDaySlots(slots, dayIndex, hourRange)); }, [isInteractive, onChange, slots, hourRange]);
+    const isDayAllActive = useCallback((dayIndex: number): boolean => isAllDayActive(slots, dayIndex, hourRange), [slots, hourRange]);
     return { vis, maps, dates, displayEvents, isHeaderHidden, isInteractive, handleDayClick, isDayAllActive };
 }
 
