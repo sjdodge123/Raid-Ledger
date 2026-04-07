@@ -83,10 +83,10 @@ test.describe('Profile gaming — Game Time (desktop)', () => {
         await expect(page.getByRole('button', { name: 'Friday' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Sunday' })).toBeVisible();
 
-        // Action buttons
-        await expect(page.getByRole('button', { name: 'Absence' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+        // Action buttons (exact: true to avoid matching "Remove absence" buttons)
+        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
     });
 });
 
@@ -117,9 +117,9 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
         await expect(page.getByRole('heading', { name: 'My Game Time' })).toBeVisible({ timeout: 15_000 });
 
         // Absence, Clear, Save buttons should be visible above the grid
-        await expect(page.getByRole('button', { name: 'Absence' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Absence', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
     });
 });
 

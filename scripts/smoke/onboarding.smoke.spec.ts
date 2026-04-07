@@ -290,10 +290,11 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
 test.describe('Onboarding wizard game-time step (ROK-1011)', () => {
     test('game-time step renders compact GameTimeGrid on all viewports', async ({ page }) => {
         const dialog = await openWizard(page);
-        await skipPastSteamIfPresent(dialog);
 
-        // Advance past Games step to Game Time step
-        await dialog.getByRole('button', { name: 'Next' }).click();
+        // Navigate directly to Game Time via breadcrumb (skips dynamic character steps)
+        const gameTimeBreadcrumb = dialog.getByRole('button', { name: 'Game Time' });
+        await expect(gameTimeBreadcrumb).toBeVisible({ timeout: 10_000 });
+        await gameTimeBreadcrumb.click();
         await expect(dialog.getByRole('heading', { name: 'When Do You Play?' })).toBeVisible({ timeout: 10_000 });
 
         // ROK-1011: Should render GameTimeGrid, not the old accordion editor
