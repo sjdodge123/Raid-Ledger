@@ -108,7 +108,7 @@ export function GameTimePanel({
     mode, previewBlocks, hourRange, rolling = true, onEventClick, enabled = true,
 }: GameTimePanelProps) {
     const effectiveRolling = mode === 'profile' ? false : rolling;
-    const effectiveHourRange = hourRange ?? (mode === 'profile' ? [6, 24] as [number, number] : undefined);
+    const effectiveHourRange = hourRange ?? (mode === 'profile' ? [9, 24] as [number, number] : undefined);
     const editor = useGameTimeEditor({ enabled, rolling: effectiveRolling });
     const isMobile = useMediaQuery('(max-width: 767px)');
     const [popoverEvent, setPopoverEvent] = useState<{ event: GameTimeEventBlock; anchorRect: DOMRect } | null>(null);

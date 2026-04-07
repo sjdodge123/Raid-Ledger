@@ -45,7 +45,7 @@ function GameTimeStepGrid({ slots, handleChange, tzLabel }: {
     slots: ReturnType<typeof useGameTimeEditor>['slots'];
     handleChange: ReturnType<typeof useGameTimeEditor>['handleChange']; tzLabel: string;
 }) {
-    return <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[6, 24]} fullDayNames compact noStickyOffset />;
+    return <GameTimeGrid slots={slots} onChange={handleChange} tzLabel={tzLabel} hourRange={[9, 24]} fullDayNames compact noStickyOffset />;
 }
 
 export function GameTimeStep() {

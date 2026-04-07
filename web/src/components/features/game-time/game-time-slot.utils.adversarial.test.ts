@@ -52,25 +52,26 @@ describe('isAllDayActive', () => {
         expect(isAllDayActive(slots, 0)).toBe(true);
     });
 
-    it('returns false when all 24 hours exist but some are committed (not counted as active)', () => {
+    it('returns true when all toggleable hours are active (committed hours excluded from check)', () => {
         const slots: GameTimeSlot[] = [
             ...Array.from({ length: 23 }, (_, i) => ({
                 dayOfWeek: 0, hour: i, status: 'available' as const,
             })),
             { dayOfWeek: 0, hour: 23, status: 'committed' as const },
         ];
-        // Only 23 available — committed does not count
-        expect(isAllDayActive(slots, 0)).toBe(false);
+        // 23 available hours + 1 committed. Committed is excluded → all toggleable are active.
+        expect(isAllDayActive(slots, 0)).toBe(true);
     });
 
-    it('returns false when all 24 hours exist but one is blocked (not counted as active)', () => {
+    it('returns true when all toggleable hours are active (blocked hours excluded from check)', () => {
         const slots: GameTimeSlot[] = [
             ...Array.from({ length: 23 }, (_, i) => ({
                 dayOfWeek: 0, hour: i, status: 'available' as const,
             })),
             { dayOfWeek: 0, hour: 23, status: 'blocked' as const },
         ];
-        expect(isAllDayActive(slots, 0)).toBe(false);
+        // Blocked hour excluded → all toggleable are active.
+        expect(isAllDayActive(slots, 0)).toBe(true);
     });
 
     it('checks the correct day — ignores slots from other days', () => {
@@ -132,12 +133,10 @@ describe('toggleAllDaySlots — adversarial edge cases', () => {
         expect(committed).toHaveLength(1);
     });
 
-    it('fills to 24 available when some hours have committed slots blocking those positions', () => {
+    it('deselects toggleable hours when all are active, preserving committed', () => {
         // hours 0-21 are available, hours 22 and 23 are committed.
-        // isAllActive should be false (only 22 available) → should select missing available hours.
-        // BUT committed hours already occupy hour 22 and 23, so toggling adds hours 22+23 as "available"
-        // only if they don't already exist — they do (as committed), so no new slots added.
-        // Result: 22 available + 2 committed = 24 total.
+        // All toggleable hours (0-21) are active → deselect clears them.
+        // Committed slots at 22/23 are preserved.
         const slots: GameTimeSlot[] = [
             ...Array.from({ length: 22 }, (_, i) => ({
                 dayOfWeek: 0, hour: i, status: 'available' as const,
@@ -146,15 +145,13 @@ describe('toggleAllDaySlots — adversarial edge cases', () => {
             { dayOfWeek: 0, hour: 23, status: 'committed' as const },
         ];
         const result = toggleAllDaySlots(slots, 0);
-        // committed slots are preserved
+        // committed slots preserved
         expect(result.find((s) => s.hour === 22)?.status).toBe('committed');
         expect(result.find((s) => s.hour === 23)?.status).toBe('committed');
-        // No new slots added for hours 22/23 because they already exist
-        const hour22Slots = result.filter((s) => s.dayOfWeek === 0 && s.hour === 22);
-        expect(hour22Slots).toHaveLength(1);
-        // Available slots (hours 0-21) remain
+        // Available slots cleared
         const availableCount = result.filter((s) => s.dayOfWeek === 0 && s.status === 'available').length;
-        expect(availableCount).toBe(22);
+        expect(availableCount).toBe(0);
+        expect(result).toHaveLength(2);
     });
 
     it('selects all hours for Saturday (day 6)', () => {

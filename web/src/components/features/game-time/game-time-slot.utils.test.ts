@@ -51,7 +51,7 @@ describe('toggleAllDaySlots — edge cases', () => {
         expect(result.filter((s) => s.dayOfWeek === 2)).toHaveLength(1);
     });
 
-    it('does not toggle committed or blocked slots', () => {
+    it('clears available slots but preserves committed/blocked when all toggleable hours are active', () => {
         const slots: GameTimeSlot[] = [
             ...Array.from({ length: 22 }, (_, i) => ({
                 dayOfWeek: 0, hour: i, status: 'available' as const,
@@ -60,7 +60,8 @@ describe('toggleAllDaySlots — edge cases', () => {
             { dayOfWeek: 0, hour: 23, status: 'blocked' as const },
         ];
         const result = toggleAllDaySlots(slots, 0);
-        expect(result).toHaveLength(24);
+        // All toggleable hours (0-21) were active → cleared. Committed/blocked preserved.
+        expect(result).toHaveLength(2);
         expect(result.find((s) => s.hour === 22)?.status).toBe('committed');
         expect(result.find((s) => s.hour === 23)?.status).toBe('blocked');
     });
