@@ -1,10 +1,10 @@
 import { DURATION_PRESETS } from './reschedule-utils';
 
-export function PollBanner({ onPoll, isPending }: { onPoll: () => void; isPending: boolean }) {
+export function PollBanner({ onPoll, isPending, disabled }: { onPoll: () => void; isPending: boolean; disabled?: boolean }) {
     return (
         <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5">
             <p className="text-sm text-foreground flex-1">Let your community decide -- post a Discord poll for the best time</p>
-            <button onClick={onPoll} disabled={isPending}
+            <button onClick={onPoll} disabled={isPending || disabled}
                 className="shrink-0 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 text-sm font-medium text-white transition-colors">
                 {isPending ? 'Converting...' : 'Poll for Best Time'}
             </button>

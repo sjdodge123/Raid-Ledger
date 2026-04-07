@@ -169,7 +169,7 @@ function RescheduleContentBody({ d, eventTitle, reschedule, createPoll, handleCl
 }) {
     return (
         <div className="flex flex-col gap-3 min-h-0 h-full">
-            <PollBanner onPoll={handlePoll} isPending={createPoll.isPending || pollDisabled} />
+            <PollBanner onPoll={handlePoll} isPending={createPoll.isPending} disabled={pollDisabled} />
             <GridLegend hasSelection={!!d.s.gridSelection} />
             <GridBody isLoading={d.isLoading} signupCount={d.signupCount} currentEventBlocks={d.currentEventBlocks}
                 previewBlocks={d.previewBlocks} heatmapOverlay={d.gameTimeData?.cells}
