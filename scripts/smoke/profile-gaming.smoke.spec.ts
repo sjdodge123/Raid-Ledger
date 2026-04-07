@@ -105,9 +105,9 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
         await expect(page.getByTestId('game-time-grid')).toBeVisible();
         await expect(page.getByTestId('game-time-mobile-editor')).not.toBeVisible();
 
-        // Day-of-week buttons should be visible in the grid header
-        await expect(page.getByRole('button', { name: 'Monday' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Sunday' })).toBeVisible();
+        // Day-of-week buttons should be visible in the grid header (short names on mobile)
+        await expect(page.getByRole('button', { name: /Mon/ })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Sun/ })).toBeVisible();
     });
 
     test('action buttons remain accessible above grid', async ({ page }) => {
