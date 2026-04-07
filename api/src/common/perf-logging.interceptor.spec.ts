@@ -75,12 +75,7 @@ describe('PerfLoggingInterceptor', () => {
 
   describe('successful responses (2xx)', () => {
     it('logs status, method, URL, and duration for a 200 response', async () => {
-      const context = createMockExecutionContext(
-        'GET',
-        '/api/events',
-        200,
-        42,
-      );
+      const context = createMockExecutionContext('GET', '/api/events', 200, 42);
       const handler: CallHandler = {
         handle: () => of({ events: [] }),
       };
@@ -119,10 +114,7 @@ describe('PerfLoggingInterceptor', () => {
         500,
         7,
       );
-      const serverError = new HttpException(
-        'Internal Server Error',
-        500,
-      );
+      const serverError = new HttpException('Internal Server Error', 500);
       const handler: CallHandler = {
         handle: () => throwError(() => serverError),
       };
@@ -154,10 +146,7 @@ describe('PerfLoggingInterceptor', () => {
         '/api/scheduling-polls',
         500,
       );
-      const serverError = new HttpException(
-        'Internal Server Error',
-        500,
-      );
+      const serverError = new HttpException('Internal Server Error', 500);
       const handler: CallHandler = {
         handle: () => throwError(() => serverError),
       };
@@ -176,16 +165,8 @@ describe('PerfLoggingInterceptor', () => {
     });
 
     it('logs 503 errors with the correct status code', async () => {
-      const context = createMockExecutionContext(
-        'GET',
-        '/api/games',
-        503,
-        99,
-      );
-      const serviceUnavailable = new HttpException(
-        'Service Unavailable',
-        503,
-      );
+      const context = createMockExecutionContext('GET', '/api/games', 503, 99);
+      const serviceUnavailable = new HttpException('Service Unavailable', 503);
       const handler: CallHandler = {
         handle: () => throwError(() => serviceUnavailable),
       };

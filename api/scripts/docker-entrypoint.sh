@@ -48,6 +48,21 @@ if [ -n "$DATABASE_URL" ]; then
           console.log('✅ Migrations completed (' + appliedCount + '/' + expectedCount + ' applied)');
         }
 
+        // Verify critical tables exist (phantom migration detection)
+        const criticalTables = [
+          'community_lineups', 'community_lineup_matches',
+          'community_lineup_match_members', 'events', 'users'
+        ];
+        const missing = [];
+        for (const t of criticalTables) {
+          const [r] = await sql\`SELECT to_regclass('public.' || \${t}) AS oid\`;
+          if (!r.oid) missing.push(t);
+        }
+        if (missing.length > 0) {
+          console.warn('⚠️  PHANTOM MIGRATION: Tables missing despite ' + appliedCount + ' migrations applied: ' + missing.join(', '));
+          console.warn('   The __drizzle_migrations tracking table may be out of sync.');
+        }
+
         await sql.end();
       }
 

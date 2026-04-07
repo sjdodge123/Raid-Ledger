@@ -4,7 +4,7 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
-import { Observable, tap } from 'rxjs';
+import { Observable, tap, catchError } from 'rxjs';
 import type { Request, Response } from 'express';
 import { isPerfEnabled, perfLog } from './perf-logger';
 
@@ -31,6 +31,24 @@ export class PerfLoggingInterceptor implements NestInterceptor {
           status: res.statusCode,
           userId: userId ?? undefined,
         });
+      }),
+      catchError((err: unknown) => {
+        const durationMs = performance.now() - start;
+        const userId = (req as Request & { user?: { sub?: number } }).user?.sub;
+        const status =
+          err != null &&
+          typeof err === 'object' &&
+          'getStatus' in err &&
+          typeof (err as { getStatus: unknown }).getStatus === 'function'
+            ? (err as { getStatus: () => number }).getStatus()
+            : 500;
+
+        perfLog('HTTP', `${req.method} ${req.url}`, durationMs, {
+          status,
+          userId: userId ?? undefined,
+        });
+
+        throw err;
       }),
     );
   }
