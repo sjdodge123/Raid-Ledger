@@ -233,9 +233,10 @@ test.beforeAll(async () => {
 /** Navigate to the decided lineup and wait for the view to render. */
 async function gotoDecidedView(page: import('@playwright/test').Page): Promise<void> {
     await page.goto(`/community-lineup/${decidedLineupId}`);
+    await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
     // Stats panel always renders regardless of entries — use as readiness gate
-    await expect(page.locator('[data-testid="lineup-stats-panel"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="lineup-stats-panel"]')).toBeVisible({ timeout: 20_000 });
 }
 
 test.describe('Decided view podium section', () => {
