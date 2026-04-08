@@ -16,6 +16,7 @@ const baseMatch = {
   votePercentage: '75.00',
   fitType: 'normal',
   linkedEventId: null,
+  minVoteThreshold: null,
   createdAt: new Date('2026-03-01'),
   updatedAt: new Date('2026-03-01'),
   gameName: 'Elden Ring',

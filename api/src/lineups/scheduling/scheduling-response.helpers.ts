@@ -29,6 +29,7 @@ type MatchRow = {
   votePercentage: string | null;
   fitType: string | null;
   linkedEventId: number | null;
+  minVoteThreshold: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -50,6 +51,7 @@ export function buildMatchDetailDto(
     votePercentage: match.votePercentage ? Number(match.votePercentage) : null,
     fitType: match.fitType as MatchDetailResponseDto['fitType'],
     linkedEventId: match.linkedEventId,
+    minVoteThreshold: match.minVoteThreshold ?? null,
     createdAt: match.createdAt.toISOString(),
     updatedAt: match.updatedAt.toISOString(),
     gameName,
