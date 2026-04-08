@@ -154,6 +154,9 @@ export function addTypeSpecificFields(
     applySubscribedGameEmbed(embed, payload);
     return;
   }
+  if (typeof payload.gameCoverUrl === 'string' && payload.gameCoverUrl) {
+    embed.setThumbnail(payload.gameCoverUrl);
+  }
   if (type === 'roster_reassigned') {
     addRosterReassignedFields(embed, payload);
     return;

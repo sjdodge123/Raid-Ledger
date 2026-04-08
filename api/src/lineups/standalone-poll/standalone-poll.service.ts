@@ -131,7 +131,7 @@ export class StandalonePollService {
 
   /** Fire-and-forget: notify game-interested users. */
   private fireNotifications(
-    game: { id: number; name: string },
+    game: { id: number; name: string; coverUrl: string | null },
     lineupId: number,
     matchId: number,
     creatorId: number,
@@ -142,6 +142,7 @@ export class StandalonePollService {
       lineupId,
       matchId,
       creatorId,
+      game.coverUrl,
     );
   }
 

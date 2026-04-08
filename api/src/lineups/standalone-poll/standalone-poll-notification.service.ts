@@ -33,15 +33,19 @@ export class StandalonePollNotificationService {
     lineupId: number,
     matchId: number,
     creatorId: number,
+    gameCoverUrl?: string | null,
   ): Promise<void> {
     try {
       const recipientIds = await this.findRecipients(gameId, creatorId);
       if (recipientIds.length === 0) return;
+      const creatorName = await this.getCreatorName(creatorId);
       await this.dispatchNotifications(
         recipientIds,
         gameName,
         lineupId,
         matchId,
+        creatorName,
+        gameCoverUrl,
       );
     } catch (error) {
       this.logger.error(
@@ -77,12 +81,27 @@ export class StandalonePollNotificationService {
     return rows.map((r) => r.id);
   }
 
+  /** Look up the creator's display name or username. */
+  private async getCreatorName(creatorId: number): Promise<string> {
+    const rows = await this.db.execute<{
+      displayName: string | null;
+      username: string | null;
+    }>(sql`
+      SELECT display_name AS "displayName", username
+      FROM users WHERE id = ${creatorId} LIMIT 1
+    `);
+    const row = rows[0];
+    return row?.displayName || row?.username || 'Someone';
+  }
+
   /** Dispatch community_lineup notifications to recipients. */
   private async dispatchNotifications(
     recipientIds: number[],
     gameName: string,
     lineupId: number,
     matchId: number,
+    creatorName: string,
+    gameCoverUrl?: string | null,
   ): Promise<void> {
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
@@ -90,12 +109,14 @@ export class StandalonePollNotificationService {
           userId,
           type: 'community_lineup',
           title: `Scheduling poll for ${gameName}`,
-          message: `A scheduling poll for ${gameName} has been created. Suggest your best times!`,
+          message: `${creatorName} started a poll — set your availability so the group can find the best time to play.`,
           payload: {
             subtype: 'standalone_scheduling_poll',
             lineupId,
             matchId,
             gameName,
+            creatorName,
+            ...(gameCoverUrl ? { gameCoverUrl } : {}),
           },
         }),
       ),
