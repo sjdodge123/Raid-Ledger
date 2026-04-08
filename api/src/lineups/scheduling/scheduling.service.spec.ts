@@ -16,6 +16,7 @@ import {
 } from '../../common/testing/drizzle-mock';
 import { EventsService } from '../../events/events.service';
 import { LineupNotificationService } from '../lineup-notification.service';
+import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 
 jest.mock('../lineups-notify-hooks.helpers', () => ({
   fireEventCreated: jest.fn(),
@@ -53,6 +54,13 @@ describe('SchedulingService', () => {
         {
           provide: LineupNotificationService,
           useValue: { notifyEventCreated: jest.fn() },
+        },
+        {
+          provide: SchedulingPollEmbedService,
+          useValue: {
+            firePostInitialEmbed: jest.fn(),
+            fireUpdateEmbed: jest.fn(),
+          },
         },
       ],
     }).compile();

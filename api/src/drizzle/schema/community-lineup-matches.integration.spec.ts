@@ -338,8 +338,20 @@ describe('SchedulePollResponseSchema (ROK-964)', () => {
         suggestedBy: 'system',
         createdAt: '2026-01-01T00:00:00.000Z',
         votes: [
-          { userId: 5, displayName: 'Player1' },
-          { userId: 6, displayName: 'Player2' },
+          {
+            userId: 5,
+            displayName: 'Player1',
+            avatar: null,
+            discordId: null,
+            customAvatarUrl: null,
+          },
+          {
+            userId: 6,
+            displayName: 'Player2',
+            avatar: null,
+            discordId: null,
+            customAvatarUrl: null,
+          },
         ],
       },
     ],

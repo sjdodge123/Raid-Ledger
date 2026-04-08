@@ -9,6 +9,7 @@ import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { NotificationModule } from '../../notifications/notification.module';
 import { LINEUP_PHASE_QUEUE } from '../queue/lineup-phase.constants';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
+import { SchedulingModule } from '../scheduling/scheduling.module';
 import { StandalonePollController } from './standalone-poll.controller';
 import { StandalonePollService } from './standalone-poll.service';
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
@@ -17,6 +18,7 @@ import { StandalonePollNotificationService } from './standalone-poll-notificatio
   imports: [
     DrizzleModule,
     NotificationModule,
+    SchedulingModule,
     BullModule.registerQueue({ name: LINEUP_PHASE_QUEUE }),
   ],
   controllers: [StandalonePollController],

@@ -39,7 +39,7 @@ export function MemberAvatarGroup({
   const overflow = members.length - max;
 
   return (
-    <div className="flex -space-x-1.5">
+    <div data-testid="member-avatar-group" className="flex -space-x-1.5">
       {visible.map((m) => (
         <div key={m.userId} title={m.displayName}>
           <AvatarWithFallback

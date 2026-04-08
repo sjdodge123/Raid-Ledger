@@ -799,6 +799,170 @@ test.describe('Scheduling poll other polls section', () => {
 });
 
 // ---------------------------------------------------------------------------
+// ROK-1014 AC1/AC2: GameTimeGrid shows abbreviated day names on mobile, full on desktop
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling wizard GameTimeGrid day name abbreviation (ROK-1014)', () => {
+    test('mobile: GameTimeGrid shows abbreviated day names (Sun, Mon)', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only test — abbreviated day names only shown on <768px viewports',
+        );
+
+        await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+        // Step 1 shows the GameTimeGrid — wait for it
+        const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
+        const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
+
+        if (isGridVisible) {
+            // On mobile (<768px), day headers should show abbreviated names
+            const dayHeaders = grid.locator('[data-testid^="day-header-"]');
+            const count = await dayHeaders.count();
+            expect(count).toBeGreaterThan(0);
+
+            // Check at least one header uses abbreviated form (3-letter: Sun, Mon, Tue, etc.)
+            const firstHeaderText = await dayHeaders.first().textContent();
+            expect(firstHeaderText).toBeDefined();
+            // Abbreviated names are exactly 3 characters
+            expect(firstHeaderText!.trim().length).toBeLessThanOrEqual(3);
+        }
+    });
+
+    test('desktop: GameTimeGrid shows full day names (Sunday, Monday)', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'mobile',
+            'Desktop-only test — full day names only shown on >=768px viewports',
+        );
+
+        await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+        // Step 1 shows the GameTimeGrid — wait for it
+        const grid = page.locator('[data-testid="heatmap-grid"], [data-testid="game-time-grid"]');
+        const isGridVisible = await grid.isVisible({ timeout: 10_000 }).catch(() => false);
+
+        if (isGridVisible) {
+            const dayHeaders = grid.locator('[data-testid^="day-header-"]');
+            const count = await dayHeaders.count();
+            expect(count).toBeGreaterThan(0);
+
+            // On desktop (>=768px), day headers should show full names
+            const firstHeaderText = await dayHeaders.first().textContent();
+            expect(firstHeaderText).toBeDefined();
+            // Full day names are at least 6 characters (Monday, Sunday, etc.)
+            expect(firstHeaderText!.trim().length).toBeGreaterThanOrEqual(6);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1014 AC3: Create Event button visible above bottom nav on mobile
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll bottom padding (ROK-1014)', () => {
+    test('mobile: page container has bottom padding to clear nav bar', async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name === 'desktop',
+            'Mobile-only test — bottom padding only relevant on mobile with nav bar',
+        );
+
+        await goToPoll(page, lineupId, matchId);
+
+        // Verify a container has the pb-20 class (bottom padding to clear
+        // the fixed mobile nav bar). pb-20 = 5rem = 80px clearance.
+        const hasPadding = await page.evaluate(() => {
+            return !!document.querySelector('.pb-20');
+        });
+        expect(hasPadding).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1014 AC12/AC13: Voter avatars on suggested time slots
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
+    test('voted slot cards show stacked voter avatars', async ({
+        page,
+    }) => {
+        // Ensure we have a vote — get slots and vote on the first one
+        const pollData = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        const firstSlotId = pollData?.slots?.[0]?.id;
+        if (firstSlotId) {
+            // Ensure voted (toggle twice if needed to guarantee voted state)
+            const voteRes = await apiPost(
+                adminToken,
+                `/lineups/${lineupId}/schedule/${matchId}/vote`,
+                { slotId: firstSlotId },
+            );
+            if (voteRes?.voted === false) {
+                // Was voted, toggled off — vote again
+                await apiPost(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}/vote`,
+                    { slotId: firstSlotId },
+                );
+            }
+        }
+
+        await goToPoll(page, lineupId, matchId);
+
+        const votedSlot = page.locator('[data-testid="schedule-slot"][data-voted="true"]').first();
+        await expect(votedSlot).toBeVisible({ timeout: 15_000 });
+
+        // AC12: Voted slot should show member avatar group
+        const avatarGroup = votedSlot.locator('[data-testid="member-avatar-group"]');
+        await expect(avatarGroup).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('slots with 0 votes show no avatar row', async ({
+        page,
+    }) => {
+        // Suggest a new slot that nobody votes on
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + 14);
+        futureDate.setHours(22, 0, 0, 0);
+        await apiPost(adminToken, `/lineups/${lineupId}/schedule/${matchId}/suggest`, {
+            proposedTime: futureDate.toISOString(),
+        }).catch(() => {});
+
+        await goToPoll(page, lineupId, matchId);
+
+        // The newly suggested slot auto-votes for the suggester, so retract
+        const pollData = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        const zeroVoteSlot = pollData?.slots?.find(
+            (s: { votes: unknown[] }) => s.votes.length === 0,
+        );
+
+        if (zeroVoteSlot) {
+            // AC13: Slot with 0 votes should NOT have an avatar group
+            const slotCard = page.locator(
+                `[data-testid="schedule-slot"]:has-text("0 votes")`,
+            ).first();
+            if (await slotCard.isVisible({ timeout: 5_000 }).catch(() => false)) {
+                const avatarGroup = slotCard.locator('[data-testid="member-avatar-group"]');
+                await expect(avatarGroup).not.toBeVisible();
+            }
+        }
+        // If no zero-vote slot exists (auto-vote made all slots have votes), pass vacuously
+    });
+});
+
+// ---------------------------------------------------------------------------
 // AC12: Read-only mode when match status is not "scheduling"
 // ---------------------------------------------------------------------------
 

@@ -10,6 +10,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
+import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
 import {
   findGameById,
   eventExists,
@@ -39,6 +40,7 @@ export class StandalonePollService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly notifications: StandalonePollNotificationService,
+    private readonly schedulingPollEmbed: SchedulingPollEmbedService,
   ) {}
 
   /** List all active standalone scheduling polls. */
@@ -82,6 +84,11 @@ export class StandalonePollService {
       await this.scheduleArchive(lineup.id, phaseDeadline);
     }
     this.fireNotifications(game, lineup.id, match.id, userId);
+    this.schedulingPollEmbed.firePostInitialEmbed(
+      { id: match.id, gameId: input.gameId },
+      lineup.id,
+      input.gameId,
+    );
     const memberCount = await countMatchMembers(this.db, match.id);
     return this.buildResponse(match.id, lineup.id, game, memberCount);
   }

@@ -50,6 +50,8 @@ export const communityLineupMatches = pgTable(
     linkedEventId: integer('linked_event_id').references(() => events.id, {
       onDelete: 'set null',
     }),
+    embedMessageId: text('embed_message_id'),
+    embedChannelId: text('embed_channel_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

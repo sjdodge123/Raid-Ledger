@@ -79,6 +79,9 @@ function mapSlotsWithVotes(
       .map((v) => ({
         userId: v.userId,
         displayName: v.displayName,
+        avatar: v.avatar ?? null,
+        discordId: v.discordId ?? null,
+        customAvatarUrl: v.customAvatarUrl ?? null,
       }));
     return {
       id: slot.id,
