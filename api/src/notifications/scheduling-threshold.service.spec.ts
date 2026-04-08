@@ -25,7 +25,11 @@ function makeMockNotificationService() {
 }
 
 function makeMockCronJobService() {
-  return { executeWithTracking: jest.fn((_name, fn) => fn()) };
+  return {
+    executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) =>
+      fn(),
+    ),
+  };
 }
 
 // ---------------------------------------------------------------------------
