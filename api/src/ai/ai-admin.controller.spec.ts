@@ -421,9 +421,9 @@ describe('ROK-1019: model resolution per provider', () => {
       }),
     };
     mockRegistry = {
-      resolveActive: jest.fn().mockResolvedValue(
-        createCloudProvider('google', 'Google (Gemini)'),
-      ),
+      resolveActive: jest
+        .fn()
+        .mockResolvedValue(createCloudProvider('google', 'Google (Gemini)')),
     };
     mockLogService = {
       getUsageStats: jest.fn().mockResolvedValue({
