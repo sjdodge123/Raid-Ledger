@@ -475,6 +475,19 @@ describe('ROK-1019: model resolution per provider', () => {
       expect(result.response).toContain(CLOUD_DEFAULTS.openai);
       expect(result.response).not.toContain('llama3.2:3b');
     });
+
+    it('AC4: error includes claude cloud default when provider is claude', async () => {
+      mockRegistry.resolveActive.mockResolvedValue(
+        createCloudProvider('claude', 'Claude'),
+      );
+      mockLlmService.chat.mockRejectedValue(new Error('HTTP 401'));
+
+      const result = await controller.testChat();
+
+      expect(result.success).toBe(false);
+      expect(result.response).toContain(CLOUD_DEFAULTS.claude);
+      expect(result.response).not.toContain('llama3.2:3b');
+    });
   });
 
   describe('testChat error — ollama keeps using ai_model setting', () => {

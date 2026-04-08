@@ -235,6 +235,31 @@ describe('StandalonePollNotificationService (ROK-1016)', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Deleted-user fallback — getCreatorName returns 'Someone' (ROK-1021)
+  // -----------------------------------------------------------------------
+  describe('deleted-user fallback in getCreatorName', () => {
+    it('uses "Someone" when creator user is deleted (DB returns zero rows)', async () => {
+      mockDb.execute.mockResolvedValueOnce([{ id: 20 }]);
+      // Creator lookup returns empty result set (user deleted between poll creation and dispatch)
+      mockDb.execute.mockResolvedValueOnce([]);
+
+      await service.notifyInterestedUsers(
+        GAME_ID,
+        GAME_NAME,
+        LINEUP_ID,
+        MATCH_ID,
+        CREATOR_ID,
+      );
+
+      const [input] = mockNotificationService.create.mock.calls[0];
+      expect(input.message).toContain('Someone');
+      expect(input.payload).toEqual(
+        expect.objectContaining({ creatorName: 'Someone' }),
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Payload — creatorName field is present
   // -----------------------------------------------------------------------
   describe('payload includes creatorName', () => {
