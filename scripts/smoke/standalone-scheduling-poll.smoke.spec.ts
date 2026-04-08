@@ -76,6 +76,18 @@ async function getFirstGameId(token: string): Promise<number> {
     return body.data[0].id;
 }
 
+/** Find an event that has a game (required for "Poll for Best Time" button). */
+async function getEventWithGame(token: string): Promise<number> {
+    const res = await fetch(`${API_BASE}/events/upcoming`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch events: ${res.status}`);
+    const body = (await res.json()) as { id: number; game?: { id: number } }[];
+    const event = body.find((e) => e.game?.id);
+    if (!event) throw new Error('No seeded events with a game');
+    return event.id;
+}
+
 // ---------------------------------------------------------------------------
 // AC7: "Schedule a Game" button on events page
 // ---------------------------------------------------------------------------
@@ -331,7 +343,12 @@ test.describe('Reschedule modal — Poll for Best Time', () => {
             'Desktop-only test — full modal flow',
         );
 
-        await navigateToFirstEvent(page, testInfo);
+        // Navigate to a specific event with a game — "Poll for Best Time"
+        // is disabled when the event has no gameId.
+        const token = await getAdminToken();
+        const eventId = await getEventWithGame(token);
+        await page.goto(`/events/${eventId}`);
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
 
         // Open reschedule modal
         const rescheduleBtn = page.getByRole('button', { name: 'Reschedule' });
