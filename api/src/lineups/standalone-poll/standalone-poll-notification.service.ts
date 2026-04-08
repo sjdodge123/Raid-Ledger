@@ -33,6 +33,7 @@ export class StandalonePollNotificationService {
     lineupId: number,
     matchId: number,
     creatorId: number,
+    gameCoverUrl?: string | null,
   ): Promise<void> {
     try {
       const recipientIds = await this.findRecipients(gameId, creatorId);
@@ -44,6 +45,7 @@ export class StandalonePollNotificationService {
         lineupId,
         matchId,
         creatorName,
+        gameCoverUrl,
       );
     } catch (error) {
       this.logger.error(
@@ -99,6 +101,7 @@ export class StandalonePollNotificationService {
     lineupId: number,
     matchId: number,
     creatorName: string,
+    gameCoverUrl?: string | null,
   ): Promise<void> {
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
@@ -113,6 +116,7 @@ export class StandalonePollNotificationService {
             matchId,
             gameName,
             creatorName,
+            ...(gameCoverUrl ? { gameCoverUrl } : {}),
           },
         }),
       ),
