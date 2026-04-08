@@ -76,9 +76,7 @@ describe('StandalonePollNotificationService (ROK-1016)', () => {
   describe('AC1 — game name not repeated in message', () => {
     it('message does NOT contain the game name', async () => {
       // First execute call: findRecipients returns user IDs
-      mockDb.execute.mockResolvedValueOnce(
-        RECIPIENT_IDS.map((id) => ({ id })),
-      );
+      mockDb.execute.mockResolvedValueOnce(RECIPIENT_IDS.map((id) => ({ id })));
       // Second execute call: creator lookup returns a user
       mockDb.execute.mockResolvedValueOnce([
         { displayName: 'TestCreator', username: 'testcreator' },
