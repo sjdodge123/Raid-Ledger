@@ -5,10 +5,12 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { IgdbGameDto } from '@raid-ledger/contract';
+import { useQuery } from '@tanstack/react-query';
 import { Modal } from '../ui/modal';
 import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 import { MemberPicker } from './member-picker-modal';
 import { PollGameSearch } from './poll-game-search';
+import { getPlayers } from '../../lib/api-client';
 
 interface CreatePollModalProps {
   isOpen: boolean;
@@ -81,11 +83,10 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
   );
 }
 
-/** Minimum votes threshold input (ROK-1015). Slider when members selected, number input otherwise. */
-function MinVoteThresholdInput({ value, memberCount, onChange }: {
-  value: number; memberCount: number; onChange: (v: number) => void;
+/** Minimum votes slider — always visible (ROK-1015). */
+function MinVoteThresholdSlider({ value, max, onChange }: {
+  value: number; max: number; onChange: (v: number) => void;
 }) {
-  const hasMembers = memberCount > 0;
   return (
     <div data-testid="min-vote-threshold-slider">
       <div className="flex items-center justify-between mb-2">
@@ -93,28 +94,18 @@ function MinVoteThresholdInput({ value, memberCount, onChange }: {
           Minimum Votes
         </label>
         <span className="text-sm text-muted tabular-nums">
-          {hasMembers ? `${value} of ${memberCount}` : value}
+          {value} of {max}
         </span>
       </div>
-      {hasMembers ? (
-        <input
-          type="range"
-          min={1}
-          max={memberCount}
-          step={1}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-        />
-      ) : (
-        <input
-          type="number"
-          min={1}
-          value={value}
-          onChange={(e) => onChange(Math.max(1, Number(e.target.value) || 1))}
-          className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        />
-      )}
+      <input
+        type="range"
+        min={1}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+      />
       <p className="text-xs text-muted/60 mt-1">
         Notify me when this many members have voted
       </p>
@@ -128,6 +119,13 @@ function CreatePollFormBody({ form, isPending, onSubmit }: {
   isPending: boolean;
   onSubmit: () => void;
 }) {
+  const { data: players } = useQuery({
+    queryKey: ['players', 'member-picker', ''],
+    queryFn: () => getPlayers({ page: 1 }),
+    select: (d) => d.data ?? [],
+  });
+  const totalMembers = players?.length ?? 20;
+  const sliderMax = form.memberIds.length > 0 ? form.memberIds.length : totalMembers;
   return (
     <div className="space-y-4">
       <PollGameSearch
@@ -138,9 +136,9 @@ function CreatePollFormBody({ form, isPending, onSubmit }: {
         selectedIds={form.memberIds}
         onChange={form.setMemberIds}
       />
-      <MinVoteThresholdInput
+      <MinVoteThresholdSlider
         value={form.minVoteThreshold}
-        memberCount={form.memberIds.length}
+        max={sliderMax}
         onChange={form.setMinVoteThreshold}
       />
       <button
