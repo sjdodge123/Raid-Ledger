@@ -252,39 +252,30 @@ describe('SchedulingService', () => {
   });
 
   describe('toggleVote — race condition (ROK-1017)', () => {
-    let findVoteSpy: jest.SpyInstance;
     let insertVoteSpy: jest.SpyInstance;
     let deleteVoteSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      findVoteSpy = jest.spyOn(queryHelpers, 'findVoteBySlotAndUser');
       insertVoteSpy = jest.spyOn(queryHelpers, 'insertScheduleVote');
       deleteVoteSpy = jest.spyOn(queryHelpers, 'deleteScheduleVote');
     });
 
     afterEach(() => {
-      findVoteSpy.mockRestore();
       insertVoteSpy.mockRestore();
       deleteVoteSpy.mockRestore();
     });
 
     it('AC1: concurrent votes for same slot+user do not throw', async () => {
-      // Both concurrent calls see "no vote" in the SELECT check
-      findVoteSpy.mockResolvedValue([]);
-      // First insert succeeds, second hits unique constraint
+      // First insert succeeds (new row), second returns [] (ON CONFLICT)
       insertVoteSpy
         .mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }])
-        .mockRejectedValueOnce(
-          new Error(
-            'duplicate key value violates unique constraint "uq_schedule_vote_user"',
-          ),
-        );
+        .mockResolvedValueOnce([]);
+      deleteVoteSpy.mockResolvedValue(undefined);
       // findMatchOrThrow must succeed for both calls
       mockDb.limit.mockResolvedValue([SCHEDULING_MATCH]);
 
       // Fire two concurrent toggleVote calls for the same slot+user.
-      // Current code: check-then-insert race causes the second to throw.
-      // After fix: ON CONFLICT DO NOTHING makes this idempotent.
+      // ON CONFLICT DO NOTHING returns [] — no throw.
       const results = await Promise.all([
         service.toggleVote(5, 10, 10),
         service.toggleVote(5, 10, 10),
@@ -298,43 +289,35 @@ describe('SchedulingService', () => {
     });
 
     it('AC5: vote toggle cycle works — vote then unvote', async () => {
-      // First call: no existing vote → creates vote
+      // First call: insert succeeds (new row) → voted: true
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
-      findVoteSpy.mockResolvedValueOnce([]);
-      insertVoteSpy.mockResolvedValueOnce([
-        { id: 1, slotId: 5, userId: 10 },
-      ]);
+      insertVoteSpy.mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }]);
 
       const voteResult = await service.toggleVote(5, 10, 10);
       expect(voteResult).toEqual({ voted: true });
 
-      // Second call: existing vote → deletes vote
+      // Second call: insert returns [] (conflict) → delete → voted: false
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
-      findVoteSpy.mockResolvedValueOnce([{ id: 1 }]);
-      deleteVoteSpy.mockResolvedValueOnce([]);
+      insertVoteSpy.mockResolvedValueOnce([]);
+      deleteVoteSpy.mockResolvedValueOnce(undefined);
 
       const unvoteResult = await service.toggleVote(5, 10, 10);
       expect(unvoteResult).toEqual({ voted: false });
     });
 
     it('AC1: repeated vote on already-voted slot is idempotent', async () => {
-      // Both calls see "no vote" due to race timing
-      findVoteSpy.mockResolvedValue([]);
-      // Both try to insert — second should not throw after fix
+      // First insert succeeds, second returns [] (ON CONFLICT)
       insertVoteSpy
         .mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }])
-        .mockRejectedValueOnce(
-          new Error(
-            'duplicate key value violates unique constraint "uq_schedule_vote_user"',
-          ),
-        );
+        .mockResolvedValueOnce([]);
+      deleteVoteSpy.mockResolvedValue(undefined);
       mockDb.limit.mockResolvedValue([SCHEDULING_MATCH]);
 
       // Idempotency: calling vote twice should not throw
       const first = await service.toggleVote(5, 10, 10);
       expect(first).toEqual({ voted: true });
 
-      // Second call should handle the constraint gracefully
+      // Second call handles conflict gracefully — toggles off
       await expect(service.toggleVote(5, 10, 10)).resolves.toMatchObject({
         voted: expect.any(Boolean),
       });

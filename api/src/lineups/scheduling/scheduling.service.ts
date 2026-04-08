@@ -118,7 +118,11 @@ export class SchedulingService {
     }
   }
 
-  /** Toggle a vote on a schedule slot. Returns voted state. */
+  /**
+   * Toggle a vote on a schedule slot. Returns voted state.
+   * Uses insert-first logic: INSERT ON CONFLICT DO NOTHING is atomic,
+   * eliminating the check-then-insert race condition (ROK-1017).
+   */
   async toggleVote(
     slotId: number,
     userId: number,
@@ -126,13 +130,10 @@ export class SchedulingService {
   ): Promise<{ voted: boolean }> {
     const match = await this.findMatchOrThrow(matchId);
     this.assertSchedulable(match);
-    const existing = await findVoteBySlotAndUser(this.db, slotId, userId);
-    if (existing.length > 0) {
-      await deleteScheduleVote(this.db, slotId, userId);
-      return { voted: false };
-    }
-    await insertScheduleVote(this.db, slotId, userId);
-    return { voted: true };
+    const inserted = await insertScheduleVote(this.db, slotId, userId);
+    if (inserted.length > 0) return { voted: true };
+    await deleteScheduleVote(this.db, slotId, userId);
+    return { voted: false };
   }
 
   /** Retract all votes by a user for slots belonging to a match. */
