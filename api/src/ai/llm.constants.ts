@@ -42,5 +42,5 @@ export const AI_SETTING_KEYS = {
 export const CLOUD_DEFAULTS = {
   openai: 'gpt-4o-mini',
   claude: 'claude-sonnet-4-20250514',
-  google: 'gemini-2.0-flash',
+  google: 'gemini-2.5-flash',
 } as const;

@@ -9,7 +9,7 @@ import { LlmService } from './llm.service';
 import { LlmProviderRegistry } from './llm-provider-registry';
 import { AiRequestLogService } from './ai-request-log.service';
 import { SettingsService } from '../settings/settings.service';
-import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
+import { AI_DEFAULTS, AI_SETTING_KEYS, CLOUD_DEFAULTS } from './llm.constants';
 import { buildStatusResponse, buildUsageResponse } from './ai-admin.helpers';
 import type {
   AiStatusDto,
@@ -43,7 +43,10 @@ export class AiAdminController {
       this.llmService.isAvailable(),
       false,
     );
-    const model = await this.settings.get(AI_SETTING_KEYS.MODEL as SettingKey);
+    const modelSetting = await this.settings.get(
+      AI_SETTING_KEYS.MODEL as SettingKey,
+    );
+    const model = this.resolveDisplayModel(provider?.key, modelSetting);
     return buildStatusResponse(provider, model, isAvailable);
   }
 
@@ -85,6 +88,17 @@ export class AiAdminController {
     return buildUsageResponse(stats);
   }
 
+  /** Resolve display model: cloud providers use CLOUD_DEFAULTS, Ollama uses setting. */
+  private resolveDisplayModel(
+    providerKey: string | undefined,
+    modelSetting: string | null,
+  ): string {
+    if (providerKey && providerKey in CLOUD_DEFAULTS) {
+      return CLOUD_DEFAULTS[providerKey as keyof typeof CLOUD_DEFAULTS];
+    }
+    return modelSetting ?? AI_DEFAULTS.model;
+  }
+
   /** Race a promise against a 3s timeout, returning fallback on timeout/error. */
   private async withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
     try {
@@ -107,7 +121,10 @@ export class AiAdminController {
     const isUp = await this.withTimeout(this.llmService.isAvailable(), false);
     if (!isUp) return this.notAvailableResult();
     const provider = await this.registry.resolveActive();
-    const model = await this.settings.get(AI_SETTING_KEYS.MODEL as SettingKey);
+    const modelSetting = await this.settings.get(
+      AI_SETTING_KEYS.MODEL as SettingKey,
+    );
+    const model = this.resolveDisplayModel(provider?.key, modelSetting);
     const start = Date.now();
     this.logger.log(
       `test-chat start | provider=${provider?.key} model=${model}`,

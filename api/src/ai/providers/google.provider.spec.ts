@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { GoogleProvider } from './google.provider';
 import { SettingsService } from '../../settings/settings.service';
+import { CLOUD_DEFAULTS } from '../llm.constants';
 import * as helpers from './google.helpers';
 
 jest.mock('./google.helpers', () => ({
@@ -105,5 +106,13 @@ describe('GoogleProvider', () => {
       const result = await provider.generate({ prompt: 'Write something' });
       expect(result.content).toBe('Generated');
     });
+  });
+});
+
+// --- ROK-1019: AC1 — CLOUD_DEFAULTS.google must reference a current model ---
+
+describe('ROK-1019: CLOUD_DEFAULTS.google model', () => {
+  it('AC1: defaults to gemini-2.5-flash (not retired gemini-2.0-flash)', () => {
+    expect(CLOUD_DEFAULTS.google).toBe('gemini-2.5-flash');
   });
 });
