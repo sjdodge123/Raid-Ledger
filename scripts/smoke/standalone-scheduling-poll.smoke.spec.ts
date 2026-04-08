@@ -78,12 +78,12 @@ async function getFirstGameId(token: string): Promise<number> {
 
 /** Find an event that has a game (required for "Poll for Best Time" button). */
 async function getEventWithGame(token: string): Promise<number> {
-    const res = await fetch(`${API_BASE}/events/upcoming`, {
+    const res = await fetch(`${API_BASE}/events?upcoming=true&limit=20`, {
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(`Failed to fetch events: ${res.status}`);
-    const body = (await res.json()) as { id: number; game?: { id: number } }[];
-    const event = body.find((e) => e.game?.id);
+    const body = (await res.json()) as { data: { id: number; game?: { id: number } }[] };
+    const event = body.data.find((e) => e.game?.id);
     if (!event) throw new Error('No seeded events with a game');
     return event.id;
 }
