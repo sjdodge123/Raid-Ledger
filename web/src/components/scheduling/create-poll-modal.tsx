@@ -19,18 +19,18 @@ interface CreatePollModalProps {
 function useCreatePollForm() {
   const [selectedGame, setSelectedGame] = useState<IgdbGameDto | null>(null);
   const [memberIds, setMemberIdsRaw] = useState<number[]>([]);
-  const [minVoteThreshold, setMinVoteThreshold] = useState<number>(0);
+  const [minVoteThreshold, setMinVoteThreshold] = useState<number>(3);
 
   // Sync threshold to member count on change (ROK-1015)
   const setMemberIds = useCallback((ids: number[]) => {
     setMemberIdsRaw(ids);
-    setMinVoteThreshold(ids.length);
+    if (ids.length > 0) setMinVoteThreshold(ids.length);
   }, []);
 
   const reset = useCallback(() => {
     setSelectedGame(null);
     setMemberIdsRaw([]);
-    setMinVoteThreshold(0);
+    setMinVoteThreshold(3);
   }, []);
   return {
     selectedGame, setSelectedGame,
@@ -81,10 +81,11 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
   );
 }
 
-/** Minimum votes slider shown when members are selected (ROK-1015). */
-function MinVoteThresholdSlider({ value, max, onChange }: {
-  value: number; max: number; onChange: (v: number) => void;
+/** Minimum votes threshold input (ROK-1015). Slider when members selected, number input otherwise. */
+function MinVoteThresholdInput({ value, memberCount, onChange }: {
+  value: number; memberCount: number; onChange: (v: number) => void;
 }) {
+  const hasMembers = memberCount > 0;
   return (
     <div data-testid="min-vote-threshold-slider">
       <div className="flex items-center justify-between mb-2">
@@ -92,22 +93,31 @@ function MinVoteThresholdSlider({ value, max, onChange }: {
           Minimum Votes
         </label>
         <span className="text-sm text-muted tabular-nums">
-          {value} of {max}
+          {hasMembers ? `${value} of ${memberCount}` : value}
         </span>
       </div>
-      <input
-        type="range"
-        min={1}
-        max={max}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-      />
-      <div className="flex justify-between text-xs text-muted/60 mt-1">
-        <span>1 vote</span>
-        <span>{max} votes</span>
-      </div>
+      {hasMembers ? (
+        <input
+          type="range"
+          min={1}
+          max={memberCount}
+          step={1}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        />
+      ) : (
+        <input
+          type="number"
+          min={1}
+          value={value}
+          onChange={(e) => onChange(Math.max(1, Number(e.target.value) || 1))}
+          className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+      )}
+      <p className="text-xs text-muted/60 mt-1">
+        Notify me when this many members have voted
+      </p>
     </div>
   );
 }
@@ -128,13 +138,11 @@ function CreatePollFormBody({ form, isPending, onSubmit }: {
         selectedIds={form.memberIds}
         onChange={form.setMemberIds}
       />
-      {form.memberIds.length > 0 && (
-        <MinVoteThresholdSlider
-          value={form.minVoteThreshold}
-          max={form.memberIds.length}
-          onChange={form.setMinVoteThreshold}
-        />
-      )}
+      <MinVoteThresholdInput
+        value={form.minVoteThreshold}
+        memberCount={form.memberIds.length}
+        onChange={form.setMinVoteThreshold}
+      />
       <button
         type="button"
         onClick={onSubmit}
