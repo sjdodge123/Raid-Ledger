@@ -42,6 +42,7 @@ import { buildPollResponse } from './scheduling-response.helpers';
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { fireEventCreated } from '../lineups-notify-hooks.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
+import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 
 const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const EVENT_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -56,6 +57,7 @@ export class SchedulingService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly eventsService: EventsService,
     private readonly lineupNotifications: LineupNotificationService,
+    private readonly pollEmbed: SchedulingPollEmbedService,
   ) {}
 
   /** Get the full scheduling poll page data for a match. */
@@ -101,6 +103,7 @@ export class SchedulingService {
     await this.assertNoDuplicateSlot(matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
     if (userId) await this.autoVoteForSlot(slot.id, userId);
+    this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
   }
 
@@ -131,8 +134,12 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     this.assertSchedulable(match);
     const inserted = await insertScheduleVote(this.db, slotId, userId);
-    if (inserted.length > 0) return { voted: true };
+    if (inserted.length > 0) {
+      this.pollEmbed.fireUpdateEmbed(matchId);
+      return { voted: true };
+    }
     await deleteScheduleVote(this.db, slotId, userId);
+    this.pollEmbed.fireUpdateEmbed(matchId);
     return { voted: false };
   }
 
@@ -141,6 +148,7 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     this.assertSchedulable(match);
     await deleteAllUserVotesForMatch(this.db, matchId, userId);
+    this.pollEmbed.fireUpdateEmbed(matchId);
   }
 
   /** Create an event from a schedule slot. */

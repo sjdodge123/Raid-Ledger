@@ -12,7 +12,6 @@ import {
   type EmbedContext,
 } from './discord-embed.factory';
 import { DiscordEmojiService } from './discord-emoji.service';
-import { EMBED_COLORS } from '../discord-bot.constants';
 
 function createFactory() {
   const emojiService = {
@@ -210,7 +209,8 @@ describe('buildSchedulingPollEmbed — update scenarios (AC8, AC9)', () => {
     };
     const result = factory.buildSchedulingPollEmbed(emptyData, baseContext);
     const json = result.embed.toJSON();
-    const text = (json.description ?? '') +
+    const text =
+      (json.description ?? '') +
       (json.fields?.map((f) => f.value).join(' ') ?? '');
     expect(text.toLowerCase()).toContain('no times suggested');
   });

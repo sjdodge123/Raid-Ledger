@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
+import { MemberAvatarGroup } from '../../components/lineups/decided/MemberAvatarGroup';
 
 interface SuggestedTimesProps {
   slots: ScheduleSlotWithVotesDto[];
@@ -56,6 +57,11 @@ function SlotCard({ slot, isVoted, readOnly, onToggle }: {
           {slot.votes.length} {slot.votes.length === 1 ? 'vote' : 'votes'}
         </span>
       </div>
+      {slot.votes.length > 0 && (
+        <div className="mt-1.5">
+          <MemberAvatarGroup members={slot.votes} max={5} />
+        </div>
+      )}
       {isVoted && <p className="text-xs text-emerald-400 mt-1">You voted</p>}
     </button>
   );

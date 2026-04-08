@@ -13,7 +13,9 @@ import { GameTimeGrid } from '../../components/features/game-time/GameTimeGrid';
 import { AbsenceSection } from '../../components/features/game-time/game-time-absence';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
 import { GAME_TIME_QUERY_KEY } from '../../hooks/use-game-time';
+import { useMediaQuery } from '../../hooks/use-media-query';
 import { useToggleScheduleVote } from '../../hooks/use-scheduling';
+import { MemberAvatarGroup } from '../../components/lineups/decided/MemberAvatarGroup';
 import { setWizardSkipped } from './scheduling-wizard-utils';
 
 const STEPS = [
@@ -101,6 +103,7 @@ function WizardNav({ onContinue, onSkip, continueLabel, skipLabel, disabled, isP
 function GameTimeWizardStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }): JSX.Element {
   const editor = useGameTimeEditor();
   const qc = useQueryClient();
+  const isMobile = useMediaQuery('(max-width: 767px)');
   const handleSave = async () => {
     await editor.save();
     qc.invalidateQueries({ queryKey: ['scheduling'] });
@@ -115,7 +118,7 @@ function GameTimeWizardStep({ onNext, onSkip }: { onNext: () => void; onSkip: ()
         <p className="text-muted text-sm mt-1">Paint your weekly availability so the group can find the best time.</p>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
-        <GameTimeGrid slots={editor.slots} onChange={editor.handleChange} tzLabel={editor.tzLabel} hourRange={[6, 24]} compact noStickyOffset fullDayNames />
+        <GameTimeGrid slots={editor.slots} onChange={editor.handleChange} tzLabel={editor.tzLabel} hourRange={[6, 24]} compact noStickyOffset fullDayNames={!isMobile} />
       </div>
       <AbsenceSection />
       <WizardNav onContinue={handleSave} onSkip={onSkip} continueLabel="Save & Continue" skipLabel="Skip" isPending={editor.isSaving} disabled={editor.isSaving || (!editor.isDirty && editor.slots.length === 0)} />
@@ -161,6 +164,11 @@ function VoteStep({ poll, lineupId, matchId, onNext }: {
                 <span className="text-sm font-medium">{formatSlotTime(slot.proposedTime)}</span>
                 <span className="text-xs text-muted">{slot.votes.length} {slot.votes.length === 1 ? 'vote' : 'votes'}</span>
               </div>
+              {slot.votes.length > 0 && (
+                <div className="mt-1.5">
+                  <MemberAvatarGroup members={slot.votes} max={5} />
+                </div>
+              )}
               {slotVoted && <p className="text-xs text-emerald-400 mt-1">You voted</p>}
             </button>
           );
@@ -204,7 +212,7 @@ export function SchedulingWizard({ children, poll, lineupId, matchId, gameTimeSt
   const skipStep1 = () => { setWizardSkipped(); advance(); };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-0 space-y-6">
       <WizardStepIndicator currentStep={step} onGoTo={goTo} />
       {step === 0 && <GameTimeWizardStep onNext={advance} onSkip={skipStep1} />}
       {step === 1 && <VoteStep poll={poll} lineupId={lineupId} matchId={matchId} onNext={advance} />}

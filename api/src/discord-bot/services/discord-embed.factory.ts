@@ -16,12 +16,19 @@ import {
 import { createInviteEmbed } from './discord-embed-invite.helpers';
 import { formatDurationMs } from '../utils/format-duration';
 import {
-  buildEventPushContent,
   buildCancelledPushContent,
-  buildCompletedPushContent,
   buildAdHocSpawnPushContent,
   buildAdHocCompletedPushContent,
 } from '../utils/push-content';
+import type { SchedulingPollEmbedData } from './discord-embed-scheduling.types';
+import {
+  buildSchedulingPollEmbedBody,
+  buildSchedulingPollButton,
+} from './discord-embed-scheduling.helpers';
+import {
+  buildPushContentForState,
+  getColorForState,
+} from './discord-embed-state.helpers';
 
 /** Minimal event data needed to build an embed. */
 export interface EmbedEventData {
@@ -97,12 +104,8 @@ export class DiscordEmbedFactory {
   ): EmbedResult {
     const state = options?.state ?? EMBED_STATES.POSTED;
     const buttons = options?.buttons ?? 'signup';
-    const content = this.buildPushContentForState(
-      event,
-      state,
-      context.timezone,
-    );
-    const color = this.getColorForState(state);
+    const content = buildPushContentForState(event, state, context.timezone);
+    const color = getColorForState(state);
     const embed = this.createBaseEmbed(event, context, color);
     if (state === EMBED_STATES.CANCELLED || state === EMBED_STATES.COMPLETED) {
       return { embed, content };
@@ -230,41 +233,17 @@ export class DiscordEmbedFactory {
     };
   }
 
+  /** Build a scheduling poll embed for a Discord channel (ROK-1014). */
+  buildSchedulingPollEmbed(
+    data: SchedulingPollEmbedData,
+    context: EmbedContext,
+  ): EmbedResult {
+    const embed = buildSchedulingPollEmbedBody(data, context);
+    const row = buildSchedulingPollButton(data);
+    return { embed, row };
+  }
+
   // ─── Private helpers ──────────────────────────────────────
-
-  /** Select the correct push content format based on embed state. */
-  private buildPushContentForState(
-    event: EmbedEventData,
-    state: EmbedState,
-    timezone?: string | null,
-  ): string {
-    if (state === EMBED_STATES.CANCELLED) {
-      return buildCancelledPushContent(event.title);
-    }
-    if (state === EMBED_STATES.COMPLETED) {
-      return buildCompletedPushContent(event);
-    }
-    return buildEventPushContent(event, timezone);
-  }
-
-  private getColorForState(state: EmbedState): number {
-    switch (state) {
-      case EMBED_STATES.POSTED:
-      case EMBED_STATES.FILLING:
-      case EMBED_STATES.FULL:
-        return EMBED_COLORS.ANNOUNCEMENT;
-      case EMBED_STATES.IMMINENT:
-        return EMBED_COLORS.REMINDER;
-      case EMBED_STATES.LIVE:
-        return EMBED_COLORS.SIGNUP_CONFIRMATION;
-      case EMBED_STATES.COMPLETED:
-        return EMBED_COLORS.SYSTEM;
-      case EMBED_STATES.CANCELLED:
-        return EMBED_COLORS.ERROR;
-      default:
-        return EMBED_COLORS.ANNOUNCEMENT;
-    }
-  }
 
   private createBaseEmbed(
     event: EmbedEventData,

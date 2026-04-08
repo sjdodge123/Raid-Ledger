@@ -53,6 +53,9 @@ const baseVotes = [
     slotId: 20,
     userId: 100,
     displayName: 'Alice',
+    avatar: null,
+    discordId: null,
+    customAvatarUrl: null,
     createdAt: new Date('2026-03-29'),
   },
 ];

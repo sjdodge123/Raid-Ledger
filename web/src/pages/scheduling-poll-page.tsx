@@ -124,7 +124,7 @@ function usePollMutations(lineupId: number, matchId: number) {
 function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
   const eventId = poll.match.linkedEventId;
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-0 space-y-6">
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
       <MatchContextCard match={poll.match} />
       <div className="p-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
@@ -179,7 +179,7 @@ function ActivePollSections({ lineupId, matchId, poll }: {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-0 space-y-6">
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
       {readOnly && <ReadOnlyBanner />}
       <MatchContextCard match={poll.match} />

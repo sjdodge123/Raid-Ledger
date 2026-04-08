@@ -117,6 +117,9 @@ export const SchedulePollResponseSchema = z.object({
                 z.object({
                     userId: z.number(),
                     displayName: z.string(),
+                    avatar: z.string().nullable(),
+                    discordId: z.string().nullable(),
+                    customAvatarUrl: z.string().nullable(),
                 }),
             ),
         }),

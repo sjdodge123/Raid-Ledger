@@ -8,12 +8,15 @@ import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Shape of a schedule vote row with display name. */
+/** Shape of a schedule vote row with display name and avatar fields. */
 export interface ScheduleVoteRow {
   id: number;
   slotId: number;
   userId: number;
   displayName: string;
+  avatar: string | null;
+  discordId: string | null;
+  customAvatarUrl: string | null;
   createdAt: Date;
 }
 
@@ -40,6 +43,9 @@ export function findScheduleVotes(
         sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`.as(
           'display_name',
         ),
+      avatar: schema.users.avatar,
+      discordId: schema.users.discordId,
+      customAvatarUrl: schema.users.customAvatarUrl,
       createdAt: schema.communityLineupScheduleVotes.createdAt,
     })
     .from(schema.communityLineupScheduleVotes)

@@ -93,11 +93,14 @@ describe('scheduling-query.helpers', () => {
         },
       ]);
 
-      const result = await findScheduleVotes(mockDb as never, [20]);
+      await findScheduleVotes(mockDb as never, [20]);
 
       // The select() call must include avatar, discordId, customAvatarUrl fields
       // from the users table. Verify the select arg contains these field selectors.
-      const selectArg = mockDb.select.mock.calls[0][0] as Record<string, unknown>;
+      const selectArg = mockDb.select.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
       expect(selectArg).toHaveProperty('avatar');
       expect(selectArg).toHaveProperty('discordId');
       expect(selectArg).toHaveProperty('customAvatarUrl');

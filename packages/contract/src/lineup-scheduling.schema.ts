@@ -41,6 +41,9 @@ export const ScheduleSlotWithVotesSchema = LineupScheduleSlotSchema.extend({
     z.object({
       userId: z.number(),
       displayName: z.string(),
+      avatar: z.string().nullable(),
+      discordId: z.string().nullable(),
+      customAvatarUrl: z.string().nullable(),
     }),
   ),
 });
