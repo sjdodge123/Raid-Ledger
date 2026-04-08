@@ -2,8 +2,7 @@
  * Tests for SuggestedTimes component and VoteStep in SchedulingWizard (ROK-1017).
  *
  * AC2: Vote buttons must be disabled while a mutation is in-flight.
- * Currently VoteStep does NOT wire toggle.isPending to disable buttons,
- * so the "disabled during pending mutation" test will FAIL.
+ * VoteStep wires toggle.isPending to disable buttons during flight.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';

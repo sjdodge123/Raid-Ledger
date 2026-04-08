@@ -130,8 +130,9 @@ describe('SchedulingService', () => {
 
   describe('toggleVote', () => {
     it('creates a vote when none exists', async () => {
+      // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      // insertScheduleVote returns inserted row (new vote)
       mockDb.returning.mockResolvedValueOnce([
         { id: 1, slotId: 5, userId: 10 },
       ]);
@@ -141,8 +142,10 @@ describe('SchedulingService', () => {
     });
 
     it('removes existing vote on toggle off', async () => {
+      // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
-      mockDb.limit.mockResolvedValueOnce([{ id: 1 }]);
+      // insertScheduleVote returns [] (ON CONFLICT — vote already exists)
+      mockDb.returning.mockResolvedValueOnce([]);
 
       const result = await service.toggleVote(5, 10, 10);
       expect(result).toEqual({ voted: false });
