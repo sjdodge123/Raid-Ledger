@@ -63,11 +63,23 @@ export function insertScheduleSlot(
     .returning();
 }
 
-/** Insert a vote for a schedule slot. */
+/**
+ * Insert a vote for a schedule slot (idempotent).
+ * Uses ON CONFLICT DO NOTHING so concurrent inserts for the same
+ * (slotId, userId) pair never throw a unique-constraint error.
+ * Returns the inserted row when new, or an empty array when the vote
+ * already existed.
+ */
 export function insertScheduleVote(db: Db, slotId: number, userId: number) {
   return db
     .insert(schema.communityLineupScheduleVotes)
     .values({ slotId, userId })
+    .onConflictDoNothing({
+      target: [
+        schema.communityLineupScheduleVotes.slotId,
+        schema.communityLineupScheduleVotes.userId,
+      ],
+    })
     .returning();
 }
 

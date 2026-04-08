@@ -144,6 +144,7 @@ function VoteStep({ poll, lineupId, matchId, onNext }: {
     });
     setOptimistic((s) => { const n = new Set(s); if (n.has(slotId)) n.delete(slotId); else n.add(slotId); return n; });
   };
+  const pending = toggle.isPending;
   return (
     <div data-testid="scheduling-wizard-step-2" className="space-y-4">
       <div className="text-center">
@@ -154,7 +155,7 @@ function VoteStep({ poll, lineupId, matchId, onNext }: {
         {poll.slots.map((slot) => {
           const slotVoted = isVoted(slot.id);
           return (
-            <button key={slot.id} type="button" onClick={() => handleToggle(slot.id)}
+            <button key={slot.id} type="button" disabled={pending} onClick={() => handleToggle(slot.id)}
               className={`w-full text-left p-3 rounded-lg border transition-colors ${slotVoted ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-panel border-edge text-foreground hover:border-dim'}`}>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{formatSlotTime(slot.proposedTime)}</span>

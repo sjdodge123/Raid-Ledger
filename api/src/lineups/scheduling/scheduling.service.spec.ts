@@ -130,8 +130,9 @@ describe('SchedulingService', () => {
 
   describe('toggleVote', () => {
     it('creates a vote when none exists', async () => {
+      // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      // insertScheduleVote returns inserted row (new vote)
       mockDb.returning.mockResolvedValueOnce([
         { id: 1, slotId: 5, userId: 10 },
       ]);
@@ -141,8 +142,10 @@ describe('SchedulingService', () => {
     });
 
     it('removes existing vote on toggle off', async () => {
+      // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
-      mockDb.limit.mockResolvedValueOnce([{ id: 1 }]);
+      // insertScheduleVote returns [] (ON CONFLICT — vote already exists)
+      mockDb.returning.mockResolvedValueOnce([]);
 
       const result = await service.toggleVote(5, 10, 10);
       expect(result).toEqual({ voted: false });
@@ -248,6 +251,79 @@ describe('SchedulingService', () => {
       mockCreateEventFlow();
       const result = await service.createEventFromSlot(10, 20, 1);
       expect(result).toEqual({ eventId: 100 });
+    });
+  });
+
+  describe('toggleVote — race condition (ROK-1017)', () => {
+    let insertVoteSpy: jest.SpyInstance;
+    let deleteVoteSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      insertVoteSpy = jest.spyOn(queryHelpers, 'insertScheduleVote');
+      deleteVoteSpy = jest.spyOn(queryHelpers, 'deleteScheduleVote');
+    });
+
+    afterEach(() => {
+      insertVoteSpy.mockRestore();
+      deleteVoteSpy.mockRestore();
+    });
+
+    it('AC1: concurrent votes for same slot+user do not throw', async () => {
+      // First insert succeeds (new row), second returns [] (ON CONFLICT)
+      insertVoteSpy
+        .mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }])
+        .mockResolvedValueOnce([]);
+      deleteVoteSpy.mockResolvedValue(undefined);
+      // findMatchOrThrow must succeed for both calls
+      mockDb.limit.mockResolvedValue([SCHEDULING_MATCH]);
+
+      // Fire two concurrent toggleVote calls for the same slot+user.
+      // ON CONFLICT DO NOTHING returns [] — no throw.
+      const results = await Promise.all([
+        service.toggleVote(5, 10, 10),
+        service.toggleVote(5, 10, 10),
+      ]);
+
+      // Both should resolve without error
+      expect(results).toHaveLength(2);
+      results.forEach((r) => {
+        expect(r).toMatchObject({ voted: expect.any(Boolean) });
+      });
+    });
+
+    it('AC5: vote toggle cycle works — vote then unvote', async () => {
+      // First call: insert succeeds (new row) → voted: true
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      insertVoteSpy.mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }]);
+
+      const voteResult = await service.toggleVote(5, 10, 10);
+      expect(voteResult).toEqual({ voted: true });
+
+      // Second call: insert returns [] (conflict) → delete → voted: false
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      insertVoteSpy.mockResolvedValueOnce([]);
+      deleteVoteSpy.mockResolvedValueOnce(undefined);
+
+      const unvoteResult = await service.toggleVote(5, 10, 10);
+      expect(unvoteResult).toEqual({ voted: false });
+    });
+
+    it('AC1: repeated vote on already-voted slot is idempotent', async () => {
+      // First insert succeeds, second returns [] (ON CONFLICT)
+      insertVoteSpy
+        .mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }])
+        .mockResolvedValueOnce([]);
+      deleteVoteSpy.mockResolvedValue(undefined);
+      mockDb.limit.mockResolvedValue([SCHEDULING_MATCH]);
+
+      // Idempotency: calling vote twice should not throw
+      const first = await service.toggleVote(5, 10, 10);
+      expect(first).toEqual({ voted: true });
+
+      // Second call handles conflict gracefully — toggles off
+      await expect(service.toggleVote(5, 10, 10)).resolves.toMatchObject({
+        voted: expect.any(Boolean),
+      });
     });
   });
 
