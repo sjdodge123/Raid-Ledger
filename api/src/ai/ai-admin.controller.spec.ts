@@ -7,7 +7,7 @@ import { SettingsService } from '../settings/settings.service';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { Reflector } from '@nestjs/core';
 import type { LlmProvider } from './llm-provider.interface';
-import { AI_DEFAULTS } from './llm.constants';
+import { AI_DEFAULTS, CLOUD_DEFAULTS } from './llm.constants';
 
 function createMockProvider(): LlmProvider {
   return {
@@ -382,5 +382,145 @@ describe('ROK-1000: testChat timeout and diagnostics', () => {
 
     expect(result.success).toBe(false);
     expect(result.response).toContain('No AI provider');
+  });
+});
+
+// --- ROK-1019: AC4 — model resolution per provider ---
+
+describe('ROK-1019: model resolution per provider', () => {
+  let controller: AiAdminController;
+  let mockLlmService: {
+    isAvailable: jest.Mock;
+    listModels: jest.Mock;
+    chat: jest.Mock;
+  };
+  let mockRegistry: { resolveActive: jest.Mock };
+  let mockLogService: { getUsageStats: jest.Mock };
+  let mockSettings: { get: jest.Mock };
+
+  function createCloudProvider(key: string, name: string): LlmProvider {
+    return {
+      key,
+      displayName: name,
+      requiresApiKey: true,
+      selfHosted: false,
+      isAvailable: jest.fn().mockResolvedValue(true),
+      listModels: jest.fn().mockResolvedValue([]),
+      chat: jest.fn(),
+      generate: jest.fn(),
+    };
+  }
+
+  beforeEach(async () => {
+    mockLlmService = {
+      isAvailable: jest.fn().mockResolvedValue(true),
+      listModels: jest.fn().mockResolvedValue([]),
+      chat: jest.fn().mockResolvedValue({
+        content: 'Hello!',
+        latencyMs: 150,
+      }),
+    };
+    mockRegistry = {
+      resolveActive: jest.fn().mockResolvedValue(
+        createCloudProvider('google', 'Google (Gemini)'),
+      ),
+    };
+    mockLogService = {
+      getUsageStats: jest.fn().mockResolvedValue({
+        totalRequests: 0,
+        requestsToday: 0,
+        avgLatencyMs: 0,
+        errorRate: 0,
+        byFeature: [],
+      }),
+    };
+    // Simulate a stale Ollama model in the global ai_model setting
+    mockSettings = { get: jest.fn().mockResolvedValue('llama3.2:3b') };
+
+    const module = await Test.createTestingModule({
+      controllers: [AiAdminController],
+      providers: [
+        { provide: LlmService, useValue: mockLlmService },
+        { provide: LlmProviderRegistry, useValue: mockRegistry },
+        { provide: AiRequestLogService, useValue: mockLogService },
+        { provide: SettingsService, useValue: mockSettings },
+        { provide: PluginRegistryService, useValue: { isActive: jest.fn() } },
+        { provide: Reflector, useValue: new Reflector() },
+      ],
+    }).compile();
+    controller = module.get(AiAdminController);
+  });
+
+  describe('testChat error — cloud provider model resolution', () => {
+    it('AC4: error includes cloud default model, not stale ollama model', async () => {
+      mockLlmService.chat.mockRejectedValue(new Error('HTTP 404'));
+
+      const result = await controller.testChat();
+
+      expect(result.success).toBe(false);
+      // Should show 'gemini-2.5-flash' (the cloud default), NOT 'llama3.2:3b'
+      expect(result.response).toContain(CLOUD_DEFAULTS.google);
+      expect(result.response).not.toContain('llama3.2:3b');
+    });
+
+    it('AC4: error includes openai cloud default when provider is openai', async () => {
+      mockRegistry.resolveActive.mockResolvedValue(
+        createCloudProvider('openai', 'OpenAI'),
+      );
+      mockLlmService.chat.mockRejectedValue(new Error('HTTP 401'));
+
+      const result = await controller.testChat();
+
+      expect(result.success).toBe(false);
+      expect(result.response).toContain(CLOUD_DEFAULTS.openai);
+      expect(result.response).not.toContain('llama3.2:3b');
+    });
+  });
+
+  describe('testChat error — ollama keeps using ai_model setting', () => {
+    it('AC4: ollama provider still uses the global ai_model setting', async () => {
+      mockRegistry.resolveActive.mockResolvedValue({
+        key: 'ollama',
+        displayName: 'Ollama (Local)',
+        requiresApiKey: false,
+        selfHosted: true,
+        isAvailable: jest.fn().mockResolvedValue(true),
+        listModels: jest.fn().mockResolvedValue([]),
+        chat: jest.fn(),
+        generate: jest.fn(),
+      });
+      mockLlmService.chat.mockRejectedValue(new Error('Connection refused'));
+
+      const result = await controller.testChat();
+
+      expect(result.success).toBe(false);
+      expect(result.response).toContain('llama3.2:3b');
+    });
+  });
+
+  describe('getStatus — cloud provider model resolution', () => {
+    it('AC4: getStatus shows cloud default model when provider is google', async () => {
+      const result = await controller.getStatus();
+
+      // Should resolve to the cloud default, not the stale Ollama model
+      expect(result.currentModel).toBe(CLOUD_DEFAULTS.google);
+    });
+
+    it('AC4: getStatus shows ai_model setting for ollama provider', async () => {
+      mockRegistry.resolveActive.mockResolvedValue({
+        key: 'ollama',
+        displayName: 'Ollama (Local)',
+        requiresApiKey: false,
+        selfHosted: true,
+        isAvailable: jest.fn().mockResolvedValue(true),
+        listModels: jest.fn().mockResolvedValue([]),
+        chat: jest.fn(),
+        generate: jest.fn(),
+      });
+
+      const result = await controller.getStatus();
+
+      expect(result.currentModel).toBe('llama3.2:3b');
+    });
   });
 });
