@@ -149,6 +149,27 @@ export function deleteAllUserVotesForMatch(
     );
 }
 
+/** Count distinct users who voted on any slot for a match (ROK-1015). */
+export async function countUniqueVoters(
+  db: Db,
+  matchId: number,
+): Promise<number> {
+  const [row] = await db
+    .select({
+      count: sql<number>`COUNT(DISTINCT ${schema.communityLineupScheduleVotes.userId})::int`,
+    })
+    .from(schema.communityLineupScheduleVotes)
+    .innerJoin(
+      schema.communityLineupScheduleSlots,
+      eq(
+        schema.communityLineupScheduleVotes.slotId,
+        schema.communityLineupScheduleSlots.id,
+      ),
+    )
+    .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
+  return row?.count ?? 0;
+}
+
 /** Find matches in scheduling status for a lineup where a user is a member. */
 export function findUserSchedulingMatches(
   db: Db,

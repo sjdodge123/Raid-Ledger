@@ -1,5 +1,5 @@
 {
-  "id": "ba5bfc25-9a8b-4746-be8a-fd361e4a2e05",
+  "id": "2bcb3423-bccd-45c7-a97b-42b228dfb48d",
   "prevId": "d4f0f8be-6e94-4147-aa67-884020a09ce6",
   "version": "7",
   "dialect": "postgresql",
@@ -5521,15 +5521,15 @@
           "primaryKey": false,
           "notNull": false
         },
-        "embed_message_id": {
-          "name": "embed_message_id",
-          "type": "text",
+        "min_vote_threshold": {
+          "name": "min_vote_threshold",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "embed_channel_id": {
-          "name": "embed_channel_id",
-          "type": "text",
+        "threshold_notified_at": {
+          "name": "threshold_notified_at",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },

@@ -18,6 +18,8 @@ export const CreateSchedulingPollSchema = z.object({
     durationHours: z.number().int().min(1).max(720).optional(),
     /** Optional list of user IDs to add as match members. */
     memberUserIds: z.array(z.number().int().positive()).optional(),
+    /** Minimum unique voters before organizer is notified (ROK-1015). */
+    minVoteThreshold: z.number().int().positive().optional(),
 });
 
 export type CreateSchedulingPollDto = z.infer<typeof CreateSchedulingPollSchema>;

@@ -9,6 +9,8 @@ import { AvatarWithFallback } from '../../components/shared/AvatarWithFallback';
 
 interface MatchContextCardProps {
   match: MatchDetailResponseDto;
+  /** Count of distinct users who have voted on any slot (ROK-1015). */
+  uniqueVoterCount?: number;
 }
 
 /** Convert a match member to an AvatarUser for the shared component. */
@@ -49,8 +51,29 @@ function MemberAvatarStack({ members }: {
   );
 }
 
+/** Progress bar showing X of Y members have voted (ROK-1015). */
+function VoteProgressBar({ voted, total }: {
+  voted: number;
+  total: number;
+}): JSX.Element {
+  const pct = total > 0 ? Math.min(100, Math.round((voted / total) * 100)) : 0;
+  return (
+    <div className="mt-2">
+      <div className="flex items-center justify-between text-xs text-muted mb-1">
+        <span data-testid="vote-progress-text">{voted}/{total} voted</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-overlay overflow-hidden"
+        data-testid="vote-progress-bar">
+        <div className="h-full rounded-full bg-emerald-500 transition-all"
+          style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 /** Card displaying match game details and member info. */
-export function MatchContextCard({ match }: MatchContextCardProps): JSX.Element {
+export function MatchContextCard({ match, uniqueVoterCount }: MatchContextCardProps): JSX.Element {
   return (
     <div
       data-testid="match-context-card"
@@ -76,6 +99,9 @@ export function MatchContextCard({ match }: MatchContextCardProps): JSX.Element 
         <div className="mt-2">
           <MemberAvatarStack members={match.members} />
         </div>
+        {uniqueVoterCount !== undefined && match.minVoteThreshold != null && (
+          <VoteProgressBar voted={uniqueVoterCount} total={match.minVoteThreshold} />
+        )}
       </div>
     </div>
   );

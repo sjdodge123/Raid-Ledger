@@ -10,6 +10,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SchedulingThresholdService } from './scheduling-threshold.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from './notification.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 // ---------------------------------------------------------------------------
 // Shared mocks
@@ -23,6 +24,10 @@ function makeMockNotificationService() {
   return { create: jest.fn().mockResolvedValue({ id: 'notif-1' }) };
 }
 
+function makeMockCronJobService() {
+  return { executeWithTracking: jest.fn((_name, fn) => fn()) };
+}
+
 // ---------------------------------------------------------------------------
 // Test module builder
 // ---------------------------------------------------------------------------
@@ -30,19 +35,19 @@ function makeMockNotificationService() {
 async function createTestModule() {
   const mockDb = makeMockDb();
   const mockNotificationService = makeMockNotificationService();
+  const mockCronJobService = makeMockCronJobService();
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       SchedulingThresholdService,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: NotificationService, useValue: mockNotificationService },
+      { provide: CronJobService, useValue: mockCronJobService },
     ],
   }).compile();
 
   return {
-    service: module.get<SchedulingThresholdService>(
-      SchedulingThresholdService,
-    ),
+    service: module.get<SchedulingThresholdService>(SchedulingThresholdService),
     mockDb,
     mockNotificationService,
   };
@@ -53,15 +58,17 @@ async function createTestModule() {
 // ---------------------------------------------------------------------------
 
 /** A poll that has met its threshold: 3 unique voters >= minVoteThreshold 3. */
-function makePendingPoll(overrides?: Partial<{
-  matchId: number;
-  lineupId: number;
-  gameId: number;
-  gameName: string;
-  creatorId: number;
-  minVoteThreshold: number;
-  uniqueVoterCount: number;
-}>) {
+function makePendingPoll(
+  overrides?: Partial<{
+    matchId: number;
+    lineupId: number;
+    gameId: number;
+    gameName: string;
+    creatorId: number;
+    minVoteThreshold: number;
+    uniqueVoterCount: number;
+  }>,
+) {
   return {
     matchId: 10,
     lineupId: 1,
@@ -230,8 +237,8 @@ describe('SchedulingThresholdService', () => {
     it('sets thresholdNotifiedAt after sending notification', async () => {
       const poll = makePendingPoll();
       mockDb.execute
-        .mockResolvedValueOnce([poll])    // find eligible polls
-        .mockResolvedValueOnce([]);       // update thresholdNotifiedAt
+        .mockResolvedValueOnce([poll]) // find eligible polls
+        .mockResolvedValueOnce([]); // update thresholdNotifiedAt
 
       await service.checkThresholds();
 
@@ -242,9 +249,7 @@ describe('SchedulingThresholdService', () => {
     it('does not re-send notification for already-notified poll', async () => {
       // First run: poll is eligible
       const poll = makePendingPoll();
-      mockDb.execute
-        .mockResolvedValueOnce([poll])
-        .mockResolvedValueOnce([]);
+      mockDb.execute.mockResolvedValueOnce([poll]).mockResolvedValueOnce([]);
 
       await service.checkThresholds();
       expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
@@ -259,9 +264,7 @@ describe('SchedulingThresholdService', () => {
 
     it('notification failure does not prevent thresholdNotifiedAt from being set', async () => {
       const poll = makePendingPoll();
-      mockDb.execute
-        .mockResolvedValueOnce([poll])
-        .mockResolvedValueOnce([]);
+      mockDb.execute.mockResolvedValueOnce([poll]).mockResolvedValueOnce([]);
       mockNotificationService.create.mockRejectedValueOnce(
         new Error('Discord DM failed'),
       );

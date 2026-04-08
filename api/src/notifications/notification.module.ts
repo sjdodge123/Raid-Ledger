@@ -13,6 +13,7 @@ import { GameAffinityNotificationService } from './game-affinity-notification.se
 import { LiveNoShowService } from './live-noshow.service';
 import { RecruitmentReminderService } from './recruitment-reminder.service';
 import { NotificationDedupService } from './notification-dedup.service';
+import { SchedulingThresholdService } from './scheduling-threshold.service';
 import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
@@ -43,6 +44,7 @@ import { SettingsModule } from '../settings/settings.module';
     LiveNoShowService,
     RecruitmentReminderService,
     NotificationDedupService,
+    SchedulingThresholdService,
   ],
   exports: [
     NotificationService,

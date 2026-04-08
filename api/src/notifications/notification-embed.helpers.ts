@@ -141,6 +141,10 @@ const TYPE_FIELD_DEFS: Partial<
     ],
     voice: true,
   },
+  community_lineup: {
+    fields: [['gameName', 'Game']],
+    voice: false,
+  },
 };
 
 /** Add type-specific fields to a notification embed. */
