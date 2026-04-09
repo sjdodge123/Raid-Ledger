@@ -52,9 +52,9 @@ async function apiDelete(token: string, path: string) {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-/** Find the WoW game ID from the game registry. Returns null if not found. */
+/** Find the WoW game ID from the configured games list. Returns null if not found. */
 async function findWowGameId(token: string): Promise<number | null> {
-    const registry = (await apiGet(token, '/games/registry')) as { data: Array<{ id: number; slug: string }> };
+    const registry = (await apiGet(token, '/games/configured')) as { data: Array<{ id: number; slug: string }> };
     const wow = registry.data?.find((g) => g.slug === 'world-of-warcraft');
     return wow?.id ?? null;
 }
@@ -144,9 +144,10 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         // and the PluginSlot guard (wowVariant && contentType) prevents rendering.
         await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 10_000 });
 
-        // Selected dungeon chips should be visible
-        await expect(page.getByText('TDA')).toBeVisible({ timeout: 5_000 });
-        await expect(page.getByText('TDB')).toBeVisible({ timeout: 5_000 });
+        // Selected dungeon chips should be visible (use .rounded-full to target chip spans)
+        const chips = page.locator('span.rounded-full');
+        await expect(chips.filter({ hasText: 'TDA' })).toBeVisible({ timeout: 5_000 });
+        await expect(chips.filter({ hasText: 'TDB' })).toBeVisible({ timeout: 5_000 });
     });
 
     test('user can uncheck a dungeon to remove it', async ({ page }) => {
@@ -156,18 +157,18 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 10_000 });
 
         // Both dungeons should initially be selected as chips
-        await expect(page.getByText('TDA')).toBeVisible({ timeout: 5_000 });
-        await expect(page.getByText('TDB')).toBeVisible({ timeout: 5_000 });
+        const chips = page.locator('span.rounded-full');
+        await expect(chips.filter({ hasText: 'TDA' })).toBeVisible({ timeout: 5_000 });
+        await expect(chips.filter({ hasText: 'TDB' })).toBeVisible({ timeout: 5_000 });
 
         // Click the remove button on the first dungeon chip (the X icon)
-        // SelectedChips renders a button inside each chip span
-        const chipRemoveBtn = page.locator('span').filter({ hasText: 'TDA' }).getByRole('button');
+        const chipRemoveBtn = chips.filter({ hasText: 'TDA' }).getByRole('button');
         await chipRemoveBtn.click();
 
         // TDA chip should be removed
-        await expect(page.getByText('TDA')).not.toBeVisible({ timeout: 5_000 });
+        await expect(chips.filter({ hasText: 'TDA' })).not.toBeVisible({ timeout: 5_000 });
         // TDB chip should still be present
-        await expect(page.getByText('TDB')).toBeVisible();
+        await expect(chips.filter({ hasText: 'TDB' })).toBeVisible();
     });
 
     test('user can check a new dungeon to add it', async ({ page }) => {
@@ -197,13 +198,14 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 10_000 });
 
         // Remove both dungeon chips
-        const chipRemoveBtnA = page.locator('span').filter({ hasText: 'TDA' }).getByRole('button');
+        const chips = page.locator('span.rounded-full');
+        const chipRemoveBtnA = chips.filter({ hasText: 'TDA' }).getByRole('button');
         await chipRemoveBtnA.click();
-        await expect(page.getByText('TDA')).not.toBeVisible({ timeout: 5_000 });
+        await expect(chips.filter({ hasText: 'TDA' })).not.toBeVisible({ timeout: 5_000 });
 
-        const chipRemoveBtnB = page.locator('span').filter({ hasText: 'TDB' }).getByRole('button');
+        const chipRemoveBtnB = chips.filter({ hasText: 'TDB' }).getByRole('button');
         await chipRemoveBtnB.click();
-        await expect(page.getByText('TDB')).not.toBeVisible({ timeout: 5_000 });
+        await expect(chips.filter({ hasText: 'TDB' })).not.toBeVisible({ timeout: 5_000 });
 
         // Content browser should STILL be visible even with no selections
         await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 5_000 });
@@ -259,8 +261,9 @@ test.describe('ROK-1005: Content browser in edit mode (mobile)', () => {
         await expect(dungeonLabel).toBeVisible({ timeout: 10_000 });
 
         // Selected dungeon chips should be visible
-        await expect(page.getByText('TDA')).toBeVisible({ timeout: 5_000 });
-        await expect(page.getByText('TDB')).toBeVisible({ timeout: 5_000 });
+        const chips = page.locator('span.rounded-full');
+        await expect(chips.filter({ hasText: 'TDA' })).toBeVisible({ timeout: 5_000 });
+        await expect(chips.filter({ hasText: 'TDB' })).toBeVisible({ timeout: 5_000 });
     });
 
     test('user can uncheck a dungeon on mobile', async ({ page }) => {
@@ -272,12 +275,13 @@ test.describe('ROK-1005: Content browser in edit mode (mobile)', () => {
         await expect(dungeonLabel).toBeVisible({ timeout: 10_000 });
 
         // Remove the first dungeon
-        const chipRemoveBtn = page.locator('span').filter({ hasText: 'TDA' }).getByRole('button');
+        const chips = page.locator('span.rounded-full');
+        const chipRemoveBtn = chips.filter({ hasText: 'TDA' }).getByRole('button');
         await chipRemoveBtn.click();
 
         // TDA should be removed, TDB should remain
-        await expect(page.getByText('TDA')).not.toBeVisible({ timeout: 5_000 });
-        await expect(page.getByText('TDB')).toBeVisible();
+        await expect(chips.filter({ hasText: 'TDA' })).not.toBeVisible({ timeout: 5_000 });
+        await expect(chips.filter({ hasText: 'TDB' })).toBeVisible();
     });
 });
 
