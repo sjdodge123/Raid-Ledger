@@ -7,9 +7,9 @@
  * These tests create a WoW event with contentInstances via the API, then
  * navigate to the edit page and assert on the content browser behavior.
  *
- * All tests MUST fail until the fix is implemented — the root cause is
- * `eventTypeId: null` in getEditModeState(), which causes contentType
- * to be null, hiding the content browser.
+ * The fix infers contentType from existing content instances when
+ * eventTypeId is null (edit mode), and auto-matches the eventTypeId
+ * from the instance category via useAutoMatchEventType.
  */
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
@@ -140,8 +140,6 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         await navigateToEditPage(page, eventId);
 
         // The content browser should render the "Dungeons" label
-        // This FAILS because eventTypeId is null, so contentType is null,
-        // and the PluginSlot guard (wowVariant && contentType) prevents rendering.
         await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 10_000 });
 
         // Selected dungeon chips should be visible (use .rounded-full to target chip spans)
