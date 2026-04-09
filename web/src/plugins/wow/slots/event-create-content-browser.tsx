@@ -114,6 +114,7 @@ export function EventCreateContentBrowser({ wowVariant, contentType, selectedIns
         return (
             <div>
                 <label className="block text-sm font-medium text-secondary mb-2">{label}</label>
+                <SelectedChips instances={selectedInstances} onRemove={(id) => onInstancesChange(selectedInstances.filter((i) => i.id !== id))} />
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4"><p className="text-sm text-amber-400">Blizzard API not configured — ask an admin to set it up in Plugins.</p></div>
             </div>
         );
