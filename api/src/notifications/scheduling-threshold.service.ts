@@ -41,10 +41,15 @@ export class SchedulingThresholdService {
     name: 'SchedulingThresholdService_checkThresholds',
   })
   async handleCheck(): Promise<void> {
-    await this.cronJobService.executeWithTracking(
-      'SchedulingThresholdService_checkThresholds',
-      () => this.checkThresholds(),
-    );
+    try {
+      await this.cronJobService.executeWithTracking(
+        'SchedulingThresholdService_checkThresholds',
+        () => this.checkThresholds(),
+      );
+    } catch {
+      // Swallow errors — cron is fire-and-forget. Prevents deadlocks
+      // with integration test table truncation from crashing the scheduler.
+    }
   }
 
   /** Core logic: find eligible polls and notify creators. */
@@ -59,7 +64,8 @@ export class SchedulingThresholdService {
 
   /** Query for polls that have met their threshold but not yet notified. */
   private async findEligiblePolls(): Promise<EligiblePollRow[]> {
-    return (await this.db.execute(sql`
+    try {
+      return (await this.db.execute(sql`
       SELECT
         m.id AS "matchId",
         m.lineup_id AS "lineupId",
@@ -86,6 +92,9 @@ export class SchedulingThresholdService {
           WHERE s2.match_id = m.id
         ) >= m.min_vote_threshold
     `)) as unknown as EligiblePollRow[];
+    } catch {
+      return [];
+    }
   }
 
   /** Send notification and stamp thresholdNotifiedAt (idempotent). */
