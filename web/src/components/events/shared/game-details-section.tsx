@@ -160,6 +160,33 @@ function DescriptionField({ titleInputId, description, descriptionIsAutoSuggeste
     );
 }
 
+function inferContentType(
+    selectedEventType: { slug: string } | undefined,
+    selectedInstances: Record<string, unknown>[],
+): 'dungeon' | 'raid' | null {
+    if (selectedEventType?.slug) return getContentType(selectedEventType.slug);
+    if (selectedInstances.length > 0) {
+        return (selectedInstances[0]?.category as 'dungeon' | 'raid' | undefined) ?? null;
+    }
+    return null;
+}
+
+/** Auto-set eventTypeId from existing content instances (edit mode). */
+function useAutoMatchEventType(
+    eventTypeId: number | null,
+    selectedInstances: Record<string, unknown>[],
+    eventTypes: Array<{ id: number; slug: string }>,
+    onEventTypeIdChange: (id: number | null) => void,
+) {
+    useEffect(() => {
+        if (eventTypeId !== null || selectedInstances.length === 0 || eventTypes.length === 0) return;
+        const category = selectedInstances[0]?.category as string | undefined;
+        if (!category) return;
+        const match = eventTypes.find(et => getContentType(et.slug) === category);
+        if (match) onEventTypeIdChange(match.id);
+    }, [eventTypes, eventTypeId, selectedInstances, onEventTypeIdChange]);
+}
+
 function useGameDetailsData(props: GameDetailsSectionProps) {
     const { game, eventTypeId, selectedInstances, onTitleChange, onDescriptionChange } = props;
     const registryGame = useRegistryLookup(game);
@@ -167,12 +194,7 @@ function useGameDetailsData(props: GameDetailsSectionProps) {
     const eventTypes = eventTypesData?.data ?? [];
     const wowVariant = registryGame?.slug ? getWowVariant(registryGame.slug) : null;
     const selectedEventType = eventTypes.find((t) => t.id === eventTypeId);
-    const instanceContentType = selectedInstances.length > 0
-        ? (selectedInstances[0]?.category as 'dungeon' | 'raid' | undefined) ?? null
-        : null;
-    const contentType = selectedEventType?.slug
-        ? getContentType(selectedEventType.slug)
-        : instanceContentType;
+    const contentType = inferContentType(selectedEventType, selectedInstances);
     const computeSuggestion = useTitleSuggestion(selectedEventType, game, selectedInstances);
     const computeDescSuggestion = useDescriptionSuggestion(selectedInstances);
     useAutoFill({ computeSuggestion, computeDescSuggestion, title: props.title, description: props.description, titleIsAutoSuggested: props.titleIsAutoSuggested, descriptionIsAutoSuggested: props.descriptionIsAutoSuggested, onTitleChange, onDescriptionChange });
@@ -203,14 +225,7 @@ export function GameDetailsSection(props: GameDetailsSectionProps) {
         interestCount, interestLoading, slotBetween,
     } = props;
     const d = useGameDetailsData(props);
-
-    useEffect(() => {
-        if (eventTypeId !== null || props.selectedInstances.length === 0 || d.eventTypes.length === 0) return;
-        const category = props.selectedInstances[0]?.category as string | undefined;
-        if (!category) return;
-        const match = d.eventTypes.find(et => getContentType(et.slug) === category);
-        if (match) onEventTypeIdChange(match.id);
-    }, [d.eventTypes, eventTypeId, props.selectedInstances, onEventTypeIdChange]);
+    useAutoMatchEventType(eventTypeId, props.selectedInstances, d.eventTypes, onEventTypeIdChange);
 
     return (
         <>
