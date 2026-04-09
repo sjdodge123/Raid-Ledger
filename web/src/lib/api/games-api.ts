@@ -7,8 +7,9 @@ import type {
     GameNowPlayingResponseDto,
     ItadGamePricingDto,
     ItadBatchPricingResponseDto,
+    IgdbGameDto,
 } from '@raid-ledger/contract';
-import { GameSearchResponseSchema } from '@raid-ledger/contract';
+import { GameSearchResponseSchema, IgdbGameSchema } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 
 /** Search for games via IGDB */
@@ -67,4 +68,11 @@ export async function getGamePricingBatch(
 ): Promise<ItadBatchPricingResponseDto> {
     const params = new URLSearchParams({ ids: gameIds.join(',') });
     return fetchApi(`/games/pricing/batch?${params}`);
+}
+
+/** Look up a game by Steam App ID (ROK-945). */
+export async function getGameBySteamAppId(
+    steamAppId: number,
+): Promise<IgdbGameDto> {
+    return fetchApi(`/games/by-steam-id/${steamAppId}`, {}, IgdbGameSchema);
 }

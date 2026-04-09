@@ -119,9 +119,8 @@ async function dispatchPaste(page: import('@playwright/test').Page, text: string
 // Test setup
 // ---------------------------------------------------------------------------
 
-// Steam app ID 730 = Counter-Strike 2. A well-known ID that may or may not
-// exist in the local games table. The paste listener + API endpoint don't
-// exist yet, so these tests will fail regardless.
+// Steam app ID 730 = Counter-Strike 2. We assign this Steam App ID to
+// the first configured game via the test endpoint to guarantee it exists.
 const KNOWN_STEAM_APP_ID = '730';
 const STEAM_URL = `https://store.steampowered.com/app/${KNOWN_STEAM_APP_ID}/`;
 const UNKNOWN_STEAM_URL = 'https://store.steampowered.com/app/9999999/';
@@ -129,8 +128,23 @@ const UNKNOWN_STEAM_URL = 'https://store.steampowered.com/app/9999999/';
 let adminToken: string;
 let lineupId: number;
 
+/** Ensure at least one game has the known Steam App ID. */
+async function ensureGameWithSteamAppId(token: string): Promise<void> {
+    const gamesRes = await fetch(`${API_BASE}/games/configured`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const gamesBody = (await gamesRes.json()) as { data: { id: number }[] };
+    const firstGame = gamesBody.data[0];
+    if (!firstGame) throw new Error('No configured games to assign Steam App ID');
+    await apiPost(token, '/admin/test/set-steam-app-id', {
+        gameId: firstGame.id,
+        steamAppId: Number(KNOWN_STEAM_APP_ID),
+    });
+}
+
 test.beforeAll(async () => {
     adminToken = await getAdminToken();
+    await ensureGameWithSteamAppId(adminToken);
     lineupId = await ensureBuildingLineup(adminToken);
 });
 

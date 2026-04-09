@@ -7,6 +7,7 @@ export { searchLocalGames } from './igdb-search.helpers';
 export {
   lookupGameById,
   lookupGameDetailById,
+  lookupGameBySteamAppId,
 } from './igdb-game-lookup.helpers';
 export {
   fetchTwitchToken,

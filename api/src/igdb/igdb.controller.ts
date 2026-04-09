@@ -57,6 +57,7 @@ import {
   fetchBatchGamePricing,
 } from './igdb-pricing.helpers';
 import { parseBatchIds } from './igdb-batch.util';
+import { lookupGameBySteamAppId } from './igdb-game-lookup.helpers';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -174,6 +175,18 @@ export class IgdbController {
       gameIds,
     );
     return { data };
+  }
+
+  /** GET /games/by-steam-id/:steamAppId -- Lookup game by Steam App ID (ROK-945). */
+  @RateLimit('search')
+  @Get('by-steam-id/:steamAppId')
+  async getGameBySteamAppId(
+    @Param('steamAppId', ParseIntPipe) steamAppId: number,
+  ) {
+    const db = this.igdbService.database;
+    const game = await lookupGameBySteamAppId(db, steamAppId);
+    if (!game) throw new NotFoundException('Game not found');
+    return game;
   }
 
   /** GET /games/:id/activity -- Community activity for a game. */

@@ -7,16 +7,18 @@ import { Modal } from '../ui/modal';
 import { useGameSearch } from '../../hooks/use-game-search';
 import { useNominateGame } from '../../hooks/use-lineups';
 
+export interface SelectedGame {
+    id: number;
+    name: string;
+    coverUrl: string | null;
+}
+
 interface NominateModalProps {
     isOpen: boolean;
     onClose: () => void;
     lineupId: number;
-}
-
-interface SelectedGame {
-    id: number;
-    name: string;
-    coverUrl: string | null;
+    /** Pre-selected game from paste detection (ROK-945). */
+    preSelectedGame?: SelectedGame | null;
 }
 
 /** Search input for finding games. */
@@ -113,12 +115,20 @@ function PreviewCard({ game, note, onNoteChange, onSubmit, onBack, isPending }: 
 }
 
 /** Game nomination modal with search and preview. */
-export function NominateModal({ isOpen, onClose, lineupId }: NominateModalProps): JSX.Element {
+export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: NominateModalProps): JSX.Element {
     const [query, setQuery] = useState('');
     const [selected, setSelected] = useState<SelectedGame | null>(null);
     const [note, setNote] = useState('');
     const { data: searchData, isLoading: searchLoading } = useGameSearch(query, isOpen);
     const nominate = useNominateGame();
+
+    // Sync pre-selected game when modal opens with one (ROK-945)
+    const [appliedPreSelect, setAppliedPreSelect] = useState<SelectedGame | null>(null);
+    if (isOpen && preSelectedGame && preSelectedGame !== appliedPreSelect) {
+        setAppliedPreSelect(preSelectedGame);
+        setSelected(preSelectedGame);
+    }
+    if (!isOpen && appliedPreSelect) setAppliedPreSelect(null);
 
     const handleSelect = useCallback((game: SelectedGame) => {
         setSelected(game);
