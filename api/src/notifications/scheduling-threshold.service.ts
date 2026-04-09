@@ -57,11 +57,7 @@ export class SchedulingThresholdService {
     }
   }
 
-  /**
-   * Query for polls that have met their threshold but not yet notified.
-   * Uses lock_timeout inside a transaction to bail fast if tables are
-   * locked (e.g., by integration test TRUNCATE), preventing deadlocks.
-   */
+  /** Query for polls that have met their threshold but not yet notified. */
   private async findEligiblePolls(): Promise<EligiblePollRow[]> {
     return (await this.db.execute(sql`
       SELECT

@@ -125,7 +125,7 @@ function CreatePollFormBody({ form, isPending, onSubmit }: {
     select: (d) => d.data ?? [],
   });
   const totalMembers = players?.length ?? 20;
-  const sliderMax = form.memberIds.length > 0 ? form.memberIds.length : totalMembers;
+  const sliderMax = Math.max(1, form.memberIds.length > 0 ? form.memberIds.length : totalMembers);
   return (
     <div className="space-y-4">
       <PollGameSearch

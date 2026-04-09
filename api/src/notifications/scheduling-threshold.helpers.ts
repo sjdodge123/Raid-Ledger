@@ -42,6 +42,7 @@ export function buildThresholdNotification(
       subtype: 'scheduling_poll_threshold_met',
       lineupId: poll.lineupId,
       matchId: poll.matchId,
+      gameName: poll.gameName,
     },
   };
 }
