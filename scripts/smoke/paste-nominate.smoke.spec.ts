@@ -249,7 +249,7 @@ test.describe('Input focus suppresses detection (AC4)', () => {
         ).toBeVisible({ timeout: 15_000 });
 
         // Open NominateModal manually to get an input on the page
-        const nominateBtn = page.getByRole('button', { name: 'Nominate' });
+        const nominateBtn = page.getByRole('button', { name: 'Nominate', exact: true });
         await nominateBtn.click();
 
         const modal = page.locator('[role="dialog"]');
