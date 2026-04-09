@@ -41,7 +41,6 @@ export class SchedulingThresholdService {
     name: 'SchedulingThresholdService_checkThresholds',
   })
   async handleCheck(): Promise<void> {
-    if (process.env.NODE_ENV === 'test') return;
     await this.cronJobService.executeWithTracking(
       'SchedulingThresholdService_checkThresholds',
       () => this.checkThresholds(),
