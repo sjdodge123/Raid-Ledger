@@ -19,6 +19,9 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
+import { ItadService } from '../itad/itad.service';
+import { SettingsService } from '../settings/settings.service';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import {
   GameSearchQuerySchema,
   GameSearchResponseDto,
@@ -31,10 +34,9 @@ import {
   ActivityPeriodSchema,
   GameActivityResponseDto,
   GameNowPlayingResponseDto,
-} from '@raid-ledger/contract';
-import type {
-  ItadGamePricingDto,
-  ItadBatchPricingResponseDto,
+  type ItadGamePricingDto,
+  type ItadBatchPricingResponseDto,
+  type UserRole,
 } from '@raid-ledger/contract';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { redisSwr } from '../common/swr-cache';
@@ -42,14 +44,13 @@ import { handleSearchError } from './igdb-controller.helpers';
 import { fetchGameEventTypes } from './igdb-event-types.helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
-import type { UserRole } from '@raid-ledger/contract';
 import { buildDiscoverCategories } from './igdb-discover.helpers';
 import { dispatchDiscoverRow } from './igdb-discover-dispatch.helpers';
 import {
   batchCheckInterests,
   addInterest,
   removeInterest,
-  fetchGameInterestData,
+  fetchGameInterestResponse,
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
 import {
@@ -57,7 +58,7 @@ import {
   fetchBatchGamePricing,
 } from './igdb-pricing.helpers';
 import { parseBatchIds } from './igdb-batch.util';
-import { lookupGameBySteamAppId } from './igdb-game-lookup.helpers';
+import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -70,6 +71,8 @@ export class IgdbController {
   constructor(
     private readonly igdbService: IgdbService,
     private readonly itadPriceService: ItadPriceService,
+    private readonly itadService: ItadService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /** GET /games/search -- Search for games by name. */
@@ -177,16 +180,28 @@ export class IgdbController {
     return { data };
   }
 
-  /** GET /games/by-steam-id/:steamAppId -- Lookup game by Steam App ID (ROK-945). */
+  /** GET /games/by-steam-id/:steamAppId -- Lookup or discover game (ROK-945). */
   @RateLimit('search')
   @Get('by-steam-id/:steamAppId')
   async getGameBySteamAppId(
     @Param('steamAppId', ParseIntPipe) steamAppId: number,
   ) {
     const db = this.igdbService.database;
-    const game = await lookupGameBySteamAppId(db, steamAppId);
-    if (!game) throw new NotFoundException('Game not found');
-    return game;
+    const adultFilter =
+      (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===
+      'true';
+    const result = await resolveGameBySteamAppId(steamAppId, {
+      db,
+      lookupBySteamAppId: (id) => this.itadService.lookupBySteamAppId(id),
+      adultFilterEnabled: adultFilter,
+    });
+    if (!result) throw new NotFoundException('Game not found');
+    if (result.newGameId) {
+      this.igdbService
+        .enqueueReenrich(result.newGameId)
+        .catch((e) => this.logger.error(`IGDB re-enrich failed: ${e}`));
+    }
+    return result.game;
   }
 
   /** GET /games/:id/activity -- Community activity for a game. */
@@ -271,24 +286,11 @@ export class IgdbController {
     @Param('id', ParseIntPipe) id: number,
     @Req() req: AuthRequest,
   ): Promise<GameInterestResponseDto> {
-    const data = await fetchGameInterestData(
+    return fetchGameInterestResponse(
       this.igdbService.database,
       id,
       req.user.id,
     );
-    return {
-      wantToPlay: data.source !== null,
-      count: data.count,
-      players: data.players,
-      source: data.source
-        ? (data.source as 'manual' | 'steam' | 'discord')
-        : undefined,
-      ownerCount: data.ownerCount,
-      owners: data.owners,
-      wishlisters: data.wishlisters,
-      wishlistedCount: data.wishlistedCount,
-      wishlistedByMe: data.wishlistedByMe,
-    };
   }
 
   /** POST /games/:id/want-to-play -- Toggle want-to-play on. */

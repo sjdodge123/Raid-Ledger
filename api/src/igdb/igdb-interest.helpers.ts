@@ -268,3 +268,23 @@ export async function fetchGameInterestData(
     wishlisters,
   };
 }
+
+/** Fetch interest data and map to the API response DTO. */
+export async function fetchGameInterestResponse(
+  db: Db,
+  gameId: number,
+  userId: number,
+): Promise<GameInterestResponseDto> {
+  const d = await fetchGameInterestData(db, gameId, userId);
+  return {
+    wantToPlay: d.source !== null,
+    count: d.count,
+    players: d.players,
+    source: d.source ? (d.source as 'manual' | 'steam' | 'discord') : undefined,
+    ownerCount: d.ownerCount,
+    owners: d.owners,
+    wishlisters: d.wishlisters,
+    wishlistedCount: d.wishlistedCount,
+    wishlistedByMe: d.wishlistedByMe,
+  };
+}

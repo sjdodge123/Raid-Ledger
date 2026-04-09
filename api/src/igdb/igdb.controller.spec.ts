@@ -6,6 +6,8 @@ import {
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
+import { ItadService } from '../itad/itad.service';
+import { SettingsService } from '../settings/settings.service';
 
 function describeIgdbController() {
   let controller: IgdbController;
@@ -33,6 +35,8 @@ function describeIgdbController() {
       providers: [
         { provide: IgdbService, useValue: mockIgdbService },
         { provide: ItadPriceService, useValue: {} },
+        { provide: ItadService, useValue: {} },
+        { provide: SettingsService, useValue: {} },
       ],
     }).compile();
 

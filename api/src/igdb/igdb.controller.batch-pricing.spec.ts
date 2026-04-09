@@ -6,6 +6,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
+import { ItadService } from '../itad/itad.service';
+import { SettingsService } from '../settings/settings.service';
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
 function buildMockDb(
@@ -46,6 +48,8 @@ async function createController(
     providers: [
       { provide: IgdbService, useValue: mockService },
       { provide: ItadPriceService, useValue: mockItadService },
+      { provide: ItadService, useValue: {} },
+      { provide: SettingsService, useValue: {} },
     ],
   }).compile();
   return module.get<IgdbController>(IgdbController);
@@ -263,6 +267,8 @@ describe('IgdbController.getGamePricing — individual pricing unchanged (ROK-80
           useValue: buildMockService(db),
         },
         { provide: ItadPriceService, useValue: mockItad },
+        { provide: ItadService, useValue: {} },
+        { provide: SettingsService, useValue: {} },
       ],
     }).compile();
 
@@ -290,6 +296,8 @@ describe('IgdbController.getGamePricing — individual pricing unchanged (ROK-80
       providers: [
         { provide: IgdbService, useValue: buildMockService(db) },
         { provide: ItadPriceService, useValue: mockItad },
+        { provide: ItadService, useValue: {} },
+        { provide: SettingsService, useValue: {} },
       ],
     }).compile();
 
@@ -329,6 +337,8 @@ describe('IgdbController.getGamePricing — individual pricing unchanged (ROK-80
       providers: [
         { provide: IgdbService, useValue: buildMockService(db) },
         { provide: ItadPriceService, useValue: mockItad },
+        { provide: ItadService, useValue: {} },
+        { provide: SettingsService, useValue: {} },
       ],
     }).compile();
 
