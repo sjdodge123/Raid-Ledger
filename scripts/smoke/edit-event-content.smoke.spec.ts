@@ -101,6 +101,12 @@ async function createWowEventWithDungeons(token: string, gameId: number): Promis
     return event.id;
 }
 
+/** Check if Blizzard API is configured (search/browse requires it). */
+async function isBlizzardConfigured(token: string): Promise<boolean> {
+    const status = (await apiGet(token, '/system/status')) as { blizzardConfigured?: boolean };
+    return status.blizzardConfigured ?? false;
+}
+
 /** Navigate to the edit page for a specific event. */
 async function navigateToEditPage(page: Page, eventId: number) {
     await page.goto(`/events/${eventId}/edit`);
@@ -170,21 +176,21 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
     });
 
     test('user can check a new dungeon to add it', async ({ page }) => {
+        const blizzardUp = await isBlizzardConfigured(token);
+        test.skip(!blizzardUp, 'Blizzard API not configured — browse/search unavailable');
+
         await navigateToEditPage(page, eventId);
 
         // Wait for content browser to render
         await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 10_000 });
 
         // The instance list should render (with searchable dungeon entries)
-        // Look for the search input for dungeons
         const searchInput = page.getByPlaceholder('Search dungeons...');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
         // The existing selected dungeons should show checkmarks in the list
-        // (InstanceListItem renders a checkmark SVG when isSelected is true)
         const selectedItems = page.locator('button').filter({ hasText: 'Test Dungeon Alpha' });
         if (await selectedItems.count() > 0) {
-            // Verify the selected state indicator is present
             await expect(selectedItems.first()).toBeVisible();
         }
     });
@@ -205,9 +211,16 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         await chipRemoveBtnB.click();
         await expect(chips.filter({ hasText: 'TDB' })).not.toBeVisible({ timeout: 5_000 });
 
-        // Content browser should STILL be visible even with no selections
+        // Content browser section should STILL be visible even with no selections
         await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 5_000 });
-        await expect(page.getByPlaceholder('Search dungeons...')).toBeVisible();
+
+        // When Blizzard is configured, the search input is visible; otherwise the "not configured" fallback renders
+        const blizzardUp = await isBlizzardConfigured(token);
+        if (blizzardUp) {
+            await expect(page.getByPlaceholder('Search dungeons...')).toBeVisible();
+        } else {
+            await expect(page.getByText('Blizzard API not configured')).toBeVisible();
+        }
     });
 
     test('event type dropdown is hidden in edit mode', async ({ page }) => {
