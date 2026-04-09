@@ -33,7 +33,7 @@ function MemberCheckbox({ member, checked, onToggle }: {
   member: MemberOption; checked: boolean; onToggle: () => void;
 }) {
   return (
-    <label className="flex items-center gap-2 px-3 py-2 hover:bg-panel rounded cursor-pointer">
+    <label data-testid={`member-option-${member.id}`} className="flex items-center gap-2 px-3 py-2 hover:bg-panel rounded cursor-pointer">
       <input
         type="checkbox"
         checked={checked}
