@@ -126,7 +126,7 @@ function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JS
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-0 space-y-6">
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
-      <MatchContextCard match={poll.match} />
+      <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       <div className="p-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
         <div data-testid="match-status-badge"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
@@ -182,7 +182,7 @@ function ActivePollSections({ lineupId, matchId, poll }: {
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-0 space-y-6">
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
       {readOnly && <ReadOnlyBanner />}
-      <MatchContextCard match={poll.match} />
+      <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       <AvailabilityHeatmapSection data={availability} isLoading={availLoading}
         readOnly={readOnly}
         weekStart={weekStart} onWeekChange={handleWeekChange}

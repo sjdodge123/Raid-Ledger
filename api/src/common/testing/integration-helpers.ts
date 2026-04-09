@@ -68,11 +68,15 @@ export async function seedBaseline(
 export async function truncateAllTables(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<SeededData> {
-  // Discover all application tables (exclude Drizzle migration tracking)
+  // Discover all application tables.
+  // Exclude Drizzle migration tracking and cron infrastructure tables —
+  // cron_jobs/cron_job_executions are seeded on app startup and must persist
+  // across tests to avoid FK violations and deadlocks with active cron handlers.
   const tables = await db.execute<{ tablename: string }>(sql`
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public'
       AND tablename NOT LIKE '__drizzle%'
+      AND tablename NOT IN ('cron_jobs', 'cron_job_executions')
   `);
 
   if (tables.length > 0) {

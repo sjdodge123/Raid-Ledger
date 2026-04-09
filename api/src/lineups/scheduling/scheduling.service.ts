@@ -32,6 +32,7 @@ import {
   updateMatchLinkedEvent,
   deleteAllUserVotesForMatch,
   findUserSchedulingMatches,
+  countUniqueVoters,
 } from './scheduling-query.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
@@ -66,7 +67,7 @@ export class SchedulingService {
     userId: number | null,
   ): Promise<SchedulePollPageResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
-    const [gameInfo, [lineup], members, slots] = await Promise.all([
+    const [gameInfo, [lineup], members, slots, voterCount] = await Promise.all([
       this.resolveGameInfo(match.gameId),
       this.db
         .select({ status: schema.communityLineups.status })
@@ -75,17 +76,21 @@ export class SchedulingService {
         .limit(1),
       findMatchMembers(this.db, [matchId]),
       findScheduleSlots(this.db, matchId),
+      countUniqueVoters(this.db, matchId),
     ]);
     const slotIds = slots.map((s) => s.id);
     const votes = await findScheduleVotes(this.db, slotIds);
-    return buildPollResponse(
-      { ...match, ...gameInfo },
-      members,
-      slots,
-      votes,
-      userId,
-      lineup?.status ?? 'decided',
-    );
+    return {
+      ...buildPollResponse(
+        { ...match, ...gameInfo },
+        members,
+        slots,
+        votes,
+        userId,
+        lineup?.status ?? 'decided',
+      ),
+      uniqueVoterCount: voterCount,
+    };
   }
 
   /** Suggest a new time slot for a match and auto-vote for it. */

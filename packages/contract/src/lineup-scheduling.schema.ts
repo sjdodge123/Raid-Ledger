@@ -56,6 +56,8 @@ export const SchedulePollPageResponseSchema = z.object({
   slots: z.array(ScheduleSlotWithVotesSchema),
   myVotedSlotIds: z.array(z.number()),
   lineupStatus: z.string(),
+  /** Count of distinct users who voted on any slot (ROK-1015). */
+  uniqueVoterCount: z.number().int().optional(),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;

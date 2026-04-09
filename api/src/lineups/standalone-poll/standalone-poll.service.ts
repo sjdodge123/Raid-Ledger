@@ -29,6 +29,8 @@ export interface CreatePollInput {
   linkedEventId?: number;
   durationHours?: number;
   memberUserIds?: number[];
+  /** Minimum unique voters before organizer is notified (ROK-1015). */
+  minVoteThreshold?: number;
 }
 
 @Injectable()
@@ -78,6 +80,7 @@ export class StandalonePollService {
       lineup.id,
       input.gameId,
       input.linkedEventId,
+      input.minVoteThreshold,
     );
     await this.addMembers(match.id, userId, input.memberUserIds);
     if (phaseDeadline) {

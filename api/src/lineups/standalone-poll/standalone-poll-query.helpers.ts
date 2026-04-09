@@ -79,6 +79,7 @@ export async function insertSchedulingMatch(
   lineupId: number,
   gameId: number,
   linkedEventId: number | undefined,
+  minVoteThreshold?: number,
 ): Promise<{ id: number }> {
   const [row] = await db
     .insert(schema.communityLineupMatches)
@@ -89,6 +90,7 @@ export async function insertSchedulingMatch(
       thresholdMet: true,
       voteCount: 0,
       linkedEventId: linkedEventId ?? null,
+      minVoteThreshold: minVoteThreshold ?? null,
     })
     .returning({ id: schema.communityLineupMatches.id });
   return row;

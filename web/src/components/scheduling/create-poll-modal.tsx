@@ -5,10 +5,12 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { IgdbGameDto } from '@raid-ledger/contract';
+import { useQuery } from '@tanstack/react-query';
 import { Modal } from '../ui/modal';
 import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 import { MemberPicker } from './member-picker-modal';
 import { PollGameSearch } from './poll-game-search';
+import { getPlayers } from '../../lib/api-client';
 
 interface CreatePollModalProps {
   isOpen: boolean;
@@ -18,12 +20,26 @@ interface CreatePollModalProps {
 /** Form state for the create poll modal. */
 function useCreatePollForm() {
   const [selectedGame, setSelectedGame] = useState<IgdbGameDto | null>(null);
-  const [memberIds, setMemberIds] = useState<number[]>([]);
+  const [memberIds, setMemberIdsRaw] = useState<number[]>([]);
+  const [minVoteThreshold, setMinVoteThreshold] = useState<number>(3);
+
+  // Sync threshold to member count on change (ROK-1015)
+  const setMemberIds = useCallback((ids: number[]) => {
+    setMemberIdsRaw(ids);
+    if (ids.length > 0) setMinVoteThreshold(ids.length);
+  }, []);
+
   const reset = useCallback(() => {
     setSelectedGame(null);
-    setMemberIds([]);
+    setMemberIdsRaw([]);
+    setMinVoteThreshold(3);
   }, []);
-  return { selectedGame, setSelectedGame, memberIds, setMemberIds, reset };
+  return {
+    selectedGame, setSelectedGame,
+    memberIds, setMemberIds,
+    minVoteThreshold, setMinVoteThreshold,
+    reset,
+  };
 }
 
 /**
@@ -45,6 +61,7 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
     const result = await mutation.mutateAsync({
       gameId: form.selectedGame.id,
       memberUserIds: form.memberIds.length > 0 ? form.memberIds : undefined,
+      minVoteThreshold: form.minVoteThreshold > 0 ? form.minVoteThreshold : undefined,
     });
     handleClose();
     navigate(`/community-lineup/${result.lineupId}/schedule/${result.id}`);
@@ -66,12 +83,49 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
   );
 }
 
+/** Minimum votes slider — always visible (ROK-1015). */
+function MinVoteThresholdSlider({ value, max, onChange }: {
+  value: number; max: number; onChange: (v: number) => void;
+}) {
+  return (
+    <div data-testid="min-vote-threshold-slider">
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-medium text-secondary">
+          Minimum Votes
+        </label>
+        <span className="text-sm text-muted tabular-nums">
+          {value} of {max}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={1}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+      />
+      <p className="text-xs text-muted/60 mt-1">
+        Notify me when this many members have voted
+      </p>
+    </div>
+  );
+}
+
 /** Form body extracted to stay within function line limits. */
 function CreatePollFormBody({ form, isPending, onSubmit }: {
   form: ReturnType<typeof useCreatePollForm>;
   isPending: boolean;
   onSubmit: () => void;
 }) {
+  const { data: players } = useQuery({
+    queryKey: ['players', 'member-picker', ''],
+    queryFn: () => getPlayers({ page: 1 }),
+    select: (d) => d.data ?? [],
+  });
+  const totalMembers = players?.length ?? 20;
+  const sliderMax = Math.max(1, form.memberIds.length > 0 ? form.memberIds.length : totalMembers);
   return (
     <div className="space-y-4">
       <PollGameSearch
@@ -81,6 +135,11 @@ function CreatePollFormBody({ form, isPending, onSubmit }: {
       <MemberPicker
         selectedIds={form.memberIds}
         onChange={form.setMemberIds}
+      />
+      <MinVoteThresholdSlider
+        value={form.minVoteThreshold}
+        max={sliderMax}
+        onChange={form.setMinVoteThreshold}
       />
       <button
         type="button"

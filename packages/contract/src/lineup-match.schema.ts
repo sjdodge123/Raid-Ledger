@@ -49,6 +49,10 @@ export const LineupMatchSchema = z.object({
     votePercentage: z.number().nullable(),
     fitType: FitTypeSchema.nullable(),
     linkedEventId: z.number().nullable(),
+    /** Minimum unique voters before organizer is notified (ROK-1015). */
+    minVoteThreshold: z.number().int().nullable().optional(),
+    /** Timestamp when threshold notification was sent (ROK-1015). */
+    thresholdNotifiedAt: z.string().nullable().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
 });

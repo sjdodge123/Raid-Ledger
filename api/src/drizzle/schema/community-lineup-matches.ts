@@ -52,6 +52,10 @@ export const communityLineupMatches = pgTable(
     }),
     embedMessageId: text('embed_message_id'),
     embedChannelId: text('embed_channel_id'),
+    /** Minimum unique voters before organizer is notified (ROK-1015). */
+    minVoteThreshold: integer('min_vote_threshold'),
+    /** Timestamp when the threshold notification was sent (ROK-1015). */
+    thresholdNotifiedAt: timestamp('threshold_notified_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

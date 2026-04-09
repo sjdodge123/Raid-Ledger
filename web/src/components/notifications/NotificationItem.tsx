@@ -72,6 +72,7 @@ export function NotificationItem({ notification, onClose }: NotificationItemProp
         if (isInvite) return;
         if (isUnread) markRead(notification.id);
         if (notification.payload?.eventId) { navigate(`/events/${notification.payload.eventId}`); onClose(); }
+        else if (notification.payload?.matchId && notification.payload?.lineupId) { navigate(`/community-lineup/${notification.payload.lineupId}/schedule/${notification.payload.matchId}`); onClose(); }
         else if (notification.payload?.link) { navigate(notification.payload.link); onClose(); }
     };
 
