@@ -167,7 +167,12 @@ function useGameDetailsData(props: GameDetailsSectionProps) {
     const eventTypes = eventTypesData?.data ?? [];
     const wowVariant = registryGame?.slug ? getWowVariant(registryGame.slug) : null;
     const selectedEventType = eventTypes.find((t) => t.id === eventTypeId);
-    const contentType = selectedEventType?.slug ? getContentType(selectedEventType.slug) : null;
+    const instanceContentType = selectedInstances.length > 0
+        ? (selectedInstances[0]?.category as 'dungeon' | 'raid' | undefined) ?? null
+        : null;
+    const contentType = selectedEventType?.slug
+        ? getContentType(selectedEventType.slug)
+        : instanceContentType;
     const computeSuggestion = useTitleSuggestion(selectedEventType, game, selectedInstances);
     const computeDescSuggestion = useDescriptionSuggestion(selectedInstances);
     useAutoFill({ computeSuggestion, computeDescSuggestion, title: props.title, description: props.description, titleIsAutoSuggested: props.titleIsAutoSuggested, descriptionIsAutoSuggested: props.descriptionIsAutoSuggested, onTitleChange, onDescriptionChange });
@@ -198,6 +203,14 @@ export function GameDetailsSection(props: GameDetailsSectionProps) {
         interestCount, interestLoading, slotBetween,
     } = props;
     const d = useGameDetailsData(props);
+
+    useEffect(() => {
+        if (eventTypeId !== null || props.selectedInstances.length === 0 || d.eventTypes.length === 0) return;
+        const category = props.selectedInstances[0]?.category as string | undefined;
+        if (!category) return;
+        const match = d.eventTypes.find(et => getContentType(et.slug) === category);
+        if (match) onEventTypeIdChange(match.id);
+    }, [d.eventTypes, eventTypeId, props.selectedInstances, onEventTypeIdChange]);
 
     return (
         <>
