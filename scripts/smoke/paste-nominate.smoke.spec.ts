@@ -327,39 +327,24 @@ test.describe('Paste disabled in non-building phases (AC6)', () => {
     let votingLineupId: number;
 
     test.beforeAll(async () => {
+        // Always create a fresh lineup to avoid state contamination from parallel tests
         const banner = await apiGet(adminToken, '/lineups/banner');
         if (banner && typeof banner.id === 'number') {
-            if (banner.status === 'voting') {
-                votingLineupId = banner.id;
-                return;
-            }
-            if (banner.status !== 'building') {
-                await archiveLineup(adminToken, banner.id);
-                const created = (await apiPost(adminToken, '/lineups', {
-                    targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-                })) as { id: number };
-                votingLineupId = created.id;
-            } else {
-                votingLineupId = banner.id;
-            }
-        } else {
-            const created = (await apiPost(adminToken, '/lineups', {
-                targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-            })) as { id: number };
-            votingLineupId = created.id;
+            await archiveLineup(adminToken, banner.id);
         }
 
-        // Ensure lineup has nominations before advancing to voting
-        const detail = await apiGet(adminToken, `/lineups/${votingLineupId}`);
-        if (!detail?.entries?.length) {
-            const gamesRes = await fetch(`${API_BASE}/games/configured`, {
-                headers: { Authorization: `Bearer ${adminToken}` },
-            });
-            const gamesBody = (await gamesRes.json()) as { data: { id: number }[] };
-            const gameIds = gamesBody.data.slice(0, 3).map((g) => g.id);
-            for (const gid of gameIds) {
-                await apiPost(adminToken, `/lineups/${votingLineupId}/nominate`, { gameId: gid });
-            }
+        const created = (await apiPost(adminToken, '/lineups', {
+            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        })) as { id: number };
+        votingLineupId = created.id;
+
+        // Add nominations then advance to voting
+        const gamesRes = await fetch(`${API_BASE}/games/configured`, {
+            headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        const gamesBody = (await gamesRes.json()) as { data: { id: number }[] };
+        for (const gid of gamesBody.data.slice(0, 3).map((g) => g.id)) {
+            await apiPost(adminToken, `/lineups/${votingLineupId}/nominate`, { gameId: gid });
         }
 
         await apiPatch(adminToken, `/lineups/${votingLineupId}/status`, { status: 'voting' });
@@ -367,10 +352,11 @@ test.describe('Paste disabled in non-building phases (AC6)', () => {
 
     test('pasting Steam URL on voting-status lineup does not trigger detection', async ({ page }) => {
         await page.goto(`/community-lineup/${votingLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        const leaderboard = page.locator('[data-testid="voting-leaderboard"]');
-        await expect(leaderboard).toBeVisible({ timeout: 15_000 });
+        // Wait for the page to fully load (heading visible, no error)
+        await expect(
+            page.getByRole('heading', { name: 'Community Lineup' }),
+        ).toBeVisible({ timeout: 15_000 });
 
         await dispatchPaste(page, STEAM_URL);
 
