@@ -134,9 +134,9 @@ test.describe('CreatePollModal — Minimum votes slider (AC1)', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 10_000 });
 
-        // Before selecting members, the slider should NOT be visible
+        // Slider should be visible even before selecting members (always shown)
         const slider = modal.locator('[data-testid="min-vote-threshold-slider"]');
-        await expect(slider).not.toBeVisible({ timeout: 5_000 });
+        await expect(slider).toBeVisible({ timeout: 5_000 });
 
         // Select members using the member picker
         const memberPicker = modal.locator('[data-testid="member-picker"]');
