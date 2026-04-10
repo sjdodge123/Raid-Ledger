@@ -275,28 +275,20 @@ test.describe('Decided view podium section', () => {
     test('podium action buttons are visible (Create Event removed per ROK-965)', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await gotoDecidedView(page);
 
         // Create Event was removed — events are created via scheduling poll (ROK-965).
         // Verify the "Share" button exists as the sole action button.
         const shareBtn = page.getByRole('button', {
             name: /^Share$/i,
         });
-        await expect(shareBtn).toBeVisible({ timeout: 20_000 });
+        await expect(shareBtn).toBeVisible({ timeout: 15_000 });
     });
 
     test('"Share" button is visible and enabled', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${decidedLineupId}`);
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
+        await gotoDecidedView(page);
 
         // AC: "Share" button copies lineup URL to clipboard (ROK-932)
         const shareBtn = page.getByRole('button', { name: /^Share$/i });
