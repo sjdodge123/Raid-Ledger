@@ -813,6 +813,13 @@
       "when": 1775686323219,
       "tag": "0115_faulty_wolf_cub",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1775786160248,
+      "tag": "0116_pink_loa",
+      "breakpoints": true
     }
   ]
 }

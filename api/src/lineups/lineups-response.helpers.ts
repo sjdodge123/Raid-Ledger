@@ -28,6 +28,8 @@ import {
   type UnlinkedSteamMember,
 } from './lineups-enrichment.helpers';
 import { findUserVotes } from './lineups-voting.helpers';
+import { findPendingOrActiveTiebreaker } from './tiebreaker/tiebreaker-query.helpers';
+import { buildTiebreakerDetail } from './tiebreaker/tiebreaker-response.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -167,7 +169,7 @@ export async function buildDetailResponse(
     db,
     entries.map((e) => e.gameId),
   );
-  return mapToDetailResponse(
+  const detail = mapToDetailResponse(
     lineup,
     entries,
     voteCounts,
@@ -177,4 +179,17 @@ export async function buildDetailResponse(
     enrichment,
     myVotes,
   );
+
+  // Attach tiebreaker detail if one exists (ROK-938)
+  if (lineup.activeTiebreakerId) {
+    const [tb] = await findPendingOrActiveTiebreaker(db, lineupId);
+    if (tb) {
+      (detail as Record<string, unknown>).tiebreaker =
+        await buildTiebreakerDetail(db, tb, userId);
+    }
+  } else {
+    (detail as Record<string, unknown>).tiebreaker = null;
+  }
+
+  return detail;
 }

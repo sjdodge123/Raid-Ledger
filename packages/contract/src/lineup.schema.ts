@@ -3,6 +3,9 @@ import { z } from 'zod';
 // Re-export match & scheduling schemas for backward compatibility (ROK-975)
 export * from './lineup-match.schema.js';
 
+// Re-export tiebreaker schemas (ROK-938)
+export * from './lineup-tiebreaker.schema.js';
+
 // ============================================================
 // Community Lineup Schemas (ROK-933)
 // ============================================================
@@ -117,6 +120,8 @@ export const LineupDetailResponseSchema = z.object({
     unlinkedSteamMembers: z.array(z.object({ id: z.number(), displayName: z.string() })),
     createdAt: z.string(),
     updatedAt: z.string(),
+    /** Active tiebreaker detail, null when no tiebreaker (ROK-938). */
+    tiebreaker: z.unknown().nullable().optional(),
 });
 
 export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;
@@ -141,6 +146,8 @@ export const LineupBannerResponseSchema = z.object({
     totalMembers: z.number(),
     decidedGameName: z.string().nullable(),
     entries: z.array(LineupBannerEntrySchema),
+    /** Whether a tiebreaker is active on this lineup (ROK-938). */
+    tiebreakerActive: z.boolean().optional(),
 });
 
 export type LineupBannerResponseDto = z.infer<typeof LineupBannerResponseSchema>;

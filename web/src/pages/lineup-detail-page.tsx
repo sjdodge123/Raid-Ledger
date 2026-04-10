@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLineupDetail } from '../hooks/use-lineups';
+import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
 import { NominationGrid } from '../components/lineups/NominationGrid';
 import { VotingLeaderboard } from '../components/lineups/VotingLeaderboard';
@@ -14,7 +15,9 @@ import { PastLineups } from '../components/lineups/PastLineups';
 import { DecidedView } from '../components/lineups/decided/DecidedView';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import { SteamNudgeBanner } from '../components/lineups/SteamNudgeBanner';
-import { useAuth } from '../hooks/use-auth';
+import { TiebreakerView } from '../components/lineups/tiebreaker/TiebreakerView';
+import { TiebreakerPromptModal } from '../components/lineups/tiebreaker/TiebreakerPromptModal';
+import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useSteamPasteDetection } from '../hooks/use-steam-paste';
 
 function LineupNotFound(): JSX.Element {
@@ -32,9 +35,12 @@ export function LineupDetailPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const lineupId = id ? parseInt(id, 10) : undefined;
   const { data: lineup, isLoading, error } = useLineupDetail(lineupId);
+  const { data: tiebreaker } = useTiebreakerDetail(lineupId);
   const { user } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
   const [preSelectedGame, setPreSelectedGame] = useState<SelectedGame | null>(null);
+  const [promptDismissed, setPromptDismissed] = useState(false);
+  const [tiebreakerPromptOpen, setTiebreakerPromptOpen] = useState(false);
 
   const isBuilding = !isLoading && !error && lineup?.status === 'building';
 
@@ -53,11 +59,21 @@ export function LineupDetailPage(): JSX.Element {
   if (error || !lineup) return <LineupNotFound />;
 
   const hasEntries = lineup.entries.length > 0;
+  const hasTiebreaker = lineup.status === 'voting' && tiebreaker && ['active', 'pending', 'resolved'].includes(tiebreaker.status);
+  const isOperator = isOperatorOrAdmin(user);
+
+  // Tiebreaker prompt: server-created pending tiebreaker OR operator tried to advance with ties
+  const showPrompt = isOperator && !promptDismissed && (
+    (hasTiebreaker && tiebreaker?.status === 'pending') || tiebreakerPromptOpen
+  );
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4">
       <div className="flex items-start justify-between gap-4 mb-4">
-        <LineupDetailHeader lineup={lineup} />
+        <LineupDetailHeader lineup={lineup} onTiebreakerIntercept={() => {
+          setPromptDismissed(false);
+          setTiebreakerPromptOpen(true);
+        }} />
         {isBuilding && (
           <button
             type="button"
@@ -83,7 +99,9 @@ export function LineupDetailPage(): JSX.Element {
         </div>
       )}
 
-      {lineup.status === 'decided' ? (
+      {hasTiebreaker && (tiebreaker?.status === 'active' || tiebreaker?.status === 'resolved') ? (
+        <TiebreakerView tiebreaker={tiebreaker} lineupId={lineup.id} />
+      ) : lineup.status === 'decided' ? (
         <DecidedView lineup={lineup} />
       ) : lineup.status === 'voting' && hasEntries ? (
         <VotingLeaderboard
@@ -108,6 +126,14 @@ export function LineupDetailPage(): JSX.Element {
           onClose={() => { setModalOpen(false); setPreSelectedGame(null); }}
           lineupId={lineup.id}
           preSelectedGame={preSelectedGame}
+        />
+      )}
+
+      {showPrompt && (
+        <TiebreakerPromptModal
+          lineupId={lineup.id}
+          tiebreaker={tiebreaker ?? null}
+          onClose={() => { setPromptDismissed(true); setTiebreakerPromptOpen(false); }}
         />
       )}
     </div>

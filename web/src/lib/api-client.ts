@@ -210,3 +210,13 @@ export {
     getActiveStandalonePolls,
     completeStandalonePoll,
 } from './api/standalone-poll-api';
+
+// Tiebreaker (ROK-938)
+export {
+    getTiebreakerDetail,
+    startTiebreaker,
+    dismissTiebreaker,
+    castBracketVote,
+    castVeto,
+    forceResolveTiebreaker,
+} from './api/tiebreaker-api';
