@@ -14,7 +14,7 @@
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
-import { findTrackedMessage } from './embed-sync.helpers';
+import { findTrackedMessages } from './embed-sync.helpers';
 
 const TEST_GUILD_ID = 'guild-1029';
 const CHANNEL_A = 'channel-a';
@@ -70,11 +70,27 @@ function describeMultiMessageSync() {
     it('returns an array with both records when two channels track the same event', async () => {
       // Arrange: create event with two tracking rows in different channels
       const eventId = await insertEvent(testApp);
-      await insertTrackedMessage(testApp, eventId, TEST_GUILD_ID, CHANNEL_A, MESSAGE_A);
-      await insertTrackedMessage(testApp, eventId, TEST_GUILD_ID, CHANNEL_B, MESSAGE_B);
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        TEST_GUILD_ID,
+        CHANNEL_A,
+        MESSAGE_A,
+      );
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        TEST_GUILD_ID,
+        CHANNEL_B,
+        MESSAGE_B,
+      );
 
       // Act: call the helper (currently findTrackedMessage, should become findTrackedMessages)
-      const result = await findTrackedMessage(testApp.db, eventId, TEST_GUILD_ID);
+      const result = await findTrackedMessages(
+        testApp.db,
+        eventId,
+        TEST_GUILD_ID,
+      );
 
       // Assert: must be an array of 2 records
       // This WILL FAIL because findTrackedMessage returns a single object, not an array
@@ -85,11 +101,27 @@ function describeMultiMessageSync() {
     it('includes both channel IDs in the returned records', async () => {
       // Arrange
       const eventId = await insertEvent(testApp);
-      await insertTrackedMessage(testApp, eventId, TEST_GUILD_ID, CHANNEL_A, MESSAGE_A);
-      await insertTrackedMessage(testApp, eventId, TEST_GUILD_ID, CHANNEL_B, MESSAGE_B);
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        TEST_GUILD_ID,
+        CHANNEL_A,
+        MESSAGE_A,
+      );
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        TEST_GUILD_ID,
+        CHANNEL_B,
+        MESSAGE_B,
+      );
 
       // Act
-      const result = await findTrackedMessage(testApp.db, eventId, TEST_GUILD_ID);
+      const result = await findTrackedMessages(
+        testApp.db,
+        eventId,
+        TEST_GUILD_ID,
+      );
 
       // Assert: both channel IDs must be present in the result set
       // This WILL FAIL because result is a single record, not an array
@@ -103,10 +135,20 @@ function describeMultiMessageSync() {
     it('returns an array of 1 record when only one channel tracks the event', async () => {
       // Arrange: single tracking row
       const eventId = await insertEvent(testApp);
-      await insertTrackedMessage(testApp, eventId, TEST_GUILD_ID, CHANNEL_A, MESSAGE_A);
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        TEST_GUILD_ID,
+        CHANNEL_A,
+        MESSAGE_A,
+      );
 
       // Act
-      const result = await findTrackedMessage(testApp.db, eventId, TEST_GUILD_ID);
+      const result = await findTrackedMessages(
+        testApp.db,
+        eventId,
+        TEST_GUILD_ID,
+      );
 
       // Assert: must be an array of 1 record, not a bare object
       // This WILL FAIL because findTrackedMessage returns a single object
@@ -119,7 +161,11 @@ function describeMultiMessageSync() {
       const eventId = await insertEvent(testApp);
 
       // Act
-      const result = await findTrackedMessage(testApp.db, eventId, TEST_GUILD_ID);
+      const result = await findTrackedMessages(
+        testApp.db,
+        eventId,
+        TEST_GUILD_ID,
+      );
 
       // Assert: must be an empty array, not null
       // This WILL FAIL because findTrackedMessage returns null for no records
@@ -132,11 +178,27 @@ function describeMultiMessageSync() {
     it('all tracked message IDs are queryable for the same event+guild', async () => {
       // Arrange: create event with two tracking rows (simulating original + forwarded embed)
       const eventId = await insertEvent(testApp);
-      await insertTrackedMessage(testApp, eventId, TEST_GUILD_ID, CHANNEL_A, MESSAGE_A);
-      await insertTrackedMessage(testApp, eventId, TEST_GUILD_ID, CHANNEL_B, MESSAGE_B);
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        TEST_GUILD_ID,
+        CHANNEL_A,
+        MESSAGE_A,
+      );
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        TEST_GUILD_ID,
+        CHANNEL_B,
+        MESSAGE_B,
+      );
 
       // Act: query all tracked messages
-      const result = await findTrackedMessage(testApp.db, eventId, TEST_GUILD_ID);
+      const result = await findTrackedMessages(
+        testApp.db,
+        eventId,
+        TEST_GUILD_ID,
+      );
 
       // Assert: the sync processor needs all message IDs to update each embed
       // This WILL FAIL because findTrackedMessage only returns one record
@@ -148,11 +210,27 @@ function describeMultiMessageSync() {
     it('does not return records from a different guild', async () => {
       // Arrange: two tracking rows in different guilds
       const eventId = await insertEvent(testApp);
-      await insertTrackedMessage(testApp, eventId, TEST_GUILD_ID, CHANNEL_A, MESSAGE_A);
-      await insertTrackedMessage(testApp, eventId, 'other-guild', CHANNEL_B, MESSAGE_B);
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        TEST_GUILD_ID,
+        CHANNEL_A,
+        MESSAGE_A,
+      );
+      await insertTrackedMessage(
+        testApp,
+        eventId,
+        'other-guild',
+        CHANNEL_B,
+        MESSAGE_B,
+      );
 
       // Act: query for TEST_GUILD_ID only
-      const result = await findTrackedMessage(testApp.db, eventId, TEST_GUILD_ID);
+      const result = await findTrackedMessages(
+        testApp.db,
+        eventId,
+        TEST_GUILD_ID,
+      );
 
       // Assert: must return only the record for TEST_GUILD_ID, as an array of 1
       // This WILL FAIL because findTrackedMessage returns a single object, not an array

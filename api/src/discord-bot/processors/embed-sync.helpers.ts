@@ -9,15 +9,18 @@ import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 const IMMINENT_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
 /**
- * Find the tracked Discord message for this event in the given guild.
- * Returns null if no record exists.
+ * Find all tracked Discord messages for this event in the given guild.
+ * Returns an empty array if no records exist.
+ *
+ * Multiple records exist when an event embed has been forwarded or
+ * unfurled into a second channel, creating an additional tracking row.
  */
-export async function findTrackedMessage(
+export async function findTrackedMessages(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
   guildId: string,
-): Promise<typeof schema.discordEventMessages.$inferSelect | null> {
-  const [record] = await db
+): Promise<(typeof schema.discordEventMessages.$inferSelect)[]> {
+  return db
     .select()
     .from(schema.discordEventMessages)
     .where(
@@ -25,9 +28,7 @@ export async function findTrackedMessage(
         eq(schema.discordEventMessages.eventId, eventId),
         eq(schema.discordEventMessages.guildId, guildId),
       ),
-    )
-    .limit(1);
-  return record ?? null;
+    );
 }
 
 /**
