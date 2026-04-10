@@ -60,8 +60,8 @@ export async function seedBaseline(
   return { adminUser, adminPassword, adminEmail, game };
 }
 
-const DEADLOCK_MAX_RETRIES = 3;
-const DEADLOCK_DELAY_MS = 50;
+const DEADLOCK_MAX_RETRIES = 5;
+const DEADLOCK_BASE_DELAY_MS = 200;
 
 async function retryOnDeadlock(fn: () => Promise<unknown>): Promise<void> {
   for (let attempt = 1; attempt <= DEADLOCK_MAX_RETRIES; attempt++) {
@@ -72,7 +72,8 @@ async function retryOnDeadlock(fn: () => Promise<unknown>): Promise<void> {
       const isDeadlock =
         err instanceof Error && 'code' in err && err.code === '40P01';
       if (!isDeadlock || attempt === DEADLOCK_MAX_RETRIES) throw err;
-      await new Promise((r) => setTimeout(r, DEADLOCK_DELAY_MS * attempt));
+      const delay = DEADLOCK_BASE_DELAY_MS * 2 ** (attempt - 1);
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
 }
