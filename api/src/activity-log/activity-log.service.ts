@@ -38,7 +38,7 @@ export class ActivityLogService {
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
 
-  /** Record an activity log entry. Fire-and-forget safe. */
+  /** Record an activity log entry. All callers should await this. */
   async log(
     entityType: ActivityEntityTypeDto,
     entityId: number,

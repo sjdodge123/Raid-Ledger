@@ -97,7 +97,7 @@ export class SignupsService {
       action: 'signup_created',
     });
     this.rosterNotificationBuffer.bufferJoin(eventId, userId);
-    void this.activityLog.log('event', eventId, 'signup_added', userId, {
+    await this.activityLog.log('event', eventId, 'signup_added', userId, {
       role: dto?.slotRole ?? dto?.preferredRoles?.[0] ?? null,
     });
     const character = dto?.characterId
@@ -247,7 +247,7 @@ export class SignupsService {
 
   async cancel(eventId: number, userId: number): Promise<void> {
     await this.rosterService.cancel(eventId, userId);
-    void this.activityLog.log('event', eventId, 'signup_cancelled', userId);
+    await this.activityLog.log('event', eventId, 'signup_cancelled', userId);
   }
 
   async selfUnassign(

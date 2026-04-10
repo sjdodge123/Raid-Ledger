@@ -169,7 +169,7 @@ function describeLineupsService() {
       providers: [
         LineupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: ActivityLogService, useValue: { log: jest.fn() } },
+        { provide: ActivityLogService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: SettingsService,
           useValue: { get: jest.fn().mockResolvedValue(null) },
