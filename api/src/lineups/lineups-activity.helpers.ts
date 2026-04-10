@@ -15,12 +15,12 @@ export async function logTransition(
   dto: UpdateLineupStatusDto,
 ): Promise<void> {
   if (dto.status === 'voting') {
-    void activityLog.log('lineup', id, 'voting_started', null, {
+    await activityLog.log('lineup', id, 'voting_started', null, {
       votingDeadline: dto.votingDeadline ?? null,
     });
   } else if (dto.status === 'decided' && dto.decidedGameId) {
     const [game] = await findGameName(db, dto.decidedGameId);
-    void activityLog.log('lineup', id, 'lineup_decided', null, {
+    await activityLog.log('lineup', id, 'lineup_decided', null, {
       gameId: dto.decidedGameId,
       gameName: game?.name ?? 'Unknown',
     });
@@ -36,7 +36,7 @@ export async function logNomination(
   userId: number,
 ): Promise<void> {
   const [game] = await findGameName(db, dto.gameId);
-  void activityLog.log('lineup', lineupId, 'game_nominated', userId, {
+  await activityLog.log('lineup', lineupId, 'game_nominated', userId, {
     gameId: dto.gameId,
     gameName: game?.name ?? 'Unknown',
     note: dto.note ?? null,

@@ -125,7 +125,7 @@ describe('LineupsService.removeNomination', () => {
         ),
     };
 
-    mockActivityLog = { log: jest.fn() };
+    mockActivityLog = { log: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
