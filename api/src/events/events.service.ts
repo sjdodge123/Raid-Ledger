@@ -110,7 +110,7 @@ export class EventsService {
       endTime,
       creatorId,
     );
-    void this.activityLog.log('event', result.id, 'event_created', creatorId, {
+    await this.activityLog.log('event', result.id, 'event_created', creatorId, {
       title: dto.title,
     });
     return result;
@@ -204,7 +204,7 @@ export class EventsService {
       isAdmin,
       dto,
     );
-    void this.activityLog.log('event', eventId, 'event_cancelled', userId, {
+    await this.activityLog.log('event', eventId, 'event_cancelled', userId, {
       reason: dto.reason ?? null,
     });
     return this.postMutate(
@@ -256,7 +256,7 @@ export class EventsService {
       isAdmin,
       dto,
     );
-    void this.activityLog.log('event', eventId, 'event_rescheduled', userId, {
+    await this.activityLog.log('event', eventId, 'event_rescheduled', userId, {
       oldStart: eventBefore.startTime,
       newStart: dto.startTime,
     });

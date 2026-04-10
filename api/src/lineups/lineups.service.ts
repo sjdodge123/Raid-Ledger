@@ -109,7 +109,7 @@ export class LineupsService {
       phaseDeadline,
       overrides,
     );
-    void this.activityLog.log('lineup', row.id, 'lineup_created', userId);
+    await this.activityLog.log('lineup', row.id, 'lineup_created', userId);
     void this.steamNudge.nudgeUnlinkedMembers(row.id);
     await carryOverFromLastDecided(this.db, row.id);
 
@@ -157,7 +157,7 @@ export class LineupsService {
       gameId,
       lineup.maxVotesPerPlayer ?? 3,
     );
-    void this.activityLog.log('lineup', lineupId, 'vote_cast', userId, {
+    await this.activityLog.log('lineup', lineupId, 'vote_cast', userId, {
       gameId,
       action,
     });
@@ -264,7 +264,7 @@ export class LineupsService {
     const entry = await findEntry(this.db, lineupId, gameId);
     validateRemoval(entry, caller);
     await deleteEntry(this.db, lineupId, gameId);
-    void this.activityLog.log(
+    await this.activityLog.log(
       'lineup',
       lineupId,
       'nomination_removed',
