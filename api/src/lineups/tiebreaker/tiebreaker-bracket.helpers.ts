@@ -9,9 +9,9 @@ import { countMatchupVotes, findMatchups } from './tiebreaker-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Pad to next power of 2 (min 4). */
+/** Pad to next power of 2 (min 2). */
 export function nextPowerOf2(n: number): number {
-  const p = Math.max(4, Math.pow(2, Math.ceil(Math.log2(n))));
+  const p = Math.max(2, Math.pow(2, Math.ceil(Math.log2(n))));
   return Math.min(p, 8);
 }
 
