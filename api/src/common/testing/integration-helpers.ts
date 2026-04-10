@@ -60,6 +60,23 @@ export async function seedBaseline(
   return { adminUser, adminPassword, adminEmail, game };
 }
 
+const DEADLOCK_MAX_RETRIES = 3;
+const DEADLOCK_DELAY_MS = 50;
+
+async function retryOnDeadlock(fn: () => Promise<unknown>): Promise<void> {
+  for (let attempt = 1; attempt <= DEADLOCK_MAX_RETRIES; attempt++) {
+    try {
+      await fn();
+      return;
+    } catch (err: unknown) {
+      const isDeadlock =
+        err instanceof Error && 'code' in err && err.code === '40P01';
+      if (!isDeadlock || attempt === DEADLOCK_MAX_RETRIES) throw err;
+      await new Promise((r) => setTimeout(r, DEADLOCK_DELAY_MS * attempt));
+    }
+  }
+}
+
 /**
  * Truncate all application tables between test suites.
  * Preserves baseline seed data by re-seeding after truncation.
@@ -81,7 +98,9 @@ export async function truncateAllTables(
 
   if (tables.length > 0) {
     const tableNames = tables.map((t) => t.tablename).join(', ');
-    await db.execute(sql.raw(`TRUNCATE TABLE ${tableNames} CASCADE`));
+    await retryOnDeadlock(() =>
+      db.execute(sql.raw(`TRUNCATE TABLE ${tableNames} CASCADE`)),
+    );
   }
 
   // Re-seed baseline data
