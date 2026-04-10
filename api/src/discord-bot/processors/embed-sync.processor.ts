@@ -22,7 +22,7 @@ import {
   type EmbedSyncJobData,
 } from '../queues/embed-sync.queue';
 import {
-  findTrackedMessage,
+  findTrackedMessages,
   buildEventData,
   computeEmbedState,
 } from './embed-sync.helpers';
@@ -68,9 +68,11 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     const guildId = this.requireConnection();
     if (!guildId) return;
 
-    const record = await findTrackedMessage(this.db, eventId, guildId);
-    if (!record) return;
-    if (record.embedState === EMBED_STATES.CANCELLED) return;
+    const records = await findTrackedMessages(this.db, eventId, guildId);
+    const active = records.filter(
+      (r) => r.embedState !== EMBED_STATES.CANCELLED,
+    );
+    if (active.length === 0) return;
 
     const event = await this.fetchEvent(eventId);
     if (!event || event.cancelledAt) return;
@@ -81,7 +83,17 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       this.channelResolver,
     );
     const newState = computeEmbedState(event, eventData);
-    await this.editAndSync(record, eventData, newState, eventId, reason, start);
+    const context = await this.buildContext();
+
+    await this.syncAllMessages(active, eventData, newState, context, eventId);
+    this.logAndTriggerSideEffects(
+      active,
+      newState,
+      eventId,
+      eventData,
+      reason,
+      start,
+    );
   }
 
   /** Validate bot connection, return guildId or null. */
@@ -112,32 +124,82 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     return event ?? null;
   }
 
-  /** Build embed, edit Discord message, update state, trigger side effects. */
-  private async editAndSync(
-    record: typeof schema.discordEventMessages.$inferSelect,
+  /** Sync all tracked messages, catching errors per-message. */
+  private async syncAllMessages(
+    records: (typeof schema.discordEventMessages.$inferSelect)[],
     eventData: EmbedEventData,
     newState: EmbedState,
+    context: EmbedContext,
     eventId: number,
-    reason: string,
-    perfStart: number,
   ): Promise<void> {
-    const previousState = record.embedState as EmbedState;
-    const context = await this.buildContext();
     const { embed, row, content } = this.embedFactory.buildEventUpdate(
       eventData,
       context,
       newState,
     );
-    await this.clientService.editEmbed(
-      record.channelId,
-      record.messageId,
-      embed,
-      row,
-      content,
+    for (const record of records) {
+      await this.syncSingleMessage(
+        record,
+        embed,
+        row,
+        content,
+        newState,
+        eventId,
+      );
+    }
+  }
+
+  /** Edit a single Discord message, persist state, and clean up bumps. */
+  private async syncSingleMessage(
+    record: typeof schema.discordEventMessages.$inferSelect,
+    embed: ReturnType<DiscordEmbedFactory['buildEventUpdate']>['embed'],
+    row: ReturnType<DiscordEmbedFactory['buildEventUpdate']>['row'],
+    content: ReturnType<DiscordEmbedFactory['buildEventUpdate']>['content'],
+    newState: EmbedState,
+    eventId: number,
+  ): Promise<void> {
+    try {
+      await this.clientService.editEmbed(
+        record.channelId,
+        record.messageId,
+        embed,
+        row,
+        content,
+      );
+      await this.persistState(record.id, newState);
+      await this.maybeDeleteBumpMessage(record, newState, eventId);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to sync embed in channel ${record.channelId} ` +
+          `for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+      );
+    }
+  }
+
+  /** Log state transitions and trigger side effects ONCE for all messages. */
+  private logAndTriggerSideEffects(
+    records: (typeof schema.discordEventMessages.$inferSelect)[],
+    newState: EmbedState,
+    eventId: number,
+    eventData: EmbedEventData,
+    reason: string,
+    perfStart: number,
+  ): void {
+    const previousState = records[0]?.embedState as EmbedState | undefined;
+    if (previousState && newState !== previousState) {
+      this.logger.log(
+        `Embed state transition for event ${eventId}: ${previousState} -> ${newState}`,
+      );
+    }
+    this.logger.log(
+      `Synced embed for event ${eventId} (state: ${newState}, reason: ${reason})`,
     );
-    await this.persistState(record.id, newState);
-    await this.maybeDeleteBumpMessage(record, newState, eventId);
-    this.logTransition(previousState, newState, eventId, reason, perfStart);
+    if (perfStart) {
+      perfLog('QUEUE', 'embed-sync', performance.now() - perfStart, {
+        eventId,
+        reason,
+      });
+    }
     this.triggerSideEffects(newState, eventId, eventData);
   }
 
@@ -173,30 +235,6 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       this.logger.warn(
         `Failed to delete bump message for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
       );
-    }
-  }
-
-  /** Log state transition and performance data. */
-  private logTransition(
-    prev: EmbedState,
-    next: EmbedState,
-    eventId: number,
-    reason: string,
-    perfStart: number,
-  ): void {
-    if (next !== prev) {
-      this.logger.log(
-        `Embed state transition for event ${eventId}: ${prev} -> ${next}`,
-      );
-    }
-    this.logger.log(
-      `Synced embed for event ${eventId} (state: ${next}, reason: ${reason})`,
-    );
-    if (perfStart) {
-      perfLog('QUEUE', 'embed-sync', performance.now() - perfStart, {
-        eventId,
-        reason,
-      });
     }
   }
 
