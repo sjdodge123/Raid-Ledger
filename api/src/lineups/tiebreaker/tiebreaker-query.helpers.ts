@@ -126,6 +126,24 @@ export async function countDistinctMatchupVoters(
   return row?.count ?? 0;
 }
 
+/** Find resolved tiebreaker for a lineup. Returns winner game ID or null. */
+export async function findResolvedTiebreakerWinner(
+  db: Db,
+  lineupId: number,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ winnerGameId: schema.communityLineupTiebreakers.winnerGameId })
+    .from(schema.communityLineupTiebreakers)
+    .where(
+      and(
+        eq(schema.communityLineupTiebreakers.lineupId, lineupId),
+        eq(schema.communityLineupTiebreakers.status, 'resolved'),
+      ),
+    )
+    .limit(1);
+  return row?.winnerGameId ?? null;
+}
+
 /** Find a user's veto for a tiebreaker. */
 export function findUserVeto(db: Db, tiebreakerId: number, userId: number) {
   return db
