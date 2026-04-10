@@ -120,7 +120,9 @@ export async function countDistinctMatchupVoters(
   const [row] = await db
     .select({ count: sql<number>`count(distinct user_id)::int`.as('count') })
     .from(schema.communityLineupTiebreakerBracketVotes)
-    .where(eq(schema.communityLineupTiebreakerBracketVotes.matchupId, matchupId));
+    .where(
+      eq(schema.communityLineupTiebreakerBracketVotes.matchupId, matchupId),
+    );
   return row?.count ?? 0;
 }
 

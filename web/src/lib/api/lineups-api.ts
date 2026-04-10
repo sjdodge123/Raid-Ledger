@@ -73,6 +73,7 @@ export interface CreateLineupParams {
   decidedDurationHours?: number;
   matchThreshold?: number;
   votesPerPlayer?: number;
+  defaultTiebreakerMode?: 'bracket' | 'veto' | null;
 }
 
 /** Create a new lineup with optional duration params. */

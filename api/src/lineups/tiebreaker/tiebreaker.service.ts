@@ -181,9 +181,15 @@ export class TiebreakerService {
     if (active.length === 0) return;
 
     // Use lineup voter count — only people who voted in the lineup need to vote
-    const [tb2] = await this.db.select().from(schema.communityLineupTiebreakers)
-      .where(eq(schema.communityLineupTiebreakers.id, tb.id)).limit(1);
-    const lineupVoters = await countDistinctVoters(this.db, tb2?.lineupId ?? lineupId);
+    const [tb2] = await this.db
+      .select()
+      .from(schema.communityLineupTiebreakers)
+      .where(eq(schema.communityLineupTiebreakers.id, tb.id))
+      .limit(1);
+    const lineupVoters = await countDistinctVoters(
+      this.db,
+      tb2?.lineupId ?? lineupId,
+    );
     const requiredVotes = lineupVoters[0]?.total ?? 1;
 
     for (const m of active) {
@@ -197,7 +203,9 @@ export class TiebreakerService {
       await this.resolveTiebreaker(tb.id, winner);
       await this.clearActiveTiebreaker(lineupId);
       await this.transitionToDecided(lineupId, winner);
-      this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`);
+      this.logger.log(
+        `Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`,
+      );
     }
   }
 

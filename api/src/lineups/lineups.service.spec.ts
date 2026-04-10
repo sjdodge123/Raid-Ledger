@@ -323,7 +323,9 @@ function describeLineupsService() {
       // hasResolved tiebreaker check (ROK-938) → none
       mockSelects(makeSelectChain({ limitResult: [] }));
       // detectTies → countVotesPerGame → no tie
-      mockSelects(makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 3 }] }));
+      mockSelects(
+        makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 3 }] }),
+      );
       mockUpdate();
       // findGameName for activity log
       mockSelects(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
@@ -386,7 +388,9 @@ function describeLineupsService() {
       // hasResolved tiebreaker check (ROK-938) → none
       mockSelects(makeSelectChain({ limitResult: [] }));
       // detectTies → countVotesPerGame → no tie
-      mockSelects(makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 1 }] }));
+      mockSelects(
+        makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 1 }] }),
+      );
       // applyStatusUpdate (update)
       mockDb.update.mockReturnValue({
         set: jest.fn().mockReturnValue({

@@ -186,10 +186,12 @@ export class LineupsService {
       const hasResolved = await this.db
         .select({ id: schema.communityLineupTiebreakers.id })
         .from(schema.communityLineupTiebreakers)
-        .where(and(
-          eq(schema.communityLineupTiebreakers.lineupId, id),
-          eq(schema.communityLineupTiebreakers.status, 'resolved'),
-        ))
+        .where(
+          and(
+            eq(schema.communityLineupTiebreakers.lineupId, id),
+            eq(schema.communityLineupTiebreakers.status, 'resolved'),
+          ),
+        )
         .limit(1);
       if (hasResolved.length === 0) {
         const ties = await detectTies(this.db, id);
@@ -203,7 +205,9 @@ export class LineupsService {
       } else {
         // Use the tiebreaker winner, not whatever the client sent
         const [resolved] = await this.db
-          .select({ winnerGameId: schema.communityLineupTiebreakers.winnerGameId })
+          .select({
+            winnerGameId: schema.communityLineupTiebreakers.winnerGameId,
+          })
           .from(schema.communityLineupTiebreakers)
           .where(eq(schema.communityLineupTiebreakers.id, hasResolved[0].id))
           .limit(1);
@@ -214,7 +218,11 @@ export class LineupsService {
     }
 
     // Auto-reset tiebreaker when leaving voting phase
-    if (lineup.status === 'voting' && dto.status !== 'voting' && dto.status !== 'decided') {
+    if (
+      lineup.status === 'voting' &&
+      dto.status !== 'voting' &&
+      dto.status !== 'decided'
+    ) {
       await resetTiebreaker(this.db, id);
     }
 
