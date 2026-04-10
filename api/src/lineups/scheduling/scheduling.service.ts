@@ -226,6 +226,16 @@ export class SchedulingService {
     return { polls };
   }
 
+  /** Cancel/archive a scheduling poll (operator). */
+  async cancelPoll(matchId: number): Promise<void> {
+    const match = await this.findMatchOrThrow(matchId);
+    this.assertSchedulable(match);
+    await this.db
+      .update(schema.communityLineupMatches)
+      .set({ status: 'archived', updatedAt: new Date() })
+      .where(eq(schema.communityLineupMatches.id, matchId));
+  }
+
   // -- Private helpers --
 
   private async findMatchOrThrow(matchId: number) {

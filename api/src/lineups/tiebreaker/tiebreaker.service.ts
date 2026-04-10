@@ -20,11 +20,18 @@ import type {
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { detectTies } from './tiebreaker-detect.helpers';
+import { runMatchingAlgorithm } from '../lineups-lifecycle.helpers';
 import {
   findPendingOrActiveTiebreaker,
   findMatchups,
+  countDistinctMatchupVoters,
 } from './tiebreaker-query.helpers';
-import { buildBracket, advanceBracket } from './tiebreaker-bracket.helpers';
+import {
+  buildBracket,
+  advanceBracket,
+  getCurrentRound,
+} from './tiebreaker-bracket.helpers';
+import { countDistinctVoters } from '../lineups-query.helpers';
 import {
   submitVeto,
   revealVetoes,
@@ -100,6 +107,14 @@ export class TiebreakerService {
     await this.transitionToDecided(lineupId);
   }
 
+  /** Reset/clear any active tiebreaker without changing lineup phase. */
+  async reset(lineupId: number): Promise<void> {
+    const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
+    if (!tb) return; // no-op if nothing to reset
+    await this.updateTiebreakerStatus(tb.id, 'dismissed');
+    await this.clearActiveTiebreaker(lineupId);
+  }
+
   /** Cast a bracket vote. */
   async castBracketVote(
     lineupId: number,
@@ -116,7 +131,11 @@ export class TiebreakerService {
       .values({ matchupId: dto.matchupId, userId, gameId: dto.gameId })
       .onConflictDoNothing();
 
-    return buildTiebreakerDetail(this.db, tb, userId);
+    // Check if current round is complete and auto-advance
+    await this.checkAndAdvanceRound(tb, lineupId);
+
+    const [updated] = await findPendingOrActiveTiebreaker(this.db, lineupId);
+    return buildTiebreakerDetail(this.db, updated ?? tb, userId);
   }
 
   /** Submit a veto. */
@@ -143,6 +162,43 @@ export class TiebreakerService {
     await this.resolveTiebreaker(tb.id, winnerId);
     await this.clearActiveTiebreaker(lineupId);
     await this.transitionToDecided(lineupId, winnerId);
+  }
+
+  /**
+   * Check if all community members have voted on every non-bye matchup
+   * in the current round. If so, advance the bracket.
+   * If the bracket completes, resolve the tiebreaker and transition lineup.
+   */
+  private async checkAndAdvanceRound(
+    tb: typeof schema.communityLineupTiebreakers.$inferSelect,
+    lineupId: number,
+  ): Promise<void> {
+    const round = await getCurrentRound(this.db, tb.id);
+    const matchups = await findMatchups(this.db, tb.id);
+    const active = matchups.filter(
+      (m) => m.round === round && !m.isBye && !m.winnerGameId,
+    );
+    if (active.length === 0) return;
+
+    // Use lineup voter count — only people who voted in the lineup need to vote
+    const [tb2] = await this.db.select().from(schema.communityLineupTiebreakers)
+      .where(eq(schema.communityLineupTiebreakers.id, tb.id)).limit(1);
+    const lineupVoters = await countDistinctVoters(this.db, tb2?.lineupId ?? lineupId);
+    const requiredVotes = lineupVoters[0]?.total ?? 1;
+
+    for (const m of active) {
+      const voterCount = await countDistinctMatchupVoters(this.db, m.id);
+      if (voterCount < requiredVotes) return; // still waiting for votes
+    }
+
+    // All members voted on all matchups — advance
+    const winner = await advanceBracket(this.db, tb.id);
+    if (winner) {
+      await this.resolveTiebreaker(tb.id, winner);
+      await this.clearActiveTiebreaker(lineupId);
+      await this.transitionToDecided(lineupId, winner);
+      this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`);
+    }
   }
 
   // -- private helpers --
@@ -233,6 +289,8 @@ export class TiebreakerService {
       .update(schema.communityLineups)
       .set(update)
       .where(eq(schema.communityLineups.id, lineupId));
+    // Run matching algorithm so decided view has match groups
+    await runMatchingAlgorithm(this.db, lineupId, this.logger);
   }
 
   private async determineWinner(

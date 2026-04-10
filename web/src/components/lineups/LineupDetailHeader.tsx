@@ -11,6 +11,7 @@ import { UnlinkedSteamCount } from './UnlinkedSteamCount';
 
 interface Props {
   lineup: LineupDetailResponseDto;
+  onTiebreakerIntercept?: () => void;
 }
 
 /** SVG circle progress indicator — fills 33/66/100% with red→yellow→green. */
@@ -35,7 +36,9 @@ function PhaseCircle({ status }: { status: string }): JSX.Element {
 
 const CONFIRM_TIMEOUT = 3_000;
 
-function PhaseBreadcrumb({ lineup }: { lineup: LineupDetailResponseDto }): JSX.Element {
+function PhaseBreadcrumb({ lineup, onTiebreakerIntercept }: {
+  lineup: LineupDetailResponseDto; onTiebreakerIntercept?: () => void;
+}): JSX.Element {
   const { user } = useAuth();
   const transition = useTransitionLineupStatus();
   const canOperate = isOperatorOrAdmin(user);
@@ -59,6 +62,7 @@ function PhaseBreadcrumb({ lineup }: { lineup: LineupDetailResponseDto }): JSX.E
       // Second click — execute
       clearPending();
       const targetStatus = PHASES[targetIdx];
+
       const body: { status: string; decidedGameId?: number | null } = { status: targetStatus };
       if (targetStatus === 'decided') {
         body.decidedGameId = lineup.entries[0]?.gameId ?? null;
@@ -67,7 +71,14 @@ function PhaseBreadcrumb({ lineup }: { lineup: LineupDetailResponseDto }): JSX.E
         { lineupId: lineup.id, body },
         {
           onSuccess: () => toast.success(`Moved to ${PHASE_LABELS[PHASES[targetIdx]]}`),
-          onError: (err) => toast.error(err instanceof Error ? err.message : 'Transition failed'),
+          onError: (err) => {
+            const msg = err instanceof Error ? err.message : '';
+            if (msg.includes('TIEBREAKER_REQUIRED') && onTiebreakerIntercept) {
+              onTiebreakerIntercept();
+            } else {
+              toast.error(msg || 'Transition failed');
+            }
+          },
         },
       );
     } else {
@@ -141,7 +152,7 @@ function PhaseContextInfo({ lineup }: { lineup: LineupDetailResponseDto }): JSX.
   return null;
 }
 
-export function LineupDetailHeader({ lineup }: Props): JSX.Element {
+export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JSX.Element {
   const navigate = useNavigate();
 
   return (
@@ -161,7 +172,7 @@ export function LineupDetailHeader({ lineup }: Props): JSX.Element {
           <LineupStatusBadge status={lineup.status} />
         </div>
         <div className="flex items-center gap-2">
-          <PhaseBreadcrumb lineup={lineup} />
+          <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
           <PhaseCircle status={lineup.status} />
         </div>
       </div>

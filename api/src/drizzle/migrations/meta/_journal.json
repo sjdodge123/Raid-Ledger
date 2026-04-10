@@ -820,6 +820,13 @@
       "when": 1775786160248,
       "tag": "0116_pink_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1775849215716,
+      "tag": "0117_luxuriant_sentinel",
+      "breakpoints": true
     }
   ]
 }

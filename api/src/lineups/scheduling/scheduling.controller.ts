@@ -27,6 +27,8 @@ import {
   type AggregateGameTimeResponse,
 } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../../auth/optional-jwt.guard';
+import { RolesGuard } from '../../auth/roles.guard';
+import { Roles } from '../../auth/roles.decorator';
 import { SchedulingService } from './scheduling.service';
 
 interface AuthRequest extends Request {
@@ -116,6 +118,18 @@ export class SchedulingController {
       req.user!.id,
       parsed.data.recurring,
     );
+  }
+
+  /** POST /lineups/:lineupId/schedule/:matchId/cancel — cancel poll (operator). */
+  @Post(':lineupId/schedule/:matchId/cancel')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('operator')
+  @HttpCode(HttpStatus.OK)
+  async cancelPoll(
+    @Param('matchId', ParseIntPipe) matchId: number,
+  ): Promise<{ ok: boolean }> {
+    await this.schedulingService.cancelPoll(matchId);
+    return { ok: true };
   }
 
   /** DELETE /lineups/:lineupId/schedule/:matchId/votes — retract all votes. */

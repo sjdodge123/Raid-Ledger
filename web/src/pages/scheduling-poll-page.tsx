@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import type { GameTimePreviewBlock } from '../components/features/game-time/game-time-grid.types';
 import {
@@ -15,7 +15,9 @@ import {
   useToggleScheduleVote,
   useSuggestSlot,
   useOtherPolls,
+  useCancelSchedulePoll,
 } from '../hooks/use-scheduling';
+import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useGameTime } from '../hooks/use-game-time';
 import { MatchContextCard } from './scheduling/MatchContextCard';
 import { SuggestedTimes } from './scheduling/SuggestedTimes';
@@ -124,7 +126,7 @@ function usePollMutations(lineupId: number, matchId: number) {
 function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
   const eventId = poll.match.linkedEventId;
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-0 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       <div className="p-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
@@ -164,6 +166,9 @@ function ActivePollSections({ lineupId, matchId, poll }: {
   const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
   const { toggleVote, suggest, isSuggesting } = usePollMutations(lineupId, matchId);
+  const cancelPoll = useCancelSchedulePoll();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   /* linkedEventId is a back-reference to the rescheduled event, NOT a newly
      created event. Only set createdEventId when the user creates from this poll. */
   const [createdEventId] = useState<number | null>(null);
@@ -171,6 +176,7 @@ function ActivePollSections({ lineupId, matchId, poll }: {
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const [previewBlock, setPreviewBlock] = useState<GameTimePreviewBlock | undefined>();
   const { readOnly, hasVoted } = derivePollState(poll);
+  const canCancel = isOperatorOrAdmin(user) && !readOnly;
 
   const handleWeekChange = (delta: number): void => {
     const next = new Date(weekStart);
@@ -178,9 +184,25 @@ function ActivePollSections({ lineupId, matchId, poll }: {
     setWeekStart(next);
   };
 
+  const handleCancel = () => {
+    cancelPoll.mutate({ lineupId, matchId }, { onSuccess: () => navigate('/events') });
+  };
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-0 space-y-6">
-      <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
+        {canCancel && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={cancelPoll.isPending}
+            className="px-3 py-1.5 text-xs font-medium text-red-400 border border-red-400/30 rounded-lg hover:bg-red-400/10 transition-colors disabled:opacity-50"
+          >
+            {cancelPoll.isPending ? 'Cancelling...' : 'Cancel Poll'}
+          </button>
+        )}
+      </div>
       {readOnly && <ReadOnlyBanner />}
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       <AvailabilityHeatmapSection data={availability} isLoading={availLoading}

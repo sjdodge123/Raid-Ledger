@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   BandwagonJoinResponseDto,
@@ -24,6 +25,8 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { resetTiebreaker } from './tiebreaker/tiebreaker-query.helpers';
+import { detectTies } from './tiebreaker/tiebreaker-detect.helpers';
 import { LineupNotificationService } from './lineup-notification.service';
 import {
   findActiveLineup,
@@ -175,6 +178,44 @@ export class LineupsService {
     validateTransition(lineup.status as LineupStatus, dto);
     if (dto.status === 'decided' && dto.decidedGameId) {
       await validateDecidedGame(this.db, id, dto.decidedGameId);
+    }
+
+    // Block voting → decided when top games are tied (ROK-938)
+    // Skip if a tiebreaker already resolved for this lineup
+    if (lineup.status === 'voting' && dto.status === 'decided') {
+      const hasResolved = await this.db
+        .select({ id: schema.communityLineupTiebreakers.id })
+        .from(schema.communityLineupTiebreakers)
+        .where(and(
+          eq(schema.communityLineupTiebreakers.lineupId, id),
+          eq(schema.communityLineupTiebreakers.status, 'resolved'),
+        ))
+        .limit(1);
+      if (hasResolved.length === 0) {
+        const ties = await detectTies(this.db, id);
+        if (ties) {
+          throw new BadRequestException({
+            message: 'TIEBREAKER_REQUIRED',
+            tiedGameIds: ties.tiedGameIds,
+            voteCount: ties.voteCount,
+          });
+        }
+      } else {
+        // Use the tiebreaker winner, not whatever the client sent
+        const [resolved] = await this.db
+          .select({ winnerGameId: schema.communityLineupTiebreakers.winnerGameId })
+          .from(schema.communityLineupTiebreakers)
+          .where(eq(schema.communityLineupTiebreakers.id, hasResolved[0].id))
+          .limit(1);
+        if (resolved?.winnerGameId) {
+          dto.decidedGameId = resolved.winnerGameId;
+        }
+      }
+    }
+
+    // Auto-reset tiebreaker when leaving voting phase
+    if (lineup.status === 'voting' && dto.status !== 'voting' && dto.status !== 'decided') {
+      await resetTiebreaker(this.db, id);
     }
 
     await applyStatusUpdate(

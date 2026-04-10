@@ -51,6 +51,7 @@ export function insertLineup(
         phaseDurationOverride: overrides,
         matchThreshold: dto.matchThreshold ?? undefined,
         maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
+        defaultTiebreakerMode: dto.defaultTiebreakerMode ?? undefined,
       })
       .returning();
   });

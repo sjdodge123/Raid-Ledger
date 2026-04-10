@@ -95,6 +95,35 @@ export function findVetoes(db: Db, tiebreakerId: number) {
     );
 }
 
+/** Reset pending/active tiebreakers for a lineup. Preserves resolved ones. */
+export async function resetTiebreaker(db: Db, lineupId: number): Promise<void> {
+  await db
+    .update(schema.communityLineupTiebreakers)
+    .set({ status: 'dismissed', updatedAt: new Date() })
+    .where(
+      and(
+        eq(schema.communityLineupTiebreakers.lineupId, lineupId),
+        sql`${schema.communityLineupTiebreakers.status} IN ('pending', 'active')`,
+      ),
+    );
+  await db
+    .update(schema.communityLineups)
+    .set({ activeTiebreakerId: null, updatedAt: new Date() })
+    .where(eq(schema.communityLineups.id, lineupId));
+}
+
+/** Count distinct voters for a matchup. */
+export async function countDistinctMatchupVoters(
+  db: Db,
+  matchupId: number,
+): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(distinct user_id)::int`.as('count') })
+    .from(schema.communityLineupTiebreakerBracketVotes)
+    .where(eq(schema.communityLineupTiebreakerBracketVotes.matchupId, matchupId));
+  return row?.count ?? 0;
+}
+
 /** Find a user's veto for a tiebreaker. */
 export function findUserVeto(db: Db, tiebreakerId: number, userId: number) {
   return db

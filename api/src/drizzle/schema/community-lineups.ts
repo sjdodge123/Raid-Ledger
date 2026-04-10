@@ -45,6 +45,10 @@ export const communityLineups = pgTable('community_lineups', {
   matchThreshold: integer('match_threshold').notNull().default(35),
   /** Max votes each player can cast during voting (1–10, default 3, ROK-976). */
   maxVotesPerPlayer: smallint('max_votes_per_player').notNull().default(3),
+  /** Default tiebreaker mode used when voting deadline expires (ROK-938). */
+  defaultTiebreakerMode: text('default_tiebreaker_mode', {
+    enum: ['bracket', 'veto'],
+  }),
   /** Active tiebreaker FK (ROK-938). Null when no tiebreaker is active. */
   activeTiebreakerId: integer('active_tiebreaker_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

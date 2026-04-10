@@ -37,6 +37,8 @@ export const CreateLineupSchema = z.object({
     matchThreshold: z.number().int().min(0).max(100).optional(),
     /** Max votes each player can cast during voting (1–10, default 3). */
     votesPerPlayer: z.number().int().min(1).max(10).optional(),
+    /** Default tiebreaker mode when voting deadline expires. Null = skip tiebreaker. */
+    defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable().optional(),
 });
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
@@ -109,6 +111,8 @@ export const LineupDetailResponseSchema = z.object({
     matchThreshold: z.number().nullable(),
     /** Max votes each player can cast during voting (ROK-976). */
     maxVotesPerPlayer: z.number(),
+    /** Default tiebreaker mode for deadline expiry (ROK-938). */
+    defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable(),
     entries: z.array(LineupEntryResponseSchema),
     totalVoters: z.number(),
     totalMembers: z.number(),

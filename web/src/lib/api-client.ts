@@ -202,6 +202,7 @@ export {
     getMatchAvailability,
     getSchedulingBanner,
     getOtherPolls,
+    cancelSchedulePoll,
 } from './api/scheduling-api';
 
 // Standalone Scheduling Polls (ROK-977)

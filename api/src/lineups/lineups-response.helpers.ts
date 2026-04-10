@@ -92,6 +92,7 @@ function mapLineupCore(
     phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
     matchThreshold: lineup.matchThreshold ?? 35,
     maxVotesPerPlayer: lineup.maxVotesPerPlayer ?? 3,
+    defaultTiebreakerMode: lineup.defaultTiebreakerMode ?? null,
     createdAt: lineup.createdAt.toISOString(),
     updatedAt: lineup.updatedAt.toISOString(),
   };

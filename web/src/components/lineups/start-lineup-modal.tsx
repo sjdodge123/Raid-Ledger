@@ -20,6 +20,7 @@ function useDurationState() {
   const [voting, setVoting] = useState<number | ''>('');
   const [matchThreshold, setMatchThreshold] = useState<number>(35);
   const [votesPerPlayer, setVotesPerPlayer] = useState<number>(3);
+  const [tiebreakerMode, setTiebreakerMode] = useState<'bracket' | 'veto' | null>('bracket');
   const buildingVal = building === '' ? (defaults?.buildingDurationHours ?? 48) : building;
   const votingVal = voting === '' ? (defaults?.votingDurationHours ?? 24) : voting;
 
@@ -28,10 +29,12 @@ function useDurationState() {
     voting: votingVal,
     matchThreshold,
     votesPerPlayer,
+    tiebreakerMode,
     setBuilding,
     setVoting,
     setMatchThreshold,
     setVotesPerPlayer,
+    setTiebreakerMode,
     isLoading: lineupDefaults.isLoading,
   };
 }
@@ -142,6 +145,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
         votingDurationHours: durations.voting,
         matchThreshold: durations.matchThreshold,
         votesPerPlayer: durations.votesPerPlayer,
+        defaultTiebreakerMode: durations.tiebreakerMode,
       });
       onClose();
       navigate(`/community-lineup/${result.id}`);
@@ -181,6 +185,26 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
           value={durations.votesPerPlayer}
           onChange={durations.setVotesPerPlayer}
         />
+        <div className="border-t border-edge/30 pt-4">
+          <label className="text-sm font-medium text-secondary">Tiebreaker Mode</label>
+          <p className="text-xs text-muted mb-2">Used when voting produces tied games at deadline.</p>
+          <div className="flex gap-2">
+            {([['bracket', 'Bracket'], ['veto', 'Veto'], [null, 'None']] as const).map(([val, label]) => (
+              <button
+                key={String(val)}
+                type="button"
+                onClick={() => durations.setTiebreakerMode(val as 'bracket' | 'veto' | null)}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                  durations.tiebreakerMode === val
+                    ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-400'
+                    : 'bg-panel border-edge text-muted hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
