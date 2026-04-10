@@ -31,6 +31,8 @@ import { NotFoundException } from '@nestjs/common';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
+import { ItadService } from '../itad/itad.service';
+import { SettingsService } from '../settings/settings.service';
 import { GameInterestResponseSchema } from '@raid-ledger/contract';
 
 // ─── Shared helper ───────────────────────────────────────────────────────────
@@ -58,6 +60,8 @@ async function createController(
     providers: [
       { provide: IgdbService, useValue: mockService },
       { provide: ItadPriceService, useValue: {} },
+      { provide: ItadService, useValue: {} },
+      { provide: SettingsService, useValue: {} },
     ],
   }).compile();
   return module.get<IgdbController>(IgdbController);

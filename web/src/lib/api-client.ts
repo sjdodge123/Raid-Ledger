@@ -50,6 +50,7 @@ export {
     getGameNowPlaying,
     getGamePricing,
     getGamePricingBatch,
+    getGameBySteamAppId,
 } from './api/games-api';
 
 // Characters

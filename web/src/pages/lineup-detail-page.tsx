@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLineupDetail } from '../hooks/use-lineups';
@@ -9,11 +9,13 @@ import { LineupEmptyState } from '../components/lineups/LineupEmptyState';
 import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton';
 import { CommonGroundPanel } from '../components/lineups/CommonGroundPanel';
 import { NominateModal } from '../components/lineups/NominateModal';
+import type { SelectedGame } from '../components/lineups/NominateModal';
 import { PastLineups } from '../components/lineups/PastLineups';
 import { DecidedView } from '../components/lineups/decided/DecidedView';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import { SteamNudgeBanner } from '../components/lineups/SteamNudgeBanner';
 import { useAuth } from '../hooks/use-auth';
+import { useSteamPasteDetection } from '../hooks/use-steam-paste';
 
 function LineupNotFound(): JSX.Element {
   return (
@@ -32,12 +34,25 @@ export function LineupDetailPage(): JSX.Element {
   const { data: lineup, isLoading, error } = useLineupDetail(lineupId);
   const { user } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
+  const [preSelectedGame, setPreSelectedGame] = useState<SelectedGame | null>(null);
+
+  const isBuilding = !isLoading && !error && lineup?.status === 'building';
+
+  const handleGameResolved = useCallback((game: SelectedGame) => {
+    setPreSelectedGame(game);
+    setModalOpen(true);
+  }, []);
+
+  useSteamPasteDetection({
+    enabled: isBuilding,
+    modalOpen,
+    onGameResolved: handleGameResolved,
+  });
 
   if (isLoading) return <LineupDetailSkeleton />;
   if (error || !lineup) return <LineupNotFound />;
 
   const hasEntries = lineup.entries.length > 0;
-  const isBuilding = lineup.status === 'building';
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4">
@@ -88,7 +103,12 @@ export function LineupDetailPage(): JSX.Element {
       <PastLineups />
 
       {isBuilding && (
-        <NominateModal isOpen={modalOpen} onClose={() => setModalOpen(false)} lineupId={lineup.id} />
+        <NominateModal
+          isOpen={modalOpen}
+          onClose={() => { setModalOpen(false); setPreSelectedGame(null); }}
+          lineupId={lineup.id}
+          preSelectedGame={preSelectedGame}
+        />
       )}
     </div>
   );
