@@ -78,16 +78,17 @@ export class StandalonePollService {
       signupsService: this.signupsService,
     });
     const [match] = await this.db
-      .select({ gameId: schema.communityLineupMatches.gameId })
+      .select({ gameId: schema.communityLineupMatches.gameId, gameName: schema.games.name })
       .from(schema.communityLineupMatches)
+      .innerJoin(schema.games, eq(schema.games.id, schema.communityLineupMatches.gameId))
       .where(eq(schema.communityLineupMatches.id, matchId))
       .limit(1);
     if (match?.gameId) {
       const allVoterIds = [...new Set(allVoters.map((v) => v.userId))];
       await insertPollInterests({ db: this.db, gameId: match.gameId, voterUserIds: allVoterIds });
     }
-    if (otherVoters.length > 0 && startTime) {
-      this.notifyNonSelectedVoters(otherVoters, startTime);
+    if (startTime) {
+      this.notifyVoters(selectedVoters, otherVoters, startTime, eventId, match?.gameName ?? 'Game Night');
     }
   }
 
@@ -110,20 +111,25 @@ export class StandalonePollService {
     return { selectedVoters, otherVoters };
   }
 
-  /** Fire-and-forget DM to voters who voted for non-selected slots. */
-  private notifyNonSelectedVoters(
-    voters: { userId: number }[],
+  /** Fire-and-forget DMs to all poll voters (ROK-1031). */
+  private notifyVoters(
+    selected: { userId: number }[],
+    others: { userId: number }[],
     chosenTime: string,
+    eventId: number,
+    gameName: string,
   ): void {
     const formatted = new Date(chosenTime).toLocaleString('en-US', {
       weekday: 'short', month: 'short', day: 'numeric',
       hour: 'numeric', minute: '2-digit',
     });
-    const uniqueIds = [...new Set(voters.map((v) => v.userId))];
-    for (const userId of uniqueIds) {
-      this.notifications
-        .notifyPollOutcome(userId, formatted)
-        .catch(() => { /* swallow DM failures */ });
+    for (const uid of [...new Set(selected.map((v) => v.userId))]) {
+      this.notifications.notifyAutoSignup(uid, gameName, formatted, eventId)
+        .catch(() => { /* swallow */ });
+    }
+    for (const uid of [...new Set(others.map((v) => v.userId))]) {
+      this.notifications.notifyPollOutcome(uid, formatted, eventId)
+        .catch(() => { /* swallow */ });
     }
   }
 

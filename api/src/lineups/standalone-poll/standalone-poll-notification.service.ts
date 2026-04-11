@@ -55,12 +55,24 @@ export class StandalonePollNotificationService {
   }
 
   /** DM a voter that a different timeslot was chosen (ROK-1031). */
-  async notifyPollOutcome(userId: number, chosenTime: string): Promise<void> {
+  async notifyPollOutcome(userId: number, chosenTime: string, eventId: number): Promise<void> {
     await this.notificationService.create({
       userId,
       type: 'community_lineup',
       title: 'Scheduling poll result',
       message: `The poll chose **${chosenTime}**. You voted for a different time so you weren't auto-signed up — check the event if you'd still like to join!`,
+      payload: { subtype: 'lineup_event_created', eventId },
+    });
+  }
+
+  /** DM a voter that they were auto-signed up from a poll (ROK-1031). */
+  async notifyAutoSignup(userId: number, gameName: string, eventTime: string, eventId: number): Promise<void> {
+    await this.notificationService.create({
+      userId,
+      type: 'community_lineup',
+      title: 'Auto-signed up',
+      message: `You voted for **${eventTime}** — you've been automatically signed up for **${gameName}**!`,
+      payload: { subtype: 'lineup_event_created', eventId },
     });
   }
 
