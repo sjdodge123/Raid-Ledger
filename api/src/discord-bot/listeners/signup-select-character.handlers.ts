@@ -8,6 +8,8 @@ import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
+import { findConflictingEvents } from '../../events/event-conflict.helpers';
+import { buildConflictWarning } from './signup-conflict-warning.helpers';
 
 /**
  * Handle character selection for linked users.
@@ -153,10 +155,18 @@ async function signupWithCharacterDirect(
     );
   }
   const bench = benchSuffix(signupResult.assignedSlot);
+  let conflictSuffix = '';
+  try {
+    const event = await deps.db.select().from(schema.events).where(eq(schema.events.id, eventId)).limit(1);
+    if (event[0]) {
+      const conflicts = await findConflictingEvents(deps.db, { userId, startTime: event[0].duration[0], endTime: event[0].duration[1], excludeEventId: eventId });
+      conflictSuffix = buildConflictWarning(conflicts);
+    }
+  } catch { /* swallow */ }
   const content =
     signupStatus === 'tentative'
-      ? `You're marked as **tentative** with **${character.name}**.`
-      : `Signed up as **${character.name}**!${bench}`;
+      ? `You're marked as **tentative** with **${character.name}**.${conflictSuffix}`
+      : `Signed up as **${character.name}**!${bench}${conflictSuffix}`;
   await interaction.editReply({ content, embeds: [], components: [] });
   void deps.updateEmbedSignupCount(eventId);
 }
