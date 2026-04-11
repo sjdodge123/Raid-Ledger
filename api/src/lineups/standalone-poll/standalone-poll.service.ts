@@ -58,10 +58,10 @@ export class StandalonePollService {
 
   /** Mark a standalone poll as completed (match → scheduled, lineup → archived).
    *  When eventId is provided, auto-signup slot voters and auto-heart the game (ROK-1031). */
-  async complete(matchId: number, eventId?: number): Promise<boolean> {
+  async complete(matchId: number, eventId?: number, startTime?: string): Promise<boolean> {
     const ok = await completeStandalonePoll(this.db, matchId);
     if (ok && eventId) {
-      this.fireAutoSignup(matchId, eventId).catch((err: unknown) => {
+      this.fireAutoSignup(matchId, eventId, startTime).catch((err: unknown) => {
         this.logger.warn(`Auto-signup failed for match ${matchId}: ${err}`);
       });
     }
@@ -69,21 +69,61 @@ export class StandalonePollService {
   }
 
   /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
-  private async fireAutoSignup(matchId: number, eventId: number): Promise<void> {
+  private async fireAutoSignup(matchId: number, eventId: number, startTime?: string): Promise<void> {
     const slots = await findScheduleSlots(this.db, matchId);
     const allVoters = await findScheduleVotes(this.db, slots.map((s) => s.id));
+    const { selectedVoters, otherVoters } = this.splitVotersBySlot(slots, allVoters, startTime);
     await autoSignupSlotVoters({
-      eventId, creatorId: -1, voters: allVoters,
+      eventId, creatorId: -1, voters: selectedVoters,
       signupsService: this.signupsService,
     });
-    const match = await this.db
+    const [match] = await this.db
       .select({ gameId: schema.communityLineupMatches.gameId })
       .from(schema.communityLineupMatches)
       .where(eq(schema.communityLineupMatches.id, matchId))
       .limit(1);
-    if (match[0]?.gameId) {
-      const voterIds = [...new Set(allVoters.map((v) => v.userId))];
-      await insertPollInterests({ db: this.db, gameId: match[0].gameId, voterUserIds: voterIds });
+    if (match?.gameId) {
+      const allVoterIds = [...new Set(allVoters.map((v) => v.userId))];
+      await insertPollInterests({ db: this.db, gameId: match.gameId, voterUserIds: allVoterIds });
+    }
+    if (otherVoters.length > 0 && startTime) {
+      this.notifyNonSelectedVoters(otherVoters, startTime);
+    }
+  }
+
+  /** Split voters into selected-slot voters and other-slot voters. */
+  private splitVotersBySlot<T extends { userId: number; slotId: number }>(
+    slots: { id: number; proposedTime: Date }[],
+    allVoters: T[],
+    startTime?: string,
+  ): { selectedVoters: T[]; otherVoters: T[] } {
+    if (!startTime) return { selectedVoters: allVoters, otherVoters: [] };
+    const selectedSlot = slots.find(
+      (s) => new Date(s.proposedTime).getTime() === new Date(startTime).getTime(),
+    );
+    if (!selectedSlot) return { selectedVoters: allVoters, otherVoters: [] };
+    const selectedVoters = allVoters.filter((v) => v.slotId === selectedSlot.id);
+    const selectedIds = new Set(selectedVoters.map((v) => v.userId));
+    const otherVoters = allVoters.filter(
+      (v) => v.slotId !== selectedSlot.id && !selectedIds.has(v.userId),
+    );
+    return { selectedVoters, otherVoters };
+  }
+
+  /** Fire-and-forget DM to voters who voted for non-selected slots. */
+  private notifyNonSelectedVoters(
+    voters: { userId: number }[],
+    chosenTime: string,
+  ): void {
+    const formatted = new Date(chosenTime).toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
+    const uniqueIds = [...new Set(voters.map((v) => v.userId))];
+    for (const userId of uniqueIds) {
+      this.notifications
+        .notifyPollOutcome(userId, formatted)
+        .catch(() => { /* swallow DM failures */ });
     }
   }
 

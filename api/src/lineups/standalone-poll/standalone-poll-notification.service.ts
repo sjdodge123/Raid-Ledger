@@ -54,6 +54,16 @@ export class StandalonePollNotificationService {
     }
   }
 
+  /** DM a voter that a different timeslot was chosen (ROK-1031). */
+  async notifyPollOutcome(userId: number, chosenTime: string): Promise<void> {
+    await this.notificationService.create({
+      userId,
+      type: 'community_lineup',
+      title: 'Scheduling poll result',
+      message: `The poll chose **${chosenTime}**. You voted for a different time so you weren't auto-signed up — check the event if you'd still like to join!`,
+    });
+  }
+
   /** Find users with affinity for the game, excluding the creator. */
   private async findRecipients(
     gameId: number,

@@ -27,7 +27,7 @@ export const gameInterests = pgTable(
     gameId: integer('game_id')
       .references(() => games.id, { onDelete: 'cascade' })
       .notNull(),
-    /** Source of the interest. Valid values: 'manual', 'discord', 'steam_library', 'steam_wishlist' (enforced by DB CHECK constraint) */
+    /** Source of the interest. Valid values: 'manual', 'discord', 'steam_library', 'steam_wishlist', 'poll' (enforced by DB CHECK constraint) */
     source: text('source').default('manual').notNull(),
     /** ROK-417: Total minutes played (Steam lifetime) */
     playtimeForever: integer('playtime_forever'),

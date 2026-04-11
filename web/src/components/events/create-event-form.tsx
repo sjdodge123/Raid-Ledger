@@ -20,7 +20,7 @@ import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount } from './create-event-form.utils';
 import { FormSection, TemplatesBar, WhenSection, SaveTemplateBar, FormFooter } from './create-event-form-sections';
 
-function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope, schedulingMatchId?: number | null) {
+function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope, schedulingMatchId?: number | null, schedulingStartTime?: string | null) {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const isSeriesEdit = isEditMode && !!seriesScope && seriesScope !== 'this';
@@ -34,7 +34,7 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
             toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
             queryClient.invalidateQueries({ queryKey: ['events'] });
             if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
-            if (schedulingMatchId) void completeStandalonePoll(schedulingMatchId, event?.id);
+            if (schedulingMatchId) void completeStandalonePoll(schedulingMatchId, event?.id, schedulingStartTime ?? undefined);
             navigate(event ? `/events/${event.id}` : `/events/${editEventId}`);
         },
         onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
@@ -149,7 +149,7 @@ function useCreateEventFormState(
     const [errors, setErrors] = useState<FormErrors>({});
     const registryGameId = useRegistryGameId(form.game);
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
-    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope, schedulingMatchId);
+    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope, schedulingMatchId, initialStartTime);
     const tpl = useTemplateActions(form);
     const endTimePreview = useEndTimePreview(form.startDate, form.startTime, form.durationMinutes, resolved);
     const recurrenceCount = useMemo(() => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil), [form.recurrenceFrequency, form.startDate, form.recurrenceUntil]);

@@ -192,8 +192,15 @@ async function signupWithoutCharacter(a: NoCharSignupArgs): Promise<boolean> {
     game.hasRoles && clientUrl
       ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
       : '';
+  let conflictSuffix = '';
+  try {
+    const conflicts = await findConflictingEvents(deps.db, {
+      userId, startTime: event.duration[0], endTime: event.duration[1], excludeEventId: eventId,
+    });
+    conflictSuffix = buildConflictWarning(conflicts);
+  } catch { /* swallow */ }
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${nudge}`,
+    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${nudge}${conflictSuffix}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);

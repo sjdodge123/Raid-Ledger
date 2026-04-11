@@ -246,6 +246,7 @@ async function handleLinkedNoCharRoleSelect(
     interaction,
     eventId,
     deps,
+    linkedUser.id,
     roleCtx.rolesLabel,
     signupStatus,
     result.assignedSlot ?? undefined,
@@ -268,13 +269,22 @@ async function confirmNoCharSignup(
   interaction: StringSelectMenuInteraction,
   eventId: number,
   deps: SignupInteractionDeps,
+  userId: number,
   rolesLabel: string,
   signupStatus?: 'tentative',
   assignedSlot?: string,
 ): Promise<void> {
   const eventTitle = await fetchEventTitle(eventId, deps);
+  let conflictSuffix = '';
+  try {
+    const [event] = await deps.db.select().from(schema.events).where(eq(schema.events.id, eventId)).limit(1);
+    if (event) {
+      const conflicts = await findConflictingEvents(deps.db, { userId, startTime: event.duration[0], endTime: event.duration[1], excludeEventId: eventId });
+      conflictSuffix = buildConflictWarning(conflicts);
+    }
+  } catch { /* swallow */ }
   await interaction.editReply({
-    content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel)}${benchSuffix(assignedSlot)}`,
+    content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel)}${benchSuffix(assignedSlot)}${conflictSuffix}`,
     embeds: [],
     components: [],
   });
