@@ -56,12 +56,12 @@ export class StandalonePollService {
     return findActiveStandalonePolls(this.db);
   }
 
-  /** Mark a standalone poll as completed (match → scheduled, lineup → archived).
+  /** Mark a standalone poll as completed (match -> scheduled, lineup -> archived).
    *  When eventId is provided, auto-signup slot voters and auto-heart the game (ROK-1031). */
-  async complete(matchId: number, eventId?: number, startTime?: string): Promise<boolean> {
+  async complete(matchId: number, eventId?: number, startTime?: string, creatorId?: number): Promise<boolean> {
     const ok = await completeStandalonePoll(this.db, matchId);
     if (ok && eventId) {
-      this.fireAutoSignup(matchId, eventId, startTime).catch((err: unknown) => {
+      this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch((err: unknown) => {
         this.logger.warn(`Auto-signup failed for match ${matchId}: ${err}`);
       });
     }
@@ -69,12 +69,12 @@ export class StandalonePollService {
   }
 
   /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
-  private async fireAutoSignup(matchId: number, eventId: number, startTime?: string): Promise<void> {
+  private async fireAutoSignup(matchId: number, eventId: number, startTime?: string, creatorId?: number): Promise<void> {
     const slots = await findScheduleSlots(this.db, matchId);
     const allVoters = await findScheduleVotes(this.db, slots.map((s) => s.id));
     const { selectedVoters, otherVoters } = this.splitVotersBySlot(slots, allVoters, startTime);
     await autoSignupSlotVoters({
-      eventId, creatorId: -1, voters: selectedVoters,
+      eventId, creatorId: creatorId ?? -1, voters: selectedVoters,
       signupsService: this.signupsService,
     });
     const [match] = await this.db

@@ -201,7 +201,7 @@ export async function removeInterest(
 ): Promise<GameInterestResponseDto> {
   const source = await getUserInterestSource(db, gameId, userId);
 
-  if (source === 'discord') {
+  if (source === 'discord' || source === 'poll') {
     await db
       .insert(schema.gameInterestSuppressions)
       .values({ userId, gameId })

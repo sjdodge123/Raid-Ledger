@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
 import type { CreateEventDto, UpdateEventDto, RecurrenceDto, TemplateConfigDto, EventResponseDto, SeriesScope } from '@raid-ledger/contract';
 import { createEvent, updateEvent, updateSeries, completeStandalonePoll } from '../../lib/api-client';
+import { useAuth } from '../../hooks/use-auth';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
@@ -20,7 +21,7 @@ import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount } from './create-event-form.utils';
 import { FormSection, TemplatesBar, WhenSection, SaveTemplateBar, FormFooter } from './create-event-form-sections';
 
-function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope, schedulingMatchId?: number | null, schedulingStartTime?: string | null) {
+function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope, schedulingMatchId?: number | null, schedulingStartTime?: string | null, userId?: number) {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const isSeriesEdit = isEditMode && !!seriesScope && seriesScope !== 'this';
@@ -34,7 +35,11 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
             toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
             queryClient.invalidateQueries({ queryKey: ['events'] });
             if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
-            if (schedulingMatchId) void completeStandalonePoll(schedulingMatchId, event?.id, schedulingStartTime ?? undefined);
+            if (schedulingMatchId) {
+                completeStandalonePoll(schedulingMatchId, event?.id, schedulingStartTime ?? undefined, userId).catch(() => {
+                    toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
+                });
+            }
             navigate(event ? `/events/${event.id}` : `/events/${editEventId}`);
         },
         onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
@@ -149,7 +154,8 @@ function useCreateEventFormState(
     const [errors, setErrors] = useState<FormErrors>({});
     const registryGameId = useRegistryGameId(form.game);
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
-    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope, schedulingMatchId, initialStartTime);
+    const { user } = useAuth();
+    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope, schedulingMatchId, initialStartTime, user?.id);
     const tpl = useTemplateActions(form);
     const endTimePreview = useEndTimePreview(form.startDate, form.startTime, form.durationMinutes, resolved);
     const recurrenceCount = useMemo(() => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil), [form.recurrenceFrequency, form.startDate, form.recurrenceUntil]);

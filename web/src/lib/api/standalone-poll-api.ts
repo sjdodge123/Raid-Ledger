@@ -16,8 +16,13 @@ export async function getActiveStandalonePolls(): Promise<ActiveStandalonePollDt
 
 /** Complete a standalone poll (archive after reschedule/event creation).
  *  When eventId is provided, auto-signup slot voters for that event (ROK-1031). */
-export async function completeStandalonePoll(matchId: number, eventId?: number, startTime?: string): Promise<void> {
-  const body = eventId ? { eventId, startTime } : undefined;
+export async function completeStandalonePoll(
+  matchId: number,
+  eventId?: number,
+  startTime?: string,
+  creatorId?: number,
+): Promise<void> {
+  const body = eventId ? { eventId, startTime, creatorId } : undefined;
   await fetchApi(`/scheduling-polls/${matchId}/complete`, {
     method: 'POST',
     body: body ? JSON.stringify(body) : undefined,
