@@ -198,9 +198,10 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
         ),
     );
 
-    // Advance directly to decided (new phase order: voting → decided)
+    // Advance to decided — provide decidedGameId to bypass tiebreaker guard
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'decided',
+        decidedGameId: gameIds[0],
     });
 
     // Fetch matches to verify they were generated

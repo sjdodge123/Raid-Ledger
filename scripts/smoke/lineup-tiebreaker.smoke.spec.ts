@@ -172,7 +172,7 @@ async function createVotingLineupWithTiebreaker(
     await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gameIds[0] });
     await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gameIds[1] });
 
-    // Start the tiebreaker (this endpoint does not exist yet -- TDD)
+    // Start the tiebreaker
     await apiPost(token, `/lineups/${lineupId}/tiebreaker`, {
         mode,
         roundDurationHours: 24,
@@ -232,9 +232,18 @@ test.describe('Tiebreaker prompt modal', () => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // AC: When voting deadline hits and top games have equal vote counts,
-        // system creates a pending tiebreaker and operator sees the prompt modal.
-        // The modal should show tied games and offer bracket/veto mode options.
+        // AC: When operator tries to advance to decided with tied games,
+        // the TIEBREAKER_REQUIRED error triggers the prompt modal.
+        // Click "Scheduling" in the breadcrumb (first click shows confirmation).
+        const advanceBtn = page.getByRole('button', { name: 'Scheduling' });
+        await expect(advanceBtn).toBeVisible({ timeout: 10_000 });
+        await advanceBtn.click();
+        // Second click confirms the transition attempt.
+        const confirmBtn = page.getByRole('button', { name: /advance/i });
+        await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+        await confirmBtn.click();
+
+        // TIEBREAKER_REQUIRED error opens the prompt modal
         const modal = page.locator('[data-testid="tiebreaker-prompt-modal"]');
         await expect(modal).toBeVisible({ timeout: 15_000 });
 
@@ -249,6 +258,14 @@ test.describe('Tiebreaker prompt modal', () => {
     test('TiebreakerPromptModal shows dismiss option for operator', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // Trigger the modal via breadcrumb advance attempt
+        const advanceBtn = page.getByRole('button', { name: 'Scheduling' });
+        await expect(advanceBtn).toBeVisible({ timeout: 10_000 });
+        await advanceBtn.click();
+        const confirmBtn = page.getByRole('button', { name: /advance/i });
+        await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+        await confirmBtn.click();
 
         // AC: Operator can dismiss tiebreaker, proceeding to decided
         const modal = page.locator('[data-testid="tiebreaker-prompt-modal"]');

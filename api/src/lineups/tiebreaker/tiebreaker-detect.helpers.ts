@@ -56,6 +56,9 @@ export async function guardTiebreakerOnTransition(
   dto: UpdateLineupStatusDto,
 ): Promise<void> {
   if (currentStatus === 'voting' && dto.status === 'decided') {
+    // Operator explicitly chose a winner — skip tie detection
+    if (dto.decidedGameId) return;
+
     const winner = await findResolvedTiebreakerWinner(db, lineupId);
     if (winner) {
       dto.decidedGameId = winner;

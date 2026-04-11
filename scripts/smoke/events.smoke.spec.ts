@@ -74,12 +74,12 @@ test.describe('Events list', () => {
         ).toBeVisible({ timeout: 5_000 });
     });
 
-    test('Create Event and Plan Event links are visible', async ({ page }) => {
+    test('Create Event link and Schedule a Game button are visible', async ({ page }) => {
         test.skip(test.info().project.name === 'mobile', 'Desktop-only test — links hidden on mobile');
 
         await page.goto('/events');
         await expect(page.getByRole('link', { name: 'Create Event' })).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByRole('link', { name: 'Plan Event' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Schedule a Game' })).toBeVisible();
     });
 });
 
@@ -149,12 +149,12 @@ test.describe('Events list — mobile', () => {
         ).toBeVisible({ timeout: 5_000 });
     });
 
-    test('Create Event and Plan Event links are visible', async ({ page }) => {
+    test('Create Event link and Schedule a Game button are visible', async ({ page }) => {
         test.skip(test.info().project.name === 'desktop', 'Mobile-only test — verifies mobile action links');
 
         await page.goto('/events');
         await expect(page.getByRole('link', { name: 'Create Event' })).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByRole('link', { name: 'Plan Event' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Schedule a Game' })).toBeVisible();
     });
 });
 
