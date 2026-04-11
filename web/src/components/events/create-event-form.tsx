@@ -139,8 +139,9 @@ function useCreateEventFormState(
         const state = getInitialState(editEvent, resolved, initialStartTime);
         if (!editEvent && initialGame) {
             state.game = initialGame as FormState['game'];
-            if (initialGame.playerCount?.max && !state.maxAttendees) {
-                state.maxAttendees = String(initialGame.playerCount.max);
+            if (initialGame.playerCount?.max) {
+                state.slotPlayer = initialGame.playerCount.max;
+                if (!state.maxAttendees) state.maxAttendees = String(initialGame.playerCount.max);
             }
         }
         return state;
@@ -203,8 +204,9 @@ function GameContentSection({ form, setForm, errors, setErrors, isEditMode, inte
                 titleInputId="title" eventTypeSelectId="eventType" showEventType={!isEditMode}
                 onGameChange={(game) => setForm((prev) => {
                     const updates: Partial<typeof prev> = { game, titleIsAutoSuggested: prev.titleIsAutoSuggested };
-                    if (game?.playerCount?.max && !prev.maxAttendees) {
-                        updates.maxAttendees = String(game.playerCount.max);
+                    if (game?.playerCount?.max) {
+                        updates.slotPlayer = game.playerCount.max;
+                        if (!prev.maxAttendees) updates.maxAttendees = String(game.playerCount.max);
                     }
                     return { ...prev, ...updates };
                 })}

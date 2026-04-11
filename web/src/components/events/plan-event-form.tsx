@@ -226,8 +226,9 @@ function PlanGameSection({ form, setForm, errors, setErrors }: {
                 titleError={errors.title} titleInputId="planTitle" eventTypeSelectId="planEventType"
                 onGameChange={(game) => setForm((prev) => {
                     const updates: Partial<typeof prev> = { game, titleIsAutoSuggested: prev.titleIsAutoSuggested };
-                    if (game?.playerCount?.max && !prev.maxAttendees) {
-                        updates.maxAttendees = String(game.playerCount.max);
+                    if (game?.playerCount?.max) {
+                        updates.slotPlayer = game.playerCount.max;
+                        if (!prev.maxAttendees) updates.maxAttendees = String(game.playerCount.max);
                     }
                     return { ...prev, ...updates };
                 })}

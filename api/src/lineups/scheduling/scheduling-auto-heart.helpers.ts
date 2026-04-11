@@ -29,21 +29,21 @@ export async function insertPollInterests(
   const { db, gameId, voterUserIds } = params;
   if (voterUserIds.length === 0) return;
 
-  const suppressionRows = await db
-    .select({
-      userId: schema.gameInterestSuppressions.userId,
-      gameId: schema.gameInterestSuppressions.gameId,
-    })
-    .from(schema.gameInterestSuppressions)
-    .where(
-      and(
-        inArray(schema.gameInterestSuppressions.userId, voterUserIds),
-        eq(schema.gameInterestSuppressions.gameId, gameId),
-      ),
-    );
-
-  const suppressions = Array.isArray(suppressionRows) ? suppressionRows : [];
-  const suppressedSet = new Set(suppressions.map((s) => s.userId));
+  let suppressedSet = new Set<number>();
+  try {
+    const suppressionRows = await db
+      .select({ userId: schema.gameInterestSuppressions.userId })
+      .from(schema.gameInterestSuppressions)
+      .where(
+        and(
+          inArray(schema.gameInterestSuppressions.userId, voterUserIds),
+          eq(schema.gameInterestSuppressions.gameId, gameId),
+        ),
+      );
+    suppressedSet = new Set(suppressionRows.map((s) => s.userId));
+  } catch {
+    // Suppression table may not exist yet — proceed without filtering
+  }
   const eligibleUserIds = voterUserIds.filter((uid) => !suppressedSet.has(uid));
 
   if (eligibleUserIds.length === 0) {
