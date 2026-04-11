@@ -224,7 +224,13 @@ function PlanGameSection({ form, setForm, errors, setErrors }: {
                 titleIsAutoSuggested={form.titleIsAutoSuggested}
                 descriptionIsAutoSuggested={form.descriptionIsAutoSuggested}
                 titleError={errors.title} titleInputId="planTitle" eventTypeSelectId="planEventType"
-                onGameChange={(game) => setForm((prev) => ({ ...prev, game, titleIsAutoSuggested: prev.titleIsAutoSuggested }))}
+                onGameChange={(game) => setForm((prev) => {
+                    const updates: Partial<typeof prev> = { game, titleIsAutoSuggested: prev.titleIsAutoSuggested };
+                    if (game?.playerCount?.max && !prev.maxAttendees) {
+                        updates.maxAttendees = String(game.playerCount.max);
+                    }
+                    return { ...prev, ...updates };
+                })}
                 onEventTypeIdChange={(id) => setForm((prev) => ({ ...prev, eventTypeId: id }))}
                 onTitleChange={(title, isAuto) => {
                     setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto }));

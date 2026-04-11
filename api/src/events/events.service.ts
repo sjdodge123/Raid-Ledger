@@ -54,6 +54,8 @@ import {
 import { inviteMemberFlow } from './event-invite.helpers';
 import { findOneEvent, findEventsByIds } from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
+import { findConflictingEvents } from './event-conflict.helpers';
 
 @Injectable()
 export class EventsService {
@@ -140,6 +142,17 @@ export class EventsService {
   async findOne(id: number): Promise<EventResponseDto> {
     const row = await findOneEvent(this.db, id);
     return mapEventToResponse(row);
+  }
+
+  /** Finds a single event and enriches with conflict data for the user. */
+  async findOneWithConflicts(
+    id: number,
+    userId: number | null,
+  ): Promise<EventResponseDto> {
+    const event = await this.findOne(id);
+    return enrichEventWithConflicts(event, userId, (params) =>
+      findConflictingEvents(this.db, params),
+    );
   }
 
   /** Finds multiple events by IDs. */

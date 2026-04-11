@@ -8,10 +8,8 @@
  */
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { insertPollInterests } from './scheduling-auto-heart.helpers';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../../common/testing/drizzle-mock';
+import { createDrizzleMock } from '../../common/testing/drizzle-mock';
+import type { MockDb } from '../../common/testing/drizzle-mock';
 import { createMockUser } from '../../common/testing/factories';
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
 
@@ -146,9 +144,7 @@ describe('autoSignupSlotVoters', () => {
     const calledUserIds = mockSignupsService.signup.mock.calls.map(
       (call: [number, number]) => call[1],
     );
-    const user10Calls = calledUserIds.filter(
-      (id: number) => id === 10,
-    ).length;
+    const user10Calls = calledUserIds.filter((id: number) => id === 10).length;
     expect(user10Calls).toBe(1);
     expect(mockSignupsService.signup).toHaveBeenCalledTimes(2);
   });
@@ -226,9 +222,7 @@ describe('insertPollInterests', () => {
     const valuesCall = mockDb.values.mock.calls[0][0] as Array<{
       userId: number;
     }>;
-    const insertedUserIds = valuesCall.map(
-      (v: { userId: number }) => v.userId,
-    );
+    const insertedUserIds = valuesCall.map((v: { userId: number }) => v.userId);
     expect(insertedUserIds).not.toContain(11);
     expect(insertedUserIds).toContain(10);
     expect(insertedUserIds).toContain(12);

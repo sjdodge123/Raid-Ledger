@@ -196,7 +196,13 @@ function GameContentSection({ form, setForm, errors, setErrors, isEditMode, inte
                 selectedInstances={form.selectedInstances} titleIsAutoSuggested={form.titleIsAutoSuggested}
                 descriptionIsAutoSuggested={form.descriptionIsAutoSuggested} titleError={errors.title}
                 titleInputId="title" eventTypeSelectId="eventType" showEventType={!isEditMode}
-                onGameChange={(game) => setForm((prev) => ({ ...prev, game, titleIsAutoSuggested: prev.titleIsAutoSuggested }))}
+                onGameChange={(game) => setForm((prev) => {
+                    const updates: Partial<typeof prev> = { game, titleIsAutoSuggested: prev.titleIsAutoSuggested };
+                    if (game?.playerCount?.max && !prev.maxAttendees) {
+                        updates.maxAttendees = String(game.playerCount.max);
+                    }
+                    return { ...prev, ...updates };
+                })}
                 onEventTypeIdChange={(id) => setForm((prev) => ({ ...prev, eventTypeId: id }))}
                 onTitleChange={(title, isAuto) => { setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto })); if (!isAuto && errors.title) setErrors((prev) => ({ ...prev, title: undefined })); }}
                 onDescriptionChange={(description, isAuto) => setForm((prev) => ({ ...prev, description, descriptionIsAutoSuggested: isAuto }))}

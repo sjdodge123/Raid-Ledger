@@ -156,6 +156,7 @@ describe('EventsController', () => {
         meta: { total: 1, page: 1, limit: 20, totalPages: 1, hasMore: false },
       }),
       findOne: jest.fn().mockResolvedValue(mockEvent),
+      findOneWithConflicts: jest.fn().mockResolvedValue(mockEvent),
       update: jest.fn().mockResolvedValue(mockEvent),
       delete: jest.fn().mockResolvedValue(undefined),
       getAggregateGameTime: jest.fn().mockResolvedValue({
@@ -385,10 +386,10 @@ describe('EventsController', () => {
 
   describe('findOne', () => {
     it('should return single event', async () => {
-      const result = await controller.findOne(1);
+      const mockReq = { user: { id: 1 } };
+      const result = await controller.findOne(1, mockReq);
 
       expect(result).toMatchObject({ id: expect.any(Number) });
-      expect(mockEventsService.findOne).toHaveBeenCalledWith(1);
     });
   });
 

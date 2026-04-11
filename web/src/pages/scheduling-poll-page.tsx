@@ -218,7 +218,8 @@ function ActivePollSections({ lineupId, matchId, poll }: {
         }} />
       <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
         readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
-        isSuggesting={isSuggesting} prefillTime={prefillTime} />
+        isSuggesting={isSuggesting} prefillTime={prefillTime}
+        conflictingSlotIds={poll.conflictingSlotIds} />
       <CreateEventSection slots={poll.slots} match={poll.match} matchId={matchId}
         hasVoted={hasVoted} readOnly={readOnly}
         createdEventId={createdEventId} linkedEventId={poll.match.linkedEventId ?? null}

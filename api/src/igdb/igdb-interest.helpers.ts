@@ -13,7 +13,7 @@ import {
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Sources that count as "interested" (hearts). Library/wishlist are separate. */
-export const HEART_SOURCES = ['manual', 'discord', 'steam'];
+export const HEART_SOURCES = ['manual', 'discord', 'steam', 'poll'];
 
 /** SQL expression for distinct user count (ROK-804). */
 const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
@@ -280,7 +280,9 @@ export async function fetchGameInterestResponse(
     wantToPlay: d.source !== null,
     count: d.count,
     players: d.players,
-    source: d.source ? (d.source as 'manual' | 'steam' | 'discord') : undefined,
+    source: d.source
+      ? (d.source as 'manual' | 'steam' | 'discord' | 'poll')
+      : undefined,
     ownerCount: d.ownerCount,
     owners: d.owners,
     wishlisters: d.wishlisters,

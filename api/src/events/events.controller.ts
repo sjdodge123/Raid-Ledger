@@ -105,10 +105,12 @@ export class EventsController {
   }
 
   @Get(':id')
+  @UseGuards(OptionalJwtGuard)
   async findOne(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: { user?: { id: number } },
   ): Promise<EventResponseDto> {
-    return this.eventsService.findOne(id);
+    return this.eventsService.findOneWithConflicts(id, req.user?.id ?? null);
   }
 
   @Get(':id/activity')

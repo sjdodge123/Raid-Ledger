@@ -377,11 +377,12 @@ describe('getInterestCount — adversarial edge cases', () => {
 // ─── HEART_SOURCES constant — adversarial (ROK-804) ─────────────────────────
 
 describe('HEART_SOURCES constant', () => {
-  it('contains exactly manual, discord, steam — no other values', () => {
-    expect(HEART_SOURCES).toHaveLength(3);
+  it('contains exactly manual, discord, steam, poll — no other values', () => {
+    expect(HEART_SOURCES).toHaveLength(4);
     expect(HEART_SOURCES).toContain('manual');
     expect(HEART_SOURCES).toContain('discord');
     expect(HEART_SOURCES).toContain('steam');
+    expect(HEART_SOURCES).toContain('poll');
   });
 
   it('does not include steam_library (ownership, not interest)', () => {

@@ -11,14 +11,8 @@
  * - Support self-exclusion via excludeEventId parameter
  */
 import { findConflictingEvents } from './event-conflict.helpers';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
-import {
-  createMockEvent,
-  createMockSignup,
-} from '../common/testing/factories';
+import { createDrizzleMock } from '../common/testing/drizzle-mock';
+import type { MockDb } from '../common/testing/drizzle-mock';
 
 // ─── Shared test data ──────────────────────────────────────────────────────
 
@@ -27,9 +21,7 @@ const START_TIME = new Date('2026-05-01T18:00:00Z');
 const END_TIME = new Date('2026-05-01T20:00:00Z');
 
 /** Build a conflicting event row as returned by the query. */
-function buildConflictEvent(
-  overrides: Record<string, unknown> = {},
-) {
+function buildConflictEvent(overrides: Record<string, unknown> = {}) {
   return {
     id: 10,
     title: 'Conflicting Event',
