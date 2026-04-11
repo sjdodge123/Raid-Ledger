@@ -17,7 +17,16 @@ import { SettingsService } from '../settings/settings.service';
 // ---------------------------------------------------------------------------
 
 function makeMockDb() {
-  return { execute: jest.fn().mockResolvedValue([]) };
+  return {
+    execute: jest.fn().mockResolvedValue([]),
+    select: jest.fn().mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([{ embedMessageId: null }]),
+        }),
+      }),
+    }),
+  };
 }
 
 function makeMockNotificationService() {
@@ -658,56 +667,40 @@ describe('LineupNotificationService', () => {
 
     // AC1: embedMessageId already set -> NO channel embed posted
     it('AC1: skips channel embed when embedMessageId is already set', async () => {
-      stubMatchLookup([
-        { id: MATCH_ID, embedMessageId: 'msg-existing' },
-      ]);
+      stubMatchLookup([{ id: MATCH_ID, embedMessageId: 'msg-existing' }]);
 
-      await service.notifySchedulingOpen(
-        makeMatch({ status: 'scheduling' }),
-      );
+      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
 
       expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
     });
 
     // AC2: embedMessageId already set -> DMs still sent
     it('AC2: still sends DMs when embedMessageId is already set', async () => {
-      stubMatchLookup([
-        { id: MATCH_ID, embedMessageId: 'msg-existing' },
-      ]);
+      stubMatchLookup([{ id: MATCH_ID, embedMessageId: 'msg-existing' }]);
       const members = [makeMember(1), makeMember(2)];
       mockDb.execute.mockResolvedValueOnce(members);
 
-      await service.notifySchedulingOpen(
-        makeMatch({ status: 'scheduling' }),
-      );
+      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
 
       expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
     });
 
     // AC3: embedMessageId null (lineup matches) -> channel embed posted
     it('AC3: posts channel embed when embedMessageId is null', async () => {
-      stubMatchLookup([
-        { id: MATCH_ID, embedMessageId: null },
-      ]);
+      stubMatchLookup([{ id: MATCH_ID, embedMessageId: null }]);
 
-      await service.notifySchedulingOpen(
-        makeMatch({ status: 'scheduling' }),
-      );
+      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
 
     // AC4: embedMessageId null -> DMs still sent
     it('AC4: still sends DMs when embedMessageId is null', async () => {
-      stubMatchLookup([
-        { id: MATCH_ID, embedMessageId: null },
-      ]);
+      stubMatchLookup([{ id: MATCH_ID, embedMessageId: null }]);
       const members = [makeMember(1), makeMember(2)];
       mockDb.execute.mockResolvedValueOnce(members);
 
-      await service.notifySchedulingOpen(
-        makeMatch({ status: 'scheduling' }),
-      );
+      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
 
       expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
     });

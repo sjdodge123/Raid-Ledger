@@ -33,6 +33,7 @@ import {
 import {
   findDiscordLinkedMembers,
   findMatchMemberUsers,
+  hasExistingPollEmbed,
 } from './lineup-notification-targets.helpers';
 import { DEDUP_TTL } from './lineup-notification.constants';
 
@@ -286,6 +287,8 @@ export class LineupNotificationService {
 
     const channelId = await resolveLineupChannel(this.settingsService);
     if (!channelId) return;
+
+    if (await hasExistingPollEmbed(this.db, match.id)) return;
 
     const ctx = await this.resolveCtx(match.lineupId, 'decided');
     const { embed, row } = buildSchedulingEmbed(ctx, match.gameName, match.id);

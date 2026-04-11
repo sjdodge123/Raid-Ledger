@@ -2,7 +2,7 @@
  * Target resolution queries for Community Lineup notifications (ROK-932).
  * Finds Discord-linked members and match members for DM dispatch.
  */
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { DiscordMember } from './lineup-notification-dm.helpers';
@@ -20,6 +20,19 @@ export async function findDiscordLinkedMembers(
     FROM users u
     WHERE u.discord_id IS NOT NULL
   `)) as unknown as DiscordMember[];
+}
+
+/** Check if a match already has a poll embed posted (ROK-1033). */
+export async function hasExistingPollEmbed(
+  db: Db,
+  matchId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ embedMessageId: schema.communityLineupMatches.embedMessageId })
+    .from(schema.communityLineupMatches)
+    .where(eq(schema.communityLineupMatches.id, matchId))
+    .limit(1);
+  return !!row?.embedMessageId;
 }
 
 /** Get match members with Discord linked. */
