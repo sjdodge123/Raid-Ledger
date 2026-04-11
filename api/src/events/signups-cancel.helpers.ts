@@ -38,6 +38,11 @@ export function assertEventAcceptingSignups(
       'This event has been cancelled and is no longer accepting signups.',
     );
   }
+  if (event.reschedulingPollId) {
+    throw new ConflictException(
+      'This event is being rescheduled via a scheduling poll and is no longer accepting signups.',
+    );
+  }
   if (event.adHocStatus === 'ended') {
     throw new ConflictException(
       'This event has ended and is no longer accepting signups.',

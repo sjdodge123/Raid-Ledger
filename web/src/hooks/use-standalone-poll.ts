@@ -29,6 +29,7 @@ export function useCreateSchedulingPoll() {
       void queryClient.invalidateQueries({ queryKey: ['scheduling-banner'] });
       void queryClient.invalidateQueries({ queryKey: ['standalone-polls'] });
       void queryClient.invalidateQueries({ queryKey: ['lineups'] });
+      void queryClient.invalidateQueries({ queryKey: ['events'] });
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to create scheduling poll');

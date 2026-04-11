@@ -72,6 +72,7 @@ export async function findEligibleEvents(
     INNER JOIN games g ON g.id = e.game_id
     INNER JOIN discord_event_messages dem ON dem.event_id = e.id
     WHERE e.cancelled_at IS NULL
+      AND e.rescheduling_poll_id IS NULL
       AND lower(e.duration) >= ${now.toISOString()}::timestamptz
       AND lower(e.duration) <= ${in48h.toISOString()}::timestamptz
       AND dem.embed_state != 'full' AND e.game_id IS NOT NULL

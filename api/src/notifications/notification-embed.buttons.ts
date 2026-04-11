@@ -163,8 +163,9 @@ function buildLineupButton(
       .setURL(`${clientUrl}/events/${eventId}`);
   }
   if (matchId && lineupId) {
+    const isReschedule = sub === 'event_rescheduling';
     return new ButtonBuilder()
-      .setLabel('Vote on a Time')
+      .setLabel(isReschedule ? 'Vote Now' : 'Vote on a Time')
       .setStyle(ButtonStyle.Link)
       .setURL(`${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`);
   }

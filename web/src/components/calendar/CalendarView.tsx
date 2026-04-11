@@ -88,6 +88,7 @@ function useCalendarEvents(eventsData: ReturnType<typeof useEvents>['data'], sel
         return eventsData.data
             .filter((event) => {
                 if (event.cancelledAt) return false;
+                if (event.reschedulingPollId) return false;
                 if (selectedGames === undefined) return true;
                 return event.game?.slug && selectedGames.has(event.game.slug);
             })

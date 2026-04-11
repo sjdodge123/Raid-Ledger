@@ -80,6 +80,7 @@ export function buildFilterConditions(
   if (query.includeCancelled !== 'true') {
     conditions.push(sql`${schema.events.cancelledAt} IS NULL`);
   }
+  conditions.push(sql`${schema.events.reschedulingPollId} IS NULL`);
   addUpcomingCondition(conditions, query.upcoming);
   addDateRangeConditions(conditions, query);
   addEntityConditions(conditions, query, authenticatedUserId);

@@ -8,6 +8,7 @@ import {
   type Logger,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
+import { clearLinkedEventsByLineup } from './standalone-poll/standalone-poll-query.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   CreateLineupDto,
@@ -84,6 +85,9 @@ export async function applyStatusUpdate(
       nextPhase,
       phaseDeadline.getTime() - Date.now(),
     );
+  }
+  if (dto.status === 'archived') {
+    await clearLinkedEventsByLineup(db, id);
   }
 }
 

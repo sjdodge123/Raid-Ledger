@@ -113,16 +113,55 @@ export async function insertMatchMembers(
   );
 }
 
-/** Complete a standalone poll: set match to 'scheduled' and archive the lineup.
- *  Only acts on matches whose parent lineup is marked standalone. */
+/**
+ * Atomically stamp reschedulingPollId on an event.
+ * Guard: only stamps if reschedulingPollId IS NULL AND cancelledAt IS NULL.
+ * Returns true if stamped, false if event is already rescheduling or cancelled.
+ */
+export async function stampReschedulingPollId(
+  db: Db,
+  eventId: number,
+  matchId: number,
+): Promise<boolean> {
+  const result = await db
+    .update(schema.events)
+    .set({ reschedulingPollId: matchId })
+    .where(
+      and(
+        eq(schema.events.id, eventId),
+        sql`${schema.events.reschedulingPollId} IS NULL`,
+        sql`${schema.events.cancelledAt} IS NULL`,
+      ),
+    )
+    .returning({ id: schema.events.id });
+  return result.length > 0;
+}
+
+/**
+ * Clear reschedulingPollId on an event (used on poll expiry).
+ * Does NOT cancel the event — just removes the linkage.
+ */
+export async function clearReschedulingPollId(
+  db: Db,
+  eventId: number,
+): Promise<void> {
+  await db
+    .update(schema.events)
+    .set({ reschedulingPollId: null })
+    .where(eq(schema.events.id, eventId));
+}
+
+/** Complete a standalone poll: set match to 'scheduled', archive the lineup,
+ *  and cancel any linked event. Returns linkedEventId if one was cancelled. */
 export async function completeStandalonePoll(
   db: Db,
   matchId: number,
-): Promise<boolean> {
+): Promise<{ ok: boolean; linkedEventId?: number }> {
   const [match] = await db
     .select({
       id: schema.communityLineupMatches.id,
       lineupId: schema.communityLineupMatches.lineupId,
+      linkedEventId: schema.communityLineupMatches.linkedEventId,
     })
     .from(schema.communityLineupMatches)
     .innerJoin(
@@ -136,7 +175,7 @@ export async function completeStandalonePoll(
       ),
     )
     .limit(1);
-  if (!match) return false;
+  if (!match) return { ok: false };
 
   await db.transaction(async (tx) => {
     await tx
@@ -147,8 +186,23 @@ export async function completeStandalonePoll(
       .update(schema.communityLineups)
       .set({ status: 'archived' })
       .where(eq(schema.communityLineups.id, match.lineupId));
+    if (match.linkedEventId) {
+      await cancelLinkedEvent(tx as unknown as Db, match.linkedEventId);
+    }
   });
-  return true;
+  return { ok: true, linkedEventId: match.linkedEventId ?? undefined };
+}
+
+/** Cancel a linked event and clear its reschedulingPollId. */
+async function cancelLinkedEvent(db: Db, eventId: number): Promise<void> {
+  await db
+    .update(schema.events)
+    .set({
+      cancelledAt: new Date(),
+      cancellationReason: 'Rescheduled via scheduling poll',
+      reschedulingPollId: null,
+    })
+    .where(eq(schema.events.id, eventId));
 }
 
 /** Find all active standalone polls (scheduling matches in standalone lineups). */
@@ -184,6 +238,26 @@ export async function findActiveStandalonePolls(db: Db): Promise<
     ORDER BY m.created_at DESC
   `);
   return [...rows];
+}
+
+/**
+ * Clear reschedulingPollId on all events linked to matches
+ * in the given lineup (used on poll expiry / archive).
+ */
+export async function clearLinkedEventsByLineup(
+  db: Db,
+  lineupId: number,
+): Promise<void> {
+  const matches = await db
+    .select({ linkedEventId: schema.communityLineupMatches.linkedEventId })
+    .from(schema.communityLineupMatches)
+    .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+
+  for (const m of matches) {
+    if (m.linkedEventId) {
+      await clearReschedulingPollId(db, m.linkedEventId);
+    }
+  }
 }
 
 /** Count members for a given match. */

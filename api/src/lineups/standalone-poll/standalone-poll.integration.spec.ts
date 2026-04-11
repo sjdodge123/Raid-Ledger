@@ -471,9 +471,7 @@ function describeEventsExclusion() {
     expect(res.status).toBe(200);
 
     // Response shape is { data: [...], meta: {...} }
-    const eventIds = (res.body.data as Array<{ id: number }>).map(
-      (e) => e.id,
-    );
+    const eventIds = (res.body.data as Array<{ id: number }>).map((e) => e.id);
 
     // The event being rescheduled should be hidden
     expect(eventIds).not.toContain(event.id);
