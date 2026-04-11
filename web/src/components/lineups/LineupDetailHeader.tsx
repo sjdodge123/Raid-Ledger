@@ -64,9 +64,6 @@ function PhaseBreadcrumb({ lineup, onTiebreakerIntercept }: {
       const targetStatus = PHASES[targetIdx];
 
       const body: { status: string; decidedGameId?: number | null } = { status: targetStatus };
-      if (targetStatus === 'decided') {
-        body.decidedGameId = lineup.entries[0]?.gameId ?? null;
-      }
       transition.mutate(
         { lineupId: lineup.id, body },
         {
