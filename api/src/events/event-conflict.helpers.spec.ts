@@ -167,10 +167,6 @@ describe('findConflictingEvents', () => {
   it('excludes the specified event via excludeEventId parameter', async () => {
     // When editing/viewing an event, the event itself should not
     // appear as a conflict with itself.
-    const overlapping = buildConflictEvent({
-      id: 10,
-      title: 'Same Event',
-    });
     // The DB returns 0 results because excludeEventId=10 filters it
     const db = buildConflictDb([]);
 

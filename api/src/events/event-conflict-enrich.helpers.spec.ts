@@ -4,10 +4,7 @@
  * with myConflicts when an authenticated userId is provided.
  */
 import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
-import type {
-  EventResponseDto,
-  ConflictingEventDto,
-} from '@raid-ledger/contract';
+import type { EventResponseDto } from '@raid-ledger/contract';
 
 // ─── Shared test data ───────────────��──────────────────────────────────────
 

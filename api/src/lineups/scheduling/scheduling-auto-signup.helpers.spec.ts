@@ -10,7 +10,6 @@ import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { insertPollInterests } from './scheduling-auto-heart.helpers';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 import type { MockDb } from '../../common/testing/drizzle-mock';
-import { createMockUser } from '../../common/testing/factories';
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
 
 // ─── Shared test data ──────────────────────────────────────────────────────

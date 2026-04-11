@@ -145,13 +145,9 @@ export class EventsService {
   }
 
   /** Finds a single event and enriches with conflict data for the user. */
-  async findOneWithConflicts(
-    id: number,
-    userId: number | null,
-  ): Promise<EventResponseDto> {
-    const event = await this.findOne(id);
-    return enrichEventWithConflicts(event, userId, (params) =>
-      findConflictingEvents(this.db, params),
+  async findOneWithConflicts(id: number, userId: number | null): Promise<EventResponseDto> {
+    return enrichEventWithConflicts(
+      await this.findOne(id), userId, (p) => findConflictingEvents(this.db, p),
     );
   }
 
