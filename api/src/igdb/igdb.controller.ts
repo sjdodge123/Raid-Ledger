@@ -126,6 +126,7 @@ export class IgdbController {
         enabled: schema.games.enabled,
         maxCharactersPerUser: schema.games.maxCharactersPerUser,
         genres: schema.games.genres,
+        playerCount: schema.games.playerCount,
       })
       .from(schema.games)
       .where(eq(schema.games.enabled, true))

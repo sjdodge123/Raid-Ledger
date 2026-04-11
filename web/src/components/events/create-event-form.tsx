@@ -34,7 +34,7 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
             toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
             queryClient.invalidateQueries({ queryKey: ['events'] });
             if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
-            if (schedulingMatchId) void completeStandalonePoll(schedulingMatchId);
+            if (schedulingMatchId) void completeStandalonePoll(schedulingMatchId, event?.id);
             navigate(event ? `/events/${event.id}` : `/events/${editEventId}`);
         },
         onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
@@ -137,7 +137,12 @@ function useCreateEventFormState(
     const tzAbbr = getTimezoneAbbr(resolved);
     const [form, setForm] = useState<FormState>(() => {
         const state = getInitialState(editEvent, resolved, initialStartTime);
-        if (!editEvent && initialGame) state.game = initialGame as FormState['game'];
+        if (!editEvent && initialGame) {
+            state.game = initialGame as FormState['game'];
+            if (initialGame.playerCount?.max && !state.maxAttendees) {
+                state.maxAttendees = String(initialGame.playerCount.max);
+            }
+        }
         return state;
     });
     const [errors, setErrors] = useState<FormErrors>({});

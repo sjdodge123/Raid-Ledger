@@ -6,6 +6,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SchedulingPollResponseDto } from '@raid-ledger/contract';
+import { eq } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
@@ -22,6 +23,10 @@ import {
   findActiveStandalonePolls,
   completeStandalonePoll,
 } from './standalone-poll-query.helpers';
+import { findScheduleSlots, findScheduleVotes } from '../scheduling/scheduling-query.helpers';
+import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
+import { insertPollInterests } from '../scheduling/scheduling-auto-heart.helpers';
+import { SignupsService } from '../../events/signups.service';
 
 /** Input DTO after Zod validation. */
 export interface CreatePollInput {
@@ -43,6 +48,7 @@ export class StandalonePollService {
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly notifications: StandalonePollNotificationService,
     private readonly schedulingPollEmbed: SchedulingPollEmbedService,
+    private readonly signupsService: SignupsService,
   ) {}
 
   /** List all active standalone scheduling polls. */
@@ -50,9 +56,35 @@ export class StandalonePollService {
     return findActiveStandalonePolls(this.db);
   }
 
-  /** Mark a standalone poll as completed (match → scheduled, lineup → archived). */
-  async complete(matchId: number): Promise<boolean> {
-    return completeStandalonePoll(this.db, matchId);
+  /** Mark a standalone poll as completed (match → scheduled, lineup → archived).
+   *  When eventId is provided, auto-signup slot voters and auto-heart the game (ROK-1031). */
+  async complete(matchId: number, eventId?: number): Promise<boolean> {
+    const ok = await completeStandalonePoll(this.db, matchId);
+    if (ok && eventId) {
+      this.fireAutoSignup(matchId, eventId).catch((err: unknown) => {
+        this.logger.warn(`Auto-signup failed for match ${matchId}: ${err}`);
+      });
+    }
+    return ok;
+  }
+
+  /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
+  private async fireAutoSignup(matchId: number, eventId: number): Promise<void> {
+    const slots = await findScheduleSlots(this.db, matchId);
+    const allVoters = await findScheduleVotes(this.db, slots.map((s) => s.id));
+    await autoSignupSlotVoters({
+      eventId, creatorId: -1, voters: allVoters,
+      signupsService: this.signupsService,
+    });
+    const match = await this.db
+      .select({ gameId: schema.communityLineupMatches.gameId })
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, matchId))
+      .limit(1);
+    if (match[0]?.gameId) {
+      const voterIds = [...new Set(allVoters.map((v) => v.userId))];
+      await insertPollInterests({ db: this.db, gameId: match[0].gameId, voterUserIds: voterIds });
+    }
   }
 
   /**
