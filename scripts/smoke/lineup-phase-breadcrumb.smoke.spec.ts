@@ -122,7 +122,12 @@ async function ensureLineupInPhase(token: string, targetPhase: string): Promise<
     };
     for (const status of transitions[targetPhase] ?? []) {
         const body: Record<string, unknown> = { status };
-        if (status === 'decided') body.decidedGameId = null;
+        if (status === 'decided') {
+            const detail = await apiGet(token, `/lineups/${lineupId}`);
+            if (detail?.entries?.length > 0) {
+                body.decidedGameId = detail.entries[0].gameId;
+            }
+        }
         await apiPatch(token, `/lineups/${lineupId}/status`, body);
     }
     return lineupId;

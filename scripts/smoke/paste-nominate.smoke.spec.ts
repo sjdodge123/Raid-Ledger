@@ -77,7 +77,11 @@ async function archiveLineup(token: string, id: number): Promise<void> {
     const steps = transitions[detail.status];
     if (!steps) return;
     for (const status of steps) {
-        await apiPatch(token, `/lineups/${id}/status`, { status });
+        const body: Record<string, unknown> = { status };
+        if (status === 'decided' && detail.entries?.length > 0) {
+            body.decidedGameId = detail.entries[0].gameId;
+        }
+        await apiPatch(token, `/lineups/${id}/status`, body);
     }
 }
 
