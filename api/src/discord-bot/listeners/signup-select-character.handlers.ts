@@ -157,9 +157,9 @@ async function signupWithCharacterDirect(
   const bench = benchSuffix(signupResult.assignedSlot);
   let conflictSuffix = '';
   try {
-    const event = await deps.db.select().from(schema.events).where(eq(schema.events.id, eventId)).limit(1);
-    if (event[0]) {
-      const conflicts = await findConflictingEvents(deps.db, { userId, startTime: event[0].duration[0], endTime: event[0].duration[1], excludeEventId: eventId });
+    const [event] = await deps.db.select().from(schema.events).where(eq(schema.events.id, eventId)).limit(1);
+    if (event) {
+      const conflicts = await findConflictingEvents(deps.db, { userId, startTime: event.duration[0], endTime: event.duration[1], excludeEventId: eventId });
       conflictSuffix = buildConflictWarning(conflicts);
     }
   } catch { /* swallow */ }

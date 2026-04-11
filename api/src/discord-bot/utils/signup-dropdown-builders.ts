@@ -67,7 +67,7 @@ function buildCharacterOptions(opts: CharacterSelectOptions): Array<{
       value: char.id,
       description: parts.join(' \u2014 ') || undefined,
       emoji: classEmoji,
-      default: opts.characters.length > 1 && mainChar?.id === char.id,
+      default: false,
     };
   });
 }
