@@ -19,6 +19,7 @@ import {
   getMatchAvailability,
   getSchedulingBanner,
   getOtherPolls,
+  cancelSchedulePoll,
 } from '../lib/api-client';
 
 /** Query key prefix for scheduling poll queries. */
@@ -126,5 +127,18 @@ export function useOtherPolls(lineupId: number, matchId: number) {
     queryFn: () => getOtherPolls(lineupId, matchId),
     enabled: !!lineupId && !!matchId,
     staleTime: 60_000,
+  });
+}
+
+/** Hook for cancelling a scheduling poll (operator). */
+export function useCancelSchedulePoll() {
+  const qc = useQueryClient();
+  return useMutation<{ ok: boolean }, Error, { lineupId: number; matchId: number }>({
+    mutationFn: ({ lineupId, matchId }) => cancelSchedulePoll(lineupId, matchId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
+      toast.success('Scheduling poll cancelled');
+    },
+    onError: (err) => { toast.error(err.message || 'Failed to cancel poll'); },
   });
 }

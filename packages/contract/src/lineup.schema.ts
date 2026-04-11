@@ -3,6 +3,9 @@ import { z } from 'zod';
 // Re-export match & scheduling schemas for backward compatibility (ROK-975)
 export * from './lineup-match.schema.js';
 
+// Re-export tiebreaker schemas (ROK-938)
+export * from './lineup-tiebreaker.schema.js';
+
 // ============================================================
 // Community Lineup Schemas (ROK-933)
 // ============================================================
@@ -34,6 +37,8 @@ export const CreateLineupSchema = z.object({
     matchThreshold: z.number().int().min(0).max(100).optional(),
     /** Max votes each player can cast during voting (1–10, default 3). */
     votesPerPlayer: z.number().int().min(1).max(10).optional(),
+    /** Default tiebreaker mode when voting deadline expires. Null = skip tiebreaker. */
+    defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable().optional(),
 });
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
@@ -106,6 +111,8 @@ export const LineupDetailResponseSchema = z.object({
     matchThreshold: z.number().nullable(),
     /** Max votes each player can cast during voting (ROK-976). */
     maxVotesPerPlayer: z.number(),
+    /** Default tiebreaker mode for deadline expiry (ROK-938). */
+    defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable(),
     entries: z.array(LineupEntryResponseSchema),
     totalVoters: z.number(),
     totalMembers: z.number(),
@@ -117,6 +124,8 @@ export const LineupDetailResponseSchema = z.object({
     unlinkedSteamMembers: z.array(z.object({ id: z.number(), displayName: z.string() })),
     createdAt: z.string(),
     updatedAt: z.string(),
+    /** Active tiebreaker detail, null when no tiebreaker (ROK-938). */
+    tiebreaker: z.unknown().nullable().optional(),
 });
 
 export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;
@@ -141,6 +150,8 @@ export const LineupBannerResponseSchema = z.object({
     totalMembers: z.number(),
     decidedGameName: z.string().nullable(),
     entries: z.array(LineupBannerEntrySchema),
+    /** Whether a tiebreaker is active on this lineup (ROK-938). */
+    tiebreakerActive: z.boolean().optional(),
 });
 
 export type LineupBannerResponseDto = z.infer<typeof LineupBannerResponseSchema>;

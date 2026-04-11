@@ -1,6 +1,6 @@
 {
-  "id": "ff32caf4-1dcd-441c-a9de-8e57109d684d",
-  "prevId": "ba5bfc25-9a8b-4746-be8a-fd361e4a2e05",
+  "id": "191d492d-11fe-41be-bdbb-ff40a9422061",
+  "prevId": "758ea382-c6cd-453f-a68b-886355652ca1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5317,6 +5317,18 @@
           "notNull": true,
           "default": 3
         },
+        "default_tiebreaker_mode": {
+          "name": "default_tiebreaker_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_tiebreaker_id": {
+          "name": "active_tiebreaker_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -5366,6 +5378,419 @@
           "tableTo": "users",
           "columnsFrom": [
             "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.community_lineup_tiebreaker_bracket_matchups": {
+      "name": "community_lineup_tiebreaker_bracket_matchups",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tiebreaker_id": {
+          "name": "tiebreaker_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "round": {
+          "name": "round",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "game_a_id": {
+          "name": "game_a_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "game_b_id": {
+          "name": "game_b_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "winner_game_id": {
+          "name": "winner_game_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_bye": {
+          "name": "is_bye",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "community_lineup_tiebreaker_bracket_matchups_tiebreaker_id_community_lineup_tiebreakers_id_fk": {
+          "name": "community_lineup_tiebreaker_bracket_matchups_tiebreaker_id_community_lineup_tiebreakers_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_bracket_matchups",
+          "tableTo": "community_lineup_tiebreakers",
+          "columnsFrom": [
+            "tiebreaker_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "community_lineup_tiebreaker_bracket_matchups_game_a_id_games_id_fk": {
+          "name": "community_lineup_tiebreaker_bracket_matchups_game_a_id_games_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_bracket_matchups",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_a_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "community_lineup_tiebreaker_bracket_matchups_game_b_id_games_id_fk": {
+          "name": "community_lineup_tiebreaker_bracket_matchups_game_b_id_games_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_bracket_matchups",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_b_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "community_lineup_tiebreaker_bracket_matchups_winner_game_id_games_id_fk": {
+          "name": "community_lineup_tiebreaker_bracket_matchups_winner_game_id_games_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_bracket_matchups",
+          "tableTo": "games",
+          "columnsFrom": [
+            "winner_game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_tiebreaker_matchup_round_pos": {
+          "name": "uq_tiebreaker_matchup_round_pos",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tiebreaker_id",
+            "round",
+            "position"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.community_lineup_tiebreaker_bracket_votes": {
+      "name": "community_lineup_tiebreaker_bracket_votes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "matchup_id": {
+          "name": "matchup_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "game_id": {
+          "name": "game_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "community_lineup_tiebreaker_bracket_votes_matchup_id_community_lineup_tiebreaker_bracket_matchups_id_fk": {
+          "name": "community_lineup_tiebreaker_bracket_votes_matchup_id_community_lineup_tiebreaker_bracket_matchups_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_bracket_votes",
+          "tableTo": "community_lineup_tiebreaker_bracket_matchups",
+          "columnsFrom": [
+            "matchup_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "community_lineup_tiebreaker_bracket_votes_user_id_users_id_fk": {
+          "name": "community_lineup_tiebreaker_bracket_votes_user_id_users_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_bracket_votes",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "community_lineup_tiebreaker_bracket_votes_game_id_games_id_fk": {
+          "name": "community_lineup_tiebreaker_bracket_votes_game_id_games_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_bracket_votes",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_tiebreaker_bracket_vote": {
+          "name": "uq_tiebreaker_bracket_vote",
+          "nullsNotDistinct": false,
+          "columns": [
+            "matchup_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.community_lineup_tiebreaker_vetoes": {
+      "name": "community_lineup_tiebreaker_vetoes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tiebreaker_id": {
+          "name": "tiebreaker_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "game_id": {
+          "name": "game_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revealed": {
+          "name": "revealed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "community_lineup_tiebreaker_vetoes_tiebreaker_id_community_lineup_tiebreakers_id_fk": {
+          "name": "community_lineup_tiebreaker_vetoes_tiebreaker_id_community_lineup_tiebreakers_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_vetoes",
+          "tableTo": "community_lineup_tiebreakers",
+          "columnsFrom": [
+            "tiebreaker_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "community_lineup_tiebreaker_vetoes_user_id_users_id_fk": {
+          "name": "community_lineup_tiebreaker_vetoes_user_id_users_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_vetoes",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "community_lineup_tiebreaker_vetoes_game_id_games_id_fk": {
+          "name": "community_lineup_tiebreaker_vetoes_game_id_games_id_fk",
+          "tableFrom": "community_lineup_tiebreaker_vetoes",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_tiebreaker_veto_user": {
+          "name": "uq_tiebreaker_veto_user",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tiebreaker_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.community_lineup_tiebreakers": {
+      "name": "community_lineup_tiebreakers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lineup_id": {
+          "name": "lineup_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "tied_game_ids": {
+          "name": "tied_game_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_vote_count": {
+          "name": "original_vote_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "winner_game_id": {
+          "name": "winner_game_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "round_deadline": {
+          "name": "round_deadline",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "community_lineup_tiebreakers_lineup_id_community_lineups_id_fk": {
+          "name": "community_lineup_tiebreakers_lineup_id_community_lineups_id_fk",
+          "tableFrom": "community_lineup_tiebreakers",
+          "tableTo": "community_lineups",
+          "columnsFrom": [
+            "lineup_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "community_lineup_tiebreakers_winner_game_id_games_id_fk": {
+          "name": "community_lineup_tiebreakers_winner_game_id_games_id_fk",
+          "tableFrom": "community_lineup_tiebreakers",
+          "tableTo": "games",
+          "columnsFrom": [
+            "winner_game_id"
           ],
           "columnsTo": [
             "id"

@@ -169,7 +169,10 @@ function describeLineupsService() {
       providers: [
         LineupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: ActivityLogService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: ActivityLogService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
         {
           provide: SettingsService,
           useValue: { get: jest.fn().mockResolvedValue(null) },
@@ -320,6 +323,7 @@ function describeLineupsService() {
       mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
       // validateDecidedGame — entry with gameId 5
       mockSelects(makeSelectChain({ whereResult: [{ gameId: 5 }] }));
+      // Guard skips tiebreaker/tie checks when decidedGameId is provided
       mockUpdate();
       // findGameName for activity log
       mockSelects(makeSelectChain({ limitResult: [{ name: 'TestGame' }] }));
@@ -379,6 +383,12 @@ function describeLineupsService() {
       const votingLineup = { ...mockLineup, status: 'voting' };
       // findLineupById
       mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
+      // hasResolved tiebreaker check (ROK-938) → none
+      mockSelects(makeSelectChain({ limitResult: [] }));
+      // detectTies → countVotesPerGame → no tie
+      mockSelects(
+        makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 1 }] }),
+      );
       // applyStatusUpdate (update)
       mockDb.update.mockReturnValue({
         set: jest.fn().mockReturnValue({

@@ -24,6 +24,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { guardTiebreakerOnTransition } from './tiebreaker/tiebreaker-detect.helpers';
 import { LineupNotificationService } from './lineup-notification.service';
 import {
   findActiveLineup,
@@ -176,6 +177,9 @@ export class LineupsService {
     if (dto.status === 'decided' && dto.decidedGameId) {
       await validateDecidedGame(this.db, id, dto.decidedGameId);
     }
+
+    // Tiebreaker gate: block ties, override winner, or reset (ROK-938)
+    await guardTiebreakerOnTransition(this.db, id, lineup.status, dto);
 
     await applyStatusUpdate(
       this.db,

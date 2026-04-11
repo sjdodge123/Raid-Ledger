@@ -88,7 +88,7 @@ export async function buildBannerData(
     gameName: e.gameName,
     gameCoverUrl: e.gameCoverUrl,
   }));
-  return buildBannerResponse(
+  const result = buildBannerResponse(
     { ...lineup, decidedGameName: decidedGame[0]?.name ?? null },
     bannerEntries,
     ownerMap,
@@ -96,6 +96,10 @@ export async function buildBannerData(
     voterCount[0]?.total ?? 0,
     totalMembers,
   );
+  if (result) {
+    result.tiebreakerActive = !!lineup.activeTiebreakerId;
+  }
+  return result;
 }
 
 export function buildBannerResponse(
@@ -124,5 +128,6 @@ export function buildBannerResponse(
       ownerCount: ownerMap.get(e.gameId) ?? 0,
       voteCount: voteMap.get(e.gameId) ?? 0,
     })),
+    tiebreakerActive: false,
   };
 }

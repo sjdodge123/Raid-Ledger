@@ -13,6 +13,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
+import { TiebreakerModule } from './tiebreaker/tiebreaker.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
     forwardRef(() => DiscordBotModule),
     SettingsModule,
     BullModule.registerQueue({ name: LINEUP_PHASE_QUEUE }),
+    TiebreakerModule,
   ],
   controllers: [LineupsController],
   providers: [

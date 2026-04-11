@@ -66,6 +66,17 @@ export async function retractAllVotes(
   );
 }
 
+/** Cancel a scheduling poll (operator). */
+export async function cancelSchedulePoll(
+  lineupId: number,
+  matchId: number,
+): Promise<{ ok: boolean }> {
+  return fetchApi(
+    `/lineups/${lineupId}/schedule/${matchId}/cancel`,
+    { method: 'POST' },
+  );
+}
+
 /** Fetch heatmap availability data for a match. */
 export async function getMatchAvailability(
   lineupId: number,

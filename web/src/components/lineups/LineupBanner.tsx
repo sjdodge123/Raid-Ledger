@@ -14,6 +14,7 @@ import { NominateModal } from './NominateModal';
 import { StartLineupModal } from './start-lineup-modal';
 import { PhaseCountdown } from './phase-countdown';
 import { formatTargetDate } from './lineup-banner-helpers';
+import { TiebreakerBadge } from './tiebreaker/TiebreakerBadge';
 
 /** Pulsing green dot indicator for active lineup. */
 function PulsingDot(): JSX.Element {
@@ -58,6 +59,7 @@ function BannerHeading({ banner }: { banner: LineupBannerResponseDto }): JSX.Ele
                 What are we playing this week?
             </h2>
             <LineupStatusBadge status={banner.status} />
+            {banner.tiebreakerActive && <TiebreakerBadge />}
         </div>
     );
 }

@@ -202,6 +202,7 @@ export {
     getMatchAvailability,
     getSchedulingBanner,
     getOtherPolls,
+    cancelSchedulePoll,
 } from './api/scheduling-api';
 
 // Standalone Scheduling Polls (ROK-977)
@@ -210,3 +211,13 @@ export {
     getActiveStandalonePolls,
     completeStandalonePoll,
 } from './api/standalone-poll-api';
+
+// Tiebreaker (ROK-938)
+export {
+    getTiebreakerDetail,
+    startTiebreaker,
+    dismissTiebreaker,
+    castBracketVote,
+    castVeto,
+    forceResolveTiebreaker,
+} from './api/tiebreaker-api';
