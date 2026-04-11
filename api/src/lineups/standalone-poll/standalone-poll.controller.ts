@@ -43,9 +43,10 @@ export class StandalonePollController {
   @HttpCode(HttpStatus.OK)
   async complete(
     @Param('matchId', ParseIntPipe) matchId: number,
-    @Body() body: { eventId?: number; startTime?: string; creatorId?: number },
+    @Body() body: { eventId?: number; startTime?: string },
+    @Req() req: AuthRequest,
   ) {
-    const ok = await this.service.complete(matchId, body?.eventId, body?.startTime, body?.creatorId);
+    const ok = await this.service.complete(matchId, body?.eventId, body?.startTime, req.user.id);
     if (!ok) throw new NotFoundException('Poll not found');
     return { ok: true };
   }

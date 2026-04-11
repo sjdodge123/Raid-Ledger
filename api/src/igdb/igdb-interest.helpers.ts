@@ -188,7 +188,7 @@ export async function addInterest(
 }
 
 /**
- * Remove want-to-play interest (with auto-heart suppression for Discord source).
+ * Remove want-to-play interest (with auto-heart suppression for Discord and poll sources).
  * @param db - Database connection
  * @param gameId - Game ID
  * @param userId - User ID

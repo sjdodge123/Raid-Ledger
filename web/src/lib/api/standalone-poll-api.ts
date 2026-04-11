@@ -20,9 +20,8 @@ export async function completeStandalonePoll(
   matchId: number,
   eventId?: number,
   startTime?: string,
-  creatorId?: number,
 ): Promise<void> {
-  const body = eventId ? { eventId, startTime, creatorId } : undefined;
+  const body = eventId ? { eventId, startTime } : undefined;
   await fetchApi(`/scheduling-polls/${matchId}/complete`, {
     method: 'POST',
     body: body ? JSON.stringify(body) : undefined,
