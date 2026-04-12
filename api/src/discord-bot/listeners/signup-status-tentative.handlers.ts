@@ -7,6 +7,7 @@ import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
+import { getConflictSuffix } from './signup-conflict-warning.helpers';
 
 /** Sign up as tentative. Returns assignedSlot for bench feedback. */
 export async function signupAsTentative(
@@ -49,8 +50,13 @@ export async function handleLinkedTentative(
   }
 
   const assignedSlot = await signupAsTentative(eventId, linkedUser.id, deps);
+  const conflictSuffix = await getConflictSuffix(
+    deps.db,
+    linkedUser.id,
+    eventId,
+  );
   await interaction.editReply({
-    content: `You're marked as **tentative**.${benchSuffix(assignedSlot)}`,
+    content: `You're marked as **tentative**.${benchSuffix(assignedSlot)}${conflictSuffix}`,
     embeds: [],
   });
 }
@@ -123,6 +129,7 @@ async function tryTentativeCharPath(
       eventId,
       args.userId,
       ctx.characters[0],
+      event,
       deps,
     );
 
@@ -191,6 +198,7 @@ async function tentativeSingleCharacter(
   eventId: number,
   userId: number,
   char: import('@raid-ledger/contract').CharacterDto,
+  event: typeof schema.events.$inferSelect,
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
   const preferred = derivePreferredRoles(char);
@@ -207,8 +215,9 @@ async function tentativeSingleCharacter(
     { userId },
     { status: 'tentative' },
   );
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
-    content: `You're marked as **tentative** with **${char.name}**.${benchSuffix(result.assignedSlot)}`,
+    content: `You're marked as **tentative** with **${char.name}**.${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);

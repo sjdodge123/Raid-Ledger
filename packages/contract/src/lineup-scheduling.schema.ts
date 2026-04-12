@@ -58,6 +58,8 @@ export const SchedulePollPageResponseSchema = z.object({
   lineupStatus: z.string(),
   /** Count of distinct users who voted on any slot (ROK-1015). */
   uniqueVoterCount: z.number().int().optional(),
+  /** Slot IDs that conflict with the authenticated user's existing events (ROK-1031). */
+  conflictingSlotIds: z.array(z.number()).optional(),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;

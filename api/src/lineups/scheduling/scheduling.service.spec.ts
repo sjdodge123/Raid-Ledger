@@ -17,9 +17,20 @@ import {
 import { EventsService } from '../../events/events.service';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import { SignupsService } from '../../events/signups.service';
 
 jest.mock('../lineups-notify-hooks.helpers', () => ({
   fireEventCreated: jest.fn(),
+}));
+jest.mock('./scheduling-auto-signup.helpers', () => ({
+  autoSignupSlotVoters: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('./scheduling-auto-heart.helpers', () => ({
+  insertPollInterests: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('./scheduling-query.helpers', () => ({
+  ...jest.requireActual('./scheduling-query.helpers'),
+  findScheduleVotes: jest.fn().mockResolvedValue([]),
 }));
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -51,6 +62,7 @@ describe('SchedulingService', () => {
         SchedulingService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: EventsService, useValue: mockEventsService },
+        { provide: SignupsService, useValue: { signup: jest.fn() } },
         {
           provide: LineupNotificationService,
           useValue: { notifyEventCreated: jest.fn() },

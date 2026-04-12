@@ -20,7 +20,7 @@ import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount } from './create-event-form.utils';
 import { FormSection, TemplatesBar, WhenSection, SaveTemplateBar, FormFooter } from './create-event-form-sections';
 
-function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope, schedulingMatchId?: number | null) {
+function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope, schedulingMatchId?: number | null, schedulingStartTime?: string | null) {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const isSeriesEdit = isEditMode && !!seriesScope && seriesScope !== 'this';
@@ -34,7 +34,11 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
             toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
             queryClient.invalidateQueries({ queryKey: ['events'] });
             if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
-            if (schedulingMatchId) void completeStandalonePoll(schedulingMatchId);
+            if (schedulingMatchId) {
+                completeStandalonePoll(schedulingMatchId, event?.id, schedulingStartTime ?? undefined).catch(() => {
+                    toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
+                });
+            }
             navigate(event ? `/events/${event.id}` : `/events/${editEventId}`);
         },
         onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
@@ -137,13 +141,19 @@ function useCreateEventFormState(
     const tzAbbr = getTimezoneAbbr(resolved);
     const [form, setForm] = useState<FormState>(() => {
         const state = getInitialState(editEvent, resolved, initialStartTime);
-        if (!editEvent && initialGame) state.game = initialGame as FormState['game'];
+        if (!editEvent && initialGame) {
+            state.game = initialGame as FormState['game'];
+            if (initialGame.playerCount?.max) {
+                state.slotPlayer = initialGame.playerCount.max;
+                if (!state.maxAttendees) state.maxAttendees = String(initialGame.playerCount.max);
+            }
+        }
         return state;
     });
     const [errors, setErrors] = useState<FormErrors>({});
     const registryGameId = useRegistryGameId(form.game);
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
-    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope, schedulingMatchId);
+    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope, schedulingMatchId, initialStartTime);
     const tpl = useTemplateActions(form);
     const endTimePreview = useEndTimePreview(form.startDate, form.startTime, form.durationMinutes, resolved);
     const recurrenceCount = useMemo(() => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil), [form.recurrenceFrequency, form.startDate, form.recurrenceUntil]);
@@ -196,7 +206,14 @@ function GameContentSection({ form, setForm, errors, setErrors, isEditMode, inte
                 selectedInstances={form.selectedInstances} titleIsAutoSuggested={form.titleIsAutoSuggested}
                 descriptionIsAutoSuggested={form.descriptionIsAutoSuggested} titleError={errors.title}
                 titleInputId="title" eventTypeSelectId="eventType" showEventType={!isEditMode}
-                onGameChange={(game) => setForm((prev) => ({ ...prev, game, titleIsAutoSuggested: prev.titleIsAutoSuggested }))}
+                onGameChange={(game) => setForm((prev) => {
+                    const updates: Partial<typeof prev> = { game, titleIsAutoSuggested: prev.titleIsAutoSuggested };
+                    if (game?.playerCount?.max) {
+                        updates.slotPlayer = game.playerCount.max;
+                        if (!prev.maxAttendees) updates.maxAttendees = String(game.playerCount.max);
+                    }
+                    return { ...prev, ...updates };
+                })}
                 onEventTypeIdChange={(id) => setForm((prev) => ({ ...prev, eventTypeId: id }))}
                 onTitleChange={(title, isAuto) => { setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto })); if (!isAuto && errors.title) setErrors((prev) => ({ ...prev, title: undefined })); }}
                 onDescriptionChange={(description, isAuto) => setForm((prev) => ({ ...prev, description, descriptionIsAutoSuggested: isAuto }))}

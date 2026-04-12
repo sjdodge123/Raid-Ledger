@@ -51,7 +51,6 @@ function buildCharacterOptions(opts: CharacterSelectOptions): Array<{
   emoji?: ComponentEmojiResolvable;
   default: boolean;
 }> {
-  const mainChar = opts.characters.find((c) => c.isMain);
   return opts.characters.slice(0, 25).map((char) => {
     const parts: string[] = [];
     if (char.class) {
@@ -67,7 +66,7 @@ function buildCharacterOptions(opts: CharacterSelectOptions): Array<{
       value: char.id,
       description: parts.join(' \u2014 ') || undefined,
       emoji: classEmoji,
-      default: opts.characters.length > 1 && mainChar?.id === char.id,
+      default: false,
     };
   });
 }

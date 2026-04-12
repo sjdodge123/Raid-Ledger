@@ -4,6 +4,7 @@ import * as schema from '../../drizzle/schema';
 import { findLinkedUser } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
+import { getConflictSuffix } from './signup-conflict-warning.helpers';
 
 type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
 
@@ -114,8 +115,9 @@ async function confirmCharRoleSignup(
   assignedSlot?: string,
 ): Promise<void> {
   const character = await deps.charactersService.findOne(userId, characterId);
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
-    content: `${formatRoleConfirmation(signupStatus, character.name, rolesLabel)}${benchSuffix(assignedSlot)}`,
+    content: `${formatRoleConfirmation(signupStatus, character.name, rolesLabel)}${benchSuffix(assignedSlot)}${conflictSuffix}`,
     embeds: [],
     components: [],
   });
@@ -236,6 +238,7 @@ async function handleLinkedNoCharRoleSelect(
     interaction,
     eventId,
     deps,
+    linkedUser.id,
     roleCtx.rolesLabel,
     signupStatus,
     result.assignedSlot ?? undefined,
@@ -258,13 +261,15 @@ async function confirmNoCharSignup(
   interaction: StringSelectMenuInteraction,
   eventId: number,
   deps: SignupInteractionDeps,
+  userId: number,
   rolesLabel: string,
   signupStatus?: 'tentative',
   assignedSlot?: string,
 ): Promise<void> {
   const eventTitle = await fetchEventTitle(eventId, deps);
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
-    content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel)}${benchSuffix(assignedSlot)}`,
+    content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel)}${benchSuffix(assignedSlot)}${conflictSuffix}`,
     embeds: [],
     components: [],
   });

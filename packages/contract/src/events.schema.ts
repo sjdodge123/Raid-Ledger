@@ -110,6 +110,16 @@ export const EventGameSchema = z.object({
 
 export type EventGameDto = z.infer<typeof EventGameSchema>;
 
+/** Conflicting event summary for conflict warnings (ROK-1031). */
+export const ConflictingEventSchema = z.object({
+    id: z.number(),
+    title: z.string(),
+    startTime: z.string().datetime(),
+    endTime: z.string().datetime(),
+});
+
+export type ConflictingEventDto = z.infer<typeof ConflictingEventSchema>;
+
 /** Single event response */
 export const EventResponseSchema = z.object({
     id: z.number(),
@@ -150,6 +160,8 @@ export const EventResponseSchema = z.object({
     notificationChannelOverride: z.string().nullable().optional(),
     /** ROK-576: Extended end time when voice channel activity extends the event */
     extendedUntil: z.string().datetime().nullable().optional(),
+    /** ROK-1031: Events that conflict with this event for the authenticated user. */
+    myConflicts: z.array(ConflictingEventSchema).optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });

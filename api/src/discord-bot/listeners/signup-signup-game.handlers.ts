@@ -6,6 +6,7 @@ import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
+import { getConflictSuffix } from './signup-conflict-warning.helpers';
 
 type NewSignupCtx = {
   game: { hasRoles: boolean };
@@ -157,8 +158,9 @@ async function signupSingleCharacter(
   await deps.signupsService.confirmSignup(eventId, result.id, userId, {
     characterId: char.id,
   });
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
-    content: `Signed up as **${char.name}**!${benchSuffix(result.assignedSlot)}`,
+    content: `Signed up as **${char.name}**!${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);
@@ -182,8 +184,9 @@ async function signupWithoutCharacter(a: NoCharSignupArgs): Promise<boolean> {
     game.hasRoles && clientUrl
       ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
       : '';
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${nudge}`,
+    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${nudge}${conflictSuffix}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);

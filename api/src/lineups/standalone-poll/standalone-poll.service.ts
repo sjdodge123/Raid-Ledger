@@ -6,6 +6,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SchedulingPollResponseDto } from '@raid-ledger/contract';
+import { eq } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
@@ -22,6 +23,17 @@ import {
   findActiveStandalonePolls,
   completeStandalonePoll,
 } from './standalone-poll-query.helpers';
+import {
+  findScheduleSlots,
+  findScheduleVotes,
+} from '../scheduling/scheduling-query.helpers';
+import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
+import { insertPollInterests } from '../scheduling/scheduling-auto-heart.helpers';
+import { SignupsService } from '../../events/signups.service';
+import {
+  splitVotersBySlot,
+  formatPollTime,
+} from './standalone-poll-voter.helpers';
 
 /** Input DTO after Zod validation. */
 export interface CreatePollInput {
@@ -43,6 +55,7 @@ export class StandalonePollService {
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly notifications: StandalonePollNotificationService,
     private readonly schedulingPollEmbed: SchedulingPollEmbedService,
+    private readonly signupsService: SignupsService,
   ) {}
 
   /** List all active standalone scheduling polls. */
@@ -50,9 +63,103 @@ export class StandalonePollService {
     return findActiveStandalonePolls(this.db);
   }
 
-  /** Mark a standalone poll as completed (match → scheduled, lineup → archived). */
-  async complete(matchId: number): Promise<boolean> {
-    return completeStandalonePoll(this.db, matchId);
+  /** Mark a standalone poll as completed (match -> scheduled, lineup -> archived).
+   *  When eventId is provided, auto-signup slot voters and auto-heart the game (ROK-1031). */
+  async complete(
+    matchId: number,
+    eventId?: number,
+    startTime?: string,
+    creatorId?: number,
+  ): Promise<boolean> {
+    const ok = await completeStandalonePoll(this.db, matchId);
+    if (ok && eventId) {
+      this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
+        (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Auto-signup failed for match ${matchId}: ${msg}`);
+        },
+      );
+    }
+    return ok;
+  }
+
+  /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
+  private async fireAutoSignup(
+    matchId: number,
+    eventId: number,
+    startTime?: string,
+    creatorId?: number,
+  ): Promise<void> {
+    const slots = await findScheduleSlots(this.db, matchId);
+    const allVoters = await findScheduleVotes(
+      this.db,
+      slots.map((s) => s.id),
+    );
+    const { selectedVoters, otherVoters } = splitVotersBySlot(
+      slots,
+      allVoters,
+      startTime,
+    );
+    await autoSignupSlotVoters({
+      eventId,
+      creatorId: creatorId ?? -1,
+      voters: selectedVoters,
+      signupsService: this.signupsService,
+    });
+    const [match] = await this.db
+      .select({
+        gameId: schema.communityLineupMatches.gameId,
+        gameName: schema.games.name,
+      })
+      .from(schema.communityLineupMatches)
+      .innerJoin(
+        schema.games,
+        eq(schema.games.id, schema.communityLineupMatches.gameId),
+      )
+      .where(eq(schema.communityLineupMatches.id, matchId))
+      .limit(1);
+    if (match?.gameId) {
+      const allVoterIds = [...new Set(allVoters.map((v) => v.userId))];
+      await insertPollInterests({
+        db: this.db,
+        gameId: match.gameId,
+        voterUserIds: allVoterIds,
+      });
+    }
+    if (startTime) {
+      this.notifyVoters(
+        selectedVoters,
+        otherVoters,
+        startTime,
+        eventId,
+        match?.gameName ?? 'Game Night',
+      );
+    }
+  }
+
+  /** Fire-and-forget DMs to all poll voters (ROK-1031). */
+  private notifyVoters(
+    selected: { userId: number }[],
+    others: { userId: number }[],
+    chosenTime: string,
+    eventId: number,
+    gameName: string,
+  ): void {
+    const formatted = formatPollTime(chosenTime);
+    for (const uid of [...new Set(selected.map((v) => v.userId))]) {
+      this.notifications
+        .notifyAutoSignup(uid, gameName, formatted, eventId)
+        .catch(() => {
+          /* swallow */
+        });
+    }
+    for (const uid of [...new Set(others.map((v) => v.userId))]) {
+      this.notifications
+        .notifyPollOutcome(uid, formatted, eventId)
+        .catch(() => {
+          /* swallow */
+        });
+    }
   }
 
   /**

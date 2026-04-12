@@ -12,6 +12,7 @@ import { benchSuffix } from './signup-bench-feedback.helpers';
 import { loadGameContext } from './signup-signup-context.helpers';
 import type { GameContext } from './signup-signup-context.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
+import { getConflictSuffix } from './signup-conflict-warning.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -251,8 +252,13 @@ export async function handleNewLinkedSignup(
   }
 
   const result = await deps.signupsService.signup(eventId, linkedUser.id);
+  const conflictSuffix = await getConflictSuffix(
+    deps.db,
+    linkedUser.id,
+    eventId,
+  );
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}`,
+    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);

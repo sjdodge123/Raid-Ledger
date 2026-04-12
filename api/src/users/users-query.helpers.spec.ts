@@ -142,8 +142,8 @@ describe('fetchHeartedGames', () => {
     expect(HEART_SOURCES).not.toContain('steam_library');
   });
 
-  it('HEART_SOURCES only contains manual, discord, steam', () => {
-    expect(HEART_SOURCES).toEqual(['manual', 'discord', 'steam']);
+  it('HEART_SOURCES contains manual, discord, steam, poll', () => {
+    expect(HEART_SOURCES).toEqual(['manual', 'discord', 'steam', 'poll']);
   });
 
   it('includes playtimeSeconds in result shape (ROK-805)', async () => {

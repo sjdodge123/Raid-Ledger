@@ -13,7 +13,6 @@ import {
 import { eq, and, gte, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
-  CreateEventDto,
   SchedulePollPageResponseDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
@@ -22,6 +21,7 @@ import type {
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { EventsService } from '../../events/events.service';
+import { SignupsService } from '../../events/signups.service';
 import {
   findScheduleSlots,
   findScheduleVotes,
@@ -44,10 +44,16 @@ import { buildBannerForUser } from './scheduling-banner.helpers';
 import { fireEventCreated } from '../lineups-notify-hooks.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
+import { insertPollInterests } from './scheduling-auto-heart.helpers';
+import { findConflictingSlotIds } from './scheduling-conflict.helpers';
+import {
+  findSlotOrThrow,
+  resolveGameInfo,
+  buildCreateEventDto,
+} from './scheduling-event.helpers';
 
 const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const EVENT_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
-const FOUR_WEEKS_MS = 4 * 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class SchedulingService {
@@ -57,6 +63,7 @@ export class SchedulingService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly eventsService: EventsService,
+    private readonly signupsService: SignupsService,
     private readonly lineupNotifications: LineupNotificationService,
     private readonly pollEmbed: SchedulingPollEmbedService,
   ) {}
@@ -68,7 +75,7 @@ export class SchedulingService {
   ): Promise<SchedulePollPageResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
     const [gameInfo, [lineup], members, slots, voterCount] = await Promise.all([
-      this.resolveGameInfo(match.gameId),
+      resolveGameInfo(this.db, match.gameId),
       this.db
         .select({ status: schema.communityLineups.status })
         .from(schema.communityLineups)
@@ -80,6 +87,9 @@ export class SchedulingService {
     ]);
     const slotIds = slots.map((s) => s.id);
     const votes = await findScheduleVotes(this.db, slotIds);
+    const conflictingSlotIds = userId
+      ? await findConflictingSlotIds(this.db, userId, slots)
+      : undefined;
     return {
       ...buildPollResponse(
         { ...match, ...gameInfo },
@@ -90,6 +100,7 @@ export class SchedulingService {
         lineup?.status ?? 'decided',
       ),
       uniqueVoterCount: voterCount,
+      conflictingSlotIds,
     };
   }
 
@@ -168,9 +179,9 @@ export class SchedulingService {
       throw new BadRequestException('Event already created for this match');
     }
     await this.assertUserHasVoted(matchId, userId);
-    const slot = await this.findSlotOrThrow(slotId);
-    const gameName = await this.resolveGameName(match.gameId);
-    const dto = this.buildCreateEventDto(
+    const slot = await findSlotOrThrow(this.db, slotId);
+    const { gameName } = await resolveGameInfo(this.db, match.gameId);
+    const dto = buildCreateEventDto(
       gameName,
       match.gameId,
       slot.proposedTime,
@@ -178,6 +189,14 @@ export class SchedulingService {
     );
     const event = await this.eventsService.create(userId, dto);
     await updateMatchLinkedEvent(this.db, matchId, event.id);
+    const voters = await findScheduleVotes(this.db, [slotId]);
+    await autoSignupSlotVoters({
+      eventId: event.id,
+      creatorId: userId,
+      voters,
+      signupsService: this.signupsService,
+    });
+    this.fireAutoHeart(match.gameId, voters);
     fireEventCreated(
       this.lineupNotifications,
       this.logger,
@@ -238,6 +257,17 @@ export class SchedulingService {
 
   // -- Private helpers --
 
+  /** Fire-and-forget auto-heart for poll voters. */
+  private fireAutoHeart(gameId: number, voters: { userId: number }[]): void {
+    const voterUserIds = [...new Set(voters.map((v) => v.userId))];
+    insertPollInterests({ db: this.db, gameId, voterUserIds }).catch(
+      (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Auto-heart poll interests failed: ${msg}`);
+      },
+    );
+  }
+
   private async findMatchOrThrow(matchId: number) {
     const [match] = await findMatchById(this.db, matchId);
     if (!match) throw new NotFoundException('Match not found');
@@ -285,53 +315,5 @@ export class SchedulingService {
       .limit(1);
     if (dup)
       throw new BadRequestException('A slot within 15 minutes already exists');
-  }
-
-  private async findSlotOrThrow(slotId: number) {
-    const [slot] = await this.db
-      .select()
-      .from(schema.communityLineupScheduleSlots)
-      .where(eq(schema.communityLineupScheduleSlots.id, slotId))
-      .limit(1);
-    if (!slot) throw new NotFoundException('Slot not found');
-    return slot;
-  }
-
-  private async resolveGameName(gameId: number): Promise<string> {
-    return (await this.resolveGameInfo(gameId)).gameName;
-  }
-
-  private async resolveGameInfo(gameId: number) {
-    const [game] = await this.db
-      .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
-      .from(schema.games)
-      .where(eq(schema.games.id, gameId))
-      .limit(1);
-    return {
-      gameName: game?.name ?? 'Game Night',
-      gameCoverUrl: game?.coverUrl ?? null,
-    };
-  }
-
-  private buildCreateEventDto(
-    title: string,
-    gameId: number,
-    proposedTime: Date | string,
-    recurring: boolean,
-  ): CreateEventDto {
-    const startTime = new Date(proposedTime);
-    const endTime = new Date(startTime.getTime() + EVENT_DURATION_MS);
-    const base = {
-      title,
-      gameId,
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-    };
-    if (!recurring) return base;
-    const until = new Date(startTime.getTime() + FOUR_WEEKS_MS);
-    return {
-      ...base,
-      recurrence: { frequency: 'weekly' as const, until: until.toISOString() },
-    };
   }
 }

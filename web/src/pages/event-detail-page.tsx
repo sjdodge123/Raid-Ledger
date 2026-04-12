@@ -174,6 +174,13 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
         <>
             <PostEventSections event={page.event} eventId={page.eventId} isCancelled={derived.isCancelled} isAdHoc={voice.isAdHoc} canManageRoster={derived.canManageRoster} />
             <MobileQuickInfo event={page.event} roster={page.roster} isSignedUp={derived.isSignedUp} alphabetical={alphabetical} />
+            {page.event.myConflicts && page.event.myConflicts.length > 0 && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-amber-300">
+                        {page.event.myConflicts.map(c => `You're already signed up for ${c.title} at this time`).join('. ')}
+                    </p>
+                </div>
+            )}
             <RosterSlotSection event={page.event} eventId={page.eventId} roster={page.roster} rosterAssignments={derived.rosterAssignments}
                 isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp} userSignup={derived.userSignup}
                 canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />

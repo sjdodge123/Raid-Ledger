@@ -17,6 +17,8 @@ interface SuggestedTimesProps {
   isSuggesting: boolean;
   /** Pre-filled datetime from heatmap grid click (ISO local format for datetime-local input). */
   prefillTime?: string;
+  /** Slot IDs that conflict with the user's existing events (ROK-1031). */
+  conflictingSlotIds?: number[];
 }
 
 /** Format a datetime string for display. */
@@ -39,9 +41,10 @@ function slotCardClasses(isVoted: boolean, readOnly: boolean): string {
 }
 
 /** Single slot card with vote toggle behavior. */
-function SlotCard({ slot, isVoted, readOnly, onToggle }: {
-  slot: ScheduleSlotWithVotesDto; isVoted: boolean; readOnly: boolean; onToggle: () => void;
+function SlotCard({ slot, isVoted, readOnly, onToggle, hasConflict }: {
+  slot: ScheduleSlotWithVotesDto; isVoted: boolean; readOnly: boolean; onToggle: () => void; hasConflict: boolean;
 }): JSX.Element {
+  const conflictBorder = hasConflict ? ' border-amber-500/40' : '';
   return (
     <button
       type="button"
@@ -49,7 +52,7 @@ function SlotCard({ slot, isVoted, readOnly, onToggle }: {
       data-voted={isVoted ? 'true' : 'false'}
       onClick={readOnly ? undefined : onToggle}
       disabled={readOnly}
-      className={slotCardClasses(isVoted, readOnly)}
+      className={`${slotCardClasses(isVoted, readOnly)}${conflictBorder}`}
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{formatSlotTime(slot.proposedTime)}</span>
@@ -63,6 +66,7 @@ function SlotCard({ slot, isVoted, readOnly, onToggle }: {
         </div>
       )}
       {isVoted && <p className="text-xs text-emerald-400 mt-1">You voted</p>}
+      {hasConflict && <p className="text-xs text-amber-400 mt-1">You have a conflicting event</p>}
     </button>
   );
 }
@@ -97,8 +101,9 @@ function SuggestSlotForm({ onSubmit, isSuggesting, prefillTime }: {
 /** Section listing all suggested time slots with voting. */
 export function SuggestedTimes({
   slots, myVotedSlotIds, readOnly, onToggleVote, onSuggestSlot,
-  isSuggesting, prefillTime,
+  isSuggesting, prefillTime, conflictingSlotIds,
 }: SuggestedTimesProps): JSX.Element {
+  const conflictSet = new Set(conflictingSlotIds ?? []);
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
@@ -106,7 +111,8 @@ export function SuggestedTimes({
       </h3>
       {slots.map((slot) => (
         <SlotCard key={slot.id} slot={slot} isVoted={myVotedSlotIds.includes(slot.id)}
-          readOnly={readOnly} onToggle={() => onToggleVote(slot.id)} />
+          readOnly={readOnly} onToggle={() => onToggleVote(slot.id)}
+          hasConflict={conflictSet.has(slot.id)} />
       ))}
       {!readOnly && (
         <SuggestSlotForm onSubmit={onSuggestSlot} isSuggesting={isSuggesting} prefillTime={prefillTime} />

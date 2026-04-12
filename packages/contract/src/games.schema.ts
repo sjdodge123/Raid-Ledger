@@ -15,6 +15,8 @@ export const IgdbGameSchema = z.object({
     name: z.string(),
     slug: z.string(),
     coverUrl: z.string().nullable(),
+    /** ROK-1031: Player count for max-attendees auto-populate. */
+    playerCount: z.object({ min: z.number(), max: z.number() }).nullable().optional(),
 });
 
 export type IgdbGameDto = z.infer<typeof IgdbGameSchema>;
@@ -211,8 +213,8 @@ export const GameInterestResponseSchema = z.object({
     count: z.number(),
     /** First N interested players for avatar display (ROK-282) */
     players: z.array(InterestPlayerPreviewSchema).optional(),
-    /** Source of the interest: manual, steam, or discord (ROK-444) */
-    source: z.enum(['manual', 'steam', 'discord']).optional(),
+    /** Source of the interest: manual, steam, discord, or poll (ROK-444, ROK-1031) */
+    source: z.enum(['manual', 'steam', 'discord', 'poll']).optional(),
     /** ROK-745: Steam owners — first N players who own this game on Steam */
     owners: z.array(InterestPlayerPreviewSchema).optional(),
     /** ROK-745: Total count of Steam owners */

@@ -13,6 +13,7 @@ import {
   getInterestCount,
   getInterestedPlayers,
   batchCheckInterests,
+  removeInterest,
   HEART_SOURCES,
 } from './igdb-interest.helpers';
 
@@ -374,14 +375,81 @@ describe('getInterestCount — adversarial edge cases', () => {
   });
 });
 
+// ─── removeInterest — poll-source suppression (ROK-1031 Gap 2) ────────────────
+
+describe('removeInterest — poll-source suppression', () => {
+  function buildRemoveInterestDb(
+    source: string | null,
+  ): Record<string, jest.Mock> {
+    const db: Record<string, jest.Mock> = {};
+    const chainMethods = ['from', 'innerJoin', 'orderBy', 'groupBy'];
+    for (const m of chainMethods) {
+      db[m] = jest.fn().mockReturnThis();
+    }
+    db.select = jest.fn().mockReturnThis();
+    db.selectDistinctOn = jest.fn().mockReturnThis();
+    db.insert = jest.fn().mockReturnThis();
+    db.values = jest.fn().mockReturnThis();
+    db.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
+    db.delete = jest.fn().mockReturnThis();
+
+    // getUserInterestSource: select().from().where().limit() → source
+    // removeInterest delete: delete().where() → void
+    // getInterestCount: select().from().where() → [{ count }]
+    // getInterestedPlayers: selectDistinctOn().from().innerJoin().where().orderBy().limit() → []
+    let whereCallCount = 0;
+    db.where = jest.fn().mockImplementation(() => {
+      whereCallCount++;
+      if (whereCallCount === 1) return db; // getUserInterestSource chain → .limit()
+      if (whereCallCount === 2) return Promise.resolve(undefined); // delete
+      if (whereCallCount === 3) return Promise.resolve([{ count: 0 }]); // getInterestCount
+      return db; // getInterestedPlayers chain
+    });
+    db.limit = jest.fn().mockImplementation(() => {
+      // First limit: getUserInterestSource → returns source row
+      // Subsequent limits: getInterestedPlayers → returns []
+      return Promise.resolve(source ? [{ source }] : []);
+    });
+
+    return db;
+  }
+
+  it('creates suppression row when source is "poll"', async () => {
+    const db = buildRemoveInterestDb('poll');
+
+    await removeInterest(db as never, 42, 7);
+
+    expect(db.insert).toHaveBeenCalled();
+  });
+
+  it('creates suppression row when source is "discord"', async () => {
+    const db = buildRemoveInterestDb('discord');
+
+    await removeInterest(db as never, 42, 7);
+
+    expect(db.insert).toHaveBeenCalled();
+  });
+
+  it('does not create suppression row when source is "manual"', async () => {
+    const db = buildRemoveInterestDb('manual');
+
+    await removeInterest(db as never, 42, 7);
+
+    // insert should be called only for delete, not for suppression
+    // We check insert was NOT called (the delete uses db.delete, not db.insert)
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+});
+
 // ─── HEART_SOURCES constant — adversarial (ROK-804) ─────────────────────────
 
 describe('HEART_SOURCES constant', () => {
-  it('contains exactly manual, discord, steam — no other values', () => {
-    expect(HEART_SOURCES).toHaveLength(3);
+  it('contains exactly manual, discord, steam, poll — no other values', () => {
+    expect(HEART_SOURCES).toHaveLength(4);
     expect(HEART_SOURCES).toContain('manual');
     expect(HEART_SOURCES).toContain('discord');
     expect(HEART_SOURCES).toContain('steam');
+    expect(HEART_SOURCES).toContain('poll');
   });
 
   it('does not include steam_library (ownership, not interest)', () => {

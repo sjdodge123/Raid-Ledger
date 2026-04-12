@@ -41,8 +41,17 @@ export class StandalonePollController {
   /** Mark a standalone poll as completed (after reschedule or event creation). */
   @Post(':matchId/complete')
   @HttpCode(HttpStatus.OK)
-  async complete(@Param('matchId', ParseIntPipe) matchId: number) {
-    const ok = await this.service.complete(matchId);
+  async complete(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() body: { eventId?: number; startTime?: string },
+    @Req() req: AuthRequest,
+  ) {
+    const ok = await this.service.complete(
+      matchId,
+      body?.eventId,
+      body?.startTime,
+      req.user.id,
+    );
     if (!ok) throw new NotFoundException('Poll not found');
     return { ok: true };
   }

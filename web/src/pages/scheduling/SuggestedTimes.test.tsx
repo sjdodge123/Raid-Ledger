@@ -118,6 +118,59 @@ describe('SuggestedTimes — readOnly disables buttons', () => {
 });
 
 // ---------------------------------------------------------------------------
+// SuggestedTimes — conflict warning display (ROK-1031)
+// ---------------------------------------------------------------------------
+
+describe('SuggestedTimes — conflict warning display', () => {
+  it('shows conflict warning text for slots in conflictingSlotIds', () => {
+    const poll = buildPollData();
+    render(
+      <SuggestedTimes
+        slots={poll.slots}
+        myVotedSlotIds={[]}
+        readOnly={false}
+        onToggleVote={vi.fn()}
+        onSuggestSlot={vi.fn()}
+        isSuggesting={false}
+        conflictingSlotIds={[100]}
+      />,
+    );
+    expect(screen.getByText(/conflicting event/i)).toBeInTheDocument();
+  });
+
+  it('does not show conflict warning for non-conflicting slots', () => {
+    const poll = buildPollData();
+    render(
+      <SuggestedTimes
+        slots={poll.slots}
+        myVotedSlotIds={[]}
+        readOnly={false}
+        onToggleVote={vi.fn()}
+        onSuggestSlot={vi.fn()}
+        isSuggesting={false}
+        conflictingSlotIds={[999]}
+      />,
+    );
+    expect(screen.queryByText(/conflicting event/i)).not.toBeInTheDocument();
+  });
+
+  it('does not show conflict warning when conflictingSlotIds is undefined', () => {
+    const poll = buildPollData();
+    render(
+      <SuggestedTimes
+        slots={poll.slots}
+        myVotedSlotIds={[]}
+        readOnly={false}
+        onToggleVote={vi.fn()}
+        onSuggestSlot={vi.fn()}
+        isSuggesting={false}
+      />,
+    );
+    expect(screen.queryByText(/conflicting event/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // VoteStep (in SchedulingWizard) — AC2: buttons disabled during mutation
 // ---------------------------------------------------------------------------
 

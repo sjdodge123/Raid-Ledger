@@ -607,6 +607,8 @@ function embedUpdateAfterCharSelectTest() {
         embedState: 'posted',
       },
     ];
+    // ROK-1031: conflict check queries events table before embed update
+    mocks.mockDb.select.mockReturnValueOnce(makeChain([]));
     mocks.mockDb.select.mockReturnValueOnce(makeChain(msgRecord));
 
     const interaction = makeSelectMenuInteraction(

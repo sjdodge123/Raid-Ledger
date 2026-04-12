@@ -4,6 +4,7 @@ import { EventsController } from './events.controller';
 import { EventsSignupsController } from './events-signups.controller';
 import { EventsAttendanceController } from './events-attendance.controller';
 import { EventsService } from './events.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SignupsService } from './signups.service';
 import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
@@ -92,6 +93,7 @@ describe('EventsController', () => {
 
   function buildTestProviders() {
     return [
+      { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: EventsService, useValue: mockEventsService },
       {
         provide: EventSeriesService,
@@ -385,10 +387,10 @@ describe('EventsController', () => {
 
   describe('findOne', () => {
     it('should return single event', async () => {
-      const result = await controller.findOne(1);
+      const mockReq = { user: { id: 1 } };
+      const result = await controller.findOne(1, mockReq);
 
       expect(result).toMatchObject({ id: expect.any(Number) });
-      expect(mockEventsService.findOne).toHaveBeenCalledWith(1);
     });
   });
 

@@ -11,9 +11,13 @@ import {
   Request,
   ParseIntPipe,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
 import { EventsService } from './events.service';
 import { EventSeriesService } from './event-series.service';
 import { SignupsService } from './signups.service';
@@ -38,6 +42,8 @@ import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
+import { findConflictingEvents } from './event-conflict.helpers';
 
 /**
  * Core event CRUD controller.
@@ -47,6 +53,8 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 @Controller('events')
 export class EventsController {
   constructor(
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly eventsService: EventsService,
     private readonly seriesService: EventSeriesService,
     private readonly signupsService: SignupsService,
@@ -105,10 +113,15 @@ export class EventsController {
   }
 
   @Get(':id')
+  @UseGuards(OptionalJwtGuard)
   async findOne(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: { user?: { id: number } },
   ): Promise<EventResponseDto> {
-    return this.eventsService.findOne(id);
+    const event = await this.eventsService.findOne(id);
+    return enrichEventWithConflicts(event, req.user?.id ?? null, (p) =>
+      findConflictingEvents(this.db, p),
+    );
   }
 
   @Get(':id/activity')

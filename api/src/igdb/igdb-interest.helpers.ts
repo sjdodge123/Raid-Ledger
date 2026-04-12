@@ -13,7 +13,7 @@ import {
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Sources that count as "interested" (hearts). Library/wishlist are separate. */
-export const HEART_SOURCES = ['manual', 'discord', 'steam'];
+export const HEART_SOURCES = ['manual', 'discord', 'steam', 'poll'];
 
 /** SQL expression for distinct user count (ROK-804). */
 const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
@@ -188,7 +188,7 @@ export async function addInterest(
 }
 
 /**
- * Remove want-to-play interest (with auto-heart suppression for Discord source).
+ * Remove want-to-play interest (with auto-heart suppression for Discord and poll sources).
  * @param db - Database connection
  * @param gameId - Game ID
  * @param userId - User ID
@@ -201,7 +201,7 @@ export async function removeInterest(
 ): Promise<GameInterestResponseDto> {
   const source = await getUserInterestSource(db, gameId, userId);
 
-  if (source === 'discord') {
+  if (source === 'discord' || source === 'poll') {
     await db
       .insert(schema.gameInterestSuppressions)
       .values({ userId, gameId })
@@ -280,7 +280,9 @@ export async function fetchGameInterestResponse(
     wantToPlay: d.source !== null,
     count: d.count,
     players: d.players,
-    source: d.source ? (d.source as 'manual' | 'steam' | 'discord') : undefined,
+    source: d.source
+      ? (d.source as 'manual' | 'steam' | 'discord' | 'poll')
+      : undefined,
     ownerCount: d.ownerCount,
     owners: d.owners,
     wishlisters: d.wishlisters,
