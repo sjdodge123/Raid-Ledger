@@ -23,7 +23,7 @@ Check container logs for your initial credentials:
 ║          🔐 INITIAL ADMIN CREDENTIALS                      ║
 ╠════════════════════════════════════════════════════════════╣
 ║  Email:    admin@local                                     ║
-║  Password: xK9mP2vL...                                     ║
+║  Password: *****                                           ║
 ╠════════════════════════════════════════════════════════════╣
 ║  ⚠️  Save this password! It will not be shown again.       ║
 ╚════════════════════════════════════════════════════════════╝
