@@ -46,7 +46,12 @@ export class StandalonePollController {
     @Body() body: { eventId?: number; startTime?: string },
     @Req() req: AuthRequest,
   ) {
-    const ok = await this.service.complete(matchId, body?.eventId, body?.startTime, req.user.id);
+    const ok = await this.service.complete(
+      matchId,
+      body?.eventId,
+      body?.startTime,
+      req.user.id,
+    );
     if (!ok) throw new NotFoundException('Poll not found');
     return { ok: true };
   }

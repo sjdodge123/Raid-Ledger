@@ -55,7 +55,11 @@ export class StandalonePollNotificationService {
   }
 
   /** DM a voter that a different timeslot was chosen (ROK-1031). */
-  async notifyPollOutcome(userId: number, chosenTime: string, eventId: number): Promise<void> {
+  async notifyPollOutcome(
+    userId: number,
+    chosenTime: string,
+    eventId: number,
+  ): Promise<void> {
     await this.notificationService.create({
       userId,
       type: 'community_lineup',
@@ -66,7 +70,12 @@ export class StandalonePollNotificationService {
   }
 
   /** DM a voter that they were auto-signed up from a poll (ROK-1031). */
-  async notifyAutoSignup(userId: number, gameName: string, eventTime: string, eventId: number): Promise<void> {
+  async notifyAutoSignup(
+    userId: number,
+    gameName: string,
+    eventTime: string,
+    eventId: number,
+  ): Promise<void> {
     await this.notificationService.create({
       userId,
       type: 'community_lineup',

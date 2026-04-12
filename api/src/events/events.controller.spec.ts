@@ -4,6 +4,7 @@ import { EventsController } from './events.controller';
 import { EventsSignupsController } from './events-signups.controller';
 import { EventsAttendanceController } from './events-attendance.controller';
 import { EventsService } from './events.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SignupsService } from './signups.service';
 import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
@@ -92,6 +93,7 @@ describe('EventsController', () => {
 
   function buildTestProviders() {
     return [
+      { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: EventsService, useValue: mockEventsService },
       {
         provide: EventSeriesService,
@@ -156,7 +158,6 @@ describe('EventsController', () => {
         meta: { total: 1, page: 1, limit: 20, totalPages: 1, hasMore: false },
       }),
       findOne: jest.fn().mockResolvedValue(mockEvent),
-      findOneWithConflicts: jest.fn().mockResolvedValue(mockEvent),
       update: jest.fn().mockResolvedValue(mockEvent),
       delete: jest.fn().mockResolvedValue(undefined),
       getAggregateGameTime: jest.fn().mockResolvedValue({

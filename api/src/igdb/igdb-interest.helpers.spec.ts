@@ -13,6 +13,7 @@ import {
   getInterestCount,
   getInterestedPlayers,
   batchCheckInterests,
+  removeInterest,
   HEART_SOURCES,
 } from './igdb-interest.helpers';
 
@@ -377,7 +378,9 @@ describe('getInterestCount — adversarial edge cases', () => {
 // ─── removeInterest — poll-source suppression (ROK-1031 Gap 2) ────────────────
 
 describe('removeInterest — poll-source suppression', () => {
-  function buildRemoveInterestDb(source: string | null): Record<string, jest.Mock> {
+  function buildRemoveInterestDb(
+    source: string | null,
+  ): Record<string, jest.Mock> {
     const db: Record<string, jest.Mock> = {};
     const chainMethods = ['from', 'innerJoin', 'orderBy', 'groupBy'];
     for (const m of chainMethods) {
@@ -412,7 +415,6 @@ describe('removeInterest — poll-source suppression', () => {
   }
 
   it('creates suppression row when source is "poll"', async () => {
-    const { removeInterest } = await import('./igdb-interest.helpers');
     const db = buildRemoveInterestDb('poll');
 
     await removeInterest(db as never, 42, 7);
@@ -421,7 +423,6 @@ describe('removeInterest — poll-source suppression', () => {
   });
 
   it('creates suppression row when source is "discord"', async () => {
-    const { removeInterest } = await import('./igdb-interest.helpers');
     const db = buildRemoveInterestDb('discord');
 
     await removeInterest(db as never, 42, 7);
@@ -430,7 +431,6 @@ describe('removeInterest — poll-source suppression', () => {
   });
 
   it('does not create suppression row when source is "manual"', async () => {
-    const { removeInterest } = await import('./igdb-interest.helpers');
     const db = buildRemoveInterestDb('manual');
 
     await removeInterest(db as never, 42, 7);
