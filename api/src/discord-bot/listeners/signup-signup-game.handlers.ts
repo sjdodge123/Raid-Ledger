@@ -6,8 +6,7 @@ import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
-import { findConflictingEvents } from '../../events/event-conflict.helpers';
-import { buildConflictWarning } from './signup-conflict-warning.helpers';
+import { getConflictSuffix } from './signup-conflict-warning.helpers';
 
 type NewSignupCtx = {
   game: { hasRoles: boolean };
@@ -159,14 +158,7 @@ async function signupSingleCharacter(
   await deps.signupsService.confirmSignup(eventId, result.id, userId, {
     characterId: char.id,
   });
-  let conflictSuffix = '';
-  try {
-    const [event] = await deps.db.select().from(schema.events).where(eq(schema.events.id, eventId)).limit(1);
-    if (event) {
-      const conflicts = await findConflictingEvents(deps.db, { userId, startTime: event.duration[0], endTime: event.duration[1], excludeEventId: eventId });
-      conflictSuffix = buildConflictWarning(conflicts);
-    }
-  } catch { /* swallow */ }
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
     content: `Signed up as **${char.name}**!${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
     embeds: [],
@@ -192,13 +184,7 @@ async function signupWithoutCharacter(a: NoCharSignupArgs): Promise<boolean> {
     game.hasRoles && clientUrl
       ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
       : '';
-  let conflictSuffix = '';
-  try {
-    const conflicts = await findConflictingEvents(deps.db, {
-      userId, startTime: event.duration[0], endTime: event.duration[1], excludeEventId: eventId,
-    });
-    conflictSuffix = buildConflictWarning(conflicts);
-  } catch { /* swallow */ }
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
     content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${nudge}${conflictSuffix}`,
     embeds: [],

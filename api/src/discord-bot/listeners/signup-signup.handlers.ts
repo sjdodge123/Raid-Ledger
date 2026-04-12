@@ -12,8 +12,7 @@ import { benchSuffix } from './signup-bench-feedback.helpers';
 import { loadGameContext } from './signup-signup-context.helpers';
 import type { GameContext } from './signup-signup-context.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
-import { findConflictingEvents } from '../../events/event-conflict.helpers';
-import { buildConflictWarning } from './signup-conflict-warning.helpers';
+import { getConflictSuffix } from './signup-conflict-warning.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -253,31 +252,16 @@ export async function handleNewLinkedSignup(
   }
 
   const result = await deps.signupsService.signup(eventId, linkedUser.id);
-  const conflictSuffix = await getConflictSuffix(deps.db, linkedUser.id, event);
+  const conflictSuffix = await getConflictSuffix(
+    deps.db,
+    linkedUser.id,
+    eventId,
+  );
   await interaction.editReply({
     content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);
-}
-
-/** Fetch conflict warning suffix for the signup reply. Swallows errors. */
-async function getConflictSuffix(
-  db: SignupInteractionDeps['db'],
-  userId: number,
-  event: typeof schema.events.$inferSelect,
-): Promise<string> {
-  try {
-    const conflicts = await findConflictingEvents(db, {
-      userId,
-      startTime: event.duration[0],
-      endTime: event.duration[1],
-      excludeEventId: event.id,
-    });
-    return buildConflictWarning(conflicts);
-  } catch {
-    return '';
-  }
 }
 
 /** Wrapper for shared character select dropdown. */

@@ -7,27 +7,7 @@ import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
-import { findConflictingEvents } from '../../events/event-conflict.helpers';
-import { buildConflictWarning } from './signup-conflict-warning.helpers';
-
-/** Fetch conflict warning suffix for tentative replies. Swallows errors. */
-async function getConflictSuffix(
-  deps: SignupInteractionDeps,
-  userId: number,
-  event: typeof schema.events.$inferSelect,
-): Promise<string> {
-  try {
-    const conflicts = await findConflictingEvents(deps.db, {
-      userId,
-      startTime: event.duration[0],
-      endTime: event.duration[1],
-      excludeEventId: event.id,
-    });
-    return buildConflictWarning(conflicts);
-  } catch {
-    return '';
-  }
-}
+import { getConflictSuffix } from './signup-conflict-warning.helpers';
 
 /** Sign up as tentative. Returns assignedSlot for bench feedback. */
 export async function signupAsTentative(
@@ -70,7 +50,11 @@ export async function handleLinkedTentative(
   }
 
   const assignedSlot = await signupAsTentative(eventId, linkedUser.id, deps);
-  const conflictSuffix = await getConflictSuffix(deps, linkedUser.id, event);
+  const conflictSuffix = await getConflictSuffix(
+    deps.db,
+    linkedUser.id,
+    eventId,
+  );
   await interaction.editReply({
     content: `You're marked as **tentative**.${benchSuffix(assignedSlot)}${conflictSuffix}`,
     embeds: [],
@@ -231,7 +215,7 @@ async function tentativeSingleCharacter(
     { userId },
     { status: 'tentative' },
   );
-  const conflictSuffix = await getConflictSuffix(deps, userId, event);
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
     content: `You're marked as **tentative** with **${char.name}**.${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
     embeds: [],

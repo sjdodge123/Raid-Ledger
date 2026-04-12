@@ -4,8 +4,7 @@ import * as schema from '../../drizzle/schema';
 import { findLinkedUser } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
-import { findConflictingEvents } from '../../events/event-conflict.helpers';
-import { buildConflictWarning } from './signup-conflict-warning.helpers';
+import { getConflictSuffix } from './signup-conflict-warning.helpers';
 
 type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
 
@@ -116,14 +115,7 @@ async function confirmCharRoleSignup(
   assignedSlot?: string,
 ): Promise<void> {
   const character = await deps.charactersService.findOne(userId, characterId);
-  let conflictSuffix = '';
-  try {
-    const [event] = await deps.db.select().from(schema.events).where(eq(schema.events.id, eventId)).limit(1);
-    if (event) {
-      const conflicts = await findConflictingEvents(deps.db, { userId, startTime: event.duration[0], endTime: event.duration[1], excludeEventId: eventId });
-      conflictSuffix = buildConflictWarning(conflicts);
-    }
-  } catch { /* swallow */ }
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
     content: `${formatRoleConfirmation(signupStatus, character.name, rolesLabel)}${benchSuffix(assignedSlot)}${conflictSuffix}`,
     embeds: [],
@@ -275,14 +267,7 @@ async function confirmNoCharSignup(
   assignedSlot?: string,
 ): Promise<void> {
   const eventTitle = await fetchEventTitle(eventId, deps);
-  let conflictSuffix = '';
-  try {
-    const [event] = await deps.db.select().from(schema.events).where(eq(schema.events.id, eventId)).limit(1);
-    if (event) {
-      const conflicts = await findConflictingEvents(deps.db, { userId, startTime: event.duration[0], endTime: event.duration[1], excludeEventId: eventId });
-      conflictSuffix = buildConflictWarning(conflicts);
-    }
-  } catch { /* swallow */ }
+  const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
     content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel)}${benchSuffix(assignedSlot)}${conflictSuffix}`,
     embeds: [],
