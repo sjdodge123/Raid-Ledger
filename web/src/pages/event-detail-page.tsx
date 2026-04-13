@@ -141,7 +141,7 @@ function EventDetailModals({ event, eventId, derived, handlers, showCancelModal,
             <ConfirmModalSection show={handlers.showConfirmModal} onClose={handlers.closeConfirmModal} onConfirm={handlers.handleSelectionConfirm} onSkip={handlers.handleSelectionSkip}
                 isConfirming={handlers.signup.isPending} gameId={derived.gameRegistryEntry?.id ?? event.game?.id ?? undefined} gameName={event.game?.name ?? undefined}
                 hasRoles={derived.gameRegistryEntry?.hasRoles ?? true} gameSlug={event.game?.slug ?? undefined} preSelectedRole={handlers.preSelectedRole} eventId={eventId} />
-            <CancelModalSection show={showCancelModal || (canDeepLink && deepLinkAction === 'cancel')} eventId={eventId} eventTitle={event.title} signupCount={event.signupCount} initialReason={deepLinkReason ?? undefined}
+            <CancelModalSection show={showCancelModal || (canDeepLink && deepLinkAction === 'cancel')} eventId={eventId} eventTitle={event.title} signupCount={event.signupCount} gameId={event.game?.id} initialReason={deepLinkReason ?? undefined}
                 onClose={() => { setShowCancelModal(false); clearDeepLink(); }} />
             <RescheduleModalSection show={showRescheduleModal || (canDeepLink && deepLinkAction === 'reschedule')} eventId={eventId} currentStartTime={event.startTime} currentEndTime={event.endTime}
                 eventTitle={event.title} gameId={event.game?.id} gameSlug={event.game?.slug} gameName={event.game?.name} coverUrl={event.game?.coverUrl} description={event.description}
@@ -150,7 +150,15 @@ function EventDetailModals({ event, eventId, derived, handlers, showCancelModal,
             <RemoveConfirmModal removeConfirm={handlers.removeConfirm} onClose={() => handlers.setRemoveConfirm(null)} onConfirm={handlers.handleConfirmRemoveFromEvent} isPending={handlers.adminRemoveUser.isPending} />
             <InviteModalSection show={showInviteModal} onClose={() => setShowInviteModal(false)} eventId={eventId} pugs={handlers.pugs} roster={roster} isMMOGame={derived.isMMOGame} />
             <SeriesScopeModalSection show={seriesAction !== null} action={seriesAction ?? 'edit'} eventId={eventId}
-                onClose={() => setSeriesAction(null)} onSeriesConfirm={handlers.handleSeriesConfirm} isPending={handlers.isSeriesPending} />
+                onClose={() => setSeriesAction(null)} isPending={handlers.isSeriesPending}
+                onSeriesConfirm={(action, scope) => {
+                    if (action === 'cancel' && scope === 'this') {
+                        setSeriesAction(null);
+                        setShowCancelModal(true);
+                        return;
+                    }
+                    handlers.handleSeriesConfirm(action, scope);
+                }} />
         </>
     );
 }

@@ -144,6 +144,18 @@ export class StandalonePollNotificationService {
     return rows.map((r) => r.userId);
   }
 
+  /** Fetch the start time of a linked event. */
+  private async findEventStartTime(
+    eventId: number,
+  ): Promise<Date | undefined> {
+    const rows = await this.db.execute<{ startTime: string }>(sql`
+      SELECT lower(duration)::text AS "startTime"
+      FROM events WHERE id = ${eventId} LIMIT 1
+    `);
+    const raw = rows[0]?.startTime;
+    return raw ? new Date(raw.endsWith('Z') ? raw : raw + 'Z') : undefined;
+  }
+
   /** Look up the creator's display name or username. */
   private async getCreatorName(creatorId: number): Promise<string> {
     const rows = await this.db.execute<{
@@ -192,7 +204,10 @@ export class StandalonePollNotificationService {
       );
       return;
     }
-    const rosterIds = await this.findRosterMembers(linkedEventId);
+    const [rosterIds, eventStartTime] = await Promise.all([
+      this.findRosterMembers(linkedEventId),
+      this.findEventStartTime(linkedEventId),
+    ]);
     const rosterSet = new Set(rosterIds);
     const rosterRecipients = allRecipientIds.filter((id) => rosterSet.has(id));
     const genericRecipients = allRecipientIds.filter(
@@ -207,6 +222,7 @@ export class StandalonePollNotificationService {
           gameName,
           basePayload,
           creatorName,
+          eventStartTime,
         ),
       );
     }
@@ -255,14 +271,18 @@ export class StandalonePollNotificationService {
     gameName: string,
     basePayload: PollNotifPayload,
     creatorName: string,
+    eventStartTime?: Date,
   ): Promise<void> {
+    const timeStr = eventStartTime
+      ? ` (<t:${Math.floor(eventStartTime.getTime() / 1000)}:f>)`
+      : '';
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
         this.notificationService.create({
           userId,
           type: 'community_lineup',
           title: `Event being rescheduled — ${gameName}`,
-          message: `${creatorName} started a rescheduling poll — vote on a new time.`,
+          message: `The event you signed up for${timeStr} is being rescheduled — vote now to pick the next date.`,
           payload: { ...basePayload, subtype: 'event_rescheduling' },
         }),
       ),
