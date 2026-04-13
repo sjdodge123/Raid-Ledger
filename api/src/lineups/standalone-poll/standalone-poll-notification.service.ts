@@ -145,9 +145,7 @@ export class StandalonePollNotificationService {
   }
 
   /** Fetch the start time of a linked event. */
-  private async findEventStartTime(
-    eventId: number,
-  ): Promise<Date | undefined> {
+  private async findEventStartTime(eventId: number): Promise<Date | undefined> {
     const rows = await this.db.execute<{ startTime: string }>(sql`
       SELECT lower(duration)::text AS "startTime"
       FROM events WHERE id = ${eventId} LIMIT 1
