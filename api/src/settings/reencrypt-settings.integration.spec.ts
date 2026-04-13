@@ -74,11 +74,7 @@ function describeReencryptSettings() {
     }
 
     // Run re-encryption
-    const count = await reencryptAllSettings!(
-      testApp.db,
-      oldKey,
-      newKey,
-    );
+    const count = await reencryptAllSettings!(testApp.db, oldKey, newKey);
     expect(count).toBe(3);
 
     // Verify each row is now encrypted with the new key
@@ -89,10 +85,7 @@ function describeReencryptSettings() {
         .where(eq(appSettings.key, row.key));
 
       // Decrypting with the new key should yield the original value
-      const decrypted = encMod.decryptWithKey!(
-        dbRow.encryptedValue,
-        newKey,
-      );
+      const decrypted = encMod.decryptWithKey!(dbRow.encryptedValue, newKey);
       expect(decrypted).toBe(row.value);
 
       // Decrypting with the old key should fail (data was re-encrypted)
@@ -107,15 +100,8 @@ function describeReencryptSettings() {
     const newKey = encMod.deriveKey!(NEW_SECRET);
 
     // No rows seeded — table is empty after truncation
-    const count = await reencryptAllSettings!(
-      testApp.db,
-      oldKey,
-      newKey,
-    );
+    const count = await reencryptAllSettings!(testApp.db, oldKey, newKey);
     expect(count).toBe(0);
   });
 }
-describe(
-  'reencrypt-settings (integration)',
-  () => describeReencryptSettings(),
-);
+describe('reencrypt-settings (integration)', () => describeReencryptSettings());

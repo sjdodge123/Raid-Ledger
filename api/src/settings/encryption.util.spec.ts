@@ -12,18 +12,14 @@ import {
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const mod = require('./encryption.util') as Record<string, unknown>;
-const deriveKey = mod.deriveKey as
-  | ((secret: string) => Buffer)
-  | undefined;
+const deriveKey = mod.deriveKey as ((secret: string) => Buffer) | undefined;
 const encryptWithKey = mod.encryptWithKey as
   | ((text: string, key: Buffer) => string)
   | undefined;
 const decryptWithKey = mod.decryptWithKey as
   | ((text: string, key: Buffer) => string)
   | undefined;
-const getEncryptionKey = mod.getEncryptionKey as
-  | (() => Buffer)
-  | undefined;
+const getEncryptionKey = mod.getEncryptionKey as (() => Buffer) | undefined;
 
 /* ------------------------------------------------------------------ */
 /*  Existing tests (unchanged)                                        */
@@ -207,15 +203,13 @@ function describeEncryptionUtil() {
   });
 
   describe('getEncryptionKey production rejection (ROK-1035)', () => {
-    const HARDCODED_DEFAULT =
-      'raid-ledger-default-secret-change-in-production';
+    const HARDCODED_DEFAULT = 'raid-ledger-default-secret-change-in-production';
     const DEV_FALLBACK = 'dev-encryption-key-change-me';
 
     afterEach(() => {
       // Restore non-production env and clear cache
       process.env.NODE_ENV = 'test';
-      process.env.JWT_SECRET =
-        'test-jwt-secret-for-encryption-testing';
+      process.env.JWT_SECRET = 'test-jwt-secret-for-encryption-testing';
       _resetKeyCache();
     });
 
@@ -231,7 +225,9 @@ function describeEncryptionUtil() {
       process.env.JWT_SECRET = HARDCODED_DEFAULT;
       _resetKeyCache();
 
-      expect(() => getEncryptionKey!()).toThrow(/default.*secret|insecure|banned/i);
+      expect(() => getEncryptionKey!()).toThrow(
+        /default.*secret|insecure|banned/i,
+      );
     });
 
     it('should throw in production when JWT_SECRET is the dev fallback', () => {
@@ -242,7 +238,9 @@ function describeEncryptionUtil() {
       process.env.JWT_SECRET = DEV_FALLBACK;
       _resetKeyCache();
 
-      expect(() => getEncryptionKey!()).toThrow(/default.*secret|insecure|banned/i);
+      expect(() => getEncryptionKey!()).toThrow(
+        /default.*secret|insecure|banned/i,
+      );
     });
 
     it('should NOT throw in non-production when JWT_SECRET is the dev fallback', () => {
