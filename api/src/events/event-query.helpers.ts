@@ -210,6 +210,7 @@ function buildUpcomingUserConditions(
     inArray(schema.events.id, signedUpEventIds),
     gte(sql`lower(${schema.events.duration})`, sql`${now}::timestamp`),
     sql`${schema.events.cancelledAt} IS NULL`,
+    sql`${schema.events.reschedulingPollId} IS NULL`,
   ];
 }
 

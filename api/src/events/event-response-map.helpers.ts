@@ -71,6 +71,7 @@ function mapEventFields(
     channelBindingId: event.channelBindingId ?? null,
     notificationChannelOverride: event.notificationChannelOverride ?? null,
     extendedUntil: event.extendedUntil?.toISOString() ?? null,
+    reschedulingPollId: event.reschedulingPollId ?? null,
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
   };

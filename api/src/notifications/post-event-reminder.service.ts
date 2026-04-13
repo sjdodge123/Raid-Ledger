@@ -93,7 +93,7 @@ export class PostEventReminderService {
       JOIN events e ON e.id = ps.event_id
       LEFT JOIN users u ON u.id = ps.claimed_by_user_id
       WHERE upper(e.duration) BETWEEN (now() - interval '16 minutes') AND (now() - interval '14 minutes')
-        AND ps.status IN ('accepted', 'claimed') AND e.cancelled_at IS NULL
+        AND ps.status IN ('accepted', 'claimed') AND e.cancelled_at IS NULL AND e.rescheduling_poll_id IS NULL
         AND (u.onboarding_completed_at IS NULL OR ps.claimed_by_user_id IS NULL)
         AND ps.id NOT IN (SELECT pug_slot_id FROM post_event_reminders_sent)
     `);

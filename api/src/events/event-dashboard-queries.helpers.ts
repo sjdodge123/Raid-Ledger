@@ -40,6 +40,7 @@ function buildDashboardConditions(
   const conds: ReturnType<typeof gte>[] = [
     gte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
     sql`${schema.events.cancelledAt} IS NULL`,
+    sql`${schema.events.reschedulingPollId} IS NULL`,
   ];
   if (!isAdmin) conds.push(eq(schema.events.creatorId, userId));
   return conds;
@@ -132,6 +133,7 @@ async function fetchAttendanceRows(
   const conds: ReturnType<typeof gte>[] = [
     lte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
     sql`${schema.events.cancelledAt} IS NULL`,
+    sql`${schema.events.reschedulingPollId} IS NULL`,
   ];
   if (!isAdmin) conds.push(eq(schema.events.creatorId, userId));
   return db

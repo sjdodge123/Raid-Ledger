@@ -58,6 +58,7 @@ export const EMBED_STATES = {
   LIVE: 'live',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
+  RESCHEDULING: 'rescheduling',
 } as const;
 
 export type EmbedState = (typeof EMBED_STATES)[keyof typeof EMBED_STATES];

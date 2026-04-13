@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '../../lib/toast';
 import { Modal } from '../ui/modal';
 import { useCancelEvent } from '../../hooks/use-events';
-import { useConvertEventToPlan } from '../../hooks/use-event-plans';
+import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 
 interface CancelEventModalProps {
     isOpen: boolean;
@@ -11,14 +11,15 @@ interface CancelEventModalProps {
     eventId: number;
     eventTitle: string;
     signupCount: number;
+    gameId?: number;
     /** ROK-536: Pre-populate reason from deep-link query param. */
     initialReason?: string;
 }
 
-function useCancelHandlers({ eventId, eventTitle, onClose }: { eventId: number; eventTitle: string; onClose: () => void }) {
+function useCancelHandlers({ eventId, eventTitle, gameId, onClose }: { eventId: number; eventTitle: string; gameId?: number; onClose: () => void }) {
     const [reason, setReason] = useState('');
     const cancelEvent = useCancelEvent(eventId);
-    const convertToPlan = useConvertEventToPlan();
+    const createPoll = useCreateSchedulingPoll();
     const navigate = useNavigate();
 
     const handleClose = () => { setReason(''); onClose(); };
@@ -33,14 +34,16 @@ function useCancelHandlers({ eventId, eventTitle, onClose }: { eventId: number; 
         }
     };
 
-    const handleConvertToPlan = async () => {
+    const handleConvertToPoll = async () => {
+        if (!gameId) return;
         try {
-            await convertToPlan.mutateAsync({ eventId, options: { cancelOriginal: true } });
-            setReason(''); onClose(); navigate('/events?tab=plans');
+            const poll = await createPoll.mutateAsync({ gameId, linkedEventId: eventId, durationHours: 72 });
+            setReason(''); onClose();
+            navigate(`/community-lineup/${poll.lineupId}/schedule/${poll.id}`);
         } catch { /* Error toast handled by mutation */ }
     };
 
-    return { reason, setReason, cancelEvent, convertToPlan, handleClose, handleConfirm, handleConvertToPlan };
+    return { reason, setReason, cancelEvent, createPoll, handleClose, handleConfirm, handleConvertToPoll, canConvert: !!gameId };
 }
 
 function ReasonInput({ reason, onChange }: { reason: string; onChange: (v: string) => void }) {
@@ -68,8 +71,8 @@ function ActionButtons({ onClose, onConfirm, cancelPending, convertPending }: {
     );
 }
 
-function ConvertToPlanSection({ onConvert, isPending, cancelPending }: {
-    onConvert: () => void; isPending: boolean; cancelPending: boolean;
+function ConvertToPollSection({ onConvert, isPending, cancelPending, disabled }: {
+    onConvert: () => void; isPending: boolean; cancelPending: boolean; disabled: boolean;
 }) {
     return (
         <>
@@ -78,11 +81,11 @@ function ConvertToPlanSection({ onConvert, isPending, cancelPending }: {
                 <span className="text-xs text-muted">or</span>
                 <div className="flex-1 border-t border-edge" />
             </div>
-            <button onClick={onConvert} disabled={isPending || cancelPending}
+            <button onClick={onConvert} disabled={isPending || cancelPending || disabled}
                 className="w-full rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-medium text-white transition-colors">
-                {isPending ? 'Converting...' : 'Convert to Plan'}
+                {isPending ? 'Creating poll...' : 'Convert to Poll'}
             </button>
-            <p className="text-xs text-muted text-center -mt-1">Post a Discord poll so your community can vote on a new time</p>
+            <p className="text-xs text-muted text-center -mt-1">Don't cancel — let your community vote on a new time instead</p>
         </>
     );
 }
@@ -90,8 +93,8 @@ function ConvertToPlanSection({ onConvert, isPending, cancelPending }: {
 /**
  * Confirmation modal for cancelling an event (ROK-374).
  */
-export function CancelEventModal({ isOpen, onClose, eventId, eventTitle, signupCount, initialReason }: CancelEventModalProps) {
-    const h = useCancelHandlers({ eventId, eventTitle, onClose });
+export function CancelEventModal({ isOpen, onClose, eventId, eventTitle, signupCount, gameId, initialReason }: CancelEventModalProps) {
+    const h = useCancelHandlers({ eventId, eventTitle, gameId, onClose });
 
     // Initialize reason from prop
     if (initialReason && !h.reason) h.setReason(initialReason);
@@ -109,9 +112,9 @@ export function CancelEventModal({ isOpen, onClose, eventId, eventTitle, signupC
                 )}
                 <ReasonInput reason={h.reason} onChange={h.setReason} />
                 <ActionButtons onClose={h.handleClose} onConfirm={h.handleConfirm}
-                    cancelPending={h.cancelEvent.isPending} convertPending={h.convertToPlan.isPending} />
-                <ConvertToPlanSection onConvert={h.handleConvertToPlan}
-                    isPending={h.convertToPlan.isPending} cancelPending={h.cancelEvent.isPending} />
+                    cancelPending={h.cancelEvent.isPending} convertPending={h.createPoll.isPending} />
+                <ConvertToPollSection onConvert={h.handleConvertToPoll}
+                    isPending={h.createPoll.isPending} cancelPending={h.cancelEvent.isPending} disabled={!h.canConvert} />
             </div>
         </Modal>
     );

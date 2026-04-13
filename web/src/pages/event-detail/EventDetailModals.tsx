@@ -62,6 +62,7 @@ interface CancelModalProps {
     eventId: number;
     eventTitle: string;
     signupCount: number;
+    gameId?: number;
     initialReason?: string;
 }
 
@@ -76,6 +77,7 @@ export function CancelModalSection(props: CancelModalProps): JSX.Element | null 
                 eventId={props.eventId}
                 eventTitle={props.eventTitle}
                 signupCount={props.signupCount}
+                gameId={props.gameId}
                 initialReason={props.initialReason}
             />
         </Suspense>

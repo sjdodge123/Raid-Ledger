@@ -162,6 +162,8 @@ export const EventResponseSchema = z.object({
     extendedUntil: z.string().datetime().nullable().optional(),
     /** ROK-1031: Events that conflict with this event for the authenticated user. */
     myConflicts: z.array(ConflictingEventSchema).optional(),
+    /** ROK-1034: FK to scheduling poll match ID when event is being rescheduled */
+    reschedulingPollId: z.number().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });

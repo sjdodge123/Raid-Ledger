@@ -98,6 +98,10 @@ export const events = pgTable(
     notificationChannelOverride: varchar('notification_channel_override', {
       length: 255,
     }),
+    /** ROK-1034: FK to community_lineup_matches.id when event is being rescheduled
+     *  via a scheduling poll. Non-null hides the event from calendars/queries.
+     *  Not using .references() to avoid circular import with community-lineup-matches. */
+    reschedulingPollId: integer('rescheduling_poll_id'),
     /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
     cancelledAt: timestamp('cancelled_at'),
     /** Optional reason provided when the event was cancelled (ROK-374). */

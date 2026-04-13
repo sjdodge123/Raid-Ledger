@@ -3,7 +3,13 @@
  * Creates a minimal lineup (decided) + match (scheduling) behind the scenes,
  * exposing a simplified API that skips the full lineup flow.
  */
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SchedulingPollResponseDto } from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
@@ -22,6 +28,7 @@ import {
   countMatchMembers,
   findActiveStandalonePolls,
   completeStandalonePoll,
+  stampReschedulingPollId,
 } from './standalone-poll-query.helpers';
 import {
   findScheduleSlots,
@@ -71,8 +78,8 @@ export class StandalonePollService {
     startTime?: string,
     creatorId?: number,
   ): Promise<boolean> {
-    const ok = await completeStandalonePoll(this.db, matchId);
-    if (ok && eventId) {
+    const result = await completeStandalonePoll(this.db, matchId);
+    if (result.ok && eventId) {
       this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
         (err) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -80,7 +87,7 @@ export class StandalonePollService {
         },
       );
     }
-    return ok;
+    return result.ok;
   }
 
   /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
@@ -189,11 +196,20 @@ export class StandalonePollService {
       input.linkedEventId,
       input.minVoteThreshold,
     );
+    if (input.linkedEventId) {
+      await this.linkEventToPoll(input.linkedEventId, match.id);
+    }
     await this.addMembers(match.id, userId, input.memberUserIds);
     if (phaseDeadline) {
       await this.scheduleArchive(lineup.id, phaseDeadline);
     }
-    this.fireNotifications(game, lineup.id, match.id, userId);
+    this.fireNotifications(
+      game,
+      lineup.id,
+      match.id,
+      userId,
+      input.linkedEventId,
+    );
     this.schedulingPollEmbed.firePostInitialEmbed(
       { id: match.id, gameId: input.gameId },
       lineup.id,
@@ -246,12 +262,26 @@ export class StandalonePollService {
     await this.phaseQueue.scheduleTransition(lineupId, 'archived', delayMs);
   }
 
+  /** Atomically set reschedulingPollId on the linked event. */
+  private async linkEventToPoll(
+    eventId: number,
+    matchId: number,
+  ): Promise<void> {
+    const stamped = await stampReschedulingPollId(this.db, eventId, matchId);
+    if (!stamped) {
+      throw new ConflictException(
+        'Event is already being rescheduled or has been cancelled.',
+      );
+    }
+  }
+
   /** Fire-and-forget: notify game-interested users. */
   private fireNotifications(
     game: { id: number; name: string; coverUrl: string | null },
     lineupId: number,
     matchId: number,
     creatorId: number,
+    linkedEventId?: number,
   ): void {
     void this.notifications.notifyInterestedUsers(
       game.id,
@@ -260,6 +290,7 @@ export class StandalonePollService {
       matchId,
       creatorId,
       game.coverUrl,
+      linkedEventId,
     );
   }
 

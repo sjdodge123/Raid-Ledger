@@ -233,6 +233,20 @@ export class DiscordEmbedFactory {
     };
   }
 
+  /** Build a rescheduling embed (amber, "RESCHEDULING" badge, ROK-1034). */
+  buildEventRescheduling(
+    event: EmbedEventData,
+    context: EmbedContext,
+  ): EmbedResult {
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.REMINDER)
+      .setTitle(`${event.title} — RESCHEDULING`)
+      .setDescription('This event is being rescheduled via a scheduling poll.')
+      .setFooter({ text: context.communityName || 'Raid Ledger' })
+      .setTimestamp();
+    return { embed };
+  }
+
   /** Build a scheduling poll embed for a Discord channel (ROK-1014). */
   buildSchedulingPollEmbed(
     data: SchedulingPollEmbedData,

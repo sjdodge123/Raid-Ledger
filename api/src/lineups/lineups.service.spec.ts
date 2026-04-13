@@ -22,6 +22,11 @@ jest.mock('./lineups-carryover.helpers', () => ({
   carryOverFromLastDecided: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Mock standalone-poll query helper to avoid DB queries (ROK-1034)
+jest.mock('./standalone-poll/standalone-poll-query.helpers', () => ({
+  clearLinkedEventsByLineup: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock notification hooks to avoid extra DB queries (ROK-932)
 jest.mock('./lineups-notify-hooks.helpers', () => ({
   fireLineupCreated: jest.fn(),
