@@ -31,7 +31,7 @@ export function DayHeader({
 
     return (
         <div
-            className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-xs font-medium py-1 ${colorClass} ${interactiveClass}`}
+            className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-sm font-medium py-1 ${colorClass} ${interactiveClass}`}
             style={{ transition: 'top 300ms ease-in-out', ...splitBg }}
             data-testid={`day-header-${dayIndex}`}
             onClick={onClick}
@@ -65,12 +65,12 @@ function DayLabel({ displayDay, isRollingPast, isTodaySplit, dateLabel, nextDate
     dateLabel?: string; nextDateLabel?: string;
 }): JSX.Element {
     if (isRollingPast && nextDateLabel) {
-        return <DayWithDate day={displayDay} sub={<span className="text-[9px] opacity-60 leading-none">{nextDateLabel}</span>} />;
+        return <DayWithDate day={displayDay} sub={<span className="text-xs opacity-80 leading-none">{nextDateLabel}</span>} />;
     }
     if (isTodaySplit && dateLabel && nextDateLabel) {
         return (
             <DayWithDate day={displayDay} sub={
-                <span className="text-[9px] leading-none flex items-center gap-0.5">
+                <span className="text-xs leading-none flex items-center gap-0.5">
                     <span className="text-muted">{nextDateLabel}</span>
                     <span className="text-dim">/</span>
                     <span className="text-emerald-400/80">{dateLabel}</span>
@@ -79,7 +79,7 @@ function DayLabel({ displayDay, isRollingPast, isTodaySplit, dateLabel, nextDate
         );
     }
     if (dateLabel) {
-        return <DayWithDate day={displayDay} sub={<span className="text-[9px] opacity-60 leading-none">{dateLabel}</span>} />;
+        return <DayWithDate day={displayDay} sub={<span className="text-xs opacity-80 leading-none">{dateLabel}</span>} />;
     }
     return <>{displayDay}</>;
 }
