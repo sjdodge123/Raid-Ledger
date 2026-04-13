@@ -122,11 +122,18 @@ async function transitionVotingToDecided(token: string, id: number, entries: { g
     }
 }
 
+/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
+async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
+    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
+}
+
 /** Archive an active lineup by walking through all valid transitions. */
 async function archiveActiveLineup(token: string): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt++) {
         const banner = await apiGet(token, '/lineups/banner');
         if (!banner || typeof banner.id !== 'number') return;
+
+        await cancelLineupPhaseJobs(token, banner.id);
 
         const detail = await apiGet(token, `/lineups/${banner.id}`);
         if (!detail) return;
@@ -174,8 +181,9 @@ async function createVotingLineupWithTiebreaker(
     const gameIds = await fetchGameIds(token, 4);
 
     const createRes = (await apiPost(token, '/lineups', {
-        buildingDurationHours: 24,
-        votingDurationHours: 48,
+        buildingDurationHours: 720,
+        votingDurationHours: 720,
+        decidedDurationHours: 720,
         matchThreshold: 10,
     })) as { id?: number };
 
@@ -232,8 +240,9 @@ test.describe('Tiebreaker prompt modal', () => {
         gameIds = await fetchGameIds(adminToken, 4);
 
         const createRes = (await apiPost(adminToken, '/lineups', {
-            buildingDurationHours: 24,
-            votingDurationHours: 48,
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
             matchThreshold: 10,
         })) as { id?: number };
 

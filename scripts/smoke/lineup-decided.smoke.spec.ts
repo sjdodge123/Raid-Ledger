@@ -100,11 +100,18 @@ async function apiPatch(
 // Setup helpers
 // ---------------------------------------------------------------------------
 
+/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
+async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
+    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
+}
+
 /** Archive an active lineup by walking through all valid transitions. */
 async function archiveActiveLineup(token: string): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt++) {
         const banner = await apiGet(token, '/lineups/banner');
         if (!banner || typeof banner.id !== 'number') return;
+
+        await cancelLineupPhaseJobs(token, banner.id);
 
         const detail = await apiGet(token, `/lineups/${banner.id}`);
         if (!detail) return;
@@ -166,10 +173,11 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
     const gameIds = await fetchGameIds(token, 4);
 
     // Create lineup with a lower match threshold to maximise match generation
+    // Use 720h durations to prevent BullMQ auto-transitions (ROK-1007)
     const createRes = await apiPost(token, '/lineups', {
-        buildingDurationHours: 24,
-        votingDurationHours: 48,
-        decidedDurationHours: 24,
+        buildingDurationHours: 720,
+        votingDurationHours: 720,
+        decidedDurationHours: 720,
         matchThreshold: 10,
     });
 

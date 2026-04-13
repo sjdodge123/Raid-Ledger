@@ -75,8 +75,14 @@ let adminToken: string;
 let lineupId: number;
 let createdLineup = false;
 
+/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
+async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
+    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
+}
+
 /** Archive an active lineup by walking through all valid transitions. */
 async function archiveLineup(token: string, id: number): Promise<void> {
+    await cancelLineupPhaseJobs(token, id);
     const detail = await apiGet(token, `/lineups/${id}`);
     if (!detail) return;
     const transitions: Record<string, string[]> = {
@@ -112,6 +118,9 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
     }
     const lineup = (await apiPost(token, '/lineups', {
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        buildingDurationHours: 720,
+        votingDurationHours: 720,
+        decidedDurationHours: 720,
     })) as { id?: number };
     if (lineup?.id) {
         return lineup.id;
@@ -136,9 +145,12 @@ test.beforeAll(async () => {
         await archiveLineup(adminToken, banner.id);
     }
 
-    // Create a fresh lineup in building phase
+    // Create a fresh lineup in building phase with long durations (ROK-1007)
     const lineup = (await apiPost(adminToken, '/lineups', {
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        buildingDurationHours: 720,
+        votingDurationHours: 720,
+        decidedDurationHours: 720,
     })) as { id: number };
     lineupId = lineup.id;
     createdLineup = true;
@@ -466,6 +478,9 @@ test.describe('Voting phase', () => {
                 await archiveLineup(adminToken, banner.id);
                 const created = (await apiPost(adminToken, '/lineups', {
                     targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+                    buildingDurationHours: 720,
+                    votingDurationHours: 720,
+                    decidedDurationHours: 720,
                 })) as { id: number };
                 votingLineupId = created.id;
             } else {
@@ -475,6 +490,9 @@ test.describe('Voting phase', () => {
             // No active lineup -- create one
             const created = (await apiPost(adminToken, '/lineups', {
                 targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+                buildingDurationHours: 720,
+                votingDurationHours: 720,
+                decidedDurationHours: 720,
             })) as { id: number };
             votingLineupId = created.id;
         }

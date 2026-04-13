@@ -65,10 +65,21 @@ async function apiGet(token: string, path: string) {
     return text ? JSON.parse(text) : null;
 }
 
+/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
+async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
+    await fetch(`${API_BASE}/admin/test/cancel-lineup-phase-jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ lineupId: id }),
+    });
+}
+
 async function archiveActiveLineup(token: string): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt++) {
         const banner = await apiGet(token, '/lineups/banner');
         if (!banner || typeof banner.id !== 'number') return;
+
+        await cancelLineupPhaseJobs(token, banner.id);
 
         const detail = await apiGet(token, `/lineups/${banner.id}`);
         if (!detail) return;
@@ -101,7 +112,11 @@ async function ensureActiveLineup(token: string): Promise<number> {
     const createRes = await fetch(`${API_BASE}/lineups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ buildingDurationHours: 24, votingDurationHours: 48 }),
+        body: JSON.stringify({
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
+        }),
     });
     if (createRes.ok) {
         const data = (await createRes.json()) as { id: number };
