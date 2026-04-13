@@ -3,7 +3,20 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { EmbedEventData } from './discord-embed.factory';
 
-/** Check for an existing embed record for idempotency. */
+/**
+ * Check for an existing embed record for idempotency.
+ *
+ * LIMIT 1 is intentional here (ROK-1030 audit): the embed-poster only needs to
+ * know whether *any* tracking row exists for this event+guild. If one exists, it
+ * edits that message in-place rather than posting a duplicate. When multiple rows
+ * exist (forwarded/unfurled/shared embeds), the embed-sync processor — which
+ * uses `findTrackedMessages()` to fetch *all* rows — is responsible for keeping
+ * every copy in sync.
+ *
+ * If `replaceDeletedEmbed()` fires (the found message was deleted from Discord),
+ * only the single returned record is updated. Other tracking rows for the same
+ * event are left for the sync processor to handle on the next queue tick.
+ */
 export async function findExistingEmbedRecord(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,

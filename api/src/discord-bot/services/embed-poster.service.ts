@@ -232,6 +232,13 @@ export class EmbedPosterService {
     }
   }
 
+  /**
+   * Post a replacement embed when the original Discord message was deleted.
+   *
+   * Only the single record identified by `recordId` is updated — if additional
+   * tracking rows exist (forwarded/unfurled copies), those are left for the
+   * embed-sync processor to reconcile on the next queue tick. See ROK-1030 audit.
+   */
   private async replaceDeletedEmbed(
     eventId: number,
     recordId: string,
