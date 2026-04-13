@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
@@ -199,6 +199,8 @@ function GameContentSection({ form, setForm, errors, setErrors, isEditMode, inte
     isEditMode: boolean;
     interestCount: number; interestLoading: boolean;
 }) {
+    const onEventTypeIdChange = useCallback((id: number | null) => setForm((prev) => ({ ...prev, eventTypeId: id })), [setForm]);
+
     return (
         <FormSection title="Game & Content">
             <GameDetailsSection
@@ -214,7 +216,7 @@ function GameContentSection({ form, setForm, errors, setErrors, isEditMode, inte
                     }
                     return { ...prev, ...updates };
                 })}
-                onEventTypeIdChange={(id) => setForm((prev) => ({ ...prev, eventTypeId: id }))}
+                onEventTypeIdChange={onEventTypeIdChange}
                 onTitleChange={(title, isAuto) => { setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto })); if (!isAuto && errors.title) setErrors((prev) => ({ ...prev, title: undefined })); }}
                 onDescriptionChange={(description, isAuto) => setForm((prev) => ({ ...prev, description, descriptionIsAutoSuggested: isAuto }))}
                 onSelectedInstancesChange={(instances) => setForm((prev) => ({ ...prev, selectedInstances: instances }))}

@@ -5,21 +5,7 @@
  * then navigates to that event's detail page and verifies the timeline renders.
  */
 import { test, expect } from './base';
-
-const API_BASE = 'http://localhost:3000';
-
-async function getAdminToken(): Promise<string> {
-    const res = await fetch(`${API_BASE}/auth/local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: 'admin@local',
-            password: process.env.ADMIN_PASSWORD || 'password',
-        }),
-    });
-    const { access_token } = (await res.json()) as { access_token: string };
-    return access_token;
-}
+import { API_BASE, getAdminToken } from './api-helpers';
 
 async function createTestEvent(token: string): Promise<number> {
     const start = new Date(Date.now() + 86400000).toISOString();

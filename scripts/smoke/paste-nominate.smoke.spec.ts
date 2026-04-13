@@ -11,59 +11,7 @@
  * pass vacuously now and serve as regression guards.
  */
 import { test, expect } from './base';
-
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-// ---------------------------------------------------------------------------
-// API helpers (same pattern as community-lineup.smoke.spec.ts)
-// ---------------------------------------------------------------------------
-
-async function getAdminToken(): Promise<string> {
-    const res = await fetch(`${API_BASE}/auth/local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: 'admin@local',
-            password: process.env.ADMIN_PASSWORD || 'password',
-        }),
-    });
-    const { access_token } = (await res.json()) as { access_token: string };
-    return access_token;
-}
-
-async function apiPost(token: string, path: string, body?: Record<string, unknown>) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-    });
-    return res.json();
-}
-
-async function apiGet(token: string, path: string) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    if (!text) return null;
-    return JSON.parse(text);
-}
-
-async function apiPatch(token: string, path: string, body: Record<string, unknown>) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-    });
-    return res.json();
-}
+import { API_BASE, getAdminToken, apiPost, apiGet, apiPatch } from './api-helpers';
 
 async function archiveLineup(token: string, id: number): Promise<void> {
     const detail = await apiGet(token, `/lineups/${id}`);

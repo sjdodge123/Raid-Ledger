@@ -15,55 +15,7 @@
  */
 import { test, expect } from './base';
 import { navigateToFirstEvent, isMobile } from './helpers';
-
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-// ---------------------------------------------------------------------------
-// API helpers — reused from scheduling-poll.smoke.spec.ts pattern
-// ---------------------------------------------------------------------------
-
-let _cachedToken: string | null = null;
-let _tokenPromise: Promise<string> | null = null;
-
-async function getAdminToken(): Promise<string> {
-    if (_cachedToken) return _cachedToken;
-    if (_tokenPromise) return _tokenPromise;
-    _tokenPromise = (async () => {
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const res = await fetch(`${API_BASE}/auth/local`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: 'admin@local',
-                    password: process.env.ADMIN_PASSWORD || 'password',
-                }),
-            });
-            if (res.ok) {
-                const { access_token } = (await res.json()) as {
-                    access_token: string;
-                };
-                return access_token;
-            }
-            if (res.status === 429) {
-                const wait = attempt === 0 ? 5_000 : 15_000;
-                await new Promise((r) => setTimeout(r, wait));
-                continue;
-            }
-            throw new Error(`Auth failed: ${res.status}`);
-        }
-        throw new Error('Auth failed after 3 attempts (rate limited)');
-    })();
-    _cachedToken = await _tokenPromise;
-    _tokenPromise = null;
-    return _cachedToken;
-}
-
-async function apiDelete(token: string, path: string) {
-    await fetch(`${API_BASE}${path}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-    });
-}
+import { API_BASE, getAdminToken, apiDelete } from './api-helpers';
 
 /** Get a valid gameId from seeded data. */
 async function getFirstGameId(token: string): Promise<number> {

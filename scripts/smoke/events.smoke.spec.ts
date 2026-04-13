@@ -3,6 +3,7 @@
  */
 import { test, expect } from './base';
 import { navigateToFirstEvent } from './helpers';
+import { getAdminToken, apiGet, apiPost, apiDelete } from './api-helpers';
 
 // ---------------------------------------------------------------------------
 // Events List
@@ -415,36 +416,6 @@ test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Regression: ROK-868 — character info on duplicate signup', () => {
-    const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-    async function getAdminToken(): Promise<string> {
-        const res = await fetch(`${API_BASE}/auth/local`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: 'admin@local', password: process.env.ADMIN_PASSWORD || 'password' }),
-        });
-        const { access_token } = (await res.json()) as { access_token: string };
-        return access_token;
-    }
-
-    async function apiGet(token: string, path: string) {
-        const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-        return res.json();
-    }
-
-    async function apiPost(token: string, path: string, body: Record<string, unknown>) {
-        const res = await fetch(`${API_BASE}${path}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify(body),
-        });
-        return res.json();
-    }
-
-    async function apiDelete(token: string, path: string) {
-        await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-    }
-
     test('character data appears in event detail after duplicate signup with character', async ({ page }) => {
         test.skip(test.info().project.name === 'mobile', 'Desktop-only test — attendees panel uses desktop selectors');
 

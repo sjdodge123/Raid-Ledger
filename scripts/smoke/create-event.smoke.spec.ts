@@ -3,26 +3,7 @@
  * roster slot type switching, and successful event creation with cleanup.
  */
 import { test, expect } from './base';
-
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-// ---------------------------------------------------------------------------
-// API helpers (reused from events.smoke.spec.ts ROK-868 pattern)
-// ---------------------------------------------------------------------------
-
-async function getAdminToken(): Promise<string> {
-    const res = await fetch(`${API_BASE}/auth/local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'admin@local', password: process.env.ADMIN_PASSWORD || 'password' }),
-    });
-    const { access_token } = (await res.json()) as { access_token: string };
-    return access_token;
-}
-
-async function apiDelete(token: string, path: string) {
-    await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-}
+import { getAdminToken, apiDelete } from './api-helpers';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -8,48 +8,9 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
-
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-// ---------------------------------------------------------------------------
-// API helpers (mirrors patterns from community-lineup.smoke.spec.ts)
-// ---------------------------------------------------------------------------
-
-let _cachedToken: string | null = null;
-let _tokenPromise: Promise<string> | null = null;
-
-async function getAdminToken(): Promise<string> {
-    if (_cachedToken) return _cachedToken;
-    if (_tokenPromise) return _tokenPromise;
-    _tokenPromise = (async () => {
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const res = await fetch(`${API_BASE}/auth/local`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: 'admin@local',
-                    password: process.env.ADMIN_PASSWORD || 'password',
-                }),
-            });
-            if (res.ok) {
-                const { access_token } = (await res.json()) as {
-                    access_token: string;
-                };
-                return access_token;
-            }
-            if (res.status === 429) {
-                const wait = attempt === 0 ? 5_000 : 15_000;
-                await new Promise((r) => setTimeout(r, wait));
-                continue;
-            }
-            throw new Error(`Auth failed: ${res.status}`);
-        }
-        throw new Error('Auth failed after 3 attempts (rate limited)');
-    })();
-    _cachedToken = await _tokenPromise;
-    _tokenPromise = null;
-    return _cachedToken;
-}
+import { getAdminToken, apiGet, apiPatch } from './api-helpers';
+// lineup-decided needs a throwing apiPost — keep local override
+import { API_BASE } from './api-helpers';
 
 async function apiPost(
     token: string,
@@ -68,31 +29,6 @@ async function apiPost(
         const text = await res.text().catch(() => '');
         throw new Error(`POST ${path} failed: ${res.status} ${text}`);
     }
-    return res.json();
-}
-
-async function apiGet(token: string, path: string) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    return text ? JSON.parse(text) : null;
-}
-
-async function apiPatch(
-    token: string,
-    path: string,
-    body: Record<string, unknown>,
-) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-    });
     return res.json();
 }
 

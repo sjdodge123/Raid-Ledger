@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { IgdbGameDto, SlotConfigDto, CreateEventPlanDto, PollOption } from '@raid-ledger/contract';
 import { useTimeSuggestions, useCreateEventPlan } from '../../hooks/use-event-plans';
@@ -216,6 +216,8 @@ function PlanGameSection({ form, setForm, errors, setErrors }: {
     form: FormState; setForm: React.Dispatch<React.SetStateAction<FormState>>;
     errors: Record<string, string>; setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }) {
+    const onEventTypeIdChange = useCallback((id: number | null) => setForm((prev) => ({ ...prev, eventTypeId: id })), [setForm]);
+
     return (
         <FormSection title="Game & Details">
             <GameDetailsSection
@@ -232,7 +234,7 @@ function PlanGameSection({ form, setForm, errors, setErrors }: {
                     }
                     return { ...prev, ...updates };
                 })}
-                onEventTypeIdChange={(id) => setForm((prev) => ({ ...prev, eventTypeId: id }))}
+                onEventTypeIdChange={onEventTypeIdChange}
                 onTitleChange={(title, isAuto) => {
                     setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto }));
                     if (!isAuto && errors.title) setErrors((prev) => ({ ...prev, title: '' }));

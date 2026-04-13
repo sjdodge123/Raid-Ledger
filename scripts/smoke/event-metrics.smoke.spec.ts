@@ -8,27 +8,9 @@
  */
 import { test, expect } from './base';
 import type { TestInfo } from '@playwright/test';
+import { API_BASE, getAdminToken } from './api-helpers';
 
 function isMobile(testInfo: TestInfo) { return testInfo.project.name === 'mobile'; }
-
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function getAdminToken(): Promise<string> {
-    const res = await fetch(`${API_BASE}/auth/local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: 'admin@local',
-            password: process.env.ADMIN_PASSWORD || 'password',
-        }),
-    });
-    const { access_token } = (await res.json()) as { access_token: string };
-    return access_token;
-}
 
 interface PastEvent { id: number; title: string }
 
