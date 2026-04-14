@@ -6,8 +6,7 @@
  * and cleans up afterward.
  */
 import { test, expect } from './base';
-
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
+import { API_BASE, getAdminToken, apiPost, apiGet, apiPatch } from './api-helpers';
 
 /** Fetch real game IDs from the configured-games endpoint. */
 async function fetchGameIds(token: string, count: number): Promise<number[]> {
@@ -20,53 +19,6 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
     return body.data.slice(0, count).map((g) => g.id);
 }
 
-async function getAdminToken(): Promise<string> {
-    const res = await fetch(`${API_BASE}/auth/local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: 'admin@local',
-            password: process.env.ADMIN_PASSWORD || 'password',
-        }),
-    });
-    const { access_token } = (await res.json()) as { access_token: string };
-    return access_token;
-}
-
-async function apiPost(token: string, path: string, body?: Record<string, unknown>) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-    });
-    return res.json();
-}
-
-async function apiGet(token: string, path: string) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    if (!text) return null;
-    return JSON.parse(text);
-}
-
-async function apiPatch(token: string, path: string, body: Record<string, unknown>) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-    });
-    return res.json();
-}
-
 // ---------------------------------------------------------------------------
 // Setup: ensure an active lineup exists for the test suite
 // ---------------------------------------------------------------------------
@@ -75,8 +27,14 @@ let adminToken: string;
 let lineupId: number;
 let createdLineup = false;
 
+/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
+async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
+    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
+}
+
 /** Archive an active lineup by walking through all valid transitions. */
 async function archiveLineup(token: string, id: number): Promise<void> {
+    await cancelLineupPhaseJobs(token, id);
     const detail = await apiGet(token, `/lineups/${id}`);
     if (!detail) return;
     const transitions: Record<string, string[]> = {
@@ -112,6 +70,9 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
     }
     const lineup = (await apiPost(token, '/lineups', {
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        buildingDurationHours: 720,
+        votingDurationHours: 720,
+        decidedDurationHours: 720,
     })) as { id?: number };
     if (lineup?.id) {
         return lineup.id;
@@ -136,9 +97,12 @@ test.beforeAll(async () => {
         await archiveLineup(adminToken, banner.id);
     }
 
-    // Create a fresh lineup in building phase
+    // Create a fresh lineup in building phase with long durations (ROK-1007)
     const lineup = (await apiPost(adminToken, '/lineups', {
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        buildingDurationHours: 720,
+        votingDurationHours: 720,
+        decidedDurationHours: 720,
     })) as { id: number };
     lineupId = lineup.id;
     createdLineup = true;
@@ -466,6 +430,9 @@ test.describe('Voting phase', () => {
                 await archiveLineup(adminToken, banner.id);
                 const created = (await apiPost(adminToken, '/lineups', {
                     targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+                    buildingDurationHours: 720,
+                    votingDurationHours: 720,
+                    decidedDurationHours: 720,
                 })) as { id: number };
                 votingLineupId = created.id;
             } else {
@@ -475,6 +442,9 @@ test.describe('Voting phase', () => {
             // No active lineup -- create one
             const created = (await apiPost(adminToken, '/lineups', {
                 targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+                buildingDurationHours: 720,
+                votingDurationHours: 720,
+                decidedDurationHours: 720,
             })) as { id: number };
             votingLineupId = created.id;
         }

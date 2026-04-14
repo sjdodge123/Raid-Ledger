@@ -12,6 +12,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SignupsService } from '../events/signups.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
+import { LineupPhaseQueueService } from '../lineups/queue/lineup-phase.queue';
 import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { QueueHealthService } from '../queue/queue-health.service';
@@ -324,6 +325,15 @@ export class DemoTestService {
       .update(schema.users)
       .set({ gameTimeConfirmedAt: null })
       .where(eq(schema.users.id, userId));
+  }
+
+  /** Cancel all pending BullMQ phase-transition jobs for a lineup — DEMO_MODE only. */
+  async cancelLineupPhaseJobsForTest(lineupId: number): Promise<number> {
+    await this.assertDemoMode();
+    const queueSvc = this.moduleRef.get(LineupPhaseQueueService, {
+      strict: false,
+    });
+    return queueSvc.cancelAllForLineup(lineupId);
   }
 
   /** Build a ChannelPrefs object with all channels enabled for all types. */

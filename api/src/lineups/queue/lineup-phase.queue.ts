@@ -33,6 +33,32 @@ export class LineupPhaseQueueService {
     }
   }
 
+  /**
+   * Cancel all pending phase-transition jobs for a lineup.
+   * Removes delayed/waiting jobs for all four target statuses.
+   * Used by smoke tests to prevent stale jobs from advancing lineups.
+   */
+  async cancelAllForLineup(lineupId: number): Promise<number> {
+    const targets = ['voting', 'decided', 'scheduling', 'archived'];
+    let removed = 0;
+    for (const target of targets) {
+      const jobId = `lineup-phase-${lineupId}-${target}`;
+      const job = await this.queue.getJob(jobId);
+      if (!job) continue;
+      const state = await job.getState();
+      if (state === 'delayed' || state === 'waiting') {
+        await job.remove();
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      this.logger.debug(
+        `Cancelled ${removed} phase job(s) for lineup ${lineupId}`,
+      );
+    }
+    return removed;
+  }
+
   /** Remove an existing delayed job by ID. */
   private async removeExisting(jobId: string): Promise<void> {
     const existing = await this.queue.getJob(jobId);

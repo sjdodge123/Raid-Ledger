@@ -30,6 +30,7 @@ import {
   ClearGameInterestSchema,
   CreateTestSignupSchema,
   SetEventTimesSchema,
+  CancelLineupPhaseJobsSchema,
 } from './demo-test.schemas';
 
 /**
@@ -301,6 +302,19 @@ export class DemoTestController {
   ): Promise<{ success: boolean }> {
     await this.demoTestService.clearGameTimeConfirmationForTest(req.user.id);
     return { success: true };
+  }
+
+  /** Cancel all pending BullMQ phase-transition jobs for a lineup — DEMO_MODE only (ROK-1007). */
+  @Post('cancel-lineup-phase-jobs')
+  @HttpCode(HttpStatus.OK)
+  async cancelLineupPhaseJobsForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; removed: number }> {
+    const parsed = this.parseBody(CancelLineupPhaseJobsSchema, body);
+    const removed = await this.demoTestService.cancelLineupPhaseJobsForTest(
+      parsed.lineupId,
+    );
+    return { success: true, removed };
   }
 
   /** Parse and validate body with a Zod schema, throwing 400 on failure. */

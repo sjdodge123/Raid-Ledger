@@ -77,3 +77,7 @@ export const SetEventTimesSchema = z.object({
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
 });
+
+export const CancelLineupPhaseJobsSchema = z.object({
+  lineupId: z.number().int().positive(),
+});

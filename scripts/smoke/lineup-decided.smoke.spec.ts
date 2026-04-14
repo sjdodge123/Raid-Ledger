@@ -8,48 +8,9 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
-
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-// ---------------------------------------------------------------------------
-// API helpers (mirrors patterns from community-lineup.smoke.spec.ts)
-// ---------------------------------------------------------------------------
-
-let _cachedToken: string | null = null;
-let _tokenPromise: Promise<string> | null = null;
-
-async function getAdminToken(): Promise<string> {
-    if (_cachedToken) return _cachedToken;
-    if (_tokenPromise) return _tokenPromise;
-    _tokenPromise = (async () => {
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const res = await fetch(`${API_BASE}/auth/local`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: 'admin@local',
-                    password: process.env.ADMIN_PASSWORD || 'password',
-                }),
-            });
-            if (res.ok) {
-                const { access_token } = (await res.json()) as {
-                    access_token: string;
-                };
-                return access_token;
-            }
-            if (res.status === 429) {
-                const wait = attempt === 0 ? 5_000 : 15_000;
-                await new Promise((r) => setTimeout(r, wait));
-                continue;
-            }
-            throw new Error(`Auth failed: ${res.status}`);
-        }
-        throw new Error('Auth failed after 3 attempts (rate limited)');
-    })();
-    _cachedToken = await _tokenPromise;
-    _tokenPromise = null;
-    return _cachedToken;
-}
+import { getAdminToken, apiGet, apiPatch } from './api-helpers';
+// lineup-decided needs a throwing apiPost — keep local override
+import { API_BASE } from './api-helpers';
 
 async function apiPost(
     token: string,
@@ -71,40 +32,22 @@ async function apiPost(
     return res.json();
 }
 
-async function apiGet(token: string, path: string) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    return text ? JSON.parse(text) : null;
-}
-
-async function apiPatch(
-    token: string,
-    path: string,
-    body: Record<string, unknown>,
-) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-    });
-    return res.json();
-}
-
 // ---------------------------------------------------------------------------
 // Setup helpers
 // ---------------------------------------------------------------------------
+
+/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
+async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
+    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
+}
 
 /** Archive an active lineup by walking through all valid transitions. */
 async function archiveActiveLineup(token: string): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt++) {
         const banner = await apiGet(token, '/lineups/banner');
         if (!banner || typeof banner.id !== 'number') return;
+
+        await cancelLineupPhaseJobs(token, banner.id);
 
         const detail = await apiGet(token, `/lineups/${banner.id}`);
         if (!detail) return;
@@ -166,10 +109,11 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
     const gameIds = await fetchGameIds(token, 4);
 
     // Create lineup with a lower match threshold to maximise match generation
+    // Use 720h durations to prevent BullMQ auto-transitions (ROK-1007)
     const createRes = await apiPost(token, '/lineups', {
-        buildingDurationHours: 24,
-        votingDurationHours: 48,
-        decidedDurationHours: 24,
+        buildingDurationHours: 720,
+        votingDurationHours: 720,
+        decidedDurationHours: 720,
         matchThreshold: 10,
     });
 

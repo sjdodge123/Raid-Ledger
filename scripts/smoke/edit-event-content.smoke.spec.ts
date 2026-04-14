@@ -13,40 +13,7 @@
  */
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
-
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-// ---------------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------------
-
-async function getAdminToken(): Promise<string> {
-    const res = await fetch(`${API_BASE}/auth/local`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'admin@local', password: process.env.ADMIN_PASSWORD || 'password' }),
-    });
-    const { access_token } = (await res.json()) as { access_token: string };
-    return access_token;
-}
-
-async function apiGet(token: string, path: string) {
-    const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-    return res.json();
-}
-
-async function apiPost(token: string, path: string, body: Record<string, unknown>) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-    });
-    return res.json();
-}
-
-async function apiDelete(token: string, path: string) {
-    await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-}
+import { getAdminToken, apiGet, apiPost, apiDelete } from './api-helpers';
 
 // ---------------------------------------------------------------------------
 // Fixtures

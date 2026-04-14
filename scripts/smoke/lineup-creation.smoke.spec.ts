@@ -8,56 +8,9 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
+import { API_BASE, getAdminToken, apiGet } from './api-helpers';
 
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-
-/** Cached admin token — shared across all describe blocks to avoid rate limits. */
-let _cachedToken: string | null = null;
-let _tokenPromise: Promise<string> | null = null;
-
-async function getAdminToken(): Promise<string> {
-    if (_cachedToken) return _cachedToken;
-    if (_tokenPromise) return _tokenPromise;
-    _tokenPromise = fetchAdminToken();
-    _cachedToken = await _tokenPromise;
-    _tokenPromise = null;
-    return _cachedToken;
-}
-
-async function fetchAdminToken(): Promise<string> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch(`${API_BASE}/auth/local`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username: 'admin@local',
-                password: process.env.ADMIN_PASSWORD || 'password',
-            }),
-        });
-        if (res.ok) {
-            const { access_token } = (await res.json()) as { access_token: string };
-            return access_token;
-        }
-        if (res.status === 429) {
-            const wait = attempt === 0 ? 5_000 : 15_000;
-            await new Promise((r) => setTimeout(r, wait));
-            continue;
-        }
-        throw new Error(`Auth failed: ${res.status}`);
-    }
-    throw new Error('Auth failed after 3 attempts (rate limited)');
-}
-
-async function apiGet(token: string, path: string) {
-    const res = await fetch(`${API_BASE}${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    if (!text) return null;
-    return JSON.parse(text);
-}
-
+/** Local apiPatch that returns raw Response (used by this file's callers). */
 async function apiPatch(
     token: string,
     path: string,
@@ -78,10 +31,24 @@ async function apiPatch(
  * Walks through all valid transitions to reach archived status.
  * Retries once to handle cross-project races (desktop/mobile workers).
  */
+/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
+async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
+    await fetch(`${API_BASE}/admin/test/cancel-lineup-phase-jobs`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ lineupId: id }),
+    });
+}
+
 async function archiveActiveLineup(token: string): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt++) {
         const banner = await apiGet(token, '/lineups/banner');
         if (!banner || typeof banner.id !== 'number') return;
+
+        await cancelLineupPhaseJobs(token, banner.id);
 
         const detail = await apiGet(token, `/lineups/${banner.id}`);
         if (!detail) return;
@@ -126,9 +93,9 @@ async function ensureActiveLineup(
             Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-            buildingDurationHours: 24,
-            votingDurationHours: 48,
-            decidedDurationHours: 24,
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
         }),
     });
 
