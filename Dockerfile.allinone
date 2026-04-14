@@ -253,6 +253,31 @@ until redis-cli -s /tmp/redis.sock ping > /dev/null 2>&1; do
 done
 echo "✅ Redis is ready"
 
+# ── JWT_SECRET resolution (ROK-1035) ──────────────────────────────
+# Priority: 1) env var (if set and not the old default) → use it
+#           2) /data/.jwt_secret file exists → read it
+#           3) generate new secret, persist to /data/.jwt_secret
+HARDCODED_DEFAULT="raid-ledger-default-secret-change-in-production"
+
+if [ -n "$JWT_SECRET" ] && [ "$JWT_SECRET" != "$HARDCODED_DEFAULT" ]; then
+  echo "🔑 JWT_SECRET: using explicit env var"
+elif [ -f /data/.jwt_secret ]; then
+  export JWT_SECRET=$(cat /data/.jwt_secret)
+  echo "🔑 JWT_SECRET: loaded from /data/.jwt_secret"
+else
+  export JWT_SECRET=$(node -e "console.log(require('crypto').randomBytes(48).toString('base64'))")
+  printf '%s' "$JWT_SECRET" > /data/.jwt_secret
+  chmod 600 /data/.jwt_secret
+  echo "🔑 JWT_SECRET: generated new secret → /data/.jwt_secret"
+fi
+
+# Guard: refuse to start with the old hardcoded default
+if [ "$JWT_SECRET" = "$HARDCODED_DEFAULT" ]; then
+  echo "❌ FATAL: JWT_SECRET is still the insecure hardcoded default."
+  echo "   Remove the env var override or set a real secret."
+  exit 1
+fi
+
 # Auto-derive CORS_ORIGIN for all-in-one image if not explicitly set.
 # Render provides RENDER_EXTERNAL_URL; otherwise keep "auto" so the API
 # dynamically allows the request's own origin (works on any hostname).
@@ -336,7 +361,6 @@ ENV COMMIT_SHA=${COMMIT_SHA}
 ENV NODE_ENV=production
 ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@localhost:5432/raid_ledger
 ENV REDIS_URL=/tmp/redis.sock
-ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
 ENV DOTENV_CONFIG_QUIET=true
 ENV CORS_ORIGIN=auto
 ENV CLIENT_URL=

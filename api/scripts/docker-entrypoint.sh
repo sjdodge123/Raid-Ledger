@@ -72,6 +72,21 @@ if [ -n "$DATABASE_URL" ]; then
       });
     " 2>&1
 
+    # Re-encrypt app_settings if migrating from default JWT_SECRET (ROK-1035)
+    if [ ! -f /data/.jwt_secret_migrated ]; then
+        HARDCODED_DEFAULT="raid-ledger-default-secret-change-in-production"
+        echo "🔄 Checking if app_settings re-encryption is needed..."
+        if [ -f /app/dist/scripts/reencrypt-settings.js ]; then
+            node /app/dist/scripts/reencrypt-settings.js \
+                --old-secret "$HARDCODED_DEFAULT" \
+                --new-secret "$JWT_SECRET" 2>&1 || {
+                echo "⚠️ Re-encryption failed (non-fatal — settings may already use new key)"
+            }
+        fi
+        touch /data/.jwt_secret_migrated
+        echo "✅ Re-encryption migration marker created"
+    fi
+
     # Bootstrap admin account on first run, or sync password if ADMIN_PASSWORD is set
     echo "👤 Checking admin account..."
     node ./dist/scripts/bootstrap-admin.js 2>&1 || {
