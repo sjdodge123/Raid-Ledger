@@ -97,14 +97,24 @@ function logSummary(success: number, skipped: number): void {
   console.log(`   Succeeded: ${success}/${success + skipped}`);
   console.log(`   Skipped: ${skipped}`);
   if (skipped > 0) {
-    console.log('   ⚠️  Skipped rows were already encrypted with a different key');
+    console.log(
+      '   ⚠️  Skipped rows were already encrypted with a different key',
+    );
   }
   console.log('');
-  console.log('   ⚠️  RECOVERY NOTE: If you restore a database backup from before');
+  console.log(
+    '   ⚠️  RECOVERY NOTE: If you restore a database backup from before',
+  );
   console.log('   this migration, you must either:');
-  console.log('     1. Delete /data/.jwt_secret_migrated to re-run on next startup');
-  console.log('     2. Set JWT_SECRET to the old default to decrypt old backups:');
-  console.log('        -e JWT_SECRET=raid-ledger-default-secret-change-in-production');
+  console.log(
+    '     1. Delete /data/.jwt_secret_migrated to re-run on next startup',
+  );
+  console.log(
+    '     2. Set JWT_SECRET to the old default to decrypt old backups:',
+  );
+  console.log(
+    '        -e JWT_SECRET=raid-ledger-default-secret-change-in-production',
+  );
 }
 
 /** Parse --old-secret and --new-secret from CLI args. */
@@ -138,8 +148,8 @@ async function main(): Promise<void> {
 
   console.log('🔐 JWT_SECRET MIGRATION STARTED');
   console.log(`   Timestamp: ${new Date().toISOString()}`);
-  console.log(`   Old secret (hardcoded default): ${oldSecret}`);
-  console.log(`   New secret: ${newSecret}`);
+  console.log(`   Old secret: <hardcoded default>`);
+  console.log(`   New secret: <${newSecret.length}-char generated value>`);
   console.log(`   New secret file: /data/.jwt_secret`);
 
   const oldKey = deriveKey(oldSecret);
