@@ -137,6 +137,10 @@ async function deleteDemoUserData(
       .update(schema.availability)
       .set({ sourceEventId: null })
       .where(inArray(schema.availability.sourceEventId, demoEventIds));
+    await db
+      .update(schema.communityLineups)
+      .set({ linkedEventId: null })
+      .where(inArray(schema.communityLineups.linkedEventId, demoEventIds));
   }
   await deleteDemoUserDependents(db, demoUserIds, demoEventIds);
 }
