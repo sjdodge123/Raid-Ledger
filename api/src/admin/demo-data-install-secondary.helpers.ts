@@ -295,7 +295,7 @@ async function reassignOrigEventsToRaidLeader(
   }
 }
 
-/** Randomly reassign ~30% of generated events to non-admin creators. */
+/** Reassign ALL generated events to non-admin creators (round-robin). */
 async function reassignGenEventsRandomly(
   db: Db,
   allUsers: (typeof schema.users.$inferSelect)[],
@@ -303,15 +303,12 @@ async function reassignGenEventsRandomly(
 ): Promise<void> {
   const nonAdminUsers = allUsers.filter((u) => u.role !== 'admin');
   if (nonAdminUsers.length === 0) return;
-  const rng = createRng(0xeee);
   const reassignByCreator = new Map<number, number[]>();
-  for (const event of genEvents) {
-    if (rng() < 0.3) {
-      const creator = nonAdminUsers[Math.floor(rng() * nonAdminUsers.length)];
-      const ids = reassignByCreator.get(creator.id) ?? [];
-      ids.push(event.id);
-      reassignByCreator.set(creator.id, ids);
-    }
+  for (let i = 0; i < genEvents.length; i++) {
+    const creator = nonAdminUsers[i % nonAdminUsers.length];
+    const ids = reassignByCreator.get(creator.id) ?? [];
+    ids.push(genEvents[i].id);
+    reassignByCreator.set(creator.id, ids);
   }
   for (const [creatorId, eventIds] of reassignByCreator) {
     await db
