@@ -55,7 +55,7 @@ export function GridBody({
     return (
         <div
             ref={gridRef} className="grid gap-px select-none"
-            style={{ gridTemplateColumns: '48px repeat(7, 1fr)', touchAction: 'none', background: gridLineBackground }}
+            style={{ gridTemplateColumns: '52px repeat(7, 1fr)', touchAction: 'none', background: gridLineBackground }}
             onPointerUp={handlePointerUp}
             onPointerLeave={() => { handlePointerUp(); setHoveredCell(null); }}
             data-testid="game-time-grid"
@@ -75,7 +75,7 @@ function TzCorner({ tzLabel, noStickyOffset, isHeaderHidden }: {
             className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 bg-surface flex items-center justify-center`}
             style={{ transition: noStickyOffset ? undefined : 'top 300ms ease-in-out' }}
         >
-            {tzLabel && <span className="text-[10px] text-dim font-medium">{tzLabel}</span>}
+            {tzLabel && <span className="text-xs text-dim font-medium">{tzLabel}</span>}
         </div>
     );
 }
@@ -106,7 +106,7 @@ function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, next
 function HourRow({ hour, ...cellProps }: { hour: number } & CellRenderProps): JSX.Element {
     return (
         <Fragment>
-            <div className="text-right text-xs text-dim pr-2 py-0.5 flex items-center justify-end">
+            <div className="text-right text-sm text-dim pr-2 py-0.5 flex items-center justify-end">
                 {formatHour(hour)}
             </div>
             {DAYS.map((_, dayIndex) => (
