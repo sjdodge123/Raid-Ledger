@@ -226,6 +226,8 @@ export const THEME_ASSIGNMENTS: Record<string, string> = {
 /** Role accounts for impersonation testing */
 export const ROLE_ACCOUNTS = [
   { username: 'ShadowMage', role: 'Raid Leader' },
+  { username: 'ProRaider', role: 'Raid Leader' },
+  { username: 'TankMaster', role: 'Raid Leader' },
   { username: 'CasualCarl', role: 'Player' },
 ] as const;
 
@@ -311,5 +313,9 @@ export function getGameTimeDefinitions(): {
 
 // Re-export from extracted modules for backward compatibility
 export { getAvailabilityDefinitions } from './demo-data-availability';
-export { getEventsDefinitions } from './demo-data-events';
+export {
+  getEventsDefinitions,
+  getEdgeCaseDefinitions,
+} from './demo-data-events';
+export type { EdgeCaseEvent } from './demo-data-events';
 export { getNotificationTemplates } from './demo-data-notifications';

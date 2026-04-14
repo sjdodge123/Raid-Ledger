@@ -11,7 +11,9 @@ import {
   CHARACTERS_CONFIG,
   getClassIconUrl,
   getEventsDefinitions,
+  getEdgeCaseDefinitions,
 } from './demo-data.constants';
+import type { EdgeCaseEvent } from './demo-data.constants';
 import {
   generateEvents,
   generateCharacters,
@@ -52,7 +54,24 @@ export async function installUsers(
   return { allUsers, userByName };
 }
 
-/** Insert original + generated events. */
+/** Map an edge-case event definition to a DB-ready insert value. */
+function mapEdgeCaseEvent(e: EdgeCaseEvent, creatorId: number) {
+  return {
+    title: e.title,
+    description: e.description,
+    gameId: e.gameId,
+    creatorId,
+    duration: [e.startTime, e.endTime] as [Date, Date],
+    ...(e.isAdHoc != null && { isAdHoc: e.isAdHoc }),
+    ...(e.adHocStatus != null && { adHocStatus: e.adHocStatus }),
+    ...(e.cancelledAt != null && { cancelledAt: e.cancelledAt }),
+    ...(e.cancellationReason != null && {
+      cancellationReason: e.cancellationReason,
+    }),
+  };
+}
+
+/** Insert original + edge-case + generated events. */
 export async function installEvents(
   batchInsertReturning: BatchInsertReturning,
   seedAdminId: number,
@@ -60,14 +79,16 @@ export async function installEvents(
   generatedEvents: ReturnType<typeof generateEvents>,
 ) {
   const origEventDefs = getEventsDefinitions(allGames);
-  const origEventValues = origEventDefs.map((e) => ({
+  const edgeCaseDefs = getEdgeCaseDefinitions(allGames);
+  const origValues = origEventDefs.map((e) => ({
     title: e.title,
     description: e.description,
     gameId: e.gameId,
     creatorId: seedAdminId,
     duration: [e.startTime, e.endTime] as [Date, Date],
   }));
-  const genEventValues = generatedEvents.map((e) => ({
+  const edgeValues = edgeCaseDefs.map((e) => mapEdgeCaseEvent(e, seedAdminId));
+  const genValues = generatedEvents.map((e) => ({
     title: e.title,
     description: e.description,
     gameId: e.gameId,
@@ -75,13 +96,15 @@ export async function installEvents(
     duration: [e.startTime, e.endTime] as [Date, Date],
     maxAttendees: e.maxPlayers,
   }));
-  const createdEvents = (await batchInsertReturning(schema.events, [
-    ...origEventValues,
-    ...genEventValues,
-  ])) as (typeof schema.events.$inferSelect)[];
-  const origEvents = createdEvents.slice(0, origEventDefs.length);
-  const genEvents = createdEvents.slice(origEventDefs.length);
-  return { createdEvents, origEvents, genEvents };
+  const allValues = [...origValues, ...edgeValues, ...genValues];
+  const created = (await batchInsertReturning(
+    schema.events,
+    allValues,
+  )) as (typeof schema.events.$inferSelect)[];
+  const handcraftedCount = origEventDefs.length + edgeCaseDefs.length;
+  const origEvents = created.slice(0, handcraftedCount);
+  const genEvents = created.slice(handcraftedCount);
+  return { createdEvents: created, origEvents, genEvents };
 }
 
 /** Insert original + generated characters. */
