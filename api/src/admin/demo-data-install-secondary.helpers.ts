@@ -271,19 +271,28 @@ export async function reassignEventCreators(
   await reassignGenEventsRandomly(db, allUsers, genEvents);
 }
 
-/** Reassign first 2 original events to the raid leader (single query). */
+/** Reassign ALL original events round-robin across raid leaders. */
 async function reassignOrigEventsToRaidLeader(
   db: Db,
   userByName: Map<string, typeof schema.users.$inferSelect>,
   origEvents: (typeof schema.events.$inferSelect)[],
 ): Promise<void> {
-  const raidLeader = userByName.get(ROLE_ACCOUNTS[0].username);
-  if (!raidLeader || origEvents.length < 2) return;
-  const eventIds = origEvents.slice(0, 2).map((e) => e.id);
-  await db
-    .update(schema.events)
-    .set({ creatorId: raidLeader.id })
-    .where(inArray(schema.events.id, eventIds));
+  const raidLeaders = ROLE_ACCOUNTS.filter((a) => a.role === 'Raid Leader');
+  const byLeader = new Map<number, number[]>();
+  for (let i = 0; i < origEvents.length; i++) {
+    const leader = raidLeaders[i % raidLeaders.length];
+    const user = userByName.get(leader.username);
+    if (!user) continue;
+    const ids = byLeader.get(user.id) ?? [];
+    ids.push(origEvents[i].id);
+    byLeader.set(user.id, ids);
+  }
+  for (const [creatorId, eventIds] of byLeader) {
+    await db
+      .update(schema.events)
+      .set({ creatorId })
+      .where(inArray(schema.events.id, eventIds));
+  }
 }
 
 /** Randomly reassign ~30% of generated events to non-admin creators. */
