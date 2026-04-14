@@ -101,10 +101,9 @@ export async function installEvents(
     schema.events,
     allValues,
   )) as (typeof schema.events.$inferSelect)[];
-  const origCount = origEventDefs.length;
-  const edgeCount = edgeCaseDefs.length;
-  const origEvents = created.slice(0, origCount);
-  const genEvents = created.slice(origCount + edgeCount);
+  const handcraftedCount = origEventDefs.length + edgeCaseDefs.length;
+  const origEvents = created.slice(0, handcraftedCount);
+  const genEvents = created.slice(handcraftedCount);
   return { createdEvents: created, origEvents, genEvents };
 }
 
