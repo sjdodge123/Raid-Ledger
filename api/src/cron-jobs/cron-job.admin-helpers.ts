@@ -2,7 +2,7 @@
  * Admin/runtime helpers for cron job management.
  * Extracted from cron-job.helpers.ts for file size compliance.
  */
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronTime } from 'cron';
 import { eq, desc } from 'drizzle-orm';
@@ -87,6 +87,32 @@ export function applyRuntimeSchedule(
       `Could not apply runtime schedule for "${name}": ${err instanceof Error ? err.message : err}`,
     );
   }
+}
+
+/** Validate and apply a schedule change, returning the updated row. */
+export async function updateJobSchedule(
+  db: Db,
+  registry: SchedulerRegistry,
+  id: number,
+  cronExpression: string,
+  logger: Logger,
+): Promise<CronJobRow | undefined> {
+  try {
+    new CronTime(cronExpression);
+  } catch {
+    throw new BadRequestException(
+      `Invalid cron expression: "${cronExpression}"`,
+    );
+  }
+  const nextRunAt = computeNextRun(cronExpression);
+  const [updated] = await db
+    .update(schema.cronJobs)
+    .set({ cronExpression, nextRunAt, updatedAt: new Date() })
+    .where(eq(schema.cronJobs.id, id))
+    .returning();
+  if (!updated) return updated;
+  applyRuntimeSchedule(registry, updated.name, cronExpression, logger);
+  return updated;
 }
 
 /** Update a job's paused state and return the updated row. */

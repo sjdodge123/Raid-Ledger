@@ -64,7 +64,7 @@ export class ScheduledEventService {
   ) {}
 
   /** Cron: auto-start Discord Scheduled Events whose start time has passed. */
-  @Cron('3,33 * * * * *', {
+  @Cron('0 * * * * *', {
     name: 'ScheduledEventService_startScheduledEvents',
   })
   async handleStartScheduledEvents(): Promise<void> {

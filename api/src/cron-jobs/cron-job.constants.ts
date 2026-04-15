@@ -11,6 +11,9 @@ export const PRUNE_EVERY_N_EXECUTIONS = 50;
 /** How often (ms) to flush cached last_run_at updates to the DB */
 export const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+/** Minimum interval (ms) between liveness heartbeat updates for no-op runs */
+export const NOOP_LIVENESS_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Valid categories for cron jobs. Must match the `category` column values.
  */
@@ -82,7 +85,7 @@ export const CORE_JOB_METADATA: Record<
   },
   ScheduledEventService_startScheduledEvents: {
     description:
-      'Auto-starts Discord scheduled events when their start time arrives every 30 seconds',
+      'Auto-starts Discord scheduled events when their start time arrives every 60 seconds',
     category: 'Events',
   },
   ScheduledEventService_completeScheduledEvents: {

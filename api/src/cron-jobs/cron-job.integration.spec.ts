@@ -158,6 +158,111 @@ function describeCronJob() {
   describe('executeWithTracking', () => describeExecuteWithTracking());
 
   // ===================================================================
+  // No-op Tracking (ROK-1042)
+  // ===================================================================
+
+  function describeNoOpTracking() {
+    it('should NOT insert execution row for no-op runs', async () => {
+      const jobId = await insertTestJob(testApp, 'test:noop-silent');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:noop-silent', () =>
+        Promise.resolve(false),
+      );
+
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(executions.length).toBe(0);
+    });
+
+    it('should NOT immediately update last_run_at for no-op runs', async () => {
+      const jobId = await insertTestJob(testApp, 'test:noop-no-update');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:noop-no-update', () =>
+        Promise.resolve(false),
+      );
+
+      const [job] = await testApp.db
+        .select()
+        .from(schema.cronJobs)
+        .where(eq(schema.cronJobs.id, jobId))
+        .limit(1);
+
+      // last_run_at should not have been written directly to DB
+      // (it may be queued in pendingLastRunUpdates for liveness)
+      expect(job.lastRunAt).toBeNull();
+    });
+
+    it('should queue liveness update when lastRunAt is stale', async () => {
+      const staleDate = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
+      const jobId = await insertTestJob(testApp, 'test:noop-liveness', {
+        lastRunAt: staleDate,
+      });
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:noop-liveness', () =>
+        Promise.resolve(false),
+      );
+
+      // Flush pending updates to write to DB
+      await cronJobService.flushLastRunUpdates();
+
+      const [job] = await testApp.db
+        .select()
+        .from(schema.cronJobs)
+        .where(eq(schema.cronJobs.id, jobId))
+        .limit(1);
+
+      // last_run_at should have been updated via liveness flush
+      expect(job.lastRunAt).not.toBeNull();
+      expect(job.lastRunAt!.getTime()).toBeGreaterThan(staleDate.getTime());
+    });
+
+    it('should still fully track completed runs', async () => {
+      const jobId = await insertTestJob(testApp, 'test:completed-tracked');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking(
+        'test:completed-tracked',
+        async () => {
+          /* did real work */
+        },
+      );
+
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(executions.length).toBe(1);
+      expect(executions[0].status).toBe('completed');
+    });
+
+    it('should still fully track failed runs', async () => {
+      const jobId = await insertTestJob(testApp, 'test:failed-tracked');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:failed-tracked', () =>
+        Promise.reject(new Error('Intentional failure')),
+      );
+
+      const executions = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(executions.length).toBe(1);
+      expect(executions[0].status).toBe('failed');
+      expect(executions[0].error).toBe('Intentional failure');
+    });
+  }
+  describe('no-op tracking (ROK-1042)', () => describeNoOpTracking());
+
+  // ===================================================================
   // Execution Pruning
   // ===================================================================
 

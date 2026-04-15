@@ -110,14 +110,22 @@ async function recordExecution(
 }
 
 /** Record a no-op execution (handler ran but found nothing to do). */
-export async function recordNoOp(
-  db: Db,
-  job: CronJobRow,
+export function recordNoOp(
   jobName: string,
   startedAt: Date,
   finishedAt: Date,
-): Promise<void> {
-  await recordExecution(db, job, jobName, 'no-op', startedAt, finishedAt);
+): void {
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
+  perfLog('CRON', jobName, durationMs, { status: 'no-op' });
+}
+
+/** Check whether enough time has elapsed for a liveness heartbeat update. */
+export function shouldUpdateLiveness(
+  lastRunAt: Date | null,
+  intervalMs: number,
+): boolean {
+  if (!lastRunAt) return true;
+  return Date.now() - lastRunAt.getTime() >= intervalMs;
 }
 
 /** Record a skipped (paused) execution. */
