@@ -166,9 +166,8 @@ function describeCronJob() {
       const jobId = await insertTestJob(testApp, 'test:noop-silent');
       const cronJobService = testApp.app.get(CronJobService);
 
-      await cronJobService.executeWithTracking(
-        'test:noop-silent',
-        () => Promise.resolve(false),
+      await cronJobService.executeWithTracking('test:noop-silent', () =>
+        Promise.resolve(false),
       );
 
       const executions = await testApp.db
@@ -183,9 +182,8 @@ function describeCronJob() {
       const jobId = await insertTestJob(testApp, 'test:noop-no-update');
       const cronJobService = testApp.app.get(CronJobService);
 
-      await cronJobService.executeWithTracking(
-        'test:noop-no-update',
-        () => Promise.resolve(false),
+      await cronJobService.executeWithTracking('test:noop-no-update', () =>
+        Promise.resolve(false),
       );
 
       const [job] = await testApp.db
@@ -206,9 +204,8 @@ function describeCronJob() {
       });
       const cronJobService = testApp.app.get(CronJobService);
 
-      await cronJobService.executeWithTracking(
-        'test:noop-liveness',
-        () => Promise.resolve(false),
+      await cronJobService.executeWithTracking('test:noop-liveness', () =>
+        Promise.resolve(false),
       );
 
       // Flush pending updates to write to DB
