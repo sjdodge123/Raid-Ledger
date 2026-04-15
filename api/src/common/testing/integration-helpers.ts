@@ -98,9 +98,15 @@ export async function truncateAllTables(
   `);
 
   if (tables.length > 0) {
-    const tableNames = tables.map((t) => t.tablename).join(', ');
     await retryOnDeadlock(() =>
-      db.execute(sql.raw(`TRUNCATE TABLE ${tableNames} CASCADE`)),
+      db.transaction(async (tx) => {
+        // Disable FK trigger checks for the session so DELETE order doesn't matter.
+        await tx.execute(sql`SET session_replication_role = 'replica'`);
+        for (const t of tables) {
+          await tx.execute(sql.raw(`DELETE FROM "${t.tablename}"`));
+        }
+        await tx.execute(sql`SET session_replication_role = 'origin'`);
+      }),
     );
   }
 
