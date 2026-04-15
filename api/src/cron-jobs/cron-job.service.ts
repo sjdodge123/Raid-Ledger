@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -9,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
-import { CronTime } from 'cron';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -40,10 +38,10 @@ import {
 } from './cron-job.helpers';
 import {
   getCronJobSafe,
-  applyRuntimeSchedule,
   setPaused,
   syncOnePluginRegistrar,
   getExecutionHistory,
+  updateJobSchedule,
 } from './cron-job.admin-helpers';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
@@ -317,27 +315,14 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Update schedule (cron expression) for a job. */
   async updateSchedule(id: number, cronExpression: string) {
-    try {
-      new CronTime(cronExpression);
-    } catch {
-      throw new BadRequestException(
-        `Invalid cron expression: "${cronExpression}"`,
-      );
-    }
-    const nextRunAt = computeNextRun(cronExpression);
-    const [updated] = await this.db
-      .update(schema.cronJobs)
-      .set({ cronExpression, nextRunAt, updatedAt: new Date() })
-      .where(eq(schema.cronJobs.id, id))
-      .returning();
-    if (!updated) return updated;
-    this.jobCache.set(updated.name, updated);
-    applyRuntimeSchedule(
+    const updated = await updateJobSchedule(
+      this.db,
       this.schedulerRegistry,
-      updated.name,
+      id,
       cronExpression,
       this.logger,
     );
+    if (updated) this.jobCache.set(updated.name, updated);
     return updated;
   }
 
