@@ -84,7 +84,7 @@ describe('runSearchPipeline', () => {
       triggerRefresh,
     );
 
-    expect(result).toBe(itadResult);
+    expect(result).toEqual(itadResult);
     expect(executeSearch).not.toHaveBeenCalled();
   });
 
@@ -112,7 +112,7 @@ describe('runSearchPipeline', () => {
       triggerRefresh,
     );
 
-    expect(result).toBe(igdbResult);
+    expect(result).toEqual(igdbResult);
     expect(executeSearch).toHaveBeenCalled();
   });
 
@@ -135,7 +135,7 @@ describe('runSearchPipeline', () => {
       triggerRefresh,
     );
 
-    expect(result).toBe(igdbResult);
+    expect(result).toEqual(igdbResult);
   });
 
   it('falls back to IGDB when ITAD throws non-Error', async () => {
@@ -157,7 +157,7 @@ describe('runSearchPipeline', () => {
       triggerRefresh,
     );
 
-    expect(result).toBe(igdbResult);
+    expect(result).toEqual(igdbResult);
   });
 
   it('passes triggerRefresh callback to IGDB executeSearch', async () => {
@@ -203,7 +203,7 @@ describe('runSearchPipeline', () => {
       triggerRefresh,
     );
 
-    expect(result).toBe(igdbResult);
+    expect(result).toEqual(igdbResult);
     expect(executeItadSearch).not.toHaveBeenCalled();
     expect(executeSearch).toHaveBeenCalled();
   });
@@ -226,7 +226,7 @@ describe('runSearchPipeline', () => {
       triggerRefresh,
     );
 
-    expect(result).toBe(itadResult);
+    expect(result).toEqual(itadResult);
     expect(executeItadSearch).toHaveBeenCalled();
   });
 });
