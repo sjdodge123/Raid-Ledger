@@ -117,9 +117,7 @@ async function mergeGroup(
       await reassignEventFks(tx, loserId, group.winnerId);
       await reassignLineupFks(tx, loserId, group.winnerId);
       await reassignMiscFks(tx, loserId, group.winnerId);
-      await tx
-        .delete(schema.games)
-        .where(eq(schema.games.id, loserId));
+      await tx.delete(schema.games).where(eq(schema.games.id, loserId));
     }
   });
 }

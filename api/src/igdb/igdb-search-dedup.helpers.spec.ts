@@ -658,9 +658,7 @@ describe('mergeEnrichment', () => {
 
     mergeEnrichment(winner, donor);
 
-    expect(winner.itadBoxartUrl).toBe(
-      'https://itad.example.com/boxart.jpg',
-    );
+    expect(winner.itadBoxartUrl).toBe('https://itad.example.com/boxart.jpg');
   });
 
   it('copies itadTags from donor when winner has empty array', () => {
