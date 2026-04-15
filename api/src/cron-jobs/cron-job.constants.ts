@@ -82,7 +82,7 @@ export const CORE_JOB_METADATA: Record<
   },
   ScheduledEventService_startScheduledEvents: {
     description:
-      'Auto-starts Discord scheduled events when their start time arrives every 30 seconds',
+      'Auto-starts Discord scheduled events when their start time arrives every 60 seconds',
     category: 'Events',
   },
   ScheduledEventService_completeScheduledEvents: {
