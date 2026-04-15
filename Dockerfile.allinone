@@ -234,9 +234,8 @@ redirect_stderr=true
 command=/app/supervisor-events.sh
 events=PROCESS_STATE
 buffer_size=100
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-redirect_stderr=true
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
 
 [include]
 files = /etc/supervisor.d/services/*.ini
