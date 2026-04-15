@@ -22,6 +22,7 @@ import {
 import * as schema from '../drizzle/schema';
 import {
   FLUSH_INTERVAL_MS,
+  NOOP_LIVENESS_INTERVAL_MS,
   PRUNE_EVERY_N_EXECUTIONS,
 } from './cron-job.constants';
 import {
@@ -32,6 +33,7 @@ import {
   recordCompleted,
   recordFailed,
   recordNoOp,
+  shouldUpdateLiveness,
   extractRegistryJobMeta,
   flushPendingUpdates,
   recordSkippedTrigger,
@@ -188,29 +190,43 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     fn: () => Promise<void | boolean>,
   ): Promise<void> {
     const startedAt = new Date();
+    let didInsertRow = false;
     try {
       const result = await fn();
       const finishedAt = new Date();
       if (result === false) {
-        await recordNoOp(this.db, job, jobName, startedAt, finishedAt);
+        recordNoOp(jobName, startedAt, finishedAt);
+        this.queueLivenessIfStale(job);
       } else {
         await recordCompleted(this.db, job, jobName, startedAt, finishedAt);
+        didInsertRow = true;
       }
-    } catch (error) {
-      const finishedAt = new Date();
-      const msg = error instanceof Error ? error.message : String(error);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       await recordFailed(
         this.db,
         job,
         jobName,
         startedAt,
-        finishedAt,
+        new Date(),
         msg,
         this.logger,
       );
+      didInsertRow = true;
     } finally {
-      await this.maybePrune(job, jobName);
+      if (didInsertRow) await this.maybePrune(job, jobName);
     }
+  }
+
+  /** Queue a liveness heartbeat if enough time has elapsed since last update. */
+  private queueLivenessIfStale(job: CronJobRow): void {
+    if (!shouldUpdateLiveness(job.lastRunAt, NOOP_LIVENESS_INTERVAL_MS)) return;
+    const now = new Date();
+    this.pendingLastRunUpdates.set(job.id, {
+      lastRunAt: now,
+      cronExpression: job.cronExpression,
+    });
+    job.lastRunAt = now;
   }
 
   /** Prune old executions periodically. */

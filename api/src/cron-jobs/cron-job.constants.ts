@@ -11,6 +11,9 @@ export const PRUNE_EVERY_N_EXECUTIONS = 50;
 /** How often (ms) to flush cached last_run_at updates to the DB */
 export const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+/** Minimum interval (ms) between liveness heartbeat updates for no-op runs */
+export const NOOP_LIVENESS_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Valid categories for cron jobs. Must match the `category` column values.
  */
