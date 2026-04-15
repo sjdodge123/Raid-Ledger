@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useGameTimeEditor } from './use-game-time-editor';
@@ -60,14 +60,14 @@ describe('useGameTimeEditor - applyPreset — part 1', () => {
     });
 
     describe('Morning Preset (6a-12p)', () => {
-        it('adds morning hours (6-11) when none are active', () => {
+        it('adds morning hours (6-11) when none are active', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'morning');
+            act(() => { result.current.applyPreset(0, 'morning'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const hours = result.current.slots
                     .filter(s => s.dayOfWeek === 0)
                     .map(s => s.hour)
@@ -76,22 +76,22 @@ describe('useGameTimeEditor - applyPreset — part 1', () => {
             });
         });
 
-        it('removes morning hours when all are active', () => {
+        it('removes morning hours when all are active', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
             // Add morning hours first
-            result.current.applyPreset(0, 'morning');
+            act(() => { result.current.applyPreset(0, 'morning'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 expect(result.current.slots.length).toBeGreaterThan(0);
             });
 
             // Toggle off
-            result.current.applyPreset(0, 'morning');
+            act(() => { result.current.applyPreset(0, 'morning'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const morningSlots = result.current.slots.filter(
                     s => s.dayOfWeek === 0 && s.hour >= 6 && s.hour < 12
                 );
@@ -99,21 +99,23 @@ describe('useGameTimeEditor - applyPreset — part 1', () => {
             });
         });
 
-        it('adds only missing morning hours when some are active', () => {
+        it('adds only missing morning hours when some are active', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
             // Manually add hours 6 and 7
-            result.current.handleChange([
-                { dayOfWeek: 0, hour: 6, status: 'available' },
-                { dayOfWeek: 0, hour: 7, status: 'available' },
-            ]);
+            act(() => {
+                result.current.handleChange([
+                    { dayOfWeek: 0, hour: 6, status: 'available' },
+                    { dayOfWeek: 0, hour: 7, status: 'available' },
+                ]);
+            });
 
             // Apply morning preset
-            result.current.applyPreset(0, 'morning');
+            act(() => { result.current.applyPreset(0, 'morning'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const hours = result.current.slots
                     .filter(s => s.dayOfWeek === 0)
                     .map(s => s.hour)
@@ -131,14 +133,14 @@ describe('useGameTimeEditor - applyPreset — part 2', () => {
     });
 
     describe('Afternoon Preset (12p-6p)', () => {
-        it('adds afternoon hours (12-17)', () => {
+        it('adds afternoon hours (12-17)', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'afternoon');
+            act(() => { result.current.applyPreset(0, 'afternoon'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const hours = result.current.slots
                     .filter(s => s.dayOfWeek === 0)
                     .map(s => s.hour)
@@ -147,17 +149,17 @@ describe('useGameTimeEditor - applyPreset — part 2', () => {
             });
         });
 
-        it('removes afternoon hours when all are active', () => {
+        it('removes afternoon hours when all are active', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'afternoon');
-            waitFor(() => expect(result.current.slots.length).toBeGreaterThan(0));
+            act(() => { result.current.applyPreset(0, 'afternoon'); });
+            await waitFor(() => expect(result.current.slots.length).toBeGreaterThan(0));
 
-            result.current.applyPreset(0, 'afternoon');
+            act(() => { result.current.applyPreset(0, 'afternoon'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const afternoonSlots = result.current.slots.filter(
                     s => s.dayOfWeek === 0 && s.hour >= 12 && s.hour < 18
                 );
@@ -174,14 +176,14 @@ describe('useGameTimeEditor - applyPreset — part 3', () => {
     });
 
     describe('Evening Preset (6p-12a)', () => {
-        it('adds evening hours (18-23)', () => {
+        it('adds evening hours (18-23)', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'evening');
+            act(() => { result.current.applyPreset(0, 'evening'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const hours = result.current.slots
                     .filter(s => s.dayOfWeek === 0)
                     .map(s => s.hour)
@@ -190,17 +192,17 @@ describe('useGameTimeEditor - applyPreset — part 3', () => {
             });
         });
 
-        it('removes evening hours when all are active', () => {
+        it('removes evening hours when all are active', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'evening');
-            waitFor(() => expect(result.current.slots.length).toBeGreaterThan(0));
+            act(() => { result.current.applyPreset(0, 'evening'); });
+            await waitFor(() => expect(result.current.slots.length).toBeGreaterThan(0));
 
-            result.current.applyPreset(0, 'evening');
+            act(() => { result.current.applyPreset(0, 'evening'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const eveningSlots = result.current.slots.filter(
                     s => s.dayOfWeek === 0 && s.hour >= 18
                 );
@@ -217,14 +219,14 @@ describe('useGameTimeEditor - applyPreset — part 4', () => {
     });
 
     describe('Night Preset (12a-6a)', () => {
-        it('adds night hours (0-5)', () => {
+        it('adds night hours (0-5)', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'night');
+            act(() => { result.current.applyPreset(0, 'night'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const hours = result.current.slots
                     .filter(s => s.dayOfWeek === 0)
                     .map(s => s.hour)
@@ -233,17 +235,17 @@ describe('useGameTimeEditor - applyPreset — part 4', () => {
             });
         });
 
-        it('removes night hours when all are active', () => {
+        it('removes night hours when all are active', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'night');
-            waitFor(() => expect(result.current.slots.length).toBeGreaterThan(0));
+            act(() => { result.current.applyPreset(0, 'night'); });
+            await waitFor(() => expect(result.current.slots.length).toBeGreaterThan(0));
 
-            result.current.applyPreset(0, 'night');
+            act(() => { result.current.applyPreset(0, 'night'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const nightSlots = result.current.slots.filter(
                     s => s.dayOfWeek === 0 && s.hour < 6
                 );
@@ -260,15 +262,15 @@ describe('useGameTimeEditor - applyPreset — part 5', () => {
     });
 
     describe('Multiple Presets', () => {
-        it('can apply multiple presets to same day', () => {
+        it('can apply multiple presets to same day', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'morning');
-            result.current.applyPreset(0, 'afternoon');
+            act(() => { result.current.applyPreset(0, 'morning'); });
+            act(() => { result.current.applyPreset(0, 'afternoon'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const hours = result.current.slots
                     .filter(s => s.dayOfWeek === 0)
                     .map(s => s.hour)
@@ -277,15 +279,15 @@ describe('useGameTimeEditor - applyPreset — part 5', () => {
             });
         });
 
-        it('can apply presets to different days', () => {
+        it('can apply presets to different days', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'morning'); // Sunday morning
-            result.current.applyPreset(1, 'evening'); // Monday evening
+            act(() => { result.current.applyPreset(0, 'morning'); }); // Sunday morning
+            act(() => { result.current.applyPreset(1, 'evening'); }); // Monday evening
 
-            waitFor(() => {
+            await waitFor(() => {
                 const sundayHours = result.current.slots
                     .filter(s => s.dayOfWeek === 0)
                     .map(s => s.hour)
@@ -300,20 +302,22 @@ describe('useGameTimeEditor - applyPreset — part 5', () => {
             });
         });
 
-        it('does not affect other days when applying preset', () => {
+        it('does not affect other days when applying preset', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
             // Add Monday hours
-            result.current.handleChange([
-                { dayOfWeek: 1, hour: 10, status: 'available' },
-            ]);
+            act(() => {
+                result.current.handleChange([
+                    { dayOfWeek: 1, hour: 10, status: 'available' },
+                ]);
+            });
 
             // Apply Sunday morning preset
-            result.current.applyPreset(0, 'morning');
+            act(() => { result.current.applyPreset(0, 'morning'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 const mondaySlots = result.current.slots.filter(s => s.dayOfWeek === 1);
                 expect(mondaySlots).toHaveLength(1);
                 expect(mondaySlots[0].hour).toBe(10);
@@ -328,47 +332,51 @@ describe('Edge Cases — part 1 (sub 1)', () => {
         vi.clearAllMocks();
     });
 
-    it('handles applying preset when other days have slots', () => {
+    it('handles applying preset when other days have slots', async () => {
         const { result } = renderHook(() => useGameTimeEditor(), {
             wrapper: createWrapper(),
         });
 
         // Add slots to multiple days
-        result.current.handleChange([
-            { dayOfWeek: 1, hour: 10, status: 'available' },
-            { dayOfWeek: 2, hour: 15, status: 'available' },
-        ]);
+        act(() => {
+            result.current.handleChange([
+                { dayOfWeek: 1, hour: 10, status: 'available' },
+                { dayOfWeek: 2, hour: 15, status: 'available' },
+            ]);
+        });
 
         // Apply Sunday morning
-        result.current.applyPreset(0, 'morning');
+        act(() => { result.current.applyPreset(0, 'morning'); });
 
-        waitFor(() => {
+        await waitFor(() => {
             expect(result.current.slots.filter(s => s.dayOfWeek === 1)).toHaveLength(1);
             expect(result.current.slots.filter(s => s.dayOfWeek === 2)).toHaveLength(1);
             expect(result.current.slots.filter(s => s.dayOfWeek === 0)).toHaveLength(6);
         });
     });
 
-    it('handles toggling preset off with partial overlap', () => {
+    it('handles toggling preset off with partial overlap', async () => {
         const { result } = renderHook(() => useGameTimeEditor(), {
             wrapper: createWrapper(),
         });
 
         // Add all morning hours plus one extra
-        result.current.handleChange([
-            { dayOfWeek: 0, hour: 6, status: 'available' },
-            { dayOfWeek: 0, hour: 7, status: 'available' },
-            { dayOfWeek: 0, hour: 8, status: 'available' },
-            { dayOfWeek: 0, hour: 9, status: 'available' },
-            { dayOfWeek: 0, hour: 10, status: 'available' },
-            { dayOfWeek: 0, hour: 11, status: 'available' },
-            { dayOfWeek: 0, hour: 14, status: 'available' }, // Extra hour
-        ]);
+        act(() => {
+            result.current.handleChange([
+                { dayOfWeek: 0, hour: 6, status: 'available' },
+                { dayOfWeek: 0, hour: 7, status: 'available' },
+                { dayOfWeek: 0, hour: 8, status: 'available' },
+                { dayOfWeek: 0, hour: 9, status: 'available' },
+                { dayOfWeek: 0, hour: 10, status: 'available' },
+                { dayOfWeek: 0, hour: 11, status: 'available' },
+                { dayOfWeek: 0, hour: 14, status: 'available' }, // Extra hour
+            ]);
+        });
 
         // Toggle morning off
-        result.current.applyPreset(0, 'morning');
+        act(() => { result.current.applyPreset(0, 'morning'); });
 
-        waitFor(() => {
+        await waitFor(() => {
             const remainingSlots = result.current.slots.filter(s => s.dayOfWeek === 0);
             expect(remainingSlots).toHaveLength(1);
             expect(remainingSlots[0].hour).toBe(14);
@@ -382,31 +390,31 @@ describe('Edge Cases — part 1 (sub 2)', () => {
         vi.clearAllMocks();
     });
 
-    it('sets isDirty flag when applying preset', () => {
+    it('sets isDirty flag when applying preset', async () => {
         const { result } = renderHook(() => useGameTimeEditor(), {
             wrapper: createWrapper(),
         });
 
         expect(result.current.isDirty).toBe(false);
 
-        result.current.applyPreset(0, 'morning');
+        act(() => { result.current.applyPreset(0, 'morning'); });
 
-        waitFor(() => {
+        await waitFor(() => {
             expect(result.current.isDirty).toBe(true);
         });
     });
 
-    it('handles all 7 days (0-6)', () => {
+    it('handles all 7 days (0-6)', async () => {
         const { result } = renderHook(() => useGameTimeEditor(), {
             wrapper: createWrapper(),
         });
 
         // Apply morning to all 7 days
         for (let day = 0; day < 7; day++) {
-            result.current.applyPreset(day, 'morning');
+            act(() => { result.current.applyPreset(day, 'morning'); });
         }
 
-        waitFor(() => {
+        await waitFor(() => {
             expect(result.current.slots.length).toBe(7 * 6); // 7 days * 6 hours
         });
     });
@@ -419,17 +427,17 @@ describe('useGameTimeEditor - applyPreset — part 7', () => {
     });
 
     describe('Edge Cases — part 2', () => {
-        it('handles applying all 4 presets to same day (full 24 hours)', () => {
+        it('handles applying all 4 presets to same day (full 24 hours)', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'night');      // 0-5
-            result.current.applyPreset(0, 'morning');    // 6-11
-            result.current.applyPreset(0, 'afternoon');  // 12-17
-            result.current.applyPreset(0, 'evening');    // 18-23
+            act(() => { result.current.applyPreset(0, 'night'); });      // 0-5
+            act(() => { result.current.applyPreset(0, 'morning'); });    // 6-11
+            act(() => { result.current.applyPreset(0, 'afternoon'); });  // 12-17
+            act(() => { result.current.applyPreset(0, 'evening'); });    // 18-23
 
-            waitFor(() => {
+            await waitFor(() => {
                 const hours = result.current.slots
                     .filter(s => s.dayOfWeek === 0)
                     .map(s => s.hour)
@@ -441,31 +449,31 @@ describe('useGameTimeEditor - applyPreset — part 7', () => {
     });
 
     describe('Dirty State Management', () => {
-        it('marks editor as dirty after applying preset', () => {
+        it('marks editor as dirty after applying preset', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
             expect(result.current.isDirty).toBe(false);
 
-            result.current.applyPreset(0, 'morning');
+            act(() => { result.current.applyPreset(0, 'morning'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 expect(result.current.isDirty).toBe(true);
             });
         });
 
-        it('remains dirty after toggling preset off', () => {
+        it('remains dirty after toggling preset off', async () => {
             const { result } = renderHook(() => useGameTimeEditor(), {
                 wrapper: createWrapper(),
             });
 
-            result.current.applyPreset(0, 'morning');
-            waitFor(() => expect(result.current.isDirty).toBe(true));
+            act(() => { result.current.applyPreset(0, 'morning'); });
+            await waitFor(() => expect(result.current.isDirty).toBe(true));
 
-            result.current.applyPreset(0, 'morning');
+            act(() => { result.current.applyPreset(0, 'morning'); });
 
-            waitFor(() => {
+            await waitFor(() => {
                 expect(result.current.isDirty).toBe(true);
             });
         });
