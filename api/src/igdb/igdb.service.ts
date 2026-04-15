@@ -60,6 +60,7 @@ import {
   triggerSearchRefreshIfNeeded,
   type SearchPipelineParams,
 } from './igdb-search-pipeline.helpers';
+import { deduplicateGames } from './igdb-search-dedup.helpers';
 
 @Injectable()
 export class IgdbService {
@@ -216,6 +217,7 @@ export class IgdbService {
     const promise = runSearchPipeline(params, query, normalized, (q, n, k) =>
       triggerSearchRefreshIfNeeded(this.inFlightRefreshes, params, q, n, k),
     )
+      .then((r) => ({ ...r, games: deduplicateGames(r.games) }))
       .then((r) => sortByRelevance(this.db, r, normalized))
       .finally(() => this.inFlightSearches.delete(normalized));
     this.inFlightSearches.set(normalized, promise);
