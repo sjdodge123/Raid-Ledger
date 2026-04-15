@@ -27,6 +27,7 @@ const ROMAN_REPLACEMENTS: [RegExp, string][] = [
  * - Collapse whitespace
  */
 export function normalizeForDedup(name: string): string {
+  if (!name) return '';
   let result = name.toLowerCase();
   for (const [pattern, replacement] of ROMAN_REPLACEMENTS) {
     result = result.replace(pattern, replacement);
@@ -148,8 +149,10 @@ export function deduplicateGames(games: GameDetailDto[]): GameDetailDto[] {
 function buildDedupKeys(game: GameDetailDto): string[] {
   const keys: string[] = [];
   if (game.igdbId != null) keys.push(`igdb:${game.igdbId}`);
-  const steamId = (game as Record<string, unknown>).steamAppId;
-  if (steamId != null) keys.push(`steam:${steamId}`);
+  const steamId = (game as Record<string, unknown>).steamAppId as
+    | number
+    | undefined;
+  if (steamId != null) keys.push(`steam:${String(steamId)}`);
   keys.push(`name:${normalizeForDedup(game.name)}`);
   return keys;
 }

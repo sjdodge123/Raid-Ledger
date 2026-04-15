@@ -3,7 +3,7 @@
  * Moves foreign key references from loser game rows to the winner,
  * handling unique constraint violations by skipping conflicting rows.
  */
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 
@@ -39,7 +39,6 @@ export async function reassignLineupFks(
     'game_id',
     loserId,
     winnerId,
-    'uq_lineup_entry_game',
   );
   await safeReassignWithUnique(
     tx,
@@ -47,7 +46,6 @@ export async function reassignLineupFks(
     'game_id',
     loserId,
     winnerId,
-    'uq_lineup_vote_user_game',
   );
   await reassignLineupMatchFks(tx, loserId, winnerId);
 }
@@ -64,7 +62,6 @@ async function reassignLineupMatchFks(
     'game_id',
     loserId,
     winnerId,
-    'uq_lineup_match_game',
   );
   await reassignTiebreakerFks(tx, loserId, winnerId);
 }
@@ -123,13 +120,7 @@ export async function reassignMiscFks(
   loserId: number,
   winnerId: number,
 ): Promise<void> {
-  await safeReassign(
-    tx,
-    'discord_game_mappings',
-    'game_id',
-    loserId,
-    winnerId,
-  );
+  await safeReassign(tx, 'discord_game_mappings', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'channel_bindings', 'game_id', loserId, winnerId);
   await safeReassignWithUnique(
     tx,
@@ -137,7 +128,6 @@ export async function reassignMiscFks(
     'game_id',
     loserId,
     winnerId,
-    'uq_user_game_suppression',
   );
 }
 
@@ -166,7 +156,6 @@ async function safeReassignWithUnique(
   column: string,
   loserId: number,
   winnerId: number,
-  _constraintName: string,
 ): Promise<void> {
   // Delete loser rows that would conflict with existing winner rows
   await deleteConflictingRows(tx, table, column, loserId, winnerId);
