@@ -142,7 +142,7 @@ async function provisionDatabase(): Promise<{
   if (process.env.DATABASE_URL) {
     return { connectionString: process.env.DATABASE_URL, container: null };
   }
-  const container = await new PostgreSqlContainer('postgres:15-alpine')
+  const container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
     .withDatabase('raid_ledger_test')
     .withUsername('test')
     .withPassword('test')

@@ -46,7 +46,7 @@ start_postgres() {
     -e POSTGRES_PASSWORD=password \
     -e POSTGRES_DB=raid_ledger \
     -p 0:5432 \
-    postgres:16-alpine >/dev/null
+    pgvector/pgvector:pg16 >/dev/null
 }
 
 get_mapped_port() {
