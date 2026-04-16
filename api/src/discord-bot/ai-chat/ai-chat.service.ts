@@ -11,34 +11,25 @@ import { AnalyticsService } from '../../events/analytics.service';
 import { AiChatSessionStore } from './helpers/session-store';
 import { AiChatRateLimiter } from './helpers/rate-limiter';
 import { resolveTreeNode } from './tree/tree.registry';
-import {
-  KEYWORD_MAP,
-  CLASSIFY_PROMPT,
-  mapClassification,
-} from './ai-chat.constants';
+import { KEYWORD_MAP } from './ai-chat.constants';
 import type { AiChatDeps, TreeSession, TreeResult } from './tree/tree.types';
-import {
-  formatLeafResponse,
-  formatRawFallback,
-} from './helpers/response-formatter';
 import {
   buildWelcomeMenu,
   buildNavRow,
   buildButtonRows,
 } from './helpers/menu-builders';
 import {
-  SUMMARIZE_SYSTEM_PROMPT,
-  SUMMARY_MAX_TOKENS,
-  SUMMARY_TEMPERATURE,
-  LLM_FEATURE_TAG,
-} from './ai-chat.constants';
+  summarizeWithLlm,
+  llmClassify,
+  buildMenuResponse,
+  textResponse,
+} from './helpers/llm-helpers';
 
 /** Shape returned by simulate / handleInteraction. */
 export interface AiChatResponse {
   content: string;
   embeds: { title: string | null; description: string | null }[];
   components: { customId: string | null; label: string | null }[];
-  /** Raw discord.js rows for the listener to send. */
   rows: import('discord.js').ActionRowBuilder<
     import('discord.js').ButtonBuilder
   >[];
@@ -83,7 +74,7 @@ export class AiChatService {
   ): Promise<AiChatResponse | null> {
     if (!(await this.isEnabled())) return null;
     if (this.rateLimiter.isLimited(discordUserId)) {
-      return this.textResponse('You are being rate limited. Try again later.');
+      return textResponse('You are being rate limited. Try again later.');
     }
     const path = await this.resolvePath(discordUserId, text, buttonId);
     return this.executePath(discordUserId, path);
@@ -97,7 +88,6 @@ export class AiChatService {
   ): Promise<string | null> {
     if (buttonId) return this.resolveButtonPath(discordUserId, buttonId);
     if (text) {
-      // If the session is waiting for text input, feed it to that context
       const contextPath = this.resolveSessionTextInput(discordUserId, text);
       if (contextPath) return contextPath;
       return this.classifyFreeText(text, discordUserId);
@@ -105,7 +95,7 @@ export class AiChatService {
     return null;
   }
 
-  /** Check if the active session expects text input and route accordingly. */
+  /** Check if the active session expects text input. */
   private resolveSessionTextInput(
     discordUserId: string,
     text: string,
@@ -113,7 +103,6 @@ export class AiChatService {
     const session = this.sessionStore.get(discordUserId);
     if (!session) return null;
     const path = session.currentPath;
-    // Paths that expect free-text as search input
     if (path === 'events:search') return `events:search:${text}`;
     if (path === 'game-library:search') return `game-library:search:${text}`;
     return null;
@@ -150,31 +139,9 @@ export class AiChatService {
     const lower = text.toLowerCase().trim();
     const keywordMatch = KEYWORD_MAP[lower];
     if (keywordMatch) return keywordMatch;
-    // Only attempt LLM classification for substantive messages (3+ words).
-    // Short greetings like "hello", "hi" just show the welcome menu.
     if (lower.split(/\s+/).length < 3) return null;
     this.rateLimiter.record(discordUserId);
-    return this.llmClassify(text);
-  }
-
-  /** Use LLM to classify ambiguous free-text (10-token cap). */
-  private async llmClassify(text: string): Promise<string | null> {
-    try {
-      const res = await this.llmService.chat(
-        {
-          messages: [
-            { role: 'system', content: CLASSIFY_PROMPT },
-            { role: 'user', content: text },
-          ],
-          maxTokens: 10,
-          temperature: 0,
-        },
-        { feature: LLM_FEATURE_TAG },
-      );
-      return mapClassification(res.content);
-    } catch {
-      return null;
-    }
+    return llmClassify(this.llmService, text);
   }
 
   /** Execute a resolved path or show the welcome menu. */
@@ -204,10 +171,10 @@ export class AiChatService {
     session.currentPath = '';
     this.sessionStore.set(discordUserId, session);
     const rows = buildWelcomeMenu(session.isOperator);
-    return this.buildMenuResponse('How can I help you today?', rows);
+    return buildMenuResponse('How can I help you today?', rows);
   }
 
-  /** Ensure a session exists for the user, creating one if needed. */
+  /** Ensure a session exists for the user. */
   private async ensureSession(discordUserId: string): Promise<TreeSession> {
     const existing = this.sessionStore.get(discordUserId);
     if (existing) {
@@ -234,8 +201,7 @@ export class AiChatService {
     const content = await this.resolveContent(result, discordUserId);
     const buttonRows =
       result.buttons.length > 0 ? buildButtonRows(result.buttons) : [];
-    const allRows = [...buttonRows, navRow];
-    return this.buildMenuResponse(content, allRows);
+    return buildMenuResponse(content, [...buttonRows, navRow]);
   }
 
   /** Resolve content from a tree result (LLM or static). */
@@ -247,50 +213,12 @@ export class AiChatService {
     if (!result.data) return 'No information available.';
     if (!result.isLeaf) return result.data;
     this.rateLimiter.record(discordUserId);
-    return this.summarizeWithLlm(result.data, result.systemHint);
-  }
-
-  /** Summarize data using the LLM service. */
-  private async summarizeWithLlm(data: string, hint?: string): Promise<string> {
-    try {
-      const systemPrompt = hint
-        ? `${SUMMARIZE_SYSTEM_PROMPT} ${hint}`
-        : SUMMARIZE_SYSTEM_PROMPT;
-      const response = await this.llmService.chat(
-        {
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: data },
-          ],
-          maxTokens: SUMMARY_MAX_TOKENS,
-          temperature: SUMMARY_TEMPERATURE,
-        },
-        { feature: LLM_FEATURE_TAG },
-      );
-      return formatLeafResponse(response.content);
-    } catch (err) {
-      this.logger.warn('LLM summarization failed, using raw fallback', err);
-      return formatRawFallback(data);
-    }
-  }
-
-  /** Build a menu response from content and action rows. */
-  private buildMenuResponse(
-    content: string,
-    rows: import('discord.js').ActionRowBuilder<
-      import('discord.js').ButtonBuilder
-    >[],
-  ): AiChatResponse {
-    const components = rows.flatMap((row) =>
-      row.components.map((c) => {
-        const json = c.toJSON() as unknown as Record<string, unknown>;
-        return {
-          customId: (json['custom_id'] as string) ?? null,
-          label: (json['label'] as string) ?? null,
-        };
-      }),
+    return summarizeWithLlm(
+      this.llmService,
+      this.logger,
+      result.data,
+      result.systemHint,
     );
-    return { content, embeds: [], components, rows };
   }
 
   /** Build the dependency bag for tree handlers. */
@@ -307,20 +235,5 @@ export class AiChatService {
       analyticsService: this.analyticsService,
       clientUrl: process.env.CLIENT_URL ?? null,
     };
-  }
-
-  /** Response when the feature is disabled. */
-  private disabledResponse(): AiChatResponse {
-    return {
-      content: 'AI chat is currently disabled.',
-      embeds: [],
-      components: [],
-      rows: [],
-    };
-  }
-
-  /** Simple text-only response. */
-  private textResponse(text: string): AiChatResponse {
-    return { content: text, embeds: [], components: [], rows: [] };
   }
 }
