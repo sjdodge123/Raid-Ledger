@@ -37,6 +37,10 @@ export interface AiChatResponse {
   content: string;
   embeds: { title: string | null; description: string | null }[];
   components: { customId: string | null; label: string | null }[];
+  /** Raw discord.js rows for the listener to send. */
+  rows: import('discord.js').ActionRowBuilder<
+    import('discord.js').ButtonBuilder
+  >[];
 }
 
 @Injectable()
@@ -123,6 +127,9 @@ export class AiChatService {
     const lower = text.toLowerCase().trim();
     const keywordMatch = KEYWORD_MAP[lower];
     if (keywordMatch) return keywordMatch;
+    // Only attempt LLM classification for substantive messages (3+ words).
+    // Short greetings like "hello", "hi" just show the welcome menu.
+    if (lower.split(/\s+/).length < 3) return null;
     return this.llmClassify(text);
   }
 
@@ -252,7 +259,7 @@ export class AiChatService {
         };
       }),
     );
-    return { content, embeds: [], components };
+    return { content, embeds: [], components, rows };
   }
 
   /** Build the dependency bag for tree handlers. */
@@ -276,11 +283,12 @@ export class AiChatService {
       content: 'AI chat is currently disabled.',
       embeds: [],
       components: [],
+      rows: [],
     };
   }
 
   /** Simple text-only response. */
   private textResponse(text: string): AiChatResponse {
-    return { content: text, embeds: [], components: [] };
+    return { content: text, embeds: [], components: [], rows: [] };
   }
 }

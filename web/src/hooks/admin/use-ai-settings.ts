@@ -111,6 +111,35 @@ export function useOllamaStop() {
     });
 }
 
+/** Query AI feature toggle states. */
+export function useAiFeatures() {
+    return useQuery<{ chatEnabled: boolean; dynamicCategoriesEnabled: boolean }>({
+        queryKey: [...AI_KEY, 'features'],
+        queryFn: () => adminFetch('/admin/ai/features'),
+        enabled: !!getAuthToken(),
+        staleTime: 30_000,
+    });
+}
+
+/** Mutation to update AI feature toggles. */
+export function useUpdateAiFeatures() {
+    const qc = useQueryClient();
+    return useMutation<
+        { success: boolean },
+        Error,
+        { chatEnabled?: boolean; dynamicCategoriesEnabled?: boolean }
+    >({
+        mutationFn: (body) =>
+            adminFetch('/admin/ai/features', {
+                method: 'PUT',
+                body: JSON.stringify(body),
+            }, 'Failed to update AI features'),
+        onSuccess: () => {
+            void qc.invalidateQueries({ queryKey: [...AI_KEY, 'features'] });
+        },
+    });
+}
+
 /** Mutation to test chat with the active LLM. */
 export function useTestChat() {
     return useMutation<{ success: boolean; response: string; latencyMs: number }, Error>({

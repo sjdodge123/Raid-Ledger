@@ -1,3 +1,5 @@
+import { useAiFeatures, useUpdateAiFeatures } from '../../../hooks/admin/use-ai-settings';
+
 interface AiFeatureTogglesProps {
     disabled: boolean;
 }
@@ -32,24 +34,30 @@ function FeatureToggle({
 
 /**
  * Toggle switches for AI feature flags.
- * Disabled when the provider is offline.
+ * Reads from GET /admin/ai/features, writes via PUT /admin/ai/features.
  */
 export function AiFeatureToggles({ disabled }: AiFeatureTogglesProps) {
+    const { data } = useAiFeatures();
+    const { mutate } = useUpdateAiFeatures();
+
+    const chatEnabled = data?.chatEnabled ?? false;
+    const dynCatEnabled = data?.dynamicCategoriesEnabled ?? false;
+
     return (
         <div className="space-y-1 divide-y divide-edge/50">
             <FeatureToggle
                 label="AI Chat"
                 description="Enable AI chat assistant for community members"
-                enabled={false}
+                enabled={chatEnabled}
                 disabled={disabled}
-                onChange={() => {}}
+                onChange={(v) => mutate({ chatEnabled: v })}
             />
             <FeatureToggle
                 label="Dynamic Categories"
                 description="Use AI to suggest event categories"
-                enabled={false}
+                enabled={dynCatEnabled}
                 disabled={disabled}
-                onChange={() => {}}
+                onChange={(v) => mutate({ dynamicCategoriesEnabled: v })}
             />
         </div>
     );
