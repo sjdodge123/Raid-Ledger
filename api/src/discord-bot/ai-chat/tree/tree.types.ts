@@ -5,7 +5,6 @@ import type { LlmService } from '../../../ai/llm.service';
 import type { SettingsService } from '../../../settings/settings.service';
 import type { IgdbService } from '../../../igdb/igdb.service';
 import type { LineupsService } from '../../../lineups/lineups.service';
-import type { SchedulingService } from '../../../lineups/scheduling/scheduling.service';
 import type { AnalyticsService } from '../../../events/analytics.service';
 
 /** Result returned by every tree handler. */
@@ -51,7 +50,6 @@ export interface AiChatDeps {
   settingsService: SettingsService;
   igdbService: IgdbService;
   lineupsService: LineupsService;
-  schedulingService: SchedulingService;
   analyticsService: AnalyticsService;
   clientUrl: string | null;
 }
