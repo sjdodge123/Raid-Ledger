@@ -85,6 +85,7 @@ export function mergeEnrichment(
   winner: GameDetailDto,
   donor: GameDetailDto,
 ): void {
+  if (winner.id === 0 && donor.id !== 0) winner.id = donor.id;
   copyNullFields(winner, donor, IGDB_NULL_FIELDS);
   copyEmptyArrayFields(winner, donor, IGDB_ARRAY_FIELDS);
   copyNullFields(winner, donor, ITAD_NULL_FIELDS);

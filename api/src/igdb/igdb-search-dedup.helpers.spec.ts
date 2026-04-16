@@ -578,6 +578,24 @@ describe('deduplicateGames', () => {
 // ============================================================
 
 describe('mergeEnrichment', () => {
+  it('copies id from donor when winner has id 0', () => {
+    const winner = makeGame({ id: 0 });
+    const donor = makeGame({ id: 12345 });
+
+    mergeEnrichment(winner, donor);
+
+    expect(winner.id).toBe(12345);
+  });
+
+  it('does not overwrite non-zero id on winner', () => {
+    const winner = makeGame({ id: 100 });
+    const donor = makeGame({ id: 12345 });
+
+    mergeEnrichment(winner, donor);
+
+    expect(winner.id).toBe(100);
+  });
+
   it('copies igdbId from donor when winner has null', () => {
     const winner = makeGame({ igdbId: null });
     const donor = makeGame({ igdbId: 999 });
