@@ -2,17 +2,12 @@ import type { TreeResult, AiChatDeps, TreeSession } from './tree.types';
 
 /** Handle "My Signups" tree path. Requires a linked RL account. */
 export async function handleSignups(
-  _path: string,
+  path: string,
   deps: AiChatDeps,
   session: TreeSession,
 ): Promise<TreeResult> {
   if (!session.userId) {
-    return {
-      data: null,
-      emptyMessage: buildLinkPrompt(deps.clientUrl),
-      buttons: [],
-      isLeaf: true,
-    };
+    return leaf(null, buildLinkPrompt(deps.clientUrl), deps);
   }
   return fetchUserSignups(deps, session.userId);
 }
@@ -20,8 +15,7 @@ export async function handleSignups(
 /** Build prompt telling the user to link their Discord account. */
 function buildLinkPrompt(clientUrl: string | null): string {
   const base = 'Please link your Discord account to view your signups.';
-  if (clientUrl) return `${base} Visit ${clientUrl}/profile to link.`;
-  return base;
+  return clientUrl ? `${base} Visit ${clientUrl}/profile` : base;
 }
 
 /** Fetch upcoming signups for a linked user. */
@@ -33,12 +27,7 @@ async function fetchUserSignups(
     const result = await deps.eventsService.findUpcomingByUser(userId, 10);
     const events = result.data ?? [];
     if (events.length === 0) {
-      return {
-        data: null,
-        emptyMessage: 'You have no upcoming signups.',
-        buttons: [],
-        isLeaf: true,
-      };
+      return leaf(null, 'You have no upcoming signups.', deps);
     }
     const summary = events
       .map(
@@ -46,19 +35,33 @@ async function fetchUserSignups(
           `${e.title} — ${new Date(e.startTime).toLocaleDateString()}`,
       )
       .join('\n');
-    return {
-      data: summary,
-      emptyMessage: null,
-      buttons: [],
-      isLeaf: true,
-      systemHint: "Summarize the user's upcoming event signups.",
-    };
+    return leaf(
+      summary,
+      null,
+      deps,
+      "Summarize the user's upcoming event signups.",
+    );
   } catch {
-    return {
-      data: null,
-      emptyMessage: 'You have no upcoming signups.',
-      buttons: [],
-      isLeaf: true,
-    };
+    return leaf(null, 'You have no upcoming signups.', deps);
   }
+}
+
+/** Helper to build a leaf result with optional web link. */
+function leaf(
+  data: string | null,
+  emptyMessage: string | null,
+  deps: AiChatDeps,
+  systemHint?: string,
+): TreeResult {
+  const buttons = deps.clientUrl
+    ? [
+        {
+          customId: 'noop',
+          label: 'View Events',
+          style: 'link' as const,
+          url: `${deps.clientUrl}/events`,
+        },
+      ]
+    : [];
+  return { data, emptyMessage, buttons, isLeaf: true, systemHint };
 }

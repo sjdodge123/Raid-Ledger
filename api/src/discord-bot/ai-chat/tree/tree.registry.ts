@@ -32,19 +32,19 @@ const TREE_REGISTRY: TreeNodeEntry[] = [
   },
   {
     handler: handleLineup,
-    isLeaf: true,
+    isLeaf: false,
     requiresAuth: false,
     operatorOnly: false,
   },
   {
     handler: handlePolls,
-    isLeaf: true,
+    isLeaf: false,
     requiresAuth: false,
     operatorOnly: false,
   },
   {
     handler: handleStats,
-    isLeaf: true,
+    isLeaf: false,
     requiresAuth: false,
     operatorOnly: true,
   },

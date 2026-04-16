@@ -5,26 +5,28 @@ import { AiModule } from '../../ai/ai.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { IgdbModule } from '../../igdb/igdb.module';
 import { LineupsModule } from '../../lineups/lineups.module';
+import { DiscordBotModule } from '../discord-bot.module';
 import { AiChatService } from './ai-chat.service';
+import { AiChatListener } from './ai-chat.listener';
 
 /**
- * AI Chat module — provides the AiChatService orchestrator.
+ * AI Chat module — registered in AppModule (NOT DiscordBotModule)
+ * to avoid file-level circular imports.
  *
- * The AiChatListener (Discord DM/button handler) is NOT registered
- * here to avoid circular file-level imports with DiscordBotModule.
- * It will be wired up separately when live Discord DM support is enabled.
- * Smoke tests use the /admin/test/ai-chat-simulate endpoint instead.
+ * Imports DiscordBotModule via forwardRef to access
+ * DiscordBotClientService for the listener.
  */
 @Module({
   imports: [
     forwardRef(() => EventsModule),
     forwardRef(() => UsersModule),
+    forwardRef(() => DiscordBotModule),
     AiModule,
     SettingsModule,
     IgdbModule,
     forwardRef(() => LineupsModule),
   ],
-  providers: [AiChatService],
+  providers: [AiChatService, AiChatListener],
   exports: [AiChatService],
 })
 export class AiChatModule {}

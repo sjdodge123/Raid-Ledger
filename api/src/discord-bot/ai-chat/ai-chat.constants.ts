@@ -42,6 +42,30 @@ export const SESSION_TTL_MS = 5 * 60_000;
 /** Session sweep interval in milliseconds (60 seconds). */
 export const SESSION_SWEEP_INTERVAL_MS = 60_000;
 
+/** System prompt for free-text classification (10-token output cap). */
+export const CLASSIFY_PROMPT =
+  'Classify this message into one topic: events, signups, games, lineup, polls, stats. ' +
+  'Respond with exactly one word.';
+
+/** Map LLM classification output to a tree path. */
+export function mapClassification(output: string): string | null {
+  const word = output.toLowerCase().trim().split(/\s+/)[0];
+  const map: Record<string, string> = {
+    events: 'events',
+    event: 'events',
+    signups: 'my-signups',
+    signup: 'my-signups',
+    games: 'game-library',
+    game: 'game-library',
+    lineup: 'lineup',
+    polls: 'polls',
+    poll: 'polls',
+    stats: 'stats',
+    stat: 'stats',
+  };
+  return map[word] ?? null;
+}
+
 /** Keyword map for free-text routing to tree paths. */
 export const KEYWORD_MAP: Record<string, string> = {
   event: 'events',

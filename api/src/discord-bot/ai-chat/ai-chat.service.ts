@@ -10,7 +10,11 @@ import { AnalyticsService } from '../../events/analytics.service';
 import { AiChatSessionStore } from './helpers/session-store';
 import { AiChatRateLimiter } from './helpers/rate-limiter';
 import { resolveTreeNode } from './tree/tree.registry';
-import { KEYWORD_MAP } from './ai-chat.constants';
+import {
+  KEYWORD_MAP,
+  CLASSIFY_PROMPT,
+  mapClassification,
+} from './ai-chat.constants';
 import type { AiChatDeps, TreeSession, TreeResult } from './tree/tree.types';
 import {
   formatLeafResponse,
@@ -76,16 +80,16 @@ export class AiChatService {
       return this.textResponse('You are being rate limited. Try again later.');
     }
     this.rateLimiter.record(discordUserId);
-    const path = this.resolvePath(discordUserId, text, buttonId);
+    const path = await this.resolvePath(discordUserId, text, buttonId);
     return this.executePath(discordUserId, path);
   }
 
   /** Resolve button/text to a tree path. */
-  private resolvePath(
+  private async resolvePath(
     discordUserId: string,
     text?: string,
     buttonId?: string,
-  ): string | null {
+  ): Promise<string | null> {
     if (buttonId) return this.resolveButtonPath(discordUserId, buttonId);
     if (text) return this.classifyFreeText(text);
     return null;
@@ -115,9 +119,31 @@ export class AiChatService {
   }
 
   /** Classify free-text input into a tree path. */
-  private classifyFreeText(text: string): string | null {
+  private async classifyFreeText(text: string): Promise<string | null> {
     const lower = text.toLowerCase().trim();
-    return KEYWORD_MAP[lower] ?? null;
+    const keywordMatch = KEYWORD_MAP[lower];
+    if (keywordMatch) return keywordMatch;
+    return this.llmClassify(text);
+  }
+
+  /** Use LLM to classify ambiguous free-text (10-token cap). */
+  private async llmClassify(text: string): Promise<string | null> {
+    try {
+      const res = await this.llmService.chat(
+        {
+          messages: [
+            { role: 'system', content: CLASSIFY_PROMPT },
+            { role: 'user', content: text },
+          ],
+          maxTokens: 10,
+          temperature: 0,
+        },
+        { feature: LLM_FEATURE_TAG },
+      );
+      return mapClassification(res.content);
+    } catch {
+      return null;
+    }
   }
 
   /** Execute a resolved path or show the welcome menu. */

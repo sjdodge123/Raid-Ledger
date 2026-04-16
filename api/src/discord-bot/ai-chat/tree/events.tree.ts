@@ -37,10 +37,20 @@ async function eventsForRange(
   const summary = events
     .map((e) => `${e.title} — ${new Date(e.startTime).toLocaleDateString()}`)
     .join('\n');
+  const buttons = deps.clientUrl
+    ? [
+        {
+          customId: 'noop',
+          label: 'View Events',
+          style: 'link' as const,
+          url: `${deps.clientUrl}/events`,
+        },
+      ]
+    : [];
   return {
     data: summary,
     emptyMessage: null,
-    buttons: [],
+    buttons,
     isLeaf: true,
     systemHint: 'Summarize these upcoming events for the user.',
   };
@@ -58,7 +68,7 @@ function thisWeekRange(): { start: Date; end: Date } {
   return { start, end };
 }
 
-/** Build date range for "next week" (Monday to Sunday after this week). */
+/** Build date range for "next week". */
 function nextWeekRange(): { start: Date; end: Date } {
   const { end: thisEnd } = thisWeekRange();
   const start = new Date(thisEnd);

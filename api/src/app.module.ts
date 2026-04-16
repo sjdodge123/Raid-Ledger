@@ -29,6 +29,7 @@ import { RelayModule } from './relay/relay.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { VersionModule } from './version/version.module';
 import { DiscordBotModule } from './discord-bot/discord-bot.module';
+import { AiChatModule } from './discord-bot/ai-chat/ai-chat.module';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { SentryEnvModule } from './sentry/sentry-env.module';
 import { CronJobModule } from './cron-jobs/cron-job.module';
@@ -72,6 +73,7 @@ import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.
     FeedbackModule,
     VersionModule,
     DiscordBotModule,
+    AiChatModule,
     SentryModule.forRoot(),
     SentryEnvModule,
     CronJobModule,
