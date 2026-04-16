@@ -5,6 +5,7 @@ import { AiModule } from '../../ai/ai.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { IgdbModule } from '../../igdb/igdb.module';
 import { LineupsModule } from '../../lineups/lineups.module';
+import { SchedulingModule } from '../../lineups/scheduling/scheduling.module';
 import { DiscordBotModule } from '../discord-bot.module';
 import { AiChatService } from './ai-chat.service';
 import { AiChatListener } from './ai-chat.listener';
@@ -25,6 +26,7 @@ import { AiChatListener } from './ai-chat.listener';
     SettingsModule,
     IgdbModule,
     forwardRef(() => LineupsModule),
+    forwardRef(() => SchedulingModule),
   ],
   providers: [AiChatService, AiChatListener],
   exports: [AiChatService],

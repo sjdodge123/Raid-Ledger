@@ -17,24 +17,39 @@ function pollsMenu(): TreeResult {
 }
 
 /** Handle "Polls" tree path. */
-export function handlePolls(
+export async function handlePolls(
   path: string,
   deps: AiChatDeps,
   session: TreeSession,
 ): Promise<TreeResult> {
-  if (path === 'polls') return Promise.resolve(pollsMenu());
-  if (path === 'polls:active') {
-    return Promise.resolve(fetchActivePolls(deps));
-  }
-  if (path === 'polls:my-votes') {
-    return Promise.resolve(fetchMyVotes(deps, session));
-  }
-  return Promise.resolve(pollsMenu());
+  if (path === 'polls') return pollsMenu();
+  if (path === 'polls:active') return fetchActivePolls(deps, session);
+  if (path === 'polls:my-votes') return fetchMyVotes(deps, session);
+  return pollsMenu();
 }
 
-/** Fetch active scheduling polls. */
-function fetchActivePolls(deps: AiChatDeps): TreeResult {
-  return leaf(null, 'No active polls right now. Check back later!', deps);
+/** Fetch active scheduling polls via the banner endpoint. */
+async function fetchActivePolls(
+  deps: AiChatDeps,
+  session: TreeSession,
+): Promise<TreeResult> {
+  if (!session.userId) {
+    return leaf(null, buildLinkPrompt(deps.clientUrl), deps);
+  }
+  try {
+    const banner = await deps.schedulingService.getSchedulingBanner(
+      session.userId,
+    );
+    if (!banner || banner.polls.length === 0) {
+      return leaf(null, 'No active polls right now.', deps);
+    }
+    const summary = banner.polls
+      .map((p) => `${p.gameName} — ${p.slotCount} time slots`)
+      .join('\n');
+    return leaf(summary, null, deps, 'Summarize the active scheduling polls.');
+  } catch {
+    return leaf(null, 'Unable to load polls right now.', deps);
+  }
 }
 
 /** Fetch user's poll votes (requires linked account). */
@@ -46,7 +61,7 @@ function fetchMyVotes(deps: AiChatDeps, session: TreeSession): TreeResult {
 }
 
 function buildLinkPrompt(clientUrl: string | null): string {
-  const base = 'Link your Discord account to see your votes.';
+  const base = 'Link your Discord account to see your polls.';
   return clientUrl ? `${base} Visit ${clientUrl}/profile` : base;
 }
 
@@ -63,7 +78,7 @@ function leaf(
           customId: 'noop',
           label: 'View Polls',
           style: 'link' as const,
-          url: `${deps.clientUrl}/games`,
+          url: `${deps.clientUrl}/events`,
         },
       ]
     : [];

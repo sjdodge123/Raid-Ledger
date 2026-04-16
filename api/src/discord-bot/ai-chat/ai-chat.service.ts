@@ -6,6 +6,7 @@ import { LlmService } from '../../ai/llm.service';
 import { SettingsService } from '../../settings/settings.service';
 import { IgdbService } from '../../igdb/igdb.service';
 import { LineupsService } from '../../lineups/lineups.service';
+import { SchedulingService } from '../../lineups/scheduling/scheduling.service';
 import { AnalyticsService } from '../../events/analytics.service';
 import { AiChatSessionStore } from './helpers/session-store';
 import { AiChatRateLimiter } from './helpers/rate-limiter';
@@ -56,6 +57,7 @@ export class AiChatService {
     private readonly settingsService: SettingsService,
     private readonly igdbService: IgdbService,
     private readonly lineupsService: LineupsService,
+    private readonly schedulingService: SchedulingService,
     private readonly analyticsService: AnalyticsService,
   ) {}
 
@@ -193,7 +195,7 @@ export class AiChatService {
     const user = await this.usersService.findByDiscordId(discordUserId);
     const session: TreeSession = {
       currentPath: '',
-      isOperator: user?.role === 'admin',
+      isOperator: user?.role === 'admin' || user?.role === 'operator',
       userId: user?.id ?? null,
       lastActiveAt: Date.now(),
     };
@@ -272,6 +274,7 @@ export class AiChatService {
       settingsService: this.settingsService,
       igdbService: this.igdbService,
       lineupsService: this.lineupsService,
+      schedulingService: this.schedulingService,
       analyticsService: this.analyticsService,
       clientUrl: process.env.CLIENT_URL ?? null,
     };
