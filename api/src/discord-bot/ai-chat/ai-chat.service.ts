@@ -80,12 +80,11 @@ export class AiChatService {
     discordUserId: string,
     text?: string,
     buttonId?: string,
-  ): Promise<AiChatResponse> {
-    if (!(await this.isEnabled())) return this.disabledResponse();
+  ): Promise<AiChatResponse | null> {
+    if (!(await this.isEnabled())) return null;
     if (this.rateLimiter.isLimited(discordUserId)) {
       return this.textResponse('You are being rate limited. Try again later.');
     }
-    this.rateLimiter.record(discordUserId);
     const path = await this.resolvePath(discordUserId, text, buttonId);
     return this.executePath(discordUserId, path);
   }
@@ -97,7 +96,7 @@ export class AiChatService {
     buttonId?: string,
   ): Promise<string | null> {
     if (buttonId) return this.resolveButtonPath(discordUserId, buttonId);
-    if (text) return this.classifyFreeText(text);
+    if (text) return this.classifyFreeText(text, discordUserId);
     return null;
   }
 
@@ -125,13 +124,17 @@ export class AiChatService {
   }
 
   /** Classify free-text input into a tree path. */
-  private async classifyFreeText(text: string): Promise<string | null> {
+  private async classifyFreeText(
+    text: string,
+    discordUserId: string,
+  ): Promise<string | null> {
     const lower = text.toLowerCase().trim();
     const keywordMatch = KEYWORD_MAP[lower];
     if (keywordMatch) return keywordMatch;
     // Only attempt LLM classification for substantive messages (3+ words).
     // Short greetings like "hello", "hi" just show the welcome menu.
     if (lower.split(/\s+/).length < 3) return null;
+    this.rateLimiter.record(discordUserId);
     return this.llmClassify(text);
   }
 
@@ -171,7 +174,7 @@ export class AiChatService {
     this.sessionStore.set(discordUserId, session);
     const deps = this.buildDeps();
     const result = await node.handler(path, deps, session);
-    return this.buildResponse(result);
+    return this.buildResponse(result, discordUserId);
   }
 
   /** Build the welcome menu response. */
@@ -204,9 +207,12 @@ export class AiChatService {
   }
 
   /** Build response from a tree result. */
-  private async buildResponse(result: TreeResult): Promise<AiChatResponse> {
+  private async buildResponse(
+    result: TreeResult,
+    discordUserId: string,
+  ): Promise<AiChatResponse> {
     const navRow = buildNavRow();
-    const content = await this.resolveContent(result);
+    const content = await this.resolveContent(result, discordUserId);
     const buttonRows =
       result.buttons.length > 0 ? buildButtonRows(result.buttons) : [];
     const allRows = [...buttonRows, navRow];
@@ -214,10 +220,14 @@ export class AiChatService {
   }
 
   /** Resolve content from a tree result (LLM or static). */
-  private async resolveContent(result: TreeResult): Promise<string> {
+  private async resolveContent(
+    result: TreeResult,
+    discordUserId: string,
+  ): Promise<string> {
     if (result.emptyMessage) return result.emptyMessage;
     if (!result.data) return 'No information available.';
     if (!result.isLeaf) return result.data;
+    this.rateLimiter.record(discordUserId);
     return this.summarizeWithLlm(result.data, result.systemHint);
   }
 

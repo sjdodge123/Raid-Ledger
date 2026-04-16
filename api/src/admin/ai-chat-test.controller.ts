@@ -37,10 +37,18 @@ export class AiChatTestController {
   @HttpCode(HttpStatus.OK)
   async aiChatSimulate(@Body() body: unknown) {
     const parsed = this.parseBody(AiChatSimulateSchema, body);
-    return this.aiChatService.handleInteraction(
+    const res = await this.aiChatService.handleInteraction(
       parsed.discordUserId,
       parsed.text,
       parsed.buttonId,
+    );
+    return (
+      res ?? {
+        content: 'AI chat is currently disabled.',
+        embeds: [],
+        components: [],
+        rows: [],
+      }
     );
   }
 

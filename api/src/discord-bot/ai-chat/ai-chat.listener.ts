@@ -79,6 +79,7 @@ export class AiChatListener {
         msg.author.id,
         msg.content,
       );
+      if (!res) return; // feature disabled — ignore silently
       await msg.reply(this.buildReplyPayload(res));
     } catch (err) {
       this.logger.error('Error handling AI chat DM', err);
@@ -89,12 +90,13 @@ export class AiChatListener {
     try {
       const path = parseAiCustomId(interaction.customId);
       if (!path) return;
-      await interaction.deferReply({ ephemeral: true });
       const res = await this.aiChatService.handleInteraction(
         interaction.user.id,
         undefined,
         interaction.customId,
       );
+      if (!res) return; // feature disabled — ignore silently
+      await interaction.deferReply({ ephemeral: true });
       await interaction.editReply(this.buildReplyPayload(res));
     } catch (err) {
       this.logger.error('Error handling AI chat button', err);
