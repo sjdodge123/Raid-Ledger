@@ -1,4 +1,14 @@
-import { Controller, Get, Logger, Post, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Logger,
+  Post,
+  Put,
+  Body,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import {
@@ -109,6 +119,45 @@ export class AiAdminController {
     } catch {
       return fallback;
     }
+  }
+
+  /** GET /admin/ai/features — read AI feature toggle states. */
+  @Get('features')
+  async getFeatures(): Promise<{
+    chatEnabled: boolean;
+    dynamicCategoriesEnabled: boolean;
+  }> {
+    const chat = await this.settings.get(
+      AI_SETTING_KEYS.CHAT_ENABLED as SettingKey,
+    );
+    const dynCat = await this.settings.get(
+      AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED as SettingKey,
+    );
+    return {
+      chatEnabled: chat === 'true',
+      dynamicCategoriesEnabled: dynCat === 'true',
+    };
+  }
+
+  /** PUT /admin/ai/features — update AI feature toggles. */
+  @Put('features')
+  @HttpCode(HttpStatus.OK)
+  async updateFeatures(
+    @Body() body: { chatEnabled?: boolean; dynamicCategoriesEnabled?: boolean },
+  ): Promise<{ success: boolean }> {
+    if (body.chatEnabled !== undefined) {
+      await this.settings.set(
+        AI_SETTING_KEYS.CHAT_ENABLED as SettingKey,
+        String(body.chatEnabled),
+      );
+    }
+    if (body.dynamicCategoriesEnabled !== undefined) {
+      await this.settings.set(
+        AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED as SettingKey,
+        String(body.dynamicCategoriesEnabled),
+      );
+    }
+    return { success: true };
   }
 
   /** POST /admin/ai/test-chat — send a test message to the active LLM. */

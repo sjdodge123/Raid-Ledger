@@ -1,6 +1,7 @@
 import {
   Client,
   GatewayIntentBits,
+  Partials,
   PermissionsBitField,
   type Guild,
 } from 'discord.js';
@@ -68,5 +69,6 @@ export function createDiscordClient(): Client {
       GatewayIntentBits.DirectMessages,
       GatewayIntentBits.MessageContent,
     ],
+    partials: [Partials.Channel],
   });
 }

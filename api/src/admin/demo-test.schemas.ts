@@ -81,3 +81,17 @@ export const SetEventTimesSchema = z.object({
 export const CancelLineupPhaseJobsSchema = z.object({
   lineupId: z.number().int().positive(),
 });
+
+export const AiChatSimulateSchema = z.object({
+  discordUserId: z.string().min(1),
+  text: z.string().optional(),
+  buttonId: z.string().optional(),
+});
+
+export const ExpireAiChatSessionSchema = z.object({
+  discordUserId: z.string().min(1),
+});
+
+export const SetAiChatEnabledSchema = z.object({
+  enabled: z.boolean(),
+});

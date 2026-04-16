@@ -15,15 +15,24 @@ import { DemoDataService } from './demo-data.service';
 import { DemoTestService } from './demo-test.service';
 import { SlashCommandTestService } from './slash-command-test.service';
 import { LineupsModule } from '../lineups/lineups.module';
+import { AiChatModule } from '../discord-bot/ai-chat/ai-chat.module';
+import { AiChatTestController } from './ai-chat-test.controller';
 
 @Module({
-  imports: [SettingsModule, AuthModule, IgdbModule, LineupsModule],
+  imports: [
+    SettingsModule,
+    AuthModule,
+    IgdbModule,
+    LineupsModule,
+    AiChatModule,
+  ],
   controllers: [
     AdminController,
     AdminSettingsController,
     AdminGamesController,
     BrandingController,
     DemoTestController,
+    AiChatTestController,
     SlashCommandTestController,
     ItadSettingsController,
     LineupSettingsController,
