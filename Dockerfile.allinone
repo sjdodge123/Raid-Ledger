@@ -221,9 +221,6 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 redirect_stderr=true
 
-[include]
-files = /etc/supervisor.d/services/*.ini
-
 [program:logrotate]
 command=/bin/bash -c 'while true; do /usr/sbin/logrotate /etc/logrotate.d/raid-ledger --state /data/logs/.logrotate.state; sleep 86400; done'
 autostart=true
@@ -232,6 +229,16 @@ priority=50
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 redirect_stderr=true
+
+[eventlistener:process_events]
+command=/app/supervisor-events.sh
+events=PROCESS_STATE
+buffer_size=100
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[include]
+files = /etc/supervisor.d/services/*.ini
 EOF
 
 # Create API startup script (waits for PostgreSQL + Redis)
@@ -329,6 +336,30 @@ if [ ! -s "${PGDATA}/PG_VERSION" ]; then
 fi
 EOF
 RUN chmod +x /app/init-db.sh
+
+# Supervisor event listener — logs process state changes (ROK-1023)
+COPY <<'EOF' /app/supervisor-events.sh
+#!/bin/bash
+# Supervisor event listener — logs process state changes to /data/logs/
+# Protocol: http://supervisord.org/events.html
+while true; do
+  echo "READY"
+  read -r header
+  # Extract payload length from header
+  len=$(echo "$header" | tr ' ' '\n' | grep '^len:' | cut -d: -f2)
+  if [ -n "$len" ] && [ "$len" -gt 0 ]; then
+    read -r -n "$len" payload
+  else
+    payload=""
+  fi
+  # Log the event
+  ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  echo "$ts $header $payload" >> /data/logs/supervisor-events.log
+  echo "RESULT 2"
+  printf "OK"
+done
+EOF
+RUN chmod +x /app/supervisor-events.sh
 
 # Create main entrypoint
 COPY <<'EOF' /app/entrypoint.sh
