@@ -430,8 +430,9 @@ describe('IgdbService', () => {
 
       await service.searchGames('valheim');
 
-      // upsertGamesFromApi inserts each game individually (2 games, neither banned)
-      expect(mockDb.insert).toHaveBeenCalledTimes(2);
+      // ROK-1024: upsertGamesFromApi batches all non-conflicting games into
+      // a single INSERT (was previously one INSERT per row).
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -9,7 +9,7 @@ import { mapApiGameToDbRow, mapDbRowToDetail } from './igdb.mappers';
 const logger = new Logger('IgdbUpsertHelpers');
 
 /**
- * Build the conflict-update set for game upsert.
+ * Build the conflict-update set for a single-row game upsert.
  * Uses COALESCE for twitchGameId/steamAppId so IGDB nulls
  * don't overwrite manually-set or seed values.
  */
@@ -34,6 +34,36 @@ function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
     steamAppId: row.steamAppId ?? sql`${schema.games.steamAppId}`,
     crossplay: row.crossplay,
     cachedAt: new Date(),
+  };
+}
+
+/**
+ * Build the conflict-update set for a BATCH game upsert (ROK-1024).
+ * Each field references `excluded.<column>` — the per-row value from the
+ * INSERT. For twitchGameId/steamAppId, COALESCE preserves the existing
+ * value when the incoming row has null, mirroring the single-row semantics.
+ */
+function buildBatchUpsertSet() {
+  return {
+    name: sql`excluded.name`,
+    slug: sql`excluded.slug`,
+    coverUrl: sql`excluded.cover_url`,
+    genres: sql`excluded.genres`,
+    summary: sql`excluded.summary`,
+    rating: sql`excluded.rating`,
+    aggregatedRating: sql`excluded.aggregated_rating`,
+    popularity: sql`excluded.popularity`,
+    gameModes: sql`excluded.game_modes`,
+    themes: sql`excluded.themes`,
+    platforms: sql`excluded.platforms`,
+    screenshots: sql`excluded.screenshots`,
+    videos: sql`excluded.videos`,
+    firstReleaseDate: sql`excluded.first_release_date`,
+    playerCount: sql`excluded.player_count`,
+    twitchGameId: sql`COALESCE(excluded.twitch_game_id, ${schema.games.twitchGameId})`,
+    steamAppId: sql`COALESCE(excluded.steam_app_id, ${schema.games.steamAppId})`,
+    crossplay: sql`excluded.crossplay`,
+    cachedAt: sql`now()`,
   };
 }
 
@@ -107,9 +137,87 @@ async function filterBannedGames(
   return apiGames.filter((g) => !bannedIgdbIds.has(g.id));
 }
 
+/** Row type produced by mapApiGameToDbRow. */
+type GameRow = ReturnType<typeof mapApiGameToDbRow>;
+
+/**
+ * Batch pre-check: find existing ITAD-sourced game rows matching any of the
+ * provided steamAppIds (no igdbId set). Returns a map of steamAppId -> row id
+ * so the caller can merge instead of insert.
+ * Replaces per-row SELECTs with ONE IN-clause SELECT (ROK-1024).
+ */
+async function batchMergeBysteamAppId(
+  db: PostgresJsDatabase<typeof schema>,
+  steamAppIds: number[],
+): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (steamAppIds.length === 0) return map;
+  const existing = await db
+    .select({
+      id: schema.games.id,
+      steamAppId: schema.games.steamAppId,
+    })
+    .from(schema.games)
+    .where(
+      and(
+        inArray(schema.games.steamAppId, steamAppIds),
+        isNull(schema.games.igdbId),
+      ),
+    );
+  for (const row of existing) {
+    if (row.steamAppId != null) map.set(row.steamAppId, row.id);
+  }
+  return map;
+}
+
+/** Apply IGDB data onto an existing ITAD-sourced row identified by internal id. */
+async function applyIgdbMergeToRow(
+  db: PostgresJsDatabase<typeof schema>,
+  existingId: number,
+  row: GameRow,
+): Promise<void> {
+  await db
+    .update(schema.games)
+    .set({
+      ...buildUpsertSet(row),
+      igdbId: row.igdbId,
+      igdbEnrichmentStatus: 'enriched',
+      igdbEnrichmentRetryCount: 0,
+    })
+    .where(eq(schema.games.id, existingId));
+  logger.log(
+    `Merged IGDB ${row.igdbId} into existing game ${existingId} by steamAppId`,
+  );
+}
+
+/**
+ * Split rows into two sets: rows that should update an existing ITAD row
+ * (merge) vs rows that should go into a fresh batch INSERT.
+ */
+function splitMergeVsInsert(
+  rows: GameRow[],
+  mergeMap: Map<number, number>,
+): { merges: Array<{ id: number; row: GameRow }>; inserts: GameRow[] } {
+  const merges: Array<{ id: number; row: GameRow }> = [];
+  const inserts: GameRow[] = [];
+  for (const row of rows) {
+    const existingId = row.steamAppId
+      ? mergeMap.get(row.steamAppId)
+      : undefined;
+    if (existingId != null) merges.push({ id: existingId, row });
+    else inserts.push(row);
+  }
+  return { merges, inserts };
+}
+
 /**
  * Upsert games from IGDB API responses into the local database.
  * Skips games whose igdbId is banned (tombstoned).
+ *
+ * Performance (ROK-1024): uses ONE batched SELECT for the steamAppId merge
+ * pre-check and ONE batched INSERT ... ON CONFLICT DO UPDATE for the
+ * remaining rows, instead of per-row queries.
+ *
  * @param db - Database connection
  * @param apiGames - Raw IGDB API game objects
  * @returns Inserted/existing game rows as detail DTOs
@@ -124,8 +232,21 @@ export async function upsertGamesFromApi(
   if (filteredGames.length === 0) return [];
 
   const rows = filteredGames.map((g) => mapApiGameToDbRow(g));
-  for (const row of rows) {
-    await upsertSingleGameRow(db, row);
+  const steamAppIds = rows
+    .map((r) => r.steamAppId)
+    .filter((id): id is number => id != null);
+  const mergeMap = await batchMergeBysteamAppId(db, steamAppIds);
+  const { merges, inserts } = splitMergeVsInsert(rows, mergeMap);
+
+  for (const { id, row } of merges) {
+    await applyIgdbMergeToRow(db, id, row);
+  }
+
+  if (inserts.length > 0) {
+    await db.insert(schema.games).values(inserts).onConflictDoUpdate({
+      target: schema.games.igdbId,
+      set: buildBatchUpsertSet(),
+    });
   }
 
   const igdbIds = rows.map((r) => r.igdbId);
