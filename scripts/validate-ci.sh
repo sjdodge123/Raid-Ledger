@@ -183,6 +183,17 @@ _wait_for_container_health() {
     return 1
   fi
   echo -e "${GREEN}Nginx proxy: healthy${NC}"
+
+  # Verify pgvector extension is loaded (ROK-948). Indirectly covered by the
+  # migration run during startup — but an explicit check catches silent-success
+  # bugs (e.g. build step swapped to a different Postgres major with no pgvector).
+  if ! docker exec "$cname" su-exec postgres \
+    psql -d raid_ledger -tAc "SELECT extname FROM pg_extension WHERE extname='vector'" \
+    | grep -q '^vector$'; then
+    echo -e "${RED}pgvector extension not loaded in allinone DB${NC}"
+    return 1
+  fi
+  echo -e "${GREEN}pgvector: loaded${NC}"
 }
 
 # ---------------------------------------------------------------------------
