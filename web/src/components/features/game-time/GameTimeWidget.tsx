@@ -7,6 +7,7 @@ import type { GameTimePreviewBlock } from './GameTimeGrid';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { EventBlockPopover } from './EventBlockPopover';
 import { AttendeeAvatars } from '../../calendar/AttendeeAvatars';
+import { checkGameTimeOverlap } from './game-time-overlap.utils';
 
 interface AttendeePreview {
     id: number;
@@ -42,25 +43,6 @@ function computeSmartHourRange(startTime: string, endTime: string): [number, num
         return [rangeStart - addBefore, rangeEnd + addAfter];
     }
     return [rangeStart, rangeEnd];
-}
-
-function checkGameTimeOverlap(slots: Array<{ dayOfWeek: number; hour: number; status?: string }>, startTime: string, endTime: string): boolean {
-    if (!slots.length) return false;
-    const templateSet = new Set(
-        slots.filter((s) => s.status === 'available' || !s.status).map((s) => `${s.dayOfWeek}:${s.hour}`),
-    );
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const cursor = new Date(start);
-    cursor.setMinutes(0, 0, 0);
-    if (cursor < start) cursor.setHours(cursor.getHours() + 1);
-    while (cursor < end) {
-        const jsDay = cursor.getDay();
-        const gameDay = jsDay === 0 ? 6 : jsDay - 1;
-        if (templateSet.has(`${gameDay}:${cursor.getHours()}`)) return true;
-        cursor.setHours(cursor.getHours() + 1);
-    }
-    return false;
 }
 
 function collectDayHours(startTime: string, endTime: string): Map<number, number[]> {

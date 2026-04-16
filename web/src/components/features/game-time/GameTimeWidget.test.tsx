@@ -66,11 +66,12 @@ function renderWidget(props: {
 
 describe('GameTimeWidget — part 1', () => {
     it('shows overlap message when template matches event hours', () => {
-        // 2026-02-09 is Monday → JS getDay()=1 → game-time dayOfWeek=0
+        // 2026-02-09 is Monday. Slots use Sunday-first convention (0=Sun..6=Sat),
+        // matching JS Date.getDay() — so Monday = dayOfWeek=1. See ROK-1039.
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [
-                { dayOfWeek: 0, hour: 19, status: 'available' },
-                { dayOfWeek: 0, hour: 20, status: 'available' },
+                { dayOfWeek: 1, hour: 19, status: 'available' },
+                { dayOfWeek: 1, hour: 20, status: 'available' },
             ],
         }));
 
