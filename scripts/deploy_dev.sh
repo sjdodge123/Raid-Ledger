@@ -272,10 +272,38 @@ validate_db_volume() {
     print_success "DB volume verified: $volume_name"
 }
 
+# Verify the DB container image matches what docker-compose.yml currently expects.
+# A mismatch means the dev upgraded (e.g. ROK-948: pg15 -> pgvector/pgvector:pg16)
+# without recreating the volume — migrations that depend on the new image's
+# extensions will fail with cryptic errors. We stop loudly and tell the user
+# exactly which one-time command fixes it.
+validate_db_image() {
+    local expected_image
+    expected_image=$(grep -E '^\s+image:\s*' "$MAIN_REPO/docker-compose.yml" | head -1 | awk '{print $2}')
+    [ -z "$expected_image" ] && return 0  # Can't parse — skip
+
+    local actual_image
+    actual_image=$(docker inspect raid-ledger-db --format '{{.Config.Image}}' 2>/dev/null || true)
+    [ -z "$actual_image" ] && return 0  # No container yet — skip
+
+    if [ "$actual_image" != "$expected_image" ]; then
+        print_error "DB container image MISMATCH"
+        print_error "  Running: $actual_image"
+        print_error "  Expected: $expected_image"
+        echo ""
+        print_warning "Postgres major-version upgrades are NOT in-place. Fix (destroys local DB data):"
+        echo "  docker compose down -v && ./scripts/deploy_dev.sh --ci --fresh --rebuild"
+        exit 1
+    fi
+}
+
 # Start Docker containers safely — uses 'docker start' first to avoid
 # creating wrong volumes from worktree directory prefixes.
 ensure_docker() {
     echo "Ensuring Docker DB + Redis are running..."
+
+    # Catch an image mismatch before starting the stale container.
+    validate_db_image
 
     # Try starting existing containers by name first (safe from any directory)
     local db_started=false
