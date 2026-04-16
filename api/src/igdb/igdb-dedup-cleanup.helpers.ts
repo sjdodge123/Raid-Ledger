@@ -54,7 +54,8 @@ async function findDupsBySteamAppId(
   const g = schema.games;
   const rows = await db.execute(sql`
     SELECT ${g.steamAppId} AS key_val, array_agg(${g.id}) AS ids,
-           array_agg(CASE WHEN ${g.itadGameId} IS NOT NULL THEN ${g.id} END) AS itad_ids
+           array_agg(CASE WHEN ${g.itadGameId} IS NOT NULL THEN ${g.id} END) AS itad_ids,
+           array_agg(CASE WHEN ${g.igdbId} IS NOT NULL THEN ${g.id} END) AS igdb_ids
     FROM ${g}
     WHERE ${g.steamAppId} IS NOT NULL
     GROUP BY ${g.steamAppId}
@@ -70,7 +71,8 @@ async function findDupsByIgdbId(
   const g = schema.games;
   const rows = await db.execute(sql`
     SELECT ${g.igdbId} AS key_val, array_agg(${g.id}) AS ids,
-           array_agg(CASE WHEN ${g.itadGameId} IS NOT NULL THEN ${g.id} END) AS itad_ids
+           array_agg(CASE WHEN ${g.itadGameId} IS NOT NULL THEN ${g.id} END) AS itad_ids,
+           array_agg(CASE WHEN ${g.igdbId} IS NOT NULL THEN ${g.id} END) AS igdb_ids
     FROM ${g}
     WHERE ${g.igdbId} IS NOT NULL
     GROUP BY ${g.igdbId}
@@ -81,15 +83,36 @@ async function findDupsByIgdbId(
 
 interface DupRow {
   key_val: number;
-  ids: number[];
-  itad_ids: (number | null)[];
+  ids: number[] | string;
+  itad_ids: number[] | string;
+  igdb_ids: number[] | string;
+}
+
+/** Parse a PostgreSQL array value (may be a string or already an array). */
+function parsePgArray(val: number[] | string): number[] {
+  if (Array.isArray(val)) {
+    return val.filter((n): n is number => typeof n === 'number' && !isNaN(n));
+  }
+  if (typeof val !== 'string') return [];
+  return val
+    .replace(/[{}]/g, '')
+    .split(',')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => !isNaN(n));
 }
 
 /** Build a DuplicateGroup from a raw DB row. */
 function buildGroupFromRow(row: DupRow): DuplicateGroup {
-  const itadId = row.itad_ids.find((id) => id != null);
-  const winnerId = itadId ?? row.ids[0];
-  const loserIds = row.ids.filter((id) => id !== winnerId);
+  const ids = parsePgArray(row.ids);
+  const itadIds = new Set(parsePgArray(row.itad_ids));
+  const igdbIds = new Set(parsePgArray(row.igdb_ids));
+  // Prefer game with both IGDB+ITAD, then IGDB only, then ITAD only
+  const winnerId =
+    ids.find((id) => igdbIds.has(id) && itadIds.has(id)) ??
+    ids.find((id) => igdbIds.has(id)) ??
+    ids.find((id) => itadIds.has(id)) ??
+    ids[0];
+  const loserIds = ids.filter((id) => id !== winnerId);
   return { winnerId, loserIds };
 }
 

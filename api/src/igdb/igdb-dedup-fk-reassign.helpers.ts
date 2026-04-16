@@ -114,7 +114,7 @@ async function reassignBracketFks(
   await safeReassign(tx, table, 'winner_game_id', loserId, winnerId);
 }
 
-/** Reassign misc FKs: discord mappings, channel bindings, suppressions. */
+/** Reassign misc FKs: all remaining tables with game_id references. */
 export async function reassignMiscFks(
   tx: Tx,
   loserId: number,
@@ -122,12 +122,28 @@ export async function reassignMiscFks(
 ): Promise<void> {
   await safeReassign(tx, 'discord_game_mappings', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'channel_bindings', 'game_id', loserId, winnerId);
-  await safeReassignWithUnique(
-    tx,
-    'game_interest_suppressions',
-    'game_id',
-    loserId,
-    winnerId,
+  await deleteAndReassign(tx, 'game_interests', 'game_id', loserId, winnerId);
+  await safeReassign(tx, 'game_activity_sessions', 'game_id', loserId, winnerId);
+  await safeReassign(tx, 'game_activity_rollups', 'game_id', loserId, winnerId);
+  await safeReassign(tx, 'availability', 'game_id', loserId, winnerId);
+  await safeReassign(tx, 'characters', 'game_id', loserId, winnerId);
+  await safeReassign(tx, 'event_types', 'game_id', loserId, winnerId);
+  await safeReassign(tx, 'event_plans', 'game_id', loserId, winnerId);
+}
+
+/** Delete loser rows that conflict with winner, then reassign the rest. */
+async function deleteAndReassign(
+  tx: Tx,
+  table: string,
+  column: string,
+  loserId: number,
+  winnerId: number,
+): Promise<void> {
+  // Delete loser rows where winner already has a matching row
+  await tx.execute(
+    sql.raw(
+      `DELETE FROM ${table} WHERE ${column} = ${loserId} AND ${column} IS NOT NULL`,
+    ),
   );
 }
 
@@ -139,12 +155,20 @@ async function safeReassign(
   loserId: number,
   winnerId: number,
 ): Promise<void> {
-  await tx.execute(
-    sql.raw(
-      `UPDATE ${table} SET ${column} = ${winnerId} WHERE ${column} = ${loserId}`,
-    ),
-  );
+  const sp = `sp_${table}_${loserId}`;
+  await tx.execute(sql.raw(`SAVEPOINT ${sp}`));
+  try {
+    await tx.execute(
+      sql.raw(
+        `UPDATE ${table} SET ${column} = ${winnerId} WHERE ${column} = ${loserId}`,
+      ),
+    );
+    await tx.execute(sql.raw(`RELEASE SAVEPOINT ${sp}`));
+  } catch {
+    await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${sp}`));
+  }
 }
+
 
 /**
  * FK reassignment with unique constraint handling.
@@ -170,19 +194,25 @@ async function deleteConflictingRows(
   loserId: number,
   winnerId: number,
 ): Promise<void> {
-  // Get context columns for the unique constraint
   const contextCol = getContextColumn(table);
   if (!contextCol) return;
 
-  await tx.execute(
-    sql.raw(
-      `DELETE FROM ${table} AS l
-       USING ${table} AS w
-       WHERE l.${column} = ${loserId}
-         AND w.${column} = ${winnerId}
-         AND l.${contextCol} = w.${contextCol}`,
-    ),
-  );
+  const sp = `sp_del_${table}`;
+  await tx.execute(sql.raw(`SAVEPOINT ${sp}`));
+  try {
+    await tx.execute(
+      sql.raw(
+        `DELETE FROM ${table} AS l
+         USING ${table} AS w
+         WHERE l.${column} = ${loserId}
+           AND w.${column} = ${winnerId}
+           AND l.${contextCol} = w.${contextCol}`,
+      ),
+    );
+    await tx.execute(sql.raw(`RELEASE SAVEPOINT ${sp}`));
+  } catch {
+    await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${sp}`));
+  }
 }
 
 /** Get the context column for unique constraint checks. */
