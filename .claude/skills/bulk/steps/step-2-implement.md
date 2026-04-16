@@ -1,6 +1,6 @@
-# Step 2: Implement — Batch Branch, Worktrees, Dev Agents, Merge
+# Step 2: Implement — Batch Branch, Worktrees, Devs, Reviewers, Merge
 
-**Lead creates the batch branch, worktrees, spawns dev agents, and merges results. Max 2-3 dev agents in parallel.**
+Lead creates the batch branch, worktrees, spawns devs and reviewers, merges results. Max 2-3 devs in parallel.
 
 ---
 
@@ -11,81 +11,83 @@ git fetch origin main
 git checkout -b batch/YYYY-MM-DD origin/main
 ```
 
-Replace `YYYY-MM-DD` with the actual date from the state file.
-
 ---
 
-## 2b. Create Worktrees
+## 2b. Bring Up Environment (once) and Create Worktrees
 
-For each story in the batch:
+**Lead owns Docker. Devs never touch it.**
+
+### Once per batch — start the environment (Lead runs in main repo):
 
 ```bash
-# Create story branch from batch branch
-git branch batch/rok-<num> batch/YYYY-MM-DD
-
-# Create worktree
-git worktree add ../Raid-Ledger--rok-<num> batch/rok-<num>
-
-# Setup worktree — copies .env files, installs deps, builds contract
-# The deploy script is worktree-aware and handles everything automatically
-cd ../Raid-Ledger--rok-<num> && ./scripts/deploy_dev.sh --ci --rebuild && cd -
+./scripts/deploy_dev.sh --ci --rebuild
 ```
 
-**DO NOT manually copy .env files, run npm install, or npm audit fix.** The deploy script handles all of this.
+Docker, API, web are now running and shared by all worktrees.
 
-Update state for each story: `status: "queued"` → `"worktree_ready"`
+### Per story — lightweight worktree setup (Lead runs, not dev):
+
+```bash
+git branch batch/rok-<num> batch/YYYY-MM-DD
+git worktree add ../Raid-Ledger--rok-<num> batch/rok-<num>
+cd ../Raid-Ledger--rok-<num>
+npm install
+npm run build -w packages/contract
+cd -
+```
+
+Then verify env files copied into the worktree:
+```
+mcp__mcp-env__env_check()
+```
+If any `.env` is missing, call `mcp__mcp-env__env_copy({ file: "<path>" })`.
+
+No Docker restart. Devs inherit a working env.
+
+Update state: `status: "queued"` → `"worktree_ready"`.
 
 ---
 
-## 2c. Planner Pass (Standard Stories That Need Planning)
+## 2c. Planner Pass (stories where needs_planner: true)
 
-For any story where `needs_planner: true`, run a **Plan agent** before spawning the dev agent. This ensures the dev has a clear implementation approach, correct file targets, and test strategy.
+Skip entirely if all stories have `needs_planner: false`.
 
-**Skip this step entirely** if all stories have `needs_planner: false`.
-
-For each story needing a planner, spawn a Plan agent:
+For each planner story, spawn a Plan subagent:
 
 ```
 Agent(subagent_type: "Plan", description: "Plan ROK-<num>",
       prompt: """
-      Plan the implementation for ROK-<num>: <story title>
+Plan the implementation for ROK-<num>: <title>
 
-      ## Story Description
-      <paste full story description from Linear>
+## Story Description
+<paste from Linear>
 
-      ## Task
-      Produce a brief implementation plan covering:
-      1. Which files need changes and what changes in each
-      2. The order of changes (what depends on what)
-      3. Test strategy — which tests to add/modify, what assertions matter
-      4. Any gotchas or edge cases the dev should watch for
-      5. If the story involves multiple concerns (e.g., backend + frontend), how they connect
+## Task
+Produce a brief plan covering:
+1. Files to change and what changes
+2. Order of changes (dependencies)
+3. Test strategy — which tests, what assertions matter
+4. Gotchas or edge cases
+5. How concerns connect (e.g., backend + frontend)
 
-      Keep it concise — this is a tech-debt/chore/perf story, not a feature. Focus on the approach, not boilerplate.
-      """)
+Keep it concise — tech-debt/chore/perf story, not a feature.
+""")
 ```
 
-Planner agents can run in parallel (they're read-only). When each completes:
+Planners run in parallel (read-only). When each completes:
 
-1. **Record the plan** in state:
-   ```yaml
-   plan_summary: |
-     <concise implementation plan from planner>
-   ```
-
-2. If the planner reveals the story is actually **full-scope**, remove it from the batch and recommend `/build`. Update state: `status: "deferred"`.
-
-Once all planners are complete, proceed to spawn dev agents. The plan summary is included in each dev agent's prompt.
+1. Record in state: `plan_summary: <concise plan>`.
+2. If planner reveals full scope → remove from batch, `status: "deferred"`, recommend `/build`.
 
 ---
 
-## 2d. Create Team and Spawn Dev Agents
+## 2d. Create Team and Spawn Devs
 
 ```
 TeamCreate({ team_name: "batch-YYYY-MM-DD", description: "Batch for YYYY-MM-DD" })
 ```
 
-For each story, read `templates/dev-bulk.md`, fill in the template variables, and spawn:
+For each story: read `templates/dev-bulk.md`, fill variables, spawn.
 
 ```
 Task(subagent_type: "general-purpose", team_name: "batch-YYYY-MM-DD",
@@ -93,97 +95,98 @@ Task(subagent_type: "general-purpose", team_name: "batch-YYYY-MM-DD",
      prompt: <filled dev-bulk.md>)
 ```
 
-Spawn up to 2-3 devs in parallel (use a single message with multiple Task tool calls).
+Up to 2-3 in parallel (single message, multiple Task calls).
 
-Update state for each story:
-```yaml
-status: "dev_active"
-next_action: "dev-rok-<num> active. Wait for completion message."
-```
-
-Update pipeline:
-```yaml
-pipeline.next_action: |
-  Dev agents active: dev-rok-XXX, dev-rok-YYY.
-  When each dev completes: merge into batch branch.
-  When all stories merged: read steps/step-3-validate.md.
-```
+Update state: `status: "dev_active"`, `gates.dev: PENDING`.
+Pipeline: `next_action: "Devs active: X, Y. On dev completion → spawn per-story reviewer. On reviewer completion → merge. All merged → step-3."`.
 
 ---
 
-## 2e. When Dev Completes → Merge into Batch Branch
+## 2e. When Dev Completes → Spawn Per-Story Reviewer (parallel)
 
-When a dev agent messages completion:
+When a dev messages completion:
 
-1. **Verify the work** — check commit exists in the worktree:
-   ```bash
-   cd ../Raid-Ledger--rok-<num> && git log --oneline -3
+1. Verify commit: `cd ../Raid-Ledger--rok-<num> && git log --oneline -3`.
+2. Record `dev_commit_sha: <sha>`, `status: "reviewing"`, `gates.dev: PASS`.
+3. **Spawn reviewer immediately** (parallel with any still-active devs):
+
+   ```
+   Agent(subagent_type: "devedup-rl:reviewer",
+         description: "Review ROK-<num>",
+         prompt: """
+   Review changes on branch batch/rok-<num> compared to origin/main.
+   Worktree: ../Raid-Ledger--rok-<num> — stay in this worktree for all reads/edits.
+
+   Story: ROK-<num> — <title>
+   Label: <Tech Debt | Chore | Performance>
+   Spec + ACs: <paste full Linear issue description>
+
+   Checklist:
+   1. Correctness — logic bugs, edge cases, error handling, AC trace end-to-end
+   2. Security — injection, auth bypass, data exposure
+   3. Performance — N+1, allocations, missing indexes
+   4. Contract integrity — shared types changed? consumers updated?
+   5. Standards — ESLint, file/function size limits, naming
+
+   Classify findings: [critical], [high], [medium], [low].
+   - If BLOCKING issues exist: DO NOT commit auto-fixes. Report all findings so the Lead can respawn the dev with the full list.
+   - If only critical/high fixable issues: auto-fix directly in the worktree, run `npx tsc --noEmit` + `npm run lint -w <workspace>` + relevant tests, then commit as `review: auto-fix critical issues (ROK-<num>)`.
+   - Report medium/low as tech debt.
+
+   Standing rules: stay in worktree; never push, create PRs, enable auto-merge, force-push, or call `mcp__linear__*` — Lead handles all of that. Do NOT run `deploy_dev.sh`. Output final verdict: APPROVED | APPROVED WITH FIXES | BLOCKED.
+   """)
    ```
 
-2. **Record the commit SHA** in state: `dev_commit_sha: "<sha>"`
+Update state: `gates.reviewer: PENDING`.
 
-3. **Merge into batch branch:**
+---
+
+## 2f. When Reviewer Completes → Merge into Batch Branch
+
+For each story where reviewer finishes:
+
+1. Check reviewer verdict:
+   - **APPROVED / APPROVED WITH FIXES:** `gates.reviewer: PASS`. Continue to merge.
+   - **BLOCKED:** respawn dev with blockers. Don't merge yet.
+2. Merge into batch branch:
    ```bash
-   # Switch to batch branch in main worktree
    git checkout batch/YYYY-MM-DD
-
-   # Merge the story branch
    git merge --no-ff batch/rok-<num> -m "merge ROK-<num> into batch"
    ```
-
-4. **Handle merge conflicts:**
-   - **Trivial** (whitespace, imports): Lead resolves directly
-   - **Substantive** (logic conflicts): Re-spawn dev with conflict context
-   - **Unresolvable**: Remove story from batch, update state to `queued`, notify operator
-
-5. **Cleanup story worktree + branch:**
+3. Conflicts:
+   - Trivial (whitespace, imports) → Lead resolves.
+   - Substantive (logic) → respawn dev with conflict context.
+   - Unresolvable → remove from batch, `status: "queued"`, notify operator.
+4. Cleanup:
    ```bash
    git worktree remove ../Raid-Ledger--rok-<num>
    git branch -d batch/rok-<num>
    ```
-
-6. **Update state:**
-   ```yaml
-   status: "merged_to_batch"
-   next_action: "Merged into batch branch. Waiting for validation."
-   ```
-
-7. **Shut down the dev agent:**
-   ```
-   SendMessage({ type: "shutdown_request", recipient: "dev-rok-<num>",
-                  content: "Work merged. Shutting down." })
-   ```
+5. State: `status: "merged_to_batch"`, record any tech debt findings for the batch-level TD story.
+6. Shutdown dev agent: `SendMessage({ type: "shutdown_request", recipient: "dev-rok-<num>", content: "Work reviewed and merged." })`.
 
 ---
 
-## 2f. Post-Compaction Recovery
+## 2g. Post-Compaction Recovery
 
-If you've just recovered from compaction and state shows stories in `dev_active`:
-
-1. Check which agents are still alive by sending a ping via `SendMessage`
-2. If an agent is dead, check the worktree for their commits:
-   ```bash
-   cd <worktree_path> && git log --oneline -5
-   ```
-3. If dev committed → merge into batch branch (step 2e)
-4. If dev didn't commit → re-spawn dev (the worktree has their partial work)
+If state shows `dev_active` or `reviewing`:
+1. Ping agents via `SendMessage` to check liveness.
+2. Dead → check worktree: `cd <worktree> && git log --oneline -5`.
+3. Committed + reviewer gate PENDING → spawn reviewer (2e).
+4. Reviewer complete → merge (2f).
+5. Not committed → respawn dev.
 
 ---
 
-## Proceed
-
-When ALL stories in the batch reach `merged_to_batch`, shut down the team and proceed to **Step 3**.
+When ALL stories reach `merged_to_batch`, shut down the team and proceed to **Step 3**.
 
 ```bash
-# Verify batch branch has all merges
-git log --oneline batch/YYYY-MM-DD ^origin/main
+git log --oneline batch/YYYY-MM-DD ^origin/main  # verify merges
 ```
 
 Update state:
 ```yaml
 pipeline:
   current_step: "validate"
-  next_action: |
-    All stories merged into batch branch. Read steps/step-3-validate.md.
-    Run full validation suite on the batch branch.
+  next_action: "All merged + reviewed. Read step-3-validate.md."
 ```

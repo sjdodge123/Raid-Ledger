@@ -1,134 +1,108 @@
 # Step 4: Review — Poll Linear, Rework, Reviewer, Architect, Smoke
 
-**Lead checks Linear directly, handles rework loops, and runs final gates.**
-
 ---
 
 ## 4a. Check Story Status in Linear
 
-When the operator signals they're ready, poll each story:
-
-```
-mcp__linear__get_issue({ issueId: "<linear_id>" })
-```
-
-Check the status and route accordingly:
+When operator signals ready, poll each story: `mcp__linear__get_issue({ issueId: "<linear_id>" })`.
 
 ### Changes Requested → Rework Loop
-1. Read the operator's feedback (Linear comments or direct message)
-2. **Commit any operator testing changes first** (MANDATORY):
-   ```bash
-   cd <worktree_path>
-   git add -A
-   git status
-   # If there are changes:
-   git commit -m "test: operator testing changes (ROK-XXX)"
-   ```
-3. Re-spawn dev agent with `<TASK_TYPE>` = `REWORK` and the feedback
-4. When dev completes → spawn test agent (if standard/full)
-5. **Loop back to Step 3** (re-validate, re-push, re-deploy)
-6. Update state: `status: "rework"`, `gates.operator: REJECT`
 
-### Code Review → Proceed to Review Gates
-1. **Commit any operator testing changes first** (MANDATORY):
+1. Read operator's feedback (Linear comments or direct message).
+2. **Commit any operator testing changes first** (mandatory):
    ```bash
-   cd <worktree_path>
-   git add -A
-   git status
-   # If there are changes:
-   git commit -m "test: operator testing changes (ROK-XXX)"
-   # Use /push skill (runs full CI + push). Skip PR — already exists.
-   /push --skip-pr
+   cd <worktree>
+   git add -A && git status
+   git commit -m "test: operator testing changes (ROK-XXX)"  # if changes exist
    ```
-2. Update state: `gates.operator: PASS`, `status: "reviewing"`
-3. Update Linear to "Code Review":
+3. Respawn dev with `<TASK_TYPE>` = `REWORK` and the feedback. Dev will emit `rework_scope` in its output.
+4. When dev returns, **verify `rework_scope` before trusting it:**
+
+   **Auto-force `material` if:**
+   - Operator feedback mentions "Playwright", "smoke", "test", "failing test", or any test-file path
+   - Operator feedback mentions contract, migration, or cross-module behavior
+   - `git diff main..HEAD --stat` shows changes in >1 non-test source file
+   - Any `packages/contract/`, `api/src/drizzle/migrations/`, `Dockerfile*`, `nginx/**`, `tools/**`, or `scripts/**` in diff
+
+   Otherwise accept dev's classification.
+
+5. Branch on final `rework_scope`:
+
+   **trivial** — fast path (skip full revalidation):
+   - Verify Local CI Proof is clean (trust the dev's scoped run)
+   - Push from the worktree:
+     ```bash
+     cd <worktree>
+     git fetch origin main && git rebase origin/main
+     git push
+     cd -
+     ```
+   - Skip full deploy/Playwright/smoke — operator will re-test
+   - Loop back to 4a (operator tests the fix)
+
+   **material** — full path:
+   - Spawn test agent if new behavior added (standard/full scope)
+   - Loop back to Step 3 (full CI, push, deploy, Playwright)
+
+6. State: `status: "rework"`, `gates.operator: REJECT`, record `rework_scope` (and whether Lead forced material) for audit trail.
+
+### Code Review → Proceed
+
+1. Commit operator testing changes if any (same as above).
+2. Push from the worktree (inline — no `/push` skill nesting):
+   ```bash
+   cd <worktree>
+   git fetch origin main && git rebase origin/main
+   # If rebase pulled new commits: re-run CI scope appropriate to the story
+   git push
+   cd -
    ```
-   mcp__linear__save_issue({
-     issueId: "<linear_id>",
-     statusName: "Code Review"
-   })
+3. State: `gates.operator: PASS`, `status: "reviewing"`.
+4. Linear → "Code Review":
    ```
-4. Continue to 4b
+   mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "Code Review" })
+   ```
+5. Continue to 4b.
 
 ---
 
 ## 4b. Spawn Reviewer
 
-Read `templates/reviewer.md`, fill in the template, and spawn:
-
-```
-Agent(prompt: <filled reviewer.md>)
-```
-
-Check the reviewer's returned verdict:
-- **APPROVED / APPROVED WITH FIXES:** Update `gates.reviewer: PASS`. Continue.
-  - If APPROVED WITH FIXES: push the reviewer's commits before proceeding
-- **BLOCKED:** Present blocking issues to operator. May need dev re-spawn.
+Read `templates/reviewer.md`, fill, spawn. Verdicts:
+- **APPROVED / APPROVED WITH FIXES:** `gates.reviewer: PASS`. If with fixes, push auto-fix commits before proceeding.
+- **BLOCKED:** present blockers to operator. May need dev respawn.
 
 ---
 
-## 4c. Optional: Architect Final Check (if needs_architect)
+## 4c. Optional: Architect Final (if needs_architect)
 
-**SEQUENTIAL — must complete before smoke tests.**
-
-Read `templates/architect.md`, set `<TASK_TYPE>` to `POST_REVIEW`, pass the full diff:
-
-```
-Agent(prompt: <filled architect.md with git diff main..HEAD>)
-```
-
-Check the returned verdict:
-- **APPROVED / GUIDANCE:** Update `gates.architect_final: PASS`. Continue.
-- **BLOCKED:** Present to operator. Must resolve before shipping.
+Sequential — must finish before smoke. Read `templates/architect.md`, `<TASK_TYPE>` = `POST_REVIEW`, pass `git diff main..HEAD`. Verdicts same as 4b. BLOCKED → resolve before shipping.
 
 ---
 
-## 4d. Lead Runs Smoke Tests
+## 4d. Lead Smoke Tests
 
-**NEVER skipped, even for light scope stories.**
-
-Lead runs the full test + build suite from the main worktree:
+Never skipped, even for light scope. From main worktree:
 
 ```bash
-# Ensure main is up to date
 git pull --rebase origin main
-
-# Full build
-npm run build -w packages/contract
-npm run build -w api
-npm run build -w web
-
-# Full test suite
-npm run test -w api
-npm run test -w web
-
-# Type check
-npx tsc --noEmit -p api/tsconfig.json
-npx tsc --noEmit -p web/tsconfig.json
+npm run build -w packages/contract && npm run build -w api && npm run build -w web
+npm run test -w api && npm run test -w web
+npx tsc --noEmit -p api/tsconfig.json && npx tsc --noEmit -p web/tsconfig.json
 ```
 
-If Playwright tests are relevant (UI changes):
-```bash
-npx playwright test
-```
+If UI changes: `npx playwright test`.
 
-Update state: `gates.smoke_test: PASS` (or `FAIL`)
-
-If smoke tests fail:
-- Diagnose the failure — read the error, check if it's timing-related (`sleep()` usage)
-- If it's a regression from this story → fix or re-spawn dev
-- If it's a test infrastructure issue (flaky timing, missing wait) → fix the test, don't skip it
-- **NEVER dismiss as "pre-existing" and proceed** — investigate and fix, or create a Linear story with root cause
+Gate: `gates.smoke_test: PASS` or `FAIL`. On failure: diagnose (timing? `sleep()`?). Regression → fix or respawn dev. Test infra issue (flaky, missing wait) → fix the test, don't skip. **Never dismiss as "pre-existing"** — investigate and fix, or create a Linear story with root cause.
 
 ---
 
 ## 4e. Update State
 
 ```yaml
-stories:
-  ROK-XXX:
-    status: "ready_to_ship"
-    next_action: "All gates passed. Read steps/step-5-ship.md."
+stories.ROK-XXX:
+  status: "ready_to_ship"
+  next_action: "All gates passed. Read step-5-ship.md."
 ```
 
 When ALL stories reach `ready_to_ship`, proceed to **Step 5**.
