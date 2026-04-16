@@ -1,4 +1,4 @@
-import { ilike, type Column, type SQL } from 'drizzle-orm';
+import { ilike, or, type Column, type SQL } from 'drizzle-orm';
 
 /**
  * Strip punctuation from a search query, leaving only alphanumeric
@@ -37,5 +37,37 @@ export function buildWordMatchFilters(column: Column, query: string): SQL[] {
   const normalized = stripSearchPunctuation(query).toLowerCase();
   const words = normalized.split(/\s+/).filter((w) => w.length > 0);
   if (words.length === 0) return [];
-  return words.map((word) => ilike(column, `%${escapeLikePattern(word)}%`));
+  return words.map((word) => {
+    const alt = romanArabicAlt(word);
+    if (!alt) return ilike(column, `%${escapeLikePattern(word)}%`);
+    return or(
+      ilike(column, `%${escapeLikePattern(word)}%`),
+      ilike(column, `%${escapeLikePattern(alt)}%`),
+    )!;
+  });
+}
+
+const ARABIC_TO_ROMAN: Record<string, string> = {
+  '2': 'II',
+  '3': 'III',
+  '4': 'IV',
+  '5': 'V',
+  '6': 'VI',
+  '7': 'VII',
+  '8': 'VIII',
+};
+const ROMAN_TO_ARABIC: Record<string, string> = {
+  ii: '2',
+  iii: '3',
+  iv: '4',
+  v: '5',
+  vi: '6',
+  vii: '7',
+  viii: '8',
+};
+
+/** Return the Roman/Arabic alternative for a word, or null if none. */
+function romanArabicAlt(word: string): string | null {
+  if (ARABIC_TO_ROMAN[word]) return ARABIC_TO_ROMAN[word];
+  return ROMAN_TO_ARABIC[word.toLowerCase()] ?? null;
 }

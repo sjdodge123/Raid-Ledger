@@ -165,6 +165,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       const fullPage = Array.from({ length: 20 }, (_, i) => ({
         ...fullGameRow,
         id: i + 1,
+        igdbId: 1234 + i,
+        slug: `halo-infinite-${i}`,
+        name: `Halo Infinite ${i}`,
       }));
       mockDb.select = jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
@@ -584,6 +587,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       const fullPage = Array.from({ length: 20 }, (_, i) => ({
         ...fullGameRow,
         id: i + 1,
+        igdbId: 1234 + i,
+        slug: `halo-infinite-${i}`,
+        name: `Halo Infinite ${i}`,
       }));
       mockDb.select = jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({

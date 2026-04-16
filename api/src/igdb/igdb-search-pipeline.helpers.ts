@@ -11,6 +11,7 @@ import type { ItadService } from '../itad/itad.service';
 import type { IgdbApiGame, SearchResult } from './igdb.constants';
 import { buildItadSearchDeps } from './igdb-itad-deps.helpers';
 import { executeItadSearch } from './igdb-itad-search.helpers';
+import { deduplicateGames } from './igdb-search-dedup.helpers';
 import {
   executeSearch,
   doSearchRefresh,
@@ -60,6 +61,21 @@ export function isPartialPrefixQuery(normalized: string): boolean {
  * @returns Search results
  */
 export async function runSearchPipeline(
+  params: SearchPipelineParams,
+  query: string,
+  normalized: string,
+  triggerRefresh: (q: string, n: string, k: string) => void,
+): Promise<SearchResult> {
+  const result = await runSearchPipelineCore(
+    params,
+    query,
+    normalized,
+    triggerRefresh,
+  );
+  return { ...result, games: deduplicateGames(result.games) };
+}
+
+async function runSearchPipelineCore(
   params: SearchPipelineParams,
   query: string,
   normalized: string,
