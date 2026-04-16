@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 
 /**
  * Service for managing user preferences (ROK-195)
@@ -62,25 +62,29 @@ export class PreferencesService {
   }
 
   /**
-   * Batch upsert multiple preferences for a user in a single transaction (ROK-666).
+   * Batch upsert multiple preferences for a user in a single query (ROK-1045).
    */
   async setUserPreferences(
     userId: number,
     preferences: Record<string, unknown>,
   ) {
-    const now = new Date();
-    const entries = Object.entries(preferences);
+    const rows = Object.entries(preferences).map(([key, value]) => ({
+      userId,
+      key,
+      value,
+    }));
 
-    await this.db.transaction(async (tx) => {
-      for (const [key, value] of entries) {
-        await tx
-          .insert(schema.userPreferences)
-          .values({ userId, key, value })
-          .onConflictDoUpdate({
-            target: [schema.userPreferences.userId, schema.userPreferences.key],
-            set: { value, updatedAt: now },
-          });
-      }
-    });
+    if (rows.length === 0) return;
+
+    await this.db
+      .insert(schema.userPreferences)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [schema.userPreferences.userId, schema.userPreferences.key],
+        set: {
+          value: sql`excluded.value`,
+          updatedAt: new Date(),
+        },
+      });
   }
 }

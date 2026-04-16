@@ -130,10 +130,19 @@ function parseCliArgs(): { oldSecret: string; newSecret: string } {
     process.exit(1);
   }
 
-  return {
-    oldSecret: args[oldIdx + 1],
-    newSecret: args[newIdx + 1],
-  };
+  const oldSecret = args[oldIdx + 1];
+  const newSecret = args[newIdx + 1];
+
+  if (!oldSecret || oldSecret.startsWith('--')) {
+    console.error('Error: --old-secret requires a value');
+    process.exit(1);
+  }
+  if (!newSecret || newSecret.startsWith('--')) {
+    console.error('Error: --new-secret requires a value');
+    process.exit(1);
+  }
+
+  return { oldSecret, newSecret };
 }
 
 /** Standalone entry point — only runs when executed directly. */

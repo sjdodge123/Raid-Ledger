@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -9,6 +10,7 @@ import type {
   DemoDataCountsDto,
 } from '@raid-ledger/contract';
 import { createRng } from './demo-data-generator';
+import { getEventsDefinitions } from './demo-data.constants';
 import * as coreH from './demo-data-install-core.helpers';
 import * as signupsH from './demo-data-install-signups.helpers';
 import * as secondaryH from './demo-data-install-secondary.helpers';
@@ -195,7 +197,11 @@ export class DemoDataService {
       o?: 'doNothing',
     ) => this.batchInsert(t, r, o);
     const igdbIdsByDbId = new Map(allGames.map((g) => [g.igdbId, g.id]));
-    const origEvents = (await this.db.select().from(schema.events)).slice(0, 6);
+    const origTitles = getEventsDefinitions(allGames).map((e) => e.title);
+    const origEvents = await this.db
+      .select()
+      .from(schema.events)
+      .where(inArray(schema.events.title, origTitles));
     const avail = await secondaryH.installAvailability(
       bi,
       userByName,
