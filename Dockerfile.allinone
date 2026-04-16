@@ -269,6 +269,22 @@ until /sbin/su-exec postgres pg_isready -q; do
 done
 echo "✅ PostgreSQL is ready"
 
+# Ensure pgvector extension is installed (ROK-948). pgvector v0.7.x is NOT a
+# trusted extension, so the raid_ledger role cannot install it via a plain
+# drizzle migration. init-db.sh handles fresh installs; existing data volumes
+# (PG_VERSION present) skip that block — so we also install here on every
+# start as the postgres superuser. Idempotent; the migration 0120 then no-ops.
+# Fail loud if it can't install — an unbootable API is clearer than a
+# mid-migration crash.
+if ! /sbin/su-exec postgres psql -v ON_ERROR_STOP=1 -qt -d raid_ledger \
+    -c "CREATE EXTENSION IF NOT EXISTS vector;" > /dev/null 2>&1; then
+  echo "❌ FATAL: pgvector extension could not be installed"
+  echo "   The pgvector binary may be missing from this image, or the"
+  echo "   postgres data dir is corrupted. Check /data/logs/postgresql.log."
+  exit 1
+fi
+echo "✅ pgvector extension ensured"
+
 # Wait for Redis to be ready (Unix socket)
 echo "⏳ Waiting for Redis..."
 until redis-cli -s /tmp/redis.sock ping > /dev/null 2>&1; do
