@@ -20,7 +20,7 @@ const DEFAULT_LOG_DIR = '/data/logs';
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 
 /** Services that write log files. */
-const VALID_SERVICES: LogService[] = ['api', 'nginx', 'postgresql', 'redis'];
+const VALID_SERVICES: LogService[] = ['api', 'nginx', 'postgresql', 'redis', 'supervisor'];
 
 /** Patterns to scrub from exported log content. */
 const SCRUB_PATTERNS: RegExp[] = [
