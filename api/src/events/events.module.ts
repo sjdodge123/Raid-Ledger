@@ -94,6 +94,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     AdHocEventsGateway,
     BenchPromotionService,
     ActiveEventCacheService,
+    AnalyticsService,
   ],
 })
 export class EventsModule {}

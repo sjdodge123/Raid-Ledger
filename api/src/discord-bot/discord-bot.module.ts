@@ -76,6 +76,8 @@ import { VoiceAttendanceService } from './services/voice-attendance.service';
 import { EventAutoExtendService } from './services/event-auto-extend.service';
 import { AdHocReaperService } from './services/ad-hoc-reaper.service';
 import { PlayingCommand } from './commands/playing.command';
+import { AiChatModule } from './ai-chat/ai-chat.module';
+import { AiChatListener } from './ai-chat/ai-chat.listener';
 
 @Module({
   imports: [
@@ -88,6 +90,7 @@ import { PlayingCommand } from './commands/playing.command';
     CharactersModule,
     CronJobModule,
     ItadModule,
+    AiChatModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),
@@ -151,6 +154,7 @@ import { PlayingCommand } from './commands/playing.command';
     InviteCommand,
     HelpCommand,
     PlayingCommand,
+    AiChatListener,
   ],
   exports: [
     DiscordBotService,
