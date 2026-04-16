@@ -34,9 +34,10 @@ async function eventsForRange(
   if (events.length === 0) {
     return { data: null, emptyMessage: emptyMsg, buttons: [], isLeaf: true };
   }
-  const summary = events
+  const list = events
     .map((e) => `${e.title} — ${new Date(e.startTime).toLocaleDateString()}`)
     .join('\n');
+  const context = `Question: What events are coming up?\nData:\n${list}`;
   const buttons = deps.clientUrl
     ? [
         {
@@ -48,11 +49,11 @@ async function eventsForRange(
       ]
     : [];
   return {
-    data: summary,
+    data: context,
     emptyMessage: null,
     buttons,
     isLeaf: true,
-    systemHint: 'Summarize these upcoming events for the user.',
+    systemHint: 'List the upcoming events with their dates.',
   };
 }
 
@@ -80,7 +81,7 @@ function nextWeekRange(): { start: Date; end: Date } {
   return { start, end };
 }
 
-/** Search events by game name. */
+/** Search events by game name — returns formatted list, no LLM. */
 async function searchEventsByGame(
   deps: AiChatDeps,
   query: string,
@@ -89,12 +90,7 @@ async function searchEventsByGame(
     const games = await deps.igdbService.searchLocalGames(query);
     const match = games.games?.[0];
     if (!match) {
-      return {
-        data: null,
-        emptyMessage: `No games found matching "${query}".`,
-        buttons: [],
-        isLeaf: true,
-      };
+      return staticLeaf(`No games found matching "${query}".`, deps);
     }
     const result = await deps.eventsService.findAll({
       gameId: String(match.id),
@@ -104,41 +100,32 @@ async function searchEventsByGame(
     });
     const events = result.data ?? [];
     if (events.length === 0) {
-      return {
-        data: null,
-        emptyMessage: `No upcoming events for ${match.name}.`,
-        buttons: [],
-        isLeaf: true,
-      };
+      return staticLeaf(`No upcoming events for ${match.name}.`, deps);
     }
-    const summary = events
-      .map((e) => `${e.title} — ${new Date(e.startTime).toLocaleDateString()}`)
+    const list = events
+      .map(
+        (e) => `• ${e.title} — ${new Date(e.startTime).toLocaleDateString()}`,
+      )
       .join('\n');
-    const buttons = deps.clientUrl
-      ? [
-          {
-            customId: 'noop',
-            label: 'View Events',
-            style: 'link' as const,
-            url: `${deps.clientUrl}/events`,
-          },
-        ]
-      : [];
-    return {
-      data: summary,
-      emptyMessage: null,
-      buttons,
-      isLeaf: true,
-      systemHint: `Summarize upcoming events for ${match.name}.`,
-    };
+    return staticLeaf(`**Upcoming events for ${match.name}:**\n${list}`, deps);
   } catch {
-    return {
-      data: null,
-      emptyMessage: 'Unable to search events right now.',
-      buttons: [],
-      isLeaf: true,
-    };
+    return staticLeaf('Unable to search events right now.', deps);
   }
+}
+
+/** Build a static leaf result (no LLM) with optional web link. */
+function staticLeaf(message: string, deps: AiChatDeps): TreeResult {
+  const buttons = deps.clientUrl
+    ? [
+        {
+          customId: 'noop',
+          label: 'View Events',
+          style: 'link' as const,
+          url: `${deps.clientUrl}/events`,
+        },
+      ]
+    : [];
+  return { data: null, emptyMessage: message, buttons, isLeaf: true };
 }
 
 /** Main events tree handler. */

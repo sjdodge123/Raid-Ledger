@@ -29,17 +29,18 @@ async function fetchUserSignups(
     if (events.length === 0) {
       return leaf(null, 'You have no upcoming signups.', deps);
     }
-    const summary = events
+    const list = events
       .map(
         (e: { title: string; startTime: string }) =>
           `${e.title} — ${new Date(e.startTime).toLocaleDateString()}`,
       )
       .join('\n');
+    const context = `Question: What events am I signed up for?\nData:\n${list}`;
     return leaf(
-      summary,
+      context,
       null,
       deps,
-      "Summarize the user's upcoming event signups.",
+      'List the events the user is signed up for with dates.',
     );
   } catch {
     return leaf(null, 'You have no upcoming signups.', deps);

@@ -1,5 +1,10 @@
 import { aiCustomId } from '../ai-chat.constants';
-import type { TreeResult, AiChatDeps, TreeSession } from './tree.types';
+import type {
+  TreeResult,
+  AiChatDeps,
+  TreeSession,
+  ButtonDef,
+} from './tree.types';
 
 const SUB_BUTTONS = [
   { customId: aiCustomId('game-library:trending'), label: 'Trending' },
@@ -7,7 +12,6 @@ const SUB_BUTTONS = [
   { customId: aiCustomId('game-library:my-games'), label: 'My Games' },
 ];
 
-/** Game Library sub-menu. */
 function gameLibraryMenu(): TreeResult {
   return {
     data: null,
@@ -17,7 +21,6 @@ function gameLibraryMenu(): TreeResult {
   };
 }
 
-/** Handle "Game Library" tree path. */
 export async function handleGames(
   path: string,
   deps: AiChatDeps,
@@ -25,20 +28,14 @@ export async function handleGames(
 ): Promise<TreeResult> {
   if (path === 'game-library') return gameLibraryMenu();
   if (path === 'game-library:trending') return fetchTrending(deps);
-  if (path === 'game-library:my-games') {
-    return fetchMyGames(deps, session);
-  }
+  if (path === 'game-library:my-games') return fetchMyGames(deps, session);
+  if (path === 'game-library:search') return promptSearch();
   if (path.startsWith('game-library:search:')) {
-    const query = path.replace('game-library:search:', '');
-    return searchGames(deps, query);
-  }
-  if (path === 'game-library:search') {
-    return promptSearch();
+    return searchGames(deps, path.replace('game-library:search:', ''));
   }
   return gameLibraryMenu();
 }
 
-/** Prompt user to type a game name. */
 function promptSearch(): TreeResult {
   return {
     data: null,
@@ -48,38 +45,27 @@ function promptSearch(): TreeResult {
   };
 }
 
-/** Fetch trending games from activity rollups. */
 async function fetchTrending(deps: AiChatDeps): Promise<TreeResult> {
   try {
     const result = await deps.igdbService.searchLocalGames('');
     const games = result.games ?? [];
     if (games.length === 0) {
-      return leaf(null, 'No trending games right now.', deps);
+      return staticResult('No trending games right now.', deps);
     }
-    const summary = games
-      .slice(0, 5)
-      .map((g: { name: string }) => g.name)
-      .join(', ');
-    return leaf(
-      summary,
-      null,
-      deps,
-      'Summarize what the community is playing.',
-    );
+    const list = games.slice(0, 5).map(formatGameLine).join('\n');
+    return staticResult(`**Trending games:**\n${list}`, deps);
   } catch {
-    return leaf(null, 'Unable to fetch trending games.', deps);
+    return staticResult('Unable to fetch trending games.', deps);
   }
 }
 
-/** Fetch user's game library (requires linked account). */
 function fetchMyGames(deps: AiChatDeps, session: TreeSession): TreeResult {
   if (!session.userId) {
-    return leaf(null, buildLinkPrompt(deps.clientUrl), deps);
+    return staticResult(buildLinkPrompt(deps.clientUrl), deps);
   }
-  return leaf(null, 'Your game library integration is coming soon!', deps);
+  return staticResult('Your game library integration is coming soon!', deps);
 }
 
-/** Search local games by query string. */
 async function searchGames(
   deps: AiChatDeps,
   query: string,
@@ -88,16 +74,19 @@ async function searchGames(
     const result = await deps.igdbService.searchLocalGames(query);
     const games = result.games ?? [];
     if (games.length === 0) {
-      return leaf(null, `No games found matching "${query}".`, deps);
+      return staticResult(`No games found matching "${query}".`, deps);
     }
-    const summary = games
-      .slice(0, 10)
-      .map((g: { name: string }) => g.name)
-      .join(', ');
-    return leaf(summary, null, deps, 'List the matching games.');
+    const list = games.slice(0, 10).map(formatGameLine).join('\n');
+    const header = `**${games.length} result${games.length > 1 ? 's' : ''} for "${query}":**`;
+    return staticResult(`${header}\n${list}`, deps);
   } catch {
-    return leaf(null, 'Unable to search games right now.', deps);
+    return staticResult('Unable to search games right now.', deps);
   }
+}
+
+/** Format a single game line with name. */
+function formatGameLine(g: { name: string; id?: number }): string {
+  return `• ${g.name}`;
 }
 
 function buildLinkPrompt(clientUrl: string | null): string {
@@ -105,22 +94,17 @@ function buildLinkPrompt(clientUrl: string | null): string {
   return clientUrl ? `${base} Visit ${clientUrl}/profile` : base;
 }
 
-/** Helper to build a leaf result with optional web link. */
-function leaf(
-  data: string | null,
-  emptyMessage: string | null,
-  deps: AiChatDeps,
-  systemHint?: string,
-): TreeResult {
-  const buttons = deps.clientUrl
+/** Build a static result (no LLM) with optional web link. */
+function staticResult(message: string, deps: AiChatDeps): TreeResult {
+  const buttons: ButtonDef[] = deps.clientUrl
     ? [
         {
           customId: 'noop',
           label: 'Games Page',
-          style: 'link' as const,
+          style: 'link',
           url: `${deps.clientUrl}/games`,
         },
       ]
     : [];
-  return { data, emptyMessage, buttons, isLeaf: true, systemHint };
+  return { data: null, emptyMessage: message, buttons, isLeaf: true };
 }

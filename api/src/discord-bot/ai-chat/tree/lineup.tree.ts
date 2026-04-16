@@ -43,12 +43,14 @@ async function fetchActiveLineup(
     const status = lineup.status ?? 'unknown';
     const entries = lineup.entries?.length ?? 0;
     const data = [
+      `Question: What is the current community lineup status?`,
+      `Data:`,
       `Game: ${gameName}`,
       `Status: ${status}`,
       `Nominations: ${entries}`,
       `Voters: ${lineup.totalVoters}/${lineup.totalMembers}`,
     ].join('\n');
-    return leaf(data, null, deps, 'Describe the current lineup.');
+    return leaf(data, null, deps, 'Describe the lineup status briefly.');
   } catch {
     return leaf(null, 'No active lineup right now.', deps);
   }
@@ -65,11 +67,11 @@ async function fetchNominations(
     if (entries.length === 0) {
       return leaf(null, 'No nominations yet.', deps);
     }
-    const summary = entries
+    const list = entries
       .slice(0, 10)
-      .map((e) => `${e.gameName} (${e.voteCount ?? 0} votes)`)
+      .map((e) => `• ${e.gameName} — ${e.voteCount ?? 0} votes`)
       .join('\n');
-    return leaf(summary, null, deps, 'List the current nominations.');
+    return leaf(null, `**Current nominations:**\n${list}`, deps);
   } catch {
     return leaf(null, 'No active lineup right now.', deps);
   }

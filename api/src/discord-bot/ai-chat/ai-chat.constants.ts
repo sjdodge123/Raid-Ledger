@@ -14,10 +14,12 @@ export function parseAiCustomId(customId: string): string | null {
 
 /** System prompt for leaf node summarization (kept under 200 tokens). */
 export const SUMMARIZE_SYSTEM_PROMPT =
-  'You are a concise gaming community assistant in a private DM. ' +
-  'Address the user directly (say "you" not "everyone"). ' +
-  'Summarize the provided data in 1-3 sentences. ' +
-  'Be friendly and direct. No markdown. Key details: names, dates, counts.';
+  'You are a gaming community assistant replying in a private DM. Rules: ' +
+  '1) Answer ONLY the question described in the context. ' +
+  '2) Use 1-3 short sentences. No markdown, no bullet points. ' +
+  '3) Say "you/your" not "everyone". ' +
+  '4) Only state facts from the provided data. Never fabricate. ' +
+  '5) Do not describe what the data is — just answer the question.';
 
 /** Max tokens for LLM summarization responses. */
 export const SUMMARY_MAX_TOKENS = 150;

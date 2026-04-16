@@ -43,10 +43,11 @@ async function fetchActivePolls(
     if (!banner || banner.polls.length === 0) {
       return leaf(null, 'No active polls right now.', deps);
     }
-    const summary = banner.polls
-      .map((p) => `${p.gameName} — ${p.slotCount} time slots`)
+    const list = banner.polls
+      .map((p) => `• ${p.gameName} — ${p.slotCount} time slots`)
       .join('\n');
-    return leaf(summary, null, deps, 'Summarize the active scheduling polls.');
+    const count = banner.polls.length;
+    return leaf(null, `**Active polls (${count}):**\n${list}`, deps);
   } catch {
     return leaf(null, 'Unable to load polls right now.', deps);
   }
