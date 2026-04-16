@@ -96,7 +96,26 @@ export class AiChatService {
     buttonId?: string,
   ): Promise<string | null> {
     if (buttonId) return this.resolveButtonPath(discordUserId, buttonId);
-    if (text) return this.classifyFreeText(text, discordUserId);
+    if (text) {
+      // If the session is waiting for text input, feed it to that context
+      const contextPath = this.resolveSessionTextInput(discordUserId, text);
+      if (contextPath) return contextPath;
+      return this.classifyFreeText(text, discordUserId);
+    }
+    return null;
+  }
+
+  /** Check if the active session expects text input and route accordingly. */
+  private resolveSessionTextInput(
+    discordUserId: string,
+    text: string,
+  ): string | null {
+    const session = this.sessionStore.get(discordUserId);
+    if (!session) return null;
+    const path = session.currentPath;
+    // Paths that expect free-text as search input
+    if (path === 'events:search') return `events:search:${text}`;
+    if (path === 'game-library:search') return `game-library:search:${text}`;
     return null;
   }
 

@@ -80,6 +80,67 @@ function nextWeekRange(): { start: Date; end: Date } {
   return { start, end };
 }
 
+/** Search events by game name. */
+async function searchEventsByGame(
+  deps: AiChatDeps,
+  query: string,
+): Promise<TreeResult> {
+  try {
+    const games = await deps.igdbService.searchLocalGames(query);
+    const match = games.games?.[0];
+    if (!match) {
+      return {
+        data: null,
+        emptyMessage: `No games found matching "${query}".`,
+        buttons: [],
+        isLeaf: true,
+      };
+    }
+    const result = await deps.eventsService.findAll({
+      gameId: String(match.id),
+      page: 1,
+      limit: 10,
+      upcoming: 'true',
+    });
+    const events = result.data ?? [];
+    if (events.length === 0) {
+      return {
+        data: null,
+        emptyMessage: `No upcoming events for ${match.name}.`,
+        buttons: [],
+        isLeaf: true,
+      };
+    }
+    const summary = events
+      .map((e) => `${e.title} — ${new Date(e.startTime).toLocaleDateString()}`)
+      .join('\n');
+    const buttons = deps.clientUrl
+      ? [
+          {
+            customId: 'noop',
+            label: 'View Events',
+            style: 'link' as const,
+            url: `${deps.clientUrl}/events`,
+          },
+        ]
+      : [];
+    return {
+      data: summary,
+      emptyMessage: null,
+      buttons,
+      isLeaf: true,
+      systemHint: `Summarize upcoming events for ${match.name}.`,
+    };
+  } catch {
+    return {
+      data: null,
+      emptyMessage: 'Unable to search events right now.',
+      buttons: [],
+      isLeaf: true,
+    };
+  }
+}
+
 /** Main events tree handler. */
 export async function handleEvents(
   path: string,
@@ -103,6 +164,10 @@ export async function handleEvents(
       buttons: [],
       isLeaf: false,
     };
+  }
+  if (path.startsWith('events:search:')) {
+    const query = path.replace('events:search:', '');
+    return searchEventsByGame(deps, query);
   }
   return eventsMenu();
 }
