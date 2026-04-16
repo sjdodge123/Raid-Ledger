@@ -48,12 +48,22 @@ export function buildWordMatchFilters(column: Column, query: string): SQL[] {
 }
 
 const ARABIC_TO_ROMAN: Record<string, string> = {
-  '2': 'II', '3': 'III', '4': 'IV', '5': 'V',
-  '6': 'VI', '7': 'VII', '8': 'VIII',
+  '2': 'II',
+  '3': 'III',
+  '4': 'IV',
+  '5': 'V',
+  '6': 'VI',
+  '7': 'VII',
+  '8': 'VIII',
 };
 const ROMAN_TO_ARABIC: Record<string, string> = {
-  ii: '2', iii: '3', iv: '4', v: '5',
-  vi: '6', vii: '7', viii: '8',
+  ii: '2',
+  iii: '3',
+  iv: '4',
+  v: '5',
+  vi: '6',
+  vii: '7',
+  viii: '8',
 };
 
 /** Return the Roman/Arabic alternative for a word, or null if none. */

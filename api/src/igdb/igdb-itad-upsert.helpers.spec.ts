@@ -152,7 +152,7 @@ function buildUpsertDb(limitResults: unknown[][]) {
 
   db.transaction = jest
     .fn()
-    .mockImplementation(async (cb: (tx: typeof db) => unknown) => cb(db));
+    .mockImplementation((cb: (tx: typeof db) => unknown) => cb(db));
   db.delete = jest.fn().mockReturnValue(db);
 
   return db;

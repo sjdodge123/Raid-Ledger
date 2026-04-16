@@ -123,15 +123,29 @@ export async function reassignMiscFks(
   await safeReassign(tx, 'discord_game_mappings', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'channel_bindings', 'game_id', loserId, winnerId);
   await deleteAndReassign(tx, 'game_interests', 'game_id', loserId, winnerId);
-  await safeReassign(tx, 'game_activity_sessions', 'game_id', loserId, winnerId);
+  await safeReassign(
+    tx,
+    'game_activity_sessions',
+    'game_id',
+    loserId,
+    winnerId,
+  );
   await safeReassign(tx, 'game_activity_rollups', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'availability', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'characters', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'event_types', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'event_plans', 'game_id', loserId, winnerId);
+  // Table may not exist yet (pending migration) — savepoint protects txn
+  await safeReassign(
+    tx,
+    'game_interest_suppressions',
+    'game_id',
+    loserId,
+    winnerId,
+  );
 }
 
-/** Delete loser rows that conflict with winner, then reassign the rest. */
+/** Delete conflicting loser rows (same user+source), then reassign rest. */
 async function deleteAndReassign(
   tx: Tx,
   table: string,
@@ -139,12 +153,14 @@ async function deleteAndReassign(
   loserId: number,
   winnerId: number,
 ): Promise<void> {
-  // Delete loser rows where winner already has a matching row
   await tx.execute(
     sql.raw(
-      `DELETE FROM ${table} WHERE ${column} = ${loserId} AND ${column} IS NOT NULL`,
+      `DELETE FROM ${table} AS l USING ${table} AS w
+       WHERE l.${column} = ${loserId} AND w.${column} = ${winnerId}
+         AND l.user_id = w.user_id AND l.source = w.source`,
     ),
   );
+  await safeReassign(tx, table, column, loserId, winnerId);
 }
 
 /** Simple FK reassignment (no unique constraints to worry about). */
@@ -168,7 +184,6 @@ async function safeReassign(
     await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${sp}`));
   }
 }
-
 
 /**
  * FK reassignment with unique constraint handling.

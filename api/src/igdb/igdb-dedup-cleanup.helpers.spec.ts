@@ -14,10 +14,7 @@ import {
 // ─── Test data ────────────────────────────────────────────────────────────
 
 /** Build a DuplicateGroup for testing. */
-function makeGroup(
-  winnerId: number,
-  loserIds: number[],
-): DuplicateGroup {
+function makeGroup(winnerId: number, loserIds: number[]): DuplicateGroup {
   return { winnerId, loserIds };
 }
 
@@ -31,12 +28,8 @@ describe('findDuplicateGames', () => {
   });
 
   it('returns groups from both steamAppId and igdbId duplicates', async () => {
-    const steamDups = [
-      { key_val: 646570, ids: [1, 2], itad_ids: [null, 2] },
-    ];
-    const igdbDups = [
-      { key_val: 12345, ids: [3, 4], itad_ids: [3, null] },
-    ];
+    const steamDups = [{ key_val: 646570, ids: [1, 2], itad_ids: [null, 2] }];
+    const igdbDups = [{ key_val: 12345, ids: [3, 4], itad_ids: [3, null] }];
 
     // findDupsBySteamAppId: db.execute()
     mockDb.execute.mockResolvedValueOnce(steamDups);
@@ -62,9 +55,7 @@ describe('findDuplicateGames', () => {
   });
 
   it('picks first id as winner when no ITAD row exists', async () => {
-    const steamDups = [
-      { key_val: 100, ids: [5, 6], itad_ids: [null, null] },
-    ];
+    const steamDups = [{ key_val: 100, ids: [5, 6], itad_ids: [null, null] }];
 
     mockDb.execute.mockResolvedValueOnce(steamDups);
     mockDb.execute.mockResolvedValueOnce([]);
@@ -93,12 +84,8 @@ describe('findDuplicateGames', () => {
 
   it('deduplicates overlapping groups that share a winner', async () => {
     // Both steam and igdb find the same pair as duplicates
-    const steamDups = [
-      { key_val: 300, ids: [20, 21], itad_ids: [20, null] },
-    ];
-    const igdbDups = [
-      { key_val: 400, ids: [20, 22], itad_ids: [20, null] },
-    ];
+    const steamDups = [{ key_val: 300, ids: [20, 21], itad_ids: [20, null] }];
+    const igdbDups = [{ key_val: 400, ids: [20, 22], itad_ids: [20, null] }];
 
     mockDb.execute.mockResolvedValueOnce(steamDups);
     mockDb.execute.mockResolvedValueOnce(igdbDups);
@@ -123,10 +110,7 @@ describe('mergeAndDeleteDuplicates', () => {
   });
 
   it('returns merged count for successfully processed groups', async () => {
-    const groups = [
-      makeGroup(1, [2]),
-      makeGroup(3, [4, 5]),
-    ];
+    const groups = [makeGroup(1, [2]), makeGroup(3, [4, 5])];
 
     // Each mergeGroup call uses a transaction
     // transaction mock already delegates to cb(mockDb)
@@ -147,22 +131,20 @@ describe('mergeAndDeleteDuplicates', () => {
   });
 
   it('captures errors for failed groups and continues processing', async () => {
-    const groups = [
-      makeGroup(1, [2]),
-      makeGroup(3, [4]),
-      makeGroup(5, [6]),
-    ];
+    const groups = [makeGroup(1, [2]), makeGroup(3, [4]), makeGroup(5, [6])];
 
     // First group succeeds (default transaction mock works)
     // Second group: make the transaction throw
     let callCount = 0;
-    mockDb.transaction.mockImplementation(async (fn) => {
-      callCount++;
-      if (callCount === 2) {
-        throw new Error('FK constraint violation');
-      }
-      return fn(mockDb);
-    });
+    mockDb.transaction.mockImplementation(
+      (fn: (tx: unknown) => Promise<void>) => {
+        callCount++;
+        if (callCount === 2) {
+          return Promise.reject(new Error('FK constraint violation'));
+        }
+        return fn(mockDb);
+      },
+    );
 
     const result = await mergeAndDeleteDuplicates(mockDb as never, groups);
 
@@ -230,11 +212,7 @@ describe('mergeAndDeleteDuplicates return shape (AC 10)', () => {
 
   it('merged count equals number of successfully processed groups', async () => {
     const mockDb = createDrizzleMock();
-    const groups = [
-      makeGroup(1, [2]),
-      makeGroup(3, [4]),
-      makeGroup(5, [6]),
-    ];
+    const groups = [makeGroup(1, [2]), makeGroup(3, [4]), makeGroup(5, [6])];
 
     const result = await mergeAndDeleteDuplicates(mockDb as never, groups);
 
