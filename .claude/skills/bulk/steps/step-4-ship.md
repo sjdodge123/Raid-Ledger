@@ -1,65 +1,41 @@
-# Step 4: Ship — PR, Auto-Merge, Linear Sync, Cleanup, Summary
-
-**Lead does everything directly. Final step.**
+# Step 4: Ship
 
 ---
 
-## 4a. PR (already created by /push in Step 3i)
+## 4a. PR (already created inline in 3h)
 
-The PR was created by `/push` in Step 3i. Verify it exists:
-
-```bash
-gh pr list --head batch/YYYY-MM-DD --json number,url
-```
+Verify: `gh pr list --head batch/YYYY-MM-DD --json number,url`.
 
 ---
 
 ## 4b. Enable Auto-Merge (LAST action)
 
-**This is the final pipeline action. Only run after the PR is created and all gates have passed.**
-
 ```bash
 gh pr merge batch/YYYY-MM-DD --auto --squash
 ```
 
-Update state: `gates.pr: PASS`
+State: `gates.pr: PASS`.
 
 ---
 
-## 4c. Sync Linear — Update Stories to "Done"
+## 4c. Linear → Done
 
-For each story in the batch:
-
+For each story:
 ```
-mcp__linear__save_issue({
-  issueId: "<linear_id>",
-  statusName: "Done"
-})
+mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "Done" })
 ```
 
-Update each story's state: `status: "done"`
+Update each: `status: "done"`.
 
 ---
 
-## 4d. Wait for Merge, Then Cleanup
+## 4d. Wait for Merge, Cleanup
 
-Wait for the PR to merge (check with `gh pr view batch/YYYY-MM-DD --json state`).
-
-Once merged:
 ```bash
-# Update main
-git checkout main
-git pull --rebase origin main
-
-# Delete batch branch (local + remote already deleted by squash merge)
+gh pr view batch/YYYY-MM-DD --json state  # wait for merged
+git checkout main && git pull --rebase origin main
 git branch -d batch/YYYY-MM-DD 2>/dev/null
-
-# Any remaining story worktrees (should be cleaned up in Step 2e)
-git worktree prune
-```
-
-Clean up team artifacts:
-```bash
+git worktree prune  # any remaining story worktrees
 rm -rf ~/.claude/teams/batch-YYYY-MM-DD
 rm -rf ~/.claude/tasks/batch-YYYY-MM-DD
 ```
@@ -68,44 +44,31 @@ rm -rf ~/.claude/tasks/batch-YYYY-MM-DD
 
 ## 4e. Final Summary
 
-Present to the operator:
-
 ```
 ## Bulk Complete — YYYY-MM-DD
 
 | Story | Label | Status |
 |-------|-------|--------|
-| ROK-XXX: Title | Tech Debt | Done |
-| ROK-YYY: Title | Chore | Done |
 
 ### PR
 #<pr_number> — auto-merge enabled (squash)
 
-### Validation Results
-- Build: PASS
-- TypeScript: PASS
-- Lint: PASS
-- Unit tests: PASS
-- Integration tests: PASS
-- Smoke tests: PASS / SKIP
+### Validation
+Build / TypeScript / Lint / Unit / Integration / Smoke — PASS
 
 ### Agent Usage
-- Dev agents: <count> (opus)
+Dev: N (opus) + Planner: N (opus)
 ```
 
 ---
 
-## 4f. Wiki Update (if applicable)
+## 4f. Wiki Update (optional, best-effort)
 
-**Best-effort, non-blocking.** If any story in the batch touches a domain with a wiki page, attempt to sync the wiki. See `../build/steps/step-5i-wiki-update.md` for the full procedure and domain-to-page mapping.
-
-**Note:** Bulk stories are typically `tech-debt:`, `chore:`, or `perf:` — wiki updates are rare but may be warranted when a change affects user-facing behavior documented in the wiki. Use judgment: only update if the change materially changes how a documented feature works.
-
-If the wiki push fails, log a warning and continue. Wiki sync failures must NEVER fail the pipeline.
+Bulk stories are usually `tech-debt:` / `chore:` / `perf:` — wiki updates are rare. If a change materially alters a documented feature, see `../build/steps/step-5i-wiki-update.md`. Wiki failures NEVER fail the pipeline.
 
 ---
 
-Archive the state file:
+Archive state:
 ```bash
 mv planning-artifacts/batch-state.yaml planning-artifacts/batch-state-YYYY-MM-DD.yaml
 ```

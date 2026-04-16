@@ -1,115 +1,78 @@
-# Step 2: Implement — Worktrees, Planner, Architect, Dev, Test
+# Step 2: Implement — Worktrees, Planner, Architect, Test, Dev
 
-**Lead creates worktrees and spawns subagents. Max 2-3 dev subagents in parallel.**
+Lead creates worktrees, spawns subagents. Max 2-3 devs in parallel.
 
 ---
 
-## 2a. Create Worktrees
+## 2a. Bring Up Environment (once per batch) and Create Worktrees
 
-For each story in the batch:
+**Lead owns Docker. Devs never touch it.** This step has two parts.
+
+### Once per batch — start the environment (Lead runs in main repo):
 
 ```bash
-# Create branch from main
-git branch rok-<num>-<short-name> origin/main
-
-# Create worktree
-git worktree add ../Raid-Ledger--rok-<num> rok-<num>-<short-name>
-
-# Setup worktree — copies .env files, installs deps, builds contract
-# The deploy script is worktree-aware and handles everything automatically
-cd ../Raid-Ledger--rok-<num> && ./scripts/deploy_dev.sh --ci --rebuild && cd -
+./scripts/deploy_dev.sh --ci --rebuild
 ```
 
-**DO NOT manually copy .env files, run npm install, or npm audit fix.** The deploy script handles all of this. See CLAUDE.md "Local Dev Environment" for details.
+Docker, API, web are now running and shared by all worktrees (Docker is process-level, not directory-level).
 
-After worktree creation, verify env files are present:
+Verify env files: `mcp__mcp-env__env_check()`. If `tools/test-bot/.env` is missing: `mcp__mcp-env__env_copy({ file: "tools/test-bot/.env" })`.
+
+### Per story — lightweight worktree setup (Lead runs, not dev):
+
+```bash
+git branch rok-<num>-<short-name> origin/main
+git worktree add ../Raid-Ledger--rok-<num> rok-<num>-<short-name>
+cd ../Raid-Ledger--rok-<num>
+npm install
+npm run build -w packages/contract
+cd -
+```
+
+Then verify env files copied into the worktree (the deploy_dev script does this for main repo but worktrees need their own):
 ```
 mcp__mcp-env__env_check()
 ```
-If any .env files are missing (common for `tools/test-bot/.env`), copy them:
-```
-mcp__mcp-env__env_copy({ file: "tools/test-bot/.env" })
-```
+If missing `.env`, `api/.env`, or `tools/test-bot/.env`, call `mcp__mcp-env__env_copy({ file: "<path>" })` for each.
 
-Update state for each story: `status: "worktree_ready"`
+No Docker restart, no DB reset. Devs inherit a working env.
 
----
-
-## 2b. Optional: Planner (full scope only)
-
-For stories with `needs_planner: true`:
-
-1. Read `templates/planner.md`
-2. Fill in the template variables
-3. Spawn as a subagent:
-
-```
-Agent(prompt: <filled planner.md>)
-```
-
-4. The planner's implementation plan is returned directly in the agent output
-5. Save the plan — it gets passed to the dev subagent
+Update state: `status: "worktree_ready"`.
 
 ---
 
-## 2c. Optional: Architect Pre-Dev (full scope only)
+## 2b. Optional: Planner (full scope)
 
-For stories with `needs_architect: true`:
-
-1. Read `templates/architect.md`
-2. Set `<TASK_TYPE>` to `PRE_DEV`
-3. Pass the planner's output (or story spec if no planner)
-4. Spawn as a subagent:
-
-```
-Agent(prompt: <filled architect.md>)
-```
-
-5. Check the returned verdict:
-   - **APPROVED / GUIDANCE:** Proceed to dev (pass guidance along)
-   - **BLOCKED:** Present to operator for resolution before spawning dev
+For `needs_planner: true`: read `templates/planner.md`, fill variables, spawn. The returned plan goes into the dev's prompt.
 
 ---
 
-## 2d. E2E Test First — TDD (MANDATORY for standard/full scope)
+## 2c. Optional: Architect Pre-Dev (full scope)
 
-**This step is NOT optional. Every standard and full scope story MUST have a failing test committed BEFORE the dev agent starts.** No exceptions. No judgment calls. No "this is simple enough to skip."
+For `needs_architect: true`: read `templates/architect.md`, set `<TASK_TYPE>` = `PRE_DEV`, pass planner output (or spec), spawn. Verdicts:
+- **APPROVED / GUIDANCE:** proceed to dev (pass guidance along).
+- **BLOCKED:** present to operator before spawning dev.
 
-If the scope is `light` (config, copy, docs — no testable runtime behavior), set `gates.e2e_test_first: N/A` and proceed. For ALL other scopes, this gate MUST be PASS before spawning any dev agent.
+---
 
-### Determine test type from the story's area:
+## 2d. E2E Test First — TDD
 
-| Area Touched | Test Type | Location |
-|-------------|-----------|----------|
-| UI (web pages/components) | Playwright smoke test (desktop + mobile) | `scripts/smoke/<feature>.smoke.spec.ts` |
-| Discord bot / notifications | Discord companion bot smoke test | `tools/test-bot/src/smoke/tests/<feature>.test.ts` |
-| API-only (no UI/Discord) | Integration test (Jest, real DB) | `api/src/<module>/*.integration.spec.ts` |
-| Pure logic / utility | Unit test | `api/src/<module>/*.spec.ts` or `web/src/<module>/*.test.ts` |
+Every standard/full story MUST have a failing test committed BEFORE the dev starts. Light scope only: set `gates.e2e_test_first: N/A` and skip.
 
-### Spawn TDD test agent:
+Read `templates/test-agent.md`, set `<TASK_TYPE>` = `TDD_WRITE_FAILING`, spawn.
 
-Read `templates/test-agent.md`, fill in template variables, and set `<TASK_TYPE>` to `TDD_WRITE_FAILING`:
+### Lead validates test agent output:
 
-```
-Agent(prompt: <filled test-agent.md>, model: "sonnet")
-```
+1. Output includes TDD Test Report table → else respawn.
+2. Every AC has "Confirmed Failing? = YES" → else respawn.
+3. Failure output is actual test runner output → else respawn.
+4. Test file committed in worktree: `cd <worktree> && git log --oneline -1`.
 
-### Validate the test agent's output (Lead MUST check):
+Gate: `PASS` (validated + committed) or `N/A` (light only). Any other value blocks dev spawn.
 
-1. **Output includes the TDD Test Report table** — if not, re-spawn the test agent
-2. **Every AC has "Confirmed Failing? = YES"** — if any say NO or are missing, re-spawn
-3. **Failure output is included** — actual test runner output showing failures. If missing, re-spawn
-4. **Test file was committed** — verify in the worktree: `cd <worktree> && git log --oneline -1`
+**Hard rule:** do NOT spawn dev unless `gates.e2e_test_first` is PASS or N/A. If the test agent fails validation 3x, escalate to operator — never skip TDD.
 
-### Gate enforcement:
-
-- `gates.e2e_test_first: PASS` — test agent output validated, failing test committed
-- `gates.e2e_test_first: N/A` — light scope only
-- **Any other value (PENDING, SKIP, FAIL) blocks dev agent spawn**
-
-**HARD RULE: Do NOT spawn a dev agent for any story where `gates.e2e_test_first` is not PASS or N/A.** If the test agent fails to produce a valid TDD report, re-spawn it. If it fails 3 times, escalate to the operator — do NOT skip TDD and proceed to dev.
-
-If the test agent writes a test that **passes** (feature already works), investigate — the story may already be done or the test isn't asserting the right thing. Do NOT set the gate to PASS if the tests pass — TDD means tests must FAIL first.
+If the test passes (feature already works), investigate. The story may be done or the assertion is wrong. Do NOT set the gate PASS — TDD tests must FAIL first.
 
 ---
 
@@ -117,93 +80,50 @@ If the test agent writes a test that **passes** (feature already works), investi
 
 For each story with a failing test ready:
 
-1. Read `templates/dev.md`
-2. Fill in template variables:
-   - `<WORKTREE_PATH>`: the story's worktree
-   - `<ROK-XXX>`, `<TITLE>`: from state file
-   - `<NEW | REWORK>`: based on story origin
-   - **`<TEST_FILE>`**: path to the failing test from step 2d
-   - Planner output and architect guidance if applicable
-3. **Include in the dev prompt:** "A failing test exists at `<TEST_FILE>`. Your job is to make it pass. Run the test after implementing to confirm."
-4. Spawn (use parallel `Agent` calls for multiple stories):
+1. Read `templates/dev.md`.
+2. Fill variables: `<WORKTREE_PATH>`, `<ROK-XXX>`, `<TITLE>`, `<NEW | REWORK>`, `<TEST_FILE>`, plus planner/architect output if applicable.
+3. Spawn in parallel (single message, multiple `Agent` calls).
 
-```
-Agent(prompt: <filled dev.md>)
-```
-
-Update state: `status: "dev_active"`, `gates.dev: PENDING`
-
-Update `next_action` fields:
-```yaml
-pipeline.next_action: |
-  Dev subagents active for: ROK-XXX, ROK-YYY.
-  When each dev completes: Lead AC audit.
-  When all stories reach "ready_for_validate": read steps/step-3-validate.md.
-stories.ROK-XXX.next_action: |
-  Dev subagent active. Must make failing test pass.
-```
+Update state: `status: "dev_active"`, `gates.dev: PENDING`, `pipeline.next_action: "Devs active: ROK-XXX, ROK-YYY. On completion: Lead AC audit. When all ready_for_validate → read step-3-validate.md."`.
 
 ---
 
-## 2f. When Dev Completes → Lead AC Audit (MANDATORY)
+## 2f. When Dev Completes → Lead AC Audit
 
-When a dev subagent returns its output, the Lead **MUST** audit the AC trace table before proceeding. Do NOT blindly trust the dev agent's output.
+Do NOT blindly trust the dev's output.
 
-### Lead AC Audit Checklist
+### AC Audit Checklist
 
-1. **Read the dev's AC trace table.** If the dev didn't produce one, treat this as a FAIL — re-spawn the dev.
-2. **Spot-check 2-3 ACs end-to-end** by reading the actual files in the worktree:
-   - Pick the most complex AC (multi-layer features, combined filters, conditional behavior)
-   - Read the controller → service → query helper chain and confirm the param flows through every layer
-   - Read the rendered component tree and confirm each UI element from the spec exists
-3. **Check default/edge semantics:**
-   - What happens when a filter is "not set"? Does the default match what the UI shows?
-   - If filters combine (e.g., gameId + role), does the query path handle BOTH params together?
-   - Are there any hard-coded constant lists (like HEART_SOURCES) that might not match the UI's options?
-4. **Verdict:**
-   - **All ACs verified → `gates.dev: PASS`** — proceed to test subagent
-   - **Any AC broken → `gates.dev: FAIL`** — fix directly in the worktree (if simple) or re-spawn dev with specific feedback
+1. Read the dev's AC trace table. Missing → FAIL, respawn.
+2. Spot-check 2-3 ACs end-to-end in the worktree:
+   - Pick the most complex AC (multi-layer features, combined filters, conditional behavior).
+   - Read controller → service → query helper; confirm the param flows at every layer.
+   - Read the rendered component tree; confirm each UI element from the spec exists.
+3. Check default/edge semantics:
+   - What happens when a filter isn't set? Does the default match the UI?
+   - If filters combine (e.g. gameId + role), does the query handle BOTH together?
+   - Any hard-coded constant lists (like HEART_SOURCES) that don't match the UI's options?
+4. Verdict: all verified → `gates.dev: PASS` → test runner check. Any AC broken → `gates.dev: FAIL`, fix directly (if simple) or respawn dev with specific feedback.
 
-### After AC Audit passes:
+### Verify TDD test passes
 
-1. **Verify the TDD test passes.** Run the test that was written in step 2d:
-   - Playwright: `npx playwright test <test_file>`
-   - Discord smoke: `cd tools/test-bot && npm run smoke`
-   - Integration: `npm run test -w api -- --testPathPattern=<test_file>`
-2. **If the test passes** → `gates.dev: PASS`, `status: "ready_for_validate"`
-3. **If the test still fails** → re-spawn dev with the specific failure output, or fix directly
+Run the test from 2d:
+- Playwright: `npx playwright test <file>`
+- Discord smoke: `cd tools/test-bot && npm run smoke`
+- Integration: `npm run test -w api -- --testPathPattern=<file>`
 
-### E2E Test Coverage Audit (Lead MUST check before proceeding to Step 3)
+Pass → `status: "ready_for_validate"`. Still fails → respawn dev with the failure output.
 
-After dev passes, verify the **right type** of E2E test exists. Cross-reference the story's area against the profiling matrix:
+### E2E coverage audit
 
-| Area Touched | Required Test Type | How to verify |
-|-------------|-------------------|---------------|
-| UI (web pages/components) | Playwright smoke test | `ls scripts/smoke/` — new or modified `.smoke.spec.ts` file |
-| Discord bot / notifications | Discord companion bot smoke test | `ls tools/test-bot/src/smoke/tests/` — new or modified `.test.ts` file |
-| API-only (no UI/Discord) | Integration test (Jest) | `git diff main --name-only \| grep integration.spec` |
-| Pure logic / utility | Unit test | `git diff main --name-only \| grep -E '\.spec\.ts\|\.test\.ts'` |
-
-**Check:** Does the test agent's output match the required type from the matrix?
-- If story AC mentions "smoke test" or "Discord test" but no such test file exists → **GAP.** Re-spawn test agent with explicit instructions.
-- If the dev agent wrote only unit tests but the area requires Playwright/Discord smoke → **GAP.** Spawn test agent to write the missing E2E test.
-- Record findings in state: `test_coverage: { type: "<type>", file: "<path>", gap: null | "<description>" }`
+Verify the right type of E2E test exists (cross-reference area against SKILL.md's matrix). If the story touches UI but no Playwright file exists, or Discord but no smoke test — spawn test agent to fill the gap. Record in state: `test_coverage: { type, file, gap }`.
 
 ---
 
 ## Post-Compaction Recovery
 
-If you've just recovered from compaction and state shows stories in `dev_active` or `testing`:
-
-1. Check the worktree for commits:
-   ```bash
-   cd <worktree_path> && git log --oneline -5
-   ```
-2. If dev committed but test subagent wasn't spawned yet → spawn test subagent
-3. If dev didn't commit → re-spawn dev subagent (the worktree has their partial work)
+State shows `dev_active` or `testing` → check the worktree: `cd <worktree> && git log --oneline -5`. If dev committed but test subagent never spawned → spawn it. If dev didn't commit → respawn dev (worktree has partial work).
 
 ---
 
-## Proceed
-
-When ALL stories in the batch reach `ready_for_validate`, proceed to **Step 3**.
+When ALL stories reach `ready_for_validate`, proceed to **Step 3**.

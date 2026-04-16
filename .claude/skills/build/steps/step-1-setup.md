@@ -1,33 +1,25 @@
 # Step 1: Setup — Cleanup, Fetch, Profile, Init State
 
-**Lead does everything directly. No agents spawned in this step.**
+Lead does everything directly. No agents spawned.
 
 ---
 
 ## 1a. Quick Workspace Cleanup
 
 ```bash
-# Check for stale worktrees
 git worktree list
 git fetch --prune
-
-# Delete local branches already merged to main
 git branch --merged main | grep -v '^\*\|main' | xargs -r git branch -d
-
-# Clean up old planning artifacts
 ls planning-artifacts/build-state-batch-*.yaml 2>/dev/null
 ```
 
-If stale worktrees exist from a previous build, remove them:
-```bash
-git worktree remove <path> --force  # only if confirmed no in-flight work
-```
+Remove stale worktrees from previous builds (only if confirmed no in-flight work): `git worktree remove <path> --force`.
 
 ---
 
 ## 1b. Check for In-Flight State
 
-Scan existing worktrees for state files from previous builds:
+Scan worktrees for prior state files:
 
 ```bash
 for wt in ../Raid-Ledger--rok-*; do
@@ -35,234 +27,136 @@ for wt in ../Raid-Ledger--rok-*; do
 done
 ```
 
-- **If no state files found:** Fresh build. Continue to 1c.
-- **If a state file exists for the requested story:** Read it, then **reconcile against origin before trusting any status.**
+If a state file exists for the requested story, **reconcile against origin before trusting status.** Use `mcp__mcp-env__story_status({ stories: ["ROK-XXX", ...] })` — returns verdict per story: `done`, `in_flight`, `not_started`.
 
-### Origin Reconciliation (MANDATORY before resuming)
+- `done` → set `status: "done"`, gates PASS, skip.
+- `in_flight` → check PR state, determine resume point.
+- `not_started` → resume from state file.
 
-The state file may be stale from a previous session that shipped stories. **Use the `mcp__mcp-env__story_status` MCP tool** to check all stories at once:
+If the MCP is unavailable: `git fetch origin && git branch -r --merged origin/main | grep rok-<num>`.
 
-```
-mcp__mcp-env__story_status({ stories: ["ROK-XXX", "ROK-YYY"] })
-```
+After reconciliation:
+- All stories `done` → clean worktree, start fresh.
+- Any story with `requirements_gathered: false` → resume 1e for those only. Read existing specs from `planning-artifacts/specs/` for completed ones.
+- Stories in `dev_active`/`testing` → skip to Step 2.
+- `ready_for_validate` → Step 3; `waiting_for_operator` → Step 4; `ready_to_ship` → Step 5.
 
-This returns structured JSON with `verdict` per story: `done`, `in_flight`, or `not_started`. Use the verdicts to update state:
-
-- `done` → story is shipped. Update state: `status: "done"`, all gates → `PASS`. Skip it.
-- `in_flight` → branch on origin, check PR state in the response to determine resume point.
-- `not_started` → resume from where the state file says.
-
-**If `mcp__mcp-env__story_status` is unavailable**, fall back to manual git checks:
-
-```bash
-git fetch origin
-git branch -r --merged origin/main | grep rok-<num>
-```
-
-After reconciliation, update the state file with corrected statuses, then:
-  - If all stories are `done` → clean up worktree and start fresh
-  - If ANY story has `requirements_gathered: false` → resume Step 1e (requirements interview) for those stories only. Read existing spec files in `planning-artifacts/specs/` for stories already interviewed.
-  - If stories are in `dev_active` or `testing` → skip to Step 2 (check agent status)
-  - If stories are in `ready_for_validate` → skip to Step 3
-  - If stories are in `waiting_for_operator` → skip to Step 4
-  - If stories are in `ready_to_ship` → skip to Step 5
-  - Present a reconciled summary showing which stories were already shipped vs still in-flight
-
-**IMPORTANT:** Only claim state files for stories YOU are building. If you find state files for OTHER stories, leave them alone — another session may be working on them.
+Only claim state files for stories YOU are building — other sessions may own the rest.
 
 ---
 
 ## 1c. Fetch Stories from Linear
 
-Use `mcp__linear__list_issues` to fetch dispatchable stories directly.
-
-### Fetch Dispatch Ready stories:
 ```
-mcp__linear__list_issues({
-  teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
-  statusName: "Dispatch Ready",
-  first: 20
-})
+mcp__linear__list_issues({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", statusName: "Dispatch Ready", first: 20 })
 ```
 
-### Fetch Changes Requested stories (rework):
-```
-mcp__linear__list_issues({
-  teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
-  statusName: "Changes Requested",
-  first: 10
-})
-```
-
-### If operator specified `ROK-XXX`:
-Fetch just that story:
-```
-mcp__linear__get_issue({ issueId: "ROK-XXX" })
-```
-
-### If operator specified `rework`:
-Only fetch Changes Requested stories.
+For rework: `statusName: "Changes Requested"`. For specific story: `mcp__linear__get_issue({ issueId: "ROK-XXX" })`.
 
 ---
 
 ## 1d. Profile Stories
 
-Apply the profiling matrix from SKILL.md to each story:
+Apply the profiling matrix from SKILL.md. Per story: scope (light/standard/full), `needs_planner` (true if full), `needs_architect` (true if full), serialization conflicts (touches `packages/contract`? migration? file overlap?).
 
-For each story, determine:
-- **Scope:** light / standard / full (using the decision rules in SKILL.md)
-- **needs_planner:** true if scope is `full`
-- **needs_architect:** true if scope is `full`
-- **Serialization conflicts:** Does it touch `packages/contract`? Add migrations? Overlap files with other stories?
+Group into batches respecting serialization. Max 2-3 devs per batch.
 
-Group stories into batches respecting serialization rules. Max 2-3 dev agents per batch.
+**Migration rule:** if a story adds a DB migration, it MUST be the only story in its batch. Shared Docker Postgres means deploying one worktree's migration affects all in-flight worktrees. Serialize migrations against everything — put them in their own batch.
 
 ---
 
 ## 1e. Requirements Interview (Plan Mode)
 
-After profiling, assess **every** story's spec quality. Most stories will NOT pass this bar — that's intentional.
+Assess every story's spec quality. Most won't pass — that's intentional.
 
-### Spec Completeness Checklist
+**Spec is complete only if ALL are true:**
+1. Exact file paths listed
+2. Contract changes: before/after shapes (fields, types, nullability)
+3. DB schema: columns/tables with types, nullability, defaults, indexes, migration direction
+4. API endpoints: method, path, req/resp shapes, errors, auth
+5. Behavioral edge cases (empty data, nulls, concurrency, partial failures, unauthorized)
+6. UI states (loading, empty, error, success) for frontend work
+7. Testable ACs (specific, automatable — not "works correctly")
+8. Data flow: trigger → backend → persistence → response → UI
 
-A story's spec is **only** considered complete if it has **ALL** of the following:
-
-1. **Exact file paths** — every file that will be created or modified is listed by path
-2. **Contract changes spelled out** — if any DTO, schema, or endpoint signature changes, the before/after shapes are defined (field names, types, nullability)
-3. **DB schema changes spelled out** — new columns/tables defined with types, nullability, defaults, indexes, and migration direction
-4. **API endpoint specs** — method, path, request/response shapes, error cases, auth requirements
-5. **Behavioral edge cases** — what happens on empty data, nulls, concurrent access, partial failures, unauthorized access
-6. **UI state mapping** — for frontend work: loading, empty, error, and success states are all described
-7. **Testable acceptance criteria** — each AC maps to a specific, automatable assertion (not vague outcomes like "works correctly" or "displays properly")
-8. **Data flow** — how data moves from trigger → backend → persistence → response → UI update
-
-### Assessment
-
-For each story, mark it:
-- **SPEC_COMPLETE** — passes ALL 8 checks (rare — most stories won't)
-- **SPEC_INCOMPLETE** — fails any check
-
-**If ALL stories are SPEC_COMPLETE:** skip to 1f (present batch).
-
-**If ANY story is SPEC_INCOMPLETE:** enter plan mode and interview the operator.
+Mark each story SPEC_COMPLETE or SPEC_INCOMPLETE. If all complete → skip to 1f. If any incomplete → enter plan mode.
 
 ### Interview Protocol
 
-1. **Enter plan mode** (`EnterPlanMode`)
-2. For each incomplete story, present:
-   - The story title and current description
-   - Which checklist items are missing (be specific)
-   - Targeted questions to fill the gaps — ask about behavior, not implementation
-3. **Interview one story at a time.** Finish one before starting the next.
-4. Ask focused questions — don't dump all gaps at once. Group related gaps into 2-3 questions per round.
-5. After each answer, update your understanding and ask follow-up questions until all 8 checklist items are satisfied.
-6. When a story's spec is complete, **immediately write the enriched spec** to `planning-artifacts/specs/ROK-XXX.md` using this format:
+1. `EnterPlanMode`.
+2. For each incomplete story: present title, description, missing items, then targeted questions about behavior (not implementation). One story at a time. Group related gaps into 2-3 questions per round.
+3. When a story's spec is complete, immediately write `planning-artifacts/specs/ROK-XXX.md`:
 
 ```markdown
 # ROK-XXX: <title>
 
 ## Original Description
-<paste from Linear>
+<from Linear>
 
-## Enriched Spec (from operator interview)
+## Enriched Spec (from interview)
 
 ### Files Affected
 | File | Change Type | Description |
-|------|------------|-------------|
-| `path/to/file` | modify/create | what changes |
 
-### Contract Changes
-<before/after shapes, or "none">
-
-### DB Changes
-<columns, types, migration details, or "none">
-
-### API Changes
-<endpoints, shapes, errors, or "none">
-
-### UI States
-<loading/empty/error/success, or "N/A">
-
-### Edge Cases & Error Handling
-- <case 1>
-- <case 2>
-
-### Data Flow
-<trigger → backend → persistence → response → UI>
-
-### Acceptance Criteria (Testable)
-- [ ] <specific, automatable assertion>
-- [ ] <specific, automatable assertion>
+### Contract Changes / DB Changes / API Changes / UI States / Edge Cases / Data Flow / Acceptance Criteria
+<sections filled out>
 ```
 
-7. **Update `build-state.yaml`** after each story is spec'd — set `requirements_gathered: true` and `spec_file: "planning-artifacts/specs/ROK-XXX.md"` on that story. This is critical for recovery.
-8. After ALL stories are spec'd, **exit plan mode** (`ExitPlanMode`) and continue to 1f.
+4. Update state: set `requirements_gathered: true`, `spec_file: "planning-artifacts/specs/ROK-XXX.md"` per story — critical for recovery.
+5. After all stories spec'd → `ExitPlanMode` → continue to 1f.
 
-### Context Survival
-
-If the operator needs to "clear context and build" mid-interview:
-- The state file tracks which stories have `requirements_gathered: true`
-- Enriched specs are on disk in `planning-artifacts/specs/`
-- On resume (step 1b), stories with `requirements_gathered: true` skip the interview
-- Stories without it re-enter the interview from scratch (the state file knows which ones)
+**Context survival:** state file tracks `requirements_gathered`. Specs live on disk. On resume, completed stories skip the interview automatically.
 
 ---
 
 ## 1f. Present Batch to Operator
 
-Present a summary table:
-
 ```
 ## Build Batch <N>
-
 | # | Story | Scope | Planner | Architect | Notes |
 |---|-------|-------|---------|-----------|-------|
-| 1 | ROK-XXX: Title | standard | no | no | Single module |
-| 2 | ROK-YYY: Title | full | yes | yes | Contract changes |
 
-Serialization: ROK-YYY must complete before batch 2 (contract changes).
-Estimated agents: 2 dev (opus) + 2 test (sonnet) + 2 reviewer (sonnet)
+Serialization: <describe>
+Estimated agents: N dev + N test + N reviewer
 ```
 
-**Wait for operator approval.** If the operator approves during this discussion (e.g., "go", "let's do it", "sounds good"), that IS the confirmation — do not re-ask.
+Wait for operator approval. Approval during discussion ("go", "let's do it") IS confirmation — don't re-ask.
 
 ---
 
 ## 1g. Initialize State File
 
-**Note:** The state file will be written to the worktree AFTER it's created in Step 2a. Prepare the state content now, write it after worktree creation.
-
-State file path: `<worktree>/build-state.yaml` (e.g., `../Raid-Ledger--rok-XXX/build-state.yaml`):
+Write `<worktree>/build-state.yaml` after worktree creation in Step 2a. Schema:
 
 ```yaml
 pipeline:
   current_step: "implement"
   batch: 1
-  next_action: |
-    Read steps/step-2-implement.md. Create worktrees and spawn dev subagents.
+  next_action: "Read step-2-implement.md. Create worktrees and spawn dev subagents."
   stories:
     ROK-XXX:
-      title: "Story title"
-      linear_id: "<uuid from Linear>"
-      scope: standard
+      title: "..."
+      linear_id: "<uuid>"
+      scope: standard  # light | standard | full
       status: "queued"
       branch: "rok-xxx-short-name"
       worktree: "../Raid-Ledger--rok-xxx"
       needs_planner: false
       needs_architect: false
-      requirements_gathered: true  # false if interview was interrupted
-      spec_file: "planning-artifacts/specs/ROK-XXX.md"  # null if spec was already complete
+      requirements_gathered: true
+      spec_file: "planning-artifacts/specs/ROK-XXX.md"  # null if pre-complete
       e2e_test_type: "playwright"  # playwright | discord_smoke | integration | unit
-      e2e_test_file: null          # filled by test agent in Step 2d
+      e2e_test_file: null  # filled by test agent in 2d
       gates:
         e2e_test_first: PENDING
         dev: PENDING
         ci: PENDING
+        playwright: PENDING  # set in 3c.5
         operator: PENDING
         reviewer: PENDING
         architect_final: PENDING
-        smoke_test: PENDING
-      next_action: "Queued. Waiting for worktree creation in Step 2."
+        smoke_test: PENDING  # Lead's final smoke in 4d
+      next_action: "Queued."
       agent_history: []
 ```
 
@@ -270,17 +164,9 @@ pipeline:
 
 ## 1h. Update Linear to "In Progress"
 
-**MANDATORY — do this NOW before proceeding to Step 2.**
-
-Move every story in the batch to "In Progress":
-
+Mandatory before Step 2. For each story:
 ```
-mcp__linear__save_issue({
-  issueId: "<linear_id>",
-  statusName: "In Progress"
-})
+mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "In Progress" })
 ```
-
-This ensures Linear reflects that work has started as soon as the batch is confirmed, not after CI/deploy in Step 3.
 
 Proceed to **Step 2**.

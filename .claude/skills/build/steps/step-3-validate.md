@@ -1,103 +1,84 @@
 # Step 3: Validate — CI, Push, Deploy, FULL STOP
 
-**Lead runs everything directly. No agents spawned.**
-
-**CRITICAL: Steps 3a and 3b MUST both pass BEFORE any push to origin. If you skip 3a and go straight to `/push`, you are violating the pipeline. The 34% PR CI failure rate over the last 2 weeks was caused by skipping local validation. Every failed CI run on GitHub wastes Actions minutes and blocks merges.**
+Lead runs everything. Gates 3a and 3b must both pass BEFORE any push — skipping 3a is a pipeline violation.
 
 ---
 
-## 3a. Run FULL CI Locally (MANDATORY — NEVER SKIP)
+## 3a. Verify Dev CI Proof
 
-**This is the primary CI gate. Run ALL checks, not just the ones `/push` scope detection would select.** The `/push` skill's scope detection is a convenience for standalone pushes — inside `/build`, you MUST run the full suite because dev agents may have introduced cross-workspace regressions.
+Dev agents self-scope CI based on what they touched (see `dev.md` CI Scope table). Lead verifies rather than always re-runs.
 
-For each story at `ready_for_validate`, run the **complete** CI suite in its worktree:
+### For each story:
 
-```bash
-WORKTREE="../Raid-Ledger--rok-<num>"
-cd $WORKTREE
-./scripts/validate-ci.sh --full
-cd -
-```
+1. Read the dev's "CI Scope" output: `ci_scope` value and reason.
+2. Cross-check `ci_scope` against the actual diff: `cd <worktree> && git diff main..HEAD --name-only`. Risk signals that demand `full`:
+   - Any `packages/contract/**` file
+   - Any `Dockerfile*`, `docker-entrypoint.sh`, `nginx/**`
+   - New migration file in `api/src/drizzle/migrations/`
+   - Both `api/src/**` and `web/src/**` changed
+   - Any `tools/**` or `scripts/**` file
 
-This script runs ALL checks (build, typecheck, lint, unit tests with coverage, integration tests, plus conditional migration validation and container startup). Agents cannot cherry-pick individual checks.
+3. Decide:
+   - **`ci_scope: full` and proof table all PASS** → accept. `gates.ci: PASS`.
+   - **`ci_scope: full` but any FAIL** → respawn dev with failure context.
+   - **`ci_scope: api | web | tests | docs` and no risk signal** → accept. `gates.ci: PASS`.
+   - **Scope under-selected** (risk signal present but dev ran narrow) → run `./scripts/validate-ci.sh --full` yourself in the worktree. Fix failures or respawn.
+   - **Scope unclear or dev output malformed** → run `./scripts/validate-ci.sh --full`.
 
-**DO NOT scope-reduce these checks.** Even if the story only touched `web/`, run API tests too — contract changes, shared types, and transitive dependencies can break either workspace.
+On Lead-driven failure: lint/type errors → fix directly, commit `fix: resolve CI issues (ROK-XXX)`. Test failures → respawn dev. Never push with known failures.
 
-If CI fails:
-- **Lint/type errors:** Fix directly in the worktree, commit as `fix: resolve CI issues (ROK-XXX)`
-- **Test failures:** Assess — if trivial, fix. If complex, re-spawn dev for the failing story.
-- **NEVER push with known failures hoping CI will pass** — fix locally first.
-
-Update state: `gates.ci: PASS` (or `FAIL`)
-
-**Do NOT proceed to 3b until gates.ci = PASS for every story in the batch.**
+Gate: `gates.ci: PASS` for every story before 3b.
 
 ---
 
 ## 3b. Push Branch
 
-**PREREQUISITE: Step 3a MUST have passed. If you skipped 3a or it failed, STOP.**
-
-Use raw git push here — step 3a already ran full CI. Do NOT use `/push` (it would redundantly re-run checks and its scope detection might skip checks that 3a already caught).
+Step 3a must have passed. Use raw git — not `/push` — since 3a already ran full CI.
 
 ```bash
 cd ../Raid-Ledger--rok-<num>
 git fetch origin main
 git rebase origin/main
-
-# If rebase conflicts: resolve them, then RE-RUN step 3a (rebase can introduce breakage)
-
+# If rebase brought new commits: re-run 3a before pushing
 git push -u origin $(git branch --show-current)
 cd -
 ```
-
-**If the rebase brought in new commits, you MUST re-run step 3a before pushing.** The merge may introduce breakage that wasn't present before.
 
 ---
 
 ## 3c. Deploy Locally
 
 ```bash
-# From the worktree (or main repo) — script is worktree-aware
 cd ../Raid-Ledger--rok-<num>
 ./scripts/deploy_dev.sh --ci --rebuild
 cd -
 ```
 
-The script handles Docker, .env copying, migrations, seeding, and health checks automatically.
-
-If the deploy fails, diagnose and fix. If it needs `--fresh` (DB wipe), get operator approval first (destructive operation).
+If deploy needs `--fresh` (DB wipe), get operator approval (destructive).
 
 ---
 
-## 3c.5. Playwright Smoke Tests (MANDATORY)
+## 3c.5. Playwright Smoke Tests
 
-After deploying locally (step 3c), run the full Playwright smoke suite:
+After deploy, run BOTH desktop + mobile projects (CI runs both):
 
 ```bash
 cd ../Raid-Ledger--rok-<num> && npx playwright test && cd -
 ```
 
-The smoke tests verify auth flows, calendar, events, notifications, and navigation against live seed data. They require the API and web server to be running (deploy_dev.sh handles this).
+On failure:
+- Selector/flake → fix test or UI, commit `fix: resolve Playwright issues (ROK-XXX)`.
+- Real regression → diagnose which story broke it, fix or respawn dev.
+- After fix: `git push` from the worktree.
 
-**Run BOTH desktop AND mobile projects.** CI runs both. Do NOT use `--project=desktop`.
-
-If Playwright fails:
-- **Selector/flake failures:** Fix the test or the UI, commit as `fix: resolve Playwright issues (ROK-XXX)`
-- **Real regressions:** Diagnose which story broke the flow, fix or re-spawn dev.
-- After fixing, re-push: `cd ../Raid-Ledger--rok-<num> && git push && cd -`
-
-Update state: `gates.playwright: PASS` (or `FAIL`)
+Gate: `gates.playwright: PASS` or `FAIL`.
 
 ---
 
 ## 3d. Update Linear to "In Review"
 
 ```
-mcp__linear__save_issue({
-  issueId: "<linear_id>",
-  statusName: "In Review"
-})
+mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "In Review" })
 ```
 
 ---
@@ -109,68 +90,41 @@ Update `<worktree>/build-state.yaml`:
 ```yaml
 pipeline:
   current_step: "review"
-  next_action: |
-    ALL stories deployed and in "In Review". WAITING for operator to test.
-    When operator updates Linear, read steps/step-4-review.md.
-
-stories:
-  ROK-XXX:
-    status: "waiting_for_operator"
-    gates:
-      operator: WAITING
-    next_action: |
-      Deployed and in "In Review". Waiting for operator to test and update Linear.
+  next_action: "All stories in 'In Review'. Waiting for operator. When they update Linear → read step-4-review.md."
+stories.ROK-XXX:
+  status: "waiting_for_operator"
+  gates.operator: WAITING
 ```
 
-**FULL STOP.** Tell the operator. The summary MUST include the test verification table — this is not optional.
+Present to operator with the full verification table — this is mandatory, not optional:
 
 ```
 ## Ready for Testing
 
 | Story | Branch | Status |
 |-------|--------|--------|
-| ROK-XXX: Title | rok-xxx-name | In Review — ready for your testing |
+| ROK-XXX: Title | rok-xxx-name | In Review |
 
 ### Test Verification
+| Story | TDD Tests | E2E Type | Test File | Smoke Run |
+|-------|-----------|----------|-----------|-----------|
+| ROK-XXX | N failing → N passing | Playwright/Discord/Integration/Unit | <path> | PASS/FAIL/N/A |
 
-| Story | TDD Tests | E2E Type Required | E2E Test File | Smoke Run |
-|-------|-----------|-------------------|---------------|-----------|
-| ROK-XXX | N failing → N passing | Playwright / Discord / Integration / Unit | `path/to/test/file` | PASS / FAIL / N/A |
-
-### Local CI Proof (MANDATORY)
-
+### Local CI Proof
 | Check | ROK-XXX |
 |-------|---------|
-| Build (all workspaces) | PASS |
-| TypeScript (all) | PASS |
-| Lint (all) | PASS |
-| Tests — api | PASS (N suites, M tests) |
-| Tests — web | PASS (N suites, M tests) |
-| Integration tests — api | PASS (N suites, M tests) |
-| Coverage — api | PASS (N%) |
-| Coverage — web | PASS (N%) |
-| Migration validation | PASS / SKIPPED |
-| Container startup | PASS / SKIPPED |
-| Playwright (desktop + mobile) | PASS (N tests) / N/A |
+| Build (all workspaces) / TypeScript / Lint / Tests api / Tests web / Integration / Coverage api / Coverage web / Migration / Container / Playwright (desktop + mobile) |
 
 ### Gate Summary
-
 | Gate | ROK-XXX |
 |------|---------|
-| E2E Test First (TDD) | PASS / N/A |
-| Dev AC Audit | PASS |
-| CI (build/lint/test) | PASS |
-| Test Coverage Audit | PASS / GAP: <detail> |
+| E2E Test First (TDD) / Dev AC Audit / CI / Test Coverage Audit |
 
-The app is deployed locally. Test each story and update Linear:
+The app is deployed. Test each story and update Linear:
 - **Code Review** = approved, ready for code review
 - **Changes Requested** = needs rework (add feedback as comment)
 
-I'll wait here until you're ready to proceed.
+I'll wait.
 ```
 
-**If any row in the Local CI Proof or Gate Summary shows FAIL, fix it BEFORE presenting to the operator.** The operator should never see unresolved test gaps.
-
-**If the Local CI Proof section is missing from your output, you skipped step 3a. Go back and run it.**
-
-**Do NOT proceed until the operator gives direction.** This is a mandatory gate.
+If any row shows FAIL, fix it before presenting. If Local CI Proof is missing from your output, you skipped 3a — go back. Do NOT proceed until operator gives direction.

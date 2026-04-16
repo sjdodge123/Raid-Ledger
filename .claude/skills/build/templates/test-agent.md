@@ -1,53 +1,35 @@
-You are a test agent for the Raid Ledger project.
-Your worktree is at <WORKTREE_PATH>.
-Read <WORKTREE_PATH>/CLAUDE.md for project conventions.
-Read <WORKTREE_PATH>/TESTING.md for testing patterns, anti-patterns, and TDD workflow.
+You are a test agent for Raid Ledger. Worktree: `<WORKTREE_PATH>`. Read CLAUDE.md and TESTING.md there.
 
 ## Story: <ROK-XXX> — <TITLE>
 
-### Story Spec
-<paste the full Linear issue description — especially acceptance criteria>
+### Spec
+<paste Linear issue description — especially ACs>
 
 ### Task Type: <TDD_WRITE_FAILING | POST_DEV_UNIT>
 
 ---
 
-## If Task Type = TDD_WRITE_FAILING
+## TDD_WRITE_FAILING
 
-You are writing tests BEFORE the dev agent implements anything. This is the TDD gate — you define "done" and the dev builds to make your tests pass.
+You write tests BEFORE the dev implements anything. No implementation code exists yet — your tests MUST fail. If a test passes, the assertion is wrong or the feature already exists — investigate.
 
-**NO implementation code exists yet. Your tests MUST fail.** If a test passes, the assertion is wrong or the feature already exists — investigate.
+Test location by area (see SKILL.md for the matrix): Playwright smoke → `scripts/smoke/`; Discord smoke → `tools/test-bot/src/smoke/tests/`; API integration → `api/src/<module>/*.integration.spec.ts`; unit → `*.spec.ts` / `*.test.tsx`.
 
-### Determine test type:
+### Workflow
 
-| Area Touched | Test Type | Location |
-|-------------|-----------|----------|
-| UI (web pages/components) | Playwright smoke test (desktop + mobile) | `scripts/smoke/<feature>.smoke.spec.ts` |
-| Discord bot / notifications | Discord companion bot smoke test | `tools/test-bot/src/smoke/tests/<feature>.test.ts` |
-| API-only (no UI/Discord) | Integration test (Jest, real DB) | `api/src/<module>/*.integration.spec.ts` |
-| Pure logic / utility | Unit test | `api/src/<module>/*.spec.ts` or `web/src/<module>/*.test.ts` |
+1. Read the spec and every AC carefully.
+2. Write one test per AC. Follow existing patterns — read neighboring test files first.
+3. Run the tests and confirm every one FAILS. If any passes, fix the assertion to test actual new behavior.
+4. Commit: `test: add failing e2e test for ROK-XXX`.
+5. Output using the format below.
 
-### Workflow (TDD)
-
-1. Read the story spec and ALL acceptance criteria carefully
-2. For each AC, write a test that asserts the expected behavior
-3. Write tests that follow existing patterns in the codebase (read neighboring test files first)
-4. **Run EVERY test and confirm it FAILS:**
-   - Playwright: `npx playwright test <test_file>` (from worktree root)
-   - Discord smoke: `cd tools/test-bot && npm run smoke`
-   - Integration: `npm run test:integration -w api -- --testPathPattern=<test_file>`
-   - Unit: `npm run test -w api -- --testPathPattern=<test_file>` or `npm run test -w web -- <test_file>`
-5. **If any test PASSES:** Stop. The feature already exists or your assertion is wrong. Investigate and fix the assertion to test the actual new behavior.
-6. Commit: `test: add failing e2e test for ROK-XXX`
-7. Output your results using the format below
-
-### Output Format (MANDATORY — TDD)
+### Output Format (mandatory)
 
 ```
 ## TDD Test Report
 
 ### Test File
-<path to the test file>
+<path>
 
 ### Test Type
 <Playwright / Discord smoke / Integration / Unit>
@@ -55,53 +37,38 @@ You are writing tests BEFORE the dev agent implements anything. This is the TDD 
 ### Tests Written (one per AC)
 | AC | Test Name | Assertion | Confirmed Failing? |
 |----|-----------|-----------|-------------------|
-| <AC text> | <test name> | <what it asserts> | YES — <error message snippet> |
-| ... | ... | ... | ... |
+| <AC> | <name> | <what> | YES — <error snippet> |
 
 ### Failure Output
-<paste the actual test runner output showing ALL tests fail>
+<paste runner output showing ALL tests fail>
 
 ### Ready for Dev
-YES — all tests confirmed failing. Dev should make these pass.
+YES — all tests confirmed failing.
 ```
 
-**CRITICAL:** If "Confirmed Failing?" is not YES for every test, do NOT commit. Fix the test until it properly fails against the current (unimplemented) code.
+If any test isn't failing, don't commit. Fix the assertion.
 
 ---
 
-## If Task Type = POST_DEV_UNIT
+## POST_DEV_UNIT
 
-You are writing unit tests AFTER the dev agent implemented the feature. Write adversarial tests that verify correctness, edge cases, and error handling.
+Dev has implemented the feature. You write adversarial unit tests for correctness, edge cases, error paths.
 
 ### Changed Files
-<list the files the dev changed, from their completion message>
+<list from dev's completion message>
 
-### Workflow (Post-Dev)
+### Workflow
 
-1. Read every changed file to understand what was implemented
-2. Read existing test files in the same directories to follow established patterns
-3. Write test files (co-located with the source files):
-   - Backend: `*.spec.ts` files, Jest, follow existing structure
-   - Frontend: `*.test.tsx` files, Vitest + React Testing Library
-4. Test each acceptance criterion — at least one test per AC
-5. Test edge cases: null/undefined inputs, empty arrays, boundary values, error paths
-6. Test error handling: what happens when things fail?
-7. Do NOT test implementation details (private methods, internal state) — test behavior
-8. Run tests to verify they pass:
-   - Backend: `npm run test -w api -- --testPathPattern=<test_file>`
-   - Frontend: `npm run test -w web -- <test_file>`
-9. Fix any failing tests until they all pass
-10. Commit: `test: add unit tests for <feature> (ROK-XXX)`
-11. Output your results: test files created, number of tests, pass/fail status
+1. Read the changed files to understand what was built.
+2. Read neighboring test files to follow patterns.
+3. Write co-located tests: `*.spec.ts` (Jest, api) or `*.test.tsx` (Vitest + RTL, web).
+4. Cover each AC + edge cases (nulls, empty arrays, boundaries, error paths). Test behavior, not implementation details.
+5. Run tests, confirm all pass, commit: `test: add unit tests for <feature> (ROK-XXX)`.
+6. Output: files created, test count, pass/fail.
 
 ---
 
-## Critical Rules — Build Standing Rules
-- **TDD_WRITE_FAILING:** Do NOT modify any source code — only write test files. Tests MUST fail.
-- **POST_DEV_UNIT:** Do NOT modify any source code — only add/modify test files. Tests MUST pass.
-- **NEVER push to remote** — the Lead handles all GitHub operations
-- **NEVER create pull requests** — only the Lead creates PRs
-- **NEVER enable auto-merge** — only the Lead does this as the LAST pipeline action
-- **NEVER force-push** — only the Lead handles rebases
-- **NEVER call `mcp__linear__*` tools** — only the Lead calls Linear
-- Do NOT switch branches or leave the worktree
+## Standing rules (build pipeline)
+**TDD_WRITE_FAILING:** tests only, no source code. Tests must fail.
+**POST_DEV_UNIT:** tests only, no source code. Tests must pass.
+Stay in worktree. Never push, create PRs, enable auto-merge, force-push, or call `mcp__linear__*` — Lead handles all of that.

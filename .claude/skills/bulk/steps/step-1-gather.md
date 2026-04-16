@@ -1,181 +1,116 @@
 # Step 1: Gather — Cleanup, Fetch, Profile, Present, Init State
 
-**Lead does everything directly. No agents spawned in this step.**
+Lead does everything. No agents spawned.
 
 ---
 
 ## 1a. Quick Workspace Cleanup
 
 ```bash
-# Prune stale worktrees
 git worktree prune
 git fetch --prune
-
-# Delete local branches already merged to main
 git branch --merged main | grep -v '^\*\|main' | xargs -r git branch -d
 
-# Clean up old batch team/task artifacts
+# Old batch artifacts
 ls ~/.claude/teams/batch-* 2>/dev/null && rm -rf ~/.claude/teams/batch-*
 ls ~/.claude/tasks/batch-* 2>/dev/null && rm -rf ~/.claude/tasks/batch-*
 
-# Clean up old batch/* branches (local only)
+# Old local batch/* branches
 git branch | grep 'batch/' | xargs -r git branch -d 2>/dev/null
 ```
 
-If stale worktrees exist from a previous batch, remove them:
-```bash
-git worktree remove <path> --force  # only if confirmed no in-flight work
-```
+Remove stale worktrees (only if no in-flight work): `git worktree remove <path> --force`.
 
 ---
 
 ## 1b. Check for In-Flight State
 
-Check if `planning-artifacts/batch-state.yaml` exists:
-
-- **If it doesn't exist:** Fresh batch. Continue to 1c.
-- **If it exists:** Read it, then **reconcile against origin before trusting any status.**
-
-### Origin Reconciliation (MANDATORY before resuming)
-
-The state file may be stale from a previous session that shipped stories. **Use the `mcp__mcp-env__story_status` MCP tool** to check all stories at once:
+If `planning-artifacts/batch-state.yaml` exists, reconcile against origin before trusting status.
 
 ```
 mcp__mcp-env__story_status({ stories: ["ROK-XXX", "ROK-YYY"] })
 ```
 
-This returns `verdict` per story: `done`, `in_flight`, or `not_started`.
+Also: `git branch -r --merged origin/main | grep batch/`. If the batch branch itself merged to main, the batch is done — archive and start fresh.
 
-Also check the batch branch: `git branch -r --merged origin/main | grep batch/`
+Verdicts:
+- `done` → `status: "done"`, skip.
+- `in_flight` → check PR state (`gh pr list --head rok-<num>-<short-name> --json state,url`):
+  - PR merged → done; PR open → resume from ship; no PR → resume from validate.
+- Branch not on origin → check worktree for commits → resume from state file.
 
-**If the batch branch itself is merged to main:** the entire batch is done. Archive and start fresh.
-
-Use the verdicts to update state:
-
-1. `done` → story is shipped. Update state: `status: "done"`. Skip it.
-2. `in_flight` → branch on origin. Check PR state in the response:
-   - Yes → check for an existing PR: `gh pr list --head rok-<num>-<short-name> --json state,url`
-     - PR merged → story is **done**
-     - PR open → resume from ship step
-     - No PR → resume from validate step
-3. **Branch does NOT exist on origin?**
-   - Check worktree for commits → resume from where the state file says
-
-**If the batch branch itself is merged to main:** the entire batch is done. Archive the state file and start fresh.
-
-After reconciliation, update the state file with corrected statuses, then:
-  - If all stories are `done` → archive and start fresh
-  - If remaining stories are in `dev_active` → skip to Step 2
-  - If remaining stories are in `merged_to_batch` → skip to Step 3
-  - Present a reconciled summary showing which stories were already shipped vs still in-flight
+After reconciliation:
+- All done → archive, start fresh.
+- Remaining in `dev_active` → Step 2.
+- Remaining in `merged_to_batch` → Step 3.
+- Present reconciled summary (shipped vs in-flight).
 
 ---
 
 ## 1c. Fetch Stories from Linear
 
-Use `mcp__linear__list_issues` to fetch eligible stories. Run queries filtered to dispatchable statuses.
-
-### Primary pool — "Dispatch Ready" status:
-
 ```
-mcp__linear__list_issues({
-  teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
-  statusName: "Dispatch Ready",
-  first: 20
-})
+mcp__linear__list_issues({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", statusName: "Dispatch Ready", first: 20 })
 ```
 
-Filter results to stories with labels: **Tech Debt**, **Chore**, or **Performance**.
+Filter results to labels: **Tech Debt**, **Chore**, or **Performance**.
 
-### Secondary pool — "Backlog" status (opt-in):
+Secondary pool (opt-in): same query with `statusName: "Backlog"`.
 
-```
-mcp__linear__list_issues({
-  teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
-  statusName: "Backlog",
-  first: 20
-})
-```
+For specific stories: `mcp__linear__get_issue({ issueId: "ROK-XXX" })` per ID. Verify label is eligible — if Bug/Feature, flag and recommend `/build`.
 
-Filter results to stories with labels: **Tech Debt**, **Chore**, or **Performance**.
+### Verify "Chore" label exists (first run only)
 
-### If operator specified specific stories (e.g. `ROK-XXX ROK-YYY`):
-
-Fetch just those stories:
-```
-mcp__linear__get_issue({ issueId: "ROK-XXX" })
-mcp__linear__get_issue({ issueId: "ROK-YYY" })
-```
-
-Verify fetched stories have an eligible label (Tech Debt, Chore, or Performance). If a story has a Bug or Feature label, flag it and recommend `/build` instead.
-
-### Verify "Chore" label exists
-
-On first run, check that the "Chore" label exists in Linear. If not, create it:
 ```
 mcp__linear__list_issue_labels({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386" })
 ```
-If "Chore" is missing:
+
+If missing:
 ```
-mcp__linear__create_issue_label({
-  teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
-  name: "Chore",
-  color: "#95A5A6"
-})
+mcp__linear__create_issue_label({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", name: "Chore", color: "#95A5A6" })
 ```
 
 ---
 
 ## 1d. Profile Stories
 
-For each candidate story, determine:
+Per story: scope (light/standard/full per SKILL.md), `needs_planner`, serialization conflicts.
 
-- **Scope:** light / standard / full (using the decision rules in SKILL.md)
-- **Needs planner:** yes / no (see below)
-- **Serialization conflicts:** Does it overlap files with other stories in the batch?
-
-**Full-scope stories are NOT eligible.** If a story looks full-scope (contract changes, migrations, 3+ modules), flag it and recommend `/build` instead.
+**Full scope not eligible.** Contract changes, migrations, 3+ modules → flag, recommend `/build`.
 
 ### Planner Assessment
 
-Determine whether each story needs a **planner agent** before the dev agent. The planner produces a brief implementation plan identifying the right approach, file targets, module dependencies, and test strategy.
-
 | Needs planner? | Criteria |
 |----------------|----------|
-| **yes** | Touches 2+ files across different concerns (e.g., backend + frontend, service + controller + test). Non-obvious architectural decisions (where to persist state, which pattern to use). |
-| **no** | Light scope. Single-file change. Change is obvious and self-contained from the story description (e.g., "add a comment", "fix weak assertion", "rename variable"). |
+| yes | 2+ files across concerns (backend + frontend, service + controller + test); non-obvious architectural decisions |
+| no | Light scope; single-file; obvious and self-contained from description |
 
-**Rule of thumb:** If a dev agent could reasonably misunderstand the approach or make a wrong architectural call, it needs a planner. When in doubt, plan.
+When in doubt, plan.
 
 ---
 
-## 1e. Present Batch Table
-
-Present a summary table to the operator:
+## 1e. Present Batch to Operator
 
 ```
-## Bulk — <YYYY-MM-DD>
+## Bulk — YYYY-MM-DD
 
 | # | Story | Label | Scope | Planner? | Notes |
 |---|-------|-------|-------|----------|-------|
-| 1 | ROK-XXX: Title | Tech Debt | standard | yes | Multi-file refactor |
-| 2 | ROK-YYY: Title | Chore | light | no | Config cleanup |
-| 3 | ROK-ZZZ: Title | Performance | standard | no | Query optimization |
 
 **Flagged (not eligible — recommend /build):**
-- ROK-AAA: Title — full scope (contract changes)
+- ROK-AAA: Title — <reason>
 
-Serialization: None (all can run in parallel)
-Agents: <count> planner (opus) + <count> dev (opus)
+Serialization: <describe>
+Agents: N planner + N dev (all opus)
 ```
 
-**Wait for operator approval.** If the operator approves (e.g., "go", "let's do it", "sounds good"), that IS the confirmation — do not re-ask.
+Wait for operator approval. "go" / "let's do it" IS the confirmation — don't re-ask.
 
 ---
 
 ## 1f. Initialize State File
 
-Create `planning-artifacts/batch-state.yaml`:
+Write `planning-artifacts/batch-state.yaml`:
 
 ```yaml
 pipeline:
@@ -183,45 +118,37 @@ pipeline:
   batch_date: "YYYY-MM-DD"
   batch_branch: "batch/YYYY-MM-DD"
   team_name: "batch-YYYY-MM-DD"
-  next_action: |
-    Read steps/step-2-implement.md. Create batch branch, worktrees, and spawn dev agents.
+  next_action: "Read step-2-implement.md. Create batch branch, worktrees, spawn devs."
   gates:
-    review: PENDING
     test_gaps: PENDING
     integration: PENDING
     ci: PENDING
     smoke: PENDING
-    pr: PENDING
   stories:
     ROK-XXX:
-      title: "Story title"
-      linear_id: "<uuid from Linear>"
-      label: "Tech Debt"
+      title: "..."
+      linear_id: "<uuid>"
+      label: "Tech Debt"  # Tech Debt | Chore | Performance
       scope: standard
       needs_planner: true
       status: "queued"
       branch: "batch/rok-xxx"
       worktree: "../Raid-Ledger--rok-xxx"
       dev_commit_sha: null
-      plan_summary: null   # filled by planner agent if needs_planner is true
-      next_action: "Queued. Waiting for worktree creation in Step 2."
+      plan_summary: null  # filled by planner if needs_planner
+      gates:
+        dev: PENDING
+        reviewer: PENDING
+      next_action: "Queued."
 ```
 
 ---
 
 ## 1g. Update Linear to "In Progress"
 
-**MANDATORY — do this NOW before proceeding to Step 2.**
-
-Move every story in the batch to "In Progress":
-
+Mandatory before Step 2. For each story:
 ```
-mcp__linear__save_issue({
-  issueId: "<linear_id>",
-  statusName: "In Progress"
-})
+mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "In Progress" })
 ```
-
-This ensures Linear reflects that work has started as soon as the batch is confirmed, not after validation in Step 3.
 
 Proceed to **Step 2**.
