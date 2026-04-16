@@ -100,6 +100,18 @@ function allText(res: AiChatSimResponse): string {
     .toLowerCase();
 }
 
+// ── Setup: enable AI chat for the test suite ──
+
+const enableAiChat: SmokeTest = {
+  name: 'AI Chat: setup — enable ai_chat_enabled setting',
+  category: 'dm',
+  async run(ctx) {
+    await ctx.api.post('/admin/test/set-ai-chat-enabled', {
+      enabled: true,
+    });
+  },
+};
+
 // ── AC1: Welcome menu with correct button count ──
 
 const welcomeMenuMember: SmokeTest = {
@@ -412,6 +424,7 @@ const backAndHomeNavigation: SmokeTest = {
 };
 
 export const aiChatTests: SmokeTest[] = [
+  enableAiChat,
   welcomeMenuMember,
   eventsSubMenu,
   thisWeekWithEvents,
