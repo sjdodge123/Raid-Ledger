@@ -36,9 +36,21 @@ gh pr view batch/YYYY-MM-DD --json state  # wait for merged
 git checkout main && git pull --rebase origin main
 git branch -d batch/YYYY-MM-DD 2>/dev/null
 git worktree prune  # any remaining story worktrees
-rm -rf ~/.claude/teams/batch-YYYY-MM-DD
-rm -rf ~/.claude/tasks/batch-YYYY-MM-DD
 ```
+
+**Team cleanup (Lead only — do NOT let a teammate run this).** By this point every dev + reviewer teammate should have been shut down in Step 2h. Run:
+
+```
+TeamDelete({ team_name: "batch-YYYY-MM-DD" })
+```
+
+If `TeamDelete` fails because a teammate is still running, shut it down first:
+
+```
+SendMessage({ to: "<teammate-name>", message: { type: "shutdown_request", reason: "batch complete" } })
+```
+
+Then retry `TeamDelete`. Only fall back to removing `~/.claude/teams/batch-YYYY-MM-DD/` and `~/.claude/tasks/batch-YYYY-MM-DD/` manually if `TeamDelete` is unavailable — the docs warn cleanup from anywhere but the Lead may leave resources in an inconsistent state.
 
 ---
 
@@ -57,7 +69,8 @@ rm -rf ~/.claude/tasks/batch-YYYY-MM-DD
 Build / TypeScript / Lint / Unit / Integration / Smoke — PASS
 
 ### Agent Usage
-Dev: N (opus) + Planner: N (opus)
+Team: batch-YYYY-MM-DD (cleaned up)
+Dev teammates: N (opus) + Reviewer teammates: N (opus) + Planner subagents: N (opus)
 ```
 
 ---
