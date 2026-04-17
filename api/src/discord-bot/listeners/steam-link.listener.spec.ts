@@ -167,6 +167,10 @@ describe('SteamLinkListener', () => {
     autoHeartTests();
   });
 
+  describe('message handling — DM confirmations (ROK-1054)', () => {
+    dmConfirmationTests();
+  });
+
   describe('button handlers', () => {
     buttonHandlerTests();
   });
@@ -422,6 +426,79 @@ function buttonHandlerTests() {
     await callHandleButtonInteraction(interaction);
 
     expect(interaction.update).toHaveBeenCalled();
+  });
+}
+
+function dmConfirmationTests() {
+  it('AC1: DMs the user when they post a Steam link for a game they already have hearted', async () => {
+    // Game exists, user linked, interest already present
+    stubGameLookup({ id: 42, name: 'Counter-Strike 2', steamAppId: 730 });
+    stubUserLookup({ id: 7, discordId: 'discord-user-1' });
+    stubInterestCheck(true);
+
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
+    await callHandleMessage(msg);
+
+    // Expect a DM confirmation that matches the spec copy
+    expect(mockDmSend).toHaveBeenCalledTimes(1);
+    expect(mockDmSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          'You already have **Counter-Strike 2** hearted',
+        ),
+      }),
+    );
+  });
+
+  it('AC2: DMs the user when auto-heart adds a game interest', async () => {
+    stubGameLookup({ id: 42, name: 'Counter-Strike 2', steamAppId: 730 });
+    stubUserLookup({ id: 7, discordId: 'discord-user-1' });
+    stubInterestCheck(false);
+    stubAutoHeartPref(true);
+
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
+    await callHandleMessage(msg);
+
+    // Auto-heart should still add the interest
+    expect(mockDb.insert).toHaveBeenCalled();
+    // And DM the user with an "Auto-hearted ..." confirmation
+    expect(mockDmSend).toHaveBeenCalledTimes(1);
+    expect(mockDmSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Auto-hearted **Counter-Strike 2**'),
+      }),
+    );
+  });
+
+  it('AC3: swallows DM send errors (user has DMs disabled) and logs a warning', async () => {
+    stubGameLookup({ id: 42, name: 'Counter-Strike 2', steamAppId: 730 });
+    stubUserLookup({ id: 7, discordId: 'discord-user-1' });
+    // Trigger the already-hearted branch so we exercise the new DM send
+    stubInterestCheck(true);
+
+    // Simulate DM send failing (e.g. user has DMs disabled)
+    const dmError = new Error('Cannot send messages to this user');
+    mockDmSend.mockRejectedValueOnce(dmError);
+
+    // Spy on the listener's logger warn method
+    const warnSpy = jest
+      .spyOn(
+        (listener as unknown as { logger: { warn: jest.Mock } }).logger,
+        'warn',
+      )
+      .mockImplementation();
+
+    const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
+
+    // Should NOT throw when DM send rejects
+    await expect(callHandleMessage(msg)).resolves.toBeUndefined();
+
+    // Should have attempted the DM once
+    expect(mockDmSend).toHaveBeenCalledTimes(1);
+    // Should have logged a warning instead of throwing
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 }
 
