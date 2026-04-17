@@ -7,7 +7,7 @@ import type { GameTimePreviewBlock } from './GameTimeGrid';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { EventBlockPopover } from './EventBlockPopover';
 import { AttendeeAvatars } from '../../calendar/AttendeeAvatars';
-import { checkGameTimeOverlap } from './game-time-overlap.utils';
+import { checkGameTimeOverlap, walkEventHours } from './game-time-overlap.utils';
 
 interface AttendeePreview {
     id: number;
@@ -46,18 +46,12 @@ function computeSmartHourRange(startTime: string, endTime: string): [number, num
 }
 
 function collectDayHours(startTime: string, endTime: string): Map<number, number[]> {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const cursor = new Date(start);
-    cursor.setMinutes(0, 0, 0);
-    if (cursor < start) cursor.setHours(cursor.getHours() + 1);
     const dayHours = new Map<number, number[]>();
-    while (cursor < end) {
-        const hours = dayHours.get(cursor.getDay()) ?? [];
-        hours.push(cursor.getHours());
-        dayHours.set(cursor.getDay(), hours);
-        cursor.setHours(cursor.getHours() + 1);
-    }
+    walkEventHours(startTime, endTime, (dayOfWeek, hour) => {
+        const hours = dayHours.get(dayOfWeek) ?? [];
+        hours.push(hour);
+        dayHours.set(dayOfWeek, hours);
+    });
     return dayHours;
 }
 
