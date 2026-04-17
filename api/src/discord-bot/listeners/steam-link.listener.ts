@@ -153,20 +153,52 @@ export class SteamLinkListener {
     const user = await findLinkedRlUser(this.db, message.author.id);
     if (!user) return;
 
+    await this.dispatchInterestFlow(message, user.id, game);
+  }
+
+  /**
+   * Dispatch the post-lookup interest flow: already-hearted DM, auto-heart
+   * DM, or interactive prompt depending on existing state and preferences.
+   */
+  private async dispatchInterestFlow(
+    message: Message,
+    userId: number,
+    game: { id: number; name: string },
+  ): Promise<void> {
     const alreadyInterested = await hasExistingHeartInterest(
       this.db,
-      user.id,
+      userId,
       game.id,
     );
-    if (alreadyInterested) return;
+    if (alreadyInterested) {
+      await this.sendDmSafe(
+        message,
+        `You already have **${game.name}** hearted! 💜`,
+      );
+      return;
+    }
 
-    const autoHeart = await getAutoHeartSteamUrlsPref(this.db, user.id);
+    const autoHeart = await getAutoHeartSteamUrlsPref(this.db, userId);
     if (autoHeart) {
-      await addDiscordInterest(this.db, user.id, game.id);
+      await addDiscordInterest(this.db, userId, game.id);
+      await this.sendDmSafe(message, `Auto-hearted **${game.name}**! 💜`);
       return;
     }
 
     await this.sendInterestPrompt(message, game);
+  }
+
+  /**
+   * Send a plain-text DM to the message author, swallowing and logging
+   * failures (e.g. when the user has DMs disabled from server members).
+   */
+  private async sendDmSafe(message: Message, content: string): Promise<void> {
+    try {
+      const dm = await message.author.createDM();
+      await dm.send({ content });
+    } catch (err: unknown) {
+      this.logger.warn(`Failed to send Steam interest DM: ${String(err)}`);
+    }
   }
 
   /** Discover and add a game via ITAD when it's not in the DB. */

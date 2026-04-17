@@ -327,7 +327,7 @@ function silentSkipTests() {
     expect(mockDmSend).not.toHaveBeenCalled();
   });
 
-  it('silently skips when user is already interested in the game', async () => {
+  it('does not send an interest prompt when user is already interested in the game', async () => {
     stubGameLookup({ id: 42, name: 'CS2', steamAppId: 730 });
     stubUserLookup({ id: 7, discordId: 'discord-user-1' });
     stubInterestCheck(true);
@@ -335,7 +335,17 @@ function silentSkipTests() {
     const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
     await callHandleMessage(msg);
 
-    expect(mockDmSend).not.toHaveBeenCalled();
+    // ROK-1054: a confirmation DM IS sent (see dmConfirmationTests),
+    // but the interest prompt with buttons (components) is NOT sent.
+    const calls = mockDmSend.mock.calls;
+    const hasPromptWithComponents = calls.some(
+      (call) =>
+        Array.isArray((call[0] as Record<string, unknown>)?.components) &&
+        ((call[0] as { components: unknown[] }).components.length ?? 0) > 0,
+    );
+    expect(hasPromptWithComponents).toBe(false);
+    // Should not have inserted any new interest row either
+    expect(mockDb.insert).not.toHaveBeenCalled();
   });
 }
 
