@@ -587,9 +587,13 @@ export class TasteProfileService {
   }
 
   private currentWeekStart(): Date {
+    // Match `game_activity_rollups` convention (Monday-start, local date) so
+    // period_start strings line up across services — see
+    // api/src/discord-bot/services/game-activity-rollup.helpers.ts:getWeekStart.
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - d.getUTCDay());
-    d.setUTCHours(0, 0, 0, 0);
+    const day = d.getDay();
+    d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+    d.setHours(0, 0, 0, 0);
     return d;
   }
 

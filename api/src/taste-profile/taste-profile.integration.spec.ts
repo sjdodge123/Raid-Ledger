@@ -193,9 +193,13 @@ describe('Taste Profile (ROK-948)', () => {
       const gameA = await seedGame('Game A', [12], [1]);
       const gameB = await seedGame('Game B', [5], [2]);
 
+      // Match the Monday-start convention used by game_activity_rollups
       const weekStart = new Date();
-      weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
-      weekStart.setUTCHours(0, 0, 0, 0);
+      const weekDay = weekStart.getDay();
+      weekStart.setDate(
+        weekStart.getDate() - weekDay + (weekDay === 0 ? -6 : 1),
+      );
+      weekStart.setHours(0, 0, 0, 0);
 
       // Two games, 30000s (8.33h) and 12000s (3.33h) — total 11.66h
       await testApp.db.insert(schema.gameActivityRollups).values([
