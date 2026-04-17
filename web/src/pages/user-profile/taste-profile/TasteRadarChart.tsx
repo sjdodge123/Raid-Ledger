@@ -8,6 +8,7 @@ import {
     ResponsiveContainer,
 } from "recharts";
 import type {
+    IntensityMetricsDto,
     TasteProfileArchetype,
     TasteProfileDimensionsDto,
 } from "@raid-ledger/contract";
@@ -17,17 +18,30 @@ import { axisLabel, topAxes, type AxisScore } from "./taste-profile-helpers";
 interface TasteRadarChartProps {
     archetype: TasteProfileArchetype;
     dimensions: TasteProfileDimensionsDto;
+    intensityMetrics?: IntensityMetricsDto;
 }
 
-/** Build the aria-label summary for screen readers (AC7). */
+/**
+ * Screen-reader summary of the radar (AC7). Includes the archetype,
+ * every rendered axis with its score, and — when available — the
+ * top-level intensity/focus/breadth numbers so non-sighted users get
+ * the same at-a-glance picture the chart provides visually.
+ */
 function buildAriaLabel(
     archetype: TasteProfileArchetype,
     scores: AxisScore[],
+    metrics?: IntensityMetricsDto,
 ): string {
-    const parts = scores
+    const axes = scores
         .map((s) => `${axisLabel(s.axis)} ${s.value}`)
         .join(", ");
-    return `Taste profile for ${archetype}: ${parts}.`;
+    const header = `Taste profile for ${archetype}`;
+    if (!metrics) return `${header}: ${axes}.`;
+    return (
+        `${header}. Intensity ${metrics.intensity} of 100, ` +
+        `focus ${metrics.focus}, breadth ${metrics.breadth}, ` +
+        `consistency ${metrics.consistency}. Axes: ${axes}.`
+    );
 }
 
 function RadarGradientDefs(): JSX.Element {
@@ -78,13 +92,14 @@ function RadarBody({
 export function TasteRadarChart({
     archetype,
     dimensions,
+    intensityMetrics,
 }: TasteRadarChartProps): JSX.Element {
     const scores = topAxes(dimensions, 7);
     const data = scores.map((s) => ({
         axis: axisLabel(s.axis),
         value: s.value,
     }));
-    const ariaLabel = buildAriaLabel(archetype, scores);
+    const ariaLabel = buildAriaLabel(archetype, scores, intensityMetrics);
     return (
         <div className="taste-radar">
             <div className="taste-radar__title">

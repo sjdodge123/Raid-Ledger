@@ -65,17 +65,17 @@ export const TASTE_PROFILE_ARCHETYPES = [
 export type TasteProfileArchetype = (typeof TASTE_PROFILE_ARCHETYPES)[number];
 
 /**
- * Dimensions object keyed by the full axis pool (~20 keys).
- * `catchall(z.number())` keeps the shape forward-compatible if the
- * pool grows without requiring every consumer to be updated at once.
+ * Dimensions object — strict shape keyed by the full axis pool.
+ * Every pool axis must be present with a numeric score (0–100). Extra
+ * keys are rejected; growing the pool requires updating
+ * `TASTE_PROFILE_AXIS_POOL` and rebuilding the contract so consumers
+ * see the new type.
  */
-export const TasteProfileDimensionsSchema = z
-  .object(
-    Object.fromEntries(
-      TASTE_PROFILE_AXIS_POOL.map((axis) => [axis, z.number()]),
-    ) as Record<TasteProfilePoolAxis, z.ZodNumber>,
-  )
-  .catchall(z.number());
+export const TasteProfileDimensionsSchema = z.object(
+  Object.fromEntries(
+    TASTE_PROFILE_AXIS_POOL.map((axis) => [axis, z.number()]),
+  ) as Record<TasteProfilePoolAxis, z.ZodNumber>,
+);
 
 export const IntensityMetricsSchema = z.object({
   intensity: z.number(),

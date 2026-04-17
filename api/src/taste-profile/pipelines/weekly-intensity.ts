@@ -15,6 +15,13 @@ interface WeeklySnapshot {
   longestGameId: number | null;
 }
 
+interface CommunityDists {
+  week: Map<number, number>;
+  last4w: Map<number, number>;
+  allTime: Map<number, number>;
+  maxUniqueGames: number;
+}
+
 /** Rolling 4-week window start (28 days ago, floor to midnight). */
 function fourWeekStart(now: Date): Date {
   const d = new Date(now);
@@ -23,19 +30,20 @@ function fourWeekStart(now: Date): Date {
   return d;
 }
 
-async function communityDistributions(
+/**
+ * Fetch the week's per-user rollup totals AND the max unique-games count
+ * in a single pass over the current-week rollup slice. Saves one full
+ * table scan vs. separating the two queries.
+ */
+async function loadCurrentWeekStats(
   db: Db,
   weekStart: Date,
-  fourWkStart: Date,
-): Promise<{
-  week: Map<number, number>;
-  last4w: Map<number, number>;
-  allTime: Map<number, number>;
-}> {
-  const weekRows = await db
+): Promise<{ totals: Map<number, number>; maxUniqueGames: number }> {
+  const rows = await db
     .select({
       userId: schema.gameActivityRollups.userId,
-      total: sql<number>`sum(${schema.gameActivityRollups.totalSeconds})`,
+      totalSeconds: sql<number>`sum(${schema.gameActivityRollups.totalSeconds})`,
+      uniqueGames: sql<number>`count(distinct ${schema.gameActivityRollups.gameId})`,
     })
     .from(schema.gameActivityRollups)
     .where(
@@ -49,7 +57,35 @@ async function communityDistributions(
     )
     .groupBy(schema.gameActivityRollups.userId);
 
-  const last4wRows = await db.execute<{ user_id: number; total: number }>(sql`
+  const totals = new Map<number, number>();
+  let maxUniqueGames = 0;
+  for (const r of rows) {
+    totals.set(r.userId, Number(r.totalSeconds) / 3600);
+    const unique = Number(r.uniqueGames);
+    if (unique > maxUniqueGames) maxUniqueGames = unique;
+  }
+  return { totals, maxUniqueGames };
+}
+
+type RawTotalsRow = {
+  user_id: number;
+  total: number;
+} & Record<string, unknown>;
+
+function totalsMap(rows: RawTotalsRow[]): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const r of rows) map.set(r.user_id, Number(r.total) / 3600);
+  return map;
+}
+
+async function communityDistributions(
+  db: Db,
+  weekStart: Date,
+  fourWkStart: Date,
+): Promise<CommunityDists> {
+  const currentWeek = await loadCurrentWeekStats(db, weekStart);
+
+  const last4wRows = await db.execute<RawTotalsRow>(sql`
     SELECT user_id, SUM(total_seconds)::bigint AS total
     FROM ${schema.gameActivityRollups}
     WHERE period = 'day'
@@ -57,26 +93,18 @@ async function communityDistributions(
     GROUP BY user_id
   `);
 
-  const allTimeRows = await db.execute<{ user_id: number; total: number }>(sql`
+  const allTimeRows = await db.execute<RawTotalsRow>(sql`
     SELECT user_id, SUM(total_seconds)::bigint AS total
     FROM ${schema.gameActivityRollups}
     WHERE period = 'day'
     GROUP BY user_id
   `);
 
-  const toMap = (rows: Array<{ userId?: number; user_id?: number; total: number }>) => {
-    const map = new Map<number, number>();
-    for (const r of rows) {
-      const id = r.userId ?? r.user_id;
-      if (id === undefined) continue;
-      map.set(id, Number(r.total) / 3600);
-    }
-    return map;
-  };
   return {
-    week: toMap(weekRows),
-    last4w: toMap(last4wRows as unknown as Array<{ user_id: number; total: number }>),
-    allTime: toMap(allTimeRows as unknown as Array<{ user_id: number; total: number }>),
+    week: currentWeek.totals,
+    last4w: totalsMap(last4wRows as unknown as RawTotalsRow[]),
+    allTime: totalsMap(allTimeRows as unknown as RawTotalsRow[]),
+    maxUniqueGames: currentWeek.maxUniqueGames,
   };
 }
 
@@ -90,17 +118,11 @@ export async function runWeeklyIntensityRollup(db: Db): Promise<void> {
     totalHoursDistribution: [...dists.week.values()],
     last4wHoursDistribution: [...dists.last4w.values()],
     allTimeHoursDistribution: [...dists.allTime.values()],
-    maxUniqueGames: await maxUniqueGamesThisWeek(db, weekStart),
+    maxUniqueGames: dists.maxUniqueGames,
   };
 
   for (const { id: userId } of users) {
-    const snap = await buildWeeklySnapshot(
-      db,
-      userId,
-      weekStart,
-      fourWkStart,
-      dists,
-    );
+    const snap = await buildWeeklySnapshot(db, userId, weekStart, dists);
     if (!snap) continue;
 
     const metrics = computeIntensityMetrics(snap.input, community);
@@ -146,31 +168,11 @@ export function currentWeekStart(): Date {
   return d;
 }
 
-async function maxUniqueGamesThisWeek(
-  db: Db,
-  weekStart: Date,
-): Promise<number> {
-  const rows = await db.execute<{ c: number }>(sql`
-    SELECT MAX(c)::int AS c FROM (
-      SELECT COUNT(DISTINCT game_id) AS c
-      FROM game_activity_rollups
-      WHERE period = 'week' AND period_start = ${weekStart.toISOString().slice(0, 10)}
-      GROUP BY user_id
-    ) t
-  `);
-  return Number(rows[0]?.c ?? 0);
-}
-
 async function buildWeeklySnapshot(
   db: Db,
   userId: number,
   weekStart: Date,
-  _fourWkStart: Date,
-  dists: {
-    week: Map<number, number>;
-    last4w: Map<number, number>;
-    allTime: Map<number, number>;
-  },
+  dists: CommunityDists,
 ): Promise<WeeklySnapshot | null> {
   const rollups = await db
     .select()

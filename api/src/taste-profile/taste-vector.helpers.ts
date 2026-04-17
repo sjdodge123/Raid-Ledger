@@ -9,7 +9,7 @@ import {
 } from '@raid-ledger/contract';
 import {
   AXIS_MAPPINGS,
-  MMO_PLAYTIME_BONUS_MIN,
+  HIGH_PLAYTIME_WEIGHT_MIN,
 } from './axis-mapping.constants';
 
 /**
@@ -32,6 +32,12 @@ export interface UserGameSignal {
  * `tags` are lowercased IsThereAnyDeal/Steam user tags — far richer than
  * IGDB's genre taxonomy. They take priority in axis matching; IGDB IDs
  * act as fallback for games whose tags haven't been fetched yet.
+ *
+ * Known limitation: tag matching is English-only. ITAD supplies localized
+ * tags but we only compare against the English axis-mapping vocabulary,
+ * so non-English tag sets silently fall through to the IGDB fallback.
+ * Acceptable today because Steam's non-English tag coverage is sparse;
+ * revisit if we ever internationalize the axis vocabulary.
  */
 export interface GameMetadata {
   gameId: number;
@@ -41,55 +47,96 @@ export interface GameMetadata {
   tags: string[];
 }
 
+/**
+ * Signal-source contribution weights (tuning knobs — adjust here, not
+ * inline). The `signalWeight` sum for a single game is intentionally
+ * unbounded; self-normalization at the dimensions layer handles the
+ * scale.
+ */
+export const SIGNAL_WEIGHTS = {
+  /** Lifetime Steam playtime above this threshold (minutes) → weight 1.0. */
+  steamHighPlaytime: 1.0,
+  /** Base weight for recent-playtime owners. */
+  steamRecentBase: 0.5,
+  /** Additive bonus per `playtime2weeks` minute, capped at 0.5. */
+  steamRecentCap: 0.5,
+  /** Divisor for the recent-playtime bonus: `min(mins/600, cap)`. */
+  steamRecentDivisor: 600,
+  /** Library-tail ownership with no playtime. Kept tiny so a 1000-game
+   *  Steam library doesn't drown out actual play habits via axis
+   *  tail-aggregation. */
+  steamBareOwnership: 0.02,
+  /** Steam wishlist hint. */
+  steamWishlist: 0.2,
+  /** Presence divisor — weekly hours scaled to [0, 1]. */
+  presenceDivisor: 10,
+  /** Cap on presence contribution regardless of hours. */
+  presenceCap: 1.0,
+  /** Manual heart (explicit interest). */
+  manualHeart: 0.5,
+  /** Signed up for an event for this game. */
+  eventSignup: 0.7,
+  /** Attended voice for an event — strongest "active interest" signal. */
+  voiceAttendance: 1.0,
+  /** Auto-hearted via a scheduling poll. */
+  pollSource: 0.4,
+} as const;
+
 export function signalWeight(signal: UserGameSignal): number {
   let weight = 0;
 
   if (signal.steamOwnership) {
     const { playtimeForever, playtime2weeks } = signal.steamOwnership;
-    if (playtimeForever > MMO_PLAYTIME_BONUS_MIN) {
-      weight += 1.0;
+    if (playtimeForever > HIGH_PLAYTIME_WEIGHT_MIN) {
+      weight += SIGNAL_WEIGHTS.steamHighPlaytime;
     } else if (playtime2weeks > 0) {
-      weight += 0.5 + Math.min(playtime2weeks / 600, 0.5);
+      weight +=
+        SIGNAL_WEIGHTS.steamRecentBase +
+        Math.min(
+          playtime2weeks / SIGNAL_WEIGHTS.steamRecentDivisor,
+          SIGNAL_WEIGHTS.steamRecentCap,
+        );
     } else {
-      // Bare ownership (no playtime) is a very weak signal — a 1000-game
-      // Steam library shouldn't drown out actual play habits via axis
-      // tail-aggregation. Keep just enough to whisper through.
-      weight += 0.02;
+      weight += SIGNAL_WEIGHTS.steamBareOwnership;
     }
   }
-  if (signal.steamWishlist) weight += 0.2;
+  if (signal.steamWishlist) weight += SIGNAL_WEIGHTS.steamWishlist;
   if (signal.presenceWeeklyHours !== undefined) {
-    weight += Math.min(signal.presenceWeeklyHours / 10, 1.0);
+    weight += Math.min(
+      signal.presenceWeeklyHours / SIGNAL_WEIGHTS.presenceDivisor,
+      SIGNAL_WEIGHTS.presenceCap,
+    );
   }
-  if (signal.manualHeart) weight += 0.5;
-  if (signal.eventSignup) weight += 0.7;
-  if (signal.voiceAttendance) weight += 1.0;
-  if (signal.pollSource) weight += 0.4;
+  if (signal.manualHeart) weight += SIGNAL_WEIGHTS.manualHeart;
+  if (signal.eventSignup) weight += SIGNAL_WEIGHTS.eventSignup;
+  if (signal.voiceAttendance) weight += SIGNAL_WEIGHTS.voiceAttendance;
+  if (signal.pollSource) weight += SIGNAL_WEIGHTS.pollSource;
 
   return weight;
 }
 
+/**
+ * Does this game match the given axis?
+ * - If the game has tags, match only against the axis's tag list
+ *   (trust the richer Steam/ITAD vocabulary).
+ * - Otherwise, fall back to IGDB gameMode/genre/theme IDs.
+ *
+ * Returns 1.0 on match, 0 otherwise. Does NOT depend on per-user signal —
+ * classification is purely a property of the game. Used by both the
+ * vector computation and `computeAxisIdf` rarity calculation.
+ */
 export function axisMatchFactor(
   axis: TasteProfilePoolAxis,
   game: GameMetadata,
-  signal: UserGameSignal,
 ): number {
   const mapping = AXIS_MAPPINGS[axis];
 
-  // Tag-first classification: when user tags are present, they're a far
-  // richer signal than IGDB's coarse genre IDs. Trust them exclusively
-  // so that e.g. Satisfactory's "Automation" tag drives the Automation
-  // axis instead of also bleeding into Adventure via the IGDB fallback.
   if (game.tags.length > 0) {
     return mapping.tags.some((t) => game.tags.includes(t.toLowerCase()))
       ? 1.0
       : 0;
   }
 
-  // No tags on this game — fall back to IGDB IDs (older / unfetched games).
-  // Used to apply an MMO_PLAYTIME_BONUS here but it was over-broad: any
-  // 50h+ game would hit MMO regardless of genre. Real MMOs are caught by
-  // gameMode 5 or the MMORPG/Massively Multiplayer tags.
   const hits =
     mapping.gameModes.some((m) => game.gameModes.includes(m)) ||
     mapping.genres.some((g) => game.genres.includes(g)) ||
@@ -124,10 +171,9 @@ export function computeAxisIdf(
   const coverage = {} as Record<TasteProfilePoolAxis, number>;
   for (const axis of TASTE_PROFILE_AXIS_POOL) coverage[axis] = 0;
 
-  const emptySignal: UserGameSignal = { gameId: 0 };
   for (const game of games.values()) {
     for (const axis of TASTE_PROFILE_AXIS_POOL) {
-      if (axisMatchFactor(axis, game, emptySignal) > 0) coverage[axis] += 1;
+      if (axisMatchFactor(axis, game) > 0) coverage[axis] += 1;
     }
   }
   for (const axis of TASTE_PROFILE_AXIS_POOL) {
@@ -159,7 +205,7 @@ export function computeTasteVector(
     const w = signalWeight(signal);
     if (w === 0) continue;
     for (const axis of TASTE_PROFILE_AXIS_POOL) {
-      raw[axis] += w * axisMatchFactor(axis, game, signal);
+      raw[axis] += w * axisMatchFactor(axis, game);
     }
   }
 

@@ -66,6 +66,7 @@ function TasteProfileBody({
             <TasteRadarChart
                 archetype={profile.archetype}
                 dimensions={profile.dimensions}
+                intensityMetrics={profile.intensityMetrics}
             />
             <IntensityBadge
                 archetype={profile.archetype}

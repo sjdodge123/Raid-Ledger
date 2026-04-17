@@ -89,29 +89,24 @@ describe('axisMatchFactor (ROK-948 AC 11)', () => {
   };
 
   it('matches co_op via gameModes', () => {
-    expect(axisMatchFactor('co_op', coopGame, { gameId: 1 })).toBe(1.0);
+    expect(axisMatchFactor('co_op', coopGame)).toBe(1.0);
   });
 
   it('matches rpg via genres', () => {
-    expect(axisMatchFactor('rpg', rpgGame, { gameId: 2 })).toBe(1.0);
+    expect(axisMatchFactor('rpg', rpgGame)).toBe(1.0);
   });
 
   it('does not match when none of the mappings apply', () => {
-    expect(axisMatchFactor('pvp', coopGame, { gameId: 1 })).toBe(0);
-    expect(axisMatchFactor('mmo', rpgGame, { gameId: 2 })).toBe(0);
+    expect(axisMatchFactor('pvp', coopGame)).toBe(0);
+    expect(axisMatchFactor('mmo', rpgGame)).toBe(0);
   });
 
   it('does not award MMO axis based on playtime alone', () => {
     // Prior code awarded a +1.0 MMO bonus for games with >3000min playtime
     // regardless of genre. That was over-broad (PUBG/Satisfactory hit MMO).
     // MMO is now detected via tags (MMORPG/MMO/Massively Multiplayer) or
-    // IGDB gameMode 5 only.
-    expect(
-      axisMatchFactor('mmo', bareGame, {
-        gameId: 3,
-        steamOwnership: { playtimeForever: 50000, playtime2weeks: 0 },
-      }),
-    ).toBe(0);
+    // IGDB gameMode 5 only. `axisMatchFactor` no longer takes a signal.
+    expect(axisMatchFactor('mmo', bareGame)).toBe(0);
   });
 
   it('matches mmo via IGDB gameMode 5 (Massively Multiplayer)', () => {
@@ -122,7 +117,7 @@ describe('axisMatchFactor (ROK-948 AC 11)', () => {
       themes: [],
       tags: [],
     };
-    expect(axisMatchFactor('mmo', mmoGame, { gameId: 99 })).toBe(1.0);
+    expect(axisMatchFactor('mmo', mmoGame)).toBe(1.0);
   });
 });
 

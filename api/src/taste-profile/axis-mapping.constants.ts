@@ -197,6 +197,11 @@ export const AXIS_MAPPINGS: Record<TasteProfilePoolAxis, AxisMapping> = {
   },
 };
 
-/** MMO playtime bonus threshold: games with this much lifetime playtime
- * (in minutes) also contribute to the MMO axis regardless of tags. */
-export const MMO_PLAYTIME_BONUS_MIN = 3000;
+/**
+ * Lifetime Steam playtime threshold (minutes) above which a game is
+ * considered "heavily played" — its signal weight jumps to 1.0 for
+ * every matching axis. No longer MMO-specific (a prior version applied
+ * an MMO-axis bonus here; that was removed in favour of tag/gameMode
+ * based MMO detection).
+ */
+export const HIGH_PLAYTIME_WEIGHT_MIN = 3000;

@@ -117,4 +117,34 @@ export const handlers = [
     http.get(`${API_BASE}/users/:id/hearted-games`, () =>
         HttpResponse.json([]),
     ),
+
+    // User profile — taste profile (ROK-949). Returns a neutral empty
+    // profile so tests that incidentally render <TasteProfileSection>
+    // don't hit an MSW miss. Tests asserting specific dimensions can
+    // override with server.use().
+    http.get(`${API_BASE}/users/:id/taste-profile`, ({ params }) => {
+        const userId = Number(params.id);
+        return HttpResponse.json({
+            userId,
+            dimensions: {
+                co_op: 0, pvp: 0, battle_royale: 0, mmo: 0, moba: 0,
+                fighting: 0, shooter: 0, racing: 0, sports: 0, rpg: 0,
+                fantasy: 0, sci_fi: 0, adventure: 0, strategy: 0,
+                survival: 0, crafting: 0, automation: 0, sandbox: 0,
+                horror: 0, social: 0, roguelike: 0, puzzle: 0,
+                platformer: 0, stealth: 0,
+            },
+            intensityMetrics: {
+                intensity: 0, focus: 0, breadth: 0, consistency: 0,
+            },
+            archetype: 'Casual',
+            coPlayPartners: [],
+            computedAt: '2026-04-17T00:00:00.000Z',
+        });
+    }),
+
+    // User profile — similar players (ROK-949 companion endpoint).
+    http.get(`${API_BASE}/users/:id/similar-players`, () =>
+        HttpResponse.json({ similar: [] }),
+    ),
 ];
