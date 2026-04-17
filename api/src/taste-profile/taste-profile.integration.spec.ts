@@ -234,6 +234,39 @@ describe('Taste Profile (ROK-948)', () => {
   // ─── AC 5: co-play graph ────────────────────────────────────────
 
   describe('AC 5: co-play graph builder', () => {
+    it('creates a pair from shared signups when no voice sessions exist', async () => {
+      const aliceId = await seedUser('d:sign-alice', 'sign-alice');
+      const bobId = await seedUser('d:sign-bob', 'sign-bob');
+      const game = await seedGame('Scheduled Raid', [12], [3]);
+
+      const [event] = await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'Planned Raid',
+          gameId: game,
+          duration: [
+            new Date('2026-05-01T18:00:00Z'),
+            new Date('2026-05-01T21:00:00Z'),
+          ] as unknown as [Date, Date],
+          creatorId: aliceId,
+        })
+        .returning();
+
+      await testApp.db.insert(schema.eventSignups).values([
+        { eventId: event.id, userId: aliceId, status: 'confirmed' },
+        { eventId: event.id, userId: bobId, status: 'signed_up' },
+      ]);
+
+      await service.buildCoPlayGraph();
+
+      const rows = await testApp.db.select().from(schema.playerCoPlay);
+      expect(rows).toHaveLength(1);
+      const [lo, hi] = [aliceId, bobId].sort((a, b) => a - b);
+      expect(rows[0].userIdA).toBe(lo);
+      expect(rows[0].userIdB).toBe(hi);
+      expect(rows[0].gamesPlayed).toContain(game);
+    });
+
     it('creates a pair from overlapping voice sessions with canonical ordering', async () => {
       const aliceId = await seedUser('d:alice', 'alice');
       const bobId = await seedUser('d:bob', 'bob');
