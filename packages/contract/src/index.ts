@@ -28,6 +28,9 @@ export * from './availability.schema.js';
 // Roster Availability (heatmap)
 export * from './roster-availability.schema.js';
 
+// Taste Profile (ROK-948)
+export * from './taste-profile.schema.js';
+
 // Roster Assignments (ROK-114)
 export * from './roster.schema.js';
 

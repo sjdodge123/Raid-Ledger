@@ -42,3 +42,6 @@ export * from './schema/community-lineup-matches';
 export * from './schema/activity-log';
 export * from './schema/notification-dedup';
 export * from './schema/consumed-intent-tokens';
+export * from './schema/player-taste-vectors';
+export * from './schema/player-intensity-snapshots';
+export * from './schema/player-co-play';
