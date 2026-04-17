@@ -169,15 +169,18 @@ async function loadGameMetadata(db: Db): Promise<Map<number, GameMetadata>> {
       genres: schema.games.genres,
       gameModes: schema.games.gameModes,
       themes: schema.games.themes,
+      itadTags: schema.games.itadTags,
     })
     .from(schema.games);
   const map = new Map<number, GameMetadata>();
   for (const r of rows) {
+    const rawTags = Array.isArray(r.itadTags) ? (r.itadTags as string[]) : [];
     map.set(r.id, {
       gameId: r.id,
       genres: r.genres ?? [],
       gameModes: r.gameModes ?? [],
       themes: r.themes ?? [],
+      tags: rawTags.map((t) => t.toLowerCase()),
     });
   }
   return map;

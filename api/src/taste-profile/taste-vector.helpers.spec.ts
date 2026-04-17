@@ -71,18 +71,21 @@ describe('axisMatchFactor (ROK-948 AC 11)', () => {
     genres: [],
     gameModes: [3], // Coop
     themes: [],
+    tags: [],
   };
   const rpgGame: GameMetadata = {
     gameId: 2,
     genres: [12], // RPG
     gameModes: [],
     themes: [],
+    tags: [],
   };
   const bareGame: GameMetadata = {
     gameId: 3,
     genres: [],
     gameModes: [],
     themes: [],
+    tags: [],
   };
 
   it('matches co_op via gameModes', () => {
@@ -98,30 +101,36 @@ describe('axisMatchFactor (ROK-948 AC 11)', () => {
     expect(axisMatchFactor('mmo', rpgGame, { gameId: 2 })).toBe(0);
   });
 
-  it('awards MMO playtime bonus when playtimeForever exceeds the threshold', () => {
+  it('does not award MMO axis based on playtime alone', () => {
+    // Prior code awarded a +1.0 MMO bonus for games with >3000min playtime
+    // regardless of genre. That was over-broad (PUBG/Satisfactory hit MMO).
+    // MMO is now detected via tags (MMORPG/MMO/Massively Multiplayer) or
+    // IGDB gameMode 5 only.
     expect(
       axisMatchFactor('mmo', bareGame, {
         gameId: 3,
-        steamOwnership: { playtimeForever: 5000, playtime2weeks: 0 },
-      }),
-    ).toBe(1.0);
-  });
-
-  it('does not award MMO bonus for small playtime on untagged games', () => {
-    expect(
-      axisMatchFactor('mmo', bareGame, {
-        gameId: 3,
-        steamOwnership: { playtimeForever: 500, playtime2weeks: 0 },
+        steamOwnership: { playtimeForever: 50000, playtime2weeks: 0 },
       }),
     ).toBe(0);
+  });
+
+  it('matches mmo via IGDB gameMode 5 (Massively Multiplayer)', () => {
+    const mmoGame: GameMetadata = {
+      gameId: 99,
+      genres: [],
+      gameModes: [5],
+      themes: [],
+      tags: [],
+    };
+    expect(axisMatchFactor('mmo', mmoGame, { gameId: 99 })).toBe(1.0);
   });
 });
 
 describe('computeTasteVector (ROK-948 AC 11)', () => {
   const games = new Map<number, GameMetadata>([
-    [10, { gameId: 10, genres: [12], gameModes: [], themes: [] }], // RPG
-    [11, { gameId: 11, genres: [], gameModes: [3], themes: [] }], // Coop
-    [12, { gameId: 12, genres: [15], gameModes: [], themes: [] }], // Strategy
+    [10, { gameId: 10, genres: [12], gameModes: [], themes: [], tags: [] }], // RPG
+    [11, { gameId: 11, genres: [], gameModes: [3], themes: [], tags: [] }], // Coop
+    [12, { gameId: 12, genres: [15], gameModes: [], themes: [], tags: [] }], // Strategy
   ]);
 
   it('returns zeroed dimensions + zero vector for an empty signal list', () => {

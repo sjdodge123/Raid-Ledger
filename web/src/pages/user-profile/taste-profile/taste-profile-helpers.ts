@@ -46,7 +46,7 @@ export function topAxes(
 }
 
 /**
- * Human-readable axis labels covering the full 20-axis pool. Used for
+ * Human-readable axis labels covering the full axis pool. Used for
  * chart labels and for the radar chart's `aria-label`.
  */
 export function axisLabel(axis: TasteProfilePoolAxis): string {
@@ -79,18 +79,26 @@ export function axisLabel(axis: TasteProfilePoolAxis): string {
             return "Adventure";
         case "strategy":
             return "Strategy";
-        case "rts":
-            return "RTS";
-        case "tbs":
-            return "TBS";
         case "survival":
             return "Survival";
+        case "crafting":
+            return "Crafting";
+        case "automation":
+            return "Automation";
         case "sandbox":
             return "Sandbox";
         case "horror":
             return "Horror";
         case "social":
             return "Social";
+        case "roguelike":
+            return "Roguelike";
+        case "puzzle":
+            return "Puzzle";
+        case "platformer":
+            return "Platformer";
+        case "stealth":
+            return "Stealth";
     }
 }
 

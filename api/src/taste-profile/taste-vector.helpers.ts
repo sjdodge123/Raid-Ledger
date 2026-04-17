@@ -29,12 +29,16 @@ export interface UserGameSignal {
 
 /**
  * Metadata subset used by the mapper.
+ * `tags` are lowercased IsThereAnyDeal/Steam user tags — far richer than
+ * IGDB's genre taxonomy. They take priority in axis matching; IGDB IDs
+ * act as fallback for games whose tags haven't been fetched yet.
  */
 export interface GameMetadata {
   gameId: number;
   genres: number[];
   gameModes: number[];
   themes: number[];
+  tags: string[];
 }
 
 export function signalWeight(signal: UserGameSignal): number {
@@ -71,23 +75,27 @@ export function axisMatchFactor(
   signal: UserGameSignal,
 ): number {
   const mapping = AXIS_MAPPINGS[axis];
+
+  // Tag-first classification: when user tags are present, they're a far
+  // richer signal than IGDB's coarse genre IDs. Trust them exclusively
+  // so that e.g. Satisfactory's "Automation" tag drives the Automation
+  // axis instead of also bleeding into Adventure via the IGDB fallback.
+  if (game.tags.length > 0) {
+    return mapping.tags.some((t) => game.tags.includes(t.toLowerCase()))
+      ? 1.0
+      : 0;
+  }
+
+  // No tags on this game — fall back to IGDB IDs (older / unfetched games).
+  // Used to apply an MMO_PLAYTIME_BONUS here but it was over-broad: any
+  // 50h+ game would hit MMO regardless of genre. Real MMOs are caught by
+  // gameMode 5 or the MMORPG/Massively Multiplayer tags.
   const hits =
     mapping.gameModes.some((m) => game.gameModes.includes(m)) ||
     mapping.genres.some((g) => game.genres.includes(g)) ||
     mapping.themes.some((t) => game.themes.includes(t));
 
-  if (hits) return 1.0;
-
-  // MMO playtime bonus: a high-playtime game also drives the MMO axis.
-  if (
-    axis === 'mmo' &&
-    signal.steamOwnership &&
-    signal.steamOwnership.playtimeForever > MMO_PLAYTIME_BONUS_MIN
-  ) {
-    return 1.0;
-  }
-
-  return 0;
+  return hits ? 1.0 : 0;
 }
 
 function zeroedPool(): Record<TasteProfilePoolAxis, number> {

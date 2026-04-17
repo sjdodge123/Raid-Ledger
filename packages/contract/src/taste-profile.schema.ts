@@ -40,12 +40,16 @@ export const TASTE_PROFILE_AXIS_POOL = [
   'sci_fi',
   'adventure',
   'strategy',
-  'rts',
-  'tbs',
   'survival',
+  'crafting',
+  'automation',
   'sandbox',
   'horror',
   'social',
+  'roguelike',
+  'puzzle',
+  'platformer',
+  'stealth',
 ] as const;
 
 export type TasteProfilePoolAxis = (typeof TASTE_PROFILE_AXIS_POOL)[number];
