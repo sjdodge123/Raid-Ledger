@@ -88,6 +88,7 @@ export {
     deleteMyAccount,
     adminRemoveUser,
     unlinkDiscord,
+    getTasteProfile,
 } from './api/users-api';
 
 // Preferences

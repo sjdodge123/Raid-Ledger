@@ -8,13 +8,18 @@ import {
   useUserSteamWishlist,
   useUserActivity,
 } from "../hooks/use-user-profile";
+import { useTasteProfile } from "../hooks/use-taste-profile";
 import { useGamesPricingBatch } from "../hooks/use-games-pricing-batch";
 import { useGameRegistry } from "../hooks/use-game-registry";
 import { useAuth } from "../hooks/use-auth";
 import { formatDistanceToNow } from "date-fns";
 import { resolveAvatar, toAvatarUser } from "../lib/avatar";
 import { UserEventSignups } from "../components/profile/UserEventSignups";
-import type { UserProfileDto, ItadGamePricingDto } from "@raid-ledger/contract";
+import type {
+  UserProfileDto,
+  ItadGamePricingDto,
+  TasteProfileArchetype,
+} from "@raid-ledger/contract";
 import {
   HeartedGameCard,
   GroupedCharacters,
@@ -25,6 +30,9 @@ import {
 } from "./user-profile/user-profile-components";
 import { HeartedGamesModal } from "./user-profile/hearted-games-modal";
 import { isGuestRouteState } from "./user-profile/user-profile-helpers";
+import { TasteProfileSection } from "./user-profile/taste-profile/TasteProfileSection";
+import { ArchetypePill } from "./user-profile/taste-profile/ArchetypePill";
+import { isEmptyTasteProfile } from "./user-profile/taste-profile/taste-profile-helpers";
 import "./user-profile-page.css";
 
 /** Loading skeleton for user profile */
@@ -107,31 +115,75 @@ function useProfilePricing(userId: number | undefined): PricingMap {
   return useGamesPricingBatch(allIds);
 }
 
-/** Loaded profile content */
-function ProfileContent({
+/** Profile sections body (split out so `ProfileContent` stays <30 lines). */
+function ProfileSections({
   profile,
   numericId,
   isOwnProfile,
   games,
+  pricingMap,
+  tasteProfile,
 }: {
   profile: UserProfileDto;
   numericId: number | undefined;
   isOwnProfile: boolean;
   games: { id: number; name: string }[];
+  pricingMap: PricingMap;
+  tasteProfile: ReturnType<typeof useTasteProfile>;
 }): JSX.Element {
+  return (
+    <>
+      {numericId && <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} pricingMap={pricingMap} />}
+      {numericId && <UserEventSignups userId={numericId} />}
+      {profile.characters.length > 0 && <GroupedCharacters characters={profile.characters} games={games} />}
+      {numericId && <HeartedGamesSection userId={numericId} pricingMap={pricingMap} />}
+      {numericId && <SteamLibrarySection userId={numericId} pricingMap={pricingMap} />}
+      {numericId && <SteamWishlistSection userId={numericId} pricingMap={pricingMap} />}
+      {numericId !== undefined && (
+        <TasteProfileSection userId={numericId} queryResult={tasteProfile} />
+      )}
+    </>
+  );
+}
+
+/**
+ * Resolve the archetype pill for the profile header.
+ * Returns null when the user has no data yet (empty profile).
+ */
+function useHeaderArchetype(
+  tasteProfile: ReturnType<typeof useTasteProfile>,
+): TasteProfileArchetype | null {
+  if (!tasteProfile.data) return null;
+  if (isEmptyTasteProfile(tasteProfile.data)) return null;
+  return tasteProfile.data.archetype;
+}
+
+interface ProfileContentProps {
+  profile: UserProfileDto;
+  numericId: number | undefined;
+  isOwnProfile: boolean;
+  games: { id: number; name: string }[];
+}
+
+/** Loaded profile content */
+function ProfileContent({ profile, numericId, isOwnProfile, games }: ProfileContentProps): JSX.Element {
   const memberSince = formatDistanceToNow(new Date(profile.createdAt), { addSuffix: true });
   const profileAvatar = resolveAvatar(toAvatarUser(profile));
   const pricingMap = useProfilePricing(numericId);
+  const tasteProfile = useTasteProfile(numericId);
+  const headerArchetype = useHeaderArchetype(tasteProfile);
   return (
     <div className="user-profile-page">
       <div className="user-profile-card">
-        <ProfileHeader profile={profile} profileAvatar={profileAvatar} memberSince={memberSince} />
-        {numericId && <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} pricingMap={pricingMap} />}
-        {numericId && <UserEventSignups userId={numericId} />}
-        {profile.characters.length > 0 && <GroupedCharacters characters={profile.characters} games={games} />}
-        {numericId && <HeartedGamesSection userId={numericId} pricingMap={pricingMap} />}
-        {numericId && <SteamLibrarySection userId={numericId} pricingMap={pricingMap} />}
-        {numericId && <SteamWishlistSection userId={numericId} pricingMap={pricingMap} />}
+        <ProfileHeader profile={profile} profileAvatar={profileAvatar} memberSince={memberSince} archetype={headerArchetype} />
+        <ProfileSections
+          profile={profile}
+          numericId={numericId}
+          isOwnProfile={isOwnProfile}
+          games={games}
+          pricingMap={pricingMap}
+          tasteProfile={tasteProfile}
+        />
       </div>
     </div>
   );
@@ -180,10 +232,12 @@ function ProfileHeader({
   profile,
   profileAvatar,
   memberSince,
+  archetype,
 }: {
   profile: { username: string };
   profileAvatar: { url: string | null };
   memberSince: string;
+  archetype: TasteProfileArchetype | null;
 }): JSX.Element {
   return (
     <div className="user-profile-header">
@@ -194,7 +248,10 @@ function ProfileHeader({
         <div className="user-profile-avatar user-profile-avatar--initials">{profile.username.charAt(0).toUpperCase()}</div>
       )}
       <div className="user-profile-info">
-        <h1 className="user-profile-name">{profile.username}</h1>
+        <h1 className="user-profile-name">
+          {profile.username}
+          {archetype && <ArchetypePill archetype={archetype} />}
+        </h1>
         <p className="user-profile-meta">Member {memberSince}</p>
       </div>
     </div>

@@ -1,0 +1,105 @@
+import type { JSX } from "react";
+import {
+    Radar,
+    RadarChart,
+    PolarGrid,
+    PolarAngleAxis,
+    PolarRadiusAxis,
+    ResponsiveContainer,
+} from "recharts";
+import {
+    TASTE_PROFILE_AXES,
+    type TasteProfileArchetype,
+    type TasteProfileDimensionsDto,
+} from "@raid-ledger/contract";
+import { ArchetypePill } from "./ArchetypePill";
+import { axisLabel } from "./taste-profile-helpers";
+
+interface TasteRadarChartProps {
+    archetype: TasteProfileArchetype;
+    dimensions: TasteProfileDimensionsDto;
+}
+
+/**
+ * Build the aria-label that summarises the whole chart for screen
+ * readers — AC7: "aria-label includes archetype + each axis + value".
+ */
+function buildAriaLabel(
+    archetype: TasteProfileArchetype,
+    dims: TasteProfileDimensionsDto,
+): string {
+    const parts = TASTE_PROFILE_AXES.map(
+        (axis) => `${axisLabel(axis)} ${dims[axis]}`,
+    ).join(", ");
+    return `Taste profile for ${archetype}: ${parts}.`;
+}
+
+function RadarGradientDefs(): JSX.Element {
+    return (
+        <defs>
+            <radialGradient id="taste-radial" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#ef4444" stopOpacity={0.55} />
+                <stop offset="55%" stopColor="#fbbf24" stopOpacity={0.55} />
+                <stop offset="100%" stopColor="#22c55e" stopOpacity={0.55} />
+            </radialGradient>
+        </defs>
+    );
+}
+
+function RadarBody({
+    data,
+}: {
+    data: { axis: string; value: number }[];
+}): JSX.Element {
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <RadarChart data={data} outerRadius="75%">
+                <RadarGradientDefs />
+                <PolarGrid stroke="rgba(255,255,255,0.15)" />
+                <PolarAngleAxis dataKey="axis" tick={{ fill: "#a1a1aa", fontSize: 12 }} />
+                <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                <Radar
+                    dataKey="value"
+                    stroke="#a855f7"
+                    strokeWidth={2}
+                    fill="url(#taste-radial)"
+                    fillOpacity={0.85}
+                    isAnimationActive={false}
+                />
+            </RadarChart>
+        </ResponsiveContainer>
+    );
+}
+
+/**
+ * 7-axis radar chart with radial red→yellow→green fill and an archetype
+ * hero title above. Chart height is driven by CSS (300px desktop, 240px
+ * mobile) via `.taste-radar__chart-wrap`.
+ */
+export function TasteRadarChart({
+    archetype,
+    dimensions,
+}: TasteRadarChartProps): JSX.Element {
+    const data = TASTE_PROFILE_AXES.map((axis) => ({
+        axis: axisLabel(axis),
+        value: dimensions[axis],
+    }));
+    const ariaLabel = buildAriaLabel(archetype, dimensions);
+    return (
+        <div className="taste-radar">
+            <div className="taste-radar__title">
+                <span className="taste-radar__title-prefix">
+                    Taste Radar —{" "}
+                </span>
+                <ArchetypePill archetype={archetype} size="lg" />
+            </div>
+            <div
+                className="taste-radar__chart-wrap"
+                role="img"
+                aria-label={ariaLabel}
+            >
+                <RadarBody data={data} />
+            </div>
+        </div>
+    );
+}

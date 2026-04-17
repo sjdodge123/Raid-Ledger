@@ -8,6 +8,7 @@ import type {
   UserActivityResponseDto,
   UserManagementListResponseDto,
   UserRole,
+  TasteProfileResponseDto,
 } from "@raid-ledger/contract";
 import { fetchApi } from "./fetch-api";
 
@@ -131,4 +132,11 @@ export async function adminRemoveUser(userId: number): Promise<void> {
 /** Unlink Discord from current user's account (ROK-195) */
 export async function unlinkDiscord(): Promise<void> {
   return fetchApi("/users/me/discord", { method: "DELETE" });
+}
+
+/** Fetch a user's taste profile (radar + intensity + co-play partners, ROK-948/949) */
+export async function getTasteProfile(
+  userId: number,
+): Promise<TasteProfileResponseDto> {
+  return fetchApi(`/users/${userId}/taste-profile`);
 }
