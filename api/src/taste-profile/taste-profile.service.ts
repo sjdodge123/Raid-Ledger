@@ -565,7 +565,7 @@ export class TasteProfileService {
       avatar: string | null;
       session_count: number;
       total_minutes: number;
-      last_played_at: Date;
+      last_played_at: Date | string;
     }>(sql`
       SELECT
         CASE WHEN user_id_a = ${userId} THEN user_id_b ELSE user_id_a END AS user_id,
@@ -582,7 +582,10 @@ export class TasteProfileService {
       avatar: r.avatar,
       sessionCount: r.session_count,
       totalMinutes: r.total_minutes,
-      lastPlayedAt: r.last_played_at.toISOString(),
+      lastPlayedAt:
+        r.last_played_at instanceof Date
+          ? r.last_played_at.toISOString()
+          : new Date(r.last_played_at).toISOString(),
     }));
   }
 
