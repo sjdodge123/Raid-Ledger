@@ -841,6 +841,13 @@
       "when": 1775949315716,
       "tag": "0119_vengeful_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1775949415716,
+      "tag": "0120_enable_pgvector",
+      "breakpoints": true
     }
   ]
 }

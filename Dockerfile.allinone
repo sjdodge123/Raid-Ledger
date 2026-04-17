@@ -82,6 +82,22 @@ RUN apk add --no-cache \
   logrotate \
   zstd
 
+# Build and install pgvector v0.7.4 from source (ROK-948).
+# Alpine does not ship a postgresql16-pgvector package, so we compile.
+# Build dependencies are installed under a virtual package and removed after
+# install to keep the runtime image lean. JIT (clang/llvm) is intentionally
+# omitted — pgvector works fine without it and avoids Alpine version drift
+# on unversioned clang/llvm package names.
+RUN apk add --no-cache --virtual .pgvector-build \
+    git build-base postgresql16-dev \
+  && git clone --branch v0.7.4 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector \
+  && cd /tmp/pgvector \
+  && make OPTFLAGS="" PG_CONFIG=/usr/libexec/postgresql16/pg_config \
+  && make install PG_CONFIG=/usr/libexec/postgresql16/pg_config \
+  && cd / \
+  && rm -rf /tmp/pgvector \
+  && apk del .pgvector-build
+
 # Copy glibc runtime for Ollama (replaces gcompat which couldn't provide fcntl64)
 COPY --from=glibc-donor /opt/glibc/lib/ /opt/glibc/lib/
 
@@ -253,6 +269,22 @@ until /sbin/su-exec postgres pg_isready -q; do
 done
 echo "✅ PostgreSQL is ready"
 
+# Ensure pgvector extension is installed (ROK-948). pgvector v0.7.x is NOT a
+# trusted extension, so the raid_ledger role cannot install it via a plain
+# drizzle migration. init-db.sh handles fresh installs; existing data volumes
+# (PG_VERSION present) skip that block — so we also install here on every
+# start as the postgres superuser. Idempotent; the migration 0120 then no-ops.
+# Fail loud if it can't install — an unbootable API is clearer than a
+# mid-migration crash.
+if ! /sbin/su-exec postgres psql -v ON_ERROR_STOP=1 -qt -d raid_ledger \
+    -c "CREATE EXTENSION IF NOT EXISTS vector;" > /dev/null 2>&1; then
+  echo "❌ FATAL: pgvector extension could not be installed"
+  echo "   The pgvector binary may be missing from this image, or the"
+  echo "   postgres data dir is corrupted. Check /data/logs/postgresql.log."
+  exit 1
+fi
+echo "✅ pgvector extension ensured"
+
 # Wait for Redis to be ready (Unix socket)
 echo "⏳ Waiting for Redis..."
 until redis-cli -s /tmp/redis.sock ping > /dev/null 2>&1; do
@@ -329,9 +361,13 @@ if [ ! -s "${PGDATA}/PG_VERSION" ]; then
   /sbin/su-exec postgres psql -q -c "CREATE DATABASE raid_ledger OWNER raid_ledger;"
   /sbin/su-exec postgres psql -q -c "GRANT ALL PRIVILEGES ON DATABASE raid_ledger TO raid_ledger;"
 
+  # Enable pgvector extension (ROK-948) — requires superuser, must run before
+  # Drizzle migrations create the vector-typed columns.
+  /sbin/su-exec postgres psql -q -d raid_ledger -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
   # Stop PostgreSQL (supervisor will start it)
   /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -m fast -w stop 2>/dev/null
-  
+
   echo "✅ PostgreSQL initialized"
 fi
 EOF
