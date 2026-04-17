@@ -52,12 +52,12 @@ describe('signalWeight (ROK-948 AC 11)', () => {
   });
 
   it('scales presence weekly hours by min(hours/10, 1.0)', () => {
-    expect(
-      signalWeight({ gameId: 1, presenceWeeklyHours: 5 }),
-    ).toBeCloseTo(0.5);
-    expect(
-      signalWeight({ gameId: 1, presenceWeeklyHours: 15 }),
-    ).toBeCloseTo(1.0);
+    expect(signalWeight({ gameId: 1, presenceWeeklyHours: 5 })).toBeCloseTo(
+      0.5,
+    );
+    expect(signalWeight({ gameId: 1, presenceWeeklyHours: 15 })).toBeCloseTo(
+      1.0,
+    );
   });
 
   it('returns 0 for a signal with no sources', () => {
