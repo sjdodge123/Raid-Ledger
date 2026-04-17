@@ -112,12 +112,24 @@ test.describe('User profile taste section', () => {
             page.getByRole('heading', { name: 'Taste Profile' }),
         ).toBeVisible({ timeout: 15_000 });
 
-        // Skip the archetype-pill assertion if the empty state is shown —
-        // per spec, empty profiles do NOT render a pill.
+        // Wait for the section body to settle — either empty-state or a
+        // non-empty body must be rendered before we decide which branch
+        // of the AC to assert. This avoids a race where the query is
+        // still loading when isVisible() runs.
         const emptyState = page.getByText(
             'Not enough data yet — play more games!',
             { exact: false },
         );
+        const archetypeRegex = new RegExp(
+            `\\b(${ARCHETYPE_NAMES.join('|')})\\b`,
+        );
+        const archetypeText = page.getByText(archetypeRegex).first();
+        await expect(emptyState.or(archetypeText)).toBeVisible({
+            timeout: 15_000,
+        });
+
+        // Skip the archetype-pill assertion if the empty state is shown —
+        // per spec, empty profiles do NOT render a pill.
         if (await emptyState.isVisible().catch(() => false)) {
             test.info().annotations.push({
                 type: 'skip-reason',
@@ -130,12 +142,7 @@ test.describe('User profile taste section', () => {
         // Non-empty: exactly one of the 5 archetype names must be on the
         // page.  We look for the regex union so the test is robust to the
         // pill's exact DOM structure (span / badge / pill component).
-        const archetypeRegex = new RegExp(
-            `\\b(${ARCHETYPE_NAMES.join('|')})\\b`,
-        );
-        await expect(page.getByText(archetypeRegex).first()).toBeVisible({
-            timeout: 10_000,
-        });
+        await expect(archetypeText).toBeVisible({ timeout: 10_000 });
     });
 
     test('"Show all" partners button opens a modal when present (AC6)', async ({
