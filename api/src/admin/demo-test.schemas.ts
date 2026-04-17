@@ -62,6 +62,11 @@ export const ClearGameInterestSchema = z.object({
   gameId: z.number().int().positive(),
 });
 
+export const SetAutoHeartPrefSchema = z.object({
+  userId: z.number().int().positive(),
+  enabled: z.boolean(),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 export const CreateTestSignupSchema = z.object({

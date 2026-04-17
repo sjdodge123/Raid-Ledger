@@ -29,6 +29,7 @@ function createMockService() {
     pauseReconciliationForTest: jest.fn().mockResolvedValue({ success: true }),
     setEventTimesForTest: jest.fn().mockResolvedValue({ success: true }),
     clearGameTimeConfirmationForTest: jest.fn().mockResolvedValue(undefined),
+    setAutoHeartPrefForTest: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -138,6 +139,42 @@ describe('DemoTestController — new test utility endpoints', () => {
         eventId: 1,
         startTime: 'not-a-date',
         endTime: '2026-04-01T02:00:00Z',
+      }),
+    ).rejects.toThrow(/Validation failed/);
+  });
+
+  it('setAutoHeartPref delegates to service (ROK-1054)', async () => {
+    const result = await controller.setAutoHeartPrefForTest({
+      userId: 7,
+      enabled: true,
+    });
+    expect(result).toEqual({ success: true });
+    expect(mockService.setAutoHeartPrefForTest).toHaveBeenCalledWith(7, true);
+  });
+
+  it('setAutoHeartPref accepts enabled=false', async () => {
+    const result = await controller.setAutoHeartPrefForTest({
+      userId: 12,
+      enabled: false,
+    });
+    expect(result).toEqual({ success: true });
+    expect(mockService.setAutoHeartPrefForTest).toHaveBeenCalledWith(12, false);
+  });
+
+  it('setAutoHeartPref rejects invalid userId', async () => {
+    await expect(
+      controller.setAutoHeartPrefForTest({
+        userId: -1,
+        enabled: true,
+      }),
+    ).rejects.toThrow(/Validation failed/);
+  });
+
+  it('setAutoHeartPref rejects non-boolean enabled', async () => {
+    await expect(
+      controller.setAutoHeartPrefForTest({
+        userId: 1,
+        enabled: 'yes',
       }),
     ).rejects.toThrow(/Validation failed/);
   });

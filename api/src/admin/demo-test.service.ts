@@ -29,6 +29,7 @@ import {
   triggerClassifyForTest as triggerClassify,
   type InjectVoiceSessionParams,
 } from './demo-test-voice.helpers';
+import { setAutoHeartSteamUrlsPref } from '../discord-bot/listeners/steam-link-interest.helpers';
 
 /**
  * Service for demo/test-only endpoints used by smoke tests.
@@ -316,6 +317,15 @@ export class DemoTestService {
       .update(schema.games)
       .set({ steamAppId })
       .where(eq(schema.games.id, gameId));
+  }
+
+  /** Set the autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */
+  async setAutoHeartPrefForTest(
+    userId: number,
+    enabled: boolean,
+  ): Promise<void> {
+    await this.assertDemoMode();
+    await setAutoHeartSteamUrlsPref(this.db, userId, enabled);
   }
 
   /** Clear game_time_confirmed_at for a user -- DEMO_MODE only (ROK-999). */

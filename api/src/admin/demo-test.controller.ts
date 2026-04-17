@@ -31,6 +31,7 @@ import {
   CreateTestSignupSchema,
   SetEventTimesSchema,
   CancelLineupPhaseJobsSchema,
+  SetAutoHeartPrefSchema,
 } from './demo-test.schemas';
 
 /**
@@ -280,6 +281,20 @@ export class DemoTestController {
     await this.demoTestService.setSteamAppIdForTest(
       parsed.gameId,
       parsed.steamAppId,
+    );
+    return { success: true };
+  }
+
+  /** Set autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */
+  @Post('set-auto-heart-pref')
+  @HttpCode(HttpStatus.OK)
+  async setAutoHeartPrefForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = this.parseBody(SetAutoHeartPrefSchema, body);
+    await this.demoTestService.setAutoHeartPrefForTest(
+      parsed.userId,
+      parsed.enabled,
     );
     return { success: true };
   }
