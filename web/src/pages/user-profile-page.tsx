@@ -133,15 +133,15 @@ function ProfileSections({
 }): JSX.Element {
   return (
     <>
+      {numericId !== undefined && (
+        <TasteProfileSection userId={numericId} queryResult={tasteProfile} />
+      )}
       {numericId && <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} pricingMap={pricingMap} />}
       {numericId && <UserEventSignups userId={numericId} />}
       {profile.characters.length > 0 && <GroupedCharacters characters={profile.characters} games={games} />}
       {numericId && <HeartedGamesSection userId={numericId} pricingMap={pricingMap} />}
       {numericId && <SteamLibrarySection userId={numericId} pricingMap={pricingMap} />}
       {numericId && <SteamWishlistSection userId={numericId} pricingMap={pricingMap} />}
-      {numericId !== undefined && (
-        <TasteProfileSection userId={numericId} queryResult={tasteProfile} />
-      )}
     </>
   );
 }
