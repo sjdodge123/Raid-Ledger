@@ -42,6 +42,7 @@ import { AiModule } from './ai/ai.module';
 import { LineupsModule } from './lineups/lineups.module';
 import { SchedulingModule } from './lineups/scheduling/scheduling.module';
 import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.module';
+import { TasteProfileModule } from './taste-profile/taste-profile.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.
     SchedulingModule,
     LineupsModule,
     StandalonePollModule,
+    TasteProfileModule,
   ],
   controllers: [AppController],
   providers: [

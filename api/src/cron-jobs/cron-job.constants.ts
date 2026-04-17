@@ -146,4 +146,18 @@ export const CORE_JOB_METADATA: Record<
       'Notifies poll organizers when unique voter count reaches the minimum vote threshold every 5 minutes',
     category: 'Notifications',
   },
+  TasteProfileService_aggregateVectors: {
+    description:
+      'Aggregates signal data into per-user 7-axis taste vectors daily at 5:30 AM',
+    category: 'Data Sync',
+  },
+  TasteProfileService_buildCoPlayGraph: {
+    description:
+      'Rebuilds the player co-play graph from voice session overlaps and shared signups daily at 5:45 AM',
+    category: 'Data Sync',
+  },
+  TasteProfileService_weeklyIntensityRollup: {
+    description: 'Rolls up weekly play intensity snapshots Sundays at 6 AM',
+    category: 'Data Sync',
+  },
 };

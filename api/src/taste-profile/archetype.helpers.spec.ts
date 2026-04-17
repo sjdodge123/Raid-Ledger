@@ -20,9 +20,9 @@ describe('archetype derivation (ROK-948 AC 7)', () => {
   };
 
   it("returns 'Dedicated' at the boundary", () => {
-    expect(
-      deriveArchetype({ ...base, intensity: 75, consistency: 60 }),
-    ).toBe('Dedicated');
+    expect(deriveArchetype({ ...base, intensity: 75, consistency: 60 })).toBe(
+      'Dedicated',
+    );
   });
 
   it("returns 'Specialist' at the focus boundary", () => {
@@ -53,9 +53,9 @@ describe('archetype derivation (ROK-948 AC 7)', () => {
   });
 
   it("returns 'Social Drifter' when intensity < 50 and coPlayPartners ≥ 3", () => {
-    expect(
-      deriveArchetype({ ...base, intensity: 49, coPlayPartners: 3 }),
-    ).toBe('Social Drifter');
+    expect(deriveArchetype({ ...base, intensity: 49, coPlayPartners: 3 })).toBe(
+      'Social Drifter',
+    );
   });
 
   it("falls back to 'Casual' when nothing else matches", () => {

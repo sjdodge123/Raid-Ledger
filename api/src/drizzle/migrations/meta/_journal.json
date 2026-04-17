@@ -848,6 +848,13 @@
       "when": 1775949415716,
       "tag": "0120_enable_pgvector",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1775949515716,
+      "tag": "0121_player_taste_profile",
+      "breakpoints": true
     }
   ]
 }
