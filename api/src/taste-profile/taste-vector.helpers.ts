@@ -47,7 +47,10 @@ export function signalWeight(signal: UserGameSignal): number {
     } else if (playtime2weeks > 0) {
       weight += 0.5 + Math.min(playtime2weeks / 600, 0.5);
     } else {
-      weight += 0.1;
+      // Bare ownership (no playtime) is a very weak signal — a 1000-game
+      // Steam library shouldn't drown out actual play habits via axis
+      // tail-aggregation. Keep just enough to whisper through.
+      weight += 0.02;
     }
   }
   if (signal.steamWishlist) weight += 0.2;

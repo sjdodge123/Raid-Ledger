@@ -1,8 +1,9 @@
 /**
- * Intensity metrics computation (ROK-948 AC 6).
+ * Intensity metrics computation (ROK-948 AC 6, tuned in ROK-949).
  *
- * Formulas (from the enriched spec):
- *   intensity   = percentile rank of totalHours vs community (0–100)
+ * Formulas:
+ *   intensity   = blended percentile rank (60% current week, 30% rolling
+ *                 4-week, 10% all-time — see `BLEND_WEIGHTS`)
  *   focus       = longestSessionHours / totalHours * 100 (clamped 0–100)
  *   breadth     = uniqueGames / communityMaxUniqueGames * 100 (clamped 0–100)
  *   consistency = 100 - normalized stddev of weekly hours (clamped 0–100)
@@ -10,6 +11,8 @@
 
 export interface WeeklySnapshotInput {
   totalHours: number;
+  last4wHours: number;
+  allTimeHours: number;
   longestSessionHours: number;
   uniqueGames: number;
   /** Rolling 8-week history of totalHours (oldest first, most recent last). */
@@ -17,8 +20,12 @@ export interface WeeklySnapshotInput {
 }
 
 export interface CommunityStats {
-  /** Distribution of totalHours across the community. */
+  /** Distribution of current-week totalHours across the community. */
   totalHoursDistribution: number[];
+  /** Distribution of rolling 4-week hours across the community. */
+  last4wHoursDistribution: number[];
+  /** Distribution of all-time hours across the community. */
+  allTimeHoursDistribution: number[];
   /** Max uniqueGames value across the community. */
   maxUniqueGames: number;
 }
@@ -29,6 +36,13 @@ export interface IntensityMetricsResult {
   breadth: number;
   consistency: number;
 }
+
+/** Blend weights for the intensity percentile (must sum to 1.0). */
+export const BLEND_WEIGHTS = {
+  week: 0.6,
+  last4w: 0.3,
+  allTime: 0.1,
+} as const;
 
 function clamp(value: number, min = 0, max = 100): number {
   if (!Number.isFinite(value)) return min;
@@ -65,14 +79,38 @@ function consistencyScore(weeklyHistory: number[]): number {
   return clamp(100 * (1 - coefOfVariation));
 }
 
+/**
+ * Blend the three percentile ranks into a single intensity score.
+ * Returns a 0–100 number (not yet rounded/clamped).
+ */
+function blendedIntensity(
+  snap: WeeklySnapshotInput,
+  community: CommunityStats,
+): number {
+  const weekPct = percentileRank(
+    snap.totalHours,
+    community.totalHoursDistribution,
+  );
+  const last4wPct = percentileRank(
+    snap.last4wHours,
+    community.last4wHoursDistribution,
+  );
+  const allTimePct = percentileRank(
+    snap.allTimeHours,
+    community.allTimeHoursDistribution,
+  );
+  return (
+    weekPct * BLEND_WEIGHTS.week +
+    last4wPct * BLEND_WEIGHTS.last4w +
+    allTimePct * BLEND_WEIGHTS.allTime
+  );
+}
+
 export function computeIntensityMetrics(
   snap: WeeklySnapshotInput,
   community: CommunityStats,
 ): IntensityMetricsResult {
-  const intensityRaw = percentileRank(
-    snap.totalHours,
-    community.totalHoursDistribution,
-  );
+  const intensityRaw = blendedIntensity(snap, community);
   const focusRaw =
     snap.totalHours > 0
       ? (snap.longestSessionHours / snap.totalHours) * 100

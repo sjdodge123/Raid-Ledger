@@ -10,13 +10,13 @@ import {
 } from './taste-vector.helpers';
 
 describe('signalWeight (ROK-948 AC 11)', () => {
-  it('returns 0.1 for ownership with no playtime', () => {
+  it('returns 0.02 for bare ownership with no playtime (library-tail weak signal)', () => {
     expect(
       signalWeight({
         gameId: 1,
         steamOwnership: { playtimeForever: 0, playtime2weeks: 0 },
       }),
-    ).toBeCloseTo(0.1);
+    ).toBeCloseTo(0.02);
   });
 
   it('returns 1.0 for ownership with >3000 min lifetime playtime', () => {
