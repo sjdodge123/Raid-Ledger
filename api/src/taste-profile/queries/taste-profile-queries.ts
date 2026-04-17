@@ -4,7 +4,9 @@ import * as schema from '../../drizzle/schema';
 import type {
   TasteProfileArchetype,
   TasteProfileDimensionsDto,
+  TasteProfilePoolAxis,
 } from '@raid-ledger/contract';
+import { TASTE_PROFILE_AXIS_POOL } from '@raid-ledger/contract';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -155,13 +157,7 @@ async function topCoPlayPartners(
 }
 
 function zeroedDimensions(): TasteProfileDimensionsDto {
-  return {
-    co_op: 0,
-    pvp: 0,
-    rpg: 0,
-    survival: 0,
-    strategy: 0,
-    social: 0,
-    mmo: 0,
-  };
+  const dims = {} as Record<TasteProfilePoolAxis, number>;
+  for (const axis of TASTE_PROFILE_AXIS_POOL) dims[axis] = 0;
+  return dims as TasteProfileDimensionsDto;
 }

@@ -7,30 +7,26 @@ import {
     PolarRadiusAxis,
     ResponsiveContainer,
 } from "recharts";
-import {
-    TASTE_PROFILE_AXES,
-    type TasteProfileArchetype,
-    type TasteProfileDimensionsDto,
+import type {
+    TasteProfileArchetype,
+    TasteProfileDimensionsDto,
 } from "@raid-ledger/contract";
 import { ArchetypePill } from "./ArchetypePill";
-import { axisLabel } from "./taste-profile-helpers";
+import { axisLabel, topAxes, type AxisScore } from "./taste-profile-helpers";
 
 interface TasteRadarChartProps {
     archetype: TasteProfileArchetype;
     dimensions: TasteProfileDimensionsDto;
 }
 
-/**
- * Build the aria-label that summarises the whole chart for screen
- * readers — AC7: "aria-label includes archetype + each axis + value".
- */
+/** Build the aria-label summary for screen readers (AC7). */
 function buildAriaLabel(
     archetype: TasteProfileArchetype,
-    dims: TasteProfileDimensionsDto,
+    scores: AxisScore[],
 ): string {
-    const parts = TASTE_PROFILE_AXES.map(
-        (axis) => `${axisLabel(axis)} ${dims[axis]}`,
-    ).join(", ");
+    const parts = scores
+        .map((s) => `${axisLabel(s.axis)} ${s.value}`)
+        .join(", ");
     return `Taste profile for ${archetype}: ${parts}.`;
 }
 
@@ -75,16 +71,20 @@ function RadarBody({
  * 7-axis radar chart with radial red→yellow→green fill and an archetype
  * hero title above. Chart height is driven by CSS (300px desktop, 240px
  * mobile) via `.taste-radar__chart-wrap`.
+ *
+ * Each player sees their personal top 7 axes selected from the full pool,
+ * so the radar reflects what they actually play (ROK-949 dynamic axes).
  */
 export function TasteRadarChart({
     archetype,
     dimensions,
 }: TasteRadarChartProps): JSX.Element {
-    const data = TASTE_PROFILE_AXES.map((axis) => ({
-        axis: axisLabel(axis),
-        value: dimensions[axis],
+    const scores = topAxes(dimensions, 7);
+    const data = scores.map((s) => ({
+        axis: axisLabel(s.axis),
+        value: s.value,
     }));
-    const ariaLabel = buildAriaLabel(archetype, dimensions);
+    const ariaLabel = buildAriaLabel(archetype, scores);
     return (
         <div className="taste-radar">
             <div className="taste-radar__title">

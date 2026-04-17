@@ -4,24 +4,26 @@ import {
     axisLabel,
     formatFocusIndicator,
     formatIntensity,
+    topAxes,
 } from "./taste-profile-helpers";
-import type { TasteProfileResponseDto } from "@raid-ledger/contract";
+import {
+    TASTE_PROFILE_AXIS_POOL,
+    type TasteProfileResponseDto,
+} from "@raid-ledger/contract";
+
+function zeroPool(): TasteProfileResponseDto["dimensions"] {
+    const dims: Record<string, number> = {};
+    for (const axis of TASTE_PROFILE_AXIS_POOL) dims[axis] = 0;
+    return dims as TasteProfileResponseDto["dimensions"];
+}
 
 function makeProfile(
-    overrides?: Partial<TasteProfileResponseDto["dimensions"]>,
+    overrides?: Partial<Record<string, number>>,
 ): TasteProfileResponseDto {
+    const dims = { ...zeroPool(), ...overrides } as Record<string, number>;
     return {
         userId: 42,
-        dimensions: {
-            co_op: 0,
-            pvp: 0,
-            rpg: 0,
-            survival: 0,
-            strategy: 0,
-            social: 0,
-            mmo: 0,
-            ...overrides,
-        },
+        dimensions: dims as TasteProfileResponseDto["dimensions"],
         intensityMetrics: {
             intensity: 0,
             focus: 0,
@@ -35,25 +37,76 @@ function makeProfile(
 }
 
 describe("isEmptyTasteProfile", () => {
-    it("returns true when every dimension is zero", () => {
+    it("returns true when every pool dimension is zero", () => {
         expect(isEmptyTasteProfile(makeProfile())).toBe(true);
     });
 
-    it("returns false when any dimension is non-zero", () => {
+    it("returns false when any pool dimension is non-zero", () => {
         expect(isEmptyTasteProfile(makeProfile({ co_op: 5 }))).toBe(false);
         expect(isEmptyTasteProfile(makeProfile({ mmo: 1 }))).toBe(false);
+        expect(isEmptyTasteProfile(makeProfile({ horror: 42 }))).toBe(false);
     });
 });
 
 describe("axisLabel", () => {
-    it("maps every axis to a human-readable label", () => {
+    it("returns a non-empty label for every pool axis", () => {
+        for (const axis of TASTE_PROFILE_AXIS_POOL) {
+            const label = axisLabel(axis);
+            expect(label).toBeTruthy();
+            expect(label.length).toBeGreaterThan(0);
+        }
+    });
+
+    it("maps core axes to their display labels", () => {
         expect(axisLabel("co_op")).toBe("Co-op");
         expect(axisLabel("pvp")).toBe("PvP");
         expect(axisLabel("rpg")).toBe("RPG");
-        expect(axisLabel("survival")).toBe("Survival");
-        expect(axisLabel("strategy")).toBe("Strategy");
-        expect(axisLabel("social")).toBe("Social");
-        expect(axisLabel("mmo")).toBe("MMO");
+        expect(axisLabel("battle_royale")).toBe("Battle Royale");
+        expect(axisLabel("sci_fi")).toBe("Sci-Fi");
+    });
+});
+
+describe("topAxes", () => {
+    it("returns the top 7 axes sorted by value descending", () => {
+        const profile = makeProfile({
+            shooter: 100,
+            pvp: 90,
+            battle_royale: 80,
+            adventure: 70,
+            co_op: 60,
+            fantasy: 55,
+            rpg: 40,
+            survival: 20,
+        });
+        const result = topAxes(profile.dimensions, 7);
+        expect(result.map((r) => r.axis)).toEqual([
+            "shooter",
+            "pvp",
+            "battle_royale",
+            "adventure",
+            "co_op",
+            "fantasy",
+            "rpg",
+        ]);
+    });
+
+    it("defaults to 7 when n is not provided", () => {
+        const profile = makeProfile({ shooter: 90, pvp: 80, co_op: 70 });
+        expect(topAxes(profile.dimensions)).toHaveLength(7);
+    });
+
+    it("returns all pool entries when n is larger than pool", () => {
+        const profile = makeProfile({ shooter: 10 });
+        expect(topAxes(profile.dimensions, 99)).toHaveLength(
+            TASTE_PROFILE_AXIS_POOL.length,
+        );
+    });
+
+    it("returns deterministic order for all-zero profiles", () => {
+        const profile = makeProfile();
+        const result = topAxes(profile.dimensions, 7);
+        expect(result).toHaveLength(7);
+        for (const entry of result) expect(entry.value).toBe(0);
     });
 });
 

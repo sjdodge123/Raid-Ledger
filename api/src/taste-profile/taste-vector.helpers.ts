@@ -1,8 +1,12 @@
 import type {
   TasteProfileAxis,
   TasteProfileDimensionsDto,
+  TasteProfilePoolAxis,
 } from '@raid-ledger/contract';
-import { TASTE_PROFILE_AXES } from '@raid-ledger/contract';
+import {
+  TASTE_PROFILE_AXES,
+  TASTE_PROFILE_AXIS_POOL,
+} from '@raid-ledger/contract';
 import {
   AXIS_MAPPINGS,
   MMO_PLAYTIME_BONUS_MIN,
@@ -59,7 +63,7 @@ export function signalWeight(signal: UserGameSignal): number {
 }
 
 export function axisMatchFactor(
-  axis: TasteProfileAxis,
+  axis: TasteProfilePoolAxis,
   game: GameMetadata,
   signal: UserGameSignal,
 ): number {
@@ -83,12 +87,19 @@ export function axisMatchFactor(
   return 0;
 }
 
+function zeroedPool(): Record<TasteProfilePoolAxis, number> {
+  const init = {} as Record<TasteProfilePoolAxis, number>;
+  for (const axis of TASTE_PROFILE_AXIS_POOL) init[axis] = 0;
+  return init;
+}
+
 /**
- * Compute the 7-axis dimensions jsonb (display scale 0–100) + the
- * normalized unit vector (length 7, for pgvector cosine queries).
+ * Compute the full-pool dimensions jsonb (display scale 0–100) + the
+ * normalized 7-element vector (for pgvector cosine queries keyed by
+ * `TASTE_PROFILE_AXES`).
  *
- * Self-normalized per-user: the user's strongest axis maps to 100, so
- * new users and heavy users both produce comparable radar shapes. Community
+ * Self-normalized per-user: the user's strongest pool axis maps to 100,
+ * so new users and heavy users produce comparable radar shapes. Community
  * normalization (percentile rank) is layered on top by the intensity
  * metrics, not the dimensions vector.
  */
@@ -96,35 +107,30 @@ export function computeTasteVector(
   signals: UserGameSignal[],
   games: Map<number, GameMetadata>,
 ): { dimensions: TasteProfileDimensionsDto; vector: number[] } {
-  const raw: Record<TasteProfileAxis, number> = {
-    co_op: 0,
-    pvp: 0,
-    rpg: 0,
-    survival: 0,
-    strategy: 0,
-    social: 0,
-    mmo: 0,
-  };
+  const raw = zeroedPool();
 
   for (const signal of signals) {
     const game = games.get(signal.gameId);
     if (!game) continue;
     const w = signalWeight(signal);
     if (w === 0) continue;
-    for (const axis of TASTE_PROFILE_AXES) {
+    for (const axis of TASTE_PROFILE_AXIS_POOL) {
       raw[axis] += w * axisMatchFactor(axis, game, signal);
     }
   }
 
-  const values = TASTE_PROFILE_AXES.map((a) => raw[a]);
+  const values = TASTE_PROFILE_AXIS_POOL.map((a) => raw[a]);
   const max = Math.max(0, ...values);
-  const dimensions = {} as Record<TasteProfileAxis, number>;
-  for (const axis of TASTE_PROFILE_AXES) {
+  const dimensions = {} as Record<TasteProfilePoolAxis, number>;
+  for (const axis of TASTE_PROFILE_AXIS_POOL) {
     dimensions[axis] = max > 0 ? Math.round((raw[axis] / max) * 100) : 0;
   }
 
-  // Vector is the raw dimensions in [0, 1] for cosine distance.
-  const vector = TASTE_PROFILE_AXES.map((axis) => dimensions[axis] / 100);
+  // Similarity vector stays 7-dim and keyed by the original core axes so
+  // the pgvector column and similar-players cosine stay stable.
+  const vector = TASTE_PROFILE_AXES.map(
+    (axis: TasteProfileAxis) => dimensions[axis] / 100,
+  );
 
   return {
     dimensions: dimensions as TasteProfileDimensionsDto,

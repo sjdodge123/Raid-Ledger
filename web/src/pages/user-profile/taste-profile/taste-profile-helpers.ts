@@ -5,41 +5,92 @@
  * any rendering or network calls.
  */
 import {
-    TASTE_PROFILE_AXES,
-    type TasteProfileAxis,
+    TASTE_PROFILE_AXIS_POOL,
+    type TasteProfilePoolAxis,
     type TasteProfileResponseDto,
 } from "@raid-ledger/contract";
 
 /**
- * Returns true when every dimension value is 0 — the signal that the
- * user has not accumulated any play history yet.
+ * Returns true when every dimension value in the pool is 0 — the signal
+ * that the user has not accumulated any play history yet.
  */
 export function isEmptyTasteProfile(
     profile: TasteProfileResponseDto,
 ): boolean {
-    return TASTE_PROFILE_AXES.every((axis) => profile.dimensions[axis] === 0);
+    const dims = profile.dimensions as Record<string, number>;
+    return TASTE_PROFILE_AXIS_POOL.every((axis) => (dims[axis] ?? 0) === 0);
+}
+
+/** Sorted `{ axis, value }` tuples — highest values first. */
+export interface AxisScore {
+    axis: TasteProfilePoolAxis;
+    value: number;
 }
 
 /**
- * Human-readable axis labels (text only — no emoji/SVG). Used both for
+ * Returns the top `n` axes for a player, sorted by score descending.
+ * Ties are broken by `TASTE_PROFILE_AXIS_POOL` order for determinism.
+ * Output length is always `min(n, pool size)`.
+ */
+export function topAxes(
+    dimensions: TasteProfileResponseDto["dimensions"],
+    n = 7,
+): AxisScore[] {
+    const dims = dimensions as Record<string, number>;
+    const scored: AxisScore[] = TASTE_PROFILE_AXIS_POOL.map((axis) => ({
+        axis,
+        value: dims[axis] ?? 0,
+    }));
+    scored.sort((a, b) => b.value - a.value);
+    return scored.slice(0, n);
+}
+
+/**
+ * Human-readable axis labels covering the full 20-axis pool. Used for
  * chart labels and for the radar chart's `aria-label`.
  */
-export function axisLabel(axis: TasteProfileAxis): string {
+export function axisLabel(axis: TasteProfilePoolAxis): string {
     switch (axis) {
         case "co_op":
             return "Co-op";
         case "pvp":
             return "PvP";
-        case "rpg":
-            return "RPG";
-        case "survival":
-            return "Survival";
-        case "strategy":
-            return "Strategy";
-        case "social":
-            return "Social";
+        case "battle_royale":
+            return "Battle Royale";
         case "mmo":
             return "MMO";
+        case "moba":
+            return "MOBA";
+        case "fighting":
+            return "Fighting";
+        case "shooter":
+            return "Shooter";
+        case "racing":
+            return "Racing";
+        case "sports":
+            return "Sports";
+        case "rpg":
+            return "RPG";
+        case "fantasy":
+            return "Fantasy";
+        case "sci_fi":
+            return "Sci-Fi";
+        case "adventure":
+            return "Adventure";
+        case "strategy":
+            return "Strategy";
+        case "rts":
+            return "RTS";
+        case "tbs":
+            return "TBS";
+        case "survival":
+            return "Survival";
+        case "sandbox":
+            return "Sandbox";
+        case "horror":
+            return "Horror";
+        case "social":
+            return "Social";
     }
 }
 
@@ -59,7 +110,7 @@ export function formatFocusIndicator(
 }
 
 /**
- * Formats the primary intensity text.  `intensity` is a 0–100 percentile
+ * Formats the primary intensity text. `intensity` is a 0–100 percentile
  * rank (see `api/src/taste-profile/intensity-rollup.helpers.ts`) so we
  * render it as `Intensity: {n}/100` rather than inventing hours.
  */
