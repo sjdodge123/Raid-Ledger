@@ -105,6 +105,38 @@ function zeroedPool(): Record<TasteProfilePoolAxis, number> {
 }
 
 /**
+ * Compute per-axis rarity weights using the inverse-document-frequency
+ * formula: `idf(axis) = ln((N + 1) / (coverage + 1)) + 1`.
+ *
+ * - Broad axes (e.g. "Adventure" — 200+ games) get a small multiplier.
+ * - Specific axes (e.g. "Automation" — ~20 games) get a large one.
+ * - Zero-coverage axes get the maximum multiplier (shouldn't dominate
+ *   anything because the raw score will still be 0 if nobody hits them).
+ *
+ * The `+ 1` terms are Laplace smoothing so the formula doesn't divide
+ * by zero and stays bounded on a small library.
+ */
+export function computeAxisIdf(
+  games: Map<number, GameMetadata>,
+): Record<TasteProfilePoolAxis, number> {
+  const idf = {} as Record<TasteProfilePoolAxis, number>;
+  const n = games.size;
+  const coverage = {} as Record<TasteProfilePoolAxis, number>;
+  for (const axis of TASTE_PROFILE_AXIS_POOL) coverage[axis] = 0;
+
+  const emptySignal: UserGameSignal = { gameId: 0 };
+  for (const game of games.values()) {
+    for (const axis of TASTE_PROFILE_AXIS_POOL) {
+      if (axisMatchFactor(axis, game, emptySignal) > 0) coverage[axis] += 1;
+    }
+  }
+  for (const axis of TASTE_PROFILE_AXIS_POOL) {
+    idf[axis] = Math.log((n + 1) / (coverage[axis] + 1)) + 1;
+  }
+  return idf;
+}
+
+/**
  * Compute the full-pool dimensions jsonb (display scale 0–100) + the
  * normalized 7-element vector (for pgvector cosine queries keyed by
  * `TASTE_PROFILE_AXES`).
@@ -117,6 +149,7 @@ function zeroedPool(): Record<TasteProfilePoolAxis, number> {
 export function computeTasteVector(
   signals: UserGameSignal[],
   games: Map<number, GameMetadata>,
+  axisIdf?: Record<TasteProfilePoolAxis, number>,
 ): { dimensions: TasteProfileDimensionsDto; vector: number[] } {
   const raw = zeroedPool();
 
@@ -127,6 +160,14 @@ export function computeTasteVector(
     if (w === 0) continue;
     for (const axis of TASTE_PROFILE_AXIS_POOL) {
       raw[axis] += w * axisMatchFactor(axis, game, signal);
+    }
+  }
+
+  // Apply rarity (IDF) weighting so specific axes aren't swamped by
+  // broad ones that match a huge chunk of the library.
+  if (axisIdf) {
+    for (const axis of TASTE_PROFILE_AXIS_POOL) {
+      raw[axis] *= axisIdf[axis];
     }
   }
 

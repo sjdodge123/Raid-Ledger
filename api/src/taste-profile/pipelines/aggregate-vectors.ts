@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
+  computeAxisIdf,
   computeTasteVector,
   type GameMetadata,
   type UserGameSignal,
@@ -15,6 +16,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 export async function runAggregateVectors(db: Db): Promise<void> {
   const users = await db.select({ id: schema.users.id }).from(schema.users);
   const gameMap = await loadGameMetadata(db);
+  const axisIdf = computeAxisIdf(gameMap);
 
   for (const { id: userId } of users) {
     const signals = await loadUserSignals(db, userId);
@@ -28,7 +30,7 @@ export async function runAggregateVectors(db: Db): Promise<void> {
       .limit(1);
     if (existing.length > 0 && existing[0].signalHash === signalHash) continue;
 
-    const { dimensions, vector } = computeTasteVector(signals, gameMap);
+    const { dimensions, vector } = computeTasteVector(signals, gameMap, axisIdf);
     const intensityMetrics = existing[0]?.intensityMetrics ?? {
       intensity: 0,
       focus: 0,
