@@ -45,6 +45,7 @@ function makeMockDedupService() {
 function makeMockBotClient() {
   return {
     sendEmbed: jest.fn().mockResolvedValue({ id: 'msg-1' }),
+    editEmbed: jest.fn().mockResolvedValue({ id: 'msg-1' }),
     isConnected: jest.fn().mockReturnValue(true),
   };
 }
@@ -196,7 +197,7 @@ describe('LineupNotificationService', () => {
       mockBotClient.sendEmbed.mockResolvedValueOnce({ id: 'msg-created-42' });
       mockSettingsService.get.mockResolvedValue('chan-lineup');
 
-      await service.notifyLineupCreated(makeLineup(99));
+      await service.notifyLineupCreated(makeLineup({ id: 99 }));
 
       expect(mockDb.update).toHaveBeenCalledTimes(1);
       const setCall = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
