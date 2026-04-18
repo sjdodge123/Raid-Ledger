@@ -183,23 +183,22 @@ async function resolveRescheduleContext(
   return { discordUrl, voiceChannelId };
 }
 
-/** Sends a batch of reschedule notifications to the given users. */
+/** Sends a batch of reschedule notifications to the given users (ROK-1043). */
 async function sendRescheduleNotifications(
   notificationService: NotificationService,
   userIds: number[],
   message: string,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  await Promise.all(
-    userIds.map((uid) =>
-      notificationService.create({
-        userId: uid,
-        type: 'event_rescheduled',
-        title: 'Event Rescheduled',
-        message,
-        payload,
-      }),
-    ),
+  if (userIds.length === 0) return;
+  await notificationService.createMany(
+    userIds.map((uid) => ({
+      userId: uid,
+      type: 'event_rescheduled',
+      title: 'Event Rescheduled',
+      message,
+      payload,
+    })),
   );
 }
 

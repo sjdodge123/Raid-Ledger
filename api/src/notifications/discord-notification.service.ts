@@ -18,6 +18,10 @@ import {
   MAX_CONSECUTIVE_FAILURES,
   type DiscordNotificationJobData,
 } from './discord-notification.constants';
+import {
+  dispatchManyDiscordNotifications,
+  type DispatchManyInput,
+} from './discord-notification-batch.helpers';
 
 /**
  * Service for dispatching Discord DM notifications (ROK-180).
@@ -73,6 +77,21 @@ export class DiscordNotificationService {
       `Enqueued Discord notification for user ${input.userId} (${input.type})`,
     );
     return true;
+  }
+
+  /**
+   * Batch-dispatch Discord notifications (ROK-1043).
+   * See discord-notification-batch.helpers.ts for implementation.
+   */
+  async dispatchMany(inputs: DispatchManyInput[]): Promise<number> {
+    return dispatchManyDiscordNotifications(
+      this.db,
+      this.queue,
+      this.redis,
+      this.logger,
+      this.clientService.isConnected(),
+      inputs,
+    );
   }
 
   /** Resolve user's Discord ID, returning null if not linked. */

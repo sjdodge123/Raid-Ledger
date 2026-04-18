@@ -11,10 +11,7 @@ import { eq, and, isNull, desc, lt, not, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import type {
-  ChannelPrefs,
-  NotificationType,
-} from '../drizzle/schema/notification-preferences';
+import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { DiscordNotificationService } from './discord-notification.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -22,6 +19,11 @@ import {
   mapNotificationToDto,
   mapPreferencesToDto,
 } from './notification-mapping.helpers';
+import { createManyNotifications } from './notification-batch.helpers';
+import {
+  mergePreferences,
+  detectDiscordEnabled,
+} from './notification-prefs.helpers';
 import type {
   CreateNotificationInput,
   NotificationDto,
@@ -87,6 +89,16 @@ export class NotificationService {
     );
     this.dispatchDiscord(input, created.id);
     return mapNotificationToDto(created);
+  }
+
+  /** Create notifications for many users in a single batch (ROK-1043). */
+  createMany(inputs: CreateNotificationInput[]): Promise<NotificationDto[]> {
+    return createManyNotifications(
+      this.db,
+      this.logger,
+      this.discordNotificationService,
+      inputs,
+    );
   }
 
   /** Get unread notifications for a user. */
@@ -192,8 +204,8 @@ export class NotificationService {
     input: UpdatePreferencesInput,
   ): Promise<NotificationPreferencesDto> {
     const current = await this.getPreferences(userId);
-    const merged = this.mergePreferences(current.channelPrefs, input);
-    const discordJustEnabled = this.detectDiscordEnabled(
+    const merged = mergePreferences(current.channelPrefs, input);
+    const discordJustEnabled = detectDiscordEnabled(
       current.channelPrefs,
       merged,
     );
@@ -314,31 +326,5 @@ export class NotificationService {
           `Failed to dispatch Discord notification: ${err instanceof Error ? err.message : 'Unknown error'}`,
         );
       });
-  }
-
-  /** Deep-merge incoming partial preferences with current. */
-  private mergePreferences(
-    current: ChannelPrefs,
-    input: UpdatePreferencesInput,
-  ): ChannelPrefs {
-    const merged: ChannelPrefs = { ...current };
-    for (const [type, channels] of Object.entries(input.channelPrefs)) {
-      const notifType = type as NotificationType;
-      if (merged[notifType] && channels)
-        merged[notifType] = { ...merged[notifType], ...channels };
-    }
-    return merged;
-  }
-
-  /** Detect if Discord was just enabled for the first time. */
-  private detectDiscordEnabled(
-    previous: ChannelPrefs,
-    merged: ChannelPrefs,
-  ): boolean {
-    const wasEnabled = Object.values(previous).some(
-      (ch) => ch.discord === true,
-    );
-    const nowEnabled = Object.values(merged).some((ch) => ch.discord === true);
-    return !wasEnabled && nowEnabled;
   }
 }
