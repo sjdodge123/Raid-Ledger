@@ -7,6 +7,7 @@ import {
   smallint,
   unique,
   jsonb,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { games } from './games';
@@ -22,6 +23,10 @@ export type LineupStatus = 'building' | 'voting' | 'decided' | 'archived';
  */
 export const communityLineups = pgTable('community_lineups', {
   id: serial('id').primaryKey(),
+  /** Operator-authored title shown everywhere the lineup appears (ROK-1063). */
+  title: varchar('title', { length: 100 }).notNull(),
+  /** Optional operator-authored markdown description (ROK-1063). */
+  description: text('description'),
   status: text('status', {
     enum: ['building', 'voting', 'decided', 'archived'],
   })

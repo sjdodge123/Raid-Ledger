@@ -20,6 +20,10 @@ export interface EmbedContext {
   lineupId: number;
   communityName: string;
   phase: LineupPhase;
+  /** Operator-authored lineup title (ROK-1063). Falls back to default when missing. */
+  lineupTitle?: string;
+  /** Operator-authored markdown description (ROK-1063). */
+  lineupDescription?: string | null;
 }
 
 /** Nomination entry for milestone embeds. */
@@ -80,6 +84,20 @@ function phaseBreadcrumb(current: LineupPhase): string {
   }).join('  \u203A  ');
 }
 
+/**
+ * Resolve the embed title: prepend the operator-authored lineup title to the
+ * phase headline when present, otherwise fall back to the legacy default
+ * ("Community Lineup — <headline>") (ROK-1063).
+ */
+function resolveEmbedTitle(
+  ctx: EmbedContext,
+  emoji: string,
+  headline: string,
+): string {
+  const base = ctx.lineupTitle?.trim() || 'Community Lineup';
+  return `${emoji} ${base} — ${headline}`;
+}
+
 /** Apply shared author + phase breadcrumb + footer to an embed. */
 function applyChrome(embed: EmbedBuilder, ctx: EmbedContext, label: string) {
   embed
@@ -105,11 +123,13 @@ export function buildCreatedEmbed(
   const deadline = targetDate
     ? `\n\n\u{1F4C5} **Target play date:** ${discordTs(targetDate)}`
     : '';
+  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
 
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F3B2} Community Lineup — Nominations Open!')
+    .setTitle(resolveEmbedTitle(ctx, '\u{1F3B2}', 'Nominations Open!'))
     .setDescription(
-      'A new **Community Lineup** has started! Suggest games now; voting ' +
+      descIntro +
+        'A new **Community Lineup** has started! Suggest games now; voting ' +
         'opens automatically once nominations close. Phases advance on ' +
         'their own as each deadline passes:' +
         '\n\n' +
@@ -173,10 +193,12 @@ export function buildVotingOpenEmbed(
     ? `\n\n\u23F0 **Voting closes:** ${discordTs(deadline)}`
     : '';
 
+  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F5F3}\u{FE0F} Vote on the Community Lineup!')
+    .setTitle(resolveEmbedTitle(ctx, '\u{1F5F3}\u{FE0F}', 'Voting Open!'))
     .setDescription(
-      'Nominations are closed — voting is now open. Pick the games you ' +
+      descIntro +
+        'Nominations are closed — voting is now open. Pick the games you ' +
         'most want to play; each member gets a limited number of votes, ' +
         'so choose wisely.' +
         deadlineStr,
@@ -208,10 +230,12 @@ export function buildDecidedEmbed(
   const scheduling = matches.filter((m) => m.thresholdMet);
   const rally = matches.filter((m) => !m.thresholdMet);
 
+  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F3AF} Community Lineup — Results Are In!')
+    .setTitle(resolveEmbedTitle(ctx, '\u{1F3AF}', 'Results Are In!'))
     .setDescription(
-      'Voting is closed. Games that hit the vote threshold are ' +
+      descIntro +
+        'Voting is closed. Games that hit the vote threshold are ' +
         '**ready to schedule** — pick a time and play. Games still short ' +
         'on votes can rally more players and join the schedule.',
     )
@@ -345,11 +369,13 @@ export function buildTiebreakerStartedEmbed(
     ? `\n\n\u23F0 **Closes** ${discordTs(deadline)}`
     : '';
   const cta = mode === 'veto' ? 'Cast Your Vetoes' : 'Vote in Bracket';
+  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
 
   const embed = new EmbedBuilder()
-    .setTitle('\u2694\u{FE0F} Tiebreaker Round Started')
+    .setTitle(resolveEmbedTitle(ctx, '\u2694\u{FE0F}', 'Tiebreaker Round Started'))
     .setDescription(
-      `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +
+      descIntro +
+        `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +
         deadlineStr,
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);

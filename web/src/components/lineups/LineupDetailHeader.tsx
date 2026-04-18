@@ -8,6 +8,8 @@ import { PhaseCountdown } from './phase-countdown';
 import { PHASES, PHASE_LABELS } from './lineup-phases';
 import { toast } from '../../lib/toast';
 import { UnlinkedSteamCount } from './UnlinkedSteamCount';
+import { MarkdownText } from '../ui/markdown-text';
+import { EditLineupMetadataModal } from './edit-lineup-metadata-modal';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -149,13 +151,36 @@ function PhaseContextInfo({ lineup }: { lineup: LineupDetailResponseDto }): JSX.
   return null;
 }
 
+function EditButton({ onClick }: { onClick: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-xs text-muted hover:text-foreground px-2 py-1 rounded border border-edge/50 hover:bg-overlay/50 transition-colors"
+      aria-label="Edit lineup metadata"
+    >
+      Edit
+    </button>
+  );
+}
+
+function useCanEdit(lineup: LineupDetailResponseDto): boolean {
+  const { user } = useAuth();
+  if (lineup.status === 'archived') return false;
+  if (!user) return false;
+  if (isOperatorOrAdmin(user)) return true;
+  return user.id === lineup.createdBy.id;
+}
+
 export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JSX.Element {
   const navigate = useNavigate();
+  const [editOpen, setEditOpen] = useState(false);
+  const canEdit = useCanEdit(lineup);
 
   return (
     <div className="border-b border-edge pb-4 mb-4 w-full">
       <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate(-1)}
             className="text-muted hover:text-foreground transition"
@@ -165,14 +190,22 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-lg font-display font-bold tracking-wide">Community Lineup</h1>
+          <h1 className="text-lg font-display font-bold tracking-wide truncate" title={lineup.title}>
+            {lineup.title}
+          </h1>
           <LineupStatusBadge status={lineup.status} />
+          {canEdit && <EditButton onClick={() => setEditOpen(true)} />}
         </div>
         <div className="flex items-center gap-2">
           <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
           <PhaseCircle status={lineup.status} />
         </div>
       </div>
+      {lineup.description && (
+        <div className="ml-8 mb-2">
+          <MarkdownText text={lineup.description} />
+        </div>
+      )}
       <div className="flex items-center justify-between ml-8">
         <div className="flex items-center gap-2 flex-wrap text-sm">
           <span className="text-muted">Started by {lineup.createdBy.displayName}</span>
@@ -183,6 +216,14 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
           <PhaseCountdown phaseDeadline={lineup.phaseDeadline} phaseStartedAt={lineup.updatedAt} status={lineup.status} compact />
         )}
       </div>
+      {editOpen && (
+        <EditLineupMetadataModal
+          lineupId={lineup.id}
+          initialTitle={lineup.title}
+          initialDescription={lineup.description}
+          onClose={() => setEditOpen(false)}
+        />
+      )}
     </div>
   );
 }

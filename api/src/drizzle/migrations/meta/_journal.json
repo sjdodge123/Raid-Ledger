@@ -855,6 +855,13 @@
       "when": 1775949515716,
       "tag": "0121_player_taste_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1776486584799,
+      "tag": "0122_lineup_title_description",
+      "breakpoints": true
     }
   ]
 }

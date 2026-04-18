@@ -58,7 +58,7 @@ function describeCommonGround() {
     const res = await testApp.request
       .post('/lineups')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
+      .send({ title: 'Common Ground Test' });
     if (res.status !== 201) {
       throw new Error(
         `createBuildingLineup failed: ${res.status} ${JSON.stringify(res.body)}`,

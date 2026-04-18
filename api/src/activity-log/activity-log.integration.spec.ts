@@ -49,7 +49,7 @@ function describeActivityLog() {
       const createRes = await testApp.request
         .post('/lineups')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({});
+        .send({ title: 'Activity Log Test' });
 
       const lineupId = createRes.body.id as number;
       const res = await testApp.request
@@ -74,7 +74,7 @@ function describeActivityLog() {
       const createRes = await testApp.request
         .post('/lineups')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({});
+        .send({ title: 'Activity Log Test' });
       const lineupId = createRes.body.id as number;
 
       await testApp.request
@@ -104,7 +104,7 @@ function describeActivityLog() {
       const createRes = await testApp.request
         .post('/lineups')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({});
+        .send({ title: 'Activity Log Test' });
       const lineupId = createRes.body.id as number;
 
       await testApp.request
@@ -124,7 +124,7 @@ function describeActivityLog() {
       const createRes = await testApp.request
         .post('/lineups')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({});
+        .send({ title: 'Activity Log Test' });
       const lineupId = createRes.body.id as number;
 
       await testApp.request

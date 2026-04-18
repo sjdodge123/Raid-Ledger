@@ -62,7 +62,7 @@ function describeVoting() {
     return testApp.request
       .post('/lineups')
       .set('Authorization', `Bearer ${token}`)
-      .send(extra);
+      .send({ title: 'Voting Test', ...extra });
   }
 
   async function addEntry(lineupId: number, gameId: number, userId: number) {

@@ -132,6 +132,7 @@ export function LineupDetailPage(): JSX.Element {
       {showPrompt && (
         <TiebreakerPromptModal
           lineupId={lineup.id}
+          lineupTitle={lineup.title}
           tiebreaker={tiebreaker ?? null}
           onClose={() => { setPromptDismissed(true); setTiebreakerPromptOpen(false); }}
         />

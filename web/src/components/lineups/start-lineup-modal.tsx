@@ -1,5 +1,6 @@
 /**
- * Start Lineup modal with configurable duration fields (ROK-946).
+ * Start Lineup modal with configurable duration fields (ROK-946)
+ * and per-lineup title + description (ROK-1063).
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +13,14 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
+
+function defaultTitle(): string {
+  const now = new Date();
+  const month = now.toLocaleString('en-US', { month: 'long' });
+  return `Lineup — ${month} ${now.getFullYear()}`;
+}
+
+const DESCRIPTION_MAX = 500;
 
 function useDurationState() {
   const { lineupDefaults } = useLineupSettings();
@@ -133,14 +142,106 @@ function ThresholdSlider({ value, onChange }: {
   );
 }
 
+function TitleField({ value, onChange }: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label htmlFor="lineup-title" className="block text-sm font-medium text-secondary mb-1">
+        Title <span className="text-rose-400">*</span>
+      </label>
+      <input
+        id="lineup-title"
+        type="text"
+        required
+        maxLength={100}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Lineup — April 2026"
+        className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+      />
+    </div>
+  );
+}
+
+function DescriptionField({ value, onChange }: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label htmlFor="lineup-description" className="block text-sm font-medium text-secondary">
+          Description
+        </label>
+        <span className="text-xs text-muted tabular-nums">
+          {value.length} / {DESCRIPTION_MAX}
+        </span>
+      </div>
+      <textarea
+        id="lineup-description"
+        rows={3}
+        maxLength={DESCRIPTION_MAX}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Optional markdown — bold, italic, links, line breaks"
+        className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+      />
+    </div>
+  );
+}
+
+function TiebreakerPicker({ value, onChange }: {
+  value: 'bracket' | 'veto' | null;
+  onChange: (v: 'bracket' | 'veto' | null) => void;
+}) {
+  const opts: ReadonlyArray<readonly [('bracket' | 'veto' | null), string]> = [
+    ['bracket', 'Bracket'],
+    ['veto', 'Veto'],
+    [null, 'None'],
+  ];
+  return (
+    <div className="border-t border-edge/30 pt-4">
+      <label className="text-sm font-medium text-secondary">Tiebreaker Mode</label>
+      <p className="text-xs text-muted mb-2">Used when voting produces tied games at deadline.</p>
+      <div className="flex gap-2">
+        {opts.map(([val, label]) => (
+          <button
+            key={String(val)}
+            type="button"
+            onClick={() => onChange(val)}
+            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+              value === val
+                ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-400'
+                : 'bg-panel border-edge text-muted hover:text-foreground'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function StartLineupModal({ isOpen, onClose }: Props) {
   const navigate = useNavigate();
   const createLineup = useCreateLineup();
   const durations = useDurationState();
+  const [title, setTitle] = useState<string>(defaultTitle);
+  const [description, setDescription] = useState<string>('');
 
   async function handleSubmit() {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      toast.error('Title is required');
+      return;
+    }
     try {
       const result = await createLineup.mutateAsync({
+        title: trimmed,
+        description: description.trim() === '' ? null : description,
         buildingDurationHours: durations.building,
         votingDurationHours: durations.voting,
         matchThreshold: durations.matchThreshold,
@@ -157,6 +258,8 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Start Community Lineup">
       <div className="space-y-4">
+        <TitleField value={title} onChange={setTitle} />
+        <DescriptionField value={description} onChange={setDescription} />
         <p className="text-sm text-muted">
           Configure the duration for each phase. The lineup will automatically
           advance through phases when time expires.
@@ -185,26 +288,10 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
           value={durations.votesPerPlayer}
           onChange={durations.setVotesPerPlayer}
         />
-        <div className="border-t border-edge/30 pt-4">
-          <label className="text-sm font-medium text-secondary">Tiebreaker Mode</label>
-          <p className="text-xs text-muted mb-2">Used when voting produces tied games at deadline.</p>
-          <div className="flex gap-2">
-            {([['bracket', 'Bracket'], ['veto', 'Veto'], [null, 'None']] as const).map(([val, label]) => (
-              <button
-                key={String(val)}
-                type="button"
-                onClick={() => durations.setTiebreakerMode(val as 'bracket' | 'veto' | null)}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                  durations.tiebreakerMode === val
-                    ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-400'
-                    : 'bg-panel border-edge text-muted hover:text-foreground'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <TiebreakerPicker
+          value={durations.tiebreakerMode}
+          onChange={durations.setTiebreakerMode}
+        />
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
@@ -216,7 +303,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={createLineup.isPending}
+            disabled={createLineup.isPending || title.trim() === ''}
             className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
           >
             {createLineup.isPending ? 'Creating...' : 'Create Lineup'}

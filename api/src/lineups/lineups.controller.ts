@@ -19,6 +19,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import {
   CreateLineupSchema,
+  UpdateLineupMetadataSchema,
   UpdateLineupStatusSchema,
   CommonGroundQuerySchema,
   NominateGameSchema,
@@ -151,6 +152,26 @@ export class LineupsController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.lineupsService.transitionStatus(id, parsed.data);
+  }
+
+  /**
+   * PATCH /lineups/:id/metadata — update title/description (ROK-1063).
+   * Allowed for admin/operator or the original creator.
+   */
+  @Patch(':id/metadata')
+  async updateMetadata(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<LineupDetailResponseDto> {
+    const parsed = UpdateLineupMetadataSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.lineupsService.updateMetadata(id, parsed.data, {
+      id: req.user.id,
+      role: req.user.role,
+    });
   }
 
   /** GET /lineups/:id/matches — grouped matches for decided view (ROK-937). */

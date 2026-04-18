@@ -67,6 +67,10 @@ export async function removeNomination(lineupId: number, gameId: number): Promis
 
 /** Parameters for creating a lineup. */
 export interface CreateLineupParams {
+  /** Operator-authored title (required, 1-100 chars, ROK-1063). */
+  title: string;
+  /** Optional markdown description (<=500 chars, ROK-1063). */
+  description?: string | null;
   targetDate?: string | null;
   buildingDurationHours?: number;
   votingDurationHours?: number;
@@ -78,11 +82,28 @@ export interface CreateLineupParams {
 
 /** Create a new lineup with optional duration params. */
 export async function createLineup(
-  params: CreateLineupParams = {},
+  params: CreateLineupParams,
 ): Promise<LineupDetailResponseDto> {
   return fetchApi('/lineups', {
     method: 'POST',
     body: JSON.stringify(params),
+  });
+}
+
+/** Parameters for updating lineup metadata (ROK-1063). */
+export interface UpdateLineupMetadataParams {
+  title?: string;
+  description?: string | null;
+}
+
+/** Update a lineup's title and/or description (ROK-1063). */
+export async function updateLineupMetadata(
+  lineupId: number,
+  body: UpdateLineupMetadataParams,
+): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${lineupId}/metadata`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
   });
 }
 

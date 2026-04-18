@@ -43,7 +43,7 @@ function describePhaseScheduling() {
     return testApp.request
       .post('/lineups')
       .set('Authorization', `Bearer ${token}`)
-      .send(durations);
+      .send({ title: 'Phase Scheduling Test', ...durations });
   }
 
   // ── POST /lineups with duration params ──────────────────────
@@ -76,7 +76,7 @@ function describePhaseScheduling() {
       const res = await testApp.request
         .post('/lineups')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({});
+        .send({ title: 'Phase Scheduling Default' });
 
       expect(res.status).toBe(201);
       // Without explicit durations, admin defaults (48h building) are applied

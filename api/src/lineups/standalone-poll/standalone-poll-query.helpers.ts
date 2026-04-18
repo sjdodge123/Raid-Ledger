@@ -61,6 +61,10 @@ export async function insertDecidedLineup(
   const [row] = await db
     .insert(schema.communityLineups)
     .values({
+      // Synthetic title — this lineup row is only a storage vehicle for a
+      // standalone scheduling poll and is hidden from lineup queries by
+      // `phaseDurationOverride.standalone`. Not surfaced in any UI.
+      title: 'Standalone Scheduling Poll',
       status: 'decided',
       createdBy: userId,
       linkedEventId: linkedEventId ?? null,

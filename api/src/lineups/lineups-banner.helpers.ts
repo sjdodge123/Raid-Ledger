@@ -33,6 +33,8 @@ interface BannerEntry {
 /** Lineup shape used by buildBannerResponse. */
 interface BannerLineup {
   id: number;
+  title: string;
+  description: string | null;
   status: string;
   targetDate: Date | null;
   phaseDeadline?: Date | null;
@@ -114,6 +116,8 @@ export function buildBannerResponse(
 
   return {
     id: lineup.id,
+    title: lineup.title,
+    description: lineup.description ?? null,
     status: lineup.status as LineupBannerResponseDto['status'],
     targetDate: lineup.targetDate?.toISOString?.() ?? null,
     phaseDeadline: lineup.phaseDeadline?.toISOString?.() ?? null,

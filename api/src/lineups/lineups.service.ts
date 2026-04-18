@@ -15,6 +15,7 @@ import type {
   LineupBannerResponseDto,
   LineupDetailResponseDto,
   NominateGameDto,
+  UpdateLineupMetadataDto,
   UpdateLineupStatusDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -66,6 +67,7 @@ import {
   advanceMatch as advanceMatchHelper,
 } from './lineups-bandwagon.helpers';
 import { carryOverFromLastDecided } from './lineups-carryover.helpers';
+import { authorizeAndPersistMetadata } from './lineups-metadata.helpers';
 import {
   fireLineupCreated,
   fireNominationMilestone,
@@ -119,6 +121,8 @@ export class LineupsService {
 
     fireLineupCreated(this.lineupNotifications, this.logger, {
       id: row.id,
+      title: row.title,
+      description: row.description ?? null,
       targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
     });
 
@@ -311,14 +315,7 @@ export class LineupsService {
       matchId,
       userId,
     );
-    if (result.promoted) {
-      fireSchedulingOpen(
-        this.lineupNotifications,
-        this.logger,
-        this.db,
-        matchId,
-      );
-    }
+    this.firePromoted(result.promoted, matchId);
     return result;
   }
 
@@ -328,14 +325,22 @@ export class LineupsService {
     matchId: number,
   ): Promise<{ promoted: boolean }> {
     const result = await advanceMatchHelper(this.db, lineupId, matchId);
-    if (result.promoted) {
-      fireSchedulingOpen(
-        this.lineupNotifications,
-        this.logger,
-        this.db,
-        matchId,
-      );
-    }
+    this.firePromoted(result.promoted, matchId);
     return result;
+  }
+
+  private firePromoted(promoted: boolean, matchId: number): void {
+    if (!promoted) return;
+    fireSchedulingOpen(this.lineupNotifications, this.logger, this.db, matchId);
+  }
+
+  /** Update a lineup's title and/or description (ROK-1063). */
+  async updateMetadata(
+    id: number,
+    dto: UpdateLineupMetadataDto,
+    caller: CallerIdentity,
+  ): Promise<LineupDetailResponseDto> {
+    await authorizeAndPersistMetadata(this.db, id, dto, caller);
+    return buildDetailResponse(this.db, id, caller.id);
   }
 }

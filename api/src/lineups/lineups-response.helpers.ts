@@ -82,6 +82,8 @@ function mapLineupCore(
 ) {
   return {
     id: lineup.id,
+    title: lineup.title,
+    description: lineup.description ?? null,
     status: lineup.status,
     targetDate: lineup.targetDate?.toISOString() ?? null,
     decidedGameId: lineup.decidedGameId,

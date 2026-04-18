@@ -11,9 +11,13 @@ import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
-import { resolveLineupChannel } from './lineup-notification-channel.helpers';
+import {
+  resolveLineupChannel,
+  loadLineupMeta,
+} from './lineup-notification-channel.helpers';
 import type {
   EmbedContext,
+  EmbedWithRow,
   NominationEntry,
   LineupPhase,
 } from './lineup-notification-embed.helpers';
@@ -26,12 +30,11 @@ import {
   buildEventCreatedEmbed,
 } from './lineup-notification-embed.helpers';
 import {
-  sendVotingDM,
-  sendSchedulingDM,
-  sendEventCreatedDM,
-} from './lineup-notification-dm.helpers';
+  fanOutVotingDMs,
+  fanOutSchedulingDMs,
+  fanOutEventCreatedDMs,
+} from './lineup-notification-dm-batch.helpers';
 import {
-  findDiscordLinkedMembers,
   findMatchMemberUsers,
   hasExistingPollEmbed,
 } from './lineup-notification-targets.helpers';
@@ -40,6 +43,10 @@ import { DEDUP_TTL } from './lineup-notification.constants';
 /** Shape of a lineup passed to notification methods. */
 export interface LineupInfo {
   id: number;
+  /** Operator-authored title surfaced in every embed (ROK-1063). */
+  title?: string;
+  /** Operator-authored markdown description (ROK-1063). */
+  description?: string | null;
   targetDate?: Date;
   votingDeadline?: Date;
   phaseDeadline?: Date | null;
@@ -73,28 +80,34 @@ export class LineupNotificationService {
   private async resolveCtx(
     lineupId: number,
     phase: LineupPhase,
+    overrides?: { title?: string; description?: string | null },
   ): Promise<EmbedContext> {
     const baseUrl = (await this.settingsService.getClientUrl()) ?? '';
     const community = await this.settingsService.get('community_name');
+    const meta = overrides?.title
+      ? overrides
+      : await loadLineupMeta(this.db, lineupId);
     return {
       baseUrl,
       lineupId,
       communityName: community ?? 'Raid Ledger',
       phase,
+      lineupTitle: meta.title,
+      lineupDescription: meta.description ?? null,
     };
   }
 
   /** AC-1: Post channel embed when lineup is created. */
   async notifyLineupCreated(lineup: LineupInfo): Promise<void> {
-    const key = `lineup-created:${lineup.id}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    const channelId = await resolveLineupChannel(this.settingsService);
-    if (!channelId) return;
-
-    const ctx = await this.resolveCtx(lineup.id, 'nominations');
-    const { embed, row } = buildCreatedEmbed(ctx, lineup.targetDate);
-    await this.botClient.sendEmbed(channelId, embed, row);
+    const ctx = await this.resolveCtx(lineup.id, 'nominations', {
+      title: lineup.title,
+      description: lineup.description ?? null,
+    });
+    await this.postChannelEmbed(
+      `lineup-created:${lineup.id}`,
+      () => buildCreatedEmbed(ctx, lineup.targetDate),
+      ctx,
+    );
   }
 
   /** AC-2: Post channel embed at nomination milestones (25/50/100%). */
@@ -103,15 +116,12 @@ export class LineupNotificationService {
     threshold: number,
     entries: NominationEntry[],
   ): Promise<void> {
-    const key = `lineup-milestone:${lineupId}:${threshold}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    const channelId = await resolveLineupChannel(this.settingsService);
-    if (!channelId) return;
-
     const ctx = await this.resolveCtx(lineupId, 'nominations');
-    const { embed, row } = buildMilestoneEmbed(ctx, threshold, entries);
-    await this.botClient.sendEmbed(channelId, embed, row);
+    await this.postChannelEmbed(
+      `lineup-milestone:${lineupId}:${threshold}`,
+      () => buildMilestoneEmbed(ctx, threshold, entries),
+      ctx,
+    );
   }
 
   /** AC-3: Post channel embed + DMs when voting opens. */
@@ -128,16 +138,12 @@ export class LineupNotificationService {
     lineupId: number,
     matches: MatchInfo[],
   ): Promise<void> {
-    const key = `lineup-decided:${lineupId}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    const channelId = await resolveLineupChannel(this.settingsService);
-    if (channelId) {
-      const ctx = await this.resolveCtx(lineupId, 'decided');
-      const { embed, row } = buildDecidedEmbed(ctx, matches);
-      await this.botClient.sendEmbed(channelId, embed, row);
-    }
-
+    const ctx = await this.resolveCtx(lineupId, 'decided');
+    await this.postChannelEmbed(
+      `lineup-decided:${lineupId}`,
+      () => buildDecidedEmbed(ctx, matches),
+      ctx,
+    );
     await this.sendMatchMemberDMs(lineupId, matches);
   }
 
@@ -167,21 +173,13 @@ export class LineupNotificationService {
     coPlayers: string[],
     lineupId: number,
   ): Promise<void> {
-    const key = `lineup-match-dm:${matchId}:${userId}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    const coPlayerList = coPlayers.length ? coPlayers.join(', ') : 'your group';
-    await this.notificationService.create({
+    const coList = coPlayers.length ? coPlayers.join(', ') : 'your group';
+    await this.sendDedupedDM(`lineup-match-dm:${matchId}:${userId}`, {
       userId,
       type: 'community_lineup',
       title: `You're matched for ${gameName}!`,
-      message: `You're in a match for ${gameName} with ${coPlayerList}. Schedule a time!`,
-      payload: {
-        subtype: 'lineup_match_member',
-        matchId,
-        lineupId,
-        gameName,
-      },
+      message: `You're in a match for ${gameName} with ${coList}. Schedule a time!`,
+      payload: { subtype: 'lineup_match_member', matchId, lineupId, gameName },
     });
   }
 
@@ -192,10 +190,7 @@ export class LineupNotificationService {
     gameName: string,
     lineupId: number,
   ): Promise<void> {
-    const key = `lineup-rally-dm:${matchId}:${userId}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    await this.notificationService.create({
+    await this.sendDedupedDM(`lineup-rally-dm:${matchId}:${userId}`, {
       userId,
       type: 'community_lineup',
       title: `${gameName} needs more interest!`,
@@ -209,18 +204,24 @@ export class LineupNotificationService {
     });
   }
 
+  /** Send a deduped DM via the notification service (ROK-1063 refactor). */
+  private async sendDedupedDM(
+    dedupKey: string,
+    payload: Parameters<NotificationService['create']>[0],
+  ): Promise<void> {
+    if (await this.dedupService.checkAndMarkSent(dedupKey, DEDUP_TTL)) return;
+    await this.notificationService.create(payload);
+  }
+
   /** AC-8: Post per-match channel embed + DMs when scheduling opens. */
   async notifySchedulingOpen(match: MatchInfo): Promise<void> {
     await this.postSchedulingChannelEmbed(match);
-    const members = await findMatchMemberUsers(this.db, match.id);
-    for (const m of members) {
-      await sendSchedulingDM(
-        this.notificationService,
-        this.dedupService,
-        match,
-        m,
-      );
-    }
+    await fanOutSchedulingDMs(
+      this.db,
+      this.notificationService,
+      this.dedupService,
+      match,
+    );
   }
 
   /** AC-10: Post channel embed + DMs when event is created. */
@@ -232,7 +233,14 @@ export class LineupNotificationService {
     const members = await findMatchMemberUsers(this.db, match.id);
     const names = members.map((m) => m.displayName);
     await this.postEventCreatedChannelEmbed(match, eventDate, eventId, names);
-    await this.sendEventCreatedDMs(match, eventDate, eventId, members);
+    await fanOutEventCreatedDMs(
+      this.notificationService,
+      this.dedupService,
+      match,
+      eventDate,
+      eventId,
+      members,
+    );
   }
 
   /** AC-16: DM to nominator when operator removes their nomination. */
@@ -243,21 +251,37 @@ export class LineupNotificationService {
     userId: number,
     operatorName: string,
   ): Promise<void> {
-    const key = `lineup-removed-dm:${lineupId}:${gameId}:${userId}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    await this.notificationService.create({
-      userId,
-      type: 'community_lineup',
-      title: 'Nomination removed',
-      message: `Your nomination ${gameName} was removed by ${operatorName}.`,
-      payload: {
-        subtype: 'lineup_nomination_removed',
-        lineupId,
-        gameId,
-        gameName,
+    await this.sendDedupedDM(
+      `lineup-removed-dm:${lineupId}:${gameId}:${userId}`,
+      {
+        userId,
+        type: 'community_lineup',
+        title: 'Nomination removed',
+        message: `Your nomination ${gameName} was removed by ${operatorName}.`,
+        payload: {
+          subtype: 'lineup_nomination_removed',
+          lineupId,
+          gameId,
+          gameName,
+        },
       },
-    });
+    );
+  }
+
+  /** Dedup + resolve channel + post an embed (ROK-1063 refactor). */
+  private async postChannelEmbed(
+    dedupKey: string,
+    build: (
+      ctx: EmbedContext,
+    ) => Promise<EmbedWithRow | null> | EmbedWithRow | null,
+    ctx: EmbedContext,
+  ): Promise<void> {
+    if (await this.dedupService.checkAndMarkSent(dedupKey, DEDUP_TTL)) return;
+    const channelId = await resolveLineupChannel(this.settingsService);
+    if (!channelId) return;
+    const result = await build(ctx);
+    if (!result) return;
+    await this.botClient.sendEmbed(channelId, result.embed, result.row);
   }
 
   /** Post the voting-open channel embed. */
@@ -265,34 +289,25 @@ export class LineupNotificationService {
     lineup: LineupInfo,
     games: { id: number; name: string }[],
   ): Promise<void> {
-    const key = `lineup-voting:${lineup.id}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    const channelId = await resolveLineupChannel(this.settingsService);
-    if (!channelId) return;
-
     const ctx = await this.resolveCtx(lineup.id, 'voting');
-    const { embed, row } = buildVotingOpenEmbed(
+    await this.postChannelEmbed(
+      `lineup-voting:${lineup.id}`,
+      () => buildVotingOpenEmbed(ctx, games, lineup.votingDeadline),
       ctx,
-      games,
-      lineup.votingDeadline,
     );
-    await this.botClient.sendEmbed(channelId, embed, row);
   }
 
   /** Post the scheduling-open channel embed for a match. */
   private async postSchedulingChannelEmbed(match: MatchInfo): Promise<void> {
-    const key = `lineup-scheduling:${match.id}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    const channelId = await resolveLineupChannel(this.settingsService);
-    if (!channelId) return;
-
-    if (await hasExistingPollEmbed(this.db, match.id)) return;
-
     const ctx = await this.resolveCtx(match.lineupId, 'decided');
-    const { embed, row } = buildSchedulingEmbed(ctx, match.gameName, match.id);
-    await this.botClient.sendEmbed(channelId, embed, row);
+    await this.postChannelEmbed(
+      `lineup-scheduling:${match.id}`,
+      async () => {
+        if (await hasExistingPollEmbed(this.db, match.id)) return null;
+        return buildSchedulingEmbed(ctx, match.gameName, match.id);
+      },
+      ctx,
+    );
   }
 
   /** Post the event-created channel embed. */
@@ -302,22 +317,20 @@ export class LineupNotificationService {
     eventId: number | undefined,
     memberNames: string[],
   ): Promise<void> {
-    const key = `lineup-event:${match.id}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    const channelId = await resolveLineupChannel(this.settingsService);
-    if (!channelId) return;
-
     const ctx = await this.resolveCtx(match.lineupId, 'decided');
-    const { embed, row } = buildEventCreatedEmbed(
+    await this.postChannelEmbed(
+      `lineup-event:${match.id}`,
+      () =>
+        buildEventCreatedEmbed(
+          ctx,
+          match.gameName,
+          match.gameId,
+          eventDate,
+          eventId,
+          memberNames,
+        ),
       ctx,
-      match.gameName,
-      match.gameId,
-      eventDate,
-      eventId,
-      memberNames,
     );
-    await this.botClient.sendEmbed(channelId, embed, row);
   }
 
   /** Send voting-open DMs to all Discord-linked members. */
@@ -325,34 +338,12 @@ export class LineupNotificationService {
     lineup: LineupInfo,
     gameCount: number,
   ): Promise<void> {
-    const members = await findDiscordLinkedMembers(this.db);
-    for (const member of members) {
-      await sendVotingDM(
-        this.notificationService,
-        this.dedupService,
-        lineup,
-        member,
-        gameCount,
-      );
-    }
-  }
-
-  /** Send event-created DMs to prefetched match members. */
-  private async sendEventCreatedDMs(
-    match: MatchInfo,
-    eventDate: Date,
-    eventId: number | undefined,
-    members: Awaited<ReturnType<typeof findMatchMemberUsers>>,
-  ): Promise<void> {
-    for (const member of members) {
-      await sendEventCreatedDM(
-        this.notificationService,
-        this.dedupService,
-        match,
-        member,
-        eventDate,
-        eventId,
-      );
-    }
+    await fanOutVotingDMs(
+      this.db,
+      this.notificationService,
+      this.dedupService,
+      lineup,
+      gameCount,
+    );
   }
 }
