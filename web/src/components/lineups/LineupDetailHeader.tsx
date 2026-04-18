@@ -182,7 +182,7 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
 
   return (
     <div className="border-b border-edge pb-4 mb-4 w-full">
-      {/* Row 1: back + title + edit (always single row, title truncates) */}
+      {/* Row 1: back + title + badge + edit + (desktop-only: breadcrumb + circle) */}
       <div className="flex items-center gap-3 min-w-0 mb-2 md:mb-1">
         <button
           onClick={() => navigate(-1)}
@@ -196,21 +196,15 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
         <h1 className="text-lg font-display font-bold tracking-wide truncate flex-1 min-w-0" title={lineup.title}>
           {lineup.title}
         </h1>
-        {/* Desktop-only inline badge + breadcrumb after title */}
+        <LineupStatusBadge status={lineup.status} />
+        {canEdit && <EditButton onClick={() => setEditOpen(true)} />}
+        {/* Desktop-only inline breadcrumb + circle after edit */}
         <div className="hidden md:flex items-center gap-3 flex-shrink-0">
-          <LineupStatusBadge status={lineup.status} />
-          {canEdit && <EditButton onClick={() => setEditOpen(true)} />}
           <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
           <PhaseCircle status={lineup.status} />
         </div>
-        {/* Mobile-only edit button on the same row as title */}
-        {canEdit && (
-          <div className="md:hidden flex-shrink-0">
-            <EditButton onClick={() => setEditOpen(true)} />
-          </div>
-        )}
       </div>
-      {/* Row 2 (mobile only): breadcrumb + circle (badge already shown as current phase in breadcrumb) */}
+      {/* Row 2 (mobile only): breadcrumb + circle */}
       <div className="md:hidden flex items-center gap-2 flex-wrap mb-2 ml-8">
         <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
         <PhaseCircle status={lineup.status} />
