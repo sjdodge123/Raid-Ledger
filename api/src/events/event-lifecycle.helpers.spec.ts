@@ -9,6 +9,7 @@ import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 function createMockNotificationService() {
   return {
     create: jest.fn().mockResolvedValue(undefined),
+    createMany: jest.fn().mockResolvedValue([]),
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
     resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
   };
@@ -118,8 +119,8 @@ describe('Regression: ROK-828', () => {
       { startTime: newStartISO, endTime: newEndISO },
     );
 
-    expect(mockNotifSvc.create).toHaveBeenCalled();
-    const call = mockNotifSvc.create.mock.calls[0][0];
+    expect(mockNotifSvc.createMany).toHaveBeenCalled();
+    const call = mockNotifSvc.createMany.mock.calls[0][0][0];
     expect(call.message).toContain('has been rescheduled to');
     expect(call.message).not.toContain('moved');
   });
@@ -134,7 +135,7 @@ describe('Regression: ROK-828', () => {
       { startTime: newStartISO, endTime: newEndISO },
     );
 
-    const call = mockNotifSvc.create.mock.calls[0][0];
+    const call = mockNotifSvc.createMany.mock.calls[0][0][0];
     // Discord native timestamp syntax <t:unix:f>
     expect(call.message).toContain(`<t:${expectedUnix}:f>`);
     // Relative timestamp <t:unix:R>
@@ -155,10 +156,37 @@ describe('Regression: ROK-828', () => {
       { startTime: newStartISO, endTime: newEndISO },
     );
 
-    const call = mockNotifSvc.create.mock.calls[0][0];
+    const call = mockNotifSvc.createMany.mock.calls[0][0][0];
     expect(call.message).toContain('Palworld Event');
     expect(call.type).toBe('event_rescheduled');
     expect(call.title).toBe('Event Rescheduled');
+  });
+
+  it('should batch all users into a single createMany call (ROK-1043)', async () => {
+    // Multi-user reschedule: expect one createMany with N entries
+    const multiEvent = createMockEvent({
+      id: eventId,
+      title: 'Palworld Event',
+      creatorId,
+    });
+    const multiSignups = [{ userId: 2 }, { userId: 3 }, { userId: 4 }];
+    const multiDb = buildRescheduleMockDb(multiEvent, multiSignups);
+    const multiNotif = createMockNotificationService();
+    await rescheduleEvent(
+      multiDb as any,
+      multiNotif as any,
+      eventId,
+      creatorId,
+      true,
+      { startTime: newStartISO, endTime: newEndISO },
+    );
+    expect(multiNotif.create).not.toHaveBeenCalled();
+    expect(multiNotif.createMany).toHaveBeenCalledTimes(1);
+    const args = multiNotif.createMany.mock.calls[0][0] as {
+      userId: number;
+    }[];
+    expect(args).toHaveLength(3);
+    expect(args.map((a) => a.userId)).toEqual([2, 3, 4]);
   });
 });
 

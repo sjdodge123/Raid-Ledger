@@ -207,6 +207,45 @@ async function testRescheduleNotifications() {
   ).toBeDefined();
 }
 
+async function testReschedulePerfBatch() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Perf Batch Raid',
+  });
+  const userCount = 12;
+  const userRows = await testApp.db
+    .insert(schema.users)
+    .values(
+      Array.from({ length: userCount }, (_, i) => ({
+        discordId: `perf-resched-${i}`,
+        username: `perf_resched_${i}`,
+        role: 'member' as const,
+      })),
+    )
+    .returning();
+  await testApp.db.insert(schema.eventSignups).values(
+    userRows.map((u) => ({
+      eventId,
+      userId: u.id,
+      status: 'signed_up' as const,
+    })),
+  );
+  const newStart = new Date(Date.now() + 72 * 60 * 60 * 1000);
+  const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
+  const t0 = performance.now();
+  const res = await testApp.request
+    .patch(`/events/${eventId}/reschedule`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+  const elapsed = performance.now() - t0;
+  expect(res.status).toBe(200);
+  expect(elapsed).toBeLessThan(200);
+  const notifs = await testApp.db
+    .select()
+    .from(schema.notifications)
+    .where(eq(schema.notifications.type, 'event_rescheduled'));
+  expect(notifs).toHaveLength(userCount);
+}
+
 async function testRescheduleResetsTentativeStatus() {
   const eventId = await createFutureEvent(testApp, adminToken, {
     title: 'Tentative Reset Raid',
@@ -438,6 +477,8 @@ describe('Events — reschedule', () => {
     testRescheduleResetsTentativeStatus());
   it('should not reset declined signups on reschedule (ROK-759)', () =>
     testRescheduleDoesNotResetDeclined());
+  it('reschedule with 12 signups completes under 200ms (ROK-1043)', () =>
+    testReschedulePerfBatch());
 });
 
 describe('Events — invite member', () => {
