@@ -99,7 +99,7 @@ async function buildDecidedLineup(opts: {
   const createRes = await testApp.request
     .post('/lineups')
     .set('Authorization', `Bearer ${opts.token}`)
-    .send({ matchThreshold: opts.matchThreshold ?? 35 });
+    .send({ title: 'Matches Test', matchThreshold: opts.matchThreshold ?? 35 });
   const lineupId = createRes.body.id as number;
 
   // Add entries for each game
@@ -421,7 +421,7 @@ function describeJoin() {
     const createRes = await testApp.request
       .post('/lineups')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
+      .send({ title: 'Matches Test' });
     const lineupId = createRes.body.id as number;
 
     const member = await loginAsMember('early-joiner');
@@ -629,7 +629,7 @@ function describeCarryover() {
     const newRes = await testApp.request
       .post('/lineups')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
+      .send({ title: 'Matches Test' });
 
     expect(newRes.status).toBe(201);
     const newLineupId = newRes.body.id as number;

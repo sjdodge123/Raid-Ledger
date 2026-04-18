@@ -24,8 +24,12 @@ export type LineupStatusDto = z.infer<typeof LineupStatusSchema>;
 // Request Schemas
 // ============================================================
 
-/** Create a new lineup. */
+/** Create a new lineup (ROK-1063: title required, description optional markdown). */
 export const CreateLineupSchema = z.object({
+    /** Operator-authored title (1-100 chars, ROK-1063). */
+    title: z.string().trim().min(1).max(100),
+    /** Optional operator-authored markdown description (<=500 chars, ROK-1063). */
+    description: z.string().max(500).nullable().optional(),
     targetDate: z.string().datetime({ offset: true }).nullable().optional(),
     /** Hours for the building phase (1-720, default from admin settings). */
     buildingDurationHours: z.number().int().min(1).max(720).optional(),
@@ -42,6 +46,23 @@ export const CreateLineupSchema = z.object({
 });
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
+
+/**
+ * Update a lineup's title and/or description (ROK-1063).
+ * Title, when provided, must be 1-100 chars (trimmed non-empty).
+ * Description may be null to clear.
+ */
+export const UpdateLineupMetadataSchema = z
+    .object({
+        title: z.string().trim().min(1).max(100).optional(),
+        description: z.string().max(500).nullable().optional(),
+    })
+    .refine(
+        (data) => data.title !== undefined || data.description !== undefined,
+        { message: 'At least one of title or description must be provided' },
+    );
+
+export type UpdateLineupMetadataDto = z.infer<typeof UpdateLineupMetadataSchema>;
 
 /** Transition a lineup to a new status with optional context fields. */
 export const UpdateLineupStatusSchema = z.object({
@@ -100,6 +121,10 @@ export type LineupEntryResponseDto = z.infer<typeof LineupEntryResponseSchema>;
 /** Full lineup detail including entries and vote tallies. */
 export const LineupDetailResponseSchema = z.object({
     id: z.number(),
+    /** Operator-authored title shown in H1 / embeds (ROK-1063). */
+    title: z.string(),
+    /** Operator-authored markdown description (ROK-1063). */
+    description: z.string().nullable(),
     status: LineupStatusSchema,
     targetDate: z.string().nullable(),
     decidedGameId: z.number().nullable(),
@@ -142,6 +167,10 @@ const LineupBannerEntrySchema = z.object({
 /** Lightweight banner data for the Games page hero. */
 export const LineupBannerResponseSchema = z.object({
     id: z.number(),
+    /** Operator-authored title (ROK-1063). */
+    title: z.string(),
+    /** Operator-authored markdown description (ROK-1063). */
+    description: z.string().nullable(),
     status: LineupStatusSchema,
     targetDate: z.string().nullable(),
     phaseDeadline: z.string().nullable(),

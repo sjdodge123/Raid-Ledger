@@ -97,7 +97,7 @@ export function CommonGroundFilters({ filters, onChange, availableTags, search, 
     );
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr', gap: 16, alignItems: 'center' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[160px_1fr_1fr_1fr] gap-3 sm:gap-4 items-center">
             <input
                 type="text"
                 value={search}

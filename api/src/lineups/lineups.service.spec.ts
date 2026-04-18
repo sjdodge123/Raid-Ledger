@@ -42,6 +42,8 @@ const NOW = new Date('2026-03-22T20:00:00Z');
 
 const mockLineup = {
   id: 1,
+  title: 'Test Lineup',
+  description: null as string | null,
   status: 'building',
   targetDate: null as Date | null,
   decidedGameId: null as number | null,
@@ -216,7 +218,7 @@ function describeLineupsService() {
       mockInsert([{ ...mockLineup, id: 1 }]);
       mockBuildDetail();
 
-      const result = await service.create({}, 10);
+      const result = await service.create({ title: 'Test Lineup' }, 10);
 
       expect(result.id).toBe(1);
       expect(result.status).toBe('building');
@@ -226,7 +228,9 @@ function describeLineupsService() {
     it('should throw ConflictException when active lineup exists', async () => {
       mockSelects(makeSelectChain({ limitResult: [{ id: 99 }] }));
 
-      await expect(service.create({}, 10)).rejects.toThrow(ConflictException);
+      await expect(
+        service.create({ title: 'Test Lineup' }, 10),
+      ).rejects.toThrow(ConflictException);
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
@@ -236,7 +240,10 @@ function describeLineupsService() {
       mockInsert([{ ...mockLineup, targetDate: new Date(targetDate) }]);
       mockBuildDetail({ ...mockLineup, targetDate: new Date(targetDate) });
 
-      const result = await service.create({ targetDate }, 10);
+      const result = await service.create(
+        { title: 'Test Lineup', targetDate },
+        10,
+      );
 
       expect(result.targetDate).toBe(new Date(targetDate).toISOString());
     });

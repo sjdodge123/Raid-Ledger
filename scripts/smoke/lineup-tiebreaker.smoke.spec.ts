@@ -117,6 +117,7 @@ async function createVotingLineupWithTiebreaker(
     const gameIds = await fetchGameIds(token, 4);
 
     const createRes = (await apiPost(token, '/lineups', {
+        title: 'Smoke Lineup',
         buildingDurationHours: 720,
         votingDurationHours: 720,
         decidedDurationHours: 720,
@@ -176,6 +177,7 @@ test.describe('Tiebreaker prompt modal', () => {
         gameIds = await fetchGameIds(adminToken, 4);
 
         const createRes = (await apiPost(adminToken, '/lineups', {
+            title: 'Smoke Lineup',
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,

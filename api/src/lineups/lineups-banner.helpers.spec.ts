@@ -9,6 +9,8 @@ const NOW = new Date('2026-03-22T20:00:00Z');
 
 const mockLineup = {
   id: 1,
+  title: 'Test Lineup',
+  description: null as string | null,
   status: 'building' as const,
   targetDate: NOW,
   decidedGameId: null as number | null,

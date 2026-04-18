@@ -75,7 +75,7 @@ function describeLineups() {
     return testApp.request
       .post('/lineups')
       .set('Authorization', `Bearer ${token}`)
-      .send({});
+      .send({ title: 'Lineup Test' });
   }
 
   async function addEntry(lineupId: number, gameId: number, userId: number) {
@@ -105,7 +105,10 @@ function describeLineups() {
       const res = await testApp.request
         .post('/lineups')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ targetDate: '2026-04-15T00:00:00Z' });
+        .send({
+          title: 'Target Date Test',
+          targetDate: '2026-04-15T00:00:00Z',
+        });
 
       expect(res.status).toBe(201);
       expect(res.body.targetDate).toBeTruthy();

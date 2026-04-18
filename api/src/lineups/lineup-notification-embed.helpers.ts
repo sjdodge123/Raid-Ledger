@@ -10,6 +10,12 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import {
+  discordTs,
+  ctaButton,
+  resolveEmbedTitle,
+  applyChrome,
+} from './lineup-notification-embed-chrome.helpers';
 
 /** Lineup phase for breadcrumb rendering. */
 export type LineupPhase = 'nominations' | 'voting' | 'decided';
@@ -20,6 +26,10 @@ export interface EmbedContext {
   lineupId: number;
   communityName: string;
   phase: LineupPhase;
+  /** Operator-authored lineup title (ROK-1063). Falls back to default when missing. */
+  lineupTitle?: string;
+  /** Operator-authored markdown description (ROK-1063). */
+  lineupDescription?: string | null;
 }
 
 /** Nomination entry for milestone embeds. */
@@ -46,55 +56,6 @@ export interface EmbedWithRow {
   row: ActionRowBuilder<ButtonBuilder>;
 }
 
-/** Convert a Date to Discord relative timestamp: `<t:UNIX:R>`. */
-function discordTs(date: Date, style: 'R' | 'f' | 'F' = 'R'): string {
-  return `<t:${Math.floor(date.getTime() / 1000)}:${style}>`;
-}
-
-/** Build a link button pointing at the lineup page with a custom label. */
-function ctaButton(
-  ctx: EmbedContext,
-  label: string,
-): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setLabel(label)
-      .setStyle(ButtonStyle.Link)
-      .setURL(`${ctx.baseUrl}/community-lineup/${ctx.lineupId}`),
-  );
-}
-
-const PHASE_LABELS: [LineupPhase, string][] = [
-  ['nominations', 'Nominations'],
-  ['voting', 'Voting'],
-  ['decided', 'Scheduling'],
-];
-
-/** Build a breadcrumb with completed phases struck through. */
-function phaseBreadcrumb(current: LineupPhase): string {
-  const idx = PHASE_LABELS.findIndex(([k]) => k === current);
-  return PHASE_LABELS.map(([key, name], i) => {
-    if (i < idx) return `\u2705 ${name}`;
-    if (key === current) return `\u{1F539} **${name}**`;
-    return `\u2796 ${name}`;
-  }).join('  \u203A  ');
-}
-
-/** Apply shared author + phase breadcrumb + footer to an embed. */
-function applyChrome(embed: EmbedBuilder, ctx: EmbedContext, label: string) {
-  embed
-    .setAuthor({ name: ctx.communityName || 'Raid Ledger' })
-    .addFields({
-      name: '\u200B',
-      value: phaseBreadcrumb(ctx.phase),
-      inline: false,
-    })
-    .setFooter({
-      text: `${ctx.communityName || 'Raid Ledger'} \u00B7 ${label}`,
-    })
-    .setTimestamp();
-}
-
 // ─── Channel Embeds ──────────────────────────────────────────
 
 /** Lineup created — building phase begins (AC-1). */
@@ -105,11 +66,13 @@ export function buildCreatedEmbed(
   const deadline = targetDate
     ? `\n\n\u{1F4C5} **Target play date:** ${discordTs(targetDate)}`
     : '';
+  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
 
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F3B2} Community Lineup — Nominations Open!')
+    .setTitle(resolveEmbedTitle(ctx, '\u{1F3B2}', 'Nominations Open!'))
     .setDescription(
-      'A new **Community Lineup** has started! Suggest games now; voting ' +
+      descIntro +
+        'A new **Community Lineup** has started! Suggest games now; voting ' +
         'opens automatically once nominations close. Phases advance on ' +
         'their own as each deadline passes:' +
         '\n\n' +
@@ -173,10 +136,12 @@ export function buildVotingOpenEmbed(
     ? `\n\n\u23F0 **Voting closes:** ${discordTs(deadline)}`
     : '';
 
+  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F5F3}\u{FE0F} Vote on the Community Lineup!')
+    .setTitle(resolveEmbedTitle(ctx, '\u{1F5F3}\u{FE0F}', 'Voting Open!'))
     .setDescription(
-      'Nominations are closed — voting is now open. Pick the games you ' +
+      descIntro +
+        'Nominations are closed — voting is now open. Pick the games you ' +
         'most want to play; each member gets a limited number of votes, ' +
         'so choose wisely.' +
         deadlineStr,
@@ -208,10 +173,12 @@ export function buildDecidedEmbed(
   const scheduling = matches.filter((m) => m.thresholdMet);
   const rally = matches.filter((m) => !m.thresholdMet);
 
+  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F3AF} Community Lineup — Results Are In!')
+    .setTitle(resolveEmbedTitle(ctx, '\u{1F3AF}', 'Results Are In!'))
     .setDescription(
-      'Voting is closed. Games that hit the vote threshold are ' +
+      descIntro +
+        'Voting is closed. Games that hit the vote threshold are ' +
         '**ready to schedule** — pick a time and play. Games still short ' +
         'on votes can rally more players and join the schedule.',
     )
@@ -345,11 +312,15 @@ export function buildTiebreakerStartedEmbed(
     ? `\n\n\u23F0 **Closes** ${discordTs(deadline)}`
     : '';
   const cta = mode === 'veto' ? 'Cast Your Vetoes' : 'Vote in Bracket';
+  const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
 
   const embed = new EmbedBuilder()
-    .setTitle('\u2694\u{FE0F} Tiebreaker Round Started')
+    .setTitle(
+      resolveEmbedTitle(ctx, '\u2694\u{FE0F}', 'Tiebreaker Round Started'),
+    )
     .setDescription(
-      `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +
+      descIntro +
+        `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +
         deadlineStr,
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);

@@ -35,6 +35,20 @@ export function fireLineupCreated(
   svc.notifyLineupCreated(lineup).catch(logError(logger, 'lineup-created'));
 }
 
+/**
+ * Fire an in-place embed refresh after metadata edit (ROK-1063).
+ * No-op when the lineup has no stored Discord message reference.
+ */
+export function fireLineupMetadataRefresh(
+  svc: LineupNotificationService,
+  logger: Logger,
+  lineup: LineupInfo,
+): void {
+  svc
+    .refreshCreatedEmbed(lineup)
+    .catch(logError(logger, 'lineup-metadata-refresh'));
+}
+
 /** Check and fire nomination milestone notification. */
 export function fireNominationMilestone(
   svc: LineupNotificationService,

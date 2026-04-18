@@ -14,6 +14,8 @@ export function createMockBanner(
 ): LineupBannerResponseDto {
     return {
         id: 1,
+        title: 'Test Lineup',
+        description: null,
         status: 'building',
         targetDate: '2026-03-28',
         entryCount: 3,
@@ -25,7 +27,7 @@ export function createMockBanner(
             { gameId: 2, gameName: 'Elden Ring', gameCoverUrl: '/cover2.jpg', ownerCount: 4, voteCount: 2 },
         ],
         ...overrides,
-    };
+    } as LineupBannerResponseDto;
 }
 
 /** Create a mock lineup entry response. */
@@ -60,6 +62,8 @@ export function createMockLineupDetail(
 ): LineupDetailResponseDto {
     return {
         id: 1,
+        title: 'Test Lineup',
+        description: null,
         status: 'building',
         targetDate: '2026-03-28',
         decidedGameId: null,
@@ -74,5 +78,5 @@ export function createMockLineupDetail(
         createdAt: '2026-03-20T00:00:00Z',
         updatedAt: '2026-03-20T00:00:00Z',
         ...overrides,
-    };
+    } as LineupDetailResponseDto;
 }

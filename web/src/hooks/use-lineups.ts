@@ -19,8 +19,12 @@ import {
   createLineup,
   transitionLineupStatus,
   toggleVote,
+  updateLineupMetadata,
 } from '../lib/api-client';
-import type { CreateLineupParams } from '../lib/api/lineups-api';
+import type {
+  CreateLineupParams,
+  UpdateLineupMetadataParams,
+} from '../lib/api/lineups-api';
 
 /** Query key for the active lineup. */
 const ACTIVE_LINEUP_KEY = ['lineups', 'active'] as const;
@@ -135,6 +139,22 @@ export function useToggleVote() {
     { lineupId: number; gameId: number }
   >({
     mutationFn: ({ lineupId, gameId }) => toggleVote(lineupId, gameId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/** Hook for updating lineup title/description (ROK-1063). */
+export function useUpdateLineupMetadata() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    { lineupId: number; body: UpdateLineupMetadataParams }
+  >({
+    mutationFn: ({ lineupId, body }) => updateLineupMetadata(lineupId, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
     },

@@ -51,12 +51,12 @@ function StatusBar({ targetDate, phaseDeadline, status }: {
     );
 }
 
-/** Heading row with question and status badge. */
+/** Heading row with per-lineup title and status badge (ROK-1063). */
 function BannerHeading({ banner }: { banner: LineupBannerResponseDto }): JSX.Element {
     return (
         <div className="flex items-center gap-3 mb-1">
-            <h2 className="text-lg font-bold text-foreground">
-                What are we playing this week?
+            <h2 className="text-lg font-bold text-foreground truncate" title={banner.title}>
+                {banner.title}
             </h2>
             <LineupStatusBadge status={banner.status} />
             {banner.tiebreakerActive && <TiebreakerBadge />}

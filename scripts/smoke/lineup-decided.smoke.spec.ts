@@ -111,6 +111,7 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
     // Create lineup with a lower match threshold to maximise match generation
     // Use 720h durations to prevent BullMQ auto-transitions (ROK-1007)
     const createRes = await apiPost(token, '/lineups', {
+        title: 'Smoke Lineup',
         buildingDurationHours: 720,
         votingDurationHours: 720,
         decidedDurationHours: 720,

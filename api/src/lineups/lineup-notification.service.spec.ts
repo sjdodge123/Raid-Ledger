@@ -26,6 +26,11 @@ function makeMockDb() {
         }),
       }),
     }),
+    update: jest.fn().mockReturnValue({
+      set: jest.fn().mockReturnValue({
+        where: jest.fn().mockResolvedValue(undefined),
+      }),
+    }),
   };
 }
 
@@ -40,6 +45,7 @@ function makeMockDedupService() {
 function makeMockBotClient() {
   return {
     sendEmbed: jest.fn().mockResolvedValue({ id: 'msg-1' }),
+    editEmbed: jest.fn().mockResolvedValue({ id: 'msg-1' }),
     isConnected: jest.fn().mockReturnValue(true),
   };
 }
@@ -185,6 +191,114 @@ describe('LineupNotificationService', () => {
       await service.notifyLineupCreated(makeLineup());
 
       expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+    });
+
+    it('persists Discord channel/message IDs after posting (ROK-1063)', async () => {
+      mockBotClient.sendEmbed.mockResolvedValueOnce({ id: 'msg-created-42' });
+      mockSettingsService.get.mockResolvedValue('chan-lineup');
+
+      await service.notifyLineupCreated(makeLineup({ id: 99 }));
+
+      expect(mockDb.update).toHaveBeenCalledTimes(1);
+      const setCall = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
+      expect(setCall).toMatchObject({
+        discordCreatedChannelId: 'chan-lineup',
+        discordCreatedMessageId: 'msg-created-42',
+      });
+    });
+
+    it('skips persisting message ID when no channel is configured', async () => {
+      mockSettingsService.get.mockResolvedValue(null);
+      mockSettingsService.getDiscordBotDefaultChannel.mockResolvedValue(null);
+
+      await service.notifyLineupCreated(makeLineup());
+
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // ROK-1063: Embed refresh after metadata edit
+  // -----------------------------------------------------------------------
+  describe('refreshCreatedEmbed (ROK-1063)', () => {
+    it('edits the stored Discord message in place when refs exist', async () => {
+      mockBotClient.editEmbed = jest.fn().mockResolvedValue({ id: 'msg-1' });
+      mockDb.select = jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([
+              {
+                channelId: 'chan-edit',
+                messageId: 'msg-edit-77',
+                targetDate: null,
+              },
+            ]),
+          }),
+        }),
+      });
+      mockSettingsService.get.mockResolvedValue('chan-edit');
+
+      await service.refreshCreatedEmbed({
+        id: 99,
+        title: 'New Title',
+        description: 'New desc',
+      });
+
+      expect(mockBotClient.editEmbed).toHaveBeenCalledTimes(1);
+      const [channelArg, messageArg] = mockBotClient.editEmbed.mock.calls[0];
+      expect(channelArg).toBe('chan-edit');
+      expect(messageArg).toBe('msg-edit-77');
+    });
+
+    it('is a no-op when the lineup has no stored Discord message ref', async () => {
+      mockBotClient.editEmbed = jest.fn();
+      mockDb.select = jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { channelId: null, messageId: null, targetDate: null },
+              ]),
+          }),
+        }),
+      });
+
+      await service.refreshCreatedEmbed({
+        id: 99,
+        title: 'X',
+        description: null,
+      });
+
+      expect(mockBotClient.editEmbed).not.toHaveBeenCalled();
+    });
+
+    it('swallows edit errors so metadata update still succeeds', async () => {
+      mockBotClient.editEmbed = jest
+        .fn()
+        .mockRejectedValue(new Error('Unknown Message'));
+      mockDb.select = jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([
+              {
+                channelId: 'c1',
+                messageId: 'm1',
+                targetDate: null,
+              },
+            ]),
+          }),
+        }),
+      });
+      mockSettingsService.get.mockResolvedValue('c1');
+
+      await expect(
+        service.refreshCreatedEmbed({
+          id: 99,
+          title: 'X',
+          description: null,
+        }),
+      ).resolves.toBeUndefined();
     });
   });
 

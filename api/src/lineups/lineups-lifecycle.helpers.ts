@@ -46,6 +46,8 @@ export function insertLineup(
     return tx
       .insert(schema.communityLineups)
       .values({
+        title: dto.title,
+        description: dto.description ?? null,
         createdBy: userId,
         targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
         phaseDeadline,

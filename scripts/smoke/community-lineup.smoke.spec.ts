@@ -69,6 +69,7 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
         await archiveLineup(token, banner.id);
     }
     const lineup = (await apiPost(token, '/lineups', {
+        title: 'Smoke Lineup',
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         buildingDurationHours: 720,
         votingDurationHours: 720,
@@ -99,6 +100,7 @@ test.beforeAll(async () => {
 
     // Create a fresh lineup in building phase with long durations (ROK-1007)
     const lineup = (await apiPost(adminToken, '/lineups', {
+        title: 'Smoke Lineup',
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         buildingDurationHours: 720,
         votingDurationHours: 720,
@@ -131,11 +133,13 @@ test.describe('Community Lineup banner on Games page', () => {
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
     });
 
-    test('banner shows question heading and vote link', async ({ page }) => {
+    test('banner shows per-lineup title heading and vote link (ROK-1063)', async ({ page }) => {
         await page.goto('/games');
 
-        const heading = page.getByText('What are we playing this week?');
-        await expect(heading).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
+        // Per-lineup H2 title (falls back to backfilled "Lineup — <Month YYYY>")
+        const heading = page.locator('h2').filter({ hasText: /Lineup|Community/i }).first();
+        await expect(heading).toBeVisible({ timeout: 5_000 });
 
         const viewLink = page.getByRole('link', { name: /View Lineup/i });
         await expect(viewLink).toBeVisible({ timeout: 5_000 });
@@ -258,7 +262,7 @@ test.describe('Community Lineup detail page', () => {
 
         // Header shows "Community Lineup" title
         await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 15_000 });
 
         // Status badge shows one of the valid statuses
@@ -276,7 +280,7 @@ test.describe('Community Lineup detail page', () => {
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 15_000 });
 
         // Phase breadcrumb shows "Nominating" in the header
@@ -289,7 +293,7 @@ test.describe('Community Lineup detail page', () => {
     test('activity timeline section is present', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 15_000 });
 
         // Activity heading -- the timeline may have entries from lineup creation
@@ -304,7 +308,7 @@ test.describe('Community Lineup detail page', () => {
     test('shows nomination grid or empty state', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 15_000 });
 
         // Either "Nominated Games" heading (has entries) or empty state text
@@ -328,7 +332,7 @@ test.describe('Community Lineup detail page', () => {
         await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 10_000 });
 
         await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 10_000 });
 
         // Click back button (aria-label="Go back")
@@ -355,7 +359,7 @@ test.describe('Community Lineup responsive layout', () => {
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 15_000 });
 
         // If there are nominated games, the grid container uses sm:grid-cols-2
@@ -377,7 +381,7 @@ test.describe('Community Lineup responsive layout', () => {
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 15_000 });
 
         const nominatedHeading = page.getByRole('heading', { name: 'Nominated Games' });
@@ -429,6 +433,7 @@ test.describe('Voting phase', () => {
             if (banner.status !== 'building') {
                 await archiveLineup(adminToken, banner.id);
                 const created = (await apiPost(adminToken, '/lineups', {
+                    title: 'Smoke Lineup',
                     targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
                     buildingDurationHours: 720,
                     votingDurationHours: 720,
@@ -441,6 +446,7 @@ test.describe('Voting phase', () => {
         } else {
             // No active lineup -- create one
             const created = (await apiPost(adminToken, '/lineups', {
+                title: 'Smoke Lineup',
                 targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
                 buildingDurationHours: 720,
                 votingDurationHours: 720,

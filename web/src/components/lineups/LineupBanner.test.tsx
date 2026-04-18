@@ -64,10 +64,10 @@ describe('LineupBanner — populated state', () => {
         expect(screen.getByText('COMMUNITY LINEUP')).toBeInTheDocument();
     });
 
-    it('renders the lineup question heading', () => {
-        mockHookReturn(createMockBanner());
+    it('renders the lineup title heading (ROK-1063)', () => {
+        mockHookReturn(createMockBanner({ title: 'Spring Kickoff' }));
         renderWithProviders(<LineupBanner />);
-        expect(screen.getByText(/what are we playing/i)).toBeInTheDocument();
+        expect(screen.getByText('Spring Kickoff')).toBeInTheDocument();
     });
 
     it('renders the lineup status badge', () => {

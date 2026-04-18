@@ -69,6 +69,7 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 
     // Create lineup with a low match threshold to maximize match generation
     const createRes = await apiPost(token, '/lineups', {
+        title: 'Smoke Lineup',
         buildingDurationHours: 24,
         votingDurationHours: 48,
         decidedDurationHours: 24,

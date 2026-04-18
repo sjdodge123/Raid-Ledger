@@ -69,7 +69,7 @@ export function LineupDetailPage(): JSX.Element {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4">
-      <div className="flex items-start justify-between gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <LineupDetailHeader lineup={lineup} onTiebreakerIntercept={() => {
           setPromptDismissed(false);
           setTiebreakerPromptOpen(true);
@@ -78,7 +78,7 @@ export function LineupDetailPage(): JSX.Element {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="mt-1 px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors flex-shrink-0"
+            className="sm:mt-1 px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors flex-shrink-0 w-full sm:w-auto"
           >
             Nominate
           </button>
@@ -132,6 +132,7 @@ export function LineupDetailPage(): JSX.Element {
       {showPrompt && (
         <TiebreakerPromptModal
           lineupId={lineup.id}
+          lineupTitle={lineup.title}
           tiebreaker={tiebreaker ?? null}
           onClose={() => { setPromptDismissed(true); setTiebreakerPromptOpen(false); }}
         />
