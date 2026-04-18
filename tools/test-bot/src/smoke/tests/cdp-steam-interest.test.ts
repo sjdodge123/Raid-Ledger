@@ -76,6 +76,15 @@ function buildCdpSteamTests(): SmokeTest[] {
       steamAppId: TEST_STEAM_APP_ID,
     });
 
+    // Read the real game name from the DB — ctx.games[0].name is a synthetic
+    // `Game <id>` label (see setup.ts#buildDemoData). The listener reads the
+    // true name from Postgres so assertions must use the DB value.
+    const dbGame = await ctx.api.post<{ id: number; name: string }>(
+      '/admin/test/get-game',
+      { id: game.id },
+    );
+    const gameName = dbGame.name;
+
     // Get the logged-in user's Discord ID via CDP
     const discordId = await getLoggedInDiscordId(page);
     if (!discordId) {
@@ -97,7 +106,16 @@ function buildCdpSteamTests(): SmokeTest[] {
       gameId: game.id,
     });
 
-    return { gameName: game.name, discordId };
+    // Reset auto-heart preference so tests start from a known-clean baseline.
+    // A prior run (e.g. the AC2 auto-heart test) can otherwise leave
+    // autoHeartSteamUrls=true and make the interest-prompt test hit the
+    // auto-heart branch instead.
+    await ctx.api.post('/admin/test/set-auto-heart-pref', {
+      userId: ctx.testUserId,
+      enabled: false,
+    });
+
+    return { gameName, discordId };
   }
 
   /** Navigate to DMs and read the most recent DM message. */
@@ -143,28 +161,44 @@ function buildCdpSteamTests(): SmokeTest[] {
     return '';
   }
 
+  /**
+   * Post a Steam URL in the test channel after ensuring the page is on the
+   * correct channel and any ephemeral messages are dismissed.
+   */
+  async function postSteamUrl(
+    ctx: TestContext,
+    p: import('playwright').Page,
+  ): Promise<void> {
+    const { typeMessage, navigateToChannel, dismissEphemeralMessages } =
+      await import('../cdp/discord-page.js');
+    await navigateToChannel(p, SMOKE.guildId, ctx.defaultChannelId);
+    await p.waitForTimeout(2000);
+    await dismissEphemeralMessages(p);
+    const url = `https://store.steampowered.com/app/${TEST_STEAM_APP_ID}/`;
+    await typeMessage(p, url);
+    // Give the bot time to process the message and dispatch a DM.
+    await p.waitForTimeout(5000);
+  }
+
+  /** Return to the default test channel for subsequent tests. */
+  async function returnToTestChannel(
+    ctx: TestContext,
+    p: import('playwright').Page,
+  ): Promise<void> {
+    const { navigateToChannel } = await import('../cdp/discord-page.js');
+    await navigateToChannel(p, SMOKE.guildId, ctx.defaultChannelId);
+    await p.waitForTimeout(1000);
+  }
+
   const tests: SmokeTest[] = [
     {
       name: 'CDP: Steam URL triggers DM interest prompt',
       category: 'cdp-command',
       async run(ctx) {
         const p = await getPage(ctx);
-        const { typeMessage, navigateToChannel, dismissEphemeralMessages } =
-          await import('../cdp/discord-page.js');
         const { gameName } = await setupFixtures(ctx, p);
-        // Re-navigate after the reload in getLoggedInDiscordId
-        await navigateToChannel(p, SMOKE.guildId, ctx.defaultChannelId);
-        await p.waitForTimeout(2000);
-        await dismissEphemeralMessages(p);
+        await postSteamUrl(ctx, p);
 
-        // Send the Steam URL in the channel
-        const url = `https://store.steampowered.com/app/${TEST_STEAM_APP_ID}/`;
-        await typeMessage(p, url);
-
-        // Wait for bot to process and send DM
-        await p.waitForTimeout(5000);
-
-        // Check for DM
         const dmText = await readLastDm(p, 15_000);
 
         if (!dmText) {
@@ -182,9 +216,90 @@ function buildCdpSteamTests(): SmokeTest[] {
           );
         }
 
-        // Navigate back to the test channel for subsequent tests
-        await navigateToChannel(p, SMOKE.guildId, ctx.defaultChannelId);
-        await p.waitForTimeout(1000);
+        await returnToTestChannel(ctx, p);
+      },
+    },
+    {
+      name: 'CDP: Steam URL on already-hearted game triggers "already hearted" DM',
+      category: 'cdp-command',
+      async run(ctx) {
+        const p = await getPage(ctx);
+        const { gameName } = await setupFixtures(ctx, p);
+
+        // Pre-heart the game so the listener takes the "already hearted" path.
+        const game = ctx.games[0];
+        if (!game) throw new Error('No games in test context');
+        await ctx.api.post('/admin/test/add-game-interest', {
+          userId: ctx.testUserId,
+          gameId: game.id,
+        });
+
+        await postSteamUrl(ctx, p);
+
+        const dmText = await readLastDm(p, 15_000);
+
+        if (!dmText) {
+          throw new Error(
+            `Expected "already hearted" DM for "${gameName}", got no DM from bot`,
+          );
+        }
+
+        const lc = dmText.toLowerCase();
+        const hasGameName = lc.includes(gameName.toLowerCase());
+        const hasAlreadyPhrase = lc.includes('already have');
+        if (!hasGameName || !hasAlreadyPhrase) {
+          throw new Error(
+            `DM content "${dmText}" missing expected markers ` +
+              `(gameName=${hasGameName}, alreadyHavePhrase=${hasAlreadyPhrase}) ` +
+              `for game "${gameName}"`,
+          );
+        }
+
+        await returnToTestChannel(ctx, p);
+      },
+    },
+    {
+      name: 'CDP: Steam URL with auto-heart enabled triggers "auto-hearted" DM',
+      category: 'cdp-command',
+      async run(ctx) {
+        const p = await getPage(ctx);
+        const { gameName } = await setupFixtures(ctx, p);
+
+        // Enable auto-heart preference so the listener hearts silently + DMs.
+        await ctx.api.post('/admin/test/set-auto-heart-pref', {
+          userId: ctx.testUserId,
+          enabled: true,
+        });
+
+        try {
+          await postSteamUrl(ctx, p);
+
+          const dmText = await readLastDm(p, 15_000);
+
+          if (!dmText) {
+            throw new Error(
+              `Expected "auto-hearted" DM for "${gameName}", got no DM from bot`,
+            );
+          }
+
+          const lc = dmText.toLowerCase();
+          const hasGameName = lc.includes(gameName.toLowerCase());
+          const hasAutoPhrase = lc.includes('auto-hearted');
+          if (!hasGameName || !hasAutoPhrase) {
+            throw new Error(
+              `DM content "${dmText}" missing expected markers ` +
+                `(gameName=${hasGameName}, autoHeartedPhrase=${hasAutoPhrase}) ` +
+                `for game "${gameName}"`,
+            );
+          }
+        } finally {
+          // Always disable the preference so it doesn't leak into later tests.
+          await ctx.api.post('/admin/test/set-auto-heart-pref', {
+            userId: ctx.testUserId,
+            enabled: false,
+          });
+          await returnToTestChannel(ctx, p);
+        }
       },
     },
   ];
