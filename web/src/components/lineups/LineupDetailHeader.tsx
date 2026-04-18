@@ -89,7 +89,7 @@ function PhaseBreadcrumb({ lineup, onTiebreakerIntercept }: {
   }
 
   return (
-    <div className="flex items-center gap-1 text-sm">
+    <div className="flex items-center flex-wrap gap-x-1 gap-y-0.5 text-sm">
       {PHASES.map((p, i) => {
         const isCurrent = i === currentIdx;
         const isClickable = canOperate && (i === currentIdx + 1 || i === currentIdx - 1);
@@ -156,10 +156,13 @@ function EditButton({ onClick }: { onClick: () => void }): JSX.Element {
     <button
       type="button"
       onClick={onClick}
-      className="text-xs text-muted hover:text-foreground px-2 py-1 rounded border border-edge/50 hover:bg-overlay/50 transition-colors"
+      className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground px-2.5 py-1.5 rounded border border-edge/50 hover:bg-overlay/50 active:bg-overlay transition-colors flex-shrink-0 whitespace-nowrap min-h-[32px]"
       aria-label="Edit lineup metadata"
     >
-      Edit
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+      <span className="hidden sm:inline">Edit</span>
     </button>
   );
 }
@@ -179,27 +182,38 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
 
   return (
     <div className="border-b border-edge pb-4 mb-4 w-full">
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-3 min-w-0">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-muted hover:text-foreground transition"
-            aria-label="Go back"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-lg font-display font-bold tracking-wide truncate" title={lineup.title}>
-            {lineup.title}
-          </h1>
+      {/* Row 1: back + title + edit (always single row, title truncates) */}
+      <div className="flex items-center gap-3 min-w-0 mb-2 md:mb-1">
+        <button
+          onClick={() => navigate(-1)}
+          className="text-muted hover:text-foreground transition flex-shrink-0"
+          aria-label="Go back"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <h1 className="text-lg font-display font-bold tracking-wide truncate flex-1 min-w-0" title={lineup.title}>
+          {lineup.title}
+        </h1>
+        {/* Desktop-only inline badge + breadcrumb after title */}
+        <div className="hidden md:flex items-center gap-3 flex-shrink-0">
           <LineupStatusBadge status={lineup.status} />
           {canEdit && <EditButton onClick={() => setEditOpen(true)} />}
-        </div>
-        <div className="flex items-center gap-2">
           <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
           <PhaseCircle status={lineup.status} />
         </div>
+        {/* Mobile-only edit button on the same row as title */}
+        {canEdit && (
+          <div className="md:hidden flex-shrink-0">
+            <EditButton onClick={() => setEditOpen(true)} />
+          </div>
+        )}
+      </div>
+      {/* Row 2 (mobile only): breadcrumb + circle (badge already shown as current phase in breadcrumb) */}
+      <div className="md:hidden flex items-center gap-2 flex-wrap mb-2 ml-8">
+        <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
+        <PhaseCircle status={lineup.status} />
       </div>
       {lineup.description && (
         <div className="ml-8 mb-2">

@@ -70,6 +70,7 @@ import { carryOverFromLastDecided } from './lineups-carryover.helpers';
 import { authorizeAndPersistMetadata } from './lineups-metadata.helpers';
 import {
   fireLineupCreated,
+  fireLineupMetadataRefresh,
   fireNominationMilestone,
   fireVotingOpen,
   fireDecidedNotifications,
@@ -341,6 +342,12 @@ export class LineupsService {
     caller: CallerIdentity,
   ): Promise<LineupDetailResponseDto> {
     await authorizeAndPersistMetadata(this.db, id, dto, caller);
-    return buildDetailResponse(this.db, id, caller.id);
+    const detail = await buildDetailResponse(this.db, id, caller.id);
+    fireLineupMetadataRefresh(this.lineupNotifications, this.logger, {
+      id: detail.id,
+      title: detail.title,
+      description: detail.description,
+    });
+    return detail;
   }
 }

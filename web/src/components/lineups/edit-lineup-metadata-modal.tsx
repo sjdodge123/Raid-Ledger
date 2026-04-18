@@ -58,7 +58,8 @@ function DescriptionField({ value, onChange }: {
                 maxLength={DESCRIPTION_MAX}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                placeholder="Optional markdown — **bold**, *italic*, `code`, [link](https://example.com)"
+                className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
             />
         </div>
     );

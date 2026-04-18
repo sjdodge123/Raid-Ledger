@@ -5,6 +5,7 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { eq } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
@@ -103,11 +104,57 @@ export class LineupNotificationService {
       title: lineup.title,
       description: lineup.description ?? null,
     });
-    await this.postChannelEmbed(
+    const sent = await this.postChannelEmbed(
       `lineup-created:${lineup.id}`,
       () => buildCreatedEmbed(ctx, lineup.targetDate),
       ctx,
     );
+    if (sent) {
+      await this.db
+        .update(schema.communityLineups)
+        .set({
+          discordCreatedChannelId: sent.channelId,
+          discordCreatedMessageId: sent.messageId,
+        })
+        .where(eq(schema.communityLineups.id, lineup.id));
+    }
+  }
+
+  /**
+   * Refresh the lineup-created embed after metadata edit (ROK-1063).
+   * Edits the original Discord message in place with the new title/description.
+   * Silent no-op if no stored message ref (e.g. channel not configured at creation).
+   */
+  async refreshCreatedEmbed(lineup: LineupInfo): Promise<void> {
+    const [row] = await this.db
+      .select({
+        channelId: schema.communityLineups.discordCreatedChannelId,
+        messageId: schema.communityLineups.discordCreatedMessageId,
+        targetDate: schema.communityLineups.targetDate,
+      })
+      .from(schema.communityLineups)
+      .where(eq(schema.communityLineups.id, lineup.id))
+      .limit(1);
+    if (!row?.channelId || !row?.messageId) return;
+    const ctx = await this.resolveCtx(lineup.id, 'nominations', {
+      title: lineup.title,
+      description: lineup.description ?? null,
+    });
+    const built = buildCreatedEmbed(ctx, row.targetDate ?? undefined);
+    try {
+      await this.botClient.editEmbed(
+        row.channelId,
+        row.messageId,
+        built.embed,
+        built.row,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to edit lineup-created embed for lineup ${lineup.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /** AC-2: Post channel embed at nomination milestones (25/50/100%). */
@@ -275,13 +322,19 @@ export class LineupNotificationService {
       ctx: EmbedContext,
     ) => Promise<EmbedWithRow | null> | EmbedWithRow | null,
     ctx: EmbedContext,
-  ): Promise<void> {
-    if (await this.dedupService.checkAndMarkSent(dedupKey, DEDUP_TTL)) return;
+  ): Promise<{ channelId: string; messageId: string } | null> {
+    if (await this.dedupService.checkAndMarkSent(dedupKey, DEDUP_TTL))
+      return null;
     const channelId = await resolveLineupChannel(this.settingsService);
-    if (!channelId) return;
+    if (!channelId) return null;
     const result = await build(ctx);
-    if (!result) return;
-    await this.botClient.sendEmbed(channelId, result.embed, result.row);
+    if (!result) return null;
+    const sent = await this.botClient.sendEmbed(
+      channelId,
+      result.embed,
+      result.row,
+    );
+    return { channelId, messageId: sent.id };
   }
 
   /** Post the voting-open channel embed. */

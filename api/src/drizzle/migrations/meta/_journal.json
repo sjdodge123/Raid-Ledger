@@ -862,6 +862,13 @@
       "when": 1776486584799,
       "tag": "0122_lineup_title_description",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1776536897783,
+      "tag": "0123_lineup_created_embed_refs",
+      "breakpoints": true
     }
   ]
 }

@@ -56,6 +56,10 @@ export const communityLineups = pgTable('community_lineups', {
   }),
   /** Active tiebreaker FK (ROK-938). Null when no tiebreaker is active. */
   activeTiebreakerId: integer('active_tiebreaker_id'),
+  /** Discord channel ID of the creation embed (ROK-1063, for edit-in-place). */
+  discordCreatedChannelId: text('discord_created_channel_id'),
+  /** Discord message ID of the creation embed (ROK-1063, for edit-in-place). */
+  discordCreatedMessageId: text('discord_created_message_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
