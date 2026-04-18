@@ -3,7 +3,11 @@ import { AdminController } from './admin.controller';
 import { AdminSettingsController } from './settings.controller';
 import { AdminGamesController } from './settings-games.controller';
 import { BrandingController } from './branding.controller';
-import { DemoTestController } from './demo-test.controller';
+import { DemoTestCoreController } from './demo-test-core.controller';
+import { DemoTestVoiceController } from './demo-test-voice.controller';
+import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
+import { DemoTestSignupsController } from './demo-test-signups.controller';
+import { DemoTestGamesController } from './demo-test-games.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { LineupSettingsController } from './settings-lineup.controller';
@@ -31,7 +35,11 @@ import { AiChatTestController } from './ai-chat-test.controller';
     AdminSettingsController,
     AdminGamesController,
     BrandingController,
-    DemoTestController,
+    DemoTestCoreController,
+    DemoTestVoiceController,
+    DemoTestScheduledEventsController,
+    DemoTestSignupsController,
+    DemoTestGamesController,
     AiChatTestController,
     SlashCommandTestController,
     ItadSettingsController,
