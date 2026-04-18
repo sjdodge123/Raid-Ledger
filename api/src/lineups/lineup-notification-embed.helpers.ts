@@ -1,7 +1,7 @@
 /**
  * Discord embed builders for Community Lineup notifications (ROK-932).
- * All embeds include: community author, View Lineup button, footer, and
- * Discord-native timestamps for deadlines.
+ * All embeds include: community author, phase-specific call-to-action
+ * button, footer, and Discord-native timestamps for deadlines.
  */
 import {
   EmbedBuilder,
@@ -51,11 +51,14 @@ function discordTs(date: Date, style: 'R' | 'f' | 'F' = 'R'): string {
   return `<t:${Math.floor(date.getTime() / 1000)}:${style}>`;
 }
 
-/** Build the "View Lineup" link button. */
-function viewButton(ctx: EmbedContext): ActionRowBuilder<ButtonBuilder> {
+/** Build a link button pointing at the lineup page with a custom label. */
+function ctaButton(
+  ctx: EmbedContext,
+  label: string,
+): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setLabel('View Lineup')
+      .setLabel(label)
       .setStyle(ButtonStyle.Link)
       .setURL(`${ctx.baseUrl}/community-lineup/${ctx.lineupId}`),
   );
@@ -100,15 +103,15 @@ export function buildCreatedEmbed(
   targetDate?: Date,
 ): EmbedWithRow {
   const deadline = targetDate
-    ? `\n\n\u{1F4C5} **Target date:** ${discordTs(targetDate, 'f')} (${discordTs(targetDate)})`
+    ? `\n\n\u{1F4C5} **Target play date:** ${discordTs(targetDate)}`
     : '';
 
   const embed = new EmbedBuilder()
     .setTitle('\u{1F3B2} Community Lineup — Nominations Open!')
     .setDescription(
-      'A new **Community Lineup** has started! The lineup is how we decide ' +
-        'what to play together. It runs in **timed phases** — each phase ' +
-        'advances automatically when its deadline expires:' +
+      'A new **Community Lineup** has started! Suggest games now; voting ' +
+        'opens automatically once nominations close. Phases advance on ' +
+        'their own as each deadline passes:' +
         '\n\n' +
         '1. \u{1F539} **Nominations** *(current)* — suggest games to play\n' +
         '2. \u2796 **Voting** — pick your favorites from the nominees\n' +
@@ -129,7 +132,7 @@ export function buildCreatedEmbed(
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
   applyChrome(embed, ctx, 'Nominations Open');
-  return { embed, row: viewButton(ctx) };
+  return { embed, row: ctaButton(ctx, 'Nominate a Game') };
 }
 
 /** Nomination milestone reached (AC-2). */
@@ -157,7 +160,7 @@ export function buildMilestoneEmbed(
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
   applyChrome(embed, ctx, 'Nomination Milestone');
-  return { embed, row: viewButton(ctx) };
+  return { embed, row: ctaButton(ctx, 'Nominate a Game') };
 }
 
 /** Voting opened (AC-3). */
@@ -167,16 +170,15 @@ export function buildVotingOpenEmbed(
   deadline?: Date,
 ): EmbedWithRow {
   const deadlineStr = deadline
-    ? `\n\n\u23F0 **Voting closes:** ${discordTs(deadline, 'f')} (${discordTs(deadline)})`
+    ? `\n\n\u23F0 **Voting closes:** ${discordTs(deadline)}`
     : '';
 
   const embed = new EmbedBuilder()
     .setTitle('\u{1F5F3}\u{FE0F} Vote on the Community Lineup!')
     .setDescription(
-      "Nominations are closed — it's time to vote! Pick the games you " +
-        'most want to play. Each member gets a limited number of votes, ' +
-        'so choose wisely. When voting ends, the top picks will be grouped ' +
-        'into matches based on who voted for what.' +
+      'Nominations are closed — voting is now open. Pick the games you ' +
+        'most want to play; each member gets a limited number of votes, ' +
+        'so choose wisely.' +
         deadlineStr,
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
@@ -194,7 +196,7 @@ export function buildVotingOpenEmbed(
   }
 
   applyChrome(embed, ctx, 'Voting Open');
-  return { embed, row: viewButton(ctx) };
+  return { embed, row: ctaButton(ctx, 'Cast Your Votes') };
 }
 
 /** Matches found — decided phase (AC-5). */
@@ -207,12 +209,11 @@ export function buildDecidedEmbed(
   const rally = matches.filter((m) => !m.thresholdMet);
 
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F3AF} Community Lineup — Matches Found!')
+    .setTitle('\u{1F3AF} Community Lineup — Results Are In!')
     .setDescription(
-      'Voting is complete! Players have been grouped into matches ' +
-        'based on their votes. Games that hit the vote threshold are ' +
-        '**ready to schedule** — pick a time and play. Games that are ' +
-        'close can still make it if more players join.',
+      'Voting is closed. Games that hit the vote threshold are ' +
+        '**ready to schedule** — pick a time and play. Games still short ' +
+        'on votes can rally more players and join the schedule.',
     )
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 
@@ -233,7 +234,7 @@ export function buildDecidedEmbed(
   }
 
   applyChrome(embed, ctx, 'Matches Decided');
-  return { embed, row: viewButton(ctx) };
+  return { embed, row: ctaButton(ctx, 'View Results') };
 }
 
 /** Format a match as a linked game line with vote count. */
@@ -298,9 +299,9 @@ export function buildEventCreatedEmbed(
   const embed = new EmbedBuilder()
     .setTitle(`\u2705 ${gameName} is locked in!`)
     .setDescription(
-      `[**${gameName}**](${gameUrl}) is officially scheduled! The event has been ` +
-        'created and is open for signups. Head to the event page to confirm your spot.' +
-        `\n\n\u{1F4C5} **When:** ${discordTs(eventDate, 'f')} (${discordTs(eventDate)})`,
+      `[**${gameName}**](${gameUrl}) is officially scheduled and open for ` +
+        'signups. Head to the event page to confirm your spot.' +
+        `\n\n\u{1F4C5} **Starts** ${discordTs(eventDate)}`,
     )
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 
@@ -330,16 +331,29 @@ export function buildEventCreatedEmbed(
   return { embed, row };
 }
 
-/** Stub for future tiebreaker notification (M8). */
-export function buildTiebreakerStartedEmbed(ctx: EmbedContext): EmbedWithRow {
+/** Tiebreaker round started (bracket or veto mode). */
+export function buildTiebreakerStartedEmbed(
+  ctx: EmbedContext,
+  mode: 'bracket' | 'veto' = 'bracket',
+  deadline?: Date,
+): EmbedWithRow {
+  const modeBlurb =
+    mode === 'veto'
+      ? 'Pick the games you want *removed* — the most-vetoed drop out.'
+      : 'Vote head-to-head on each matchup to settle the tie.';
+  const deadlineStr = deadline
+    ? `\n\n\u23F0 **Closes** ${discordTs(deadline)}`
+    : '';
+  const cta = mode === 'veto' ? 'Cast Your Vetoes' : 'Vote in Bracket';
+
   const embed = new EmbedBuilder()
     .setTitle('\u2694\u{FE0F} Tiebreaker Round Started')
     .setDescription(
-      "It's a tie! An operator has started a tiebreaker round " +
-        'to determine the final picks.',
+      `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +
+        deadlineStr,
     )
     .setColor(EMBED_COLORS.ANNOUNCEMENT);
 
   applyChrome(embed, ctx, 'Tiebreaker');
-  return { embed, row: viewButton(ctx) };
+  return { embed, row: ctaButton(ctx, cta) };
 }
