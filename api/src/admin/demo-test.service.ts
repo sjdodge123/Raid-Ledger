@@ -319,6 +319,17 @@ export class DemoTestService {
       .where(eq(schema.games.id, gameId));
   }
 
+  /** Fetch a game by id (for smoke-test fixture setup) — DEMO_MODE only (ROK-1054). */
+  async getGameForTest(id: number) {
+    await this.assertDemoMode();
+    const rows = await this.db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   /** Set the autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */
   async setAutoHeartPrefForTest(
     userId: number,

@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -27,6 +28,7 @@ import {
   InjectVoiceSessionSchema,
   AwaitProcessingSchema,
   SetSteamAppIdSchema,
+  GetGameSchema,
   ClearGameInterestSchema,
   CreateTestSignupSchema,
   SetEventTimesSchema,
@@ -283,6 +285,16 @@ export class DemoTestController {
       parsed.steamAppId,
     );
     return { success: true };
+  }
+
+  /** Fetch a game by id — DEMO_MODE only (ROK-1054 smoke test). */
+  @Post('get-game')
+  @HttpCode(HttpStatus.OK)
+  async getGameForTest(@Body() body: unknown) {
+    const { id } = this.parseBody(GetGameSchema, body);
+    const game = await this.demoTestService.getGameForTest(id);
+    if (!game) throw new NotFoundException('Game not found');
+    return game;
   }
 
   /** Set autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */

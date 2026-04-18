@@ -30,6 +30,7 @@ function createMockService() {
     setEventTimesForTest: jest.fn().mockResolvedValue({ success: true }),
     clearGameTimeConfirmationForTest: jest.fn().mockResolvedValue(undefined),
     setAutoHeartPrefForTest: jest.fn().mockResolvedValue(undefined),
+    getGameForTest: jest.fn(),
   };
 }
 
@@ -177,6 +178,29 @@ describe('DemoTestController — new test utility endpoints', () => {
         enabled: 'yes',
       }),
     ).rejects.toThrow(/Validation failed/);
+  });
+
+  it('getGame returns game name and id (ROK-1054)', async () => {
+    mockService.getGameForTest.mockResolvedValueOnce({
+      id: 8363,
+      name: 'Test WoW',
+    });
+    const result = await controller.getGameForTest({ id: 8363 });
+    expect(result).toEqual({ id: 8363, name: 'Test WoW' });
+    expect(mockService.getGameForTest).toHaveBeenCalledWith(8363);
+  });
+
+  it('getGame returns 404 when game not found', async () => {
+    mockService.getGameForTest.mockResolvedValueOnce(null);
+    await expect(controller.getGameForTest({ id: 99999 })).rejects.toThrow(
+      /Game not found/,
+    );
+  });
+
+  it('getGame rejects invalid id', async () => {
+    await expect(controller.getGameForTest({ id: -1 })).rejects.toThrow(
+      /Validation failed/,
+    );
   });
 
   it('clearGameTimeConfirmation delegates to service (ROK-999)', async () => {

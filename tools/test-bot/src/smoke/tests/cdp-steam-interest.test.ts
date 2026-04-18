@@ -76,6 +76,15 @@ function buildCdpSteamTests(): SmokeTest[] {
       steamAppId: TEST_STEAM_APP_ID,
     });
 
+    // Read the real game name from the DB — ctx.games[0].name is a synthetic
+    // `Game <id>` label (see setup.ts#buildDemoData). The listener reads the
+    // true name from Postgres so assertions must use the DB value.
+    const dbGame = await ctx.api.post<{ id: number; name: string }>(
+      '/admin/test/get-game',
+      { id: game.id },
+    );
+    const gameName = dbGame.name;
+
     // Get the logged-in user's Discord ID via CDP
     const discordId = await getLoggedInDiscordId(page);
     if (!discordId) {
@@ -97,7 +106,16 @@ function buildCdpSteamTests(): SmokeTest[] {
       gameId: game.id,
     });
 
-    return { gameName: game.name, discordId };
+    // Reset auto-heart preference so tests start from a known-clean baseline.
+    // A prior run (e.g. the AC2 auto-heart test) can otherwise leave
+    // autoHeartSteamUrls=true and make the interest-prompt test hit the
+    // auto-heart branch instead.
+    await ctx.api.post('/admin/test/set-auto-heart-pref', {
+      userId: ctx.testUserId,
+      enabled: false,
+    });
+
+    return { gameName, discordId };
   }
 
   /** Navigate to DMs and read the most recent DM message. */

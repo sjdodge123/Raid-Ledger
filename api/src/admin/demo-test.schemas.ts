@@ -57,6 +57,10 @@ export const SetSteamAppIdSchema = z.object({
   steamAppId: z.number().int().positive(),
 });
 
+export const GetGameSchema = z.object({
+  id: z.number().int().positive(),
+});
+
 export const ClearGameInterestSchema = z.object({
   userId: z.number().int().positive(),
   gameId: z.number().int().positive(),
