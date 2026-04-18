@@ -10,6 +10,8 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as supertest from 'supertest';
 import type TestAgent from 'supertest/lib/agent';
 import * as schema from '../../drizzle/schema';
+import { clearAuthUserCache } from '../../auth/auth-user-cache';
+import { INSTANCE_KEY, type TestApp } from './test-app';
 
 export interface SeededData {
   adminUser: typeof schema.users.$inferSelect;
@@ -110,8 +112,33 @@ export async function truncateAllTables(
     );
   }
 
+  // Reset cross-suite in-memory state that can otherwise leak between files
+  // during a full integration run (ROK-1059). The mock Redis store and the
+  // auth-user cache are module-level singletons held alive by the TestApp
+  // singleton on `process`. Without clearing them here, a `jwt_block:<userId>`
+  // entry written by an earlier suite can silently invalidate tokens issued
+  // to the freshly re-seeded admin (whose new id may collide with a stale key).
+  clearAuthUserCache();
+  clearJwtBlockKeysFromMockRedis();
+
   // Re-seed baseline data
   return seedBaseline(db);
+}
+
+/**
+ * Delete all `jwt_block:*` entries from the in-memory Redis mock backing the
+ * current TestApp singleton. No-op when no TestApp is registered yet (which
+ * happens during the very first truncate before the mock is created).
+ */
+function clearJwtBlockKeysFromMockRedis(): void {
+  const instance = (process as unknown as Record<string, TestApp | null>)[
+    INSTANCE_KEY
+  ];
+  const store = instance?.redisMock?.store;
+  if (!store) return;
+  for (const key of [...store.keys()]) {
+    if (key.startsWith('jwt_block:')) store.delete(key);
+  }
 }
 
 /**

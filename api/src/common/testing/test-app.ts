@@ -75,9 +75,12 @@ function mockRedisIncr(store: Map<string, string>) {
   };
 }
 
-/** In-memory Redis mock that satisfies the interface used by the app. */
-function createRedisMock() {
-  const store = new Map<string, string>();
+export interface RedisMockHandle {
+  client: ReturnType<typeof buildRedisMockClient>;
+  store: Map<string, string>;
+}
+
+function buildRedisMockClient(store: Map<string, string>) {
   return {
     get: (key: string) => Promise.resolve(store.get(key) ?? null),
     set: mockRedisSet(store),
@@ -96,8 +99,14 @@ function createRedisMock() {
     quit: () => Promise.resolve('OK'),
     disconnect: () => undefined,
     status: 'ready',
-    duplicate: () => createRedisMock(),
+    duplicate: () => buildRedisMockClient(store),
   };
+}
+
+/** In-memory Redis mock whose backing store is exposed for cross-suite reset. */
+function createRedisMock(): RedisMockHandle {
+  const store = new Map<string, string>();
+  return { client: buildRedisMockClient(store), store };
 }
 
 export interface TestApp {
@@ -107,6 +116,9 @@ export interface TestApp {
   seed: SeededData;
   /** Only set when running locally via Testcontainers; null in CI. */
   container: StartedPostgreSqlContainer | null;
+  /** Handle to the in-memory Redis mock. Exposed so truncateAllTables can
+   * clear cross-suite state (e.g. jwt_block:* keys) without call-site changes. */
+  redisMock: RedisMockHandle;
 }
 
 /**
@@ -116,7 +128,7 @@ export interface TestApp {
  * The `process` object IS shared across VM contexts in the same
  * Node.js process, making it a reliable cross-file singleton store.
  */
-const INSTANCE_KEY = '__raid_ledger_test_app';
+export const INSTANCE_KEY = '__raid_ledger_test_app';
 
 function getInstance(): TestApp | null {
   return (
@@ -177,20 +189,25 @@ export async function getTestApp(): Promise<TestApp> {
   if (cached) return cached;
   const { connectionString, container } = await provisionDatabase();
   const db = await setupDatabase(connectionString);
+  const redisMock = createRedisMock();
+  // Register the mock BEFORE seeding so truncateAllTables can reset it
+  // via the process-level singleton during its first (pre-app-init) call.
+  const preInstance: Partial<TestApp> = { db, redisMock };
+  setInstance(preInstance as TestApp);
   const seed = await truncateAllTables(db);
   setTestEnvVars(connectionString);
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DrizzleAsyncProvider)
     .useValue(db)
     .overrideProvider(REDIS_CLIENT)
-    .useValue(createRedisMock())
+    .useValue(redisMock.client)
     .compile();
   const app = moduleRef.createNestApplication();
   await app.init();
   const request = supertest.default(
     app.getHttpServer() as import('http').Server,
   );
-  const testApp: TestApp = { app, request, db, seed, container };
+  const testApp: TestApp = { app, request, db, seed, container, redisMock };
   setInstance(testApp);
   return testApp;
 }
