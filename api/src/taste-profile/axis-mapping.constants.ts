@@ -1,56 +1,207 @@
-import type { TasteProfileAxis } from '@raid-ledger/contract';
+import type { TasteProfilePoolAxis } from '@raid-ledger/contract';
 
 /**
- * Per-axis IGDB ID matchers (ROK-948).
+ * Per-axis matchers (ROK-948 / ROK-949 dynamic-axes extension).
  *
- * Each axis matches on any of gameModes / genres / themes present on the
- * game row. A game that matches multiple categories for the same axis
- * still only contributes weight 1.0 for that axis (see taste-vector.helpers).
+ * Priority order when classifying a game for an axis:
+ *   1. `tags` (Steam/IsThereAnyDeal user tags — richest vocabulary,
+ *      covers specific sub-genres IGDB's schema lacks: "Automation",
+ *      "Crafting", "Roguelike", "Battle Royale", etc.)
+ *   2. `gameModes` / `genres` / `themes` (IGDB IDs — fallback for
+ *      games whose itad tags haven't been fetched yet)
+ *
+ * A game hits an axis if ANY listed identifier matches; the axis then
+ * contributes `1.0 * signalWeight(user, game)` to that user's raw score
+ * (see taste-vector.helpers). Tag matching is case-insensitive.
  */
 export interface AxisMapping {
+  tags: string[];
   gameModes: number[];
   genres: number[];
   themes: number[];
 }
 
-export const AXIS_MAPPINGS: Record<TasteProfileAxis, AxisMapping> = {
+export const AXIS_MAPPINGS: Record<TasteProfilePoolAxis, AxisMapping> = {
   co_op: {
-    gameModes: [3, 4], // Coop, Split screen
+    tags: ['Co-op', 'Online Co-Op', 'Local Co-Op'],
+    gameModes: [3, 4],
     genres: [],
-    themes: [40], // Party
+    themes: [],
   },
   pvp: {
-    gameModes: [2, 6], // Multiplayer, Battle Royale
-    genres: [4, 36], // Fighting, MOBA
+    tags: ['PvP', 'Competitive'],
+    gameModes: [2],
+    genres: [],
+    themes: [],
+  },
+  battle_royale: {
+    tags: ['Battle Royale'],
+    gameModes: [6],
+    genres: [],
+    themes: [],
+  },
+  mmo: {
+    tags: ['MMORPG', 'MMO', 'Massively Multiplayer'],
+    gameModes: [5],
+    genres: [],
+    themes: [],
+  },
+  moba: {
+    tags: ['MOBA'],
+    gameModes: [],
+    genres: [36],
+    themes: [],
+  },
+  fighting: {
+    tags: ['Fighting', "Beat 'em up", '2D Fighter', '3D Fighter'],
+    gameModes: [],
+    genres: [4, 25],
+    themes: [],
+  },
+  shooter: {
+    tags: ['FPS', 'Shooter', 'First-Person', 'Third-Person Shooter'],
+    gameModes: [],
+    genres: [5],
+    themes: [],
+  },
+  racing: {
+    tags: ['Racing', 'Driving'],
+    gameModes: [],
+    genres: [10],
+    themes: [],
+  },
+  sports: {
+    tags: ['Sports', 'Football', 'Basketball', 'Soccer'],
+    gameModes: [],
+    genres: [14],
     themes: [],
   },
   rpg: {
+    tags: ['RPG', 'Action RPG', 'JRPG', 'CRPG', 'Party-Based RPG'],
     gameModes: [],
-    genres: [12, 31, 34], // RPG, Adventure, Visual Novel
-    themes: [17, 31, 38], // Fantasy, Drama, Open world
+    genres: [12, 34],
+    themes: [],
   },
-  survival: {
+  fantasy: {
+    tags: ['Fantasy', 'Magic', 'Dragons'],
     gameModes: [],
-    genres: [13], // Simulator
-    themes: [21, 33, 38], // Survival, Sandbox, Open world
+    genres: [],
+    themes: [17],
+  },
+  sci_fi: {
+    tags: ['Sci-fi', 'Space', 'Cyberpunk', 'Futuristic'],
+    gameModes: [],
+    genres: [],
+    themes: [18],
+  },
+  adventure: {
+    tags: ['Adventure', 'Story Rich', 'Exploration'],
+    gameModes: [],
+    genres: [31],
+    themes: [31],
   },
   strategy: {
+    tags: [
+      'Strategy',
+      'RTS',
+      'Real Time Strategy',
+      'Turn-Based Strategy',
+      'Turn-Based',
+      '4X',
+      'Grand Strategy',
+      'Wargame',
+      'Tactics',
+      'Auto Battler',
+      'Tower Defense',
+    ],
     gameModes: [],
-    genres: [11, 15, 16, 24, 35], // RTS, Strategy, TBS, Tactical, Card & Board
-    themes: [41], // 4X
+    genres: [11, 15, 16, 24],
+    themes: [41],
   },
-  social: {
+  survival: {
+    tags: ['Survival', 'Open World Survival Craft'],
     gameModes: [],
-    genres: [9, 32, 33], // Puzzle, Indie, Arcade
-    themes: [27, 40], // Comedy, Party
+    genres: [],
+    themes: [21],
   },
-  mmo: {
-    gameModes: [5], // MMO
+  crafting: {
+    tags: ['Crafting', 'Open World Survival Craft'],
+    gameModes: [],
     genres: [],
     themes: [],
   },
+  automation: {
+    tags: [
+      'Automation',
+      'Base Building',
+      'Factory Building',
+      'Factory Sim',
+      'Resource Management',
+      'City Builder',
+      'Building',
+    ],
+    gameModes: [],
+    genres: [],
+    themes: [],
+  },
+  sandbox: {
+    tags: ['Sandbox', 'Open World'],
+    gameModes: [],
+    genres: [],
+    themes: [33, 38],
+  },
+  horror: {
+    tags: ['Horror', 'Psychological Horror', 'Survival Horror'],
+    gameModes: [],
+    genres: [],
+    themes: [19],
+  },
+  social: {
+    tags: ['Party', 'Casual', 'Local Multiplayer'],
+    gameModes: [],
+    genres: [9, 35],
+    themes: [40, 27],
+  },
+  roguelike: {
+    tags: [
+      'Roguelike',
+      'Roguelite',
+      'Rogue-like',
+      'Rogue-lite',
+      'Action Roguelike',
+      'Traditional Roguelike',
+      'Roguelike Deckbuilder',
+      'Roguevania',
+    ],
+    gameModes: [],
+    genres: [],
+    themes: [],
+  },
+  puzzle: {
+    tags: ['Puzzle', 'Point & Click', 'Logic', 'Math'],
+    gameModes: [],
+    genres: [9],
+    themes: [],
+  },
+  platformer: {
+    tags: ['Platformer', '2D Platformer', '3D Platformer', 'Metroidvania'],
+    gameModes: [],
+    genres: [8],
+    themes: [],
+  },
+  stealth: {
+    tags: ['Stealth'],
+    gameModes: [],
+    genres: [],
+    themes: [43],
+  },
 };
 
-/** MMO playtime bonus threshold: games with this much lifetime playtime
- * (in minutes) also contribute to the MMO axis regardless of tags. */
-export const MMO_PLAYTIME_BONUS_MIN = 3000;
+/**
+ * Lifetime Steam playtime threshold (minutes) above which a game is
+ * considered "heavily played" — its signal weight jumps to 1.0 for
+ * every matching axis. No longer MMO-specific (a prior version applied
+ * an MMO-axis bonus here; that was removed in favour of tag/gameMode
+ * based MMO detection).
+ */
+export const HIGH_PLAYTIME_WEIGHT_MIN = 3000;
