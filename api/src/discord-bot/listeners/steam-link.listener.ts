@@ -197,7 +197,9 @@ export class SteamLinkListener {
       const dm = await message.author.createDM();
       await dm.send({ content });
     } catch (err: unknown) {
-      this.logger.warn(`Failed to send Steam interest DM: ${String(err)}`);
+      const detail =
+        err instanceof Error ? (err.stack ?? err.message) : String(err);
+      this.logger.warn(`Failed to send Steam interest DM: ${detail}`);
     }
   }
 
