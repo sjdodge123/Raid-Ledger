@@ -20,12 +20,10 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import type { LineupStatus } from '../drizzle/schema';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
-import { guardTiebreakerOnTransition } from './tiebreaker/tiebreaker-detect.helpers';
 import { LineupNotificationService } from './lineup-notification.service';
 import {
   findActiveLineup,
@@ -33,14 +31,8 @@ import {
   findBuildingLineup,
   findNominatedGameIds,
   countDistinctNominators,
-  validateDecidedGame,
 } from './lineups-query.helpers';
-import {
-  insertLineup,
-  applyStatusUpdate,
-  runMatchingAlgorithm,
-  validateTransition,
-} from './lineups-lifecycle.helpers';
+import { insertLineup } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { buildCommonGroundResponse } from './common-ground-query.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
@@ -59,23 +51,20 @@ import {
   buildOverrides,
   computeInitialDeadline,
 } from './lineups-phase.helpers';
-import { logTransition, logNomination } from './lineups-activity.helpers';
+import { logNomination } from './lineups-activity.helpers';
 import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
-import {
-  executeBandwagonJoin,
-  advanceMatch as advanceMatchHelper,
-} from './lineups-bandwagon.helpers';
 import { carryOverFromLastDecided } from './lineups-carryover.helpers';
-import { authorizeAndPersistMetadata } from './lineups-metadata.helpers';
+import { runMetadataUpdate } from './lineups-metadata.helpers';
+import { runStatusTransition } from './lineups-transition.helpers';
+import {
+  runBandwagonJoin,
+  runAdvanceMatch,
+} from './lineups-match-actions.helpers';
 import {
   fireLineupCreated,
-  fireLineupMetadataRefresh,
   fireNominationMilestone,
-  fireVotingOpen,
-  fireDecidedNotifications,
   fireNominationRemoved,
-  fireSchedulingOpen,
 } from './lineups-notify-hooks.helpers';
 
 /** Caller identity for authorization checks. */
@@ -171,52 +160,22 @@ export class LineupsService {
   }
 
   /** Transition a lineup to a new status. */
-  async transitionStatus(
+  transitionStatus(
     id: number,
     dto: UpdateLineupStatusDto,
   ): Promise<LineupDetailResponseDto> {
-    const [lineup] = await findLineupById(this.db, id);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-
-    validateTransition(lineup.status as LineupStatus, dto);
-    if (dto.status === 'decided' && dto.decidedGameId) {
-      await validateDecidedGame(this.db, id, dto.decidedGameId);
-    }
-
-    // Tiebreaker gate: block ties, override winner, or reset (ROK-938)
-    await guardTiebreakerOnTransition(this.db, id, lineup.status, dto);
-
-    await applyStatusUpdate(
-      this.db,
-      this.settings,
-      this.phaseQueue,
+    return runStatusTransition(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        settings: this.settings,
+        phaseQueue: this.phaseQueue,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+      },
       id,
       dto,
-      lineup,
     );
-    if (dto.status === 'decided') {
-      await runMatchingAlgorithm(this.db, id, this.logger);
-    }
-    await logTransition(this.db, this.activityLog, id, dto);
-
-    if (dto.status === 'voting') {
-      fireVotingOpen(
-        this.lineupNotifications,
-        this.logger,
-        this.db,
-        id,
-        lineup.phaseDeadline,
-      );
-    }
-    if (dto.status === 'decided') {
-      fireDecidedNotifications(
-        this.lineupNotifications,
-        this.logger,
-        this.db,
-        id,
-      );
-    }
-    return buildDetailResponse(this.db, id);
   }
 
   /** Get Common Ground games — ownership overlap. */
@@ -305,34 +264,33 @@ export class LineupsService {
   }
 
   /** Bandwagon join a match (ROK-937). */
-  async bandwagonJoin(
+  bandwagonJoin(
     lineupId: number,
     matchId: number,
     userId: number,
   ): Promise<BandwagonJoinResponseDto> {
-    const result = await executeBandwagonJoin(
+    return runBandwagonJoin(
       this.db,
+      this.lineupNotifications,
+      this.logger,
       lineupId,
       matchId,
       userId,
     );
-    this.firePromoted(result.promoted, matchId);
-    return result;
   }
 
   /** Advance a suggested match to scheduling (ROK-937). */
-  async advanceMatch(
+  advanceMatch(
     lineupId: number,
     matchId: number,
   ): Promise<{ promoted: boolean }> {
-    const result = await advanceMatchHelper(this.db, lineupId, matchId);
-    this.firePromoted(result.promoted, matchId);
-    return result;
-  }
-
-  private firePromoted(promoted: boolean, matchId: number): void {
-    if (!promoted) return;
-    fireSchedulingOpen(this.lineupNotifications, this.logger, this.db, matchId);
+    return runAdvanceMatch(
+      this.db,
+      this.lineupNotifications,
+      this.logger,
+      lineupId,
+      matchId,
+    );
   }
 
   /** Update a lineup's title and/or description (ROK-1063). */
@@ -341,13 +299,13 @@ export class LineupsService {
     dto: UpdateLineupMetadataDto,
     caller: CallerIdentity,
   ): Promise<LineupDetailResponseDto> {
-    await authorizeAndPersistMetadata(this.db, id, dto, caller);
-    const detail = await buildDetailResponse(this.db, id, caller.id);
-    fireLineupMetadataRefresh(this.lineupNotifications, this.logger, {
-      id: detail.id,
-      title: detail.title,
-      description: detail.description,
-    });
-    return detail;
+    return runMetadataUpdate(
+      this.db,
+      this.lineupNotifications,
+      this.logger,
+      id,
+      dto,
+      caller,
+    );
   }
 }

@@ -5,13 +5,20 @@
 import {
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { UpdateLineupMetadataDto } from '@raid-ledger/contract';
+import type {
+  LineupDetailResponseDto,
+  UpdateLineupMetadataDto,
+} from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { findLineupById } from './lineups-query.helpers';
+import { buildDetailResponse } from './lineups-response.helpers';
+import type { LineupNotificationService } from './lineup-notification.service';
+import { fireLineupMetadataRefresh } from './lineups-notify-hooks.helpers';
 import type { CallerIdentity } from './lineups.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -49,4 +56,26 @@ export async function authorizeAndPersistMetadata(
     .update(schema.communityLineups)
     .set(values)
     .where(eq(schema.communityLineups.id, id));
+}
+
+/**
+ * High-level metadata update: authorise, persist, fire notification refresh,
+ * and return the fresh detail payload.
+ */
+export async function runMetadataUpdate(
+  db: Db,
+  lineupNotifications: LineupNotificationService,
+  logger: Logger,
+  id: number,
+  dto: UpdateLineupMetadataDto,
+  caller: CallerIdentity,
+): Promise<LineupDetailResponseDto> {
+  await authorizeAndPersistMetadata(db, id, dto, caller);
+  const detail = await buildDetailResponse(db, id, caller.id);
+  fireLineupMetadataRefresh(lineupNotifications, logger, {
+    id: detail.id,
+    title: detail.title,
+    description: detail.description,
+  });
+  return detail;
 }
