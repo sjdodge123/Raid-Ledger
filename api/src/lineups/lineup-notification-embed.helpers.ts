@@ -372,7 +372,9 @@ export function buildTiebreakerStartedEmbed(
   const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
 
   const embed = new EmbedBuilder()
-    .setTitle(resolveEmbedTitle(ctx, '\u2694\u{FE0F}', 'Tiebreaker Round Started'))
+    .setTitle(
+      resolveEmbedTitle(ctx, '\u2694\u{FE0F}', 'Tiebreaker Round Started'),
+    )
     .setDescription(
       descIntro +
         `It's a tie! A ${mode} tiebreaker is now running. ${modeBlurb}` +

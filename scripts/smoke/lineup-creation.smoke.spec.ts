@@ -93,6 +93,7 @@ async function ensureActiveLineup(
             Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+            title: 'Smoke Lineup',
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
@@ -150,7 +151,7 @@ test.describe('Start Lineup button on Games page', () => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${adminToken}`,
                 },
-                body: JSON.stringify({}),
+                body: JSON.stringify({ title: 'Smoke Lineup' }),
             });
             expect(createRes.ok).toBe(true);
         }
@@ -259,7 +260,7 @@ test.describe('Lineup creation modal', () => {
         }
 
         await expect(
-            page.getByRole('heading', { name: 'Community Lineup' }),
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 10_000 });
     });
 });
@@ -333,7 +334,7 @@ test.describe('Phase breadcrumb transitions', () => {
             lineupId = await ensureActiveLineup(adminToken);
             await page.goto(`/community-lineup/${lineupId}`);
             await expect(
-                page.getByRole('heading', { name: 'Community Lineup' }),
+                page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
             ).toBeVisible({ timeout: 5_000 });
             // "Voting" should be a clickable button (next phase from building)
             const votingBtn = page.getByRole('button', { name: 'Voting' });
@@ -346,7 +347,7 @@ test.describe('Phase breadcrumb transitions', () => {
             lineupId = await ensureActiveLineup(adminToken);
             await page.goto(`/community-lineup/${lineupId}`);
             await expect(
-                page.getByRole('heading', { name: 'Community Lineup' }),
+                page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
             ).toBeVisible({ timeout: 5_000 });
 
             // First click — shows "Advance?"
@@ -371,7 +372,7 @@ test.describe('Phase breadcrumb transitions', () => {
 
             await page.goto(`/community-lineup/${lineupId}`);
             await expect(
-                page.getByRole('heading', { name: 'Community Lineup' }),
+                page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
             ).toBeVisible({ timeout: 5_000 });
 
             // "Nominating" should be a clickable button (previous phase from voting)

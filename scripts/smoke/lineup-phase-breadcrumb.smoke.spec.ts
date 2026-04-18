@@ -70,6 +70,7 @@ async function ensureActiveLineup(token: string): Promise<number> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
+            title: 'Smoke Lineup',
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
@@ -112,7 +113,7 @@ async function ensureLineupInPhase(token: string, targetPhase: string): Promise<
 async function gotoLineupDetail(page: ReturnType<typeof test.info>['_test'] extends never ? never : Parameters<Parameters<typeof test>[1]>[0]['page'], lineupId: number) {
     await page.goto(`/community-lineup/${lineupId}`);
     await expect(
-        page.getByRole('heading', { name: 'Community Lineup' }),
+        page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
     ).toBeVisible({ timeout: 10_000 });
 }
 

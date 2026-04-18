@@ -85,6 +85,7 @@ async function createVotingLineupWithVotesPerPlayer(
     const gameIds = await fetchGameIds(token, 3);
 
     const createRes = await apiPost(token, '/lineups', {
+        title: 'Smoke Lineup',
         buildingDurationHours: 720,
         votingDurationHours: 720,
         decidedDurationHours: 720,
