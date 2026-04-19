@@ -7,9 +7,9 @@ import {
   TASTE_WEIGHT,
   type CommonGroundWeights,
 } from '../lineups/common-ground-scoring.constants';
-import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { SETTING_KEYS, type SettingKey } from '../drizzle/schema/app-settings';
 
-type SettingGetter = (key: string) => Promise<string | null>;
+type SettingGetter = (key: SettingKey) => Promise<string | null>;
 
 /** Parse a DB-stored numeric weight, falling back to `fallback` if invalid. */
 export function parseWeight(raw: string | null, fallback: number): number {
