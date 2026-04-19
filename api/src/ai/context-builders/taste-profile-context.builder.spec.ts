@@ -229,10 +229,12 @@ describe('TasteProfileContextBuilder', () => {
 
     it('mixes present + missing users into the correct buckets', async () => {
       mockTasteProfileService.getTasteProfile.mockImplementation(
-        async (id: number) => {
+        (id: number) => {
           if (id === 1)
-            return buildProfile({ userId: 1, dimensions: { rpg: 80 } });
-          return null;
+            return Promise.resolve(
+              buildProfile({ userId: 1, dimensions: { rpg: 80 } }),
+            );
+          return Promise.resolve(null);
         },
       );
 
@@ -253,16 +255,20 @@ describe('TasteProfileContextBuilder', () => {
         buildPartner({ userId: 100 + i, username: `partner${i}` }),
       );
       mockTasteProfileService.getTasteProfile.mockImplementation(
-        async (id: number) => {
+        (id: number) => {
           if (id === 1) {
-            return buildProfile({
-              userId: 1,
-              dimensions: { rpg: 80 },
-              coPlayPartners: partners,
-            });
+            return Promise.resolve(
+              buildProfile({
+                userId: 1,
+                dimensions: { rpg: 80 },
+                coPlayPartners: partners,
+              }),
+            );
           }
           // All partners have a zeroed profile with a small dim
-          return buildProfile({ userId: id, dimensions: { co_op: 50 } });
+          return Promise.resolve(
+            buildProfile({ userId: id, dimensions: { co_op: 50 } }),
+          );
         },
       );
 
@@ -281,25 +287,29 @@ describe('TasteProfileContextBuilder', () => {
     it('each partner has up to 3 topAxes derived from their own profile', async () => {
       const partners = [buildPartner({ userId: 100 })];
       mockTasteProfileService.getTasteProfile.mockImplementation(
-        async (id: number) => {
+        (id: number) => {
           if (id === 1) {
-            return buildProfile({
-              userId: 1,
-              dimensions: { rpg: 80 },
-              coPlayPartners: partners,
-            });
+            return Promise.resolve(
+              buildProfile({
+                userId: 1,
+                dimensions: { rpg: 80 },
+                coPlayPartners: partners,
+              }),
+            );
           }
           // partner 100 has a clear co-op bias
-          return buildProfile({
-            userId: id,
-            dimensions: {
-              co_op: 90,
-              mmo: 70,
-              social: 60,
-              strategy: 40,
-              puzzle: 20,
-            },
-          });
+          return Promise.resolve(
+            buildProfile({
+              userId: id,
+              dimensions: {
+                co_op: 90,
+                mmo: 70,
+                social: 60,
+                strategy: 40,
+                puzzle: 20,
+              },
+            }),
+          );
         },
       );
 
@@ -314,16 +324,18 @@ describe('TasteProfileContextBuilder', () => {
     it('partner without own vector still appears with empty topAxes (graceful)', async () => {
       const partners = [buildPartner({ userId: 100, username: 'unvec' })];
       mockTasteProfileService.getTasteProfile.mockImplementation(
-        async (id: number) => {
+        (id: number) => {
           if (id === 1) {
-            return buildProfile({
-              userId: 1,
-              dimensions: { rpg: 80 },
-              coPlayPartners: partners,
-            });
+            return Promise.resolve(
+              buildProfile({
+                userId: 1,
+                dimensions: { rpg: 80 },
+                coPlayPartners: partners,
+              }),
+            );
           }
           // Partner 100: no vector → null
-          return null;
+          return Promise.resolve(null);
         },
       );
 

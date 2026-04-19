@@ -19,6 +19,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 
 function describeCommonGroundTaste() {
   let testApp: TestApp;
@@ -307,9 +308,7 @@ function describeCommonGroundTaste() {
 
       // Override the taste weight via SettingsService to a higher value
       const settings = testApp.app.get(SettingsService);
-      // Use an untyped key since dev will add COMMON_GROUND_TASTE_WEIGHT to SETTING_KEYS.
-
-      await (settings as any).set('common_ground_taste_weight' as never, '100');
+      await settings.set(SETTING_KEYS.COMMON_GROUND_TASTE_WEIGHT, '100');
 
       const overridden = await testApp.request
         .get('/lineups/common-ground')
