@@ -16,6 +16,10 @@ import {
   getAutoHeartSteamUrlsPref,
   addDiscordInterest,
   setAutoHeartSteamUrlsPref,
+  findActiveBuildingLineup,
+  isGameNominated,
+  getAutoNominateSteamUrlsPref,
+  setAutoNominateSteamUrlsPref,
 } from './steam-link-interest.helpers';
 import {
   createDrizzleMock,
@@ -169,6 +173,99 @@ describe('setAutoHeartSteamUrlsPref', () => {
     mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
 
     await setAutoHeartSteamUrlsPref(mockDb as never, 7, true);
+
+    expect(mockDb.onConflictDoUpdate).toHaveBeenCalled();
+  });
+});
+
+// --- ROK-1081: paste-to-nominate helpers ---
+
+describe('findActiveBuildingLineup', () => {
+  it('returns the lineup when one is in building status', async () => {
+    mockDb.limit.mockResolvedValueOnce([{ id: 123 }]);
+
+    const result = await findActiveBuildingLineup(mockDb as never);
+
+    expect(result).toMatchObject({ id: expect.any(Number) });
+  });
+
+  it('returns null when no lineup is in building status', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await findActiveBuildingLineup(mockDb as never);
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('isGameNominated', () => {
+  it('returns true when the game is already on the lineup entries', async () => {
+    mockDb.limit.mockResolvedValueOnce([{ id: 1 }]);
+
+    const result = await isGameNominated(mockDb as never, 123, 42);
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false when the game has not been nominated for the lineup', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await isGameNominated(mockDb as never, 123, 42);
+
+    expect(result).toBe(false);
+  });
+});
+
+describe('getAutoNominateSteamUrlsPref', () => {
+  it('returns true when user has auto-nominate preference enabled', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      { key: 'autoNominateSteamUrls', value: true },
+    ]);
+
+    const result = await getAutoNominateSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false when preference row does not exist', async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+
+    const result = await getAutoNominateSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(false);
+  });
+
+  it('returns false when preference value is explicitly false', async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      { key: 'autoNominateSteamUrls', value: false },
+    ]);
+
+    const result = await getAutoNominateSteamUrlsPref(mockDb as never, 7);
+
+    expect(result).toBe(false);
+  });
+});
+
+describe('setAutoNominateSteamUrlsPref', () => {
+  it('upserts the autoNominateSteamUrls preference to true', async () => {
+    mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+
+    await setAutoNominateSteamUrlsPref(mockDb as never, 7, true);
+
+    expect(mockDb.insert).toHaveBeenCalled();
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 7,
+        key: 'autoNominateSteamUrls',
+        value: true,
+      }),
+    );
+  });
+
+  it('uses onConflictDoUpdate for upsert semantics', async () => {
+    mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+
+    await setAutoNominateSteamUrlsPref(mockDb as never, 7, true);
 
     expect(mockDb.onConflictDoUpdate).toHaveBeenCalled();
   });

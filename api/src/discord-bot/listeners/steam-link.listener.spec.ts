@@ -35,6 +35,7 @@ function setupSteamLinkModule() {
   chain.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
   chain.onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
   chain.select = jest.fn().mockReturnValue(chain);
+  chain.orderBy = jest.fn().mockReturnValue(chain);
   mockDb = chain;
 
   listener = new SteamLinkListener(
@@ -178,6 +179,8 @@ describe('SteamLinkListener', () => {
   describe('rate limiting / dedup', () => {
     rateLimitTests();
   });
+
+  // ROK-1081 nomination flow tests live in ./steam-link.listener.nomination.spec.ts
 });
 
 function botConnectedTests() {
@@ -528,3 +531,4 @@ function rateLimitTests() {
     expect(mockDmSend).toHaveBeenCalledTimes(1);
   });
 }
+
