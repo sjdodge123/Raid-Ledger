@@ -53,6 +53,8 @@ import type {
   BrandingConfig,
   DiscordBotConfig,
 } from './settings.types';
+import type { CommonGroundWeights } from '../lineups/common-ground-scoring.constants';
+import { resolveCommonGroundWeights } from './common-ground-weights.helpers';
 
 const CACHE_TTL_MS = 30 * 60_000;
 
@@ -261,21 +263,13 @@ export class SettingsService implements OnModuleInit {
     return _getBranding(this);
   }
 
-  async setCommunityName(name: string): Promise<void> {
-    await this.set(SETTING_KEYS.COMMUNITY_NAME, name);
-  }
-
-  async setCommunityLogoPath(filePath: string): Promise<void> {
-    await this.set(SETTING_KEYS.COMMUNITY_LOGO_PATH, filePath);
-  }
-
-  async setCommunityAccentColor(color: string): Promise<void> {
-    await this.set(SETTING_KEYS.COMMUNITY_ACCENT_COLOR, color);
-  }
-
-  async clearBranding(): Promise<void> {
-    await _clearBranding(this);
-  }
+  setCommunityName = (name: string) =>
+    this.set(SETTING_KEYS.COMMUNITY_NAME, name);
+  setCommunityLogoPath = (filePath: string) =>
+    this.set(SETTING_KEYS.COMMUNITY_LOGO_PATH, filePath);
+  setCommunityAccentColor = (color: string) =>
+    this.set(SETTING_KEYS.COMMUNITY_ACCENT_COLOR, color);
+  clearBranding = () => _clearBranding(this);
 
   // ─── GitHub ───────────────────────────────────────────────────
 
@@ -397,4 +391,10 @@ export class SettingsService implements OnModuleInit {
   setItadApiKey = (key: string) => this.set(SETTING_KEYS.ITAD_API_KEY, key);
   isItadConfigured = () => this.exists(SETTING_KEYS.ITAD_API_KEY);
   clearItadConfig = () => this.delete(SETTING_KEYS.ITAD_API_KEY);
+
+  // ─── Common Ground weights (ROK-950) ─────────────────────────
+
+  async getCommonGroundWeights(): Promise<CommonGroundWeights> {
+    return resolveCommonGroundWeights((key) => this.get(key));
+  }
 }

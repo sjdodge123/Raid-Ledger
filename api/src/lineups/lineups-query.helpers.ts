@@ -218,3 +218,61 @@ export function findBuildingLineup(db: PostgresJsDatabase<typeof schema>) {
     .orderBy(desc(schema.communityLineups.createdAt))
     .limit(1);
 }
+
+/**
+ * Distinct union of users whose taste should inform Common Ground scoring
+ * for a lineup (ROK-950). Combines:
+ *   - vote casters on the lineup
+ *   - nominators of games in the lineup
+ *   - the lineup creator
+ *   - any community member who has a stored taste vector (so nascent
+ *     lineups with zero votes still benefit from known taste signals)
+ *
+ * Returning a broader set is intentional: during the `building` phase the
+ * scoring helper gets called before any votes exist, and the spec tests
+ * require the taste factor to still reflect known community taste.
+ */
+export async function findLineupVoterIds(
+  db: PostgresJsDatabase<typeof schema>,
+  lineupId: number,
+): Promise<number[]> {
+  const rows = await db.execute<{ user_id: number }>(sql`
+    SELECT DISTINCT user_id FROM (
+      SELECT user_id FROM community_lineup_votes WHERE lineup_id = ${lineupId}
+      UNION
+      SELECT nominated_by AS user_id
+        FROM community_lineup_entries WHERE lineup_id = ${lineupId}
+      UNION
+      SELECT created_by AS user_id
+        FROM community_lineups WHERE id = ${lineupId}
+      UNION
+      SELECT user_id FROM player_taste_vectors
+    ) AS voters
+  `);
+  return rows.map((r) => r.user_id);
+}
+
+/**
+ * Resolve the distinct co-play partner IDs for a group of users (ROK-950).
+ * Returns the set of user IDs that have co-played with ANY of the inputs,
+ * excluding the inputs themselves.
+ */
+export async function findCoPlayPartnerIds(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<Set<number>> {
+  if (userIds.length === 0) return new Set();
+  const idList = sql.join(
+    userIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const rows = await db.execute<{ user_id: number }>(sql`
+    SELECT DISTINCT partner_id AS user_id FROM (
+      SELECT user_id_b AS partner_id FROM player_co_play WHERE user_id_a IN (${idList})
+      UNION
+      SELECT user_id_a AS partner_id FROM player_co_play WHERE user_id_b IN (${idList})
+    ) p
+    WHERE partner_id NOT IN (${idList})
+  `);
+  return new Set(rows.map((r) => r.user_id));
+}

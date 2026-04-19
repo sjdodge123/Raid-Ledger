@@ -1,6 +1,7 @@
 /**
- * Common Ground query helpers (ROK-934).
- * Builds the SQL query for ownership overlap and maps results.
+ * Common Ground query helpers (ROK-934 / ROK-950).
+ * Builds the SQL query for ownership overlap and maps results. ROK-950
+ * extends mapping with a pluggable taste/social/intensity scoring context.
  */
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -8,6 +9,7 @@ import type {
   CommonGroundGameDto,
   CommonGroundQueryDto,
   CommonGroundResponseDto,
+  CommonGroundScoreBreakdownDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import {
@@ -16,7 +18,15 @@ import {
   FULL_PRICE_PENALTY,
   SCORING_WEIGHTS,
   nominationCap,
+  type CommonGroundWeights,
 } from './common-ground-scoring.constants';
+import {
+  computeTasteScore,
+  computeSocialScore,
+  computeIntensityFit,
+  gameToTasteVector,
+  type IntensityBucket,
+} from './common-ground-taste.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -44,12 +54,24 @@ export interface CommonGroundRow {
   earlyAccess: boolean;
   itadTags: string[];
   playerCount: { min: number; max: number } | null;
+  /** ROK-950: Steam-library owner user IDs for social-score intersection. */
+  ownerUserIds: number[];
 }
 
 /**
- * Build and execute the Common Ground aggregation query.
- * @returns Raw rows before scoring.
+ * Scoring context passed into `mapCommonGroundRow` (ROK-950). All fields
+ * are optional — callers that don't care about taste/social/intensity
+ * scoring can omit the context entirely and the breakdown will zero those
+ * factors.
  */
+export interface ScoringContext {
+  voterVector: number[] | null;
+  coPlayPartnerIds: Set<number>;
+  voterIntensity: IntensityBucket | null;
+  weights: CommonGroundWeights;
+}
+
+/** Build and execute the Common Ground aggregation query. */
 export async function queryCommonGround(
   db: PostgresJsDatabase<typeof schema>,
   filters: CommonGroundFilters,
@@ -71,7 +93,11 @@ export async function queryCommonGround(
       g.itad_current_url AS "itadCurrentUrl",
       g.early_access AS "earlyAccess",
       COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
-      g.player_count AS "playerCount"
+      g.player_count AS "playerCount",
+      COALESCE(
+        array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_library'),
+        ARRAY[]::int[]
+      ) AS "ownerUserIds"
     FROM games g
     LEFT JOIN game_interests gi ON gi.game_id = g.id
     WHERE ${sql.join(conditions, sql` AND `)}
@@ -127,10 +153,9 @@ function buildWhereConditions(
 }
 
 /**
- * Compute the Common Ground score for a game.
- * @param ownerCount - Number of library owners
- * @param currentCut - Current discount percentage (0-100), null if unknown
- * @returns Numeric score
+ * Legacy scalar scorer kept for back-compat with existing unit tests
+ * (ROK-934). Returns the same value as `scoreBreakdown.baseScore` plus
+ * sale/full-price adjustment.
  */
 export function computeScore(
   ownerCount: number,
@@ -142,13 +167,102 @@ export function computeScore(
   return ownerScore + saleAdjustment;
 }
 
-/** Map a raw DB row to a scored CommonGroundGameDto. */
-export function mapCommonGroundRow(row: CommonGroundRow): CommonGroundGameDto {
-  return {
+/** Compute the full per-game score breakdown (ROK-950). */
+export function computeScoreBreakdown(
+  row: CommonGroundRow,
+  ctx: ScoringContext | null,
+): CommonGroundScoreBreakdownDto {
+  const baseScore = computeScore(row.ownerCount, row.itadCurrentCut);
+  if (!ctx) {
+    return {
+      baseScore,
+      tasteScore: 0,
+      socialScore: 0,
+      intensityScore: 0,
+      total: baseScore,
+    };
+  }
+  const gameVec = gameToTasteVector7(row.itadTags);
+  const tasteScore = computeTasteScore(
+    gameVec,
+    ctx.voterVector,
+    ctx.weights.tasteWeight,
+  );
+  const socialScore = computeSocialScore(
+    { ownerIds: new Set(row.ownerUserIds ?? []) },
+    ctx.coPlayPartnerIds,
+    ctx.weights.socialWeight,
+  );
+  const intensityScore = computeIntensityFit(
+    { intensityBucket: deriveGameIntensity(row) },
+    ctx.voterIntensity,
+    ctx.weights.intensityWeight,
+  );
+  const total = baseScore + tasteScore + socialScore + intensityScore;
+  return { baseScore, tasteScore, socialScore, intensityScore, total };
+}
+
+/**
+ * Project the full-pool game taste vector down to the 7 pgvector axes so
+ * it can be multiplied against the stored voter vector (`vector(7)`).
+ */
+function gameToTasteVector7(itadTags: string[]): number[] {
+  const pool = gameToTasteVector(itadTags);
+  // Match stored pgvector column order: co_op, pvp, rpg, survival, strategy, social, mmo.
+  // Indices in TASTE_PROFILE_AXIS_POOL (declared in contract): 0, 1, 9, 14, 13, 19, 3.
+  return [pool[0], pool[1], pool[9], pool[14], pool[13], pool[19], pool[3]];
+}
+
+/**
+ * Heuristic intensity bucket derived from player count / tag signals.
+ * Placeholder today — returns `null` when we lack a good signal. Keeps the
+ * intensity factor additive without locking us into a premature mapping.
+ */
+function deriveGameIntensity(row: CommonGroundRow): IntensityBucket | null {
+  const tags = row.itadTags.map((t) => t.toLowerCase());
+  if (tags.includes('casual') || tags.includes('party')) return 'low';
+  if (
+    tags.includes('competitive') ||
+    tags.includes('mmorpg') ||
+    tags.includes('mmo')
+  ) {
+    return 'high';
+  }
+  return null;
+}
+
+/**
+ * Map a raw DB row to a scored CommonGroundGameDto. When `ctx` is supplied
+ * the breakdown is populated with taste/social/intensity factors; the
+ * top-level `score` field stays equal to `breakdown.total` for callers
+ * that ignore the breakdown.
+ */
+export function mapCommonGroundRow(
+  row: CommonGroundRow,
+  ctx: ScoringContext | null = null,
+): CommonGroundGameDto {
+  const safeRow: CommonGroundRow = {
     ...row,
     itadTags: Array.isArray(row.itadTags) ? row.itadTags : [],
-    playerCount: row.playerCount as { min: number; max: number } | null,
-    score: computeScore(row.ownerCount, row.itadCurrentCut),
+    ownerUserIds: Array.isArray(row.ownerUserIds) ? row.ownerUserIds : [],
+  };
+  const breakdown = computeScoreBreakdown(safeRow, ctx);
+  return {
+    gameId: safeRow.gameId,
+    gameName: safeRow.gameName,
+    slug: safeRow.slug,
+    coverUrl: safeRow.coverUrl,
+    ownerCount: safeRow.ownerCount,
+    wishlistCount: safeRow.wishlistCount,
+    nonOwnerPrice: safeRow.nonOwnerPrice,
+    itadCurrentCut: safeRow.itadCurrentCut,
+    itadCurrentShop: safeRow.itadCurrentShop,
+    itadCurrentUrl: safeRow.itadCurrentUrl,
+    earlyAccess: safeRow.earlyAccess,
+    itadTags: safeRow.itadTags,
+    playerCount: safeRow.playerCount,
+    score: breakdown.total,
+    scoreBreakdown: breakdown,
   };
 }
 
@@ -159,15 +273,24 @@ export async function buildCommonGroundResponse(
   nominatedIds: number[],
   nominatorCount: number,
   filters: CommonGroundQueryDto,
+  ctx: ScoringContext | null = null,
 ): Promise<CommonGroundResponseDto> {
   const rows = await queryCommonGround(db, filters, nominatedIds);
-  const scored = rows.map(mapCommonGroundRow);
+  const scored = rows.map((r) => mapCommonGroundRow(r, ctx));
   scored.sort((a, b) => b.score - a.score);
+  const weights = ctx?.weights ?? { ...SCORING_WEIGHTS };
   return {
     data: scored,
     meta: {
       total: scored.length,
-      appliedWeights: { ...SCORING_WEIGHTS },
+      appliedWeights: {
+        ownerWeight: weights.ownerWeight,
+        saleBonus: weights.saleBonus,
+        fullPricePenalty: weights.fullPricePenalty,
+        tasteWeight: weights.tasteWeight,
+        socialWeight: weights.socialWeight,
+        intensityWeight: weights.intensityWeight,
+      },
       activeLineupId: lineupId,
       nominatedCount: nominatedIds.length,
       maxNominations: nominationCap(nominatorCount),

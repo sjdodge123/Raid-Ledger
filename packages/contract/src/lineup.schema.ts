@@ -229,6 +229,23 @@ export type CastVoteDto = z.infer<typeof CastVoteSchema>;
 
 export type NominateGameDto = z.infer<typeof NominateGameSchema>;
 
+/**
+ * Per-game score breakdown (ROK-950). `total` equals the top-level `score`
+ * field for back-compat; downstream consumers should prefer the breakdown
+ * when reasoning about individual factors.
+ */
+export const CommonGroundScoreBreakdownSchema = z.object({
+    baseScore: z.number(),
+    tasteScore: z.number(),
+    socialScore: z.number(),
+    intensityScore: z.number(),
+    total: z.number(),
+});
+
+export type CommonGroundScoreBreakdownDto = z.infer<
+    typeof CommonGroundScoreBreakdownSchema
+>;
+
 /** A single game in the Common Ground response. */
 export const CommonGroundGameSchema = z.object({
     gameId: z.number(),
@@ -245,6 +262,8 @@ export const CommonGroundGameSchema = z.object({
     itadTags: z.array(z.string()),
     playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),
     score: z.number(),
+    /** ROK-950: per-factor score breakdown (taste, social, intensity, base). */
+    scoreBreakdown: CommonGroundScoreBreakdownSchema.optional(),
 });
 
 export type CommonGroundGameDto = z.infer<typeof CommonGroundGameSchema>;
@@ -258,6 +277,12 @@ export const CommonGroundResponseSchema = z.object({
             ownerWeight: z.number(),
             saleBonus: z.number(),
             fullPricePenalty: z.number(),
+            /** ROK-950: cosine-similarity weight between game and voter taste vector. */
+            tasteWeight: z.number(),
+            /** ROK-950: weight applied when a co-play partner owns the game. */
+            socialWeight: z.number(),
+            /** ROK-950: weight applied when the game's intensity matches the voter's preferred intensity. */
+            intensityWeight: z.number(),
         }),
         activeLineupId: z.number(),
         nominatedCount: z.number(),

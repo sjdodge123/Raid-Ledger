@@ -12,6 +12,15 @@ export const SALE_BONUS = 5;
 /** Penalty when the game is at full price. */
 export const FULL_PRICE_PENALTY = 2;
 
+/** ROK-950: Default weight on voter/game taste-vector cosine similarity. */
+export const TASTE_WEIGHT = 15;
+
+/** ROK-950: Default weight when a co-play partner owns the game. */
+export const SOCIAL_WEIGHT = 8;
+
+/** ROK-950: Default weight when game intensity matches voter intensity bucket. */
+export const INTENSITY_WEIGHT = 5;
+
 /** Default minimum owners filter. */
 export const DEFAULT_MIN_OWNERS = 2;
 
@@ -43,4 +52,17 @@ export const SCORING_WEIGHTS = {
   ownerWeight: OWNER_WEIGHT,
   saleBonus: SALE_BONUS,
   fullPricePenalty: FULL_PRICE_PENALTY,
+  tasteWeight: TASTE_WEIGHT,
+  socialWeight: SOCIAL_WEIGHT,
+  intensityWeight: INTENSITY_WEIGHT,
 } as const;
+
+/** ROK-950: Configurable Common Ground weights resolved from SettingsService. */
+export interface CommonGroundWeights {
+  ownerWeight: number;
+  saleBonus: number;
+  fullPricePenalty: number;
+  tasteWeight: number;
+  socialWeight: number;
+  intensityWeight: number;
+}
