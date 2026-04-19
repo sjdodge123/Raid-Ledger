@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { DemoTestGamesController } from './demo-test-games.controller';
 import { DemoTestService } from './demo-test.service';
+import { DemoTestLineupService } from './demo-test-lineup.service';
 import { LineupSteamNudgeService } from '../lineups/lineup-steam-nudge.service';
 
 function createMockService() {
@@ -14,19 +15,32 @@ function createMockService() {
   };
 }
 
+function createMockLineupService() {
+  return {
+    setAutoNominatePrefForTest: jest.fn().mockResolvedValue(undefined),
+    createBuildingLineupForTest: jest.fn().mockResolvedValue({ lineupId: 1 }),
+    nominateGameForTest: jest.fn().mockResolvedValue(undefined),
+    archiveLineupForTest: jest.fn().mockResolvedValue(undefined),
+    archiveActiveLineupForTest: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('DemoTestGamesController', () => {
   let controller: DemoTestGamesController;
   let mockService: ReturnType<typeof createMockService>;
+  let mockLineupService: ReturnType<typeof createMockLineupService>;
   let nudge: { nudgeUnlinkedMembers: jest.Mock };
 
   beforeEach(async () => {
     mockService = createMockService();
+    mockLineupService = createMockLineupService();
     nudge = { nudgeUnlinkedMembers: jest.fn().mockResolvedValue(undefined) };
 
     const module = await Test.createTestingModule({
       controllers: [DemoTestGamesController],
       providers: [
         { provide: DemoTestService, useValue: mockService },
+        { provide: DemoTestLineupService, useValue: mockLineupService },
         { provide: LineupSteamNudgeService, useValue: nudge },
       ],
     }).compile();

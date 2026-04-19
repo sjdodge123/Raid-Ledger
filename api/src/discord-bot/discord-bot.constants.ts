@@ -171,6 +171,18 @@ export const STEAM_INTEREST_BUTTON_IDS = {
   AUTO: 'steam_interest_auto',
 } as const;
 
+/**
+ * Custom IDs for Steam URL paste-to-nominate buttons (ROK-1081).
+ * Format: `{action}:{gameId}` -- e.g. `steam_nominate_nominate:42`.
+ * The active lineup is re-resolved on click so nothing is stale.
+ */
+export const STEAM_NOMINATE_BUTTON_IDS = {
+  NOMINATE: 'steam_nominate_nominate',
+  HEART: 'steam_nominate_heart',
+  AUTO: 'steam_nominate_auto',
+  DISMISS: 'steam_nominate_dismiss',
+} as const;
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',

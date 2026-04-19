@@ -115,6 +115,19 @@ function buildCdpSteamTests(): SmokeTest[] {
       enabled: false,
     });
 
+    // ROK-1081: the listener now offers a nomination DM when a building
+    // Community Lineup is active. These heart-flow tests assert the
+    // unchanged ROK-966 copy, so make a best-effort attempt to archive
+    // any active building lineup. The endpoint may 404 if no lineup exists
+    // or if the test-only endpoint has not yet been deployed.
+    try {
+      await ctx.api.post('/admin/test/archive-active-lineup', {});
+    } catch {
+      // Endpoint is new (ROK-1081) and may not exist in older deployments.
+      // Ignore — the test will still catch heart-flow regressions when
+      // no lineup is present, which is the common case.
+    }
+
     return { gameName, discordId };
   }
 

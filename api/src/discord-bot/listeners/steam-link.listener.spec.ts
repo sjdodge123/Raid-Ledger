@@ -35,6 +35,7 @@ function setupSteamLinkModule() {
   chain.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
   chain.onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
   chain.select = jest.fn().mockReturnValue(chain);
+  chain.orderBy = jest.fn().mockReturnValue(chain);
   mockDb = chain;
 
   listener = new SteamLinkListener(
@@ -136,6 +137,10 @@ function stubAutoHeartPref(enabled: boolean) {
   }
 }
 
+function stubNoBuildingLineup() {
+  mockDb.limit.mockResolvedValueOnce([]);
+}
+
 describe('SteamLinkListener', () => {
   beforeEach(() => {
     setupSteamLinkModule();
@@ -178,6 +183,8 @@ describe('SteamLinkListener', () => {
   describe('rate limiting / dedup', () => {
     rateLimitTests();
   });
+
+  // ROK-1081 nomination flow tests live in ./steam-link.listener.nomination.spec.ts
 });
 
 function botConnectedTests() {
@@ -330,6 +337,7 @@ function silentSkipTests() {
   it('does not send an interest prompt when user is already interested in the game', async () => {
     stubGameLookup({ id: 42, name: 'CS2', steamAppId: 730 });
     stubUserLookup({ id: 7, discordId: 'discord-user-1' });
+    stubNoBuildingLineup();
     stubInterestCheck(true);
 
     const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
@@ -353,6 +361,7 @@ function autoHeartTests() {
   it('auto-hearts without prompt when preference is enabled', async () => {
     stubGameLookup({ id: 42, name: 'CS2', steamAppId: 730 });
     stubUserLookup({ id: 7, discordId: 'discord-user-1' });
+    stubNoBuildingLineup();
     stubInterestCheck(false);
     stubAutoHeartPref(true);
 
@@ -444,6 +453,7 @@ function dmConfirmationTests() {
     // Game exists, user linked, interest already present
     stubGameLookup({ id: 42, name: 'Counter-Strike 2', steamAppId: 730 });
     stubUserLookup({ id: 7, discordId: 'discord-user-1' });
+    stubNoBuildingLineup();
     stubInterestCheck(true);
 
     const msg = createMessage('https://store.steampowered.com/app/730/CS2/');
@@ -463,6 +473,7 @@ function dmConfirmationTests() {
   it('AC2: DMs the user when auto-heart adds a game interest', async () => {
     stubGameLookup({ id: 42, name: 'Counter-Strike 2', steamAppId: 730 });
     stubUserLookup({ id: 7, discordId: 'discord-user-1' });
+    stubNoBuildingLineup();
     stubInterestCheck(false);
     stubAutoHeartPref(true);
 
@@ -483,6 +494,7 @@ function dmConfirmationTests() {
   it('AC3: swallows DM send errors (user has DMs disabled) and logs a warning', async () => {
     stubGameLookup({ id: 42, name: 'Counter-Strike 2', steamAppId: 730 });
     stubUserLookup({ id: 7, discordId: 'discord-user-1' });
+    stubNoBuildingLineup();
     // Trigger the already-hearted branch so we exercise the new DM send
     stubInterestCheck(true);
 
