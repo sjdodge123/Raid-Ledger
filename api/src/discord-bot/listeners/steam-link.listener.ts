@@ -9,13 +9,8 @@
  * Nomination flow (building lineup active) — 4 buttons:
  *   Nominate / Just Heart It / Always Auto-Nominate / Dismiss
  */
-import {
-  Injectable,
-  Inject,
-  Logger,
-  Optional,
-  forwardRef,
-} from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
@@ -81,11 +76,24 @@ export class SteamLinkListener {
     @Optional() private readonly itadService: ItadService,
     @Optional() private readonly igdbService: IgdbService,
     private readonly settingsService: SettingsService,
-    @Optional()
-    @Inject(forwardRef(() => LineupsService))
-    private readonly lineupsService?: LineupsService,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {
     this.startDedupCleanup();
+  }
+
+  /**
+   * Lazily resolve LineupsService via ModuleRef to avoid an import-time
+   * cycle between DiscordBotModule <-> LineupsModule. Returns null when
+   * the service isn't registered (e.g. in isolated unit tests without
+   * the full module graph).
+   */
+  private getLineupsService(): LineupsService | null {
+    if (!this.moduleRef) return null;
+    try {
+      return this.moduleRef.get(LineupsService, { strict: false });
+    } catch {
+      return null;
+    }
   }
 
   /** Periodically clean up expired dedup entries. */
@@ -233,12 +241,13 @@ export class SteamLinkListener {
     game: Game,
     lineupId: number,
   ): Promise<void> {
-    if (!this.lineupsService) {
+    const lineups = this.getLineupsService();
+    if (!lineups) {
       await this.sendDmSafe(message, 'Auto-nominate is not available.');
       return;
     }
     const copy = await safeNominate(
-      this.lineupsService,
+      lineups,
       lineupId,
       game.id,
       game.name,
@@ -297,7 +306,7 @@ export class SteamLinkListener {
   private buildNominateDeps() {
     return {
       db: this.db,
-      lineupsService: this.lineupsService,
+      lineupsService: this.getLineupsService() ?? undefined,
       findActiveBuildingLineupId: async () =>
         (await findActiveBuildingLineup(this.db))?.id ?? null,
       addInterest: (userId: number, gameId: number) =>

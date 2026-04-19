@@ -42,13 +42,17 @@ export function buildMockContext(): MockContext {
     nominate: jest.fn().mockResolvedValue(undefined),
   };
 
+  const mockModuleRef = {
+    get: jest.fn().mockReturnValue(mockLineupsService),
+  };
+
   const listener = new SteamLinkListener(
     chain as never,
     mockClientService as never,
     undefined as never,
     undefined as never,
     undefined as never,
-    mockLineupsService as never,
+    mockModuleRef as never,
   );
 
   return {
