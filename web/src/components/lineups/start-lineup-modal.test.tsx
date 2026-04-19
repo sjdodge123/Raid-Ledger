@@ -24,6 +24,10 @@ vi.mock('../../hooks/admin/use-lineup-settings', () => ({
     useLineupSettings: vi.fn(),
 }));
 
+vi.mock('../../hooks/use-postable-discord-channels', () => ({
+    usePostableDiscordChannels: vi.fn(),
+}));
+
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual<typeof import('react-router-dom')>(
         'react-router-dom',
@@ -33,6 +37,7 @@ vi.mock('react-router-dom', async () => {
 
 import { useCreateLineup } from '../../hooks/use-lineups';
 import { useLineupSettings } from '../../hooks/admin/use-lineup-settings';
+import { usePostableDiscordChannels } from '../../hooks/use-postable-discord-channels';
 
 const mutateAsync = vi.fn();
 
@@ -40,6 +45,19 @@ function currentMonthYear(): string {
     const now = new Date();
     const month = now.toLocaleString('en-US', { month: 'long' });
     return `${month} ${now.getFullYear()}`;
+}
+
+function mockChannels(
+    channels: { id: string; name: string }[],
+    overrides: Partial<ReturnType<typeof usePostableDiscordChannels>> = {},
+): void {
+    vi.mocked(usePostableDiscordChannels).mockReturnValue({
+        data: { data: channels },
+        isLoading: false,
+        isError: false,
+        error: null,
+        ...overrides,
+    } as unknown as ReturnType<typeof usePostableDiscordChannels>);
 }
 
 beforeEach(() => {
@@ -62,6 +80,10 @@ beforeEach(() => {
         },
         updateDefaults: {},
     } as unknown as ReturnType<typeof useLineupSettings>);
+    mockChannels([
+        { id: '100000000000000001', name: 'general' },
+        { id: '100000000000000002', name: 'events' },
+    ]);
 });
 
 describe('StartLineupModal — title field', () => {
@@ -144,5 +166,63 @@ describe('StartLineupModal — submits title + description', () => {
             title: 'Co-op Night',
             description: 'Casual co-op picks',
         });
+    });
+});
+
+describe('StartLineupModal — channel override picker (ROK-1064)', () => {
+    it('renders the "Post embeds to" picker with community default option', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const label = screen.getByLabelText(/post embeds to/i);
+        expect(label).toBeInTheDocument();
+        expect(
+            screen.getByRole('option', { name: /use community default/i }),
+        ).toBeInTheDocument();
+    });
+
+    it('renders an option per postable channel returned by the hook', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(screen.getByRole('option', { name: /#general/ })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /#events/ })).toBeInTheDocument();
+    });
+
+    it('omits channelOverrideId from submit when "Use community default" is selected', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync).toHaveBeenCalledTimes(1);
+        expect(
+            'channelOverrideId' in mutateAsync.mock.calls[0][0],
+        ).toBe(false);
+    });
+
+    it('includes channelOverrideId on submit when a channel is selected', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const select = screen.getByLabelText(/post embeds to/i);
+        await user.selectOptions(select, '100000000000000002');
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            channelOverrideId: '100000000000000002',
+        });
+    });
+
+    it('hides the picker when the channels query errors', () => {
+        mockChannels([], { isError: true, isLoading: false });
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(screen.queryByLabelText(/post embeds to/i)).toBeNull();
     });
 });

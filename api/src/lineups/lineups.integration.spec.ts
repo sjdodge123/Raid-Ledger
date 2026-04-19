@@ -12,7 +12,6 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
-import { LineupNotificationService } from './lineup-notification.service';
 import { SettingsService } from '../settings/settings.service';
 
 function describeLineups() {
@@ -503,7 +502,8 @@ function describeLineups() {
       },
       channels: {
         cache: {
-          get: (id: string) => (id === OVERRIDE_CHANNEL_ID ? fakeChannel : null),
+          get: (id: string) =>
+            id === OVERRIDE_CHANNEL_ID ? fakeChannel : null,
         },
       },
     } as unknown;
@@ -529,6 +529,17 @@ function describeLineups() {
       .send(body);
     expect(res.status).toBe(201);
     return res.body.id as number;
+  }
+
+  /** Poll until `predicate()` is truthy or we exceed `timeoutMs`. */
+  async function waitFor(
+    predicate: () => boolean,
+    timeoutMs = 1000,
+  ): Promise<void> {
+    const start = Date.now();
+    while (!predicate() && Date.now() - start < timeoutMs) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
   }
 
   function describeROK1064() {
@@ -561,16 +572,9 @@ function describeLineups() {
           >,
         );
 
-      const lineupId = await createLineupWithOverride(OVERRIDE_CHANNEL_ID);
-
-      // Trigger notification directly on the real service (bypasses the
-      // fire-and-forget wrapper so failures surface as test errors).
-      const notifSvc = testApp.app.get(LineupNotificationService);
-      await notifSvc.notifyLineupCreated({
-        id: lineupId,
-        title: 'Override Test',
-        description: null,
-      });
+      await createLineupWithOverride(OVERRIDE_CHANNEL_ID);
+      // POST fires notifyLineupCreated in the background; poll until it lands.
+      await waitFor(() => sendEmbedSpy.mock.calls.length >= 1);
 
       expect(sendEmbedSpy).toHaveBeenCalledTimes(1);
       const [channelArg] = sendEmbedSpy.mock.calls[0];
@@ -588,14 +592,8 @@ function describeLineups() {
           >,
         );
 
-      const lineupId = await createLineupWithOverride(undefined);
-
-      const notifSvc = testApp.app.get(LineupNotificationService);
-      await notifSvc.notifyLineupCreated({
-        id: lineupId,
-        title: 'Override Test',
-        description: null,
-      });
+      await createLineupWithOverride(undefined);
+      await waitFor(() => sendEmbedSpy.mock.calls.length >= 1);
 
       expect(sendEmbedSpy).toHaveBeenCalledTimes(1);
       const [channelArg] = sendEmbedSpy.mock.calls[0];
@@ -613,13 +611,7 @@ function describeLineups() {
         );
 
       const lineupId = await createLineupWithOverride(OVERRIDE_CHANNEL_ID);
-
-      const notifSvc = testApp.app.get(LineupNotificationService);
-      await notifSvc.notifyLineupCreated({
-        id: lineupId,
-        title: 'Override Test',
-        description: null,
-      });
+      await waitFor(() => sendEmbedSpy.mock.calls.length >= 1);
 
       // Sent to bound channel, NOT the override.
       expect(sendEmbedSpy).toHaveBeenCalledTimes(1);

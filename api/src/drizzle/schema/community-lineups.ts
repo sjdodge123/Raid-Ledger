@@ -60,6 +60,12 @@ export const communityLineups = pgTable('community_lineups', {
   discordCreatedChannelId: text('discord_created_channel_id'),
   /** Discord message ID of the creation embed (ROK-1063, for edit-in-place). */
   discordCreatedMessageId: text('discord_created_message_id'),
+  /**
+   * Optional per-lineup Discord channel override (ROK-1064).
+   * When set, every lineup lifecycle embed posts to this channel instead
+   * of the guild-bound default. Null = use default.
+   */
+  channelOverrideId: text('channel_override_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

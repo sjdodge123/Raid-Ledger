@@ -78,6 +78,8 @@ export interface CreateLineupParams {
   matchThreshold?: number;
   votesPerPlayer?: number;
   defaultTiebreakerMode?: 'bracket' | 'veto' | null;
+  /** Optional per-lineup Discord channel override (ROK-1064). */
+  channelOverrideId?: string | null;
 }
 
 /** Create a new lineup with optional duration params. */
