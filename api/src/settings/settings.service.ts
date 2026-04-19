@@ -53,15 +53,8 @@ import type {
   BrandingConfig,
   DiscordBotConfig,
 } from './settings.types';
-import {
-  OWNER_WEIGHT,
-  SALE_BONUS,
-  FULL_PRICE_PENALTY,
-  TASTE_WEIGHT,
-  SOCIAL_WEIGHT,
-  INTENSITY_WEIGHT,
-  type CommonGroundWeights,
-} from '../lineups/common-ground-scoring.constants';
+import type { CommonGroundWeights } from '../lineups/common-ground-scoring.constants';
+import { resolveCommonGroundWeights } from './common-ground-weights.helpers';
 
 const CACHE_TTL_MS = 30 * 60_000;
 
@@ -270,21 +263,13 @@ export class SettingsService implements OnModuleInit {
     return _getBranding(this);
   }
 
-  async setCommunityName(name: string): Promise<void> {
-    await this.set(SETTING_KEYS.COMMUNITY_NAME, name);
-  }
-
-  async setCommunityLogoPath(filePath: string): Promise<void> {
-    await this.set(SETTING_KEYS.COMMUNITY_LOGO_PATH, filePath);
-  }
-
-  async setCommunityAccentColor(color: string): Promise<void> {
-    await this.set(SETTING_KEYS.COMMUNITY_ACCENT_COLOR, color);
-  }
-
-  async clearBranding(): Promise<void> {
-    await _clearBranding(this);
-  }
+  setCommunityName = (name: string) =>
+    this.set(SETTING_KEYS.COMMUNITY_NAME, name);
+  setCommunityLogoPath = (filePath: string) =>
+    this.set(SETTING_KEYS.COMMUNITY_LOGO_PATH, filePath);
+  setCommunityAccentColor = (color: string) =>
+    this.set(SETTING_KEYS.COMMUNITY_ACCENT_COLOR, color);
+  clearBranding = () => _clearBranding(this);
 
   // ─── GitHub ───────────────────────────────────────────────────
 
@@ -409,30 +394,7 @@ export class SettingsService implements OnModuleInit {
 
   // ─── Common Ground weights (ROK-950) ─────────────────────────
 
-  /**
-   * Resolve Common Ground scoring weights from DB settings with defaults.
-   * Each weight falls back to its constant default if unset or non-numeric.
-   */
   async getCommonGroundWeights(): Promise<CommonGroundWeights> {
-    const [tasteRaw, socialRaw, intensityRaw] = await Promise.all([
-      this.get(SETTING_KEYS.COMMON_GROUND_TASTE_WEIGHT),
-      this.get(SETTING_KEYS.COMMON_GROUND_SOCIAL_WEIGHT),
-      this.get(SETTING_KEYS.COMMON_GROUND_INTENSITY_WEIGHT),
-    ]);
-    return {
-      ownerWeight: OWNER_WEIGHT,
-      saleBonus: SALE_BONUS,
-      fullPricePenalty: FULL_PRICE_PENALTY,
-      tasteWeight: parseWeight(tasteRaw, TASTE_WEIGHT),
-      socialWeight: parseWeight(socialRaw, SOCIAL_WEIGHT),
-      intensityWeight: parseWeight(intensityRaw, INTENSITY_WEIGHT),
-    };
+    return resolveCommonGroundWeights((key) => this.get(key));
   }
-}
-
-/** Parse a DB-stored numeric weight, falling back to `fallback` if invalid. */
-function parseWeight(raw: string | null, fallback: number): number {
-  if (raw === null) return fallback;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : fallback;
 }
