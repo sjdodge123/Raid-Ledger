@@ -80,6 +80,14 @@ Three custom MCP servers provide tools for environment management, story trackin
 - **Never hand-edit migration SQL** unless fixing a known Drizzle codegen bug. If you must, document the edit in the commit message.
 - **One migration per schema change.** Do not combine unrelated schema changes into a single migration file.
 
+### Migration State Recovery
+
+Backups exclude the `drizzle` schema (migration metadata is code, not data) to prevent cross-branch hash drift. When restoring a backup or unsticking a drifted dev DB:
+
+- **`DATABASE_URL=... node scripts/reconcile-migrations.mjs`** — probes each journal entry, skips any whose effects already exist (treats `column already exists`, `relation already exists`, etc. as idempotent), runs anything truly missing, and records the hash row. Safe to re-run. Add `--dry-run` to preview.
+- `deploy_dev.sh` calls reconcile automatically after an auto-restore from `api/backups/daily/`.
+- **Symptom that means you need reconcile:** `drizzle-kit migrate` fails with `column/relation X already exists` on a migration whose hash isn't in `drizzle.__drizzle_migrations`.
+
 ## Testing
 
 - **Backend:** `npm run test -w api` (Jest). Coverage: `npm run test:cov -w api`

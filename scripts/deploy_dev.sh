@@ -369,18 +369,26 @@ validate_db_data() {
         print_warning "Found backup: $backup_name ($backup_size)"
         print_warning "Auto-restoring from backup..."
 
-        # Copy backup into container and restore
+        # Copy backup into container and restore.
+        # NOTE: we exclude the `drizzle` schema from restore — that table is
+        # code state, not data, and round-tripping it through backups causes
+        # cross-branch migration-hash drift. The reconcile step below brings
+        # __drizzle_migrations back in sync with the current journal.
         docker cp "$latest_backup" raid-ledger-db:/tmp/restore.dump
         if docker exec raid-ledger-db pg_restore \
             --clean --if-exists --no-owner --no-privileges \
+            --exclude-schema=drizzle \
             -d "postgresql://user:password@localhost:5432/raid_ledger" \
             /tmp/restore.dump 2>&1 | tail -5; then
 
             docker exec raid-ledger-db rm -f /tmp/restore.dump
 
-            # Re-run migrations in case backup is older than current schema
-            echo "Re-running migrations after restore..."
-            npm run db:migrate -w api 2>&1 || true
+            # Reconcile migration state: the restored DB has schema but no
+            # drizzle.__drizzle_migrations rows. Reconcile probes each
+            # journal entry, skips ones whose effects are already present,
+            # and runs anything truly missing.
+            echo "Reconciling migration state after restore..."
+            DATABASE_URL="$DATABASE_URL" node "$PROJECT_DIR/scripts/reconcile-migrations.mjs" 2>&1 || true
 
             # Verify restore worked
             user_count=$(docker exec raid-ledger-db psql -U user -d raid_ledger -tAc \
@@ -483,10 +491,14 @@ create_safety_backup() {
 
     print_warning "Creating safety backup before fresh start..."
 
+    # NOTE: we exclude the `drizzle` schema. Migration state is code, not
+    # data, and including it causes cross-branch hash drift on restore.
+    # On restore we reconcile from the current journal instead.
     if docker exec raid-ledger-db pg_dump \
         --format=custom \
         --no-owner \
         --no-privileges \
+        --exclude-schema=drizzle \
         "--file=/tmp/safety_backup.dump" \
         "$DATABASE_URL" 2>/dev/null && \
        docker cp "raid-ledger-db:/tmp/safety_backup.dump" "$filepath" 2>/dev/null && \
