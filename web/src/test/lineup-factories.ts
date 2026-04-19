@@ -77,6 +77,9 @@ export function createMockLineupDetail(
         totalMembers: 10,
         createdAt: '2026-03-20T00:00:00Z',
         updatedAt: '2026-03-20T00:00:00Z',
+        // ROK-1064: optional Discord channel override fields.
+        channelOverrideId: null,
+        channelOverrideName: null,
         ...overrides,
     } as LineupDetailResponseDto;
 }

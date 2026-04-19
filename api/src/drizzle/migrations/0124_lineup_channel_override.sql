@@ -1,0 +1,1 @@
+ALTER TABLE "community_lineups" ADD COLUMN "channel_override_id" text;

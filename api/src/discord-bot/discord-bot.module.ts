@@ -13,6 +13,7 @@ import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { LineupChannelSettingsController } from './lineup-channel-settings.controller';
+import { DiscordChannelsController } from './discord-channels.controller';
 import { DiscordMemberController } from './discord-member.controller';
 import { DiscordUserController } from './discord-user.controller';
 import { ChannelBindingsController } from './channel-bindings.controller';
@@ -96,6 +97,7 @@ import { PlayingCommand } from './commands/playing.command';
   controllers: [
     DiscordBotSettingsController,
     LineupChannelSettingsController,
+    DiscordChannelsController,
     DiscordMemberController,
     DiscordUserController,
     ChannelBindingsController,

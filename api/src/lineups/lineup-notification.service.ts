@@ -24,6 +24,7 @@ import { SettingsService } from '../settings/settings.service';
 import {
   resolveLineupChannel,
   loadLineupMeta,
+  loadLineupChannelOverride,
 } from './lineup-notification-channel.helpers';
 import type {
   EmbedContext,
@@ -60,6 +61,8 @@ export interface LineupInfo {
   targetDate?: Date;
   votingDeadline?: Date;
   phaseDeadline?: Date | null;
+  /** Per-lineup Discord channel override (ROK-1064). */
+  channelOverrideId?: string | null;
 }
 
 /** Shape of a match passed to notification methods. */
@@ -113,10 +116,12 @@ export class LineupNotificationService {
       title: lineup.title,
       description: lineup.description ?? null,
     });
+    // If caller passed the override explicitly, use it; otherwise load from DB.
     const sent = await this.postChannelEmbed(
       `lineup-created:${lineup.id}`,
       () => buildCreatedEmbed(ctx, lineup.targetDate),
       ctx,
+      lineup.channelOverrideId,
     );
     if (sent) {
       await persistCreatedEmbedRef(
@@ -314,17 +319,34 @@ export class LineupNotificationService {
     );
   }
 
-  /** Dedup + resolve channel + post an embed (ROK-1063 refactor). */
+  /**
+   * Dedup + resolve channel + post an embed (ROK-1063 refactor, ROK-1064).
+   *
+   * Honors per-lineup channel override when `overrideId` is provided directly
+   * (e.g. from the creation DTO). For lifecycle hooks that only carry a
+   * `lineupId`, pass `overrideId = undefined` and we'll load it from the DB.
+   */
   private async postChannelEmbed(
     dedupKey: string,
     build: (
       ctx: EmbedContext,
     ) => Promise<EmbedWithRow | null> | EmbedWithRow | null,
     ctx: EmbedContext,
+    overrideId?: string | null,
   ): Promise<{ channelId: string; messageId: string } | null> {
     if (await this.dedupService.checkAndMarkSent(dedupKey, DEDUP_TTL))
       return null;
-    const channelId = await resolveLineupChannel(this.settingsService);
+    const resolvedOverride =
+      overrideId === undefined
+        ? await loadLineupChannelOverride(this.db, ctx.lineupId)
+        : overrideId;
+    const channelId = await resolveLineupChannel(
+      this.settingsService,
+      this.botClient,
+      this.dedupService,
+      ctx.lineupId,
+      resolvedOverride,
+    );
     if (!channelId) return null;
     const result = await build(ctx);
     if (!result) return null;
