@@ -43,6 +43,16 @@ export const CreateLineupSchema = z.object({
     votesPerPlayer: z.number().int().min(1).max(10).optional(),
     /** Default tiebreaker mode when voting deadline expires. Null = skip tiebreaker. */
     defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable().optional(),
+    /**
+     * Optional per-lineup Discord channel override (ROK-1064).
+     * When set, every lineup lifecycle embed posts to this channel instead
+     * of the guild-bound default. Must be a Discord snowflake (17–20 digits).
+     */
+    channelOverrideId: z
+        .string()
+        .regex(/^\d{17,20}$/)
+        .nullable()
+        .optional(),
 });
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
@@ -151,6 +161,14 @@ export const LineupDetailResponseSchema = z.object({
     updatedAt: z.string(),
     /** Active tiebreaker detail, null when no tiebreaker (ROK-938). */
     tiebreaker: z.unknown().nullable().optional(),
+    /** Per-lineup Discord channel override ID (ROK-1064), null when unset. */
+    channelOverrideId: z.string().nullable(),
+    /**
+     * Pre-resolved Discord channel name for the detail header badge (ROK-1064).
+     * Null when no override set, or when override set but channel no longer
+     * visible to the bot.
+     */
+    channelOverrideName: z.string().nullable(),
 });
 
 export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;

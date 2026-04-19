@@ -22,6 +22,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
@@ -85,7 +86,15 @@ export class LineupsService {
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly steamNudge: LineupSteamNudgeService,
     private readonly lineupNotifications: LineupNotificationService,
+    private readonly botClient: DiscordBotClientService,
   ) {}
+
+  /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
+  private resolveChannelName = (channelId: string): string | null => {
+    const guild = this.botClient.getGuild();
+    const channel = guild?.channels?.cache?.get(channelId);
+    return channel?.name ?? null;
+  };
 
   /** Create a new lineup. Throws 409 if an active lineup already exists. */
   async create(
@@ -114,16 +123,28 @@ export class LineupsService {
       title: row.title,
       description: row.description ?? null,
       targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
+      // ROK-1064: per-lineup Discord channel override.
+      channelOverrideId: row.channelOverrideId ?? null,
     });
 
-    return buildDetailResponse(this.db, row.id);
+    return buildDetailResponse(
+      this.db,
+      row.id,
+      undefined,
+      this.resolveChannelName,
+    );
   }
 
   /** Get the currently active lineup (building or voting). */
   async findActive(userId?: number): Promise<LineupDetailResponseDto> {
     const [row] = await findActiveLineup(this.db);
     if (!row) throw new NotFoundException('No active lineup');
-    return buildDetailResponse(this.db, row.id, userId);
+    return buildDetailResponse(
+      this.db,
+      row.id,
+      userId,
+      this.resolveChannelName,
+    );
   }
 
   /** Get a lineup by ID with full detail. */
@@ -131,7 +152,7 @@ export class LineupsService {
     id: number,
     userId?: number,
   ): Promise<LineupDetailResponseDto> {
-    return buildDetailResponse(this.db, id, userId);
+    return buildDetailResponse(this.db, id, userId, this.resolveChannelName);
   }
 
   /** Toggle a vote for a game in a lineup (ROK-936). */
@@ -156,7 +177,12 @@ export class LineupsService {
       gameId,
       action,
     });
-    return buildDetailResponse(this.db, lineupId, userId);
+    return buildDetailResponse(
+      this.db,
+      lineupId,
+      userId,
+      this.resolveChannelName,
+    );
   }
 
   /** Transition a lineup to a new status. */
@@ -215,7 +241,12 @@ export class LineupsService {
       lineupId,
     );
 
-    return buildDetailResponse(this.db, lineupId);
+    return buildDetailResponse(
+      this.db,
+      lineupId,
+      undefined,
+      this.resolveChannelName,
+    );
   }
 
   /** Remove a nomination. */

@@ -79,6 +79,7 @@ function mapLineupCore(
   lineup: typeof schema.communityLineups.$inferSelect,
   creator: Awaited<ReturnType<typeof findUserById>>,
   decidedGame: Awaited<ReturnType<typeof findGameName>>,
+  channelOverrideName: string | null,
 ) {
   return {
     id: lineup.id,
@@ -97,6 +98,9 @@ function mapLineupCore(
     defaultTiebreakerMode: lineup.defaultTiebreakerMode ?? null,
     createdAt: lineup.createdAt.toISOString(),
     updatedAt: lineup.updatedAt.toISOString(),
+    // ROK-1064: per-lineup Discord channel override + resolved name.
+    channelOverrideId: lineup.channelOverrideId ?? null,
+    channelOverrideName,
   };
 }
 
@@ -110,10 +114,11 @@ function mapToDetailResponse(
   decidedGame: Awaited<ReturnType<typeof findGameName>>,
   enrichment: EnrichmentMaps,
   myVotes: number[],
+  channelOverrideName: string | null,
 ): LineupDetailResponseDto {
   const voteMap = new Map(voteCounts.map((v) => [v.gameId, v.voteCount]));
   return {
-    ...mapLineupCore(lineup, creator, decidedGame),
+    ...mapLineupCore(lineup, creator, decidedGame, channelOverrideName),
     entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
     totalVoters: voterCount[0]?.total ?? 0,
     totalMembers: enrichment.totalMembers,
@@ -147,11 +152,18 @@ async function fetchEnrichment(
   };
 }
 
+/**
+ * Callback for resolving a Discord channel name from its ID (ROK-1064).
+ * Callers inject this to avoid a hard dependency on the Discord bot client.
+ */
+export type ResolveChannelName = (channelId: string) => string | null;
+
 /** Assemble the full detail response for a lineup. */
 export async function buildDetailResponse(
   db: Db,
   lineupId: number,
   userId?: number,
+  resolveChannelName?: ResolveChannelName,
 ): Promise<LineupDetailResponseDto> {
   const [lineup] = await findLineupById(db, lineupId);
   if (!lineup) throw new NotFoundException('Lineup not found');
@@ -172,6 +184,9 @@ export async function buildDetailResponse(
     db,
     entries.map((e) => e.gameId),
   );
+  const channelOverrideName = lineup.channelOverrideId
+    ? (resolveChannelName?.(lineup.channelOverrideId) ?? null)
+    : null;
   const detail = mapToDetailResponse(
     lineup,
     entries,
@@ -181,6 +196,7 @@ export async function buildDetailResponse(
     decidedGame,
     enrichment,
     myVotes,
+    channelOverrideName,
   );
 
   // Attach tiebreaker detail if one exists (ROK-938)

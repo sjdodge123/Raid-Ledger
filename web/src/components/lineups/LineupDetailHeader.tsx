@@ -151,6 +151,28 @@ function PhaseContextInfo({ lineup }: { lineup: LineupDetailResponseDto }): JSX.
   return null;
 }
 
+/**
+ * Read-only pill showing which Discord channel lineup embeds post to
+ * (ROK-1064). Renders nothing when no override is set.
+ */
+function ChannelOverrideBadge({
+  lineup,
+}: {
+  lineup: LineupDetailResponseDto;
+}): JSX.Element | null {
+  if (!lineup.channelOverrideId) return null;
+  const name = lineup.channelOverrideName ?? 'unknown-channel';
+  return (
+    <span
+      data-testid="lineup-channel-override-badge"
+      className="inline-flex items-center px-1.5 py-0.5 text-xs rounded bg-overlay/40 text-muted"
+      title="Lineup embeds post to this channel"
+    >
+      #{name}
+    </span>
+  );
+}
+
 function EditButton({ onClick }: { onClick: () => void }): JSX.Element {
   return (
     <button
@@ -219,6 +241,7 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
           <span className="text-muted">Started by {lineup.createdBy.displayName}</span>
           <span className="text-dim">·</span>
           <PhaseContextInfo lineup={lineup} />
+          <ChannelOverrideBadge lineup={lineup} />
         </div>
         {lineup.phaseDeadline && (
           <PhaseCountdown phaseDeadline={lineup.phaseDeadline} phaseStartedAt={lineup.updatedAt} status={lineup.status} compact />

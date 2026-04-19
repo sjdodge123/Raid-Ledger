@@ -4,12 +4,15 @@
  * Verifies lineup CRUD and status transitions against a real PostgreSQL
  * database via HTTP endpoints, including auth guard enforcement.
  */
+import { Logger } from '@nestjs/common';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { SettingsService } from '../settings/settings.service';
 
 function describeLineups() {
   let testApp: TestApp;
@@ -463,5 +466,168 @@ function describeLineups() {
     });
   }
   describe('Active lineup constraint', describeActiveConstraint);
+
+  // ── ROK-1064: per-lineup Discord channel override ───────────
+  //
+  // Feature spec: lineup creation accepts an optional channelOverrideId.
+  // When set, lifecycle embeds post to that channel instead of the guild-bound
+  // default channel. If the bot loses perms on the override channel, dispatch
+  // falls back to the bound channel and logs exactly one dedup'd warning.
+
+  /** Discord snowflakes (17-20 digits). */
+  const BOUND_CHANNEL_ID = '123456789012345678';
+  const OVERRIDE_CHANNEL_ID = '987654321098765432';
+
+  /**
+   * Build a fake Discord Guild whose cache resolves OVERRIDE_CHANNEL_ID to a
+   * text channel with controllable permissions. Used to stand in for the real
+   * discord.js Guild without connecting the bot.
+   */
+  function buildFakeGuild(opts: { hasPerms: boolean }) {
+    const fakeChannel = {
+      id: OVERRIDE_CHANNEL_ID,
+      name: 'lineup-override',
+      isTextBased: () => true,
+      isThread: () => false,
+      isDMBased: () => false,
+      permissionsFor: () => ({
+        has: () => opts.hasPerms,
+      }),
+    };
+    return {
+      members: {
+        me: {
+          permissionsIn: () => ({ has: () => opts.hasPerms }),
+        },
+      },
+      channels: {
+        cache: {
+          get: (id: string) =>
+            id === OVERRIDE_CHANNEL_ID ? fakeChannel : null,
+        },
+      },
+    } as unknown;
+  }
+
+  /** Seed the guild-bound default channel setting. */
+  async function seedBoundChannel(): Promise<void> {
+    const settings = testApp.app.get(SettingsService);
+    await settings.setDiscordBotDefaultChannel(BOUND_CHANNEL_ID);
+  }
+
+  /** Create a lineup via HTTP with an optional channelOverrideId. */
+  async function createLineupWithOverride(
+    channelOverrideId?: string | null,
+  ): Promise<number> {
+    const body: Record<string, unknown> = { title: 'Override Test' };
+    if (channelOverrideId !== undefined) {
+      body.channelOverrideId = channelOverrideId;
+    }
+    const res = await testApp.request
+      .post('/lineups')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(body);
+    expect(res.status).toBe(201);
+    return res.body.id as number;
+  }
+
+  /** Poll until `predicate()` is truthy or we exceed `timeoutMs`. */
+  async function waitFor(
+    predicate: () => boolean,
+    timeoutMs = 1000,
+  ): Promise<void> {
+    const start = Date.now();
+    while (!predicate() && Date.now() - start < timeoutMs) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+
+  function describeROK1064() {
+    let sendEmbedSpy: jest.SpyInstance;
+    let warnSpy: jest.SpyInstance;
+
+    beforeEach(async () => {
+      const botClient = testApp.app.get(DiscordBotClientService);
+      // Stub sendEmbed so we don't hit a real Discord API and so we can
+      // assert on the channelId argument.
+      sendEmbedSpy = jest
+        .spyOn(botClient, 'sendEmbed')
+        .mockResolvedValue({ id: 'mock-msg-id' } as never);
+      warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      await seedBoundChannel();
+    });
+
+    afterEach(() => {
+      sendEmbedSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('posts lineup-created embed to override channel when channelOverrideId is set', async () => {
+      const botClient = testApp.app.get(DiscordBotClientService);
+      jest
+        .spyOn(botClient, 'getGuild')
+        .mockReturnValue(
+          buildFakeGuild({ hasPerms: true }) as ReturnType<
+            DiscordBotClientService['getGuild']
+          >,
+        );
+
+      await createLineupWithOverride(OVERRIDE_CHANNEL_ID);
+      // POST fires notifyLineupCreated in the background; poll until it lands.
+      await waitFor(() => sendEmbedSpy.mock.calls.length >= 1);
+
+      expect(sendEmbedSpy).toHaveBeenCalledTimes(1);
+      const [channelArg] = sendEmbedSpy.mock.calls[0];
+      expect(channelArg).toBe(OVERRIDE_CHANNEL_ID);
+      expect(channelArg).not.toBe(BOUND_CHANNEL_ID);
+    });
+
+    it('posts lineup-created embed to bound channel when no override is set', async () => {
+      const botClient = testApp.app.get(DiscordBotClientService);
+      jest
+        .spyOn(botClient, 'getGuild')
+        .mockReturnValue(
+          buildFakeGuild({ hasPerms: true }) as ReturnType<
+            DiscordBotClientService['getGuild']
+          >,
+        );
+
+      await createLineupWithOverride(undefined);
+      await waitFor(() => sendEmbedSpy.mock.calls.length >= 1);
+
+      expect(sendEmbedSpy).toHaveBeenCalledTimes(1);
+      const [channelArg] = sendEmbedSpy.mock.calls[0];
+      expect(channelArg).toBe(BOUND_CHANNEL_ID);
+    });
+
+    it('falls back to bound channel and warns once when bot lacks perms on override', async () => {
+      const botClient = testApp.app.get(DiscordBotClientService);
+      jest
+        .spyOn(botClient, 'getGuild')
+        .mockReturnValue(
+          buildFakeGuild({ hasPerms: false }) as ReturnType<
+            DiscordBotClientService['getGuild']
+          >,
+        );
+
+      const lineupId = await createLineupWithOverride(OVERRIDE_CHANNEL_ID);
+      await waitFor(() => sendEmbedSpy.mock.calls.length >= 1);
+
+      // Sent to bound channel, NOT the override.
+      expect(sendEmbedSpy).toHaveBeenCalledTimes(1);
+      const [channelArg] = sendEmbedSpy.mock.calls[0];
+      expect(channelArg).toBe(BOUND_CHANNEL_ID);
+
+      // Exactly one warning logged for this (lineupId, channelId) pair.
+      const fallbackWarns = warnSpy.mock.calls.filter((call) => {
+        const msg = String(call[0] ?? '');
+        return (
+          msg.includes(String(lineupId)) && msg.includes(OVERRIDE_CHANNEL_ID)
+        );
+      });
+      expect(fallbackWarns).toHaveLength(1);
+    });
+  }
+  describe('ROK-1064: per-lineup channel override', describeROK1064);
 }
 describe('Lineups (integration)', describeLineups);

@@ -88,3 +88,16 @@ export const DiscordBotSetAdHocStatusSchema = z.object({
     enabled: z.boolean(),
 });
 export type DiscordBotSetAdHocStatusDto = z.infer<typeof DiscordBotSetAdHocStatusSchema>;
+
+/** ROK-1064: A single Discord text channel surfaced by GET /discord/channels. */
+export const DiscordChannelSummarySchema = z.object({
+    id: z.string(),
+    name: z.string(),
+});
+export type DiscordChannelSummaryDto = z.infer<typeof DiscordChannelSummarySchema>;
+
+/** ROK-1064: Response body for GET /discord/channels. */
+export const DiscordChannelListResponseSchema = z.object({
+    data: z.array(DiscordChannelSummarySchema),
+});
+export type DiscordChannelListResponseDto = z.infer<typeof DiscordChannelListResponseSchema>;
