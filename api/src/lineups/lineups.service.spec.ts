@@ -10,6 +10,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { LineupNotificationService } from './lineup-notification.service';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
@@ -202,6 +203,12 @@ function describeLineupsService() {
             notifySchedulingOpen: jest.fn().mockResolvedValue(undefined),
             notifyNominationRemoved: jest.fn().mockResolvedValue(undefined),
             notifyEventCreated: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: TasteProfileService,
+          useValue: {
+            getTasteVectorsForUsers: jest.fn().mockResolvedValue(new Map()),
           },
         },
       ],

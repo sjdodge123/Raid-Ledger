@@ -32,6 +32,8 @@ import {
   findNominatedGameIds,
   countDistinctNominators,
 } from './lineups-query.helpers';
+import { TasteProfileService } from '../taste-profile/taste-profile.service';
+import { buildScoringContext } from './common-ground-context.helpers';
 import { insertLineup } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { buildCommonGroundResponse } from './common-ground-query.helpers';
@@ -85,6 +87,7 @@ export class LineupsService {
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly steamNudge: LineupSteamNudgeService,
     private readonly lineupNotifications: LineupNotificationService,
+    private readonly tasteProfile: TasteProfileService,
   ) {}
 
   /** Create a new lineup. Throws 409 if an active lineup already exists. */
@@ -178,7 +181,7 @@ export class LineupsService {
     );
   }
 
-  /** Get Common Ground games — ownership overlap. */
+  /** Get Common Ground games — ownership overlap + taste scoring (ROK-950). */
   async getCommonGround(
     filters: CommonGroundQueryDto,
   ): Promise<CommonGroundResponseDto> {
@@ -187,12 +190,19 @@ export class LineupsService {
       throw new NotFoundException('No active lineup in building status');
     const nominated = await findNominatedGameIds(this.db, lineup.id);
     const [nominators] = await countDistinctNominators(this.db, lineup.id);
+    const ctx = await buildScoringContext(
+      this.db,
+      lineup.id,
+      this.tasteProfile,
+      this.settings,
+    );
     return buildCommonGroundResponse(
       this.db,
       lineup.id,
       nominated,
       nominators?.count ?? 0,
       filters,
+      ctx,
     );
   }
 

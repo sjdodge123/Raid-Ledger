@@ -2,6 +2,7 @@ import { Module, OnModuleInit, Logger } from '@nestjs/common';
 import { SettingsModule } from '../settings/settings.module';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { TasteProfileModule } from '../taste-profile/taste-profile.module';
 import { AiAdminController } from './ai-admin.controller';
 import { AiProvidersController } from './ai-providers.controller';
 import { LlmProviderRegistry } from './llm-provider-registry';
@@ -16,13 +17,14 @@ import { OllamaSetupService } from './providers/ollama-setup.service';
 import { LlmService } from './llm.service';
 import { AiRequestLogService } from './ai-request-log.service';
 import { AI_MANIFEST } from './ai-manifest';
+import { TasteProfileContextBuilder } from './context-builders/taste-profile-context.builder';
 
 /**
  * AI module — registers the AI plugin manifest and wires up
  * the LLM provider infrastructure for all 4 providers.
  */
 @Module({
-  imports: [SettingsModule, DrizzleModule],
+  imports: [SettingsModule, DrizzleModule, TasteProfileModule],
   controllers: [AiAdminController, AiProvidersController],
   providers: [
     LlmProviderRegistry,
@@ -36,8 +38,9 @@ import { AI_MANIFEST } from './ai-manifest';
     OllamaSetupService,
     LlmService,
     AiRequestLogService,
+    TasteProfileContextBuilder,
   ],
-  exports: [LlmService],
+  exports: [LlmService, TasteProfileContextBuilder],
 })
 export class AiModule implements OnModuleInit {
   private readonly logger = new Logger(AiModule.name);

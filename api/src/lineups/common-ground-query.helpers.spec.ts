@@ -59,6 +59,7 @@ describe('mapCommonGroundRow', () => {
     earlyAccess: false,
     itadTags: ['RPG'],
     playerCount: { min: 1, max: 4 },
+    ownerUserIds: [],
   };
 
   it('includes computed score in mapped result', () => {

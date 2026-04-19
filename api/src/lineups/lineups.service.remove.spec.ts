@@ -14,6 +14,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { LineupNotificationService } from './lineup-notification.service';
 
 // Mock notification hooks to avoid extra DB queries (ROK-932)
@@ -148,6 +149,12 @@ describe('LineupsService.removeNomination', () => {
           provide: LineupNotificationService,
           useValue: {
             notifyNominationRemoved: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: TasteProfileService,
+          useValue: {
+            getTasteVectorsForUsers: jest.fn().mockResolvedValue(new Map()),
           },
         },
       ],

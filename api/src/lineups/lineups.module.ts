@@ -14,6 +14,7 @@ import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { TiebreakerModule } from './tiebreaker/tiebreaker.module';
+import { TasteProfileModule } from '../taste-profile/taste-profile.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { TiebreakerModule } from './tiebreaker/tiebreaker.module';
     SettingsModule,
     BullModule.registerQueue({ name: LINEUP_PHASE_QUEUE }),
     TiebreakerModule,
+    TasteProfileModule,
   ],
   controllers: [LineupsController],
   providers: [

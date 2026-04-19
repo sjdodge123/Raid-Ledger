@@ -1,7 +1,8 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type {
+  IntensityMetricsDto,
   TasteProfileArchetype,
   TasteProfileDimensionsDto,
   TasteProfilePoolAxis,
@@ -160,4 +161,40 @@ function zeroedDimensions(): TasteProfileDimensionsDto {
   const dims = {} as Record<TasteProfilePoolAxis, number>;
   for (const axis of TASTE_PROFILE_AXIS_POOL) dims[axis] = 0;
   return dims as TasteProfileDimensionsDto;
+}
+
+/** Lightweight vector record for Common Ground scoring (ROK-950). */
+export interface TasteVectorRow {
+  userId: number;
+  vector: number[];
+  intensityMetrics: IntensityMetricsDto;
+}
+
+/**
+ * Batched vector lookup for scoring contexts (ROK-950). Missing users are
+ * simply absent from the map — callers decide whether to treat that as an
+ * error or a graceful skip.
+ */
+export async function getTasteVectorsForUsers(
+  db: Db,
+  userIds: number[],
+): Promise<Map<number, TasteVectorRow>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      userId: schema.playerTasteVectors.userId,
+      vector: schema.playerTasteVectors.vector,
+      intensityMetrics: schema.playerTasteVectors.intensityMetrics,
+    })
+    .from(schema.playerTasteVectors)
+    .where(inArray(schema.playerTasteVectors.userId, userIds));
+  const map = new Map<number, TasteVectorRow>();
+  for (const row of rows) {
+    map.set(row.userId, {
+      userId: row.userId,
+      vector: row.vector,
+      intensityMetrics: row.intensityMetrics,
+    });
+  }
+  return map;
 }
