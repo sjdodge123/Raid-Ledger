@@ -136,10 +136,15 @@ create_safety_backup() {
 
     print_warning "Creating safety backup before fresh start..."
 
+    # NOTE: we exclude the `drizzle` schema. Migration state is code, not
+    # data, and including it causes cross-branch hash drift on restore.
+    # On restore, run scripts/reconcile-migrations.mjs to rebuild state
+    # from the current journal.
     if docker exec raid-ledger-db pg_dump \
         --format=custom \
         --no-owner \
         --no-privileges \
+        --exclude-schema=drizzle \
         "--file=/tmp/safety_backup.dump" \
         "$DATABASE_URL" 2>/dev/null && \
        docker cp "raid-ledger-db:/tmp/safety_backup.dump" "$filepath" 2>/dev/null && \
