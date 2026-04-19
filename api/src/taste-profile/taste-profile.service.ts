@@ -10,8 +10,10 @@ import { runBuildCoPlayGraph } from './pipelines/build-co-play-graph';
 import {
   findSimilarPlayers,
   getTasteProfile,
+  getTasteVectorsForUsers,
   type SimilarPlayerRow,
   type TasteProfileResult,
+  type TasteVectorRow,
 } from './queries/taste-profile-queries';
 
 @Injectable()
@@ -73,5 +75,12 @@ export class TasteProfileService {
     limit: number,
   ): Promise<SimilarPlayerRow[]> {
     return findSimilarPlayers(this.db, userId, limit);
+  }
+
+  /** Batched vector lookup for Common Ground scoring (ROK-950). */
+  getTasteVectorsForUsers(
+    userIds: number[],
+  ): Promise<Map<number, TasteVectorRow>> {
+    return getTasteVectorsForUsers(this.db, userIds);
   }
 }

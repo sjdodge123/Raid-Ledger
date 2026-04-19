@@ -126,3 +126,64 @@ export type SimilarPlayerDto = z.infer<typeof SimilarPlayerSchema>;
 export type SimilarPlayersResponseDto = z.infer<
   typeof SimilarPlayersResponseSchema
 >;
+
+// ============================================================
+// Taste Profile LLM Context (ROK-950)
+// ============================================================
+
+/**
+ * A single pool-axis entry with its score (0–100).
+ * Used for ranking the strongest and weakest axes in LLM context.
+ */
+export const TopAxisSchema = z.object({
+    axis: z.enum(TASTE_PROFILE_AXIS_POOL),
+    score: z.number(),
+});
+
+export type TopAxisDto = z.infer<typeof TopAxisSchema>;
+
+/**
+ * Co-play partner context — includes identity, session stats, and the
+ * partner's own top axes (≤3) for downstream LLM prompt construction.
+ */
+export const CoPlayPartnerContextSchema = z.object({
+    userId: z.number().int(),
+    username: z.string(),
+    sessionCount: z.number().int(),
+    topAxes: z.array(TopAxisSchema).max(3),
+});
+
+export type CoPlayPartnerContextDto = z.infer<
+    typeof CoPlayPartnerContextSchema
+>;
+
+/**
+ * Per-user taste context bundle — shape consumed by LLM prompt builders.
+ * Archetype + intensity metrics + top axes (≤5) + low axes (≤3) + co-play
+ * partners (each with their own top axes).
+ */
+export const TasteProfileContextSchema = z.object({
+    userId: z.number().int(),
+    username: z.string(),
+    archetype: z.enum(TASTE_PROFILE_ARCHETYPES),
+    intensityMetrics: IntensityMetricsSchema,
+    topAxes: z.array(TopAxisSchema).max(5),
+    lowAxes: z.array(TopAxisSchema).max(3),
+    coPlayPartners: z.array(CoPlayPartnerContextSchema).max(5),
+});
+
+export type TasteProfileContextDto = z.infer<typeof TasteProfileContextSchema>;
+
+/**
+ * Bundle returned by TasteProfileContextBuilder: resolved contexts plus
+ * a list of user IDs that could not be resolved (missing vector, deleted
+ * user, etc.).
+ */
+export const TasteProfileContextBundleSchema = z.object({
+    contexts: z.array(TasteProfileContextSchema),
+    missingUserIds: z.array(z.number().int()),
+});
+
+export type TasteProfileContextBundleDto = z.infer<
+    typeof TasteProfileContextBundleSchema
+>;

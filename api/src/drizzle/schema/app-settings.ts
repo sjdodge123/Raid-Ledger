@@ -110,6 +110,12 @@ export const SETTING_KEYS = {
   LINEUP_DEFAULT_VOTING_HOURS: 'lineup_default_voting_hours',
   /** ROK-946: Default hours for lineup decided phase */
   LINEUP_DEFAULT_DECIDED_HOURS: 'lineup_default_decided_hours',
+  /** ROK-950: Common Ground — weight on voter/game taste-vector cosine similarity. */
+  COMMON_GROUND_TASTE_WEIGHT: 'common_ground_taste_weight',
+  /** ROK-950: Common Ground — weight when a co-play partner owns the game. */
+  COMMON_GROUND_SOCIAL_WEIGHT: 'common_ground_social_weight',
+  /** ROK-950: Common Ground — weight when game intensity matches voter intensity bucket. */
+  COMMON_GROUND_INTENSITY_WEIGHT: 'common_ground_intensity_weight',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

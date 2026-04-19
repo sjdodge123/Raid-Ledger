@@ -64,13 +64,12 @@ function buildProfile(overrides: {
       ...zeroDims,
       ...(overrides.dimensions ?? {}),
     } as TasteProfileResult['dimensions'],
-    intensityMetrics:
-      overrides.intensityMetrics ?? {
-        intensity: 60,
-        focus: 40,
-        breadth: 55,
-        consistency: 70,
-      },
+    intensityMetrics: overrides.intensityMetrics ?? {
+      intensity: 60,
+      focus: 40,
+      breadth: 55,
+      consistency: 70,
+    },
     archetype: overrides.archetype ?? 'Explorer',
     coPlayPartners: overrides.coPlayPartners ?? [],
     computedAt: new Date('2026-04-01T00:00:00Z').toISOString(),
@@ -96,10 +95,7 @@ function buildPartner(
 describe('TasteProfileContextBuilder', () => {
   let builder: TasteProfileContextBuilder;
   let mockTasteProfileService: {
-    getTasteProfile: jest.Mock<
-      Promise<TasteProfileResult | null>,
-      [number]
-    >;
+    getTasteProfile: jest.Mock<Promise<TasteProfileResult | null>, [number]>;
   };
 
   beforeEach(async () => {
@@ -232,10 +228,13 @@ describe('TasteProfileContextBuilder', () => {
     });
 
     it('mixes present + missing users into the correct buckets', async () => {
-      mockTasteProfileService.getTasteProfile.mockImplementation(async (id: number) => {
-        if (id === 1) return buildProfile({ userId: 1, dimensions: { rpg: 80 } });
-        return null;
-      });
+      mockTasteProfileService.getTasteProfile.mockImplementation(
+        async (id: number) => {
+          if (id === 1)
+            return buildProfile({ userId: 1, dimensions: { rpg: 80 } });
+          return null;
+        },
+      );
 
       const result = await builder.build([1, 2, 3]);
 

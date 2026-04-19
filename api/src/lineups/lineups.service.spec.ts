@@ -10,6 +10,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
@@ -208,6 +209,12 @@ function describeLineupsService() {
         {
           provide: DiscordBotClientService,
           useValue: { getGuild: jest.fn().mockReturnValue(null) },
+        },
+        {
+          provide: TasteProfileService,
+          useValue: {
+            getTasteVectorsForUsers: jest.fn().mockResolvedValue(new Map()),
+          },
         },
       ],
     }).compile();
