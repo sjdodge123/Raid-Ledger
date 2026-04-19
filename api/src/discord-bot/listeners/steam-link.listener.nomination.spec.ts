@@ -202,8 +202,7 @@ function nominationPromptTests() {
     const rawButtons =
       firstRow?.components ?? firstRow?.toJSON?.().components ?? [];
     const customIds = rawButtons.map((b) => {
-      const direct = (b?.data as { custom_id?: string } | undefined)
-        ?.custom_id;
+      const direct = (b?.data as { custom_id?: string } | undefined)?.custom_id;
       const viaJson = (
         b?.toJSON as (() => { custom_id?: string }) | undefined
       )?.();
@@ -276,9 +275,7 @@ function nominationCapTests() {
 
     expect(ctx.mockDmSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.stringContaining(
-          'Lineup has reached the 25-entry cap',
-        ),
+        content: expect.stringContaining('Lineup has reached the 25-entry cap'),
       }),
     );
   });

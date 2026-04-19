@@ -71,6 +71,25 @@ export const SetAutoHeartPrefSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const CreateBuildingLineupSchema = z.object({
+  createdByUserId: z.number().int().positive(),
+});
+
+export const NominateGameTestSchema = z.object({
+  lineupId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
+export const ArchiveLineupSchema = z.object({
+  lineupId: z.number().int().positive(),
+});
+
+export const SetAutoNominatePrefSchema = z.object({
+  userId: z.number().int().positive(),
+  enabled: z.boolean(),
+});
+
 const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
 
 export const CreateTestSignupSchema = z.object({

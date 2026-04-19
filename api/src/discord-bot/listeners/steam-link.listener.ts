@@ -1,20 +1,25 @@
 /**
  * Listener that detects Steam store URLs in Discord messages and prompts
- * users to mark interest in the game on Raid Ledger (ROK-966).
+ * users to heart the game (ROK-966) or nominate it to the current
+ * Community Lineup (ROK-1081).
  *
- * Three prompt options:
- * 1. "Interested" -- create game_interests row with source 'discord'
- * 2. "Not Interested" -- dismiss the ephemeral prompt
- * 3. "Always Auto-Interest" -- heart + set autoHeartSteamUrls preference
+ * Heart flow (no building lineup) — 3 buttons:
+ *   Interested / Not Interested / Always Auto-Interest
+ *
+ * Nomination flow (building lineup active) — 4 buttons:
+ *   Nominate / Just Heart It / Always Auto-Nominate / Dismiss
  */
-import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
   ChannelType,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   type Message,
   type ButtonInteraction,
   type Interaction,
@@ -26,11 +31,9 @@ import { ItadService } from '../../itad/itad.service';
 import { IgdbService } from '../../igdb/igdb.service';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTING_KEYS } from '../../drizzle/schema';
+import { LineupsService } from '../../lineups/lineups.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
-import {
-  DISCORD_BOT_EVENTS,
-  STEAM_INTEREST_BUTTON_IDS,
-} from '../discord-bot.constants';
+import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { parseSteamAppIds } from './steam-link.helpers';
 import {
   findGameBySteamAppId,
@@ -38,18 +41,32 @@ import {
   hasExistingHeartInterest,
   getAutoHeartSteamUrlsPref,
   addDiscordInterest,
-  setAutoHeartSteamUrlsPref,
+  setAutoNominateSteamUrlsPref,
   discoverGameBySteamAppId,
+  findActiveBuildingLineup,
+  isGameNominated,
+  getAutoNominateSteamUrlsPref,
 } from './steam-link-interest.helpers';
+import {
+  buildInterestButtonRow,
+  handleInterestButtonClick,
+} from './steam-link.listener.interest-flow';
+import {
+  buildNominationPrompt,
+  handleNominateButtonClick,
+  parseSteamNominateButtonId,
+  safeNominate,
+} from './steam-link.listener.nomination-flow';
 
 /** Dedup TTL in milliseconds. */
 const DEDUP_TTL_MS = 30_000;
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Game = { id: number; name: string; igdbId: number | null };
 
 /**
  * Detects Steam store URLs in Discord messages and prompts
- * the user to heart the game on Raid Ledger.
+ * the user to heart or nominate the game on Raid Ledger.
  */
 @Injectable()
 export class SteamLinkListener {
@@ -64,6 +81,9 @@ export class SteamLinkListener {
     @Optional() private readonly itadService: ItadService,
     @Optional() private readonly igdbService: IgdbService,
     private readonly settingsService: SettingsService,
+    @Optional()
+    @Inject(forwardRef(() => LineupsService))
+    private readonly lineupsService?: LineupsService,
   ) {
     this.startDedupCleanup();
   }
@@ -120,14 +140,6 @@ export class SteamLinkListener {
     const appIds = parseSteamAppIds(message.content);
     if (appIds.length === 0) return;
 
-    await this.processAppIds(appIds, message);
-  }
-
-  /** Process extracted app IDs: resolve, check, and prompt or auto-heart. */
-  private async processAppIds(
-    appIds: number[],
-    message: Message,
-  ): Promise<void> {
     for (const appId of appIds) {
       await this.processSingleAppId(appId, message);
     }
@@ -153,45 +165,90 @@ export class SteamLinkListener {
     const user = await findLinkedRlUser(this.db, message.author.id);
     if (!user) return;
 
-    await this.dispatchInterestFlow(message, user.id, game);
+    const buildingLineup = await findActiveBuildingLineup(this.db);
+    if (buildingLineup) {
+      await this.dispatchNominationFlow(
+        message,
+        user.id,
+        game,
+        buildingLineup.id,
+      );
+    } else {
+      await this.dispatchInterestFlow(message, user.id, game);
+    }
   }
 
-  /**
-   * Dispatch the post-lookup interest flow: already-hearted DM, auto-heart
-   * DM, or interactive prompt depending on existing state and preferences.
-   */
+  /** Heart flow (ROK-966) — 3-button prompt when no building lineup exists. */
   private async dispatchInterestFlow(
     message: Message,
     userId: number,
-    game: { id: number; name: string },
+    game: Game,
   ): Promise<void> {
-    const alreadyInterested = await hasExistingHeartInterest(
-      this.db,
-      userId,
-      game.id,
-    );
-    if (alreadyInterested) {
+    if (await hasExistingHeartInterest(this.db, userId, game.id)) {
       await this.sendDmSafe(
         message,
         `You already have **${game.name}** hearted! 💜`,
       );
       return;
     }
-
-    const autoHeart = await getAutoHeartSteamUrlsPref(this.db, userId);
-    if (autoHeart) {
+    if (await getAutoHeartSteamUrlsPref(this.db, userId)) {
       await addDiscordInterest(this.db, userId, game.id);
       await this.sendDmSafe(message, `Auto-hearted **${game.name}**! 💜`);
       return;
     }
-
-    await this.sendInterestPrompt(message, game);
+    const row = buildInterestButtonRow(game.id);
+    const dm = await message.author.createDM();
+    await dm.send({
+      content: `Interested in **${game.name}** on Raid Ledger?`,
+      components: [row],
+    });
   }
 
-  /**
-   * Send a plain-text DM to the message author, swallowing and logging
-   * failures (e.g. when the user has DMs disabled from server members).
-   */
+  /** Nomination flow (ROK-1081) — 4-button prompt when a building lineup is active. */
+  private async dispatchNominationFlow(
+    message: Message,
+    userId: number,
+    game: Game,
+    lineupId: number,
+  ): Promise<void> {
+    if (await isGameNominated(this.db, lineupId, game.id)) {
+      await this.sendDmSafe(
+        message,
+        `**${game.name}** is already nominated for the current lineup.`,
+      );
+      return;
+    }
+    if (await getAutoNominateSteamUrlsPref(this.db, userId)) {
+      await this.autoNominate(message, userId, game, lineupId);
+      return;
+    }
+    const dm = await message.author.createDM();
+    await dm.send(buildNominationPrompt(game));
+  }
+
+  /** Auto-nominate path: call LineupsService and DM the result. */
+  private async autoNominate(
+    message: Message,
+    userId: number,
+    game: Game,
+    lineupId: number,
+  ): Promise<void> {
+    if (!this.lineupsService) {
+      await this.sendDmSafe(message, 'Auto-nominate is not available.');
+      return;
+    }
+    const copy = await safeNominate(
+      this.lineupsService,
+      lineupId,
+      game.id,
+      game.name,
+      userId,
+      `Auto-nominated **${game.name}** to the current lineup!`,
+    );
+    await this.sendDmSafe(message, copy);
+  }
+
+  /** Send a plain-text DM, swallowing and logging failures. */
   private async sendDmSafe(message: Message, content: string): Promise<void> {
     try {
       const dm = await message.author.createDM();
@@ -204,9 +261,7 @@ export class SteamLinkListener {
   }
 
   /** Discover and add a game via ITAD when it's not in the DB. */
-  private async discoverGame(
-    appId: number,
-  ): Promise<{ id: number; name: string; igdbId: number | null } | null> {
+  private async discoverGame(appId: number): Promise<Game | null> {
     if (!this.itadService) return null;
     const adultFilter =
       (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===
@@ -221,127 +276,43 @@ export class SteamLinkListener {
     );
   }
 
-  /** Send the interest prompt as a DM to the message author. */
-  private async sendInterestPrompt(
-    message: Message,
-    game: { id: number; name: string },
-  ): Promise<void> {
-    const row = buildButtonRow(game.id);
-    const dm = await message.author.createDM();
-    await dm.send({
-      content: `Interested in **${game.name}** on Raid Ledger?`,
-      components: [row],
-    });
-  }
-
-  /** Handle a button interaction from the interest prompt. */
+  /** Route button interactions to the heart or nominate handler. */
   private async handleButtonInteraction(
     interaction: ButtonInteraction,
   ): Promise<void> {
-    const parsed = parseSteamButtonId(interaction.customId);
-    if (!parsed) return;
-
-    const { action, gameId } = parsed;
-    const user = await findLinkedRlUser(this.db, interaction.user.id);
-
-    if (action === STEAM_INTEREST_BUTTON_IDS.DISMISS) {
-      await this.handleDismissButton(interaction);
+    const nom = parseSteamNominateButtonId(interaction.customId);
+    if (nom) {
+      await handleNominateButtonClick(
+        this.buildNominateDeps(),
+        interaction,
+        nom.action,
+        nom.gameId,
+      );
       return;
     }
-
-    if (!user) {
-      await interaction.update({
-        content: 'Could not find your linked account.',
-        components: [],
-      });
-      return;
-    }
-
-    if (action === STEAM_INTEREST_BUTTON_IDS.HEART) {
-      await this.handleHeartButton(interaction, user.id, gameId);
-    } else if (action === STEAM_INTEREST_BUTTON_IDS.AUTO) {
-      await this.handleAutoButton(interaction, user.id, gameId);
-    }
+    await handleInterestButtonClick(this.db, interaction);
   }
 
-  /** Handle the "Interested" button click. */
-  private async handleHeartButton(
-    interaction: ButtonInteraction,
-    userId: number,
-    gameId: number,
-  ): Promise<void> {
-    await addDiscordInterest(this.db, userId, gameId);
-    await interaction.update({
-      content: 'Marked as interested!',
-      components: [],
-    });
-  }
-
-  /** Handle the "Not Interested" button click. */
-  private async handleDismissButton(
-    interaction: ButtonInteraction,
-  ): Promise<void> {
-    await interaction.update({ content: 'Dismissed.', components: [] });
-  }
-
-  /** Handle the "Always Auto-Interest" button click. */
-  private async handleAutoButton(
-    interaction: ButtonInteraction,
-    userId: number,
-    gameId: number,
-  ): Promise<void> {
-    await addDiscordInterest(this.db, userId, gameId);
-    await setAutoHeartSteamUrlsPref(this.db, userId, true);
-    await interaction.update({
-      content: 'Auto-interest enabled for future Steam URLs!',
-      components: [],
-    });
+  /** Build the deps object for the nomination button click handler. */
+  private buildNominateDeps() {
+    return {
+      db: this.db,
+      lineupsService: this.lineupsService,
+      findActiveBuildingLineupId: async () =>
+        (await findActiveBuildingLineup(this.db))?.id ?? null,
+      addInterest: (userId: number, gameId: number) =>
+        addDiscordInterest(this.db, userId, gameId),
+      findLinkedUser: (discordId: string) =>
+        findLinkedRlUser(this.db, discordId),
+      setAutoNominatePref: (userId: number, enabled: boolean) =>
+        setAutoNominateSteamUrlsPref(this.db, userId, enabled),
+    };
   }
 }
-
-// --- Pure helpers ---
 
 /** Check if a channel type is a guild text channel. */
 function isGuildTextChannel(type: ChannelType): boolean {
   return (
     type === ChannelType.GuildText || type === ChannelType.GuildAnnouncement
   );
-}
-
-/** Build the action row with 3 buttons for the interest prompt. */
-function buildButtonRow(gameId: number): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${STEAM_INTEREST_BUTTON_IDS.HEART}:${gameId}`)
-      .setLabel('Interested')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`${STEAM_INTEREST_BUTTON_IDS.DISMISS}:${gameId}`)
-      .setLabel('Not Interested')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`${STEAM_INTEREST_BUTTON_IDS.AUTO}:${gameId}`)
-      .setLabel('Always Auto-Interest')
-      .setStyle(ButtonStyle.Primary),
-  );
-}
-
-/** Parse a steam interest button custom ID into action + gameId. */
-function parseSteamButtonId(
-  customId: string,
-): { action: string; gameId: number } | null {
-  const parts = customId.split(':');
-  if (parts.length !== 2) return null;
-  const [action, gameIdStr] = parts;
-  const gameId = parseInt(gameIdStr, 10);
-  if (isNaN(gameId)) return null;
-  const validActions = [
-    STEAM_INTEREST_BUTTON_IDS.HEART,
-    STEAM_INTEREST_BUTTON_IDS.DISMISS,
-    STEAM_INTEREST_BUTTON_IDS.AUTO,
-  ];
-  if (!validActions.includes(action as (typeof validActions)[number])) {
-    return null;
-  }
-  return { action, gameId };
 }

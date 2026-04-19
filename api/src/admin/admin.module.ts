@@ -17,6 +17,7 @@ import { AuthModule } from '../auth/auth.module';
 import { IgdbModule } from '../igdb/igdb.module';
 import { DemoDataService } from './demo-data.service';
 import { DemoTestService } from './demo-test.service';
+import { DemoTestLineupService } from './demo-test-lineup.service';
 import { SlashCommandTestService } from './slash-command-test.service';
 import { LineupsModule } from '../lineups/lineups.module';
 import { AiChatModule } from '../discord-bot/ai-chat/ai-chat.module';
@@ -46,6 +47,11 @@ import { AiChatTestController } from './ai-chat-test.controller';
     LineupSettingsController,
     OnboardingController,
   ],
-  providers: [DemoDataService, DemoTestService, SlashCommandTestService],
+  providers: [
+    DemoDataService,
+    DemoTestService,
+    DemoTestLineupService,
+    SlashCommandTestService,
+  ],
 })
 export class AdminModule {}

@@ -5,7 +5,7 @@
  * game resolution by Steam app ID, user lookup by Discord ID,
  * existing interest checks, and preference management.
  */
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -165,4 +165,102 @@ export async function discoverGameBySteamAppId(
   const result = await discoverGameViaItad(steamAppId, deps);
   if (!result) return null;
   return findGameBySteamAppId(deps.db, steamAppId);
+}
+
+// --- ROK-1081: paste-to-nominate helpers ---
+
+/**
+ * Find the most recent Community Lineup currently in `building` status.
+ *
+ * Unlike `findActiveLineup` in lineups-query.helpers.ts, this helper is
+ * scoped strictly to `building` — a voting lineup does not accept new
+ * nominations, so the paste-to-nominate flow must not trigger for it.
+ *
+ * @param db - Drizzle database instance
+ * @returns Lineup id, or null if no building lineup exists
+ */
+export async function findActiveBuildingLineup(
+  db: Db,
+): Promise<{ id: number } | null> {
+  const [lineup] = await db
+    .select({ id: schema.communityLineups.id })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.status, 'building'))
+    .orderBy(desc(schema.communityLineups.createdAt))
+    .limit(1);
+  return lineup ?? null;
+}
+
+/**
+ * Check whether a game is already nominated for a lineup.
+ *
+ * @param db - Drizzle database instance
+ * @param lineupId - Community lineup ID
+ * @param gameId - Game ID
+ * @returns true when a `community_lineup_entries` row exists
+ */
+export async function isGameNominated(
+  db: Db,
+  lineupId: number,
+  gameId: number,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.communityLineupEntries.id })
+    .from(schema.communityLineupEntries)
+    .where(
+      and(
+        eq(schema.communityLineupEntries.lineupId, lineupId),
+        eq(schema.communityLineupEntries.gameId, gameId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * Check if a user has the auto-nominate Steam URLs preference enabled.
+ *
+ * @param db - Drizzle database instance
+ * @param userId - Raid Ledger user ID
+ * @returns true if autoNominateSteamUrls is enabled
+ */
+export async function getAutoNominateSteamUrlsPref(
+  db: Db,
+  userId: number,
+): Promise<boolean> {
+  const [pref] = await db
+    .select({
+      key: schema.userPreferences.key,
+      value: schema.userPreferences.value,
+    })
+    .from(schema.userPreferences)
+    .where(
+      and(
+        eq(schema.userPreferences.userId, userId),
+        eq(schema.userPreferences.key, 'autoNominateSteamUrls'),
+      ),
+    )
+    .limit(1);
+  return pref?.value === true;
+}
+
+/**
+ * Upsert the autoNominateSteamUrls user preference.
+ *
+ * @param db - Drizzle database instance
+ * @param userId - Raid Ledger user ID
+ * @param enabled - Whether auto-nominate is enabled
+ */
+export async function setAutoNominateSteamUrlsPref(
+  db: Db,
+  userId: number,
+  enabled: boolean,
+): Promise<void> {
+  await db
+    .insert(schema.userPreferences)
+    .values({ userId, key: 'autoNominateSteamUrls', value: enabled })
+    .onConflictDoUpdate({
+      target: [schema.userPreferences.userId, schema.userPreferences.key],
+      set: { value: enabled },
+    });
 }

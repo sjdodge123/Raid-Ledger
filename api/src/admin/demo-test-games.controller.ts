@@ -11,6 +11,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
+import { DemoTestLineupService } from './demo-test-lineup.service';
 import { LineupSteamNudgeService } from '../lineups/lineup-steam-nudge.service';
 import {
   AddGameInterestSchema,
@@ -19,6 +20,10 @@ import {
   ClearGameInterestSchema,
   SetAutoHeartPrefSchema,
   CancelLineupPhaseJobsSchema,
+  CreateBuildingLineupSchema,
+  NominateGameTestSchema,
+  ArchiveLineupSchema,
+  SetAutoNominatePrefSchema,
 } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 
@@ -31,6 +36,7 @@ import { parseDemoBody } from './demo-test.utils';
 export class DemoTestGamesController {
   constructor(
     private readonly demoTestService: DemoTestService,
+    private readonly demoTestLineup: DemoTestLineupService,
     private readonly steamNudge: LineupSteamNudgeService,
   ) {}
 
@@ -121,5 +127,65 @@ export class DemoTestGamesController {
       parsed.lineupId,
     );
     return { success: true, removed };
+  }
+
+  /** Set autoNominateSteamUrls preference — DEMO_MODE only (ROK-1081). */
+  @Post('set-auto-nominate-pref')
+  @HttpCode(HttpStatus.OK)
+  async setAutoNominatePrefForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(SetAutoNominatePrefSchema, body);
+    await this.demoTestLineup.setAutoNominatePrefForTest(
+      parsed.userId,
+      parsed.enabled,
+    );
+    return { success: true };
+  }
+
+  /** Create a building-phase lineup for smoke tests — DEMO_MODE only (ROK-1081). */
+  @Post('create-building-lineup')
+  @HttpCode(HttpStatus.OK)
+  async createBuildingLineupForTest(
+    @Body() body: unknown,
+  ): Promise<{ lineupId: number }> {
+    const parsed = parseDemoBody(CreateBuildingLineupSchema, body);
+    return this.demoTestLineup.createBuildingLineupForTest(
+      parsed.createdByUserId,
+    );
+  }
+
+  /** Insert a nomination directly — DEMO_MODE only (ROK-1081). */
+  @Post('nominate-game')
+  @HttpCode(HttpStatus.OK)
+  async nominateGameForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(NominateGameTestSchema, body);
+    await this.demoTestLineup.nominateGameForTest(
+      parsed.lineupId,
+      parsed.gameId,
+      parsed.userId,
+    );
+    return { success: true };
+  }
+
+  /** Archive a specific lineup — DEMO_MODE only (ROK-1081). */
+  @Post('archive-lineup')
+  @HttpCode(HttpStatus.OK)
+  async archiveLineupForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    const parsed = parseDemoBody(ArchiveLineupSchema, body);
+    await this.demoTestLineup.archiveLineupForTest(parsed.lineupId);
+    return { success: true };
+  }
+
+  /** Archive any active lineup — DEMO_MODE only (ROK-1081). */
+  @Post('archive-active-lineup')
+  @HttpCode(HttpStatus.OK)
+  async archiveActiveLineupForTest(): Promise<{ success: boolean }> {
+    await this.demoTestLineup.archiveActiveLineupForTest();
+    return { success: true };
   }
 }
