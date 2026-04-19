@@ -67,7 +67,8 @@ function describeCommonGroundTaste() {
     overrides: Partial<typeof schema.games.$inferInsert> = {},
   ): Promise<typeof schema.games.$inferSelect> {
     const slug =
-      overrides.slug ?? `game-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      overrides.slug ??
+      `game-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const [game] = await testApp.db
       .insert(schema.games)
       .values({
@@ -147,16 +148,16 @@ function describeCommonGroundTaste() {
     await testApp.db.insert(schema.playerTasteVectors).values({
       userId,
       vector,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       dimensions: dimensions as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       intensityMetrics: {
         intensity: opts.intensity ?? 50,
         focus: 50,
         breadth: 50,
         consistency: 50,
       } as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       archetype: (opts.archetype ?? 'Explorer') as any,
       signalHash: `test-${userId}-${Date.now()}`,
     });
@@ -165,7 +166,7 @@ function describeCommonGroundTaste() {
   // ── AC 4: Common Ground sort factors in taste/social/intensity ────
 
   describe('AC 4: taste-based sort', () => {
-    it('sorts games so voters\' shared taste axis wins over an off-axis game', async () => {
+    it("sorts games so voters' shared taste axis wins over an off-axis game", async () => {
       await createBuildingLineup();
 
       // Two voters with opposing tastes. Both own both games equally so
@@ -307,11 +308,8 @@ function describeCommonGroundTaste() {
       // Override the taste weight via SettingsService to a higher value
       const settings = testApp.app.get(SettingsService);
       // Use an untyped key since dev will add COMMON_GROUND_TASTE_WEIGHT to SETTING_KEYS.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (settings as any).set(
-        'common_ground_taste_weight' as never,
-        '100',
-      );
+
+      await (settings as any).set('common_ground_taste_weight' as never, '100');
 
       const overridden = await testApp.request
         .get('/lineups/common-ground')
@@ -450,4 +448,7 @@ function describeCommonGroundTaste() {
   });
 }
 
-describe('Common Ground — Taste Scoring (integration)', describeCommonGroundTaste);
+describe(
+  'Common Ground — Taste Scoring (integration)',
+  describeCommonGroundTaste,
+);
