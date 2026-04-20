@@ -7,9 +7,12 @@
  *
  * The input tracks raw text locally so intermediate punctuation
  * (commas, spaces) isn't clobbered by parent re-renders that only
- * round-trip the parsed numeric array.
+ * round-trip the parsed numeric array. Sync with the controlled `value`
+ * happens during render via the React "derive-state-from-props" pattern
+ * (setState in render, not in an effect) so cursor state is preserved
+ * without triggering cascading effects.
  */
-import { useEffect, useRef, useState, type JSX, type ChangeEvent } from 'react';
+import { useState, type JSX, type ChangeEvent } from 'react';
 
 export interface InviteeMultiSelectProps {
   value: number[];
@@ -21,20 +24,21 @@ export function InviteeMultiSelect({
   value,
   onChange,
 }: InviteeMultiSelectProps): JSX.Element {
-  const [raw, setRaw] = useState<string>(() => value.join(','));
-  const lastEmitted = useRef<string>(value.join(','));
-  useEffect(() => {
-    const next = value.join(',');
-    if (next !== lastEmitted.current) {
-      setRaw(next);
-      lastEmitted.current = next;
-    }
-  }, [value]);
+  const canonical = value.join(',');
+  const [state, setState] = useState<{ raw: string; emitted: string }>({
+    raw: canonical,
+    emitted: canonical,
+  });
+  // Derive-state-from-props: parent pushed a different value than we last
+  // emitted — resync the raw input on this render (no effect needed).
+  if (canonical !== state.emitted) {
+    setState({ raw: canonical, emitted: canonical });
+  }
 
   function handleChange(e: ChangeEvent<HTMLInputElement>): void {
-    setRaw(e.target.value);
-    const parsed = parseIds(e.target.value);
-    lastEmitted.current = parsed.join(',');
+    const next = e.target.value;
+    const parsed = parseIds(next);
+    setState({ raw: next, emitted: parsed.join(',') });
     onChange(parsed);
   }
 
@@ -51,7 +55,7 @@ export function InviteeMultiSelect({
         data-testid="invitee-user-ids"
         type="text"
         inputMode="numeric"
-        value={raw}
+        value={state.raw}
         onChange={handleChange}
         placeholder="e.g. 12, 18, 31"
         className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
