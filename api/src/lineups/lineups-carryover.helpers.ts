@@ -10,7 +10,11 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 const CARRYOVER_STATUSES = ['decided', 'archived'] as const;
 
-/** Find the most recent lineup in decided or archived status. */
+/**
+ * Find the most recent PUBLIC lineup in decided or archived status (ROK-1065).
+ * Private lineups never contribute to carryover — their invitee-scoped
+ * suggestion history is intentionally isolated from public rollover.
+ */
 async function findPreviousLineup(db: Db, excludeId: number) {
   return db
     .select({ id: schema.communityLineups.id })
@@ -19,6 +23,7 @@ async function findPreviousLineup(db: Db, excludeId: number) {
       and(
         ne(schema.communityLineups.id, excludeId),
         inArray(schema.communityLineups.status, [...CARRYOVER_STATUSES]),
+        eq(schema.communityLineups.visibility, 'public'),
       ),
     )
     .orderBy(desc(schema.communityLineups.createdAt))

@@ -2,11 +2,7 @@
  * Lifecycle helpers extracted from LineupsService to stay
  * under the 300-line file limit (ROK-932).
  */
-import {
-  BadRequestException,
-  ConflictException,
-  type Logger,
-} from '@nestjs/common';
+import { BadRequestException, type Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { clearLinkedEventsByLineup } from './standalone-poll/standalone-poll-query.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -19,7 +15,6 @@ import type { LineupStatus } from '../drizzle/schema';
 import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import {
-  findActiveLineup,
   VALID_TRANSITIONS,
   VALID_REVERSIONS,
 } from './lineups-query.helpers';
@@ -29,10 +24,17 @@ import {
   buildTransitionValues,
 } from './lineups-phase.helpers';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
+import { addInvitees } from './lineups-invitees.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Insert a new lineup row with phase scheduling fields. */
+/**
+ * Insert a new lineup row with phase scheduling fields (ROK-1065).
+ *
+ * ROK-1065 removed the "only one active lineup" 409 — multiple lineups may
+ * run concurrently. Private lineups seed their invitee roster inside the
+ * same transaction so the detail response is immediately consistent.
+ */
 export function insertLineup(
   db: Db,
   dto: CreateLineupDto,
@@ -41,9 +43,7 @@ export function insertLineup(
   overrides: Record<string, number | undefined> | null,
 ) {
   return db.transaction(async (tx) => {
-    const [existing] = await findActiveLineup(tx);
-    if (existing) throw new ConflictException('A lineup is already active');
-    return tx
+    const rows = await tx
       .insert(schema.communityLineups)
       .values({
         title: dto.title,
@@ -57,8 +57,15 @@ export function insertLineup(
         defaultTiebreakerMode: dto.defaultTiebreakerMode ?? undefined,
         // ROK-1064: per-lineup Discord channel override (nullable).
         channelOverrideId: dto.channelOverrideId ?? null,
+        // ROK-1065: visibility defaults to 'public' when not provided.
+        visibility: dto.visibility ?? 'public',
       })
       .returning();
+    const [row] = rows;
+    if (row && dto.inviteeUserIds && dto.inviteeUserIds.length > 0) {
+      await addInvitees(tx as Db, row.id, dto.inviteeUserIds);
+    }
+    return rows;
   });
 }
 

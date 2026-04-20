@@ -6,12 +6,37 @@ import type { LineupStatus } from '../drizzle/schema';
 
 const ACTIVE_STATUSES: LineupStatus[] = ['building', 'voting'];
 
-/** Find any lineup in building or voting status. */
-export function findActiveLineup(db: PostgresJsDatabase<typeof schema>) {
+/**
+ * Find every lineup currently in building or voting status (ROK-1065).
+ * Multiple active lineups are permitted post-ROK-1065; callers no longer
+ * assume uniqueness. Ordered newest-first for deterministic UI stacks.
+ */
+export function findActiveLineups(db: PostgresJsDatabase<typeof schema>) {
+  return db
+    .select()
+    .from(schema.communityLineups)
+    .where(inArray(schema.communityLineups.status, ACTIVE_STATUSES))
+    .orderBy(desc(schema.communityLineups.createdAt));
+}
+
+/**
+ * Find the most recent public decided/archived lineup (ROK-1065).
+ * Used by carryover so private lineups never contribute to public history
+ * and public lineups never inherit from private ones.
+ */
+export function findLatestDecidedPublicLineup(
+  db: PostgresJsDatabase<typeof schema>,
+  excludeId: number,
+) {
   return db
     .select({ id: schema.communityLineups.id })
     .from(schema.communityLineups)
-    .where(inArray(schema.communityLineups.status, ACTIVE_STATUSES))
+    .where(
+      sql`${schema.communityLineups.visibility} = 'public'
+          AND ${schema.communityLineups.status} IN ('decided', 'archived')
+          AND ${schema.communityLineups.id} <> ${excludeId}`,
+    )
+    .orderBy(desc(schema.communityLineups.createdAt))
     .limit(1);
 }
 

@@ -40,6 +40,7 @@ interface BannerLineup {
   phaseDeadline?: Date | null;
   decidedGameId: number | null;
   decidedGameName: string | null;
+  visibility: 'public' | 'private';
 }
 
 /**
@@ -133,5 +134,8 @@ export function buildBannerResponse(
       voteCount: voteMap.get(e.gameId) ?? 0,
     })),
     tiebreakerActive: false,
+    // ROK-1065: visibility surfaced to the banner so the UI can render a
+    // private badge.
+    visibility: lineup.visibility,
   };
 }
