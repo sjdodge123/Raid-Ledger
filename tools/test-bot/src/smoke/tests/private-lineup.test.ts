@@ -1,29 +1,30 @@
 /**
- * ROK-1065 — private / targeted lineup Discord smoke test.
+ * ROK-1065 — private / targeted lineup smoke test.
  *
- * Behavior being verified (feature does not exist yet; these tests MUST fail):
+ * Behavior being verified:
  *
- *   1. Creating a lineup with `{ visibility: 'private', inviteeUserIds: [<botUserId>] }`
- *      fires a DM to each invitee and does NOT post a lineup-created embed to
- *      the bound notification channel.
- *   2. Transitioning a private lineup from `building` -> `voting` fires DMs
- *      to invitees and does NOT post a voting-open embed to the channel.
+ *   1. Creating a lineup with `{ visibility: 'private', inviteeUserIds: [<userId>] }`
+ *      fires an in-app invite notification for each invitee (that the Discord
+ *      DM dispatcher would forward to Discord) and does NOT post a
+ *      lineup-created embed to the bound notification channel.
+ *   2. Transitioning a private lineup from `building` -> `voting` fires an
+ *      in-app voting-open notification for invitees and does NOT post a
+ *      voting-open embed to the channel.
+ *   3. The create response echoes the invitees array.
+ *   4. Multiple concurrent active lineups are allowed (the 409 check is gone).
  *
- * The test bot's Discord ID is linked to `ctx.dmRecipientUserId` during
- * smoke setup — we use that user as the invitee so the companion bot can
- * observe the DM.
- *
- * Current (pre-implementation) behavior strips unknown schema keys in
- * CreateLineupSchema, so `visibility` is ignored and the lineup is created
- * as public: channel embed posts, no DM fires. Both assertions fail until
- * the spec is implemented.
+ * We poll `/admin/test/notifications?userId=<invitee>&type=community_lineup`
+ * instead of Discord DMs because Discord disallows bot-to-bot DMs and the
+ * companion test bot doubles as the invitee. The in-app notification is the
+ * single source of truth that the notification pipeline fires; the Discord
+ * DM queue is tested separately in unit tests.
  */
-import { waitForDM } from '../../helpers/polling.js';
 import { readLastMessages } from '../../helpers/messages.js';
 import {
   awaitProcessing,
   assertConditionNeverMet,
 } from '../fixtures.js';
+import { pollForCondition } from '../../helpers/polling.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
 import type { SimpleMessage } from '../../helpers/messages.js';
@@ -36,10 +37,18 @@ interface LineupPayload {
   [k: string]: unknown;
 }
 
+interface TestNotification {
+  id: number;
+  type: string;
+  title?: string;
+  message?: string;
+  payload?: { subtype?: string; lineupId?: number } | null;
+  createdAt?: string;
+}
+
 /** Best-effort archival of any currently active lineup(s) so create succeeds. */
 async function archiveAllLineups(api: ApiClient): Promise<void> {
   try {
-    // Spec renames this to an array; pre-impl still returns a single object.
     const res = await api.get<
       { id: number }[] | { id: number } | null
     >('/lineups/active');
@@ -83,7 +92,36 @@ async function createPrivateLineup(
   });
 }
 
-// ── AC 1: Create private lineup → DM invitee, no channel embed ──
+/** Fetch the invitee's community_lineup notifications via the demo-test route. */
+async function fetchInviteeNotifications(
+  ctx: TestContext,
+): Promise<TestNotification[]> {
+  const res = await ctx.api
+    .get<TestNotification[]>(
+      `/admin/test/notifications?userId=${ctx.dmRecipientUserId}&type=community_lineup&limit=25`,
+    )
+    .catch(() => [] as TestNotification[]);
+  return Array.isArray(res) ? res : [];
+}
+
+/** Poll notifications until one matching `predicate` arrives, or timeout. */
+async function waitForNotification(
+  ctx: TestContext,
+  predicate: (n: TestNotification) => boolean,
+  timeoutMs: number,
+): Promise<TestNotification> {
+  const hit = await pollForCondition(
+    async () => {
+      const list = await fetchInviteeNotifications(ctx);
+      return list.find(predicate) ?? null;
+    },
+    timeoutMs,
+    { intervalMs: 1500 },
+  );
+  return hit;
+}
+
+// ── AC 1: Create private lineup → notify invitee, no channel embed ──
 
 const privateLineupDmsInviteeNoChannelEmbed: SmokeTest = {
   name: 'Private lineup creation DMs invitee and suppresses channel embed (ROK-1065)',
@@ -94,7 +132,6 @@ const privateLineupDmsInviteeNoChannelEmbed: SmokeTest = {
     const title = `Private Smoke ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
     try {
-      // Assert the server acknowledged visibility in the response (spec AC).
       if (lineup.visibility !== 'private') {
         throw new Error(
           `Expected response.visibility === 'private', got ${JSON.stringify(
@@ -105,22 +142,14 @@ const privateLineupDmsInviteeNoChannelEmbed: SmokeTest = {
 
       await awaitProcessing(ctx.api);
 
-      // Invitee must receive a DM referencing the lineup title.
-      const dm = await waitForDM(
-        ctx.testBotDiscordId,
-        (m) =>
-          m.content.includes(title) ||
-          m.embeds.some((e) => {
-            const hay = [e.title ?? '', e.description ?? ''].join(' ');
-            return hay.includes(title);
-          }),
+      await waitForNotification(
+        ctx,
+        (n) =>
+          n.payload?.subtype === 'lineup_invite' &&
+          n.payload.lineupId === lineup.id,
         ctx.config.timeoutMs,
       );
-      if (!dm) {
-        throw new Error('Invitee did not receive a DM for the private lineup');
-      }
 
-      // No lineup-created embed should appear in the bound channel.
       await assertConditionNeverMet(
         async () => {
           const msgs = await readLastMessages(ctx.defaultChannelId, 25);
@@ -144,7 +173,7 @@ const privateLineupDmsInviteeNoChannelEmbed: SmokeTest = {
   },
 };
 
-// ── AC 2: Phase transition on private lineup → DMs invitee, no channel embed ──
+// ── AC 2: Phase transition on private lineup → notify invitee, no channel embed ──
 
 const privateLineupPhaseTransitionSuppressesChannel: SmokeTest = {
   name: 'Private lineup building→voting DMs invitee and suppresses channel embed (ROK-1065)',
@@ -157,29 +186,19 @@ const privateLineupPhaseTransitionSuppressesChannel: SmokeTest = {
     try {
       await awaitProcessing(ctx.api);
 
-      // Transition to voting — this is the second notification hook.
       await ctx.api.patch(`/lineups/${lineup.id}/status`, {
         status: 'voting',
       });
       await awaitProcessing(ctx.api);
 
-      // Invitee must receive a voting-open DM.
-      const dm = await waitForDM(
-        ctx.testBotDiscordId,
-        (m) =>
-          m.embeds.some((e) => {
-            const hay = [e.title ?? '', e.description ?? ''].join(' ');
-            return /vote|voting/i.test(hay);
-          }),
+      await waitForNotification(
+        ctx,
+        (n) =>
+          n.payload?.subtype === 'lineup_voting_open' &&
+          n.payload.lineupId === lineup.id,
         ctx.config.timeoutMs,
       );
-      if (!dm) {
-        throw new Error(
-          'Invitee did not receive a voting-open DM for the private lineup',
-        );
-      }
 
-      // No voting-open embed should be posted to the channel.
       await assertConditionNeverMet(
         async () => {
           const msgs = await readLastMessages(ctx.defaultChannelId, 25);
@@ -251,7 +270,6 @@ const multipleConcurrentLineupsAllowed: SmokeTest = {
     });
     let second: LineupPayload | null = null;
     try {
-      // Second create must succeed. Under pre-ROK-1065 code it returns 409.
       second = await ctx.api.post<LineupPayload>('/lineups', {
         title: secondTitle,
         description: 'second concurrent',
@@ -262,7 +280,6 @@ const multipleConcurrentLineupsAllowed: SmokeTest = {
         );
       }
 
-      // Confirm both show up as active.
       await awaitProcessing(ctx.api);
       const activeRes = await ctx.api.get<
         { id: number }[] | { id: number }
