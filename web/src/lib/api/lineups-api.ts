@@ -5,6 +5,7 @@
 import type {
   LineupDetailResponseDto,
   LineupBannerResponseDto,
+  LineupSummaryResponseDto,
   CommonGroundResponseDto,
   NominateGameDto,
 } from '@raid-ledger/contract';
@@ -17,10 +18,17 @@ export interface CommonGroundParams {
   genre?: string;
   search?: string;
   limit?: number;
+  /** Explicit lineup to score against (ROK-1065). */
+  lineupId?: number;
 }
 
-/** Fetch the currently active lineup. */
-export async function getActiveLineup(): Promise<LineupDetailResponseDto> {
+/**
+ * Fetch every currently active lineup (ROK-1065).
+ * Returns an array ordered newest-first. Was singular pre-ROK-1065.
+ */
+export async function getActiveLineups(): Promise<
+  LineupSummaryResponseDto[]
+> {
   return fetchApi('/lineups/active');
 }
 
@@ -34,6 +42,7 @@ export async function getCommonGround(
   if (params.genre) search.set('genre', params.genre);
   if (params.search) search.set('search', params.search);
   if (params.limit != null) search.set('limit', String(params.limit));
+  if (params.lineupId != null) search.set('lineupId', String(params.lineupId));
 
   const qs = search.toString();
   return fetchApi(`/lineups/common-ground${qs ? `?${qs}` : ''}`);
@@ -80,6 +89,13 @@ export interface CreateLineupParams {
   defaultTiebreakerMode?: 'bracket' | 'veto' | null;
   /** Optional per-lineup Discord channel override (ROK-1064). */
   channelOverrideId?: string | null;
+  /** Lineup visibility — 'public' (default) or 'private' (ROK-1065). */
+  visibility?: 'public' | 'private';
+  /**
+   * Explicit invitees when visibility === 'private' (ROK-1065).
+   * Server enforces that private lineups carry at least one invitee.
+   */
+  inviteeUserIds?: number[];
 }
 
 /** Create a new lineup with optional duration params. */
@@ -128,5 +144,30 @@ export async function transitionLineupStatus(
   return fetchApi(`/lineups/${lineupId}/status`, {
     method: 'PATCH',
     body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Add one or more invitees to a private lineup (ROK-1065).
+ * Returns the refreshed lineup detail so the UI can update the roster
+ * inline without a separate refetch.
+ */
+export async function addLineupInvitees(
+  lineupId: number,
+  userIds: number[],
+): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${lineupId}/invitees`, {
+    method: 'POST',
+    body: JSON.stringify({ userIds }),
+  });
+}
+
+/** Remove a single invitee from a private lineup (ROK-1065). */
+export async function removeLineupInvitee(
+  lineupId: number,
+  userId: number,
+): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${lineupId}/invitees/${userId}`, {
+    method: 'DELETE',
   });
 }

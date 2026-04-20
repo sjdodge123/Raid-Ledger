@@ -5,12 +5,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   LineupDetailResponseDto,
   LineupBannerResponseDto,
+  LineupSummaryResponseDto,
   CommonGroundResponseDto,
   NominateGameDto,
 } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../lib/api-client';
 import {
-  getActiveLineup,
+  getActiveLineups,
   getCommonGround,
   nominateGame,
   getLineupBanner,
@@ -20,6 +21,8 @@ import {
   transitionLineupStatus,
   toggleVote,
   updateLineupMetadata,
+  addLineupInvitees,
+  removeLineupInvitee,
 } from '../lib/api-client';
 import type {
   CreateLineupParams,
@@ -37,11 +40,14 @@ const COMMON_GROUND_KEY = ['common-ground'] as const;
 /** Shared prefix for all lineup query invalidation. */
 const LINEUPS_PREFIX = ['lineups'] as const;
 
-/** Hook for fetching the active lineup. */
-export function useActiveLineup() {
-  return useQuery<LineupDetailResponseDto>({
+/**
+ * Hook for fetching every currently active lineup (ROK-1065).
+ * Returns an array ordered newest-first. Was singular pre-ROK-1065.
+ */
+export function useActiveLineups() {
+  return useQuery<LineupSummaryResponseDto[]>({
     queryKey: [...ACTIVE_LINEUP_KEY],
-    queryFn: getActiveLineup,
+    queryFn: getActiveLineups,
     staleTime: 30_000,
     retry: false,
   });
@@ -171,6 +177,40 @@ export function useTransitionLineupStatus() {
     { lineupId: number; body: { status: string; decidedGameId?: number | null } }
   >({
     mutationFn: ({ lineupId, body }) => transitionLineupStatus(lineupId, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/** Hook for adding invitees to a private lineup (ROK-1065). */
+export function useAddLineupInvitees() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    { lineupId: number; userIds: number[] }
+  >({
+    mutationFn: ({ lineupId, userIds }) =>
+      addLineupInvitees(lineupId, userIds),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/** Hook for removing an invitee from a private lineup (ROK-1065). */
+export function useRemoveLineupInvitee() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    { lineupId: number; userId: number }
+  >({
+    mutationFn: ({ lineupId, userId }) =>
+      removeLineupInvitee(lineupId, userId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
     },
