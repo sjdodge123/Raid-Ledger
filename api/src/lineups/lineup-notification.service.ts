@@ -4,6 +4,7 @@
  * decided, scheduling, event creation, and operator removal.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -36,6 +37,8 @@ import {
 } from './lineup-notification-embed.helpers';
 import {
   fanOutVotingDMs,
+  fanOutVotingDMsToInvitees,
+  fanOutLineupCreatedDMsToInvitees,
   fanOutSchedulingDMs,
   fanOutEventCreatedDMs,
 } from './lineup-notification-dm-batch.helpers';
@@ -61,6 +64,8 @@ export interface LineupInfo {
   phaseDeadline?: Date | null;
   /** Per-lineup Discord channel override (ROK-1064). */
   channelOverrideId?: string | null;
+  /** Lineup visibility (ROK-1065). 'private' routes to invitee DMs only. */
+  visibility?: 'public' | 'private';
 }
 
 /** Shape of a match passed to notification methods. */
@@ -107,11 +112,21 @@ export class LineupNotificationService {
 
   /** AC-1: Post channel embed when lineup is created. */
   async notifyLineupCreated(lineup: LineupInfo): Promise<void> {
+    const visibility = await this.resolveVisibility(lineup);
+    // ROK-1065: private lineups skip the channel embed and DM invitees.
+    if (visibility === 'private') {
+      await fanOutLineupCreatedDMsToInvitees(
+        this.db,
+        this.notificationService,
+        this.dedupService,
+        lineup,
+      );
+      return;
+    }
     const ctx = await this.resolveCtx(lineup.id, 'nominations', {
       title: lineup.title,
       description: lineup.description ?? null,
     });
-    // If caller passed the override explicitly, use it; otherwise load from DB.
     const sent = await this.postChannelEmbed(
       `lineup-created:${lineup.id}`,
       () => buildCreatedEmbed(ctx, lineup.targetDate),
@@ -126,6 +141,22 @@ export class LineupNotificationService {
         sent.messageId,
       );
     }
+  }
+
+  /**
+   * Resolve lineup visibility: prefer the caller-provided value, fall back
+   * to a DB lookup so older callers aren't broken (ROK-1065).
+   */
+  private async resolveVisibility(
+    lineup: LineupInfo,
+  ): Promise<'public' | 'private'> {
+    if (lineup.visibility) return lineup.visibility;
+    const [row] = await this.db
+      .select({ visibility: schema.communityLineups.visibility })
+      .from(schema.communityLineups)
+      .where(eq(schema.communityLineups.id, lineup.id))
+      .limit(1);
+    return row?.visibility ?? 'public';
   }
 
   /**
@@ -170,6 +201,18 @@ export class LineupNotificationService {
     lineup: LineupInfo,
     games: { id: number; name: string }[],
   ): Promise<void> {
+    const visibility = await this.resolveVisibility(lineup);
+    // ROK-1065: private lineups skip the channel embed and DM invitees only.
+    if (visibility === 'private') {
+      await fanOutVotingDMsToInvitees(
+        this.db,
+        this.notificationService,
+        this.dedupService,
+        lineup,
+        games.length,
+      );
+      return;
+    }
     const ctx = await this.resolveCtx(lineup.id, 'voting');
     await this.postChannelEmbed(
       `lineup-voting:${lineup.id}`,

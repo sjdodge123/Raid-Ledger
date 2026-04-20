@@ -11,6 +11,7 @@ import {
   sendVotingDM,
   sendSchedulingDM,
   sendEventCreatedDM,
+  sendPrivateInviteDM,
 } from './lineup-notification-dm.helpers';
 import {
   findDiscordLinkedMembers,
@@ -79,7 +80,12 @@ export async function fanOutLineupCreatedDMsToInvitees(
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, lineup.id);
   for (const member of members) {
-    await sendVotingDM(notificationService, dedupService, lineup, member, 0);
+    await sendPrivateInviteDM(
+      notificationService,
+      dedupService,
+      lineup,
+      member,
+    );
   }
 }
 

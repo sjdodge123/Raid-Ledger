@@ -25,6 +25,35 @@ export interface MatchDmInfo {
 /** Shape of a lineup for voting DMs. */
 export interface LineupDmInfo {
   id: number;
+  title?: string;
+}
+
+/**
+ * Send an invite DM for a private lineup (ROK-1065).
+ * The body includes the lineup title so the smoke test can match on it,
+ * and the DM is scoped per-invitee via a dedup key distinct from the
+ * voting-open key.
+ */
+export async function sendPrivateInviteDM(
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupDmInfo,
+  member: DiscordMember,
+): Promise<void> {
+  const key = `lineup-invite-dm:${lineup.id}:${member.userId}`;
+  if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+  const title = lineup.title ?? `Lineup #${lineup.id}`;
+
+  await notificationService.create({
+    userId: member.userId,
+    type: 'community_lineup',
+    title: `You're invited: ${title}`,
+    message: `You've been invited to the private Community Lineup "${title}". Head to the site to nominate and vote.`,
+    payload: {
+      subtype: 'lineup_invite',
+      lineupId: lineup.id,
+    },
+  });
 }
 
 /** Send a single voting-open DM to a member. */
@@ -37,11 +66,12 @@ export async function sendVotingDM(
 ): Promise<void> {
   const key = `lineup-vote-dm:${lineup.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
 
   await notificationService.create({
     userId: member.userId,
     type: 'community_lineup',
-    title: 'Time to vote on the Community Lineup!',
+    title: `Time to vote on the Community Lineup${titleSuffix}!`,
     message: `${gameCount} games are on the ballot — pick your favorites before voting closes.`,
     payload: {
       subtype: 'lineup_voting_open',

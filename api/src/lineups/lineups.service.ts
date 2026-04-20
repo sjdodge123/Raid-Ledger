@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   BandwagonJoinResponseDto,
@@ -185,7 +186,6 @@ export class LineupsService {
     if (lineupIds.length === 0) {
       return { entries: new Map(), voters: new Map() };
     }
-    const { inArray, sql } = await import('drizzle-orm');
     const entryRows = await this.db
       .select({
         lineupId: schema.communityLineupEntries.lineupId,
