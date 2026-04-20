@@ -317,7 +317,11 @@ function describeVoting() {
       expect(res.body.myVotes).toHaveLength(0);
     });
 
-    it('should include myVotes in GET /lineups/active', async () => {
+    it('GET /lineups/active returns summary rows (no myVotes, ROK-1065)', async () => {
+      // ROK-1065: /lineups/active now returns an array of summaries; myVotes
+      // is a detail-only field. This test keeps the vote pre-condition but
+      // asserts on the summary shape to prevent a regression to the old
+      // single-detail response.
       const { lineupId, games } = await setupVotingLineup();
       const { token } = await loginAsMember();
 
@@ -331,8 +335,19 @@ function describeVoting() {
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.myVotes).toBeDefined();
-      expect(res.body.myVotes).toContain(games[1].id);
+      expect(Array.isArray(res.body)).toBe(true);
+      const summary = res.body.find(
+        (r: { id: number }) => r.id === lineupId,
+      );
+      expect(summary).toBeDefined();
+      expect(summary.myVotes).toBeUndefined();
+      expect(summary).toMatchObject({
+        id: lineupId,
+        status: expect.any(String),
+        visibility: expect.any(String),
+        entryCount: expect.any(Number),
+        totalVoters: expect.any(Number),
+      });
     });
   }
   describe('GET /lineups/:id — myVotes', describeMyVotes);
