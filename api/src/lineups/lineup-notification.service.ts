@@ -21,13 +21,8 @@ import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
-import {
-  resolveLineupChannel,
-  loadLineupMeta,
-} from './lineup-notification-channel.helpers';
 import type {
   EmbedContext,
-  EmbedWithRow,
   NominationEntry,
   LineupPhase,
 } from './lineup-notification-embed.helpers';
@@ -48,7 +43,11 @@ import {
   findMatchMemberUsers,
   hasExistingPollEmbed,
 } from './lineup-notification-targets.helpers';
-import { DEDUP_TTL } from './lineup-notification.constants';
+import {
+  postChannelEmbed,
+  resolveEmbedCtx,
+  type DispatchDeps,
+} from './lineup-notification-dispatch.helpers';
 
 /** Shape of a lineup passed to notification methods. */
 export interface LineupInfo {
@@ -60,6 +59,8 @@ export interface LineupInfo {
   targetDate?: Date;
   votingDeadline?: Date;
   phaseDeadline?: Date | null;
+  /** Per-lineup Discord channel override (ROK-1064). */
+  channelOverrideId?: string | null;
 }
 
 /** Shape of a match passed to notification methods. */
@@ -87,24 +88,21 @@ export class LineupNotificationService {
     private readonly settingsService: SettingsService,
   ) {}
 
-  private async resolveCtx(
+  private get dispatchDeps(): DispatchDeps {
+    return {
+      db: this.db,
+      settingsService: this.settingsService,
+      botClient: this.botClient,
+      dedupService: this.dedupService,
+    };
+  }
+
+  private resolveCtx(
     lineupId: number,
     phase: LineupPhase,
     overrides?: { title?: string; description?: string | null },
   ): Promise<EmbedContext> {
-    const baseUrl = (await this.settingsService.getClientUrl()) ?? '';
-    const community = await this.settingsService.get('community_name');
-    const meta = overrides?.title
-      ? overrides
-      : await loadLineupMeta(this.db, lineupId);
-    return {
-      baseUrl,
-      lineupId,
-      communityName: community ?? 'Raid Ledger',
-      phase,
-      lineupTitle: meta.title,
-      lineupDescription: meta.description ?? null,
-    };
+    return resolveEmbedCtx(this.dispatchDeps, lineupId, phase, overrides);
   }
 
   /** AC-1: Post channel embed when lineup is created. */
@@ -113,10 +111,12 @@ export class LineupNotificationService {
       title: lineup.title,
       description: lineup.description ?? null,
     });
+    // If caller passed the override explicitly, use it; otherwise load from DB.
     const sent = await this.postChannelEmbed(
       `lineup-created:${lineup.id}`,
       () => buildCreatedEmbed(ctx, lineup.targetDate),
       ctx,
+      lineup.channelOverrideId,
     );
     if (sent) {
       await persistCreatedEmbedRef(
@@ -314,25 +314,18 @@ export class LineupNotificationService {
     );
   }
 
-  /** Dedup + resolve channel + post an embed (ROK-1063 refactor). */
-  private async postChannelEmbed(
+  private postChannelEmbed(
     dedupKey: string,
-    build: (
-      ctx: EmbedContext,
-    ) => Promise<EmbedWithRow | null> | EmbedWithRow | null,
+    build: Parameters<typeof postChannelEmbed>[2],
     ctx: EmbedContext,
-  ): Promise<{ channelId: string; messageId: string } | null> {
-    if (await this.dedupService.checkAndMarkSent(dedupKey, DEDUP_TTL))
-      return null;
-    const channelId = await resolveLineupChannel(this.settingsService);
-    if (!channelId) return null;
-    const result = await build(ctx);
-    if (!result) return null;
-    const sent = await this.botClient.sendEmbed(
-      channelId,
-      result.embed,
-      result.row,
+    overrideId?: string | null,
+  ): ReturnType<typeof postChannelEmbed> {
+    return postChannelEmbed(
+      this.dispatchDeps,
+      dedupKey,
+      build,
+      ctx,
+      overrideId,
     );
-    return { channelId, messageId: sent.id };
   }
 }

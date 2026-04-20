@@ -15,6 +15,7 @@ import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
 // Mock notification hooks to avoid extra DB queries (ROK-932)
 jest.mock('./lineups-notify-hooks.helpers', () => ({
@@ -149,6 +150,10 @@ describe('LineupsService.removeNomination', () => {
           useValue: {
             notifyNominationRemoved: jest.fn().mockResolvedValue(undefined),
           },
+        },
+        {
+          provide: DiscordBotClientService,
+          useValue: { getGuild: jest.fn().mockReturnValue(null) },
         },
       ],
     }).compile();

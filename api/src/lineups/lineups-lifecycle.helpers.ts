@@ -55,6 +55,8 @@ export function insertLineup(
         matchThreshold: dto.matchThreshold ?? undefined,
         maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
         defaultTiebreakerMode: dto.defaultTiebreakerMode ?? undefined,
+        // ROK-1064: per-lineup Discord channel override (nullable).
+        channelOverrideId: dto.channelOverrideId ?? null,
       })
       .returning();
   });

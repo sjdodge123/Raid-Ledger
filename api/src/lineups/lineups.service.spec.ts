@@ -11,6 +11,7 @@ import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
 jest.mock('./lineups-matching.helpers', () => ({
@@ -203,6 +204,10 @@ function describeLineupsService() {
             notifyNominationRemoved: jest.fn().mockResolvedValue(undefined),
             notifyEventCreated: jest.fn().mockResolvedValue(undefined),
           },
+        },
+        {
+          provide: DiscordBotClientService,
+          useValue: { getGuild: jest.fn().mockReturnValue(null) },
         },
       ],
     }).compile();
