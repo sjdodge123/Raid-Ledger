@@ -15,11 +15,15 @@ import { events } from './events';
 
 export type LineupStatus = 'building' | 'voting' | 'decided' | 'archived';
 
+/** Visibility mode for a community lineup (ROK-1065). */
+export type LineupVisibility = 'public' | 'private';
+
 /**
  * Community Lineups — collaborative game selection (ROK-933).
  *
  * Status flow: building → voting → decided → archived
- * Only one lineup may be in `building` or `voting` at a time.
+ * Multiple lineups may be active at once (ROK-1065 removed the
+ * "one active at a time" restriction).
  */
 export const communityLineups = pgTable('community_lineups', {
   id: serial('id').primaryKey(),
@@ -31,6 +35,16 @@ export const communityLineups = pgTable('community_lineups', {
     enum: ['building', 'voting', 'decided', 'archived'],
   })
     .default('building')
+    .notNull(),
+  /**
+   * Visibility mode (ROK-1065). 'public' lineups DM every linked member
+   * and post lifecycle embeds to the channel; 'private' lineups DM only
+   * invitees (plus the creator) and suppress the channel embed.
+   */
+  visibility: text('visibility', {
+    enum: ['public', 'private'],
+  })
+    .default('public')
     .notNull(),
   targetDate: timestamp('target_date'),
   decidedGameId: integer('decided_game_id').references(() => games.id),
@@ -117,5 +131,29 @@ export const communityLineupVotes = pgTable(
       table.userId,
       table.gameId,
     ),
+  ],
+);
+
+/**
+ * Per-lineup invitee list (ROK-1065).
+ *
+ * A private lineup's participation roster: only users rowed here (plus the
+ * creator and any admin/operator) may nominate or vote. For public lineups
+ * this table is unused.
+ */
+export const communityLineupInvitees = pgTable(
+  'community_lineup_invitees',
+  {
+    id: serial('id').primaryKey(),
+    lineupId: integer('lineup_id')
+      .references(() => communityLineups.id, { onDelete: 'cascade' })
+      .notNull(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    unique('uq_lineup_invitee_user').on(table.lineupId, table.userId),
   ],
 );
