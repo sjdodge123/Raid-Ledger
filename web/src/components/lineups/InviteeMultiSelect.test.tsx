@@ -1,30 +1,88 @@
 /**
  * Tests for InviteeMultiSelect (ROK-1065).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { InviteeMultiSelect } from './InviteeMultiSelect';
 
+vi.mock('../../lib/api-client', () => ({
+  getPlayers: vi.fn(),
+}));
+
+import { getPlayers } from '../../lib/api-client';
+
+function renderWithClient(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
+}
+
+const makeResponse = (
+  members: Array<{ id: number; username: string; discordId: string | null }>,
+) => ({
+  data: members.map((m) => ({
+    id: m.id,
+    username: m.username,
+    avatar: null,
+    discordId: m.discordId,
+  })),
+  meta: { total: members.length, page: 1, pageSize: 20, hasMore: false },
+});
+
 describe('InviteeMultiSelect', () => {
-  it('renders the current IDs as comma-separated text in the input', () => {
-    render(<InviteeMultiSelect value={[12, 18, 31]} onChange={() => {}} />);
-    const input = screen.getByTestId('invitee-user-ids') as HTMLInputElement;
-    expect(input.value).toBe('12,18,31');
+  beforeEach(() => {
+    vi.mocked(getPlayers).mockReset();
   });
 
-  it('parses comma-separated numbers and drops junk on change', () => {
-    const onChange = vi.fn();
-    render(<InviteeMultiSelect value={[]} onChange={onChange} />);
-    const input = screen.getByTestId('invitee-user-ids') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '12, 18, abc, -3, 31' } });
-    expect(onChange).toHaveBeenCalledWith([12, 18, 31]);
+  it('renders Discord-linked members and hides unlinked ones', async () => {
+    vi.mocked(getPlayers).mockResolvedValue(
+      makeResponse([
+        { id: 1, username: 'alice', discordId: 'd-1' },
+        { id: 2, username: 'bob', discordId: null },
+        { id: 3, username: 'carol', discordId: 'd-3' },
+      ]),
+    );
+
+    renderWithClient(<InviteeMultiSelect value={[]} onChange={() => {}} />);
+
+    expect(await screen.findByTestId('invitee-option-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('invitee-option-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('invitee-option-3')).toBeInTheDocument();
   });
 
-  it('collapses whitespace and returns empty array when blank', () => {
+  it('toggles selection via checkbox and invokes onChange with the new id array', async () => {
+    vi.mocked(getPlayers).mockResolvedValue(
+      makeResponse([
+        { id: 11, username: 'dan', discordId: 'd-11' },
+        { id: 12, username: 'eve', discordId: 'd-12' },
+      ]),
+    );
     const onChange = vi.fn();
-    render(<InviteeMultiSelect value={[1]} onChange={onChange} />);
-    const input = screen.getByTestId('invitee-user-ids') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '   ' } });
-    expect(onChange).toHaveBeenCalledWith([]);
+
+    renderWithClient(
+      <InviteeMultiSelect value={[11]} onChange={onChange} />,
+    );
+
+    const row12 = await screen.findByTestId('invitee-option-12');
+    fireEvent.click(row12.querySelector('input[type="checkbox"]')!);
+    expect(onChange).toHaveBeenCalledWith([11, 12]);
+
+    const row11 = screen.getByTestId('invitee-option-11');
+    fireEvent.click(row11.querySelector('input[type="checkbox"]')!);
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it('renders the selection count hint when at least one invitee is picked', async () => {
+    vi.mocked(getPlayers).mockResolvedValue(
+      makeResponse([{ id: 7, username: 'frank', discordId: 'd-7' }]),
+    );
+
+    renderWithClient(<InviteeMultiSelect value={[7]} onChange={() => {}} />);
+
+    expect(await screen.findByText(/1 invitee selected/i)).toBeInTheDocument();
   });
 });

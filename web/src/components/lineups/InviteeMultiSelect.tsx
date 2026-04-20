@@ -1,77 +1,128 @@
 /**
- * Minimal invitee multi-select input (ROK-1065).
+ * Invitee multi-select for private lineups (ROK-1065).
  *
- * For the initial private-lineup shipping cut, operators paste
- * comma-separated user IDs. A richer picker with user search can replace
- * this component later without breaking the parent modal contract.
- *
- * The input tracks raw text locally so intermediate punctuation
- * (commas, spaces) isn't clobbered by parent re-renders that only
- * round-trip the parsed numeric array. Sync with the controlled `value`
- * happens during render via the React "derive-state-from-props" pattern
- * (setState in render, not in an effect) so cursor state is preserved
- * without triggering cascading effects.
+ * Checkbox list of Discord-linked guild members with a search box —
+ * mirrors the `MemberPicker` used in the Schedule a Game poll modal.
+ * Parent contract unchanged: controlled `value: number[]` + `onChange`.
  */
-import { useState, type JSX, type ChangeEvent } from 'react';
+import { useMemo, useState, type JSX } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getPlayers } from '../../lib/api-client';
+
+interface GuildMember {
+  id: number;
+  username: string;
+  discordLinked: boolean;
+}
 
 export interface InviteeMultiSelectProps {
   value: number[];
   onChange: (next: number[]) => void;
 }
 
-/** Render a basic comma-separated user-id input with validation. */
+function useGuildMembers(search: string) {
+  return useQuery({
+    queryKey: ['players', 'invitee-picker', search],
+    queryFn: () => getPlayers({ search: search || undefined, page: 1 }),
+    select: (data): GuildMember[] =>
+      (data.data ?? []).map((u) => ({
+        id: u.id,
+        username: u.username,
+        discordLinked: !!u.discordId,
+      })),
+  });
+}
+
+function MemberRow({
+  member,
+  checked,
+  onToggle,
+}: {
+  member: GuildMember;
+  checked: boolean;
+  onToggle: () => void;
+}): JSX.Element {
+  return (
+    <label
+      data-testid={`invitee-option-${member.id}`}
+      className="flex items-center gap-2 px-3 py-2 hover:bg-panel rounded cursor-pointer"
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="rounded border-edge"
+      />
+      <span className="text-sm text-foreground flex-1">{member.username}</span>
+      {!member.discordLinked && (
+        <span className="text-[10px] uppercase tracking-wide text-muted">
+          No Discord
+        </span>
+      )}
+    </label>
+  );
+}
+
+/** Guild-member multi-select with search + checkboxes. */
 export function InviteeMultiSelect({
   value,
   onChange,
 }: InviteeMultiSelectProps): JSX.Element {
-  const canonical = value.join(',');
-  const [state, setState] = useState<{ raw: string; emitted: string }>({
-    raw: canonical,
-    emitted: canonical,
-  });
-  // Derive-state-from-props: parent pushed a different value than we last
-  // emitted — resync the raw input on this render (no effect needed).
-  if (canonical !== state.emitted) {
-    setState({ raw: canonical, emitted: canonical });
-  }
+  const [search, setSearch] = useState('');
+  const { data: members = [], isLoading } = useGuildMembers(search);
 
-  function handleChange(e: ChangeEvent<HTMLInputElement>): void {
-    const next = e.target.value;
-    const parsed = parseIds(next);
-    setState({ raw: next, emitted: parsed.join(',') });
-    onChange(parsed);
+  const filtered = useMemo(() => {
+    const discordOnly = members.filter((m) => m.discordLinked);
+    if (!search) return discordOnly;
+    const q = search.toLowerCase();
+    return discordOnly.filter((m) => m.username.toLowerCase().includes(q));
+  }, [members, search]);
+
+  function toggle(id: number): void {
+    onChange(
+      value.includes(id) ? value.filter((v) => v !== id) : [...value, id],
+    );
   }
 
   return (
-    <div className="space-y-2">
+    <div data-testid="invitee-multi-select" className="space-y-2">
       <label
-        htmlFor="invitee-user-ids"
+        htmlFor="invitee-search"
         className="block text-sm font-medium text-primary"
       >
-        Invitees (user IDs)
+        Invitees
       </label>
       <input
-        id="invitee-user-ids"
-        data-testid="invitee-user-ids"
+        id="invitee-search"
+        data-testid="invitee-search"
         type="text"
-        inputMode="numeric"
-        value={state.raw}
-        onChange={handleChange}
-        placeholder="e.g. 12, 18, 31"
-        className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search members..."
+        aria-label="Search members"
+        className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-amber-500"
       />
+      <div className="max-h-48 overflow-y-auto border border-edge rounded-lg">
+        {isLoading && (
+          <div className="px-3 py-2 text-sm text-muted">Loading...</div>
+        )}
+        {!isLoading && filtered.length === 0 && (
+          <div className="px-3 py-2 text-sm text-muted">No members found</div>
+        )}
+        {filtered.map((m) => (
+          <MemberRow
+            key={m.id}
+            member={m}
+            checked={value.includes(m.id)}
+            onToggle={() => toggle(m.id)}
+          />
+        ))}
+      </div>
       <p className="text-xs text-muted">
-        Comma-separate numeric user IDs. Private lineups require at least one.
+        {value.length > 0
+          ? `${value.length} invitee${value.length !== 1 ? 's' : ''} selected`
+          : 'Pick at least one guild member. Private lineups require ≥1 invitee.'}
       </p>
     </div>
   );
-}
-
-function parseIds(raw: string): number[] {
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .map((s) => Number.parseInt(s, 10))
-    .filter((n) => Number.isFinite(n) && n > 0);
 }

@@ -20,6 +20,24 @@ vi.mock('../../hooks/use-lineups', () => ({
     }),
 }));
 
+vi.mock('../../lib/api-client', () => ({
+    getPlayers: vi.fn(),
+}));
+
+import { getPlayers } from '../../lib/api-client';
+
+const playerListResponse = (
+    members: Array<{ id: number; username: string; discordId: string | null }>,
+) => ({
+    data: members.map((m) => ({
+        id: m.id,
+        username: m.username,
+        avatar: null,
+        discordId: m.discordId,
+    })),
+    meta: { total: members.length, page: 1, pageSize: 20, hasMore: false },
+});
+
 function wrap({ children }: { children: ReactNode }) {
     const qc = new QueryClient({
         defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -31,6 +49,13 @@ describe('AddInviteesButton (ROK-1065)', () => {
     beforeEach(() => {
         mockAdd.mockReset();
         mockAdd.mockResolvedValue({});
+        vi.mocked(getPlayers).mockReset();
+        vi.mocked(getPlayers).mockResolvedValue(
+            playerListResponse([
+                { id: 5, username: 'alice', discordId: 'd-5' },
+                { id: 7, username: 'bob', discordId: 'd-7' },
+            ]),
+        );
     });
 
     it('renders an "Invite more" button', () => {
@@ -40,16 +65,16 @@ describe('AddInviteesButton (ROK-1065)', () => {
         ).toBeInTheDocument();
     });
 
-    it('opens the modal when clicked', async () => {
+    it('opens the modal when clicked and renders the invitee picker', async () => {
         const user = userEvent.setup();
         render(<AddInviteesButton lineupId={1} />, { wrapper: wrap });
         await user.click(screen.getByRole('button', { name: /invite more/i }));
         expect(
-            screen.getByTestId('invitee-user-ids'),
+            await screen.findByTestId('invitee-multi-select'),
         ).toBeInTheDocument();
     });
 
-    it('disables submit until at least one invitee id is entered', async () => {
+    it('disables submit until at least one invitee is selected', async () => {
         const user = userEvent.setup();
         render(<AddInviteesButton lineupId={1} />, { wrapper: wrap });
         await user.click(screen.getByRole('button', { name: /invite more/i }));
@@ -57,12 +82,16 @@ describe('AddInviteesButton (ROK-1065)', () => {
         expect(submit).toBeDisabled();
     });
 
-    it('submits typed user ids to useAddLineupInvitees', async () => {
+    it('submits checked user ids to useAddLineupInvitees', async () => {
         const user = userEvent.setup();
         render(<AddInviteesButton lineupId={42} />, { wrapper: wrap });
         await user.click(screen.getByRole('button', { name: /invite more/i }));
-        const input = screen.getByTestId('invitee-user-ids');
-        await user.type(input, '5, 7');
+
+        const alice = await screen.findByTestId('invitee-option-5');
+        const bob = screen.getByTestId('invitee-option-7');
+        await user.click(alice.querySelector('input[type="checkbox"]')!);
+        await user.click(bob.querySelector('input[type="checkbox"]')!);
+
         const submit = screen.getByRole('button', { name: /^add invitees$/i });
         await user.click(submit);
         expect(mockAdd).toHaveBeenCalledWith({
