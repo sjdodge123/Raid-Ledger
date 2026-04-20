@@ -23,7 +23,12 @@ export interface InviteeMultiSelectProps {
 function useGuildMembers(search: string) {
   return useQuery({
     queryKey: ['players', 'invitee-picker', search],
-    queryFn: () => getPlayers({ search: search || undefined, page: 1 }),
+    queryFn: () =>
+      getPlayers({
+        search: search || undefined,
+        page: 1,
+        pageSize: 200,
+      }),
     select: (data): GuildMember[] =>
       (data.data ?? []).map((u) => ({
         id: u.id,
@@ -56,7 +61,7 @@ function MemberRow({
       <span className="text-sm text-foreground flex-1">{member.username}</span>
       {!member.discordLinked && (
         <span className="text-[10px] uppercase tracking-wide text-muted">
-          No Discord
+          No Discord — DMs won't reach them
         </span>
       )}
     </label>
@@ -72,10 +77,9 @@ export function InviteeMultiSelect({
   const { data: members = [], isLoading } = useGuildMembers(search);
 
   const filtered = useMemo(() => {
-    const discordOnly = members.filter((m) => m.discordLinked);
-    if (!search) return discordOnly;
+    if (!search) return members;
     const q = search.toLowerCase();
-    return discordOnly.filter((m) => m.username.toLowerCase().includes(q));
+    return members.filter((m) => m.username.toLowerCase().includes(q));
   }, [members, search]);
 
   function toggle(id: number): void {

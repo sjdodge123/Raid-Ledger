@@ -38,7 +38,7 @@ describe('InviteeMultiSelect', () => {
     vi.mocked(getPlayers).mockReset();
   });
 
-  it('renders Discord-linked members and hides unlinked ones', async () => {
+  it('renders every guild member and flags non-Discord-linked rows', async () => {
     vi.mocked(getPlayers).mockResolvedValue(
       makeResponse([
         { id: 1, username: 'alice', discordId: 'd-1' },
@@ -50,8 +50,11 @@ describe('InviteeMultiSelect', () => {
     renderWithClient(<InviteeMultiSelect value={[]} onChange={() => {}} />);
 
     expect(await screen.findByTestId('invitee-option-1')).toBeInTheDocument();
-    expect(screen.queryByTestId('invitee-option-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('invitee-option-2')).toBeInTheDocument();
     expect(screen.getByTestId('invitee-option-3')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('invitee-option-2').textContent,
+    ).toMatch(/No Discord/i);
   });
 
   it('toggles selection via checkbox and invokes onChange with the new id array', async () => {
