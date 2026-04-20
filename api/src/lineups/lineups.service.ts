@@ -26,18 +26,11 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
-import {
-  findActiveLineup,
-  findLineupById,
-  findBuildingLineup,
-  findNominatedGameIds,
-  countDistinctNominators,
-} from './lineups-query.helpers';
+import { findActiveLineup, findLineupById } from './lineups-query.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
-import { buildScoringContext } from './common-ground-context.helpers';
+import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
 import { insertLineup } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
-import { buildCommonGroundResponse } from './common-ground-query.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
 import {
   findEntry,
@@ -208,27 +201,14 @@ export class LineupsService {
   }
 
   /** Get Common Ground games — ownership overlap + taste scoring (ROK-950). */
-  async getCommonGround(
+  getCommonGround(
     filters: CommonGroundQueryDto,
   ): Promise<CommonGroundResponseDto> {
-    const [lineup] = await findBuildingLineup(this.db);
-    if (!lineup)
-      throw new NotFoundException('No active lineup in building status');
-    const nominated = await findNominatedGameIds(this.db, lineup.id);
-    const [nominators] = await countDistinctNominators(this.db, lineup.id);
-    const ctx = await buildScoringContext(
+    return runCommonGroundForBuildingLineup(
       this.db,
-      lineup.id,
+      filters,
       this.tasteProfile,
       this.settings,
-    );
-    return buildCommonGroundResponse(
-      this.db,
-      lineup.id,
-      nominated,
-      nominators?.count ?? 0,
-      filters,
-      ctx,
     );
   }
 
