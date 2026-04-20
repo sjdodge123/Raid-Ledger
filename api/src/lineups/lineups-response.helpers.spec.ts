@@ -210,6 +210,8 @@ describe('buildDetailResponse', () => {
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ whereResult: [{ count: 10 }] }),
     );
+    // 10. listInviteesWithProfile (ROK-1065) — empty for public lineup
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
 
     const result = await buildDetailResponse(mockDb as any, 1);
 

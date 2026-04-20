@@ -170,6 +170,8 @@ function describeLineupsService() {
     }
     // Enrichment: only countTotalMembers calls DB (others short-circuit on empty gameIds)
     chains.push(makeSelectChain({ whereResult: [{ count: 10 }] }));
+    // ROK-1065: listInviteesWithProfile (empty for public lineup).
+    chains.push(makeSelectChain({ whereResult: [] }));
     mockSelects(...chains);
   }
 
@@ -433,6 +435,7 @@ function describeLineupsService() {
         }),
       ); // creator
       mockSelects(makeSelectChain({ whereResult: [{ count: 10 }] })); // totalMembers
+      mockSelects(makeSelectChain({ whereResult: [] })); // ROK-1065 invitees
 
       const result = await service.transitionStatus(1, {
         status: 'decided',

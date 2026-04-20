@@ -145,7 +145,7 @@ export class LineupsService {
     return buildDetailResponse(
       this.db,
       row.id,
-      userId,
+      undefined,
       this.resolveChannelName,
     );
   }
