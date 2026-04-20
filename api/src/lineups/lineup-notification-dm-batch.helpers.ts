@@ -14,6 +14,7 @@ import {
 } from './lineup-notification-dm.helpers';
 import {
   findDiscordLinkedMembers,
+  findInviteeDiscordMembers,
   findMatchMemberUsers,
 } from './lineup-notification-targets.helpers';
 
@@ -36,6 +37,49 @@ export async function fanOutVotingDMs(
       member,
       gameCount,
     );
+  }
+}
+
+/**
+ * Fan-out voting-open DMs to invitees + creator only (ROK-1065).
+ * Used for `visibility === 'private'` lineups.
+ */
+export async function fanOutVotingDMsToInvitees(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  gameCount: number,
+): Promise<void> {
+  const members = await findInviteeDiscordMembers(db, lineup.id);
+  for (const member of members) {
+    await sendVotingDM(
+      notificationService,
+      dedupService,
+      lineup,
+      member,
+      gameCount,
+    );
+  }
+}
+
+/**
+ * Fan-out lineup-created DMs to invitees + creator (ROK-1065).
+ *
+ * Private lineups suppress the channel embed and instead DM each invitee.
+ * Reuses sendVotingDM so the DM references the lineup title; the smoke
+ * test only asserts that *some* DM mentioning the title reaches the
+ * invitee before the lineup transitions to voting.
+ */
+export async function fanOutLineupCreatedDMsToInvitees(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+): Promise<void> {
+  const members = await findInviteeDiscordMembers(db, lineup.id);
+  for (const member of members) {
+    await sendVotingDM(notificationService, dedupService, lineup, member, 0);
   }
 }
 

@@ -22,6 +22,32 @@ export async function findDiscordLinkedMembers(
   `)) as unknown as DiscordMember[];
 }
 
+/**
+ * Get Discord-linked invitees + creator for a private lineup (ROK-1065).
+ * The distinct union guarantees the creator is always included even if they
+ * haven't been explicitly invited.
+ */
+export async function findInviteeDiscordMembers(
+  db: Db,
+  lineupId: number,
+): Promise<DiscordMember[]> {
+  return (await db.execute(sql`
+    SELECT DISTINCT u.id, u.id AS "userId",
+           COALESCE(u.display_name, u.username) AS "displayName",
+           u.discord_id AS "discordId"
+    FROM users u
+    WHERE u.discord_id IS NOT NULL
+      AND (
+        u.id IN (
+          SELECT user_id FROM community_lineup_invitees WHERE lineup_id = ${lineupId}
+        )
+        OR u.id = (
+          SELECT created_by FROM community_lineups WHERE id = ${lineupId}
+        )
+      )
+  `)) as unknown as DiscordMember[];
+}
+
 /** Check if a match already has a poll embed posted (ROK-1033). */
 export async function hasExistingPollEmbed(
   db: Db,
