@@ -4,6 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useLineupDetail } from '../hooks/use-lineups';
 import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
+import { InviteeList } from '../components/lineups/InviteeList';
+import { AddInviteesButton } from '../components/lineups/AddInviteesButton';
 import { NominationGrid } from '../components/lineups/NominationGrid';
 import { VotingLeaderboard } from '../components/lineups/VotingLeaderboard';
 import { LineupEmptyState } from '../components/lineups/LineupEmptyState';
@@ -19,6 +21,39 @@ import { TiebreakerView } from '../components/lineups/tiebreaker/TiebreakerView'
 import { TiebreakerPromptModal } from '../components/lineups/tiebreaker/TiebreakerPromptModal';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useSteamPasteDetection } from '../hooks/use-steam-paste';
+
+/**
+ * Render the private-lineup invitee panel (ROK-1065). Creator/operator
+ * sees the "Invite more" button; everyone else sees the read-only roster.
+ */
+function PrivateInviteesSection({
+  lineupId,
+  invitees,
+  canManage,
+}: {
+  lineupId: number;
+  invitees: NonNullable<ReturnType<typeof useLineupDetail>['data']>['invitees'];
+  canManage: boolean;
+}): JSX.Element {
+  return (
+    <section
+      data-testid="private-invitees-section"
+      className="mt-4 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-primary">
+          Invitees ({invitees.length})
+        </h2>
+        {canManage && <AddInviteesButton lineupId={lineupId} />}
+      </div>
+      <InviteeList
+        lineupId={lineupId}
+        invitees={invitees}
+        canManage={canManage}
+      />
+    </section>
+  );
+}
 
 function LineupNotFound(): JSX.Element {
   return (
@@ -86,6 +121,14 @@ export function LineupDetailPage(): JSX.Element {
       </div>
 
       <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
+
+      {lineup.visibility === 'private' && (
+        <PrivateInviteesSection
+          lineupId={lineup.id}
+          invitees={lineup.invitees ?? []}
+          canManage={isOperator || user?.id === lineup.createdBy.id}
+        />
+      )}
 
       {isBuilding && (
         <div className="mt-3">
