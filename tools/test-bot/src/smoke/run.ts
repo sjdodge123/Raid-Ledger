@@ -26,6 +26,7 @@ import { cdpSteamNominationTests } from './tests/cdp-steam-nomination.test.js';
 import { scheduledEventCompletionTests } from './tests/scheduled-event-completion.test.js';
 import { aiChatTests } from './tests/ai-chat.test.js';
 import { lineupTitleTests } from './tests/lineup-title.test.js';
+import { privateLineupTests } from './tests/private-lineup.test.js';
 
 /** Build a TestResult from a test, status, and timing info. */
 function buildResult(
@@ -141,6 +142,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...scheduledEventCompletionTests,
     ...aiChatTests,
     ...lineupTitleTests,
+    ...privateLineupTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 
