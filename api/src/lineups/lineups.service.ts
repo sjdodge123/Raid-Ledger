@@ -26,7 +26,15 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
-import { findActiveLineup, findLineupById } from './lineups-query.helpers';
+import {
+  findActiveLineups,
+  findLineupById,
+} from './lineups-query.helpers';
+import { assertUserCanParticipate } from './lineups-eligibility.helpers';
+import {
+  runAddInvitees,
+  runRemoveInvitee,
+} from './lineups-invitees-actions.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
 import { insertLineup } from './lineups-lifecycle.helpers';
@@ -92,7 +100,12 @@ export class LineupsService {
     return channel?.name ?? null;
   };
 
-  /** Create a new lineup. Throws 409 if an active lineup already exists. */
+  /**
+   * Create a new lineup (ROK-1065).
+   * Multiple lineups may be active simultaneously post-ROK-1065. Steam
+   * nudges and carryover only fire for public lineups since private lineups
+   * have a scoped participant roster.
+   */
   async create(
     dto: CreateLineupDto,
     userId: number,
@@ -108,8 +121,11 @@ export class LineupsService {
       overrides,
     );
     await this.activityLog.log('lineup', row.id, 'lineup_created', userId);
-    void this.steamNudge.nudgeUnlinkedMembers(row.id);
-    await carryOverFromLastDecided(this.db, row.id);
+    const isPublic = row.visibility === 'public';
+    if (isPublic) {
+      void this.steamNudge.nudgeUnlinkedMembers(row.id);
+      await carryOverFromLastDecided(this.db, row.id);
+    }
 
     const delayMs = phaseDeadline.getTime() - Date.now();
     await this.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
@@ -121,26 +137,77 @@ export class LineupsService {
       targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
       // ROK-1064: per-lineup Discord channel override.
       channelOverrideId: row.channelOverrideId ?? null,
+      // ROK-1065: visibility drives DM vs. channel dispatch.
+      visibility: row.visibility,
     });
 
-    return buildDetailResponse(
-      this.db,
-      row.id,
-      undefined,
-      this.resolveChannelName,
-    );
-  }
-
-  /** Get the currently active lineup (building or voting). */
-  async findActive(userId?: number): Promise<LineupDetailResponseDto> {
-    const [row] = await findActiveLineup(this.db);
-    if (!row) throw new NotFoundException('No active lineup');
     return buildDetailResponse(
       this.db,
       row.id,
       userId,
       this.resolveChannelName,
     );
+  }
+
+  /**
+   * Get every active lineup (ROK-1065).
+   *
+   * Returns `LineupSummaryResponseDto[]`. ROK-1065 changed this from a
+   * singular detail object to an array — private lineups coexist with
+   * public ones, so the client receives all in-flight lineups. Never
+   * filtered by viewer; private participation is gated at mutation time.
+   */
+  async findActive(): Promise<
+    import('@raid-ledger/contract').LineupSummaryResponseDto[]
+  > {
+    const rows = await findActiveLineups(this.db);
+    const ids = rows.map((r) => r.id);
+    const counts = await this.loadSummaryCounts(ids);
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      targetDate: r.targetDate ? r.targetDate.toISOString() : null,
+      entryCount: counts.entries.get(r.id) ?? 0,
+      totalVoters: counts.voters.get(r.id) ?? 0,
+      createdAt: r.createdAt.toISOString(),
+      visibility: r.visibility,
+    }));
+  }
+
+  /** Load entry and voter counts for multiple lineups in two queries. */
+  private async loadSummaryCounts(
+    lineupIds: number[],
+  ): Promise<{
+    entries: Map<number, number>;
+    voters: Map<number, number>;
+  }> {
+    if (lineupIds.length === 0) {
+      return { entries: new Map(), voters: new Map() };
+    }
+    const { inArray, sql } = await import('drizzle-orm');
+    const entryRows = await this.db
+      .select({
+        lineupId: schema.communityLineupEntries.lineupId,
+        count: sql<number>`count(*)::int`.as('count'),
+      })
+      .from(schema.communityLineupEntries)
+      .where(inArray(schema.communityLineupEntries.lineupId, lineupIds))
+      .groupBy(schema.communityLineupEntries.lineupId);
+    const voterRows = await this.db
+      .select({
+        lineupId: schema.communityLineupVotes.lineupId,
+        count: sql<number>`count(distinct ${schema.communityLineupVotes.userId})::int`.as(
+          'count',
+        ),
+      })
+      .from(schema.communityLineupVotes)
+      .where(inArray(schema.communityLineupVotes.lineupId, lineupIds))
+      .groupBy(schema.communityLineupVotes.lineupId);
+    return {
+      entries: new Map(entryRows.map((r) => [r.lineupId, r.count])),
+      voters: new Map(voterRows.map((r) => [r.lineupId, r.count])),
+    };
   }
 
   /** Get a lineup by ID with full detail. */
@@ -156,12 +223,17 @@ export class LineupsService {
     lineupId: number,
     gameId: number,
     userId: number,
+    callerRole?: string,
   ): Promise<LineupDetailResponseDto> {
     const [lineup] = await findLineupById(this.db, lineupId);
     if (!lineup) throw new NotFoundException('Lineup not found');
     if (lineup.status !== 'voting') {
       throw new BadRequestException('Voting is only allowed in voting status');
     }
+    await assertUserCanParticipate(this.db, lineup, {
+      id: userId,
+      role: callerRole,
+    });
     const action = await toggleVoteHelper(
       this.db,
       lineupId,
@@ -213,11 +285,20 @@ export class LineupsService {
   }
 
   /** Nominate a game into a lineup. */
-  async nominate(lineupId: number, dto: NominateGameDto, userId: number) {
+  async nominate(
+    lineupId: number,
+    dto: NominateGameDto,
+    userId: number,
+    callerRole?: string,
+  ) {
     const [lineup] = await findLineupById(this.db, lineupId);
     if (!lineup) throw new NotFoundException('Lineup not found');
     if (lineup.status !== 'building')
       throw new BadRequestException('Lineup is not in building status');
+    await assertUserCanParticipate(this.db, lineup, {
+      id: userId,
+      role: callerRole,
+    });
 
     await validateNominationCap(this.db, lineupId);
     await validateGameExists(this.db, dto.gameId);
@@ -327,6 +408,40 @@ export class LineupsService {
       id,
       dto,
       caller,
+    );
+  }
+
+  /**
+   * Add one or more invitees to a lineup (ROK-1065).
+   * 404s if any userId is unknown (the helper probes users first). Idempotent
+   * for already-invited users via ON CONFLICT DO NOTHING.
+   */
+  addInvitees(
+    lineupId: number,
+    userIds: number[],
+    callerId: number,
+  ): Promise<LineupDetailResponseDto> {
+    return runAddInvitees(
+      this.db,
+      this.resolveChannelName,
+      lineupId,
+      userIds,
+      callerId,
+    );
+  }
+
+  /** Remove a single invitee (ROK-1065). */
+  removeInvitee(
+    lineupId: number,
+    userId: number,
+    callerId: number,
+  ): Promise<LineupDetailResponseDto> {
+    return runRemoveInvitee(
+      this.db,
+      this.resolveChannelName,
+      lineupId,
+      userId,
+      callerId,
     );
   }
 }

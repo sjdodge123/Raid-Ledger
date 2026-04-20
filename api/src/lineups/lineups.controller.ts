@@ -24,8 +24,10 @@ import {
   CommonGroundQuerySchema,
   NominateGameSchema,
   CastVoteSchema,
+  AddInviteesSchema,
   type LineupDetailResponseDto,
   type LineupBannerResponseDto,
+  type LineupSummaryResponseDto,
   type CommonGroundResponseDto,
   type ActivityTimelineResponseDto,
   type GroupedMatchesResponseDto,
@@ -62,10 +64,14 @@ export class LineupsController {
     return this.lineupsService.create(parsed.data, req.user.id);
   }
 
-  /** GET /lineups/active — current active lineup. */
+  /**
+   * GET /lineups/active — every lineup currently in building or voting
+   * status (ROK-1065). Returns an array (was singular pre-ROK-1065).
+   * Not filtered by viewer — private lineups are read-open.
+   */
   @Get('active')
-  async getActive(@Req() req: AuthRequest): Promise<LineupDetailResponseDto> {
-    return this.lineupsService.findActive(req.user.id);
+  async getActive(): Promise<LineupSummaryResponseDto[]> {
+    return this.lineupsService.findActive();
   }
 
   /** GET /lineups/banner — lightweight banner for Games page. */
@@ -107,7 +113,12 @@ export class LineupsController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.lineupsService.toggleVote(id, parsed.data.gameId, req.user.id);
+    return this.lineupsService.toggleVote(
+      id,
+      parsed.data.gameId,
+      req.user.id,
+      req.user.role,
+    );
   }
 
   /** POST /lineups/:id/nominate — add a game to a lineup. */
@@ -122,7 +133,12 @@ export class LineupsController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.lineupsService.nominate(id, parsed.data, req.user.id);
+    return this.lineupsService.nominate(
+      id,
+      parsed.data,
+      req.user.id,
+      req.user.role,
+    );
   }
 
   /** DELETE /lineups/:id/nominations/:gameId — remove a nomination. */
@@ -211,5 +227,43 @@ export class LineupsController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<ActivityTimelineResponseDto> {
     return this.activityLog.getTimeline('lineup', id);
+  }
+
+  /**
+   * POST /lineups/:id/invitees — add one or more invitees (ROK-1065).
+   * Admin/operator only.
+   */
+  @Post(':id/invitees')
+  @UseGuards(RolesGuard)
+  @Roles('operator')
+  async addInvitees(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<LineupDetailResponseDto> {
+    const parsed = AddInviteesSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.lineupsService.addInvitees(
+      id,
+      parsed.data.userIds,
+      req.user.id,
+    );
+  }
+
+  /**
+   * DELETE /lineups/:id/invitees/:userId — remove a single invitee (ROK-1065).
+   * Admin/operator only.
+   */
+  @Delete(':id/invitees/:userId')
+  @UseGuards(RolesGuard)
+  @Roles('operator')
+  async removeInvitee(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Req() req: AuthRequest,
+  ): Promise<LineupDetailResponseDto> {
+    return this.lineupsService.removeInvitee(id, userId, req.user.id);
   }
 }
