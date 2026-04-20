@@ -160,7 +160,10 @@ async function teardown(
 
 async function main(): Promise<void> {
   const ctx = await setup();
-  const allTests = collectTests(process.env.SMOKE_CATEGORY);
+  const nameFilter = process.env.SMOKE_NAME_FILTER;
+  const allTests = collectTests(process.env.SMOKE_CATEGORY).filter(
+    (t) => !nameFilter || t.name.toLowerCase().includes(nameFilter.toLowerCase()),
+  );
 
   const sequentialCats = new Set(['voice', 'cdp-command']);
   const sequentialTests = allTests.filter((t) => sequentialCats.has(t.category));
