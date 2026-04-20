@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
-  ConflictException,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -55,6 +54,8 @@ const mockLineup = {
   matchThreshold: 35,
   createdAt: NOW,
   updatedAt: NOW,
+  visibility: 'public' as 'public' | 'private',
+  channelOverrideId: null as string | null,
 };
 
 const mockUser = { id: 10, displayName: 'TestUser', username: 'TestUser' };
@@ -224,11 +225,9 @@ function describeLineupsService() {
   beforeEach(() => createService());
 
   describe('create', () => {
-    it('should create a lineup when none is active', async () => {
-      // findActiveLineup → empty (no active)
-      mockSelects(makeSelectChain({ limitResult: [] }));
-      mockInsert([{ ...mockLineup, id: 1 }]);
-      mockBuildDetail();
+    it('should create a lineup (ROK-1065: no more 409 when one is already active)', async () => {
+      mockInsert([{ ...mockLineup, id: 1, visibility: 'public' }]);
+      mockBuildDetail({ ...mockLineup, visibility: 'public' });
 
       const result = await service.create({ title: 'Test Lineup' }, 10);
 
@@ -237,20 +236,20 @@ function describeLineupsService() {
       expect(mockDb.insert).toHaveBeenCalled();
     });
 
-    it('should throw ConflictException when active lineup exists', async () => {
-      mockSelects(makeSelectChain({ limitResult: [{ id: 99 }] }));
-
-      await expect(
-        service.create({ title: 'Test Lineup' }, 10),
-      ).rejects.toThrow(ConflictException);
-      expect(mockDb.insert).not.toHaveBeenCalled();
-    });
-
     it('should pass targetDate to insert', async () => {
       const targetDate = '2026-04-01T00:00:00Z';
-      mockSelects(makeSelectChain({ limitResult: [] }));
-      mockInsert([{ ...mockLineup, targetDate: new Date(targetDate) }]);
-      mockBuildDetail({ ...mockLineup, targetDate: new Date(targetDate) });
+      mockInsert([
+        {
+          ...mockLineup,
+          targetDate: new Date(targetDate),
+          visibility: 'public',
+        },
+      ]);
+      mockBuildDetail({
+        ...mockLineup,
+        targetDate: new Date(targetDate),
+        visibility: 'public',
+      });
 
       const result = await service.create(
         { title: 'Test Lineup', targetDate },
@@ -261,33 +260,33 @@ function describeLineupsService() {
     });
   });
 
-  describe('findActive', () => {
-    it('should return the active lineup', async () => {
-      // findActive select
-      mockSelects(makeSelectChain({ limitResult: [mockLineup] }));
-      // buildDetailResponse
-      mockBuildDetail();
+  describe('findActive (ROK-1065 array return)', () => {
+    it('returns an array entry for each active lineup', async () => {
+      // findActiveLineups → whereResult (thenable awaited directly)
+      mockSelects(
+        makeSelectChain({
+          whereResult: [{ ...mockLineup, visibility: 'public' }],
+        }),
+      );
+      // loadSummaryCounts: entry count + voter count
+      mockSelects(makeSelectChain({ groupByResult: [] }));
+      mockSelects(makeSelectChain({ groupByResult: [] }));
 
       const result = await service.findActive();
 
-      expect(result.id).toBe(1);
-      expect(result.status).toBe('building');
+      expect(Array.isArray(result)).toBe(true);
+      expect(result[0].id).toBe(1);
+      expect(result[0].status).toBe('building');
+      expect(result[0].visibility).toBe('public');
     });
 
-    it('should return voting lineup as active', async () => {
-      const votingLineup = { ...mockLineup, status: 'voting' };
-      mockSelects(makeSelectChain({ limitResult: [votingLineup] }));
-      mockBuildDetail(votingLineup);
+    it('returns an empty array when no lineups are active', async () => {
+      mockSelects(makeSelectChain({ whereResult: [] }));
+      // loadSummaryCounts skipped because ids is empty
 
       const result = await service.findActive();
 
-      expect(result.status).toBe('voting');
-    });
-
-    it('should throw NotFoundException when no active lineup', async () => {
-      mockSelects(makeSelectChain({ limitResult: [] }));
-
-      await expect(service.findActive()).rejects.toThrow(NotFoundException);
+      expect(result).toEqual([]);
     });
   });
 
