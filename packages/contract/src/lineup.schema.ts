@@ -6,6 +6,11 @@ export * from './lineup-match.schema.js';
 // Re-export tiebreaker schemas (ROK-938)
 export * from './lineup-tiebreaker.schema.js';
 
+// Re-export invitee / visibility schemas (ROK-1065)
+export * from './lineup-invitees.schema.js';
+
+import { LineupVisibilitySchema, LineupInviteeResponseSchema } from './lineup-invitees.schema.js';
+
 // ============================================================
 // Community Lineup Schemas (ROK-933)
 // ============================================================
@@ -25,35 +30,53 @@ export type LineupStatusDto = z.infer<typeof LineupStatusSchema>;
 // ============================================================
 
 /** Create a new lineup (ROK-1063: title required, description optional markdown). */
-export const CreateLineupSchema = z.object({
-    /** Operator-authored title (1-100 chars, ROK-1063). */
-    title: z.string().trim().min(1).max(100),
-    /** Optional operator-authored markdown description (<=500 chars, ROK-1063). */
-    description: z.string().max(500).nullable().optional(),
-    targetDate: z.string().datetime({ offset: true }).nullable().optional(),
-    /** Hours for the building phase (1-720, default from admin settings). */
-    buildingDurationHours: z.number().int().min(1).max(720).optional(),
-    /** Hours for the voting phase (1-720, default from admin settings). */
-    votingDurationHours: z.number().int().min(1).max(720).optional(),
-    /** Hours for the decided phase (1-720, default from admin settings). */
-    decidedDurationHours: z.number().int().min(1).max(720).optional(),
-    /** Match threshold percentage for grouping algorithm (0–100, default 35). */
-    matchThreshold: z.number().int().min(0).max(100).optional(),
-    /** Max votes each player can cast during voting (1–10, default 3). */
-    votesPerPlayer: z.number().int().min(1).max(10).optional(),
-    /** Default tiebreaker mode when voting deadline expires. Null = skip tiebreaker. */
-    defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable().optional(),
-    /**
-     * Optional per-lineup Discord channel override (ROK-1064).
-     * When set, every lineup lifecycle embed posts to this channel instead
-     * of the guild-bound default. Must be a Discord snowflake (17–20 digits).
-     */
-    channelOverrideId: z
-        .string()
-        .regex(/^\d{17,20}$/)
-        .nullable()
-        .optional(),
-});
+export const CreateLineupSchema = z
+    .object({
+        /** Operator-authored title (1-100 chars, ROK-1063). */
+        title: z.string().trim().min(1).max(100),
+        /** Optional operator-authored markdown description (<=500 chars, ROK-1063). */
+        description: z.string().max(500).nullable().optional(),
+        targetDate: z.string().datetime({ offset: true }).nullable().optional(),
+        /** Hours for the building phase (1-720, default from admin settings). */
+        buildingDurationHours: z.number().int().min(1).max(720).optional(),
+        /** Hours for the voting phase (1-720, default from admin settings). */
+        votingDurationHours: z.number().int().min(1).max(720).optional(),
+        /** Hours for the decided phase (1-720, default from admin settings). */
+        decidedDurationHours: z.number().int().min(1).max(720).optional(),
+        /** Match threshold percentage for grouping algorithm (0–100, default 35). */
+        matchThreshold: z.number().int().min(0).max(100).optional(),
+        /** Max votes each player can cast during voting (1–10, default 3). */
+        votesPerPlayer: z.number().int().min(1).max(10).optional(),
+        /** Default tiebreaker mode when voting deadline expires. Null = skip tiebreaker. */
+        defaultTiebreakerMode: z.enum(['bracket', 'veto']).nullable().optional(),
+        /**
+         * Optional per-lineup Discord channel override (ROK-1064).
+         * When set, every lineup lifecycle embed posts to this channel instead
+         * of the guild-bound default. Must be a Discord snowflake (17–20 digits).
+         */
+        channelOverrideId: z
+            .string()
+            .regex(/^\d{17,20}$/)
+            .nullable()
+            .optional(),
+        /** Lineup visibility (ROK-1065). Defaults to 'public'. */
+        visibility: LineupVisibilitySchema.default('public').optional(),
+        /**
+         * Initial invitees (required when visibility === 'private').
+         * Users pinned here — along with the creator and any admin/operator —
+         * are the only ones who may nominate or vote on the lineup.
+         */
+        inviteeUserIds: z.array(z.number().int().positive()).optional(),
+    })
+    .refine(
+        (d) =>
+            d.visibility !== 'private' ||
+            (Array.isArray(d.inviteeUserIds) && d.inviteeUserIds.length > 0),
+        {
+            message: 'Private lineups require at least one invitee',
+            path: ['inviteeUserIds'],
+        },
+    );
 
 export type CreateLineupDto = z.infer<typeof CreateLineupSchema>;
 
@@ -169,6 +192,10 @@ export const LineupDetailResponseSchema = z.object({
      * visible to the bot.
      */
     channelOverrideName: z.string().nullable(),
+    /** Lineup visibility — 'public' or 'private' (ROK-1065). */
+    visibility: LineupVisibilitySchema,
+    /** Explicit invitees when visibility === 'private' (ROK-1065). */
+    invitees: z.array(LineupInviteeResponseSchema),
 });
 
 export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;
@@ -199,6 +226,8 @@ export const LineupBannerResponseSchema = z.object({
     entries: z.array(LineupBannerEntrySchema),
     /** Whether a tiebreaker is active on this lineup (ROK-938). */
     tiebreakerActive: z.boolean().optional(),
+    /** Lineup visibility (ROK-1065). */
+    visibility: LineupVisibilitySchema,
 });
 
 export type LineupBannerResponseDto = z.infer<typeof LineupBannerResponseSchema>;
@@ -206,11 +235,15 @@ export type LineupBannerResponseDto = z.infer<typeof LineupBannerResponseSchema>
 /** Lightweight lineup summary for lists. */
 export const LineupSummaryResponseSchema = z.object({
     id: z.number(),
+    /** Operator-authored title (ROK-1063). */
+    title: z.string(),
     status: LineupStatusSchema,
     targetDate: z.string().nullable(),
     entryCount: z.number(),
     totalVoters: z.number(),
     createdAt: z.string(),
+    /** Lineup visibility (ROK-1065). */
+    visibility: LineupVisibilitySchema,
 });
 
 export type LineupSummaryResponseDto = z.infer<typeof LineupSummaryResponseSchema>;
@@ -228,6 +261,11 @@ export const CommonGroundQuerySchema = z.object({
     /** Case-insensitive game name search (ILIKE). */
     search: z.string().max(100).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(50),
+    /**
+     * Explicit lineup to score against (ROK-1065).
+     * When omitted the server falls back to the newest public building lineup.
+     */
+    lineupId: z.coerce.number().int().positive().optional(),
 });
 
 export type CommonGroundQueryDto = z.infer<typeof CommonGroundQuerySchema>;
