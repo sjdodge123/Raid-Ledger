@@ -147,4 +147,52 @@ export const handlers = [
     http.get(`${API_BASE}/users/:id/similar-players`, () =>
         HttpResponse.json({ similar: [] }),
     ),
+
+    // Lineups — active list (ROK-1065: array of summaries, empty by default).
+    http.get(`${API_BASE}/lineups/active`, () => HttpResponse.json([])),
+
+    // Lineups — banner (ROK-1065: visibility surfaces in banner response).
+    http.get(`${API_BASE}/lineups/banner`, () => HttpResponse.json(null)),
+
+    // Lineups — invitees add (ROK-1065). Returns refreshed detail.
+    http.post(
+        `${API_BASE}/lineups/:id/invitees`,
+        async ({ request, params }) => {
+            const lineupId = Number(params.id);
+            const body = (await request.json()) as { userIds?: number[] };
+            const userIds = Array.isArray(body?.userIds) ? body.userIds : [];
+            return HttpResponse.json({
+                id: lineupId,
+                title: 'Test Lineup',
+                description: null,
+                status: 'building',
+                targetDate: null,
+                decidedGameId: null,
+                decidedGameName: null,
+                linkedEventId: null,
+                createdBy: { id: 1, displayName: 'Admin' },
+                votingDeadline: null,
+                maxVotesPerPlayer: 3,
+                entries: [],
+                totalVoters: 0,
+                totalMembers: 0,
+                createdAt: '2026-03-20T00:00:00Z',
+                updatedAt: '2026-03-20T00:00:00Z',
+                channelOverrideId: null,
+                channelOverrideName: null,
+                visibility: 'private',
+                invitees: userIds.map((id) => ({
+                    id,
+                    displayName: `User ${id}`,
+                    steamLinked: false,
+                })),
+            });
+        },
+    ),
+
+    // Lineups — invitee remove (ROK-1065). 204 No Content.
+    http.delete(
+        `${API_BASE}/lineups/:id/invitees/:userId`,
+        () => new HttpResponse(null, { status: 204 }),
+    ),
 ];
