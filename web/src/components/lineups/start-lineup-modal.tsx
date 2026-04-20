@@ -10,6 +10,8 @@ import { useCreateLineup } from '../../hooks/use-lineups';
 import { useLineupSettings } from '../../hooks/admin/use-lineup-settings';
 import { toast } from '../../lib/toast';
 import { LineupChannelOverrideSelect } from './lineup-channel-override-select';
+import { VisibilityToggle } from './VisibilityToggle';
+import { InviteeMultiSelect } from './InviteeMultiSelect';
 import {
   DurationSlider,
   VotesPerPlayerSlider,
@@ -66,11 +68,22 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
   const [title, setTitle] = useState<string>(defaultTitle);
   const [description, setDescription] = useState<string>('');
   const [channelOverrideId, setChannelOverrideId] = useState<string>('');
+  // ROK-1065: visibility + invitees.
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [inviteeUserIds, setInviteeUserIds] = useState<number[]>([]);
+
+  const canSubmit =
+    title.trim() !== '' &&
+    (visibility === 'public' || inviteeUserIds.length > 0);
 
   async function handleSubmit() {
     const trimmed = title.trim();
     if (!trimmed) {
       toast.error('Title is required');
+      return;
+    }
+    if (visibility === 'private' && inviteeUserIds.length === 0) {
+      toast.error('Private lineups require at least one invitee');
       return;
     }
     try {
@@ -84,6 +97,10 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
         defaultTiebreakerMode: durations.tiebreakerMode,
         // ROK-1064: empty string → omit the field (use community default).
         ...(channelOverrideId ? { channelOverrideId } : {}),
+        // ROK-1065: only send when non-default.
+        ...(visibility === 'private'
+          ? { visibility, inviteeUserIds }
+          : {}),
       });
       onClose();
       navigate(`/community-lineup/${result.id}`);
@@ -97,6 +114,13 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
       <div className="space-y-4">
         <TitleField value={title} onChange={setTitle} />
         <DescriptionField value={description} onChange={setDescription} />
+        <VisibilityToggle value={visibility} onChange={setVisibility} />
+        {visibility === 'private' && (
+          <InviteeMultiSelect
+            value={inviteeUserIds}
+            onChange={setInviteeUserIds}
+          />
+        )}
         <LineupChannelOverrideSelect
           value={channelOverrideId}
           onChange={setChannelOverrideId}
@@ -144,7 +168,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={createLineup.isPending || title.trim() === ''}
+            disabled={createLineup.isPending || !canSubmit}
             className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
           >
             {createLineup.isPending ? 'Creating...' : 'Create Lineup'}

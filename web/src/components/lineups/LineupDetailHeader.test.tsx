@@ -72,3 +72,22 @@ describe('LineupDetailHeader — description (ROK-1063)', () => {
         ).toBeInTheDocument();
     });
 });
+
+describe('LineupDetailHeader — private badge (ROK-1065)', () => {
+    it('renders the Private badge when visibility is private', () => {
+        const lineup = buildDetail({
+            title: 'Stealth Night',
+            visibility: 'private',
+        } as DetailOverrides);
+        renderWithProviders(<LineupDetailHeader lineup={lineup} />);
+
+        expect(screen.getByTestId('lineup-private-badge')).toBeInTheDocument();
+    });
+
+    it('does not render the Private badge when visibility is public', () => {
+        const lineup = buildDetail({ title: 'Raid Night' });
+        renderWithProviders(<LineupDetailHeader lineup={lineup} />);
+
+        expect(screen.queryByTestId('lineup-private-badge')).toBeNull();
+    });
+});
