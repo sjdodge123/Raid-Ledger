@@ -4,8 +4,12 @@
  * For the initial private-lineup shipping cut, operators paste
  * comma-separated user IDs. A richer picker with user search can replace
  * this component later without breaking the parent modal contract.
+ *
+ * The input tracks raw text locally so intermediate punctuation
+ * (commas, spaces) isn't clobbered by parent re-renders that only
+ * round-trip the parsed numeric array.
  */
-import { type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX, type ChangeEvent } from 'react';
 
 export interface InviteeMultiSelectProps {
   value: number[];
@@ -17,6 +21,23 @@ export function InviteeMultiSelect({
   value,
   onChange,
 }: InviteeMultiSelectProps): JSX.Element {
+  const [raw, setRaw] = useState<string>(() => value.join(','));
+  const lastEmitted = useRef<string>(value.join(','));
+  useEffect(() => {
+    const next = value.join(',');
+    if (next !== lastEmitted.current) {
+      setRaw(next);
+      lastEmitted.current = next;
+    }
+  }, [value]);
+
+  function handleChange(e: ChangeEvent<HTMLInputElement>): void {
+    setRaw(e.target.value);
+    const parsed = parseIds(e.target.value);
+    lastEmitted.current = parsed.join(',');
+    onChange(parsed);
+  }
+
   return (
     <div className="space-y-2">
       <label
@@ -30,8 +51,8 @@ export function InviteeMultiSelect({
         data-testid="invitee-user-ids"
         type="text"
         inputMode="numeric"
-        value={value.join(',')}
-        onChange={(e) => onChange(parseIds(e.target.value))}
+        value={raw}
+        onChange={handleChange}
         placeholder="e.g. 12, 18, 31"
         className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
       />
