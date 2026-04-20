@@ -1,6 +1,6 @@
 /**
- * Tests for use-lineups hooks (ROK-934).
- * Validates useActiveLineup, useCommonGround, and useNominateGame query behavior.
+ * Tests for use-lineups hooks (ROK-934, ROK-1065).
+ * Validates useActiveLineups (array), useCommonGround, and useNominateGame.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
@@ -8,28 +8,34 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 
 // --- API client mocks ---
-const mockGetActiveLineup = vi.fn();
+const mockGetActiveLineups = vi.fn();
 const mockGetCommonGround = vi.fn();
 const mockNominateGame = vi.fn();
 const mockGetLineupBanner = vi.fn();
 const mockGetLineupById = vi.fn();
 const mockRemoveNomination = vi.fn();
 const mockToggleVote = vi.fn();
+const mockAddLineupInvitees = vi.fn();
+const mockRemoveLineupInvitee = vi.fn();
 
 vi.mock('../lib/api-client', () => ({
-    getActiveLineup: (...args: unknown[]) => mockGetActiveLineup(...args),
+    getActiveLineups: (...args: unknown[]) => mockGetActiveLineups(...args),
     getCommonGround: (...args: unknown[]) => mockGetCommonGround(...args),
     nominateGame: (...args: unknown[]) => mockNominateGame(...args),
     getLineupBanner: (...args: unknown[]) => mockGetLineupBanner(...args),
     getLineupById: (...args: unknown[]) => mockGetLineupById(...args),
     removeNomination: (...args: unknown[]) => mockRemoveNomination(...args),
     toggleVote: (...args: unknown[]) => mockToggleVote(...args),
+    addLineupInvitees: (...args: unknown[]) => mockAddLineupInvitees(...args),
+    removeLineupInvitee: (...args: unknown[]) =>
+        mockRemoveLineupInvitee(...args),
 }));
 
 import {
-    useActiveLineup, useCommonGround, useNominateGame,
+    useActiveLineups, useCommonGround, useNominateGame,
     useLineupBanner, useLineupDetail, useRemoveNomination,
     useToggleVote,
+    useAddLineupInvitees, useRemoveLineupInvitee,
 } from './use-lineups';
 
 // --- Helpers ---
@@ -52,6 +58,8 @@ function createWrapper() {
 
 const mockLineupResponse = {
     id: 1,
+    title: 'Test Lineup',
+    description: null,
     status: 'building' as const,
     targetDate: null,
     decidedGameId: null,
@@ -63,6 +71,9 @@ const mockLineupResponse = {
     totalVoters: 0,
     createdAt: '2026-03-01T00:00:00Z',
     updatedAt: '2026-03-01T00:00:00Z',
+    // ROK-1065
+    visibility: 'public' as const,
+    invitees: [],
 };
 
 const mockCommonGroundResponse = {
@@ -95,30 +106,71 @@ const mockCommonGroundResponse = {
 
 // --- Tests ---
 
-describe('useActiveLineup', () => {
+describe('useActiveLineups (ROK-1065)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('returns lineup data on success', async () => {
-        const { wrapper } = createWrapper();
-        mockGetActiveLineup.mockResolvedValue(mockLineupResponse);
+    const mockSummaryRow = {
+        id: 1,
+        title: 'Weekend Raid',
+        status: 'building' as const,
+        targetDate: null,
+        entryCount: 0,
+        totalVoters: 0,
+        createdAt: '2026-03-01T00:00:00Z',
+        visibility: 'public' as const,
+    };
 
-        const { result } = renderHook(() => useActiveLineup(), { wrapper });
+    it('returns lineup array on success', async () => {
+        const { wrapper } = createWrapper();
+        mockGetActiveLineups.mockResolvedValue([mockSummaryRow]);
+
+        const { result } = renderHook(() => useActiveLineups(), { wrapper });
 
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(result.current.data).toEqual(mockLineupResponse);
-        expect(mockGetActiveLineup).toHaveBeenCalledTimes(1);
+        expect(result.current.data).toEqual([mockSummaryRow]);
+        expect(mockGetActiveLineups).toHaveBeenCalledTimes(1);
     });
 
     it('returns error state when API call fails', async () => {
         const { wrapper } = createWrapper();
-        mockGetActiveLineup.mockRejectedValue(new Error('Not found'));
+        mockGetActiveLineups.mockRejectedValue(new Error('Boom'));
 
-        const { result } = renderHook(() => useActiveLineup(), { wrapper });
+        const { result } = renderHook(() => useActiveLineups(), { wrapper });
 
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(result.current.error).toBeInstanceOf(Error);
+    });
+});
+
+describe('useAddLineupInvitees / useRemoveLineupInvitee (ROK-1065)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('add invitees calls API with lineupId + userIds', async () => {
+        mockAddLineupInvitees.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useAddLineupInvitees(), {
+            wrapper,
+        });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, userIds: [5, 7] });
+        });
+        expect(mockAddLineupInvitees).toHaveBeenCalledWith(1, [5, 7]);
+    });
+
+    it('remove invitee calls API with lineupId + userId', async () => {
+        mockRemoveLineupInvitee.mockResolvedValue(mockLineupResponse);
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useRemoveLineupInvitee(), {
+            wrapper,
+        });
+        await act(async () => {
+            await result.current.mutateAsync({ lineupId: 1, userId: 5 });
+        });
+        expect(mockRemoveLineupInvitee).toHaveBeenCalledWith(1, 5);
     });
 });
 
