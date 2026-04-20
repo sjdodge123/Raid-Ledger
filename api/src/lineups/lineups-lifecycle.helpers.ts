@@ -14,10 +14,7 @@ import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
 import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
-import {
-  VALID_TRANSITIONS,
-  VALID_REVERSIONS,
-} from './lineups-query.helpers';
+import { VALID_TRANSITIONS, VALID_REVERSIONS } from './lineups-query.helpers';
 import {
   computeTransitionDeadline,
   getNextPhase,

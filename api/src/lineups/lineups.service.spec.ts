@@ -1,8 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { LineupsService } from './lineups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { ActivityLogService } from '../activity-log/activity-log.service';

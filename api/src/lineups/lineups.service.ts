@@ -5,7 +5,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   BandwagonJoinResponseDto,
@@ -15,6 +14,7 @@ import type {
   GroupedMatchesResponseDto,
   LineupBannerResponseDto,
   LineupDetailResponseDto,
+  LineupSummaryResponseDto,
   NominateGameDto,
   UpdateLineupMetadataDto,
   UpdateLineupStatusDto,
@@ -27,10 +27,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
-import {
-  findActiveLineups,
-  findLineupById,
-} from './lineups-query.helpers';
+import { findActiveLineups, findLineupById } from './lineups-query.helpers';
 import { assertUserCanParticipate } from './lineups-eligibility.helpers';
 import {
   runAddInvitees,
@@ -177,9 +174,7 @@ export class LineupsService {
   }
 
   /** Load entry and voter counts for multiple lineups in two queries. */
-  private async loadSummaryCounts(
-    lineupIds: number[],
-  ): Promise<{
+  private async loadSummaryCounts(lineupIds: number[]): Promise<{
     entries: Map<number, number>;
     voters: Map<number, number>;
   }> {
@@ -197,9 +192,10 @@ export class LineupsService {
     const voterRows = await this.db
       .select({
         lineupId: schema.communityLineupVotes.lineupId,
-        count: sql<number>`count(distinct ${schema.communityLineupVotes.userId})::int`.as(
-          'count',
-        ),
+        count:
+          sql<number>`count(distinct ${schema.communityLineupVotes.userId})::int`.as(
+            'count',
+          ),
       })
       .from(schema.communityLineupVotes)
       .where(inArray(schema.communityLineupVotes.lineupId, lineupIds))

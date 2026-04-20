@@ -15,13 +15,15 @@ function makeLineup(
 }
 
 function makeDb(inviteeUserIds: number[]) {
-  const limit = jest.fn().mockResolvedValue(
-    inviteeUserIds.length > 0 ? [{ id: 1 }] : [],
-  );
+  const limit = jest
+    .fn()
+    .mockResolvedValue(inviteeUserIds.length > 0 ? [{ id: 1 }] : []);
   const where = jest.fn().mockReturnValue({ limit });
   const from = jest.fn().mockReturnValue({ where });
   const select = jest.fn().mockReturnValue({ from });
-  return { select } as unknown as Parameters<typeof assertUserCanParticipate>[0];
+  return { select } as unknown as Parameters<
+    typeof assertUserCanParticipate
+  >[0];
 }
 
 describe('assertUserCanParticipate', () => {
