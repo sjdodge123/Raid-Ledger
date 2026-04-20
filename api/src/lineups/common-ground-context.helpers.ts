@@ -5,16 +5,27 @@
  * stays testable and under the 30-lines-per-function budget.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { NotFoundException } from '@nestjs/common';
+import type {
+  CommonGroundQueryDto,
+  CommonGroundResponseDto,
+} from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import {
+  countDistinctNominators,
+  findBuildingLineup,
   findCoPlayPartnerIds,
   findLineupVoterIds,
+  findNominatedGameIds,
 } from './lineups-query.helpers';
 import { computeCombinedVoterVector } from './common-ground-taste.helpers';
 import type { IntensityBucket } from './common-ground-taste.helpers';
-import type { ScoringContext } from './common-ground-query.helpers';
+import {
+  buildCommonGroundResponse,
+  type ScoringContext,
+} from './common-ground-query.helpers';
 
 /**
  * Classify a voter's average intensity metric into a bucket. Mirrors the
@@ -64,4 +75,30 @@ function averageIntensityBucket(
   let sum = 0;
   for (const v of vectorMap.values()) sum += v.intensityMetrics.intensity;
   return intensityToBucket(sum / vectorMap.size);
+}
+
+/**
+ * Orchestrate the full Common Ground query for the building lineup. Kept
+ * here so `lineups.service` stays under the 300-line limit (ROK-950).
+ */
+export async function runCommonGroundForBuildingLineup(
+  db: PostgresJsDatabase<typeof schema>,
+  filters: CommonGroundQueryDto,
+  tasteProfile: TasteProfileService,
+  settings: SettingsService,
+): Promise<CommonGroundResponseDto> {
+  const [lineup] = await findBuildingLineup(db);
+  if (!lineup)
+    throw new NotFoundException('No active lineup in building status');
+  const nominated = await findNominatedGameIds(db, lineup.id);
+  const [nominators] = await countDistinctNominators(db, lineup.id);
+  const ctx = await buildScoringContext(db, lineup.id, tasteProfile, settings);
+  return buildCommonGroundResponse(
+    db,
+    lineup.id,
+    nominated,
+    nominators?.count ?? 0,
+    filters,
+    ctx,
+  );
 }
