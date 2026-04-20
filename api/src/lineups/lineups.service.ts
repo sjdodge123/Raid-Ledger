@@ -27,7 +27,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
-import { findActiveLineups, findLineupById } from './lineups-query.helpers';
+import { findLineupById } from './lineups-query.helpers';
 import { assertUserCanParticipate } from './lineups-eligibility.helpers';
 import {
   runAddInvitees,
@@ -38,6 +38,7 @@ import { runCommonGroundForBuildingLineup } from './common-ground-context.helper
 import { insertLineup } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
+import { buildActiveLineupSummaries } from './lineups-summary.helpers';
 import {
   findEntry,
   validateRemoval,
@@ -155,55 +156,8 @@ export class LineupsService {
    * public ones, so the client receives all in-flight lineups. Never
    * filtered by viewer; private participation is gated at mutation time.
    */
-  async findActive(): Promise<
-    import('@raid-ledger/contract').LineupSummaryResponseDto[]
-  > {
-    const rows = await findActiveLineups(this.db);
-    const ids = rows.map((r) => r.id);
-    const counts = await this.loadSummaryCounts(ids);
-    return rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      status: r.status,
-      targetDate: r.targetDate ? r.targetDate.toISOString() : null,
-      entryCount: counts.entries.get(r.id) ?? 0,
-      totalVoters: counts.voters.get(r.id) ?? 0,
-      createdAt: r.createdAt.toISOString(),
-      visibility: r.visibility,
-    }));
-  }
-
-  /** Load entry and voter counts for multiple lineups in two queries. */
-  private async loadSummaryCounts(lineupIds: number[]): Promise<{
-    entries: Map<number, number>;
-    voters: Map<number, number>;
-  }> {
-    if (lineupIds.length === 0) {
-      return { entries: new Map(), voters: new Map() };
-    }
-    const entryRows = await this.db
-      .select({
-        lineupId: schema.communityLineupEntries.lineupId,
-        count: sql<number>`count(*)::int`.as('count'),
-      })
-      .from(schema.communityLineupEntries)
-      .where(inArray(schema.communityLineupEntries.lineupId, lineupIds))
-      .groupBy(schema.communityLineupEntries.lineupId);
-    const voterRows = await this.db
-      .select({
-        lineupId: schema.communityLineupVotes.lineupId,
-        count:
-          sql<number>`count(distinct ${schema.communityLineupVotes.userId})::int`.as(
-            'count',
-          ),
-      })
-      .from(schema.communityLineupVotes)
-      .where(inArray(schema.communityLineupVotes.lineupId, lineupIds))
-      .groupBy(schema.communityLineupVotes.lineupId);
-    return {
-      entries: new Map(entryRows.map((r) => [r.lineupId, r.count])),
-      voters: new Map(voterRows.map((r) => [r.lineupId, r.count])),
-    };
+  async findActive(): Promise<LineupSummaryResponseDto[]> {
+    return buildActiveLineupSummaries(this.db);
   }
 
   /** Get a lineup by ID with full detail. */
