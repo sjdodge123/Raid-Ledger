@@ -3,6 +3,7 @@
  */
 import {
   computeScore,
+  deriveGameIntensity,
   mapCommonGroundRow,
 } from './common-ground-query.helpers';
 import type { CommonGroundRow } from './common-ground-query.helpers';
@@ -80,5 +81,64 @@ describe('mapCommonGroundRow', () => {
     const row = { ...baseRow, itadCurrentCut: null };
     const result = mapCommonGroundRow(row);
     expect(result.score).toBe(28); // (3*10) - 2
+  });
+});
+
+describe('deriveGameIntensity', () => {
+  const baseRow: CommonGroundRow = {
+    gameId: 1,
+    gameName: 'Test Game',
+    slug: 'test-game',
+    coverUrl: null,
+    ownerCount: 0,
+    wishlistCount: 0,
+    nonOwnerPrice: null,
+    itadCurrentCut: null,
+    itadCurrentShop: null,
+    itadCurrentUrl: null,
+    earlyAccess: false,
+    itadTags: [],
+    playerCount: null,
+    ownerUserIds: [],
+  };
+
+  it('returns null when playerCount is unknown', () => {
+    expect(deriveGameIntensity({ ...baseRow, playerCount: null })).toBeNull();
+  });
+
+  it('buckets solo (max=1) as low', () => {
+    expect(
+      deriveGameIntensity({ ...baseRow, playerCount: { min: 1, max: 1 } }),
+    ).toBe('low');
+  });
+
+  it('buckets 1-on-1 / couch co-op (max=2) as low', () => {
+    expect(
+      deriveGameIntensity({ ...baseRow, playerCount: { min: 1, max: 2 } }),
+    ).toBe('low');
+  });
+
+  it('buckets small co-op (max=4) as medium', () => {
+    expect(
+      deriveGameIntensity({ ...baseRow, playerCount: { min: 1, max: 4 } }),
+    ).toBe('medium');
+  });
+
+  it('buckets small-party upper bound (max=8) as medium', () => {
+    expect(
+      deriveGameIntensity({ ...baseRow, playerCount: { min: 1, max: 8 } }),
+    ).toBe('medium');
+  });
+
+  it('buckets raid-size (max=16) as high', () => {
+    expect(
+      deriveGameIntensity({ ...baseRow, playerCount: { min: 1, max: 16 } }),
+    ).toBe('high');
+  });
+
+  it('buckets MMO-sized lobbies (max=64) as high', () => {
+    expect(
+      deriveGameIntensity({ ...baseRow, playerCount: { min: 1, max: 64 } }),
+    ).toBe('high');
   });
 });
