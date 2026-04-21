@@ -202,9 +202,16 @@ function PanelContent({
  * Main Common Ground panel (ROK-1065).
  * Pass `lineupId` when the parent already has it — that bypasses the
  * active-lineup lookup entirely. Without a prop we pick the newest
- * building lineup from /lineups/active (array).
+ * building lineup from /lineups/active (array). `canParticipate=false`
+ * disables the Nominate buttons (private-lineup non-invitees).
  */
-export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: number } = {}): JSX.Element | null {
+export function CommonGroundPanel({
+    lineupId: propLineupId,
+    canParticipate = true,
+}: {
+    lineupId?: number;
+    canParticipate?: boolean;
+} = {}): JSX.Element | null {
     const { data: activeLineups } = useActiveLineups();
     const newestBuilding = activeLineups?.find((l) => l.status === 'building') ?? null;
     const resolvedId = propLineupId ?? newestBuilding?.id;
@@ -222,7 +229,8 @@ export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: numbe
     const debouncedParams = useDebouncedValue(apiParams, 300);
     const { data, isLoading, isError, refetch } = useCommonGround(debouncedParams, hasBuilding);
     const availableTags = useMemo(() => (data?.data ? extractUniqueTags(data.data) : []), [data]);
-    const atCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
+    const rawAtCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
+    const atCap = rawAtCap || !canParticipate;
     const { nominatingId, handleNominate } = useNomination(resolvedId);
 
     if (!hasBuilding) return null;

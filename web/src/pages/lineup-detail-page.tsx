@@ -21,6 +21,7 @@ import { TiebreakerView } from '../components/lineups/tiebreaker/TiebreakerView'
 import { TiebreakerPromptModal } from '../components/lineups/tiebreaker/TiebreakerPromptModal';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useSteamPasteDetection } from '../hooks/use-steam-paste';
+import { canParticipateInLineup } from '../lib/lineup-eligibility';
 
 /**
  * Render the private-lineup invitee panel (ROK-1065). Creator/operator
@@ -78,6 +79,8 @@ export function LineupDetailPage(): JSX.Element {
   const [tiebreakerPromptOpen, setTiebreakerPromptOpen] = useState(false);
 
   const isBuilding = !isLoading && !error && lineup?.status === 'building';
+  const canParticipate = canParticipateInLineup(lineup, user);
+  const canNominate = isBuilding && canParticipate;
 
   const handleGameResolved = useCallback((game: SelectedGame) => {
     setPreSelectedGame(game);
@@ -85,7 +88,7 @@ export function LineupDetailPage(): JSX.Element {
   }, []);
 
   useSteamPasteDetection({
-    enabled: isBuilding,
+    enabled: !!canNominate,
     modalOpen,
     onGameResolved: handleGameResolved,
   });
@@ -113,7 +116,13 @@ export function LineupDetailPage(): JSX.Element {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="sm:mt-1 px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors flex-shrink-0 w-full sm:w-auto"
+            disabled={!canParticipate}
+            title={
+              !canParticipate
+                ? 'Private lineup — ask the creator for an invite'
+                : undefined
+            }
+            className="sm:mt-1 px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors flex-shrink-0 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
           >
             Nominate
           </button>
@@ -138,7 +147,18 @@ export function LineupDetailPage(): JSX.Element {
 
       {lineup.status === 'building' && (
         <div className="mt-4">
-          <CommonGroundPanel lineupId={lineup.id} />
+          {!canParticipate && (
+            <p
+              data-testid="nominate-private-notice"
+              className="mb-2 text-xs text-amber-400"
+            >
+              Private lineup — ask the creator for an invite to nominate games.
+            </p>
+          )}
+          <CommonGroundPanel
+            lineupId={lineup.id}
+            canParticipate={canParticipate}
+          />
         </div>
       )}
 
@@ -154,6 +174,7 @@ export function LineupDetailPage(): JSX.Element {
           totalVoters={lineup.totalVoters}
           totalMembers={lineup.totalMembers}
           maxVotesPerPlayer={lineup.maxVotesPerPlayer}
+          canParticipate={canParticipate}
         />
       ) : hasEntries ? (
         <NominationGrid entries={lineup.entries} lineupId={lineup.id} />
