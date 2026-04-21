@@ -88,32 +88,30 @@ function buildCardClasses(props: UnifiedGameCardProps): string {
     return `${base} border border-edge/50 hover:border-emerald-500/50 ${hover} ${sizing}`.trim();
 }
 
-/** Genre + price badge row below the card title. */
+/** Genre + price + optional Steam-available badge row below the card title. */
 function CardBadgeRow({
     primaryGenre,
     pricing,
+    hasSteamAppId,
 }: {
     primaryGenre: string | null;
     pricing: ItadGamePricingDto | null | undefined;
+    hasSteamAppId: boolean;
 }): JSX.Element {
     return (
         <div className="flex items-center gap-1.5 mt-1">
             {primaryGenre && <GenreBadge label={primaryGenre} />}
             <PriceBadge pricing={pricing ?? null} />
+            {hasSteamAppId && (
+                <span
+                    data-testid="card-steam-badge"
+                    aria-label="Available on Steam"
+                    className="ml-auto inline-flex items-center justify-center w-5 h-5 rounded-full bg-black/50 text-emerald-300"
+                >
+                    <SteamIcon className="w-3 h-3" />
+                </span>
+            )}
         </div>
-    );
-}
-
-/** Small Steam icon badge rendered on the card cover (top-left). */
-function CardSteamBadge(): JSX.Element {
-    return (
-        <span
-            data-testid="card-steam-badge"
-            aria-label="Available on Steam"
-            className="absolute top-2 left-2 inline-flex items-center justify-center w-6 h-6 rounded-full bg-black/60 backdrop-blur-sm text-emerald-300"
-        >
-            <SteamIcon className="w-3.5 h-3.5" />
-        </span>
     );
 }
 
@@ -145,11 +143,14 @@ function CardCoverContent({
         <div className="relative aspect-[3/4] bg-panel">
             <CardCover game={game} />
             {showRating && rating != null && <RatingBadge rating={rating} />}
-            {game.steamAppId != null && <CardSteamBadge />}
             <GradientOverlay />
             <div className="absolute bottom-0 left-0 right-0 p-3">
                 <CardTitle name={game.name} />
-                <CardBadgeRow primaryGenre={primaryGenre} pricing={pricing} />
+                <CardBadgeRow
+                    primaryGenre={primaryGenre}
+                    pricing={pricing}
+                    hasSteamAppId={game.steamAppId != null}
+                />
             </div>
             {variant === 'toggle' && <HeartIcon selected={selected} />}
         </div>
