@@ -336,10 +336,10 @@ function describeVoting() {
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
-      const summaries = res.body as { id: number }[];
+      const summaries = res.body as Array<Record<string, unknown>>;
       const summary = summaries.find((r) => r.id === lineupId);
       expect(summary).toBeDefined();
-      expect(summary.myVotes).toBeUndefined();
+      expect(summary?.myVotes).toBeUndefined();
       expect(summary).toMatchObject({
         id: lineupId,
         status: expect.any(String),
