@@ -59,6 +59,9 @@ function MemberRow({
         className="rounded border-edge"
       />
       <span className="text-sm text-foreground flex-1">{member.username}</span>
+      {/* TD-2: spec asked for "No Steam linked — limited data"; implementing
+          that requires adding `steamLinked` to GetPlayersResponseDto. Tracked
+          as follow-up. */}
       {!member.discordLinked && (
         <span className="text-[10px] uppercase tracking-wide text-muted">
           No Discord — DMs won't reach them
