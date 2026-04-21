@@ -204,9 +204,7 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
 
   it('runAggregateGameVectors does not enqueue recomputes (cron-owned path)', async () => {
     await seedGame('Agg Only');
-    await testApp.db.execute(
-      sql`SELECT 1 FROM game_taste_vectors LIMIT 0`,
-    );
+    await testApp.db.execute(sql`SELECT 1 FROM game_taste_vectors LIMIT 0`);
     enqueueSpy.mockClear();
     const service = testApp.app.get(GameTasteService);
     await service.aggregateGameVectors();
