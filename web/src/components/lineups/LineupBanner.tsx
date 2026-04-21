@@ -59,6 +59,14 @@ function BannerHeading({ banner }: { banner: LineupBannerResponseDto }): JSX.Ele
                 {banner.title}
             </h2>
             <LineupStatusBadge status={banner.status} />
+            {banner.visibility === 'private' && (
+                <span
+                    data-testid="lineup-private-badge"
+                    className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded border border-amber-500/40 bg-amber-500/10 text-amber-300"
+                >
+                    Private
+                </span>
+            )}
             {banner.tiebreakerActive && <TiebreakerBadge />}
         </div>
     );
@@ -114,13 +122,17 @@ function ThumbnailRow({ entries }: { entries: LineupBannerResponseDto['entries']
     );
 }
 
-/** CTA buttons: view lineup link and nominate button. */
-function BannerActions({ id, status, onNominate }: {
-    id: number; status: string; onNominate: () => void;
+/** CTA buttons: view lineup link, nominate button, and (ROK-1065) start another for ops. */
+function BannerActions({ id, status, onNominate, canStartAnother, onStartAnother }: {
+    id: number;
+    status: string;
+    onNominate: () => void;
+    canStartAnother: boolean;
+    onStartAnother: () => void;
 }): JSX.Element {
     const ctaLabel = status === 'voting' ? 'View Lineup & Vote' : 'View Lineup';
     return (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
             <Link
                 to={`/community-lineup/${id}`}
                 className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors"
@@ -133,13 +145,26 @@ function BannerActions({ id, status, onNominate }: {
                     Nominate
                 </button>
             )}
+            {canStartAnother && (
+                <button
+                    type="button"
+                    onClick={onStartAnother}
+                    data-testid="start-another-lineup"
+                    className="px-4 py-2 text-sm font-medium bg-panel text-amber-300 border border-amber-500/40 rounded-lg hover:bg-amber-500/10 transition-colors"
+                >
+                    Start another lineup
+                </button>
+            )}
         </div>
     );
 }
 
 /** Populated banner content. */
-function BannerContent({ banner, onNominate }: {
-    banner: LineupBannerResponseDto; onNominate: () => void;
+function BannerContent({ banner, onNominate, canStartAnother, onStartAnother }: {
+    banner: LineupBannerResponseDto;
+    onNominate: () => void;
+    canStartAnother: boolean;
+    onStartAnother: () => void;
 }): JSX.Element {
     return (
         <div className="rounded-xl bg-panel/50 border border-edge/50 p-6 mb-8">
@@ -147,7 +172,13 @@ function BannerContent({ banner, onNominate }: {
             <BannerHeading banner={banner} />
             <BannerSubtitle banner={banner} />
             {banner.entries.length > 0 && <ThumbnailRow entries={banner.entries} />}
-            <BannerActions id={banner.id} status={banner.status} onNominate={onNominate} />
+            <BannerActions
+                id={banner.id}
+                status={banner.status}
+                onNominate={onNominate}
+                canStartAnother={canStartAnother}
+                onStartAnother={onStartAnother}
+            />
         </div>
     );
 }
@@ -189,10 +220,20 @@ export function LineupBanner(): JSX.Element | null {
         );
     }
 
+    const canStartAnother = isOperatorOrAdmin(user);
+
     return (
         <>
-            <BannerContent banner={banner} onNominate={() => setNominateOpen(true)} />
+            <BannerContent
+                banner={banner}
+                onNominate={() => setNominateOpen(true)}
+                canStartAnother={canStartAnother}
+                onStartAnother={() => setStartOpen(true)}
+            />
             <NominateModal isOpen={nominateOpen} onClose={() => setNominateOpen(false)} lineupId={banner.id} />
+            {canStartAnother && (
+                <StartLineupModal isOpen={startOpen} onClose={() => setStartOpen(false)} />
+            )}
         </>
     );
 }
