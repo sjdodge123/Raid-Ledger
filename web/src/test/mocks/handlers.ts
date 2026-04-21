@@ -6,6 +6,7 @@
  * specific scenarios.
  */
 import { http, HttpResponse } from 'msw';
+import { createMockLineupDetail } from '../lineup-factories';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -161,38 +162,38 @@ export const handlers = [
             const lineupId = Number(params.id);
             const body = (await request.json()) as { userIds?: number[] };
             const userIds = Array.isArray(body?.userIds) ? body.userIds : [];
-            return HttpResponse.json({
-                id: lineupId,
-                title: 'Test Lineup',
-                description: null,
-                status: 'building',
-                targetDate: null,
-                decidedGameId: null,
-                decidedGameName: null,
-                linkedEventId: null,
-                createdBy: { id: 1, displayName: 'Admin' },
-                votingDeadline: null,
-                maxVotesPerPlayer: 3,
-                entries: [],
-                totalVoters: 0,
-                totalMembers: 0,
-                createdAt: '2026-03-20T00:00:00Z',
-                updatedAt: '2026-03-20T00:00:00Z',
-                channelOverrideId: null,
-                channelOverrideName: null,
-                visibility: 'private',
-                invitees: userIds.map((id) => ({
-                    id,
-                    displayName: `User ${id}`,
-                    steamLinked: false,
-                })),
-            });
+            return HttpResponse.json(
+                createMockLineupDetail({
+                    id: lineupId,
+                    entries: [],
+                    totalVoters: 0,
+                    totalMembers: 0,
+                    visibility: 'private',
+                    invitees: userIds.map((id) => ({
+                        id,
+                        displayName: `User ${id}`,
+                        steamLinked: false,
+                    })),
+                }),
+            );
         },
     ),
 
-    // Lineups — invitee remove (ROK-1065). 204 No Content.
+    // Lineups — invitee remove (ROK-1065). API returns refreshed LineupDetailResponseDto.
     http.delete(
         `${API_BASE}/lineups/:id/invitees/:userId`,
-        () => new HttpResponse(null, { status: 204 }),
+        ({ params }) => {
+            const lineupId = Number(params.id);
+            return HttpResponse.json(
+                createMockLineupDetail({
+                    id: lineupId,
+                    entries: [],
+                    totalVoters: 0,
+                    totalMembers: 0,
+                    visibility: 'private',
+                    invitees: [],
+                }),
+            );
+        },
     ),
 ];
