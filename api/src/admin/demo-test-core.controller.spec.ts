@@ -14,9 +14,13 @@ function createMockService() {
   };
 }
 
+type MockService = ReturnType<typeof createMockService>;
+type GetController = () => DemoTestCoreController;
+type GetMockService = () => MockService;
+
 describe('DemoTestCoreController', () => {
   let controller: DemoTestCoreController;
-  let mockService: ReturnType<typeof createMockService>;
+  let mockService: MockService;
 
   beforeEach(async () => {
     mockService = createMockService();
@@ -29,92 +33,170 @@ describe('DemoTestCoreController', () => {
     controller = module.get(DemoTestCoreController);
   });
 
-  it('linkDiscord delegates to service', async () => {
-    const result = await controller.linkDiscordForTest({
+  describe('linkDiscord', () => {
+    linkDiscordTests(
+      () => controller,
+      () => mockService,
+    );
+  });
+
+  describe('enableDiscordNotifications', () => {
+    enableDiscordNotificationsTests(
+      () => controller,
+      () => mockService,
+    );
+  });
+
+  describe('getNotifications', () => {
+    getNotificationsTests(
+      () => controller,
+      () => mockService,
+    );
+  });
+
+  describe('flushNotificationBuffer', () => {
+    flushNotificationBufferTests(
+      () => controller,
+      () => mockService,
+    );
+  });
+
+  describe('flushEmbedQueue', () => {
+    flushEmbedQueueTests(
+      () => controller,
+      () => mockService,
+    );
+  });
+
+  describe('awaitProcessing', () => {
+    awaitProcessingTests(
+      () => controller,
+      () => mockService,
+    );
+  });
+
+  describe('clearGameTimeConfirmation (ROK-999)', () => {
+    clearGameTimeConfirmationTests(
+      () => controller,
+      () => mockService,
+    );
+  });
+});
+
+function linkDiscordTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().linkDiscordForTest({
       userId: 1,
       discordId: '123456789012345678',
       username: 'tester',
     });
     expect(result).toEqual({ success: true, user: { id: 1 } });
-    expect(mockService.linkDiscordForTest).toHaveBeenCalledWith(
+    expect(getMock().linkDiscordForTest).toHaveBeenCalledWith(
       1,
       '123456789012345678',
       'tester',
     );
   });
 
-  it('linkDiscord rejects malformed discordId', async () => {
+  it('rejects malformed discordId', async () => {
     await expect(
-      controller.linkDiscordForTest({
+      getController().linkDiscordForTest({
         userId: 1,
         discordId: 'bad',
         username: 'x',
       }),
     ).rejects.toThrow(/Validation failed/);
   });
+}
 
-  it('enableDiscordNotifications delegates to service', async () => {
-    const result = await controller.enableDiscordNotificationsForTest({
+function enableDiscordNotificationsTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().enableDiscordNotificationsForTest({
       userId: 7,
     });
     expect(result).toEqual({ success: true });
-    expect(mockService.enableDiscordNotificationsForTest).toHaveBeenCalledWith(
-      7,
-    );
+    expect(getMock().enableDiscordNotificationsForTest).toHaveBeenCalledWith(7);
   });
+}
 
-  it('getNotifications requires userId', async () => {
-    await expect(controller.getNotificationsForTest('0')).rejects.toThrow(
+function getNotificationsTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('requires userId', async () => {
+    await expect(getController().getNotificationsForTest('0')).rejects.toThrow(
       /userId required/,
     );
   });
 
-  it('getNotifications delegates with defaults', async () => {
-    const result = await controller.getNotificationsForTest('5');
+  it('delegates with defaults', async () => {
+    const result = await getController().getNotificationsForTest('5');
     expect(result).toEqual([]);
-    expect(mockService.getNotificationsForTest).toHaveBeenCalledWith(
+    expect(getMock().getNotificationsForTest).toHaveBeenCalledWith(
       5,
       undefined,
       20,
     );
   });
 
-  it('getNotifications accepts type and limit', async () => {
-    await controller.getNotificationsForTest('5', 'dm', '50');
-    expect(mockService.getNotificationsForTest).toHaveBeenCalledWith(
-      5,
-      'dm',
-      50,
-    );
+  it('accepts type and limit', async () => {
+    await getController().getNotificationsForTest('5', 'dm', '50');
+    expect(getMock().getNotificationsForTest).toHaveBeenCalledWith(5, 'dm', 50);
   });
+}
 
-  it('flushNotificationBuffer returns count', async () => {
-    const result = await controller.flushNotificationBufferForTest();
+function flushNotificationBufferTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('returns count', async () => {
+    const result = await getController().flushNotificationBufferForTest();
     expect(result).toEqual({ success: true, flushed: 3 });
-    expect(mockService.flushNotificationBufferForTest).toHaveBeenCalled();
+    expect(getMock().flushNotificationBufferForTest).toHaveBeenCalled();
   });
+}
 
-  it('flushEmbedQueue returns success', async () => {
-    const result = await controller.flushEmbedQueueForTest();
+function flushEmbedQueueTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('returns success', async () => {
+    const result = await getController().flushEmbedQueueForTest();
     expect(result).toMatchObject({ success: true });
-    expect(mockService.flushEmbedQueueForTest).toHaveBeenCalled();
+    expect(getMock().flushEmbedQueueForTest).toHaveBeenCalled();
   });
+}
 
-  it('awaitProcessing returns success with default timeout', async () => {
-    const result = await controller.awaitProcessingForTest({});
+function awaitProcessingTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('returns success with default timeout', async () => {
+    const result = await getController().awaitProcessingForTest({});
     expect(result).toMatchObject({ success: true });
-    expect(mockService.awaitProcessingForTest).toHaveBeenCalledWith(30000);
+    expect(getMock().awaitProcessingForTest).toHaveBeenCalledWith(30000);
   });
 
-  it('awaitProcessing accepts custom timeout', async () => {
-    const result = await controller.awaitProcessingForTest({
+  it('accepts custom timeout', async () => {
+    const result = await getController().awaitProcessingForTest({
       timeoutMs: 5000,
     });
     expect(result).toMatchObject({ success: true });
-    expect(mockService.awaitProcessingForTest).toHaveBeenCalledWith(5000);
+    expect(getMock().awaitProcessingForTest).toHaveBeenCalledWith(5000);
   });
+}
 
-  it('clearGameTimeConfirmation delegates to service (ROK-999)', async () => {
+function clearGameTimeConfirmationTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
     const req = {
       user: {
         id: 1,
@@ -124,10 +206,8 @@ describe('DemoTestCoreController', () => {
         impersonatedBy: null,
       },
     };
-    const result = await controller.clearGameTimeConfirmationForTest(req);
+    const result = await getController().clearGameTimeConfirmationForTest(req);
     expect(result).toEqual({ success: true });
-    expect(mockService.clearGameTimeConfirmationForTest).toHaveBeenCalledWith(
-      1,
-    );
+    expect(getMock().clearGameTimeConfirmationForTest).toHaveBeenCalledWith(1);
   });
-});
+}
