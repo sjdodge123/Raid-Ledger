@@ -49,6 +49,19 @@ export async function runAggregateGameVectors(db: Db): Promise<void> {
   }
 }
 
+/**
+ * Single-game recompute path (ROK-1082 event-driven enqueue). Reuses the
+ * batch loaders so it stays correct against live corpus stats — the extra
+ * table scans are negligible at < 100 games.
+ */
+export async function recomputeGameVector(
+  db: Db,
+  gameId: number,
+): Promise<void> {
+  const batch = await loadBatch(db);
+  await processGame(db, gameId, batch);
+}
+
 async function loadBatch(db: Db): Promise<AggregateBatch> {
   const [gameMap, signalsByGame, existingHashes] = await Promise.all([
     loadGameMetadata(db),
