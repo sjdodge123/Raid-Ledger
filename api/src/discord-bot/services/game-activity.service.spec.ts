@@ -34,6 +34,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { GameActivityService } from './game-activity.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { GameTasteService } from '../../game-taste/game-taste.service';
+
+/** Minimal GameTasteService stub — enqueueRecompute is fire-and-forget. */
+const mockGameTasteService = {
+  enqueueRecompute: jest.fn().mockResolvedValue(undefined),
+};
 import {
   createDrizzleMock,
   type MockDb,
@@ -115,6 +121,7 @@ async function createService(mockDb: MockDb) {
       GameActivityService,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: CronJobService, useValue: mockCronJobService },
+      { provide: GameTasteService, useValue: mockGameTasteService },
     ],
   }).compile();
 
@@ -438,6 +445,7 @@ describe('GameActivityService — flush', () => {
         GameActivityService,
         { provide: DrizzleAsyncProvider, useValue: db },
         { provide: CronJobService, useValue: mockCronJobService },
+        { provide: GameTasteService, useValue: mockGameTasteService },
       ],
     }).compile();
 
@@ -533,6 +541,7 @@ describe('GameActivityService — source dedup (ROK-591)', () => {
         GameActivityService,
         { provide: DrizzleAsyncProvider, useValue: db },
         { provide: CronJobService, useValue: mockCronJobService },
+        { provide: GameTasteService, useValue: mockGameTasteService },
       ],
     }).compile();
 

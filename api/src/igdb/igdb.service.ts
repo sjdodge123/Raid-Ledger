@@ -38,7 +38,6 @@ import {
   fetchTwitchToken,
   upsertGamesFromApi,
   upsertSingleGameRow,
-  backfillMissingCovers,
   queryNowPlaying,
   querySyncStatus,
   buildHealthStatus,
@@ -47,14 +46,9 @@ import {
   banGameHelper,
   unbanGameHelper,
   hideAdultGamesHelper,
-  refreshExistingGames,
-  discoverPopularGames,
-  clearDiscoveryCache,
-  buildAdultThemeFilter,
   executeIgdbQuery,
-  enrichSyncedGamesWithItad,
-  reEnrichGamesWithIgdb,
 } from './igdb-helpers.barrel';
+import { runSyncAllGames } from './igdb-sync-orchestration.helpers';
 import { sortByRelevance } from './igdb-search-sort.helpers';
 import {
   runSearchPipeline,
@@ -139,30 +133,14 @@ export class IgdbService {
   async syncAllGames() {
     this._syncInProgress = true;
     try {
-      const queryFn = (body: string) => this.queryIgdb(body);
-      const themeFilter = buildAdultThemeFilter(
-        await this.isAdultFilterEnabled(),
-      );
-      const refreshed = await refreshExistingGames(
-        this.db,
-        queryFn,
-        themeFilter,
-      );
-      const discovered = await discoverPopularGames(
-        this.db,
-        queryFn,
-        themeFilter,
-      );
-      const backfilled = await backfillMissingCovers(this.db, queryFn);
-      const enriched = await enrichSyncedGamesWithItad(
-        this.db,
-        (id) => this.itadService.lookupBySteamAppId(id),
-        (itadId) => this.itadService.getGameInfo(itadId),
-        (gameId) => this.enqueueTasteRecompute(gameId),
-      );
-      const reEnriched = await reEnrichGamesWithIgdb(this.db, queryFn);
-      await clearDiscoveryCache(this.redis);
-      return { refreshed, discovered, backfilled, enriched, reEnriched };
+      return await runSyncAllGames({
+        db: this.db,
+        redis: this.redis,
+        itadService: this.itadService,
+        queryIgdb: (body) => this.queryIgdb(body),
+        isAdultFilterEnabled: () => this.isAdultFilterEnabled(),
+        onGameChanged: (gameId) => this.enqueueTasteRecompute(gameId),
+      });
     } finally {
       this._syncInProgress = false;
     }
