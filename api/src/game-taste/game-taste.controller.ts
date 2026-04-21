@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   ParseIntPipe,
@@ -40,6 +42,7 @@ export class GameTasteController {
   }
 
   @Post('similar')
+  @HttpCode(HttpStatus.OK)
   async findSimilar(
     @Body() body: unknown,
   ): Promise<SimilarGamesResponseDto> {

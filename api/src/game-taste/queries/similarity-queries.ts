@@ -8,7 +8,16 @@ import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const DEFAULT_MIN_CONFIDENCE = 0.1;
+/**
+ * Default confidence filter for similarity results.
+ *
+ * A zero-signal game (no tags, no interests, no playtime, no metadata) scores
+ * `confidence = 0`. Any signal at all raises the score above zero. Using
+ * `0.0001` as the default threshold excludes true stub rows while including
+ * low-signal-but-meaningful games. Operators can widen/narrow the filter per
+ * query via the second parameter to `findSimilarGames`.
+ */
+const DEFAULT_MIN_CONFIDENCE = 0.0001;
 
 type SimilarityRow = {
   game_id: number;
