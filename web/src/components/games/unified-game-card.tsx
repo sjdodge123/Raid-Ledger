@@ -11,6 +11,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { GENRE_MAP } from '../../lib/game-utils';
 import { PriceBadge } from './PriceBadge';
 import { MODE_MAP } from './game-card-constants';
+import { SteamIcon } from '../icons/SteamIcon';
 import {
     CoverImage,
     CoverPlaceholder,
@@ -33,6 +34,8 @@ interface GameProps {
     aggregatedRating?: number | null;
     rating?: number | null;
     gameModes?: number[];
+    /** When present, renders a small Steam badge on the card cover. */
+    steamAppId?: number | null;
 }
 
 /** Props shared by both variants. */
@@ -101,6 +104,19 @@ function CardBadgeRow({
     );
 }
 
+/** Small Steam icon badge rendered on the card cover (top-left). */
+function CardSteamBadge(): JSX.Element {
+    return (
+        <span
+            data-testid="card-steam-badge"
+            aria-label="Available on Steam"
+            className="absolute top-2 left-2 inline-flex items-center justify-center w-6 h-6 rounded-full bg-black/60 backdrop-blur-sm text-emerald-300"
+        >
+            <SteamIcon className="w-3.5 h-3.5" />
+        </span>
+    );
+}
+
 /** Cover image or placeholder. */
 function CardCover({ game }: { game: GameProps }): JSX.Element {
     if (game.coverUrl) return <CoverImage src={game.coverUrl} alt={game.name} />;
@@ -129,6 +145,7 @@ function CardCoverContent({
         <div className="relative aspect-[3/4] bg-panel">
             <CardCover game={game} />
             {showRating && rating != null && <RatingBadge rating={rating} />}
+            {game.steamAppId != null && <CardSteamBadge />}
             <GradientOverlay />
             <div className="absolute bottom-0 left-0 right-0 p-3">
                 <CardTitle name={game.name} />
