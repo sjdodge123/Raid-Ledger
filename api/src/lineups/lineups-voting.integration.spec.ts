@@ -336,7 +336,8 @@ function describeVoting() {
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
-      const summary = res.body.find((r: { id: number }) => r.id === lineupId);
+      const summaries = res.body as { id: number }[];
+      const summary = summaries.find((r) => r.id === lineupId);
       expect(summary).toBeDefined();
       expect(summary.myVotes).toBeUndefined();
       expect(summary).toMatchObject({

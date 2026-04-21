@@ -4,7 +4,6 @@
  * decided, scheduling, event creation, and operator removal.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -37,11 +36,14 @@ import {
 } from './lineup-notification-embed.helpers';
 import {
   fanOutVotingDMs,
-  fanOutVotingDMsToInvitees,
-  fanOutLineupCreatedDMsToInvitees,
   fanOutSchedulingDMs,
   fanOutEventCreatedDMs,
+  fanOutMatchMemberDMs,
 } from './lineup-notification-dm-batch.helpers';
+import {
+  routeLineupCreatedIfPrivate,
+  routeVotingOpenIfPrivate,
+} from './lineup-notification-routing.helpers';
 import {
   findMatchMemberUsers,
   hasExistingPollEmbed,
@@ -94,12 +96,8 @@ export class LineupNotificationService {
   ) {}
 
   private get dispatchDeps(): DispatchDeps {
-    return {
-      db: this.db,
-      settingsService: this.settingsService,
-      botClient: this.botClient,
-      dedupService: this.dedupService,
-    };
+    const { db, settingsService, botClient, dedupService } = this;
+    return { db, settingsService, botClient, dedupService };
   }
 
   private resolveCtx(
@@ -112,17 +110,13 @@ export class LineupNotificationService {
 
   /** AC-1: Post channel embed when lineup is created. */
   async notifyLineupCreated(lineup: LineupInfo): Promise<void> {
-    const visibility = await this.resolveVisibility(lineup);
-    // ROK-1065: private lineups skip the channel embed and DM invitees.
-    if (visibility === 'private') {
-      await fanOutLineupCreatedDMsToInvitees(
-        this.db,
-        this.notificationService,
-        this.dedupService,
-        lineup,
-      );
-      return;
-    }
+    const routedPrivate = await routeLineupCreatedIfPrivate(
+      this.db,
+      this.notificationService,
+      this.dedupService,
+      lineup,
+    );
+    if (routedPrivate) return;
     const ctx = await this.resolveCtx(lineup.id, 'nominations', {
       title: lineup.title,
       description: lineup.description ?? null,
@@ -141,22 +135,6 @@ export class LineupNotificationService {
         sent.messageId,
       );
     }
-  }
-
-  /**
-   * Resolve lineup visibility: prefer the caller-provided value, fall back
-   * to a DB lookup so older callers aren't broken (ROK-1065).
-   */
-  private async resolveVisibility(
-    lineup: LineupInfo,
-  ): Promise<'public' | 'private'> {
-    if (lineup.visibility) return lineup.visibility;
-    const [row] = await this.db
-      .select({ visibility: schema.communityLineups.visibility })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineup.id))
-      .limit(1);
-    return row?.visibility ?? 'public';
   }
 
   /**
@@ -201,20 +179,16 @@ export class LineupNotificationService {
     lineup: LineupInfo,
     games: { id: number; name: string }[],
   ): Promise<void> {
-    const visibility = await this.resolveVisibility(lineup);
     const clientUrl = await this.settingsService.getClientUrl();
-    // ROK-1065: private lineups skip the channel embed and DM invitees only.
-    if (visibility === 'private') {
-      await fanOutVotingDMsToInvitees(
-        this.db,
-        this.notificationService,
-        this.dedupService,
-        lineup,
-        games,
-        clientUrl,
-      );
-      return;
-    }
+    const routedPrivate = await routeVotingOpenIfPrivate(
+      this.db,
+      this.notificationService,
+      this.dedupService,
+      lineup,
+      games,
+      clientUrl,
+    );
+    if (routedPrivate) return;
     const ctx = await this.resolveCtx(lineup.id, 'voting');
     await this.postChannelEmbed(
       `lineup-voting:${lineup.id}`,
@@ -242,25 +216,13 @@ export class LineupNotificationService {
       () => buildDecidedEmbed(ctx, matches),
       ctx,
     );
-    await this.sendMatchMemberDMs(lineupId, matches);
-  }
-
-  /** Send DMs to each member of each match (M is typically 3-5). */
-  private async sendMatchMemberDMs(lineupId: number, matches: MatchInfo[]) {
-    for (const match of matches) {
-      const members = await findMatchMemberUsers(this.db, match.id);
-      const names = members.map((m) => m.displayName);
-      for (const member of members) {
-        const coPlayers = names.filter((n) => n !== member.displayName);
-        await this.notifyMatchMember(
-          match.id,
-          member.userId,
-          match.gameName,
-          coPlayers,
-          lineupId,
-        );
-      }
-    }
+    await fanOutMatchMemberDMs(
+      this.db,
+      this.notificationService,
+      this.dedupService,
+      lineupId,
+      matches,
+    );
   }
 
   /** AC-6: Send DM to a match member with game + co-players. */

@@ -13,6 +13,7 @@ import {
   sendEventCreatedDM,
   sendPrivateInviteDM,
 } from './lineup-notification-dm.helpers';
+import { dispatchMatchMemberDM } from './lineup-notification-dms.helpers';
 import {
   findDiscordLinkedMembers,
   findInviteeDiscordMembers,
@@ -103,6 +104,33 @@ export async function fanOutSchedulingDMs(
   const members = await findMatchMemberUsers(db, match.id);
   for (const m of members) {
     await sendSchedulingDM(notificationService, dedupService, match, m);
+  }
+}
+
+/**
+ * Fan-out decided-phase DMs: each member of each match receives a DM
+ * listing the game and their co-players on that match.
+ */
+export async function fanOutMatchMemberDMs(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineupId: number,
+  matches: ReadonlyArray<MatchInfo>,
+): Promise<void> {
+  for (const match of matches) {
+    const members = await findMatchMemberUsers(db, match.id);
+    const names = members.map((m) => m.displayName);
+    for (const member of members) {
+      const coPlayers = names.filter((n) => n !== member.displayName);
+      await dispatchMatchMemberDM(dedupService, notificationService, {
+        matchId: match.id,
+        userId: member.userId,
+        gameName: match.gameName,
+        coPlayers,
+        lineupId,
+      });
+    }
   }
 }
 

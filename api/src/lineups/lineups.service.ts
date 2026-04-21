@@ -28,14 +28,12 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { findLineupById } from './lineups-query.helpers';
-import { assertUserCanParticipate } from './lineups-eligibility.helpers';
 import {
   runAddInvitees,
   runRemoveInvitee,
 } from './lineups-invitees-actions.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
-import { insertLineup } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
 import { buildActiveLineupSummaries } from './lineups-summary.helpers';
@@ -44,31 +42,19 @@ import {
   validateRemoval,
   deleteEntry,
 } from './lineups-removal.helpers';
-import {
-  validateNominationCap,
-  validateGameExists,
-  insertNomination,
-} from './lineups-nomination.helpers';
-import {
-  hasDurationParams,
-  buildOverrides,
-  computeInitialDeadline,
-} from './lineups-phase.helpers';
-import { logNomination } from './lineups-activity.helpers';
-import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
-import { carryOverFromLastDecided } from './lineups-carryover.helpers';
 import { runMetadataUpdate } from './lineups-metadata.helpers';
 import { runStatusTransition } from './lineups-transition.helpers';
 import {
   runBandwagonJoin,
   runAdvanceMatch,
 } from './lineups-match-actions.helpers';
+import { fireNominationRemoved } from './lineups-notify-hooks.helpers';
 import {
-  fireLineupCreated,
-  fireNominationMilestone,
-  fireNominationRemoved,
-} from './lineups-notify-hooks.helpers';
+  runCreateLineup,
+  runToggleVote,
+  runNominate,
+} from './lineups-actions.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -99,52 +85,24 @@ export class LineupsService {
     return channel?.name ?? null;
   };
 
-  /**
-   * Create a new lineup (ROK-1065).
-   * Multiple lineups may be active simultaneously post-ROK-1065. Steam
-   * nudges and carryover only fire for public lineups since private lineups
-   * have a scoped participant roster.
-   */
-  async create(
+  /** Create a new lineup (ROK-1065). */
+  create(
     dto: CreateLineupDto,
     userId: number,
   ): Promise<LineupDetailResponseDto> {
-    const overrides = hasDurationParams(dto) ? buildOverrides(dto) : null;
-    const phaseDeadline = await computeInitialDeadline(dto, this.settings);
-
-    const [row] = await insertLineup(
-      this.db,
+    return runCreateLineup(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        settings: this.settings,
+        phaseQueue: this.phaseQueue,
+        steamNudge: this.steamNudge,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+        resolveChannelName: this.resolveChannelName,
+      },
       dto,
       userId,
-      phaseDeadline,
-      overrides,
-    );
-    await this.activityLog.log('lineup', row.id, 'lineup_created', userId);
-    const isPublic = row.visibility === 'public';
-    if (isPublic) {
-      void this.steamNudge.nudgeUnlinkedMembers(row.id);
-      await carryOverFromLastDecided(this.db, row.id);
-    }
-
-    const delayMs = phaseDeadline.getTime() - Date.now();
-    await this.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
-
-    fireLineupCreated(this.lineupNotifications, this.logger, {
-      id: row.id,
-      title: row.title,
-      description: row.description ?? null,
-      targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
-      // ROK-1064: per-lineup Discord channel override.
-      channelOverrideId: row.channelOverrideId ?? null,
-      // ROK-1065: visibility drives DM vs. channel dispatch.
-      visibility: row.visibility,
-    });
-
-    return buildDetailResponse(
-      this.db,
-      row.id,
-      undefined,
-      this.resolveChannelName,
     );
   }
 
@@ -169,37 +127,22 @@ export class LineupsService {
   }
 
   /** Toggle a vote for a game in a lineup (ROK-936). */
-  async toggleVote(
+  toggleVote(
     lineupId: number,
     gameId: number,
     userId: number,
     callerRole?: string,
   ): Promise<LineupDetailResponseDto> {
-    const [lineup] = await findLineupById(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-    if (lineup.status !== 'voting') {
-      throw new BadRequestException('Voting is only allowed in voting status');
-    }
-    await assertUserCanParticipate(this.db, lineup, {
-      id: userId,
-      role: callerRole,
-    });
-    const action = await toggleVoteHelper(
-      this.db,
+    return runToggleVote(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        resolveChannelName: this.resolveChannelName,
+      },
       lineupId,
-      userId,
       gameId,
-      lineup.maxVotesPerPlayer ?? 3,
-    );
-    await this.activityLog.log('lineup', lineupId, 'vote_cast', userId, {
-      gameId,
-      action,
-    });
-    return buildDetailResponse(
-      this.db,
-      lineupId,
       userId,
-      this.resolveChannelName,
+      callerRole,
     );
   }
 
@@ -235,38 +178,24 @@ export class LineupsService {
   }
 
   /** Nominate a game into a lineup. */
-  async nominate(
+  nominate(
     lineupId: number,
     dto: NominateGameDto,
     userId: number,
     callerRole?: string,
-  ) {
-    const [lineup] = await findLineupById(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-    if (lineup.status !== 'building')
-      throw new BadRequestException('Lineup is not in building status');
-    await assertUserCanParticipate(this.db, lineup, {
-      id: userId,
-      role: callerRole,
-    });
-
-    await validateNominationCap(this.db, lineupId);
-    await validateGameExists(this.db, dto.gameId);
-    await insertNomination(this.db, lineupId, dto, userId);
-    await logNomination(this.db, this.activityLog, lineupId, dto, userId);
-
-    fireNominationMilestone(
-      this.lineupNotifications,
-      this.logger,
-      this.db,
+  ): Promise<LineupDetailResponseDto> {
+    return runNominate(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+        resolveChannelName: this.resolveChannelName,
+      },
       lineupId,
-    );
-
-    return buildDetailResponse(
-      this.db,
-      lineupId,
-      undefined,
-      this.resolveChannelName,
+      dto,
+      userId,
+      callerRole,
     );
   }
 
