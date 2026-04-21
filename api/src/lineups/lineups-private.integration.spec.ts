@@ -8,6 +8,7 @@
  * - I7: common-ground explicit lineupId vs fallback
  * - I8: remove-invitee preserves prior votes
  * - Invitee CRUD dedupe + non-creator 403
+ * - A6: findInviteeDiscordMembers creator-union, DISTINCT dedupe, NULL discord_id filter
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -16,6 +17,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { findInviteeDiscordMembers } from './lineup-notification-targets.helpers';
 
 function describePrivateLineups() {
   let testApp: TestApp;
@@ -268,6 +270,85 @@ function describePrivateLineups() {
     expect(res.status).toBe(200);
     expect(res.body.data).toBeDefined();
     expect(res.body.meta.activeLineupId).toBe(lineupId);
+  });
+
+  // ── A6: findInviteeDiscordMembers creator-union ──────────────
+
+  it('findInviteeDiscordMembers includes the creator even when not invited (A6)', async () => {
+    // Admin (seed user) creates the lineup but is NOT in inviteeUserIds.
+    // The DISTINCT union in findInviteeDiscordMembers should still return
+    // the creator alongside the invitee.
+    const invitee = await createMember('a6-invitee@test.local', 'a6invitee');
+    const createRes = await createPrivateLineup(adminToken, [invitee.id]);
+    const lineupId = createRes.body.id as number;
+
+    // Give the creator a Discord ID so the `discord_id IS NOT NULL` filter
+    // lets them through.
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: 'discord:admin-a6' })
+      .where(eq(schema.users.id, testApp.seed.adminUser.id));
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: 'discord:a6-invitee' })
+      .where(eq(schema.users.id, invitee.id));
+
+    const members = await findInviteeDiscordMembers(testApp.db, lineupId);
+    const ids = members.map((m) => m.userId).sort();
+    expect(ids).toContain(testApp.seed.adminUser.id);
+    expect(ids).toContain(invitee.id);
+    // DISTINCT guard: no duplicates even if the creator is also an invitee
+    // in a separate setup — this case covers union, dedupe is the next test.
+  });
+
+  it('findInviteeDiscordMembers dedupes when the creator is also an explicit invitee', async () => {
+    // Explicitly invite the admin so the union has a collision.
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: 'discord:admin-dup' })
+      .where(eq(schema.users.id, testApp.seed.adminUser.id));
+
+    const invitee = await createMember('dup-inv@test.local', 'dupinv');
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: 'discord:dup-inv' })
+      .where(eq(schema.users.id, invitee.id));
+
+    const createRes = await createPrivateLineup(adminToken, [
+      testApp.seed.adminUser.id,
+      invitee.id,
+    ]);
+    const lineupId = createRes.body.id as number;
+
+    const members = await findInviteeDiscordMembers(testApp.db, lineupId);
+    const adminCount = members.filter(
+      (m) => m.userId === testApp.seed.adminUser.id,
+    ).length;
+    expect(adminCount).toBe(1);
+  });
+
+  it('findInviteeDiscordMembers excludes users with no discord_id', async () => {
+    const withDiscord = await createMember('with-d@test.local', 'withd');
+    const withoutDiscord = await createMember('no-d@test.local', 'nod');
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: 'discord:with-d' })
+      .where(eq(schema.users.id, withDiscord.id));
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: null })
+      .where(eq(schema.users.id, withoutDiscord.id));
+
+    const createRes = await createPrivateLineup(adminToken, [
+      withDiscord.id,
+      withoutDiscord.id,
+    ]);
+    const lineupId = createRes.body.id as number;
+
+    const members = await findInviteeDiscordMembers(testApp.db, lineupId);
+    const ids = members.map((m) => m.userId);
+    expect(ids).toContain(withDiscord.id);
+    expect(ids).not.toContain(withoutDiscord.id);
   });
 
   it('common-ground falls back to the current building lineup when lineupId is omitted', async () => {
