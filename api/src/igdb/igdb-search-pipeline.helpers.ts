@@ -35,6 +35,9 @@ export interface SearchPipelineParams {
   normalizeQuery: (q: string) => string;
   getCacheKey: (q: string) => string;
   queryIgdb: (body: string) => Promise<IgdbApiGame[]>;
+  /** ROK-1082: fired per successful ITAD upsert so the service can enqueue
+   * a taste-vector recompute. */
+  onGameUpserted?: (gameId: number) => void;
 }
 
 /**
@@ -88,6 +91,7 @@ async function runSearchPipelineCore(
         db: params.db,
         queryIgdb: params.queryIgdb,
         getAdultFilter: params.getAdultFilter,
+        onGameUpserted: params.onGameUpserted,
       });
       const result = await executeItadSearch(itadDeps, normalized);
       if (result.games.length > 0)

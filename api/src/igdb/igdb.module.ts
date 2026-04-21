@@ -10,6 +10,7 @@ import { RedisModule } from '../redis/redis.module';
 import { SettingsModule } from '../settings/settings.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { ItadModule } from '../itad/itad.module';
+import { GameTasteModule } from '../game-taste/game-taste.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ItadModule } from '../itad/itad.module';
     BullModule.registerQueue({ name: IGDB_SYNC_QUEUE }),
     CronJobModule,
     ItadModule,
+    GameTasteModule,
   ],
   controllers: [IgdbController],
   providers: [IgdbService, IgdbSyncProcessor],

@@ -110,12 +110,15 @@ export function buildAdultThemeFilter(adultFilterEnabled: boolean): string {
  * @param db - Database connection
  * @param lookupBySteamAppId - Function to look up ITAD game by Steam App ID
  * @param getGameInfo - Function to fetch full game info (including tags) by ITAD ID
+ * @param onGameChanged - ROK-1082: fired per successful update so the caller
+ *                        can enqueue a game-taste-vector recompute for that id.
  * @returns Number of successfully enriched games
  */
 export async function enrichSyncedGamesWithItad(
   db: PostgresJsDatabase<typeof schema>,
   lookupBySteamAppId: (appId: number) => Promise<ItadGame | null>,
   getGameInfo: (itadId: string) => Promise<ItadGameInfo | null>,
+  onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   const games = await db
     .select({ id: schema.games.id, steamAppId: schema.games.steamAppId })
@@ -131,6 +134,7 @@ export async function enrichSyncedGamesWithItad(
       if (!itadGame) continue;
       const info = await fetchInfoGracefully(getGameInfo, itadGame.id);
       await updateGameWithItadData(db, game.id, itadGame, info);
+      onGameChanged?.(game.id);
       enriched++;
     } catch (err) {
       logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);

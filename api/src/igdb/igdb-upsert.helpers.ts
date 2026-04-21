@@ -72,12 +72,16 @@ function buildBatchUpsertSet() {
  * If a game with the same steamAppId already exists (e.g., from ITAD)
  * but has no igdbId, merge IGDB data into that row instead of inserting
  * a duplicate (ROK-986).
+ * @param onGameChanged - ROK-1082: fired after commit with the internal game id
+ *                        so the caller can enqueue a taste-vector recompute.
  */
 export async function upsertSingleGameRow(
   db: PostgresJsDatabase<typeof schema>,
   row: ReturnType<typeof mapApiGameToDbRow>,
+  onGameChanged?: (gameId: number) => void,
 ): Promise<void> {
-  if (row.steamAppId && (await mergeBysteamAppId(db, row))) return;
+  if (row.steamAppId && (await mergeBysteamAppId(db, row, onGameChanged)))
+    return;
   await db
     .insert(schema.games)
     .values(row)
@@ -85,12 +89,28 @@ export async function upsertSingleGameRow(
       target: schema.games.igdbId,
       set: buildUpsertSet(row),
     });
+  if (onGameChanged) await notifyBySingleIgdbId(db, row.igdbId, onGameChanged);
+}
+
+/** Look up the internal id by igdbId and fire the callback. */
+async function notifyBySingleIgdbId(
+  db: PostgresJsDatabase<typeof schema>,
+  igdbId: number,
+  onGameChanged: (gameId: number) => void,
+): Promise<void> {
+  const rows = await db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(eq(schema.games.igdbId, igdbId))
+    .limit(1);
+  if (rows[0]) onGameChanged(rows[0].id);
 }
 
 /** Merge IGDB data into an existing ITAD-sourced game by steamAppId. */
 async function mergeBysteamAppId(
   db: PostgresJsDatabase<typeof schema>,
   row: ReturnType<typeof mapApiGameToDbRow>,
+  onGameChanged?: (gameId: number) => void,
 ): Promise<boolean> {
   const [existing] = await db
     .select({ id: schema.games.id })
@@ -115,6 +135,7 @@ async function mergeBysteamAppId(
   logger.log(
     `Merged IGDB ${row.igdbId} into existing game ${existing.id} by steamAppId`,
   );
+  onGameChanged?.(existing.id);
   return true;
 }
 
@@ -220,11 +241,14 @@ function splitMergeVsInsert(
  *
  * @param db - Database connection
  * @param apiGames - Raw IGDB API game objects
+ * @param onGameChanged - ROK-1082: fired per touched row after commit so the
+ *                        caller can enqueue a taste-vector recompute.
  * @returns Inserted/existing game rows as detail DTOs
  */
 export async function upsertGamesFromApi(
   db: PostgresJsDatabase<typeof schema>,
   apiGames: IgdbApiGame[],
+  onGameChanged?: (gameId: number) => void,
 ): Promise<GameDetailDto[]> {
   if (apiGames.length === 0) return [];
 
@@ -254,6 +278,9 @@ export async function upsertGamesFromApi(
     .select()
     .from(schema.games)
     .where(inArray(schema.games.igdbId, igdbIds));
+  if (onGameChanged) {
+    for (const r of results) onGameChanged(r.id);
+  }
   return results.map((g) => mapDbRowToDetail(g));
 }
 

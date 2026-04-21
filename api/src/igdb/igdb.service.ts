@@ -23,6 +23,7 @@ import {
 } from './igdb-enqueue.helpers';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { ItadService } from '../itad/itad.service';
+import { GameTasteService } from '../game-taste/game-taste.service';
 import {
   IGDB_CONFIG,
   type IgdbApiGame,
@@ -81,7 +82,18 @@ export class IgdbService {
     @InjectQueue(IGDB_SYNC_QUEUE) private readonly syncQueue: Queue,
     private readonly cronJobService: CronJobService,
     private readonly itadService: ItadService,
+    private readonly gameTasteService: GameTasteService,
   ) {}
+
+  /**
+   * Fire-and-forget wrapper for the game-taste recompute queue (ROK-1082).
+   * Logs but never throws — enqueue failures must not break IGDB sync paths.
+   */
+  private enqueueTasteRecompute(gameId: number): void {
+    this.gameTasteService.enqueueRecompute(gameId).catch((err) => {
+      this.logger.warn(`game-taste enqueue failed for ${gameId}: ${err}`);
+    });
+  }
 
   @OnEvent(SETTINGS_EVENTS.IGDB_UPDATED)
   handleIgdbConfigUpdate(config: unknown) {
@@ -146,6 +158,7 @@ export class IgdbService {
         this.db,
         (id) => this.itadService.lookupBySteamAppId(id),
         (itadId) => this.itadService.getGameInfo(itadId),
+        (gameId) => this.enqueueTasteRecompute(gameId),
       );
       const reEnriched = await reEnrichGamesWithIgdb(this.db, queryFn);
       await clearDiscoveryCache(this.redis);
@@ -205,6 +218,7 @@ export class IgdbService {
       normalizeQuery: (q) => this.normalizeQuery(q),
       getCacheKey: (q) => `igdb:search:${this.normalizeQuery(q)}`,
       queryIgdb: (body) => this.queryIgdb(body),
+      onGameUpserted: (gameId) => this.enqueueTasteRecompute(gameId),
     };
   }
 
@@ -248,7 +262,9 @@ export class IgdbService {
   }
 
   async upsertGamesFromApi(apiGames: IgdbApiGame[]) {
-    return upsertGamesFromApi(this.db, apiGames);
+    return upsertGamesFromApi(this.db, apiGames, (gameId) =>
+      this.enqueueTasteRecompute(gameId),
+    );
   }
   async getSyncStatus() {
     return querySyncStatus(this.db, this._syncInProgress);
@@ -301,8 +317,11 @@ export class IgdbService {
 
   async unbanGame(id: number) {
     const result = await unbanGameHelper(this.db, id);
-    if (result.success && result.igdbId) {
-      await this.refreshSingleGame(result.igdbId);
+    if (result.success) {
+      this.enqueueTasteRecompute(id);
+      if (result.igdbId) {
+        await this.refreshSingleGame(result.igdbId);
+      }
     }
     return result;
   }
@@ -312,7 +331,9 @@ export class IgdbService {
         `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = ${igdbId}; limit 1;`,
       );
       if (g.length > 0)
-        await upsertSingleGameRow(this.db, mapApiGameToDbRow(g[0]));
+        await upsertSingleGameRow(this.db, mapApiGameToDbRow(g[0]), (gameId) =>
+          this.enqueueTasteRecompute(gameId),
+        );
     } catch {
       /* non-fatal */
     }
