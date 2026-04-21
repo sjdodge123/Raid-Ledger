@@ -15,6 +15,7 @@ import { StartLineupModal } from './start-lineup-modal';
 import { PhaseCountdown } from './phase-countdown';
 import { formatTargetDate } from './lineup-banner-helpers';
 import { TiebreakerBadge } from './tiebreaker/TiebreakerBadge';
+import { OtherActiveLineups } from './OtherActiveLineups';
 
 /** Pulsing green dot indicator for active lineup. */
 function PulsingDot(): JSX.Element {
@@ -230,6 +231,7 @@ export function LineupBanner(): JSX.Element | null {
                 canStartAnother={canStartAnother}
                 onStartAnother={() => setStartOpen(true)}
             />
+            <OtherActiveLineups primaryLineupId={banner.id} />
             <NominateModal isOpen={nominateOpen} onClose={() => setNominateOpen(false)} lineupId={banner.id} />
             {canStartAnother && (
                 <StartLineupModal isOpen={startOpen} onClose={() => setStartOpen(false)} />
