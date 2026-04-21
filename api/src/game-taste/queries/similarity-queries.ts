@@ -34,8 +34,8 @@ type SimilarityRow = {
  *   - `gameId`   → the game's game_taste_vector (self excluded from results)
  *
  * Filters banned + hidden games, and by default hides zero-signal games
- * (confidence < 0.1) so similarity results don't include stub rows. Callers
- * can widen the filter by passing `minConfidence`.
+ * (confidence < DEFAULT_MIN_CONFIDENCE) so similarity results don't include
+ * stub rows. Callers can widen the filter by passing `minConfidence`.
  */
 export async function findSimilarGames(
   db: Db,
@@ -45,8 +45,7 @@ export async function findSimilarGames(
   const limit = input.limit ?? 10;
   const target = await resolveTarget(db, input);
   if (!target) return [];
-  const excludeId =
-    input.gameId !== undefined ? input.gameId : null;
+  const excludeId = input.gameId !== undefined ? input.gameId : null;
   const rows = await executeSimilarityQuery(
     db,
     target,
@@ -78,7 +77,7 @@ async function loadPlayerVector(
     .where(sql`${schema.playerTasteVectors.userId} = ${userId}`)
     .limit(1);
   if (rows.length === 0) return null;
-  return rows[0].vector as number[];
+  return rows[0].vector;
 }
 
 async function loadPlayerVectorCentroid(
@@ -91,7 +90,7 @@ async function loadPlayerVectorCentroid(
     .from(schema.playerTasteVectors)
     .where(inArray(schema.playerTasteVectors.userId, userIds));
   if (rows.length === 0) return null;
-  return elementwiseMean(rows.map((r) => r.vector as number[]));
+  return elementwiseMean(rows.map((r) => r.vector));
 }
 
 async function loadGameVector(
@@ -104,7 +103,7 @@ async function loadGameVector(
     .where(sql`${schema.gameTasteVectors.gameId} = ${gameId}`)
     .limit(1);
   if (rows.length === 0) return null;
-  return rows[0].vector as number[];
+  return rows[0].vector;
 }
 
 function elementwiseMean(vectors: number[][]): number[] {
@@ -127,9 +126,7 @@ async function executeSimilarityQuery(
 ): Promise<SimilarityRow[]> {
   const targetLiteral = `[${target.join(',')}]`;
   const excludeClause =
-    excludeGameId !== null
-      ? sql`AND g.id <> ${excludeGameId}`
-      : sql``;
+    excludeGameId !== null ? sql`AND g.id <> ${excludeGameId}` : sql``;
   return db.execute<SimilarityRow>(sql`
     SELECT g.id AS game_id, g.name, g.cover_url,
            (gtv.vector <=> ${targetLiteral}::vector) AS distance

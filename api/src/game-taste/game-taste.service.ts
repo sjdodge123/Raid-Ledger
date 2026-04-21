@@ -58,9 +58,7 @@ export class GameTasteService {
     return findSimilarGames(this.db, input, minConfidence);
   }
 
-  getTasteProfile(
-    gameId: number,
-  ): Promise<GameTasteProfileResponseDto | null> {
+  getTasteProfile(gameId: number): Promise<GameTasteProfileResponseDto | null> {
     return getGameTasteProfile(this.db, gameId);
   }
 

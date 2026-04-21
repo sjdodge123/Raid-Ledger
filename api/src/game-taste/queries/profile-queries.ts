@@ -10,10 +10,7 @@ import {
   computeCorpusStats,
   loadGameSignals,
 } from '../pipelines/aggregate-game-vectors-loaders';
-import {
-  computeAxisIdf,
-  computeGameVector,
-} from '../game-vector.helpers';
+import { computeAxisIdf, computeGameVector } from '../game-vector.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -57,8 +54,20 @@ export async function getVectorWithDerivation(
     .where(eq(schema.gameTasteVectors.gameId, gameId))
     .limit(1);
   if (rows.length === 0) return null;
+  const derivation = await rebuildDerivation(db, gameId);
+  if (derivation === null) return null;
   const row = rows[0];
+  return {
+    gameId,
+    vector: row.vector,
+    dimensions: row.dimensions,
+    confidence: Number(row.confidence),
+    computedAt: row.computedAt.toISOString(),
+    derivation,
+  };
+}
 
+async function rebuildDerivation(db: Db, gameId: number) {
   const [gameMap, signalsByGame] = await Promise.all([
     loadGameMetadata(db),
     loadGameSignals(db),
@@ -68,19 +77,5 @@ export async function getVectorWithDerivation(
   const corpusStats = computeCorpusStats(signalsByGame);
   const axisIdf = computeAxisIdf(gameMap);
   const signals = signalsByGame.get(gameId) ?? null;
-  const { derivation } = computeGameVector(
-    metadata,
-    signals,
-    corpusStats,
-    axisIdf,
-  );
-
-  return {
-    gameId,
-    vector: row.vector,
-    dimensions: row.dimensions,
-    confidence: Number(row.confidence),
-    computedAt: row.computedAt.toISOString(),
-    derivation,
-  };
+  return computeGameVector(metadata, signals, corpusStats, axisIdf).derivation;
 }

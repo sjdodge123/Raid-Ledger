@@ -43,9 +43,7 @@ export class GameTasteController {
 
   @Post('similar')
   @HttpCode(HttpStatus.OK)
-  async findSimilar(
-    @Body() body: unknown,
-  ): Promise<SimilarGamesResponseDto> {
+  async findSimilar(@Body() body: unknown): Promise<SimilarGamesResponseDto> {
     const parsed = SimilarGamesRequestSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
