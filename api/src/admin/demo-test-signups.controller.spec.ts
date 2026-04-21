@@ -10,9 +10,13 @@ function createMockService() {
   };
 }
 
+type MockService = ReturnType<typeof createMockService>;
+type GetController = () => DemoTestSignupsController;
+type GetMockService = () => MockService;
+
 describe('DemoTestSignupsController', () => {
   let controller: DemoTestSignupsController;
-  let mockService: ReturnType<typeof createMockService>;
+  let mockService: MockService;
 
   beforeEach(async () => {
     mockService = createMockService();
@@ -25,59 +29,78 @@ describe('DemoTestSignupsController', () => {
     controller = module.get(DemoTestSignupsController);
   });
 
-  it('createSignup delegates to service', async () => {
-    const result = await controller.createSignupForTest({
+  const getController = () => controller;
+  const getService = () => mockService;
+
+  describe('createSignup', () => createSignupTests(getController, getService));
+  describe('triggerDeparture', () =>
+    triggerDepartureTests(getController, getService));
+  describe('cancelSignup', () => cancelSignupTests(getController, getService));
+});
+
+function createSignupTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().createSignupForTest({
       eventId: 1,
       userId: 2,
       preferredRoles: ['dps'],
       status: 'signed_up',
     });
     expect(result).toEqual({ id: 1 });
-    expect(mockService.createSignupForTest).toHaveBeenCalledWith(1, 2, {
+    expect(getMock().createSignupForTest).toHaveBeenCalledWith(1, 2, {
       preferredRoles: ['dps'],
       characterId: undefined,
       status: 'signed_up',
     });
   });
 
-  it('createSignup rejects invalid eventId', async () => {
+  it('rejects invalid eventId', async () => {
     await expect(
-      controller.createSignupForTest({ eventId: -1, userId: 2 }),
+      getController().createSignupForTest({ eventId: -1, userId: 2 }),
     ).rejects.toThrow(/Validation failed/);
   });
+}
 
-  it('triggerDeparture delegates to service', async () => {
-    const result = await controller.triggerDepartureForTest({
+function triggerDepartureTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().triggerDepartureForTest({
       eventId: 1,
       signupId: 2,
       discordUserId: '123',
     });
     expect(result).toEqual({ success: true });
-    expect(mockService.triggerDepartureForTest).toHaveBeenCalledWith(
-      1,
-      2,
-      '123',
-    );
+    expect(getMock().triggerDepartureForTest).toHaveBeenCalledWith(1, 2, '123');
   });
 
-  it('triggerDeparture rejects missing discordUserId', async () => {
+  it('rejects missing discordUserId', async () => {
     await expect(
-      controller.triggerDepartureForTest({ eventId: 1, signupId: 2 }),
+      getController().triggerDepartureForTest({ eventId: 1, signupId: 2 }),
     ).rejects.toThrow(/Validation failed/);
   });
+}
 
-  it('cancelSignup delegates to service', async () => {
-    const result = await controller.cancelSignupForTest({
+function cancelSignupTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().cancelSignupForTest({
       eventId: 1,
       userId: 2,
     });
     expect(result).toEqual({ success: true });
-    expect(mockService.cancelSignupForTest).toHaveBeenCalledWith(1, 2);
+    expect(getMock().cancelSignupForTest).toHaveBeenCalledWith(1, 2);
   });
 
-  it('cancelSignup rejects invalid body', async () => {
+  it('rejects invalid body', async () => {
     await expect(
-      controller.cancelSignupForTest({ eventId: 0, userId: 2 }),
+      getController().cancelSignupForTest({ eventId: 0, userId: 2 }),
     ).rejects.toThrow(/Validation failed/);
   });
-});
+}

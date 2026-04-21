@@ -25,11 +25,17 @@ function createMockLineupService() {
   };
 }
 
+type MockService = ReturnType<typeof createMockService>;
+type MockNudge = { nudgeUnlinkedMembers: jest.Mock };
+type GetController = () => DemoTestGamesController;
+type GetMockService = () => MockService;
+type GetMockNudge = () => MockNudge;
+
 describe('DemoTestGamesController', () => {
   let controller: DemoTestGamesController;
-  let mockService: ReturnType<typeof createMockService>;
+  let mockService: MockService;
   let mockLineupService: ReturnType<typeof createMockLineupService>;
-  let nudge: { nudgeUnlinkedMembers: jest.Mock };
+  let nudge: MockNudge;
 
   beforeEach(async () => {
     mockService = createMockService();
@@ -48,109 +54,159 @@ describe('DemoTestGamesController', () => {
     controller = module.get(DemoTestGamesController);
   });
 
-  it('addGameInterest delegates to service', async () => {
-    const result = await controller.addGameInterestForTest({
+  const getController = () => controller;
+  const getService = () => mockService;
+  const getNudge = () => nudge;
+
+  describe('addGameInterest', () =>
+    addGameInterestTests(getController, getService));
+  describe('clearGameInterest', () =>
+    clearGameInterestTests(getController, getService));
+  describe('setSteamAppId', () =>
+    setSteamAppIdTests(getController, getService));
+  describe('setAutoHeartPref (ROK-1054)', () =>
+    setAutoHeartPrefTests(getController, getService));
+  describe('getGame (ROK-1054)', () => getGameTests(getController, getService));
+  describe('triggerSteamNudge', () =>
+    triggerSteamNudgeTests(getController, getNudge));
+  describe('cancelLineupPhaseJobs (ROK-1007)', () =>
+    cancelLineupPhaseJobsTests(getController, getService));
+});
+
+function addGameInterestTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().addGameInterestForTest({
       userId: 1,
       gameId: 10,
     });
     expect(result).toEqual({ success: true });
-    expect(mockService.addGameInterestForTest).toHaveBeenCalledWith(1, 10);
+    expect(getMock().addGameInterestForTest).toHaveBeenCalledWith(1, 10);
   });
+}
 
-  it('clearGameInterest delegates to service', async () => {
-    const result = await controller.clearGameInterestForTest({
+function clearGameInterestTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().clearGameInterestForTest({
       userId: 1,
       gameId: 10,
     });
     expect(result).toEqual({ success: true });
-    expect(mockService.clearGameInterestForTest).toHaveBeenCalledWith(1, 10);
+    expect(getMock().clearGameInterestForTest).toHaveBeenCalledWith(1, 10);
   });
+}
 
-  it('setSteamAppId delegates to service', async () => {
-    const result = await controller.setSteamAppIdForTest({
+function setSteamAppIdTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().setSteamAppIdForTest({
       gameId: 5,
       steamAppId: 730,
     });
     expect(result).toEqual({ success: true });
-    expect(mockService.setSteamAppIdForTest).toHaveBeenCalledWith(5, 730);
+    expect(getMock().setSteamAppIdForTest).toHaveBeenCalledWith(5, 730);
   });
+}
 
-  it('setAutoHeartPref delegates to service (ROK-1054)', async () => {
-    const result = await controller.setAutoHeartPrefForTest({
+function setAutoHeartPrefTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().setAutoHeartPrefForTest({
       userId: 7,
       enabled: true,
     });
     expect(result).toEqual({ success: true });
-    expect(mockService.setAutoHeartPrefForTest).toHaveBeenCalledWith(7, true);
+    expect(getMock().setAutoHeartPrefForTest).toHaveBeenCalledWith(7, true);
   });
 
-  it('setAutoHeartPref accepts enabled=false', async () => {
-    const result = await controller.setAutoHeartPrefForTest({
+  it('accepts enabled=false', async () => {
+    const result = await getController().setAutoHeartPrefForTest({
       userId: 12,
       enabled: false,
     });
     expect(result).toEqual({ success: true });
-    expect(mockService.setAutoHeartPrefForTest).toHaveBeenCalledWith(12, false);
+    expect(getMock().setAutoHeartPrefForTest).toHaveBeenCalledWith(12, false);
   });
 
-  it('setAutoHeartPref rejects invalid userId', async () => {
+  it('rejects invalid userId', async () => {
     await expect(
-      controller.setAutoHeartPrefForTest({
+      getController().setAutoHeartPrefForTest({
         userId: -1,
         enabled: true,
       }),
     ).rejects.toThrow(/Validation failed/);
   });
 
-  it('setAutoHeartPref rejects non-boolean enabled', async () => {
+  it('rejects non-boolean enabled', async () => {
     await expect(
-      controller.setAutoHeartPrefForTest({
+      getController().setAutoHeartPrefForTest({
         userId: 1,
         enabled: 'yes',
       }),
     ).rejects.toThrow(/Validation failed/);
   });
+}
 
-  it('getGame returns game name and id (ROK-1054)', async () => {
-    mockService.getGameForTest.mockResolvedValueOnce({
+function getGameTests(getController: GetController, getMock: GetMockService) {
+  it('returns game name and id', async () => {
+    getMock().getGameForTest.mockResolvedValueOnce({
       id: 8363,
       name: 'Test WoW',
     });
-    const result = await controller.getGameForTest({ id: 8363 });
+    const result = await getController().getGameForTest({ id: 8363 });
     expect(result).toEqual({ id: 8363, name: 'Test WoW' });
-    expect(mockService.getGameForTest).toHaveBeenCalledWith(8363);
+    expect(getMock().getGameForTest).toHaveBeenCalledWith(8363);
   });
 
-  it('getGame returns 404 when game not found', async () => {
-    mockService.getGameForTest.mockResolvedValueOnce(null);
-    await expect(controller.getGameForTest({ id: 99999 })).rejects.toThrow(
+  it('returns 404 when game not found', async () => {
+    getMock().getGameForTest.mockResolvedValueOnce(null);
+    await expect(getController().getGameForTest({ id: 99999 })).rejects.toThrow(
       /Game not found/,
     );
   });
 
-  it('getGame rejects invalid id', async () => {
-    await expect(controller.getGameForTest({ id: -1 })).rejects.toThrow(
+  it('rejects invalid id', async () => {
+    await expect(getController().getGameForTest({ id: -1 })).rejects.toThrow(
       /Validation failed/,
     );
   });
+}
 
-  it('triggerSteamNudge delegates to LineupSteamNudgeService', async () => {
-    const result = await controller.triggerSteamNudge({ lineupId: 42 });
+function triggerSteamNudgeTests(
+  getController: GetController,
+  getNudge: GetMockNudge,
+) {
+  it('delegates to LineupSteamNudgeService', async () => {
+    const result = await getController().triggerSteamNudge({ lineupId: 42 });
     expect(result).toEqual({ success: true });
-    expect(nudge.nudgeUnlinkedMembers).toHaveBeenCalledWith(42);
+    expect(getNudge().nudgeUnlinkedMembers).toHaveBeenCalledWith(42);
   });
+}
 
-  it('cancelLineupPhaseJobs delegates to service (ROK-1007)', async () => {
-    const result = await controller.cancelLineupPhaseJobsForTest({
+function cancelLineupPhaseJobsTests(
+  getController: GetController,
+  getMock: GetMockService,
+) {
+  it('delegates to service', async () => {
+    const result = await getController().cancelLineupPhaseJobsForTest({
       lineupId: 7,
     });
     expect(result).toEqual({ success: true, removed: 2 });
-    expect(mockService.cancelLineupPhaseJobsForTest).toHaveBeenCalledWith(7);
+    expect(getMock().cancelLineupPhaseJobsForTest).toHaveBeenCalledWith(7);
   });
 
-  it('cancelLineupPhaseJobs rejects invalid body', async () => {
+  it('rejects invalid body', async () => {
     await expect(
-      controller.cancelLineupPhaseJobsForTest({ lineupId: -1 }),
+      getController().cancelLineupPhaseJobsForTest({ lineupId: -1 }),
     ).rejects.toThrow(/Validation failed/);
   });
-});
+}
