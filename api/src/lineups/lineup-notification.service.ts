@@ -202,6 +202,7 @@ export class LineupNotificationService {
     games: { id: number; name: string }[],
   ): Promise<void> {
     const visibility = await this.resolveVisibility(lineup);
+    const clientUrl = await this.settingsService.getClientUrl();
     // ROK-1065: private lineups skip the channel embed and DM invitees only.
     if (visibility === 'private') {
       await fanOutVotingDMsToInvitees(
@@ -210,6 +211,7 @@ export class LineupNotificationService {
         this.dedupService,
         lineup,
         games,
+        clientUrl,
       );
       return;
     }
@@ -225,6 +227,7 @@ export class LineupNotificationService {
       this.dedupService,
       lineup,
       games,
+      clientUrl,
     );
   }
 

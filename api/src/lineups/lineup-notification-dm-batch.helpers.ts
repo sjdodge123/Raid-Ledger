@@ -28,6 +28,7 @@ export async function fanOutVotingDMs(
   dedupService: NotificationDedupService,
   lineup: LineupInfo,
   games: ReadonlyArray<{ id: number; name: string }>,
+  baseUrl?: string,
 ): Promise<void> {
   const members = await findDiscordLinkedMembers(db);
   for (const member of members) {
@@ -37,6 +38,7 @@ export async function fanOutVotingDMs(
       lineup,
       member,
       games,
+      baseUrl,
     );
   }
 }
@@ -51,6 +53,7 @@ export async function fanOutVotingDMsToInvitees(
   dedupService: NotificationDedupService,
   lineup: LineupInfo,
   games: ReadonlyArray<{ id: number; name: string }>,
+  baseUrl?: string,
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, lineup.id);
   for (const member of members) {
@@ -60,6 +63,7 @@ export async function fanOutVotingDMsToInvitees(
       lineup,
       member,
       games,
+      baseUrl,
     );
   }
 }
