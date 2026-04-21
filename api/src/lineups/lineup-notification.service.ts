@@ -209,7 +209,7 @@ export class LineupNotificationService {
         this.notificationService,
         this.dedupService,
         lineup,
-        games.length,
+        games,
       );
       return;
     }
@@ -224,7 +224,7 @@ export class LineupNotificationService {
       this.notificationService,
       this.dedupService,
       lineup,
-      games.length,
+      games,
     );
   }
 

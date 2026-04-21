@@ -65,17 +65,33 @@ function composeInviteMessage(lineup: LineupDmInfo): string {
 }
 
 /** Compose the voting-open DM body, mirroring the channel "Voting Open" embed. */
-function composeVotingMessage(lineup: LineupDmInfo, gameCount: number): string {
+function composeVotingMessage(
+  lineup: LineupDmInfo,
+  games: ReadonlyArray<{ id: number; name: string }>,
+): string {
   const desc = lineup.description ? `${lineup.description}\n\n` : '';
   const deadline = lineup.votingDeadline
     ? `\n\n\u23F0 **Voting closes:** ${discordTs(lineup.votingDeadline)}`
     : '';
+  const ballot = buildBallot(games);
   return (
     `${desc}Nominations are closed — voting is now open on your private lineup. ` +
-    `**${gameCount}** game${gameCount === 1 ? '' : 's'} on the ballot. ` +
-    'Each member gets a limited number of votes, so choose wisely.' +
+    'Pick the games you most want to play; each member gets a limited number ' +
+    'of votes, so choose wisely.' +
+    ballot +
     deadline
   );
+}
+
+/** Render up to 15 nominees as a bulleted ballot, matching the channel embed. */
+function buildBallot(
+  games: ReadonlyArray<{ id: number; name: string }>,
+): string {
+  if (games.length === 0) return '';
+  const lines = games.slice(0, 15).map((g) => `\u{1F3AE} **${g.name}**`);
+  const overflow =
+    games.length > 15 ? `\n*...and ${games.length - 15} more*` : '';
+  return `\n\n**Games on the Ballot (${games.length})**\n${lines.join('\n')}${overflow}`;
 }
 
 /**
@@ -111,7 +127,7 @@ export async function sendVotingDM(
   dedupService: NotificationDedupService,
   lineup: LineupDmInfo,
   member: DiscordMember,
-  gameCount: number,
+  games: ReadonlyArray<{ id: number; name: string }>,
 ): Promise<void> {
   const key = `lineup-vote-dm:${lineup.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
@@ -121,7 +137,7 @@ export async function sendVotingDM(
     userId: member.userId,
     type: 'community_lineup',
     title: `Time to vote on the Community Lineup${titleSuffix}!`,
-    message: composeVotingMessage(lineup, gameCount),
+    message: composeVotingMessage(lineup, games),
     payload: {
       subtype: 'lineup_voting_open',
       lineupId: lineup.id,
