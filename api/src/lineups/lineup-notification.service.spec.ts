@@ -215,6 +215,34 @@ describe('LineupNotificationService', () => {
 
       expect(mockDb.update).not.toHaveBeenCalled();
     });
+
+    // ROK-1065: private visibility routes to invitee DMs instead of channel
+    describe('private visibility (ROK-1065)', () => {
+      it('dispatches invite DMs to invitees and skips the channel embed', async () => {
+        const invitees = [makeMember(11), makeMember(12)];
+        mockDb.execute.mockResolvedValueOnce(invitees);
+
+        await service.notifyLineupCreated(
+          makeLineup({ visibility: 'private', title: 'Team Night' }),
+        );
+
+        expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+        expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
+      });
+
+      it('uses the lineup-invite-dm dedup key per invitee', async () => {
+        mockDb.execute.mockResolvedValueOnce([makeMember(11)]);
+
+        await service.notifyLineupCreated(
+          makeLineup({ visibility: 'private' }),
+        );
+
+        expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+          `lineup-invite-dm:${LINEUP_ID}:11`,
+          expect.anything(),
+        );
+      });
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -432,6 +460,64 @@ describe('LineupNotificationService', () => {
         `lineup-voting:${LINEUP_ID}`,
         expect.anything(),
       );
+    });
+
+    // ROK-1065: private visibility routes to invitee DMs instead of channel
+    describe('private visibility (ROK-1065)', () => {
+      it('dispatches voting DMs to invitees and skips the channel embed', async () => {
+        const invitees = [makeMember(11), makeMember(12)];
+        mockDb.execute.mockResolvedValueOnce(invitees);
+
+        await service.notifyVotingOpen(
+          makeLineup({
+            status: 'voting',
+            votingDeadline: deadline,
+            visibility: 'private',
+          }),
+          games,
+        );
+
+        expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+        expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
+      });
+
+      it('includes the voting deadline in the dedup key so replays re-fire', async () => {
+        mockDb.execute.mockResolvedValueOnce([makeMember(11)]);
+
+        await service.notifyVotingOpen(
+          makeLineup({
+            status: 'voting',
+            votingDeadline: deadline,
+            visibility: 'private',
+          }),
+          games,
+        );
+
+        expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+          `lineup-vote-dm:${LINEUP_ID}:11:${deadline.toISOString()}`,
+          expect.anything(),
+        );
+      });
+
+      it('forwards the games list to the invitee DM payload', async () => {
+        mockDb.execute.mockResolvedValueOnce([makeMember(11)]);
+
+        await service.notifyVotingOpen(
+          makeLineup({
+            status: 'voting',
+            votingDeadline: deadline,
+            visibility: 'private',
+          }),
+          games,
+        );
+
+        const [[call]] = mockNotificationService.create.mock.calls;
+        expect(call).toMatchObject({
+          type: 'community_lineup',
+          payload: expect.objectContaining({ subtype: 'lineup_voting_open' }),
+        });
+        expect(call.message).toContain('Game A');
+      });
     });
   });
 
