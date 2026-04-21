@@ -8,6 +8,7 @@ import type {
     ItadGamePricingDto,
     ItadBatchPricingResponseDto,
     IgdbGameDto,
+    GameTasteProfileResponseDto,
 } from '@raid-ledger/contract';
 import { GameSearchResponseSchema, IgdbGameSchema } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
@@ -75,4 +76,11 @@ export async function getGameBySteamAppId(
     steamAppId: number,
 ): Promise<IgdbGameDto> {
     return fetchApi(`/games/by-steam-id/${steamAppId}`, {}, IgdbGameSchema);
+}
+
+/** Fetch the game taste profile (7-axis vector + pool dimensions, ROK-1082) */
+export async function getGameTasteProfile(
+    gameId: number,
+): Promise<GameTasteProfileResponseDto> {
+    return fetchApi(`/games/${gameId}/taste-profile`);
 }
