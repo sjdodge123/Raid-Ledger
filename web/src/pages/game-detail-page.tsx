@@ -169,7 +169,7 @@ function GameBanner({ game, rating, genres, platforms, modes, pricing }: {
                     <DetailsGrid modes={modes} playerCount={game.playerCount} platforms={platforms} crossplay={game.crossplay} releaseDate={game.firstReleaseDate} />
                     {pricing && <GamePricingSummary pricing={pricing} />}
                     {game.steamAppId != null && (
-                        <div className="mt-3">
+                        <div className="mt-2 flex justify-end">
                             <SteamStoreLink appId={game.steamAppId} />
                         </div>
                     )}
