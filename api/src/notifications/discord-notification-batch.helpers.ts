@@ -116,6 +116,39 @@ function jobDataFor(
   };
 }
 
+async function loadRecipientData(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+): Promise<{
+  discordIds: Map<number, string>;
+  disabledByUser: Map<number, Set<NotificationType>>;
+}> {
+  const [discordIds, disabledByUser] = await Promise.all([
+    loadDiscordIds(db, userIds),
+    loadDisabledTypes(db, userIds),
+  ]);
+  return { discordIds, disabledByUser };
+}
+
+async function enqueueBulkJobs(
+  queue: Queue,
+  allowed: DispatchManyInput[],
+  discordIds: Map<number, string>,
+): Promise<void> {
+  await queue.addBulk(
+    allowed.map((input) => ({
+      name: 'send-dm',
+      data: jobDataFor(input, discordIds),
+      opts: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    })),
+  );
+}
+
 /**
  * Batch-dispatch Discord notifications.
  * Uses one IN-query for Discord IDs + preferences, pipelined rate-limit
@@ -134,29 +167,12 @@ export async function dispatchManyDiscordNotifications(
     logger.debug('Discord bot not connected, skipping batch dispatch');
     return 0;
   }
-
   const userIds = [...new Set(inputs.map((i) => i.userId))];
-  const [discordIds, disabledByUser] = await Promise.all([
-    loadDiscordIds(db, userIds),
-    loadDisabledTypes(db, userIds),
-  ]);
-
+  const { discordIds, disabledByUser } = await loadRecipientData(db, userIds);
   const eligible = buildJobs(inputs, discordIds, disabledByUser);
   const allowed = await filterRateLimited(redis, eligible);
   if (allowed.length === 0) return 0;
-
-  await queue.addBulk(
-    allowed.map((input) => ({
-      name: 'send-dm',
-      data: jobDataFor(input, discordIds),
-      opts: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-        removeOnComplete: 100,
-        removeOnFail: 50,
-      },
-    })),
-  );
+  await enqueueBulkJobs(queue, allowed, discordIds);
   logger.log(
     `Enqueued ${allowed.length}/${inputs.length} Discord notifications (batch)`,
   );

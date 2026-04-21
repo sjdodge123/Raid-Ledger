@@ -347,4 +347,85 @@ describe('TasteProfileContextBuilder', () => {
       expect(partnerCtx.sessionCount).toEqual(expect.any(Number));
     });
   });
+
+  // ─── Parallelization (ROK-1087) ─────────────────────────────
+
+  describe('parallel fetch behavior (ROK-1087)', () => {
+    it('issues user profile fetches concurrently rather than serially', async () => {
+      const inFlight = { current: 0, peak: 0 };
+
+      mockTasteProfileService.getTasteProfile.mockImplementation(
+        (id: number) => {
+          inFlight.current += 1;
+          inFlight.peak = Math.max(inFlight.peak, inFlight.current);
+          return new Promise<TasteProfileResult>((resolve) => {
+            setImmediate(() => {
+              inFlight.current -= 1;
+              resolve(buildProfile({ userId: id, dimensions: { rpg: 80 } }));
+            });
+          });
+        },
+      );
+
+      await builder.build([1, 2, 3, 4]);
+
+      // Serial implementation would keep peak at 1. Parallel implementation
+      // should see all 4 user fetches in flight simultaneously.
+      expect(inFlight.peak).toBeGreaterThanOrEqual(4);
+    });
+
+    it('issues partner profile fetches concurrently within a user', async () => {
+      const inFlight = { current: 0, peak: 0 };
+      const partners = Array.from({ length: 5 }, (_, i) =>
+        buildPartner({ userId: 100 + i }),
+      );
+
+      mockTasteProfileService.getTasteProfile.mockImplementation(
+        (id: number) => {
+          inFlight.current += 1;
+          inFlight.peak = Math.max(inFlight.peak, inFlight.current);
+          return new Promise<TasteProfileResult>((resolve) => {
+            setImmediate(() => {
+              inFlight.current -= 1;
+              if (id === 1) {
+                resolve(
+                  buildProfile({
+                    userId: 1,
+                    dimensions: { rpg: 80 },
+                    coPlayPartners: partners,
+                  }),
+                );
+              } else {
+                resolve(
+                  buildProfile({ userId: id, dimensions: { co_op: 50 } }),
+                );
+              }
+            });
+          });
+        },
+      );
+
+      await builder.build([1]);
+
+      // Serial partner lookup would peak at 1. Parallel should see all 5
+      // partner fetches in flight simultaneously.
+      expect(inFlight.peak).toBeGreaterThanOrEqual(5);
+    });
+
+    it('preserves ordering of contexts matching input userIds (minus missing)', async () => {
+      mockTasteProfileService.getTasteProfile.mockImplementation(
+        (id: number) => {
+          if (id === 2) return Promise.resolve(null);
+          return Promise.resolve(
+            buildProfile({ userId: id, dimensions: { rpg: 80 } }),
+          );
+        },
+      );
+
+      const result = await builder.build([1, 2, 3, 4]);
+
+      expect(result.contexts.map((c) => c.userId)).toEqual([1, 3, 4]);
+      expect(result.missingUserIds).toEqual([2]);
+    });
+  });
 });

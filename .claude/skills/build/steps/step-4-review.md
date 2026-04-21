@@ -66,10 +66,65 @@ When operator signals ready, poll each story: `mcp__linear__get_issue({ issueId:
 
 ---
 
-## 4b. Spawn Reviewer
+## 4a.5. Reconcile Spec With Implementation (mandatory before reviewers spawn)
 
-Read `templates/reviewer.md`, fill, spawn. Verdicts:
-- **APPROVED / APPROVED WITH FIXES:** `gates.reviewer: PASS`. If with fixes, push auto-fix commits before proceeding.
+Before any reviewer teammate is spawned, Lead updates `planning-artifacts/specs/ROK-XXX.md` so the spec reflects what actually shipped. Prevents reviewers from raising false-positive "spec violation" flags on deliberate mid-build decisions.
+
+**What to reconcile:**
+- **Deferred ACs:** items the spec listed but didn't ship. Mark "Deferred to follow-up" with reason.
+- **Replaced components:** spec named `ComponentX`, impl shipped `ComponentY` — update to the as-built name.
+- **Changed semantics:** operator clarifications from browser testing that differ from original spec wording (e.g. "viewer-filtering on /lineups/active" → "no filter; private is read-open").
+- **Added scope:** mid-review enhancements bundled in (e.g. Steam store link, badges, ITAD authoritative).
+- **Test plan drift:** if the original Test-plan checklist is out of sync with what's actually covered (e.g. smoke tests pivoted to a different assertion), update the plan.
+
+**Process:**
+```bash
+cd <worktree>
+git log --oneline origin/main..HEAD   # identify commits that suggest drift
+```
+
+Scan commit subjects + recent operator-testing exchanges. Edit `planning-artifacts/specs/ROK-XXX.md` in place. Commit separately: `docs: reconcile spec with as-built implementation (ROK-XXX)`.
+
+Reviewer prompts in 4b point at the updated spec.
+
+---
+
+## 4b. Size the Diff, Then Spawn Reviewer(s)
+
+**Run the sizing check BEFORE spawning.** Pre-flight prevents burning tokens on a reviewer that runs out of context mid-run.
+
+```bash
+cd <worktree>
+git diff origin/main..HEAD --stat | tail -1     # N files changed, +A -D
+git diff origin/main..HEAD --stat | grep -v "snapshot\|package-lock" | wc -l
+git log --oneline origin/main..HEAD | wc -l
+```
+
+| Signals | Strategy |
+|---|---|
+| ≤500 lines, ≤10 files, 1 workspace | **Single agent** |
+| ≤2000 lines, ≤25 files, ≤2 workspaces | **Single agent** (incremental file flush) |
+| 2000–5000 lines **OR** contract+api+web **OR** migration + 20+ files | **3-agent parallel split** |
+| 5000+ lines **OR** full cross-cutting **OR** 30+ commits | **4+ agent split** (add dedicated "integration + cross-layer" pass) |
+
+### Single agent (default)
+Read `templates/reviewer.md`, fill variables, spawn as a team member. Agent writes findings to `planning-artifacts/review-ROK-XXX.md` incrementally.
+
+### Parallel split (for large diffs) — use dev team agents
+
+1. Create a team: `TeamCreate({ name: "review-ROK-XXX", description: "..." })`.
+2. Create three tasks via `TaskCreate`, one per slice:
+   - **security-correctness** — critical/security + correctness + auto-fix authority → `review-ROK-XXX-security.md`
+   - **tests-contract** — tests + contract integrity → `review-ROK-XXX-tests.md`
+   - **perf-style** — performance/complexity + style + tech debt → `review-ROK-XXX-style.md`
+3. Spawn three `Agent` calls (same single message, parallel) with matching `team_name` and `subagent_type: devedup-rl:reviewer`. Each agent picks up its task via `TaskList` + owner assignment.
+4. When all three tasks are `completed`, Lead reads the three findings files and writes the aggregated `review-ROK-XXX.md` with unified verdict + commit-SHA footer.
+5. Delete the team: `TeamDelete({ name: "review-ROK-XXX" })`.
+
+Why teams (not loose subagents): shared context means each agent can reference the others' findings, one agent can flag something and hand it to the right specialist via `SendMessage`, and the shared task board gives Lead a single `TaskList` call to monitor progress.
+
+### Verdict handling (applies to single or aggregated)
+- **APPROVED / APPROVED WITH FIXES:** `gates.reviewer: PASS`. Auto-fix commits stay local — Step 5 handles the push.
 - **BLOCKED:** present blockers to operator. May need dev respawn.
 
 ---

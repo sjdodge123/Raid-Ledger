@@ -52,6 +52,8 @@ Requirements Interview (plan mode, if spec incomplete)
 
 ## Ground Rules
 
+**All subagents run as team members, not loose `Agent()` calls.** Step 1 creates a team (`build-ROK-XXX` or `build-batch-N`); every subagent spawn — planner, architect, test agent, dev, reviewer, pr-writer — passes `team_name` and joins the team. Step 5 tears it down. Solo subagents are a pipeline violation.
+
 **STOP / PAUSE / halt from operator:** cease all tool calls immediately, acknowledge "Stopped.", wait.
 
 **Destructive ops require operator approval:** `deploy_dev.sh --fresh`, `git push --force`, `git reset --hard`, `rm -rf` on project dirs, DB volume deletes, table drops. If in doubt, it's destructive.

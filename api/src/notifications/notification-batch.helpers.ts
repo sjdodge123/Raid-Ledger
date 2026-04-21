@@ -59,25 +59,22 @@ function isCategoryEnabled(
   return prefs.channelPrefs[type]?.inApp ?? true;
 }
 
-/**
- * Create many notifications in a single batch (ROK-1043).
- * Filters by in-app preference, multi-row inserts, fires Discord batch.
- */
-export async function createManyNotifications(
+async function filterByEnabledCategory(
   db: PostgresJsDatabase<typeof schema>,
-  logger: Logger,
-  discordService: DiscordNotificationService | null,
   inputs: CreateNotificationInput[],
-): Promise<NotificationDto[]> {
-  if (inputs.length === 0) return [];
+): Promise<CreateNotificationInput[]> {
   const userIds = [...new Set(inputs.map((i) => i.userId))];
-
   const prefsByUser = await loadPreferencesForUsers(db, userIds);
-  const eligible = inputs.filter((input) =>
+  return inputs.filter((input) =>
     isCategoryEnabled(input.type, prefsByUser.get(input.userId)!),
   );
-  if (eligible.length === 0) return [];
+}
 
+async function insertNotificationBatch(
+  db: PostgresJsDatabase<typeof schema>,
+  logger: Logger,
+  eligible: CreateNotificationInput[],
+): Promise<(typeof schema.notifications.$inferSelect)[]> {
   const created = await db
     .insert(schema.notifications)
     .values(
@@ -91,13 +88,25 @@ export async function createManyNotifications(
       })),
     )
     .returning();
+  const types = [...new Set(eligible.map((e) => e.type))].join(',');
+  logger.log(`Created ${created.length} notifications (batch, types=${types})`);
+  return created;
+}
 
-  logger.log(
-    `Created ${created.length} notifications (batch, types=${[
-      ...new Set(eligible.map((e) => e.type)),
-    ].join(',')})`,
-  );
-
+/**
+ * Create many notifications in a single batch (ROK-1043).
+ * Filters by in-app preference, multi-row inserts, fires Discord batch.
+ */
+export async function createManyNotifications(
+  db: PostgresJsDatabase<typeof schema>,
+  logger: Logger,
+  discordService: DiscordNotificationService | null,
+  inputs: CreateNotificationInput[],
+): Promise<NotificationDto[]> {
+  if (inputs.length === 0) return [];
+  const eligible = await filterByEnabledCategory(db, inputs);
+  if (eligible.length === 0) return [];
+  const created = await insertNotificationBatch(db, logger, eligible);
   dispatchDiscordBatch(logger, discordService, eligible, created);
   return created.map(mapNotificationToDto);
 }

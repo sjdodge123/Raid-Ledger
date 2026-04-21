@@ -32,6 +32,12 @@ import {
  * Classify a voter's average intensity metric into a bucket. Mirrors the
  * game-side heuristic so the intensity-fit helper can compare apples to
  * apples.
+ *
+ * The 33/33/33 percentile tiling (≥67 / ≥34 / rest) is fixed by design:
+ * it preserves mirror-side symmetry with the game-side `deriveGameIntensity`
+ * bucket thresholds and keeps the voter/game spaces comparable. These
+ * thresholds are intentionally NOT elevated to `CommonGroundWeights` — a
+ * configurable split would break that symmetry.
  */
 function intensityToBucket(avgIntensity: number): IntensityBucket {
   if (avgIntensity >= 67) return 'high';

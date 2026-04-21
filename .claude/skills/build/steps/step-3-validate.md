@@ -1,6 +1,6 @@
-# Step 3: Validate — CI, Push, Deploy, FULL STOP
+# Step 3: Validate — CI, Deploy Locally, FULL STOP
 
-Lead runs everything. Gates 3a and 3b must both pass BEFORE any push — skipping 3a is a pipeline violation.
+Lead runs everything. The branch is NOT pushed to origin in this step — "push" here means **deploy locally** so the operator can browser-verify. Nothing leaves the worktree until after code review (step 5). Gate 3a must pass before deploy.
 
 ---
 
@@ -31,18 +31,17 @@ Gate: `gates.ci: PASS` for every story before 3b.
 
 ---
 
-## 3b. Push Branch
-
-Step 3a must have passed. Use raw git — not `/push` — since 3a already ran full CI.
+## 3b. Rebase onto main (local only — do NOT push)
 
 ```bash
 cd ../Raid-Ledger--rok-<num>
 git fetch origin main
 git rebase origin/main
-# If rebase brought new commits: re-run 3a before pushing
-git push -u origin $(git branch --show-current)
+# If rebase brought new commits: re-run 3a before continuing
 cd -
 ```
+
+**Do NOT `git push`.** The branch stays local until step 5 (after code review). Pushing pre-review would risk PRs/auto-merge going out before a human reviews.
 
 ---
 
@@ -69,7 +68,7 @@ cd ../Raid-Ledger--rok-<num> && npx playwright test && cd -
 On failure:
 - Selector/flake → fix test or UI, commit `fix: resolve Playwright issues (ROK-XXX)`.
 - Real regression → diagnose which story broke it, fix or respawn dev.
-- After fix: `git push` from the worktree.
+- After fix: re-run, then continue. **Do not push.**
 
 Gate: `gates.playwright: PASS` or `FAIL`.
 

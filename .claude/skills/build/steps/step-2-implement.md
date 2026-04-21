@@ -76,15 +76,35 @@ If the test passes (feature already works), investigate. The story may be done o
 
 ---
 
-## 2e. Spawn Dev Subagents (parallel, max 2-3)
+## 2e. Spawn Dev Subagents (parallel across stories, max 2-3)
 
-For each story with a failing test ready:
+### Standard / light scope — one dev per story
+
+For each `standard` or `light` story with a failing test ready:
 
 1. Read `templates/dev.md`.
 2. Fill variables: `<WORKTREE_PATH>`, `<ROK-XXX>`, `<TITLE>`, `<NEW | REWORK>`, `<TEST_FILE>`, plus planner/architect output if applicable.
 3. Spawn in parallel (single message, multiple `Agent` calls).
 
-Update state: `status: "dev_active"`, `gates.dev: PENDING`, `pipeline.next_action: "Devs active: ROK-XXX, ROK-YYY. On completion: Lead AC audit. When all ready_for_validate → read step-3-validate.md."`.
+### Full scope — sequence phase-bounded dev agents per story
+
+For `full` scope stories, do NOT spawn one monolithic dev. Sequence phase-bounded agents on that story, writing a brief file first so each phase picks up cheaply:
+
+1. **Write `planning-artifacts/dev-brief-ROK-XXX.md`** (Lead owns this file). Capture:
+   - Story summary + spec file pointer
+   - Architect guidance (the concrete corrections, not the full prose)
+   - Planner phase order (what each phase owns)
+   - TDD test file path
+   - "Commit after every small cluster" rule
+2. **Spawn Phase A** (contract + migration) via `templates/dev.md`. Prompt body is 1-2 lines: "Read `planning-artifacts/dev-brief-ROK-XXX.md`. Execute Phase A (contract + migration). Commit each logical cluster. Report when done."
+3. Wait for completion. Lead quickly verifies commits landed (e.g. `git log --oneline origin/main..HEAD`).
+4. **Spawn Phase B** (backend) with the same brief pointer + "Execute Phase B. Commit each cluster."
+5. Same for **Phase C** (frontend) and **Phase D** (smoke + `validate-ci.sh --full` + dev.md output).
+6. Collapse phases if the story has no frontend work, no migration, etc. — adjust the brief accordingly.
+
+Parallelism across *different* stories in the batch is unchanged (still max 2-3 concurrent devs). Phase split is sequential *within* one full-scope story.
+
+Update state: `status: "dev_active"`, `gates.dev: PENDING`, `pipeline.next_action: "Devs active: ROK-XXX [phase], ROK-YYY. On completion: Lead AC audit. When all ready_for_validate → read step-3-validate.md."`.
 
 ---
 

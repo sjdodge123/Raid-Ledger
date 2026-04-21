@@ -225,6 +225,71 @@ function describeCommonGroundTaste() {
     });
   });
 
+  // ── AC: intensity scoring discriminates on playerCount (ROK-1089) ──
+
+  describe('AC: intensity scoring discriminates', () => {
+    it("scores a high-player-count game above a low-player-count game when voters' intensity is high", async () => {
+      await createBuildingLineup();
+
+      // Two voters whose average intensity metric lands them in the
+      // 'high' bucket (≥67). Keep taste vectors empty so taste score
+      // cannot confound the comparison.
+      const voterA = await createMember('intA');
+      const voterB = await createMember('intB');
+      await insertTasteVector(voterA.id, {
+        axisScores: {},
+        intensity: 90,
+      });
+      await insertTasteVector(voterB.id, {
+        axisScores: {},
+        intensity: 90,
+      });
+      await insertTasteVector(testApp.seed.adminUser.id, {
+        axisScores: {},
+        intensity: 90,
+      });
+
+      // Two games that differ ONLY in playerCount so the intensity signal
+      // is the sole discriminator. Same itadTags, same ownership.
+      const lowGame = await insertGame({
+        name: 'Solo Game',
+        slug: 'solo-game-intensity',
+        itadTags: [],
+        playerCount: { min: 1, max: 2 },
+      });
+      const highGame = await insertGame({
+        name: 'Raid Game',
+        slug: 'raid-game-intensity',
+        itadTags: [],
+        playerCount: { min: 1, max: 64 },
+      });
+
+      for (const u of [voterA.id, voterB.id, testApp.seed.adminUser.id]) {
+        await addGameInterest(u, lowGame.id, 'steam_library');
+        await addGameInterest(u, highGame.id, 'steam_library');
+      }
+
+      const res = await testApp.request
+        .get('/lineups/common-ground')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .query({ minOwners: 2 });
+
+      expect(res.status).toBe(200);
+
+      const data = res.body.data as Array<{
+        gameId: number;
+        scoreBreakdown?: { intensityScore: number };
+      }>;
+      const highEntry = data.find((g) => g.gameId === highGame.id);
+      const lowEntry = data.find((g) => g.gameId === lowGame.id);
+
+      expect(highEntry).toBeDefined();
+      expect(lowEntry).toBeDefined();
+      expect(highEntry!.scoreBreakdown!.intensityScore).toBeGreaterThan(0);
+      expect(lowEntry!.scoreBreakdown!.intensityScore).toBe(0);
+    });
+  });
+
   // ── AC 5: works without an AI provider ───────────────────────────
 
   describe('AC 5: pure-math tuning (no AI provider)', () => {

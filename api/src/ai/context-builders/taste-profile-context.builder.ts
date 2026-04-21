@@ -40,26 +40,30 @@ export class TasteProfileContextBuilder {
       return { contexts: [], missingUserIds: [] };
     }
 
-    const contexts: TasteProfileContextDto[] = [];
-    const missingUserIds: number[] = [];
+    const profiles = await Promise.all(
+      userIds.map((userId) => this.tasteProfile.getTasteProfile(userId)),
+    );
 
-    for (const userId of userIds) {
-      const profile = await this.tasteProfile.getTasteProfile(userId);
-      if (!profile) {
-        missingUserIds.push(userId);
-        continue;
-      }
-      const partners = await this.buildPartnerContexts(profile.coPlayPartners);
-      contexts.push({
-        userId: profile.userId,
-        username: lookupUsernameFromPartners(profile),
-        archetype: profile.archetype,
-        intensityMetrics: profile.intensityMetrics,
-        topAxes: pickTopAxes(profile.dimensions, MAX_TOP_AXES),
-        lowAxes: pickLowAxes(profile.dimensions, MAX_LOW_AXES),
-        coPlayPartners: partners,
-      });
-    }
+    const missingUserIds = userIds.filter((_, i) => !profiles[i]);
+    const resolved = profiles.filter(
+      (p): p is TasteProfileResult => p !== null,
+    );
+
+    const partnerLists = await Promise.all(
+      resolved.map((profile) =>
+        this.buildPartnerContexts(profile.coPlayPartners),
+      ),
+    );
+
+    const contexts: TasteProfileContextDto[] = resolved.map((profile, i) => ({
+      userId: profile.userId,
+      username: lookupUsernameFromPartners(profile),
+      archetype: profile.archetype,
+      intensityMetrics: profile.intensityMetrics,
+      topAxes: pickTopAxes(profile.dimensions, MAX_TOP_AXES),
+      lowAxes: pickLowAxes(profile.dimensions, MAX_LOW_AXES),
+      coPlayPartners: partnerLists[i],
+    }));
 
     return { contexts, missingUserIds };
   }
@@ -69,21 +73,22 @@ export class TasteProfileContextBuilder {
     partners: CoPlayPartnerRow[],
   ): Promise<CoPlayPartnerContextDto[]> {
     const limited = partners.slice(0, MAX_PARTNERS);
-    const results: CoPlayPartnerContextDto[] = [];
-    for (const partner of limited) {
-      const partnerProfile = await this.tasteProfile.getTasteProfile(
-        partner.userId,
-      );
-      results.push({
+    const partnerProfiles = await Promise.all(
+      limited.map((partner) =>
+        this.tasteProfile.getTasteProfile(partner.userId),
+      ),
+    );
+    return limited.map((partner, i) => {
+      const partnerProfile = partnerProfiles[i];
+      return {
         userId: partner.userId,
         username: partner.username,
         sessionCount: partner.sessionCount,
         topAxes: partnerProfile
           ? pickTopAxes(partnerProfile.dimensions, MAX_PARTNER_AXES)
           : [],
-      });
-    }
-    return results;
+      };
+    });
   }
 }
 

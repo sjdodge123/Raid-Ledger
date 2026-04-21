@@ -214,21 +214,20 @@ function gameToTasteVector7(itadTags: string[]): number[] {
 }
 
 /**
- * Heuristic intensity bucket derived from player count / tag signals.
- * Placeholder today — returns `null` when we lack a good signal. Keeps the
- * intensity factor additive without locking us into a premature mapping.
+ * Intensity bucket derived from `games.playerCount.max` (ROK-1089).
+ * IGDB's mapper normalizes `min` to 1, so `max` is the principled signal:
+ * solo/1-on-1 (≤2) → low, small-party co-op (3–8) → medium, raid/MMO/
+ * competitive-sized (≥9) → high. Returns `null` when player count is
+ * unknown to preserve graceful degradation in `computeIntensityFit`.
  */
-function deriveGameIntensity(row: CommonGroundRow): IntensityBucket | null {
-  const tags = row.itadTags.map((t) => t.toLowerCase());
-  if (tags.includes('casual') || tags.includes('party')) return 'low';
-  if (
-    tags.includes('competitive') ||
-    tags.includes('mmorpg') ||
-    tags.includes('mmo')
-  ) {
-    return 'high';
-  }
-  return null;
+export function deriveGameIntensity(
+  row: CommonGroundRow,
+): IntensityBucket | null {
+  if (row.playerCount === null) return null;
+  const { max } = row.playerCount;
+  if (max <= 2) return 'low';
+  if (max <= 8) return 'medium';
+  return 'high';
 }
 
 /**
