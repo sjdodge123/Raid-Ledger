@@ -28,6 +28,10 @@ vi.mock('../../hooks/use-postable-discord-channels', () => ({
     usePostableDiscordChannels: vi.fn(),
 }));
 
+vi.mock('../../lib/api-client', () => ({
+    getPlayers: vi.fn(),
+}));
+
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual<typeof import('react-router-dom')>(
         'react-router-dom',
@@ -38,6 +42,7 @@ vi.mock('react-router-dom', async () => {
 import { useCreateLineup } from '../../hooks/use-lineups';
 import { useLineupSettings } from '../../hooks/admin/use-lineup-settings';
 import { usePostableDiscordChannels } from '../../hooks/use-postable-discord-channels';
+import { getPlayers } from '../../lib/api-client';
 
 const mutateAsync = vi.fn();
 
@@ -84,6 +89,13 @@ beforeEach(() => {
         { id: '100000000000000001', name: 'general' },
         { id: '100000000000000002', name: 'events' },
     ]);
+    vi.mocked(getPlayers).mockResolvedValue({
+        data: [
+            { id: 10, username: 'alice', avatar: null, discordId: 'd-10' },
+            { id: 11, username: 'bob', avatar: null, discordId: null },
+        ],
+        meta: { total: 2, page: 1, pageSize: 20, hasMore: false },
+    } as unknown as Awaited<ReturnType<typeof getPlayers>>);
 });
 
 describe('StartLineupModal — title field', () => {
@@ -224,5 +236,83 @@ describe('StartLineupModal — channel override picker (ROK-1064)', () => {
             <StartLineupModal isOpen={true} onClose={vi.fn()} />,
         );
         expect(screen.queryByLabelText(/post embeds to/i)).toBeNull();
+    });
+});
+
+describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
+    it('renders a visibility toggle that defaults to public', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const publicBtn = screen.getByTestId('visibility-public');
+        const privateBtn = screen.getByTestId('visibility-private');
+        expect(publicBtn).toHaveAttribute('aria-checked', 'true');
+        expect(privateBtn).toHaveAttribute('aria-checked', 'false');
+        // The invitee picker is hidden on public.
+        expect(screen.queryByTestId('invitee-multi-select')).toBeNull();
+    });
+
+    it('reveals the invitee picker when switched to private', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('visibility-private'));
+        expect(
+            await screen.findByTestId('invitee-multi-select'),
+        ).toBeInTheDocument();
+    });
+
+    it('disables Create while private is selected and no invitees picked', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('visibility-private'));
+        const createBtn = screen.getByRole('button', { name: /create lineup/i });
+        expect(createBtn).toBeDisabled();
+    });
+
+    it('enables Create once at least one invitee is picked on private', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('visibility-private'));
+        const row = await screen.findByTestId('invitee-option-10');
+        await user.click(row);
+        const createBtn = screen.getByRole('button', { name: /create lineup/i });
+        expect(createBtn).not.toBeDisabled();
+    });
+
+    it('submits visibility + inviteeUserIds when a private lineup is created', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('visibility-private'));
+        const row = await screen.findByTestId('invitee-option-10');
+        await user.click(row);
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync).toHaveBeenCalledTimes(1);
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            visibility: 'private',
+            inviteeUserIds: [10],
+        });
+    });
+
+    it('omits visibility + inviteeUserIds from submit when public (default)', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        const body = mutateAsync.mock.calls[0][0];
+        expect('visibility' in body).toBe(false);
+        expect('inviteeUserIds' in body).toBe(false);
     });
 });
