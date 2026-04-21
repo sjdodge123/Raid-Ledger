@@ -109,6 +109,16 @@ function dispatchDiscordBatch(
   created: (typeof schema.notifications.$inferSelect)[],
 ): void {
   if (!discordService) return;
+  // Index alignment contract: inputs[idx] ↔ created[idx]. Postgres preserves
+  // input order for multi-row VALUES + RETURNING, so the Nth returned row
+  // corresponds to the Nth value tuple. Drizzle does not formally guarantee
+  // this, so the assertion below fails loudly if the invariant ever breaks
+  // (a mismatch would otherwise silently route DMs to the wrong notification).
+  if (created.length !== inputs.length) {
+    throw new Error(
+      `dispatchDiscordBatch: inputs/created length mismatch (${inputs.length} vs ${created.length}) — insert-order invariant broken`,
+    );
+  }
   const jobs = inputs
     .map((input, idx) => ({ input, notification: created[idx] }))
     .filter(({ input }) => !input.skipDiscord)
