@@ -137,7 +137,13 @@ export async function sendVotingDM(
   games: ReadonlyArray<{ id: number; name: string }>,
   baseUrl?: string,
 ): Promise<void> {
-  const key = `lineup-vote-dm:${lineup.id}:${member.userId}`;
+  // Include the voting deadline in the dedup key so reverting
+  // voting → building → voting (which regenerates phaseDeadline) fires
+  // a fresh DM instead of being suppressed by the prior run's dedup.
+  const deadlineTag = lineup.votingDeadline
+    ? lineup.votingDeadline.toISOString()
+    : 'none';
+  const key = `lineup-vote-dm:${lineup.id}:${member.userId}:${deadlineTag}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
   const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
 

@@ -408,7 +408,7 @@ describe('LineupNotificationService', () => {
       );
     });
 
-    it('uses dedup key lineup-vote-dm:{lineupId}:{userId}', async () => {
+    it('uses dedup key lineup-vote-dm:{lineupId}:{userId}:{deadline} so re-entering voting re-fires (ROK-1065)', async () => {
       mockDb.execute.mockResolvedValueOnce([makeMember(7)]);
 
       await service.notifyVotingOpen(
@@ -417,7 +417,7 @@ describe('LineupNotificationService', () => {
       );
 
       expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
-        `lineup-vote-dm:${LINEUP_ID}:7`,
+        `lineup-vote-dm:${LINEUP_ID}:7:${deadline.toISOString()}`,
         expect.anything(),
       );
     });
