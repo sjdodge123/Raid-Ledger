@@ -2,7 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { EventDetailTopbar, MoreActionsMenu } from './EventDetailSubComponents';
+const { mockGameTimeWidget } = vi.hoisted(() => ({
+    mockGameTimeWidget: vi.fn(),
+}));
+vi.mock('../../components/features/game-time/GameTimeWidget', () => ({
+    GameTimeWidget: (props: unknown) => {
+        mockGameTimeWidget(props);
+        return <div data-testid="game-time-widget-proxy" />;
+    },
+}));
+
+import { EventDetailGameTimeWidget, EventDetailTopbar, MoreActionsMenu } from './EventDetailSubComponents';
 
 const defaultProps = {
     fromCalendar: false,
@@ -198,5 +208,55 @@ describe('ROK-886: TopbarManagerButtons — mobile overflow menu present', () =>
     it('mobile layout shows Edit button (shortened label)', () => {
         renderTopbar();
         expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+});
+
+describe('ROK-1040: EventDetailGameTimeWidget avatar bridge', () => {
+    beforeEach(() => {
+        mockGameTimeWidget.mockClear();
+    });
+
+    it('passes rich attendee fields and gameId through to GameTimeWidget', () => {
+        render(
+            <MemoryRouter>
+                <EventDetailGameTimeWidget
+                    rosterAssignments={null}
+                    isAuthenticated
+                    event={{
+                        startTime: '2026-02-09T19:00:00Z',
+                        endTime: '2026-02-09T22:00:00Z',
+                        title: 'Raid Night',
+                        description: 'Bring snacks',
+                        game: { id: 42, name: 'Rocket League', slug: 'rocket-league', coverUrl: 'cover.jpg' },
+                        creator: { username: 'host' },
+                    } as never}
+                    roster={{
+                        count: 1,
+                        signups: [{
+                            user: {
+                                id: 7,
+                                username: 'Player One',
+                                avatar: 'discord-hash',
+                                discordId: 'discord-id',
+                                customAvatarUrl: '/avatars/player-one.png',
+                                characters: [{ gameId: 42, name: 'Main', avatarUrl: 'character.png' }],
+                            },
+                        }],
+                    } as never}
+                />
+            </MemoryRouter>,
+        );
+
+        expect(mockGameTimeWidget).toHaveBeenCalledWith(expect.objectContaining({
+            gameId: 42,
+            attendees: [{
+                id: 7,
+                username: 'Player One',
+                avatar: 'discord-hash',
+                discordId: 'discord-id',
+                customAvatarUrl: '/avatars/player-one.png',
+                characters: [{ gameId: 42, name: 'Main', avatarUrl: 'character.png' }],
+            }],
+        }));
     });
 });

@@ -41,18 +41,24 @@ function computePreviewPosition(
     block: GameTimePreviewBlock, gridDims: GridDims,
     rangeStart: number, rangeEnd: number,
 ): PreviewPosition | null {
-    const visStart = Math.max(block.startHour, rangeStart);
-    const visEnd = Math.min(block.endHour, rangeEnd);
-    if (visStart >= visEnd) return null;
-
-    const spanHours = visEnd - visStart;
+    const visibleHours = getVisibleHours(rangeStart, rangeEnd);
+    const firstIndex = visibleHours.findIndex((hour) => hour >= block.startHour && hour < block.endHour);
+    if (firstIndex < 0) return null;
+    const spanHours = visibleHours.slice(firstIndex).filter((hour) => hour >= block.startHour && hour < block.endHour).length;
+    if (spanHours <= 0) return null;
     const colGap = gridDims.colWidth + 1;
     return {
-        top: gridDims.headerHeight + (visStart - rangeStart) * gridDims.rowHeight,
+        top: gridDims.headerHeight + firstIndex * gridDims.rowHeight,
         height: Math.max(spanHours * gridDims.rowHeight - 1, 0),
         left: gridDims.colStartLeft + block.dayOfWeek * colGap,
         width: Math.max(gridDims.colWidth, 0),
     };
+}
+
+function getVisibleHours(rangeStart: number, rangeEnd: number): number[] {
+    const allHours = Array.from({ length: 24 }, (_, hour) => hour);
+    if (rangeStart < rangeEnd) return allHours.filter((hour) => hour >= rangeStart && hour < rangeEnd);
+    return [...allHours.filter((hour) => hour >= rangeStart), ...allHours.filter((hour) => hour < rangeEnd)];
 }
 
 function PreviewBlock({ block, pos, hasEventUnderneath }: {

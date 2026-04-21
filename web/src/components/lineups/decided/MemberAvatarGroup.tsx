@@ -13,11 +13,13 @@ interface Member {
   avatar: string | null;
   discordId: string | null;
   customAvatarUrl: string | null;
+  characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
 }
 
 interface MemberAvatarGroupProps {
   members: Member[];
   max?: number;
+  gameId?: number | string;
 }
 
 /** Convert a match member to an AvatarUser for the shared component. */
@@ -27,6 +29,7 @@ function toUser(m: Member) {
     avatar: m.avatar,
     discordId: m.discordId,
     customAvatarUrl: m.customAvatarUrl,
+    characters: m.characters,
   });
 }
 
@@ -34,6 +37,7 @@ function toUser(m: Member) {
 export function MemberAvatarGroup({
   members,
   max = 5,
+  gameId,
 }: MemberAvatarGroupProps): JSX.Element {
   const visible = members.slice(0, max);
   const overflow = members.length - max;
@@ -46,6 +50,7 @@ export function MemberAvatarGroup({
             user={toUser(m)}
             username={m.displayName}
             sizeClassName="w-7 h-7"
+            gameId={gameId}
           />
         </div>
       ))}

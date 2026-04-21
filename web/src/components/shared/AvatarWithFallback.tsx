@@ -11,7 +11,7 @@ interface AvatarWithFallbackProps {
     /** User object for resolveAvatar() -- when provided, takes priority over avatarUrl (ROK-222) */
     user?: AvatarUser | null;
     /** Game ID for context-aware avatar resolution (ROK-222) */
-    gameId?: string;
+    gameId?: number | string;
 }
 
 function InitialsFallback({ username, sizeClassName }: { username: string; sizeClassName: string }) {

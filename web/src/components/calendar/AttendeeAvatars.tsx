@@ -10,7 +10,7 @@ interface SignupPreview {
     /** Discord user ID for avatar URL resolution (ROK-222) */
     discordId?: string | null;
     /** Optional characters for avatar resolution (ROK-194) */
-    characters?: Array<{ gameId: number; avatarUrl: string | null }>;
+    characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
 }
 
 interface AttendeeAvatarsProps {

@@ -65,6 +65,23 @@ it('returns null when signups array is empty', () => {
         expect(container.firstChild).toBeNull();
     });
 
+it('resolves custom uploaded avatars through shared avatar helper', () => {
+        render(<AttendeeAvatars signups={[{ id: 1, username: 'CustomUser', avatar: null, customAvatarUrl: '/avatars/custom.png' }]} totalCount={1} />);
+
+        expect(screen.getByRole('img')).toHaveAttribute('src', expect.stringContaining('/avatars/custom.png'));
+    });
+
+it('resolves character avatars with numeric game context', () => {
+        render(<AttendeeAvatars signups={[{
+            id: 1,
+            username: 'CharacterUser',
+            avatar: null,
+            characters: [{ gameId: 42, name: 'Main', avatarUrl: 'https://example.com/character.png' }],
+        }]} totalCount={1} gameId={42} />);
+
+        expect(screen.getByRole('img')).toHaveAttribute('src', 'https://example.com/character.png');
+    });
+
 }
 
 describe('AttendeeAvatars', () => {
