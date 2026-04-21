@@ -35,6 +35,7 @@ describe('Game Taste Vectors (ROK-1082)', () => {
   let testApp: TestApp;
   let adminToken: string;
   let memberToken: string;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Phase D will consume this
   let service: GameTasteService;
 
   beforeAll(async () => {
@@ -160,7 +161,7 @@ describe('Game Taste Vectors (ROK-1082)', () => {
         // pgvector round-trips to string or array — allow either shape
         const arr =
           typeof row.vector === 'string'
-            ? JSON.parse(row.vector as string)
+            ? JSON.parse(row.vector)
             : (row.vector as number[]);
         expect(Array.isArray(arr)).toBe(true);
         expect(arr).toHaveLength(7);
