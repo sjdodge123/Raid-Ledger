@@ -219,6 +219,15 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
           {lineup.title}
         </h1>
         <LineupStatusBadge status={lineup.status} />
+        {lineup.visibility === 'private' && (
+          <span
+            data-testid="lineup-private-badge"
+            title="Invite-only lineup"
+            className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-600/20 text-amber-400 border border-amber-500/40"
+          >
+            Private
+          </span>
+        )}
         {canEdit && <EditButton onClick={() => setEditOpen(true)} />}
         {/* Desktop-only inline breadcrumb + circle after edit */}
         <div className="hidden md:flex items-center gap-3 flex-shrink-0">

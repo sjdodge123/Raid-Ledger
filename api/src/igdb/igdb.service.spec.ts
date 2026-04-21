@@ -101,6 +101,7 @@ describe('IgdbService', () => {
       itadLowestCut: null,
       itadPriceUpdatedAt: null,
       earlyAccess: false,
+      steamAppId: null,
     },
   ];
 

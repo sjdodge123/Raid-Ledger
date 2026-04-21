@@ -15,6 +15,7 @@ import { fetchApi } from "./fetch-api";
 /** Fetch paginated player list (public, ROK-821: extended filters). */
 export async function getPlayers(params?: {
   page?: number;
+  pageSize?: number;
   search?: string;
   gameId?: number;
   sources?: string;
@@ -24,6 +25,7 @@ export async function getPlayers(params?: {
 }): Promise<PlayersListResponseDto> {
   const sp = new URLSearchParams();
   if (params?.page) sp.set("page", String(params.page));
+  if (params?.pageSize) sp.set("limit", String(params.pageSize));
   if (params?.search) sp.set("search", params.search);
   if (params?.gameId) sp.set("gameId", String(params.gameId));
   if (params?.sources) sp.set("sources", params.sources);

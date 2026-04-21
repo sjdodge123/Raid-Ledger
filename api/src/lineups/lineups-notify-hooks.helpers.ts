@@ -73,14 +73,42 @@ export function fireVotingOpen(
   lineupId: number,
   phaseDeadline: Date | null,
 ): void {
-  findNominatedGames(db, lineupId)
-    .then((games) =>
-      svc.notifyVotingOpen(
-        { id: lineupId, votingDeadline: phaseDeadline ?? undefined },
+  loadLineupForNotification(db, lineupId)
+    .then(async (row) => {
+      if (!row) return;
+      const games = await findNominatedGames(db, lineupId);
+      return svc.notifyVotingOpen(
+        {
+          id: lineupId,
+          title: row.title,
+          votingDeadline: phaseDeadline ?? undefined,
+          visibility: row.visibility,
+        },
         games,
-      ),
-    )
+      );
+    })
     .catch(logError(logger, 'voting-open'));
+}
+
+/** Load fields notify hooks need from the lineup row (ROK-1065). */
+async function loadLineupForNotification(
+  db: Db,
+  lineupId: number,
+): Promise<{
+  id: number;
+  title: string;
+  visibility: 'public' | 'private';
+} | null> {
+  const [row] = await db
+    .select({
+      id: schema.communityLineups.id,
+      title: schema.communityLineups.title,
+      visibility: schema.communityLineups.visibility,
+    })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  return row ?? null;
 }
 
 /** Fire decided-phase notifications (channel embed). */

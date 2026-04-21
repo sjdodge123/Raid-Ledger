@@ -11,9 +11,12 @@ import {
   sendVotingDM,
   sendSchedulingDM,
   sendEventCreatedDM,
+  sendPrivateInviteDM,
 } from './lineup-notification-dm.helpers';
+import { dispatchMatchMemberDM } from './lineup-notification-dms.helpers';
 import {
   findDiscordLinkedMembers,
+  findInviteeDiscordMembers,
   findMatchMemberUsers,
 } from './lineup-notification-targets.helpers';
 
@@ -25,7 +28,8 @@ export async function fanOutVotingDMs(
   notificationService: NotificationService,
   dedupService: NotificationDedupService,
   lineup: LineupInfo,
-  gameCount: number,
+  games: ReadonlyArray<{ id: number; name: string }>,
+  baseUrl?: string,
 ): Promise<void> {
   const members = await findDiscordLinkedMembers(db);
   for (const member of members) {
@@ -34,7 +38,58 @@ export async function fanOutVotingDMs(
       dedupService,
       lineup,
       member,
-      gameCount,
+      games,
+      baseUrl,
+    );
+  }
+}
+
+/**
+ * Fan-out voting-open DMs to invitees + creator only (ROK-1065).
+ * Used for `visibility === 'private'` lineups.
+ */
+export async function fanOutVotingDMsToInvitees(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  games: ReadonlyArray<{ id: number; name: string }>,
+  baseUrl?: string,
+): Promise<void> {
+  const members = await findInviteeDiscordMembers(db, lineup.id);
+  for (const member of members) {
+    await sendVotingDM(
+      notificationService,
+      dedupService,
+      lineup,
+      member,
+      games,
+      baseUrl,
+    );
+  }
+}
+
+/**
+ * Fan-out lineup-created DMs to invitees + creator (ROK-1065).
+ *
+ * Private lineups suppress the channel embed and instead DM each invitee.
+ * Reuses sendVotingDM so the DM references the lineup title; the smoke
+ * test only asserts that *some* DM mentioning the title reaches the
+ * invitee before the lineup transitions to voting.
+ */
+export async function fanOutLineupCreatedDMsToInvitees(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+): Promise<void> {
+  const members = await findInviteeDiscordMembers(db, lineup.id);
+  for (const member of members) {
+    await sendPrivateInviteDM(
+      notificationService,
+      dedupService,
+      lineup,
+      member,
     );
   }
 }
@@ -49,6 +104,33 @@ export async function fanOutSchedulingDMs(
   const members = await findMatchMemberUsers(db, match.id);
   for (const m of members) {
     await sendSchedulingDM(notificationService, dedupService, match, m);
+  }
+}
+
+/**
+ * Fan-out decided-phase DMs: each member of each match receives a DM
+ * listing the game and their co-players on that match.
+ */
+export async function fanOutMatchMemberDMs(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineupId: number,
+  matches: ReadonlyArray<MatchInfo>,
+): Promise<void> {
+  for (const match of matches) {
+    const members = await findMatchMemberUsers(db, match.id);
+    const names = members.map((m) => m.displayName);
+    for (const member of members) {
+      const coPlayers = names.filter((n) => n !== member.displayName);
+      await dispatchMatchMemberDM(dedupService, notificationService, {
+        matchId: match.id,
+        userId: member.userId,
+        gameName: match.gameName,
+        coPlayers,
+        lineupId,
+      });
+    }
   }
 }
 

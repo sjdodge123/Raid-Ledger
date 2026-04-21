@@ -17,6 +17,8 @@ const mockLineup = {
   votingDeadline: null as Date | null,
   createdAt: NOW,
   updatedAt: NOW,
+  visibility: 'public' as 'public' | 'private',
+  channelOverrideId: null as string | null,
 };
 
 const mockEntry = {
@@ -150,6 +152,8 @@ describe('buildDetailResponse', () => {
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ whereResult: [{ count: 15 }] }),
     );
+    // 10. listInviteesWithProfile (ROK-1065) — empty for public lineup
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
 
     const result = await buildDetailResponse(mockDb as any, 1);
 
@@ -206,6 +210,8 @@ describe('buildDetailResponse', () => {
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ whereResult: [{ count: 10 }] }),
     );
+    // 10. listInviteesWithProfile (ROK-1065) — empty for public lineup
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
 
     const result = await buildDetailResponse(mockDb as any, 1);
 

@@ -38,7 +38,12 @@ import {
   fanOutVotingDMs,
   fanOutSchedulingDMs,
   fanOutEventCreatedDMs,
+  fanOutMatchMemberDMs,
 } from './lineup-notification-dm-batch.helpers';
+import {
+  routeLineupCreatedIfPrivate,
+  routeVotingOpenIfPrivate,
+} from './lineup-notification-routing.helpers';
 import {
   findMatchMemberUsers,
   hasExistingPollEmbed,
@@ -61,6 +66,8 @@ export interface LineupInfo {
   phaseDeadline?: Date | null;
   /** Per-lineup Discord channel override (ROK-1064). */
   channelOverrideId?: string | null;
+  /** Lineup visibility (ROK-1065). 'private' routes to invitee DMs only. */
+  visibility?: 'public' | 'private';
 }
 
 /** Shape of a match passed to notification methods. */
@@ -89,12 +96,8 @@ export class LineupNotificationService {
   ) {}
 
   private get dispatchDeps(): DispatchDeps {
-    return {
-      db: this.db,
-      settingsService: this.settingsService,
-      botClient: this.botClient,
-      dedupService: this.dedupService,
-    };
+    const { db, settingsService, botClient, dedupService } = this;
+    return { db, settingsService, botClient, dedupService };
   }
 
   private resolveCtx(
@@ -107,11 +110,17 @@ export class LineupNotificationService {
 
   /** AC-1: Post channel embed when lineup is created. */
   async notifyLineupCreated(lineup: LineupInfo): Promise<void> {
+    const routedPrivate = await routeLineupCreatedIfPrivate(
+      this.db,
+      this.notificationService,
+      this.dedupService,
+      lineup,
+    );
+    if (routedPrivate) return;
     const ctx = await this.resolveCtx(lineup.id, 'nominations', {
       title: lineup.title,
       description: lineup.description ?? null,
     });
-    // If caller passed the override explicitly, use it; otherwise load from DB.
     const sent = await this.postChannelEmbed(
       `lineup-created:${lineup.id}`,
       () => buildCreatedEmbed(ctx, lineup.targetDate),
@@ -170,6 +179,16 @@ export class LineupNotificationService {
     lineup: LineupInfo,
     games: { id: number; name: string }[],
   ): Promise<void> {
+    const clientUrl = await this.settingsService.getClientUrl();
+    const routedPrivate = await routeVotingOpenIfPrivate(
+      this.db,
+      this.notificationService,
+      this.dedupService,
+      lineup,
+      games,
+      clientUrl,
+    );
+    if (routedPrivate) return;
     const ctx = await this.resolveCtx(lineup.id, 'voting');
     await this.postChannelEmbed(
       `lineup-voting:${lineup.id}`,
@@ -181,7 +200,8 @@ export class LineupNotificationService {
       this.notificationService,
       this.dedupService,
       lineup,
-      games.length,
+      games,
+      clientUrl,
     );
   }
 
@@ -196,25 +216,13 @@ export class LineupNotificationService {
       () => buildDecidedEmbed(ctx, matches),
       ctx,
     );
-    await this.sendMatchMemberDMs(lineupId, matches);
-  }
-
-  /** Send DMs to each member of each match (M is typically 3-5). */
-  private async sendMatchMemberDMs(lineupId: number, matches: MatchInfo[]) {
-    for (const match of matches) {
-      const members = await findMatchMemberUsers(this.db, match.id);
-      const names = members.map((m) => m.displayName);
-      for (const member of members) {
-        const coPlayers = names.filter((n) => n !== member.displayName);
-        await this.notifyMatchMember(
-          match.id,
-          member.userId,
-          match.gameName,
-          coPlayers,
-          lineupId,
-        );
-      }
-    }
+    await fanOutMatchMemberDMs(
+      this.db,
+      this.notificationService,
+      this.dedupService,
+      lineupId,
+      matches,
+    );
   }
 
   /** AC-6: Send DM to a match member with game + co-players. */

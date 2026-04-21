@@ -6,6 +6,7 @@
  * specific scenarios.
  */
 import { http, HttpResponse } from 'msw';
+import { createMockLineupDetail } from '../lineup-factories';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -146,5 +147,53 @@ export const handlers = [
     // User profile — similar players (ROK-949 companion endpoint).
     http.get(`${API_BASE}/users/:id/similar-players`, () =>
         HttpResponse.json({ similar: [] }),
+    ),
+
+    // Lineups — active list (ROK-1065: array of summaries, empty by default).
+    http.get(`${API_BASE}/lineups/active`, () => HttpResponse.json([])),
+
+    // Lineups — banner (ROK-1065: visibility surfaces in banner response).
+    http.get(`${API_BASE}/lineups/banner`, () => HttpResponse.json(null)),
+
+    // Lineups — invitees add (ROK-1065). Returns refreshed detail.
+    http.post(
+        `${API_BASE}/lineups/:id/invitees`,
+        async ({ request, params }) => {
+            const lineupId = Number(params.id);
+            const body = (await request.json()) as { userIds?: number[] };
+            const userIds = Array.isArray(body?.userIds) ? body.userIds : [];
+            return HttpResponse.json(
+                createMockLineupDetail({
+                    id: lineupId,
+                    entries: [],
+                    totalVoters: 0,
+                    totalMembers: 0,
+                    visibility: 'private',
+                    invitees: userIds.map((id) => ({
+                        id,
+                        displayName: `User ${id}`,
+                        steamLinked: false,
+                    })),
+                }),
+            );
+        },
+    ),
+
+    // Lineups — invitee remove (ROK-1065). API returns refreshed LineupDetailResponseDto.
+    http.delete(
+        `${API_BASE}/lineups/:id/invitees/:userId`,
+        ({ params }) => {
+            const lineupId = Number(params.id);
+            return HttpResponse.json(
+                createMockLineupDetail({
+                    id: lineupId,
+                    entries: [],
+                    totalVoters: 0,
+                    totalMembers: 0,
+                    visibility: 'private',
+                    invitees: [],
+                }),
+            );
+        },
     ),
 ];

@@ -79,6 +79,9 @@ function buildItadBaseFields(itad: ItadSearchGame, boxart: string | null) {
     earlyAccess: false,
     firstReleaseDate: parseReleaseDate(itad.releaseDate),
     popularity: null,
+    // ITAD owns the Steam app ID mapping — IGDB's external_games.uid is
+    // unreliable for games that aren't sold on Steam, so we defer to ITAD.
+    steamAppId: itad.steamAppId ?? null,
   };
 }
 

@@ -173,7 +173,7 @@ export type {
     UpdateLineupMetadataParams,
 } from './api/lineups-api';
 export {
-    getActiveLineup,
+    getActiveLineups,
     getCommonGround,
     nominateGame,
     getLineupBanner,
@@ -183,6 +183,8 @@ export {
     transitionLineupStatus,
     toggleVote,
     updateLineupMetadata,
+    addLineupInvitees,
+    removeLineupInvitee,
 } from './api/lineups-api';
 
 // Activity Log (ROK-930)

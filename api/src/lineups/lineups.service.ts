@@ -14,6 +14,7 @@ import type {
   GroupedMatchesResponseDto,
   LineupBannerResponseDto,
   LineupDetailResponseDto,
+  LineupSummaryResponseDto,
   NominateGameDto,
   UpdateLineupMetadataDto,
   UpdateLineupStatusDto,
@@ -26,42 +27,34 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
-import { findActiveLineup, findLineupById } from './lineups-query.helpers';
+import { findLineupById } from './lineups-query.helpers';
+import {
+  runAddInvitees,
+  runRemoveInvitee,
+} from './lineups-invitees-actions.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
-import { insertLineup } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
+import { buildActiveLineupSummaries } from './lineups-summary.helpers';
 import {
   findEntry,
   validateRemoval,
   deleteEntry,
 } from './lineups-removal.helpers';
-import {
-  validateNominationCap,
-  validateGameExists,
-  insertNomination,
-} from './lineups-nomination.helpers';
-import {
-  hasDurationParams,
-  buildOverrides,
-  computeInitialDeadline,
-} from './lineups-phase.helpers';
-import { logNomination } from './lineups-activity.helpers';
-import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
-import { carryOverFromLastDecided } from './lineups-carryover.helpers';
 import { runMetadataUpdate } from './lineups-metadata.helpers';
 import { runStatusTransition } from './lineups-transition.helpers';
 import {
   runBandwagonJoin,
   runAdvanceMatch,
 } from './lineups-match-actions.helpers';
+import { fireNominationRemoved } from './lineups-notify-hooks.helpers';
 import {
-  fireLineupCreated,
-  fireNominationMilestone,
-  fireNominationRemoved,
-} from './lineups-notify-hooks.helpers';
+  runCreateLineup,
+  runToggleVote,
+  runNominate,
+} from './lineups-actions.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -92,55 +85,37 @@ export class LineupsService {
     return channel?.name ?? null;
   };
 
-  /** Create a new lineup. Throws 409 if an active lineup already exists. */
-  async create(
+  /** Create a new lineup (ROK-1065). */
+  create(
     dto: CreateLineupDto,
     userId: number,
   ): Promise<LineupDetailResponseDto> {
-    const overrides = hasDurationParams(dto) ? buildOverrides(dto) : null;
-    const phaseDeadline = await computeInitialDeadline(dto, this.settings);
-
-    const [row] = await insertLineup(
-      this.db,
+    return runCreateLineup(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        settings: this.settings,
+        phaseQueue: this.phaseQueue,
+        steamNudge: this.steamNudge,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+        resolveChannelName: this.resolveChannelName,
+      },
       dto,
       userId,
-      phaseDeadline,
-      overrides,
-    );
-    await this.activityLog.log('lineup', row.id, 'lineup_created', userId);
-    void this.steamNudge.nudgeUnlinkedMembers(row.id);
-    await carryOverFromLastDecided(this.db, row.id);
-
-    const delayMs = phaseDeadline.getTime() - Date.now();
-    await this.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
-
-    fireLineupCreated(this.lineupNotifications, this.logger, {
-      id: row.id,
-      title: row.title,
-      description: row.description ?? null,
-      targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
-      // ROK-1064: per-lineup Discord channel override.
-      channelOverrideId: row.channelOverrideId ?? null,
-    });
-
-    return buildDetailResponse(
-      this.db,
-      row.id,
-      undefined,
-      this.resolveChannelName,
     );
   }
 
-  /** Get the currently active lineup (building or voting). */
-  async findActive(userId?: number): Promise<LineupDetailResponseDto> {
-    const [row] = await findActiveLineup(this.db);
-    if (!row) throw new NotFoundException('No active lineup');
-    return buildDetailResponse(
-      this.db,
-      row.id,
-      userId,
-      this.resolveChannelName,
-    );
+  /**
+   * Get every active lineup (ROK-1065).
+   *
+   * Returns `LineupSummaryResponseDto[]`. ROK-1065 changed this from a
+   * singular detail object to an array — private lineups coexist with
+   * public ones, so the client receives all in-flight lineups. Never
+   * filtered by viewer; private participation is gated at mutation time.
+   */
+  async findActive(): Promise<LineupSummaryResponseDto[]> {
+    return buildActiveLineupSummaries(this.db);
   }
 
   /** Get a lineup by ID with full detail. */
@@ -152,32 +127,22 @@ export class LineupsService {
   }
 
   /** Toggle a vote for a game in a lineup (ROK-936). */
-  async toggleVote(
+  toggleVote(
     lineupId: number,
     gameId: number,
     userId: number,
+    callerRole?: string,
   ): Promise<LineupDetailResponseDto> {
-    const [lineup] = await findLineupById(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-    if (lineup.status !== 'voting') {
-      throw new BadRequestException('Voting is only allowed in voting status');
-    }
-    const action = await toggleVoteHelper(
-      this.db,
+    return runToggleVote(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        resolveChannelName: this.resolveChannelName,
+      },
       lineupId,
-      userId,
       gameId,
-      lineup.maxVotesPerPlayer ?? 3,
-    );
-    await this.activityLog.log('lineup', lineupId, 'vote_cast', userId, {
-      gameId,
-      action,
-    });
-    return buildDetailResponse(
-      this.db,
-      lineupId,
       userId,
-      this.resolveChannelName,
+      callerRole,
     );
   }
 
@@ -213,29 +178,24 @@ export class LineupsService {
   }
 
   /** Nominate a game into a lineup. */
-  async nominate(lineupId: number, dto: NominateGameDto, userId: number) {
-    const [lineup] = await findLineupById(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-    if (lineup.status !== 'building')
-      throw new BadRequestException('Lineup is not in building status');
-
-    await validateNominationCap(this.db, lineupId);
-    await validateGameExists(this.db, dto.gameId);
-    await insertNomination(this.db, lineupId, dto, userId);
-    await logNomination(this.db, this.activityLog, lineupId, dto, userId);
-
-    fireNominationMilestone(
-      this.lineupNotifications,
-      this.logger,
-      this.db,
+  nominate(
+    lineupId: number,
+    dto: NominateGameDto,
+    userId: number,
+    callerRole?: string,
+  ): Promise<LineupDetailResponseDto> {
+    return runNominate(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+        resolveChannelName: this.resolveChannelName,
+      },
       lineupId,
-    );
-
-    return buildDetailResponse(
-      this.db,
-      lineupId,
-      undefined,
-      this.resolveChannelName,
+      dto,
+      userId,
+      callerRole,
     );
   }
 
@@ -284,11 +244,16 @@ export class LineupsService {
     return buildGroupedMatchesResponse(this.db, id);
   }
 
-  /** Bandwagon join a match (ROK-937). */
+  /**
+   * Bandwagon join a match (ROK-937, ROK-1065).
+   * `callerRole` is used to enforce the private-lineup eligibility gate
+   * (non-invitees may not bandwagon onto a private lineup's match).
+   */
   bandwagonJoin(
     lineupId: number,
     matchId: number,
     userId: number,
+    callerRole?: string,
   ): Promise<BandwagonJoinResponseDto> {
     return runBandwagonJoin(
       this.db,
@@ -297,6 +262,7 @@ export class LineupsService {
       lineupId,
       matchId,
       userId,
+      callerRole,
     );
   }
 
@@ -327,6 +293,40 @@ export class LineupsService {
       id,
       dto,
       caller,
+    );
+  }
+
+  /**
+   * Add one or more invitees to a lineup (ROK-1065).
+   * 404s if any userId is unknown (the helper probes users first). Idempotent
+   * for already-invited users via ON CONFLICT DO NOTHING.
+   */
+  addInvitees(
+    lineupId: number,
+    userIds: number[],
+    callerId: number,
+  ): Promise<LineupDetailResponseDto> {
+    return runAddInvitees(
+      this.db,
+      this.resolveChannelName,
+      lineupId,
+      userIds,
+      callerId,
+    );
+  }
+
+  /** Remove a single invitee (ROK-1065). */
+  removeInvitee(
+    lineupId: number,
+    userId: number,
+    callerId: number,
+  ): Promise<LineupDetailResponseDto> {
+    return runRemoveInvitee(
+      this.db,
+      this.resolveChannelName,
+      lineupId,
+      userId,
+      callerId,
     );
   }
 }

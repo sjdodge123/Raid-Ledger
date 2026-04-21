@@ -156,6 +156,11 @@ export function mapDbRowToDetail(
     twitchGameId: g.twitchGameId,
     crossplay: g.crossplay ?? null,
     earlyAccess: g.earlyAccess ?? false,
+    // ITAD is the authoritative source for Steam app IDs — IGDB's
+    // external_games.uid is unreliable for games that aren't actually
+    // on Steam (e.g. Blizzard MMOs). Only surface steam_app_id when
+    // ITAD has also indexed the game, which confirms a real listing.
+    steamAppId: g.itadGameId ? (g.steamAppId ?? null) : null,
     ...mapItadPricing(g),
   };
 }

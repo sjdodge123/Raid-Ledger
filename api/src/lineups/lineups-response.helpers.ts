@@ -30,6 +30,7 @@ import {
 import { findUserVotes } from './lineups-voting.helpers';
 import { findPendingOrActiveTiebreaker } from './tiebreaker/tiebreaker-query.helpers';
 import { buildTiebreakerDetail } from './tiebreaker/tiebreaker-response.helpers';
+import { listInviteesWithProfile } from './lineups-invitees.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -101,6 +102,8 @@ function mapLineupCore(
     // ROK-1064: per-lineup Discord channel override + resolved name.
     channelOverrideId: lineup.channelOverrideId ?? null,
     channelOverrideName,
+    // ROK-1065: visibility drives DM vs channel embed dispatch.
+    visibility: lineup.visibility,
   };
 }
 
@@ -125,6 +128,8 @@ function mapToDetailResponse(
     myVotes,
     unlinkedSteamCount: enrichment.unlinkedSteamCount,
     unlinkedSteamMembers: enrichment.unlinkedSteamMembers,
+    // ROK-1065: populated below via a parallel query.
+    invitees: [],
   };
 }
 
@@ -198,6 +203,8 @@ export async function buildDetailResponse(
     myVotes,
     channelOverrideName,
   );
+  // ROK-1065: invitees populated for both public (empty) and private lineups.
+  detail.invitees = await listInviteesWithProfile(db, lineupId);
 
   // Attach tiebreaker detail if one exists (ROK-938)
   if (lineup.activeTiebreakerId) {

@@ -26,6 +26,8 @@ export function createMockBanner(
             { gameId: 1, gameName: 'Valheim', gameCoverUrl: '/cover1.jpg', ownerCount: 6, voteCount: 3 },
             { gameId: 2, gameName: 'Elden Ring', gameCoverUrl: '/cover2.jpg', ownerCount: 4, voteCount: 2 },
         ],
+        // ROK-1065: visibility surfaced in the banner response.
+        visibility: 'public',
         ...overrides,
     } as LineupBannerResponseDto;
 }
@@ -80,6 +82,9 @@ export function createMockLineupDetail(
         // ROK-1064: optional Discord channel override fields.
         channelOverrideId: null,
         channelOverrideName: null,
+        // ROK-1065: visibility + invitees.
+        visibility: 'public',
+        invitees: [],
         ...overrides,
     } as LineupDetailResponseDto;
 }

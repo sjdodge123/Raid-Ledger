@@ -132,9 +132,25 @@ function BackButton({ navigate }: { navigate: NavigateFunction }): JSX.Element {
     );
 }
 
+/** External "View on Steam" link for the banner — same pattern as the ITAD deal link. */
+function SteamStoreLink({ appId }: { appId: number }): JSX.Element {
+    return (
+        <a
+            href={`https://store.steampowered.com/app/${appId}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="steam-store-link"
+            className="inline-flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+        >
+            <SteamIcon className="w-4 h-4" />
+            View on Steam &rarr;
+        </a>
+    );
+}
+
 /** Game banner with cover, info, and details grid. ROK-773: IGDB cover > ITAD boxart > none */
 function GameBanner({ game, rating, genres, platforms, modes, pricing }: {
-    game: { name: string; coverUrl: string | null; itadBoxartUrl?: string | null; summary: string | null; playerCount: { min: number; max: number } | null; crossplay: boolean | null; firstReleaseDate: string | null };
+    game: { name: string; coverUrl: string | null; itadBoxartUrl?: string | null; summary: string | null; playerCount: { min: number; max: number } | null; crossplay: boolean | null; firstReleaseDate: string | null; steamAppId?: number | null };
     rating: number | null; genres: string[]; platforms: string[]; modes: string[]; pricing: ItadGamePricingDto | null;
 }): JSX.Element {
     const displayCover = game.coverUrl ?? game.itadBoxartUrl ?? null;
@@ -152,6 +168,11 @@ function GameBanner({ game, rating, genres, platforms, modes, pricing }: {
                     {game.summary && <p className="text-secondary text-sm leading-relaxed mb-4 line-clamp-4">{game.summary}</p>}
                     <DetailsGrid modes={modes} playerCount={game.playerCount} platforms={platforms} crossplay={game.crossplay} releaseDate={game.firstReleaseDate} />
                     {pricing && <GamePricingSummary pricing={pricing} />}
+                    {game.steamAppId != null && (
+                        <div className="mt-2 flex justify-end">
+                            <SteamStoreLink appId={game.steamAppId} />
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -20,6 +20,7 @@ const mockLineup = {
   createdAt: NOW,
   updatedAt: NOW,
   linkedEventId: null as number | null,
+  visibility: 'public' as const,
 };
 
 describe('buildBannerResponse', () => {

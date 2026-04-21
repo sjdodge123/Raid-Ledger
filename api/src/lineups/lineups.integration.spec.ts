@@ -125,11 +125,13 @@ function describeLineups() {
       expect(rows[0].status).toBe('building');
     });
 
-    it('should return 409 when active lineup exists', async () => {
+    it('should allow creating a second active lineup (ROK-1065)', async () => {
+      // ROK-1065 removed the 409 single-active constraint — multiple
+      // concurrent lineups are now allowed (private ones coexist with public).
       await createLineup(adminToken);
       const res = await createLineup(adminToken);
 
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(201);
     });
 
     it('should require authentication', async () => {
@@ -154,22 +156,26 @@ function describeLineups() {
   // ── GET /lineups/active ──────────────────────────────────────
 
   function describeGETActive() {
-    it('should return the active lineup', async () => {
+    it('should return the active lineup as an array (ROK-1065)', async () => {
       await createLineup(adminToken);
       const res = await testApp.request
         .get('/lineups/active')
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('building');
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].status).toBe('building');
     });
 
-    it('should return 404 when no active lineup', async () => {
+    it('should return an empty array when no active lineup (ROK-1065)', async () => {
       const res = await testApp.request
         .get('/lineups/active')
         .set('Authorization', `Bearer ${adminToken}`);
 
-      expect(res.status).toBe(404);
+      // ROK-1065: endpoint now always 200 — empty array when no lineups.
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([]);
     });
 
     it('should be accessible to members', async () => {
@@ -181,6 +187,7 @@ function describeLineups() {
         .set('Authorization', `Bearer ${memberToken}`);
 
       expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
     });
 
     it('should require authentication', async () => {
@@ -453,7 +460,9 @@ function describeLineups() {
       expect(res2.status).toBe(201);
     });
 
-    it('should block creating while voting is active', async () => {
+    it('should permit creating while another lineup is in voting (ROK-1065)', async () => {
+      // ROK-1065: the single-active-lineup constraint is gone. Private and
+      // public lineups can coexist at any phase.
       const res1 = await createLineup(adminToken);
       const id = res1.body.id as number;
       await testApp.request
@@ -462,7 +471,7 @@ function describeLineups() {
         .send({ status: 'voting' });
 
       const res2 = await createLineup(adminToken);
-      expect(res2.status).toBe(409);
+      expect(res2.status).toBe(201);
     });
   }
   describe('Active lineup constraint', describeActiveConstraint);

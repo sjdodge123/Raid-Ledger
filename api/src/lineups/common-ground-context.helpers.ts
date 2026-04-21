@@ -5,7 +5,7 @@
  * stays testable and under the 30-lines-per-function budget.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type {
   CommonGroundQueryDto,
   CommonGroundResponseDto,
@@ -17,6 +17,7 @@ import {
   countDistinctNominators,
   findBuildingLineup,
   findCoPlayPartnerIds,
+  findLineupById,
   findLineupVoterIds,
   findNominatedGameIds,
 } from './lineups-query.helpers';
@@ -78,8 +79,36 @@ function averageIntensityBucket(
 }
 
 /**
- * Orchestrate the full Common Ground query for the building lineup. Kept
- * here so `lineups.service` stays under the 300-line limit (ROK-950).
+ * Resolve the lineup to score Common Ground against (ROK-1065).
+ * Prefers `filters.lineupId` when the client specifies one — required for
+ * multi-lineup UIs (Schedule-a-Game picker, private-lineup pages) so the
+ * response reflects the lineup the user is viewing. Falls back to the
+ * newest building lineup when omitted. 400s when the requested lineup
+ * exists but isn't in building status; 404s when neither path finds one.
+ */
+async function resolveScoringLineup(
+  db: PostgresJsDatabase<typeof schema>,
+  filters: CommonGroundQueryDto,
+): Promise<{ id: number }> {
+  if (filters.lineupId != null) {
+    const [row] = await findLineupById(db, filters.lineupId);
+    if (!row) throw new NotFoundException('Lineup not found');
+    if (row.status !== 'building') {
+      throw new BadRequestException('Lineup is not in building status');
+    }
+    return { id: row.id };
+  }
+  const [lineup] = await findBuildingLineup(db);
+  if (!lineup)
+    throw new NotFoundException('No active lineup in building status');
+  return { id: lineup.id };
+}
+
+/**
+ * Orchestrate the full Common Ground query for a building lineup.
+ * Honors `filters.lineupId` (ROK-1065) so multi-lineup UIs can target the
+ * lineup the user is currently viewing instead of always scoring against
+ * the newest building row.
  */
 export async function runCommonGroundForBuildingLineup(
   db: PostgresJsDatabase<typeof schema>,
@@ -87,9 +116,7 @@ export async function runCommonGroundForBuildingLineup(
   tasteProfile: TasteProfileService,
   settings: SettingsService,
 ): Promise<CommonGroundResponseDto> {
-  const [lineup] = await findBuildingLineup(db);
-  if (!lineup)
-    throw new NotFoundException('No active lineup in building status');
+  const lineup = await resolveScoringLineup(db, filters);
   const nominated = await findNominatedGameIds(db, lineup.id);
   const [nominators] = await countDistinctNominators(db, lineup.id);
   const ctx = await buildScoringContext(db, lineup.id, tasteProfile, settings);

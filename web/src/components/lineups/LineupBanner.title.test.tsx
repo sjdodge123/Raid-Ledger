@@ -12,6 +12,7 @@ import { LineupBanner } from './LineupBanner';
 
 vi.mock('../../hooks/use-lineups', () => ({
     useLineupBanner: vi.fn(),
+    useActiveLineups: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 vi.mock('./NominateModal', () => ({

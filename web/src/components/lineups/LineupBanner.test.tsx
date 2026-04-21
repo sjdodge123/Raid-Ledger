@@ -11,6 +11,7 @@ import { LineupBanner } from './LineupBanner';
 // Mock the hooks module
 vi.mock('../../hooks/use-lineups', () => ({
     useLineupBanner: vi.fn(),
+    useActiveLineups: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 // Mock NominateModal to avoid its internal hook dependencies

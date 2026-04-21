@@ -5,7 +5,7 @@
 import { type JSX, useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import type { CommonGroundResponseDto } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../../lib/api-client';
-import { useActiveLineup, useCommonGround, useNominateGame } from '../../hooks/use-lineups';
+import { useActiveLineups, useCommonGround, useNominateGame } from '../../hooks/use-lineups';
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { CommonGroundFilters } from './CommonGroundFilters';
 import { CommonGroundGameCard } from './CommonGroundGameCard';
@@ -198,18 +198,39 @@ function PanelContent({
     );
 }
 
-/** Main Common Ground panel. Pass lineupId when the parent already has it. */
-export function CommonGroundPanel({ lineupId: propLineupId }: { lineupId?: number } = {}): JSX.Element | null {
-    const { data: lineup } = useActiveLineup();
-    const resolvedId = propLineupId ?? lineup?.id;
+/**
+ * Main Common Ground panel (ROK-1065).
+ * Pass `lineupId` when the parent already has it — that bypasses the
+ * active-lineup lookup entirely. Without a prop we pick the newest
+ * building lineup from /lineups/active (array). `canParticipate=false`
+ * disables the Nominate buttons (private-lineup non-invitees).
+ */
+export function CommonGroundPanel({
+    lineupId: propLineupId,
+    canParticipate = true,
+}: {
+    lineupId?: number;
+    canParticipate?: boolean;
+} = {}): JSX.Element | null {
+    const { data: activeLineups } = useActiveLineups();
+    const newestBuilding = activeLineups?.find((l) => l.status === 'building') ?? null;
+    const resolvedId = propLineupId ?? newestBuilding?.id;
     const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0 });
     const [search, setSearch] = useState('');
-    const hasBuilding = propLineupId != null || lineup?.status === 'building';
-    const apiParams = useMemo(() => ({ ...filters, search: search.trim() || undefined }), [filters, search]);
+    const hasBuilding = propLineupId != null || !!newestBuilding;
+    const apiParams = useMemo(
+        () => ({
+            ...filters,
+            search: search.trim() || undefined,
+            lineupId: resolvedId,
+        }),
+        [filters, search, resolvedId],
+    );
     const debouncedParams = useDebouncedValue(apiParams, 300);
     const { data, isLoading, isError, refetch } = useCommonGround(debouncedParams, hasBuilding);
     const availableTags = useMemo(() => (data?.data ? extractUniqueTags(data.data) : []), [data]);
-    const atCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
+    const rawAtCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
+    const atCap = rawAtCap || !canParticipate;
     const { nominatingId, handleNominate } = useNomination(resolvedId);
 
     if (!hasBuilding) return null;

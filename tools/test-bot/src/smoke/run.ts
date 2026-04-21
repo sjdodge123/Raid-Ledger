@@ -26,6 +26,7 @@ import { cdpSteamNominationTests } from './tests/cdp-steam-nomination.test.js';
 import { scheduledEventCompletionTests } from './tests/scheduled-event-completion.test.js';
 import { aiChatTests } from './tests/ai-chat.test.js';
 import { lineupTitleTests } from './tests/lineup-title.test.js';
+import { privateLineupTests } from './tests/private-lineup.test.js';
 
 /** Build a TestResult from a test, status, and timing info. */
 function buildResult(
@@ -141,6 +142,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...scheduledEventCompletionTests,
     ...aiChatTests,
     ...lineupTitleTests,
+    ...privateLineupTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 
@@ -158,7 +160,10 @@ async function teardown(
 
 async function main(): Promise<void> {
   const ctx = await setup();
-  const allTests = collectTests(process.env.SMOKE_CATEGORY);
+  const nameFilter = process.env.SMOKE_NAME_FILTER;
+  const allTests = collectTests(process.env.SMOKE_CATEGORY).filter(
+    (t) => !nameFilter || t.name.toLowerCase().includes(nameFilter.toLowerCase()),
+  );
 
   const sequentialCats = new Set(['voice', 'cdp-command']);
   const sequentialTests = allTests.filter((t) => sequentialCats.has(t.category));

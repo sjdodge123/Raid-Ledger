@@ -32,13 +32,24 @@ export async function handleLineup(
   return lineupMenu();
 }
 
-/** Fetch the currently active community lineup. */
+/**
+ * Fetch the currently active community lineup (ROK-1065).
+ * findActive now returns an array; the AI chat surface picks the newest
+ * lineup to describe.
+ */
 async function fetchActiveLineup(
   deps: AiChatDeps,
   userId: number | null,
 ): Promise<TreeResult> {
   try {
-    const lineup = await deps.lineupsService.findActive(userId ?? undefined);
+    const active = await deps.lineupsService.findActive();
+    if (active.length === 0) {
+      return leaf(null, 'No active lineup right now.', deps);
+    }
+    const lineup = await deps.lineupsService.findById(
+      active[0].id,
+      userId ?? undefined,
+    );
     const gameName = lineup.decidedGameName ?? 'TBD';
     const status = lineup.status ?? 'unknown';
     const entries = lineup.entries?.length ?? 0;
@@ -56,13 +67,20 @@ async function fetchActiveLineup(
   }
 }
 
-/** Fetch current nominations. */
+/** Fetch current nominations from the newest active lineup (ROK-1065). */
 async function fetchNominations(
   deps: AiChatDeps,
   userId: number | null,
 ): Promise<TreeResult> {
   try {
-    const lineup = await deps.lineupsService.findActive(userId ?? undefined);
+    const active = await deps.lineupsService.findActive();
+    if (active.length === 0) {
+      return leaf(null, 'No active lineup right now.', deps);
+    }
+    const lineup = await deps.lineupsService.findById(
+      active[0].id,
+      userId ?? undefined,
+    );
     const entries = lineup.entries ?? [];
     if (entries.length === 0) {
       return leaf(null, 'No nominations yet.', deps);

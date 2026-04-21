@@ -18,6 +18,8 @@ interface VotingLeaderboardProps {
   totalMembers: number;
   /** Per-lineup vote limit from the server (ROK-976). */
   maxVotesPerPlayer?: number;
+  /** When false, voting is disabled UI-side (ROK-1065 eligibility). */
+  canParticipate?: boolean;
 }
 
 const DEFAULT_MAX_VOTES = 3;
@@ -33,7 +35,7 @@ function sortByVotes(entries: LineupEntryResponseDto[]): LineupEntryResponseDto[
 /** Voting leaderboard with status bar, sorted rows, and configurable vote limit. */
 export function VotingLeaderboard({
   entries, lineupId, myVotes, totalVoters, totalMembers,
-  maxVotesPerPlayer,
+  maxVotesPerPlayer, canParticipate = true,
 }: VotingLeaderboardProps): JSX.Element {
   const maxVotes = maxVotesPerPlayer ?? DEFAULT_MAX_VOTES;
   const sorted = useMemo(() => sortByVotes(entries), [entries]);
@@ -60,6 +62,14 @@ export function VotingLeaderboard({
         totalVoters={totalVoters}
         totalMembers={totalMembers}
       />
+      {!canParticipate && (
+        <p
+          data-testid="voting-private-notice"
+          className="mt-2 text-xs text-amber-400"
+        >
+          Private lineup — ask the creator for an invite to cast votes.
+        </p>
+      )}
       <div className="bg-surface border border-edge rounded-xl overflow-hidden mt-4">
         <div className="bg-panel/50 border-b border-edge px-4 py-2.5 flex items-center justify-between">
           <span className="text-xs text-muted font-semibold uppercase tracking-wider">Rank</span>
@@ -75,7 +85,7 @@ export function VotingLeaderboard({
               totalVoters={totalVoters}
               isVoted={isVoted}
               onToggleVote={() => handleToggle(entry.gameId)}
-              disabled={atLimit && !isVoted}
+              disabled={!canParticipate || (atLimit && !isVoted)}
             />
           );
         })}
