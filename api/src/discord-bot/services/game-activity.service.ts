@@ -12,6 +12,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { GameTasteService } from '../../game-taste/game-taste.service';
 import {
   FLUSH_INTERVAL_MS,
   MAX_SESSION_DURATION_SECONDS,
@@ -54,7 +55,17 @@ export class GameActivityService
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly cronJobService: CronJobService,
+    private readonly gameTasteService: GameTasteService,
   ) {}
+
+  /** Fire-and-forget batch enqueue for game-taste recomputes (ROK-1082). */
+  private enqueueTasteRecomputes(gameIds: number[]): void {
+    for (const gameId of gameIds) {
+      this.gameTasteService.enqueueRecompute(gameId).catch((err) => {
+        this.logger.warn(`game-taste enqueue failed for ${gameId}: ${err}`);
+      });
+    }
+  }
 
   async onModuleInit(): Promise<void> {
     this.flushTimer = setInterval(() => {
@@ -229,7 +240,9 @@ export class GameActivityService
     await this.cronJobService.executeWithTracking(
       'GameActivityService_dailyRollup',
       async () => {
-        await aggregateRollups(this.db, this.logger);
+        await aggregateRollups(this.db, this.logger, (ids) =>
+          this.enqueueTasteRecomputes(ids),
+        );
         await autoHeartCheck(this.db, this.logger);
       },
     );
@@ -237,7 +250,9 @@ export class GameActivityService
 
   /** @VisibleForTesting */
   async aggregateRollups(): Promise<void> {
-    await aggregateRollups(this.db, this.logger);
+    await aggregateRollups(this.db, this.logger, (ids) =>
+      this.enqueueTasteRecomputes(ids),
+    );
   }
 
   /** @VisibleForTesting */

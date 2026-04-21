@@ -14,10 +14,14 @@ interface RollupEntry {
 
 /**
  * Aggregate closed sessions into day/week/month rollup rows.
+ * @param onGamesChanged - ROK-1082: fired once with the unique gameIds touched
+ *                        by this rollup so the caller can enqueue one
+ *                        taste-vector recompute per game (not per rollup row).
  */
 export async function aggregateRollups(
   db: PostgresJsDatabase<typeof schema>,
   logger: Logger,
+  onGamesChanged?: (gameIds: number[]) => void,
 ): Promise<void> {
   const sessions = await fetchClosedSessions(db);
   if (sessions.length === 0) return;
@@ -28,6 +32,13 @@ export async function aggregateRollups(
   logger.log(
     `Rolled up ${sessions.length} session(s) into ${upsertCount} rollup row(s)`,
   );
+
+  if (onGamesChanged) {
+    const uniqueGameIds = Array.from(
+      new Set(Array.from(rollupMap.values()).map((r) => r.gameId)),
+    );
+    if (uniqueGameIds.length > 0) onGamesChanged(uniqueGameIds);
+  }
 }
 
 async function fetchClosedSessions(
