@@ -26,9 +26,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-// @ts-expect-error — module does not exist yet (ROK-1082 TDD)
 import { GameTasteService } from './game-taste.service';
-// @ts-expect-error — pipeline entry does not exist yet (ROK-1082 TDD)
 import { runAggregateGameVectors } from './pipelines/aggregate-game-vectors';
 
 describe('Game Taste Vectors (ROK-1082)', () => {

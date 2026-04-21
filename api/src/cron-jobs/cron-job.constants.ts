@@ -160,4 +160,8 @@ export const CORE_JOB_METADATA: Record<
     description: 'Rolls up weekly play intensity snapshots Sundays at 6 AM',
     category: 'Data Sync',
   },
+  GameTasteService_aggregateGameVectors: {
+    description: 'Recomputes per-game taste vectors daily at 06:00 UTC.',
+    category: 'Data Sync',
+  },
 };
