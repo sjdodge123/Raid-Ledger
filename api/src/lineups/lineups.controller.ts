@@ -206,7 +206,12 @@ export class LineupsController {
     @Param('matchId', ParseIntPipe) matchId: number,
     @Req() req: AuthRequest,
   ): Promise<BandwagonJoinResponseDto> {
-    return this.lineupsService.bandwagonJoin(id, matchId, req.user.id);
+    return this.lineupsService.bandwagonJoin(
+      id,
+      matchId,
+      req.user.id,
+      req.user.role,
+    );
   }
 
   /** POST /lineups/:id/matches/:matchId/advance — operator advance (ROK-937). */

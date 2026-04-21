@@ -315,11 +315,16 @@ export class LineupsService {
     return buildGroupedMatchesResponse(this.db, id);
   }
 
-  /** Bandwagon join a match (ROK-937). */
+  /**
+   * Bandwagon join a match (ROK-937, ROK-1065).
+   * `callerRole` is used to enforce the private-lineup eligibility gate
+   * (non-invitees may not bandwagon onto a private lineup's match).
+   */
   bandwagonJoin(
     lineupId: number,
     matchId: number,
     userId: number,
+    callerRole?: string,
   ): Promise<BandwagonJoinResponseDto> {
     return runBandwagonJoin(
       this.db,
@@ -328,6 +333,7 @@ export class LineupsService {
       lineupId,
       matchId,
       userId,
+      callerRole,
     );
   }
 
