@@ -156,6 +156,7 @@ export function mapDbRowToDetail(
     twitchGameId: g.twitchGameId,
     crossplay: g.crossplay ?? null,
     earlyAccess: g.earlyAccess ?? false,
+    steamAppId: g.steamAppId ?? null,
     ...mapItadPricing(g),
   };
 }
