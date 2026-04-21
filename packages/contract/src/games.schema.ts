@@ -74,6 +74,8 @@ export const GameDetailSchema = z.object({
     itadPriceUpdatedAt: z.string().nullable().optional(),
     /** ROK-934: Whether this game is in early access (from ITAD) */
     earlyAccess: z.boolean().optional(),
+    /** Steam app ID for linking to the Steam store page. */
+    steamAppId: z.number().nullable().optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;
