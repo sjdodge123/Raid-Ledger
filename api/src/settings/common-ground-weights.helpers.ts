@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import {
   FULL_PRICE_PENALTY,
   INTENSITY_WEIGHT,
@@ -11,16 +12,40 @@ import { SETTING_KEYS, type SettingKey } from '../drizzle/schema/app-settings';
 
 type SettingGetter = (key: SettingKey) => Promise<string | null>;
 
-/** Parse a DB-stored numeric weight, falling back to `fallback` if invalid. */
+const logger = new Logger('CommonGroundWeights');
+
+export const PARSE_WEIGHT_MIN = 0;
+export const PARSE_WEIGHT_MAX = 1000;
+
+/**
+ * Parse a DB-stored numeric weight, falling back to `fallback` if invalid.
+ * Clamps finite values to [PARSE_WEIGHT_MIN, PARSE_WEIGHT_MAX] and logs a
+ * warning when a stored value is outside the allowed range so operators can
+ * spot misconfiguration (e.g. a 1e9 weight that would starve the base score).
+ */
 export function parseWeight(raw: string | null, fallback: number): number {
   if (raw === null) return fallback;
   const n = Number(raw);
-  return Number.isFinite(n) ? n : fallback;
+  if (!Number.isFinite(n)) return fallback;
+  if (n < PARSE_WEIGHT_MIN) {
+    logger.warn(
+      `Weight ${n} below minimum ${PARSE_WEIGHT_MIN}, clamping to ${PARSE_WEIGHT_MIN}`,
+    );
+    return PARSE_WEIGHT_MIN;
+  }
+  if (n > PARSE_WEIGHT_MAX) {
+    logger.warn(
+      `Weight ${n} above maximum ${PARSE_WEIGHT_MAX}, clamping to ${PARSE_WEIGHT_MAX}`,
+    );
+    return PARSE_WEIGHT_MAX;
+  }
+  return n;
 }
 
 /**
  * Resolve Common Ground scoring weights from DB settings with defaults (ROK-950).
- * Each weight falls back to its constant default if unset or non-numeric.
+ * Each weight falls back to its constant default if unset or non-numeric,
+ * and is clamped to [PARSE_WEIGHT_MIN, PARSE_WEIGHT_MAX] (ROK-1090).
  */
 export async function resolveCommonGroundWeights(
   get: SettingGetter,
