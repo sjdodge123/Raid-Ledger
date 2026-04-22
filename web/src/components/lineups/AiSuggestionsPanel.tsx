@@ -17,7 +17,10 @@ export interface AiSuggestionsPanelProps {
 
 function LoadingSkeleton(): JSX.Element {
     return (
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div
+            className="flex gap-3 overflow-x-auto pb-2"
+            data-testid="ai-suggestions-skeleton"
+        >
             {Array.from({ length: 5 }, (_, i) => (
                 <div
                     key={i}
