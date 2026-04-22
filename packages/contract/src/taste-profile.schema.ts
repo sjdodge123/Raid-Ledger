@@ -54,15 +54,76 @@ export const TASTE_PROFILE_AXIS_POOL = [
 
 export type TasteProfilePoolAxis = (typeof TASTE_PROFILE_AXIS_POOL)[number];
 
-export const TASTE_PROFILE_ARCHETYPES = [
+/**
+ * Intensity tier enum (ROK-1083). Always present on every archetype —
+ * derived from `intensityMetrics.intensity` via a threshold ladder.
+ * Ordered from most to least intense.
+ */
+export const INTENSITY_TIERS = [
+  'Hardcore',
   'Dedicated',
-  'Specialist',
-  'Explorer',
-  'Social Drifter',
+  'Regular',
   'Casual',
 ] as const;
 
-export type TasteProfileArchetype = (typeof TASTE_PROFILE_ARCHETYPES)[number];
+export type IntensityTier = (typeof INTENSITY_TIERS)[number];
+
+export const IntensityTierSchema = z.enum(INTENSITY_TIERS);
+
+/**
+ * Vector title enum (ROK-1083). 0–2 of these may be attached to an
+ * archetype based on the player's strongest axis scores. Single-axis
+ * titles take the raw axis score; multi-axis titles take the max of
+ * their component axes (e.g. `Hero = max(rpg, fantasy)`,
+ * `Architect = max(crafting, automation, sandbox)`).
+ */
+export const VECTOR_TITLES = [
+  'Duelist',
+  'Brawler',
+  'Last One Standing',
+  'Tactician',
+  'Marksman',
+  'Companion',
+  'Raider',
+  'Socialite',
+  'Hero',
+  'Spacefarer',
+  'Wayfarer',
+  'Architect',
+  'Strategist',
+  'Survivor',
+  'Nightcrawler',
+  'Risk Taker',
+  'Operative',
+  'Puzzler',
+  'Acrobat',
+  'Racer',
+  'Athlete',
+] as const;
+
+export type VectorTitle = (typeof VECTOR_TITLES)[number];
+
+export const VectorTitleSchema = z.enum(VECTOR_TITLES);
+
+/**
+ * Composed archetype shape (ROK-1083) — replaces the old 5-value enum.
+ * `intensityTier` is always present; `vectorTitles` may be 0–2 entries;
+ * `descriptions.titles` has the same length/order as `vectorTitles`.
+ *
+ * Description text is owned by the server (see `api/src/taste-profile/
+ * archetype-copy.ts`) and shipped to the UI in the response payload so
+ * copy changes don't force a contract rebuild cascade.
+ */
+export const ArchetypeSchema = z.object({
+  intensityTier: IntensityTierSchema,
+  vectorTitles: z.array(VectorTitleSchema).max(2),
+  descriptions: z.object({
+    tier: z.string(),
+    titles: z.array(z.string()).max(2),
+  }),
+});
+
+export type ArchetypeDto = z.infer<typeof ArchetypeSchema>;
 
 /**
  * Dimensions object — strict shape keyed by the full axis pool.
@@ -97,7 +158,7 @@ export const TasteProfileResponseSchema = z.object({
   userId: z.number().int(),
   dimensions: TasteProfileDimensionsSchema,
   intensityMetrics: IntensityMetricsSchema,
-  archetype: z.enum(TASTE_PROFILE_ARCHETYPES),
+  archetype: ArchetypeSchema,
   coPlayPartners: z.array(CoPlayPartnerSchema).max(10),
   computedAt: z.string(),
 });
@@ -106,7 +167,7 @@ export const SimilarPlayerSchema = z.object({
   userId: z.number().int(),
   username: z.string(),
   avatar: z.string().nullable(),
-  archetype: z.enum(TASTE_PROFILE_ARCHETYPES),
+  intensityTier: IntensityTierSchema,
   similarity: z.number(),
 });
 
@@ -159,13 +220,15 @@ export type CoPlayPartnerContextDto = z.infer<
 
 /**
  * Per-user taste context bundle — shape consumed by LLM prompt builders.
- * Archetype + intensity metrics + top axes (≤5) + low axes (≤3) + co-play
- * partners (each with their own top axes).
+ * Archetype (composed — tier + vector titles + descriptions) + intensity
+ * metrics + top axes (≤5) + low axes (≤3) + co-play partners (each with
+ * their own top axes). The LLM receives both the intensity tier and the
+ * vector titles so the prompt retains the full signal.
  */
 export const TasteProfileContextSchema = z.object({
     userId: z.number().int(),
     username: z.string(),
-    archetype: z.enum(TASTE_PROFILE_ARCHETYPES),
+    archetype: ArchetypeSchema,
     intensityMetrics: IntensityMetricsSchema,
     topAxes: z.array(TopAxisSchema).max(5),
     lowAxes: z.array(TopAxisSchema).max(3),
