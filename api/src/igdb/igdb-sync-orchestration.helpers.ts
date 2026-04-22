@@ -49,11 +49,13 @@ export async function runSyncAllGames(
     deps.db,
     deps.queryIgdb,
     themeFilter,
+    deps.onGameChanged,
   );
   const discovered = await discoverPopularGames(
     deps.db,
     deps.queryIgdb,
     themeFilter,
+    deps.onGameChanged,
   );
   const backfilled = await backfillMissingCovers(deps.db, deps.queryIgdb);
   const enriched = await enrichSyncedGamesWithItad(

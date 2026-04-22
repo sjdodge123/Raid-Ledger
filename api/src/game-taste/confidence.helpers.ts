@@ -2,8 +2,9 @@
  * Per-game confidence scoring (ROK-1082).
  *
  * Quantifies how much signal the pipeline had for this game. Consumed by
- * the similarity query as a filter (default `minConfidence = 0.1`) so
- * zero-signal stub vectors don't pollute results.
+ * the similarity query as a filter (default `minConfidence = 0.0001`) so
+ * true zero-signal stub rows are excluded while metadata-only games
+ * (which can still produce useful axis signal) stay in the candidate pool.
  *
  * Formula (plan-ROK-1082 §Risks line 330):
  *   confidence =

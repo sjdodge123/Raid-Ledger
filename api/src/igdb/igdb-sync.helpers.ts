@@ -19,12 +19,15 @@ const logger = new Logger('IgdbSyncHelpers');
  * @param db - Database connection
  * @param queryIgdb - Function to execute IGDB queries
  * @param adultThemeFilter - APICALYPSE adult theme filter string
+ * @param onGameChanged - ROK-1082: fired per upserted row so the caller can
+ *                        enqueue a game-taste-vector recompute for that id.
  * @returns Number of games refreshed
  */
 export async function refreshExistingGames(
   db: PostgresJsDatabase<typeof schema>,
   queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
   adultThemeFilter: string,
+  onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   let refreshed = 0;
   const games = await db
@@ -43,7 +46,7 @@ export async function refreshExistingGames(
       const apiGames = await queryIgdb(
         `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = (${ids})${adultThemeFilter}; limit 10;`,
       );
-      await upsertGamesFromApi(db, apiGames);
+      await upsertGamesFromApi(db, apiGames, onGameChanged);
       refreshed += apiGames.length;
     } catch (err) {
       logger.warn(`Failed to refresh batch at index ${i}: ${err}`);
@@ -59,12 +62,15 @@ export async function refreshExistingGames(
  * @param db - Database connection
  * @param queryIgdb - Function to execute IGDB queries
  * @param adultThemeFilter - APICALYPSE adult theme filter string
+ * @param onGameChanged - ROK-1082: fired per upserted row so the caller can
+ *                        enqueue a game-taste-vector recompute for that id.
  * @returns Number of games discovered
  */
 export async function discoverPopularGames(
   db: PostgresJsDatabase<typeof schema>,
   queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
   adultThemeFilter: string,
+  onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   try {
     const popular = await queryIgdb(
@@ -72,7 +78,7 @@ export async function discoverPopularGames(
         `where game_modes = (2,3,5) & rating_count > 10${adultThemeFilter}; ` +
         `sort total_rating desc; limit 100;`,
     );
-    await upsertGamesFromApi(db, popular);
+    await upsertGamesFromApi(db, popular, onGameChanged);
     return popular.length;
   } catch (err) {
     logger.warn(`Failed to discover popular games: ${err}`);

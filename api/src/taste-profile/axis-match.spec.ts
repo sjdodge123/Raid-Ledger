@@ -28,10 +28,7 @@ function game(overrides: Partial<GameShape> = {}): GameShape {
 
 describe('axisMatchScore — direct tag matches (Change B saturation)', () => {
   it('a single matching tag scores 1/SATURATION_COUNT', () => {
-    const score = axisMatchScore(
-      'co_op',
-      game({ tags: ['co-op'] }),
-    );
+    const score = axisMatchScore('co_op', game({ tags: ['co-op'] }));
     expect(score).toBeCloseTo(1 / SATURATION_COUNT, 5);
   });
 
@@ -60,9 +57,7 @@ describe('axisMatchScore — direct tag matches (Change B saturation)', () => {
 
 describe('axisMatchScore — no match returns 0', () => {
   it('returns 0 when no direct tags and no co-occurrence rules fire', () => {
-    expect(
-      axisMatchScore('mmo', game({ tags: ['puzzle'] })),
-    ).toBe(0);
+    expect(axisMatchScore('mmo', game({ tags: ['puzzle'] }))).toBe(0);
   });
 });
 
@@ -119,18 +114,12 @@ describe('axisMatchScore — co-occurrence rules (Change C)', () => {
   });
 
   it('Multiplayer always contributes a weak signal to social', () => {
-    const score = axisMatchScore(
-      'social',
-      game({ tags: ['multiplayer'] }),
-    );
+    const score = axisMatchScore('social', game({ tags: ['multiplayer'] }));
     expect(score).toBeGreaterThanOrEqual(0.3);
   });
 
   it('Action contributes a weak signal to adventure even without adventure-specific tags', () => {
-    const score = axisMatchScore(
-      'adventure',
-      game({ tags: ['action'] }),
-    );
+    const score = axisMatchScore('adventure', game({ tags: ['action'] }));
     expect(score).toBeGreaterThanOrEqual(0.2);
   });
 
@@ -160,14 +149,12 @@ describe('axisMatchScore — co-occurrence rules (Change C)', () => {
 
 describe('axisMatchScore — IGDB fallback stays binary', () => {
   it('returns 1 for any IGDB match when tags are empty', () => {
-    expect(
-      axisMatchScore('co_op', game({ gameModes: [3] })),
-    ).toBe(1);
+    expect(axisMatchScore('co_op', game({ gameModes: [3] }))).toBe(1);
   });
 
   it('returns 0 when no IGDB IDs hit and tags are empty', () => {
-    expect(
-      axisMatchScore('mmo', game({ genres: [99], gameModes: [99] })),
-    ).toBe(0);
+    expect(axisMatchScore('mmo', game({ genres: [99], gameModes: [99] }))).toBe(
+      0,
+    );
   });
 });

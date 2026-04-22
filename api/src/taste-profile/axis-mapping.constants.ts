@@ -113,7 +113,14 @@ export const AXIS_MAPPINGS: Record<TasteProfilePoolAxis, AxisMapping> = {
     themes: [],
   },
   fantasy: {
-    tags: ['Fantasy', 'Magic', 'Dragons', 'Medieval', 'Dark Fantasy', 'Mythology'],
+    tags: [
+      'Fantasy',
+      'Magic',
+      'Dragons',
+      'Medieval',
+      'Dark Fantasy',
+      'Mythology',
+    ],
     gameModes: [],
     genres: [],
     themes: [17],

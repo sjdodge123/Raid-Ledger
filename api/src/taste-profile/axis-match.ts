@@ -78,14 +78,8 @@ function conditionalScore(
   for (const rule of CO_OCCURRENCE_RULES) {
     if (rule.axis !== axis) continue;
     if (!tagSet.has(rule.tag.toLowerCase())) continue;
-    if (
-      rule.excludes?.some((t) => tagSet.has(t.toLowerCase()))
-    )
-      continue;
-    if (
-      rule.requires?.some((t) => !tagSet.has(t.toLowerCase()))
-    )
-      continue;
+    if (rule.excludes?.some((t) => tagSet.has(t.toLowerCase()))) continue;
+    if (rule.requires?.some((t) => !tagSet.has(t.toLowerCase()))) continue;
     total += rule.weight;
   }
   return total;
@@ -126,10 +120,9 @@ export function axisMatchScore(
     return igdbFallback(axis, game);
   }
   const tagSet = lowerSet(game.tags);
-  const direct = Math.min(
-    directMatchCount(axis, tagSet),
-    SATURATION_COUNT,
-  ) / SATURATION_COUNT;
+  const direct =
+    Math.min(directMatchCount(axis, tagSet), SATURATION_COUNT) /
+    SATURATION_COUNT;
   const bonus = conditionalScore(axis, tagSet);
   return Math.min(direct + bonus, 1);
 }
