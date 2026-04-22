@@ -8,17 +8,22 @@ import {
     ResponsiveContainer,
 } from "recharts";
 import type {
+    ArchetypeDto,
     IntensityMetricsDto,
-    TasteProfileArchetype,
     TasteProfileDimensionsDto,
 } from "@raid-ledger/contract";
 import { ArchetypePill } from "./ArchetypePill";
-import { axisLabel, topAxes, type AxisScore } from "./taste-profile-helpers";
+import {
+    axisLabel,
+    composeArchetypeLabel,
+    topAxes,
+    type AxisScore,
+} from "./taste-profile-helpers";
 
 interface TasteRadarChartProps {
-    /** Optional archetype hero title. When omitted the title row is skipped
+    /** Optional composed archetype. When omitted the title row is skipped
      *  — used by callers (e.g. game taste profile) that have no archetype. */
-    archetype?: TasteProfileArchetype;
+    archetype?: ArchetypeDto;
     dimensions: TasteProfileDimensionsDto;
     intensityMetrics?: IntensityMetricsDto;
     /** Override the root element's `data-testid`. Defaults to `taste-radar-chart`. */
@@ -26,13 +31,14 @@ interface TasteRadarChartProps {
 }
 
 /**
- * Screen-reader summary of the radar (AC7). Includes the archetype (when
- * present), every rendered axis with its score, and — when available —
- * the top-level intensity/focus/breadth numbers so non-sighted users get
- * the same at-a-glance picture the chart provides visually.
+ * Screen-reader summary of the radar (AC7). Includes the composed
+ * archetype label (when present), every rendered axis with its score,
+ * and — when available — the top-level intensity/focus/breadth numbers
+ * so non-sighted users get the same at-a-glance picture the chart
+ * provides visually.
  */
 function buildAriaLabel(
-    archetype: TasteProfileArchetype | undefined,
+    archetype: ArchetypeDto | undefined,
     scores: AxisScore[],
     metrics?: IntensityMetricsDto,
 ): string {
@@ -40,7 +46,7 @@ function buildAriaLabel(
         .map((s) => `${axisLabel(s.axis)} ${s.value}`)
         .join(", ");
     const header = archetype
-        ? `Taste profile for ${archetype}`
+        ? `Taste profile for ${composeArchetypeLabel(archetype)}`
         : "Taste profile";
     if (!metrics) return `${header}: ${axes}.`;
     return (
