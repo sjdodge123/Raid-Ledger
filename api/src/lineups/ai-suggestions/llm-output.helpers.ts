@@ -13,8 +13,8 @@ export const LLM_FEATURE_TAG = 'lineup_ai_suggestions';
 const RETRY_REMINDER =
   'Your previous response was not valid JSON matching the required schema. ' +
   'Respond ONLY with a single JSON object of the form ' +
-  '{"suggestions":[{"gameId":<int>,"confidence":<0..1>,"reasoning":"..."}]} — ' +
-  'no prose, no code fences, no extra keys.';
+  '{"suggestions":[{"gameId":<int>,"reasoning":"..."}]} — ' +
+  'no prose, no code fences, no extra keys (confidence is derived server-side from output order).';
 
 /**
  * Extract a JSON object from LLM text output.
@@ -70,7 +70,9 @@ async function tryChat(
   llmService: LlmService,
   options: LlmChatOptions,
   context: LlmRequestContext,
-): Promise<AiSuggestionsLlmOutputDto | { parseFail: true } | { unavailable: Error }> {
+): Promise<
+  AiSuggestionsLlmOutputDto | { parseFail: true } | { unavailable: Error }
+> {
   try {
     const response = await llmService.chat(options, context);
     const parsed = parseOnce(response.content);
