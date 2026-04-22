@@ -19,6 +19,7 @@ export interface DiscoverCategory {
 /** Build the list of discovery categories with SQL filters. */
 export function buildDiscoverCategories(): DiscoverCategory[] {
   return [
+    buildCommunityPlayingCategory(),
     buildCommunityCategory(),
     buildMostWishlistedCategory(),
     buildDealCategory('Community Wishlisted On Sale', 'wishlisted-on-sale'),
@@ -57,6 +58,15 @@ function buildCommunityCategory(): DiscoverCategory {
     category: 'Your Community Wants to Play',
     slug: 'community-wants-to-play',
     cached: false,
+  };
+}
+
+/** Community has-been-playing category (ROK-565). Cache handled in its own helper. */
+export function buildCommunityPlayingCategory(): DiscoverCategory {
+  return {
+    category: 'Your Community Has Been Playing',
+    slug: 'community-has-been-playing',
+    cached: true,
   };
 }
 
