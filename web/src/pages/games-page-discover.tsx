@@ -8,7 +8,7 @@ export type PricingMap = Map<number, ItadGamePricingDto | null>;
 type RowMetadata = GameDiscoverRowDto['metadata'];
 
 const PLAYED_BADGE_CLS =
-    'absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md text-xs font-semibold bg-black/70 text-white backdrop-blur-sm';
+    'absolute top-2 left-1/2 -translate-x-1/2 z-10 px-2 py-0.5 rounded-md text-xs font-semibold bg-black/70 text-white backdrop-blur-sm whitespace-nowrap pointer-events-none';
 
 function formatPlayedLabel(count: number): string {
     return `${new Intl.NumberFormat('en-US').format(count)} played`;
