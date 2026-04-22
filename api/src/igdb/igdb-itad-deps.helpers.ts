@@ -27,6 +27,9 @@ export interface ItadDepsBuildParams {
   getAdultFilter: () => Promise<boolean>;
   /** ROK-986: Callback when a game is upserted without IGDB data. */
   onUnenriched?: (gameId: number) => void;
+  /** ROK-1082: fired after every successful upsert so callers can enqueue a
+   * taste-vector recompute for that game id. */
+  onGameUpserted?: (gameId: number) => void;
 }
 
 /**
@@ -45,6 +48,7 @@ export function buildItadSearchDeps(
     isBannedOrHidden: (slug) => checkBannedOrHidden(params.db, slug),
     upsertGame: (game) => upsertItadGame(params.db, game),
     onUnenriched: params.onUnenriched,
+    onGameUpserted: params.onGameUpserted,
   };
 }
 

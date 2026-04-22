@@ -13,6 +13,7 @@ import { GENRE_MAP } from '../lib/game-utils';
 import { PLATFORM_MAP, MODE_MAP } from './game-detail/game-detail-constants';
 import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
+import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
 import { GamePricingSummary } from './game-detail/GamePricingSummary';
 import { PriceBadge } from '../components/games/PriceBadge';
 import { LineupVoteBanner } from '../components/lineups/LineupVoteBanner';
@@ -95,6 +96,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
             {gameId && <CommunityActivitySection gameId={gameId} />}
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
             <GameMediaSections game={game} streamsData={streamsData} />
+            <GameTasteSection gameId={gameId} />
         </div>
     );
 }

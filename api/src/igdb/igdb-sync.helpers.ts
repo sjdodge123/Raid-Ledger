@@ -19,12 +19,15 @@ const logger = new Logger('IgdbSyncHelpers');
  * @param db - Database connection
  * @param queryIgdb - Function to execute IGDB queries
  * @param adultThemeFilter - APICALYPSE adult theme filter string
+ * @param onGameChanged - ROK-1082: fired per upserted row so the caller can
+ *                        enqueue a game-taste-vector recompute for that id.
  * @returns Number of games refreshed
  */
 export async function refreshExistingGames(
   db: PostgresJsDatabase<typeof schema>,
   queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
   adultThemeFilter: string,
+  onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   let refreshed = 0;
   const games = await db
@@ -43,7 +46,7 @@ export async function refreshExistingGames(
       const apiGames = await queryIgdb(
         `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = (${ids})${adultThemeFilter}; limit 10;`,
       );
-      await upsertGamesFromApi(db, apiGames);
+      await upsertGamesFromApi(db, apiGames, onGameChanged);
       refreshed += apiGames.length;
     } catch (err) {
       logger.warn(`Failed to refresh batch at index ${i}: ${err}`);
@@ -59,12 +62,15 @@ export async function refreshExistingGames(
  * @param db - Database connection
  * @param queryIgdb - Function to execute IGDB queries
  * @param adultThemeFilter - APICALYPSE adult theme filter string
+ * @param onGameChanged - ROK-1082: fired per upserted row so the caller can
+ *                        enqueue a game-taste-vector recompute for that id.
  * @returns Number of games discovered
  */
 export async function discoverPopularGames(
   db: PostgresJsDatabase<typeof schema>,
   queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
   adultThemeFilter: string,
+  onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   try {
     const popular = await queryIgdb(
@@ -72,7 +78,7 @@ export async function discoverPopularGames(
         `where game_modes = (2,3,5) & rating_count > 10${adultThemeFilter}; ` +
         `sort total_rating desc; limit 100;`,
     );
-    await upsertGamesFromApi(db, popular);
+    await upsertGamesFromApi(db, popular, onGameChanged);
     return popular.length;
   } catch (err) {
     logger.warn(`Failed to discover popular games: ${err}`);
@@ -110,12 +116,15 @@ export function buildAdultThemeFilter(adultFilterEnabled: boolean): string {
  * @param db - Database connection
  * @param lookupBySteamAppId - Function to look up ITAD game by Steam App ID
  * @param getGameInfo - Function to fetch full game info (including tags) by ITAD ID
+ * @param onGameChanged - ROK-1082: fired per successful update so the caller
+ *                        can enqueue a game-taste-vector recompute for that id.
  * @returns Number of successfully enriched games
  */
 export async function enrichSyncedGamesWithItad(
   db: PostgresJsDatabase<typeof schema>,
   lookupBySteamAppId: (appId: number) => Promise<ItadGame | null>,
   getGameInfo: (itadId: string) => Promise<ItadGameInfo | null>,
+  onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   const games = await db
     .select({ id: schema.games.id, steamAppId: schema.games.steamAppId })
@@ -131,6 +140,7 @@ export async function enrichSyncedGamesWithItad(
       if (!itadGame) continue;
       const info = await fetchInfoGracefully(getGameInfo, itadGame.id);
       await updateGameWithItadData(db, game.id, itadGame, info);
+      onGameChanged?.(game.id);
       enriched++;
     } catch (err) {
       logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);

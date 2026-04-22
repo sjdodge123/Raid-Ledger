@@ -28,6 +28,9 @@ export interface ItadSearchDeps {
   upsertGame: (game: GameDetailDto) => Promise<GameDetailDto>;
   /** ROK-986: Callback when a game is upserted without IGDB data. */
   onUnenriched?: (gameId: number) => void;
+  /** ROK-1082: fired after every successful upsert so callers can enqueue a
+   * taste-vector recompute for that game id. */
+  onGameUpserted?: (gameId: number) => void;
 }
 
 /**
@@ -175,8 +178,9 @@ async function upsertAll(
     try {
       const persisted = await deps.upsertGame(game);
       results.push(persisted);
-      if (!persisted.igdbId && persisted.id && deps.onUnenriched) {
-        deps.onUnenriched(persisted.id);
+      if (persisted.id != null) {
+        deps.onGameUpserted?.(persisted.id);
+        if (!persisted.igdbId) deps.onUnenriched?.(persisted.id);
       }
     } catch {
       logger.warn(`Failed to upsert game "${game.slug}", using in-memory`);

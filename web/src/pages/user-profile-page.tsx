@@ -31,8 +31,8 @@ import {
 import { HeartedGamesModal } from "./user-profile/hearted-games-modal";
 import { isGuestRouteState } from "./user-profile/user-profile-helpers";
 import { TasteProfileSection } from "./user-profile/taste-profile/TasteProfileSection";
-import { ArchetypePill } from "./user-profile/taste-profile/ArchetypePill";
-import { isEmptyTasteProfile } from "./user-profile/taste-profile/taste-profile-helpers";
+import { ArchetypePill } from "../components/taste-profile/ArchetypePill";
+import { isEmptyTasteProfile } from "../components/taste-profile/taste-profile-helpers";
 import "./user-profile-page.css";
 
 /** Loading skeleton for user profile */

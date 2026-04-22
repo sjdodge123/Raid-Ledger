@@ -6,7 +6,7 @@ import type {
 import {
     formatFocusIndicator,
     formatIntensity,
-} from "./taste-profile-helpers";
+} from "../../../components/taste-profile/taste-profile-helpers";
 
 interface IntensityBadgeProps {
     archetype: TasteProfileArchetype;

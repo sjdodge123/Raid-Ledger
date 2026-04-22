@@ -35,6 +35,8 @@ const KNOWN_THROW_SAFE: string[] = [
   'bench-promotion.service.ts',
   // LineupPhaseProcessor: onModuleInit uses bestEffortInit (ROK-972), process() delegates to executeTransition, BullMQ retries
   'lineup-phase.processor.ts',
+  // GameTasteRecomputeProcessor: process() delegates to recomputeGameVector, BullMQ retries on failure (ROK-1082)
+  'game-taste-recompute.processor.ts',
 ];
 
 /** Recursively collect all `.ts` source files. */

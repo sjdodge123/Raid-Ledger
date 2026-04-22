@@ -7,10 +7,8 @@ import {
   TASTE_PROFILE_AXES,
   TASTE_PROFILE_AXIS_POOL,
 } from '@raid-ledger/contract';
-import {
-  AXIS_MAPPINGS,
-  HIGH_PLAYTIME_WEIGHT_MIN,
-} from './axis-mapping.constants';
+import { HIGH_PLAYTIME_WEIGHT_MIN } from './axis-mapping.constants';
+import { axisMatchScore } from './axis-match';
 
 /**
  * Per-(user, game) signal rollup. Each source contributes up to one entry
@@ -116,33 +114,18 @@ export function signalWeight(signal: UserGameSignal): number {
 }
 
 /**
- * Does this game match the given axis?
- * - If the game has tags, match only against the axis's tag list
- *   (trust the richer Steam/ITAD vocabulary).
- * - Otherwise, fall back to IGDB gameMode/genre/theme IDs.
- *
- * Returns 1.0 on match, 0 otherwise. Does NOT depend on per-user signal —
- * classification is purely a property of the game. Used by both the
- * vector computation and `computeAxisIdf` rarity calculation.
+ * Backward-compatible alias for the shared graduated `axisMatchScore`
+ * in [0, 1]. Previously this function returned a binary 0 or 1; it now
+ * returns a graduated score so games matching multiple axis tags score
+ * higher than games matching one (saturated at 3 tags), and soft
+ * co-occurrence signals (e.g. "Multiplayer" → pvp when no Co-op tag)
+ * contribute partial weight. See `axis-match.ts` for details.
  */
 export function axisMatchFactor(
   axis: TasteProfilePoolAxis,
   game: GameMetadata,
 ): number {
-  const mapping = AXIS_MAPPINGS[axis];
-
-  if (game.tags.length > 0) {
-    return mapping.tags.some((t) => game.tags.includes(t.toLowerCase()))
-      ? 1.0
-      : 0;
-  }
-
-  const hits =
-    mapping.gameModes.some((m) => game.gameModes.includes(m)) ||
-    mapping.genres.some((g) => game.genres.includes(g)) ||
-    mapping.themes.some((t) => game.themes.includes(t));
-
-  return hits ? 1.0 : 0;
+  return axisMatchScore(axis, game);
 }
 
 function zeroedPool(): Record<TasteProfilePoolAxis, number> {

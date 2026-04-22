@@ -9,6 +9,7 @@ import { CharactersModule } from '../characters/characters.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { NotificationModule } from '../notifications/notification.module';
 import { ItadModule } from '../itad/itad.module';
+import { GameTasteModule } from '../game-taste/game-taste.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
@@ -89,6 +90,7 @@ import { PlayingCommand } from './commands/playing.command';
     CharactersModule,
     CronJobModule,
     ItadModule,
+    GameTasteModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),

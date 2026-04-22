@@ -16,26 +16,32 @@ import { ArchetypePill } from "./ArchetypePill";
 import { axisLabel, topAxes, type AxisScore } from "./taste-profile-helpers";
 
 interface TasteRadarChartProps {
-    archetype: TasteProfileArchetype;
+    /** Optional archetype hero title. When omitted the title row is skipped
+     *  — used by callers (e.g. game taste profile) that have no archetype. */
+    archetype?: TasteProfileArchetype;
     dimensions: TasteProfileDimensionsDto;
     intensityMetrics?: IntensityMetricsDto;
+    /** Override the root element's `data-testid`. Defaults to `taste-radar-chart`. */
+    dataTestId?: string;
 }
 
 /**
- * Screen-reader summary of the radar (AC7). Includes the archetype,
- * every rendered axis with its score, and — when available — the
- * top-level intensity/focus/breadth numbers so non-sighted users get
+ * Screen-reader summary of the radar (AC7). Includes the archetype (when
+ * present), every rendered axis with its score, and — when available —
+ * the top-level intensity/focus/breadth numbers so non-sighted users get
  * the same at-a-glance picture the chart provides visually.
  */
 function buildAriaLabel(
-    archetype: TasteProfileArchetype,
+    archetype: TasteProfileArchetype | undefined,
     scores: AxisScore[],
     metrics?: IntensityMetricsDto,
 ): string {
     const axes = scores
         .map((s) => `${axisLabel(s.axis)} ${s.value}`)
         .join(", ");
-    const header = `Taste profile for ${archetype}`;
+    const header = archetype
+        ? `Taste profile for ${archetype}`
+        : "Taste profile";
     if (!metrics) return `${header}: ${axes}.`;
     return (
         `${header}. Intensity ${metrics.intensity} of 100, ` +
@@ -44,7 +50,7 @@ function buildAriaLabel(
     );
 }
 
-function RadarGradientDefs(): JSX.Element {
+export function RadarGradientDefs(): JSX.Element {
     return (
         <defs>
             <radialGradient id="taste-radial" cx="50%" cy="50%" r="50%">
@@ -56,7 +62,7 @@ function RadarGradientDefs(): JSX.Element {
     );
 }
 
-function RadarBody({
+export function RadarBody({
     data,
 }: {
     data: { axis: string; value: number }[];
@@ -93,6 +99,7 @@ export function TasteRadarChart({
     archetype,
     dimensions,
     intensityMetrics,
+    dataTestId = "taste-radar-chart",
 }: TasteRadarChartProps): JSX.Element {
     const scores = topAxes(dimensions, 7);
     const data = scores.map((s) => ({
@@ -101,13 +108,15 @@ export function TasteRadarChart({
     }));
     const ariaLabel = buildAriaLabel(archetype, scores, intensityMetrics);
     return (
-        <div className="taste-radar">
-            <div className="taste-radar__title">
-                <span className="taste-radar__title-prefix">
-                    Taste Radar —{" "}
-                </span>
-                <ArchetypePill archetype={archetype} size="lg" />
-            </div>
+        <div className="taste-radar" data-testid={dataTestId}>
+            {archetype && (
+                <div className="taste-radar__title">
+                    <span className="taste-radar__title-prefix">
+                        Taste Radar —{" "}
+                    </span>
+                    <ArchetypePill archetype={archetype} size="lg" />
+                </div>
+            )}
             <div
                 className="taste-radar__chart-wrap"
                 role="img"

@@ -31,6 +31,9 @@ export * from './roster-availability.schema.js';
 // Taste Profile (ROK-948)
 export * from './taste-profile.schema.js';
 
+// Game Taste Vectors (ROK-1082)
+export * from './game-taste.schema.js';
+
 // Roster Assignments (ROK-114)
 export * from './roster.schema.js';
 
