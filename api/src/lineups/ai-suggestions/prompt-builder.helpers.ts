@@ -27,12 +27,26 @@ function topAxes(
     .slice(0, n);
 }
 
+function sourceLabel(source: CandidateContext['source']): string {
+  if (source === 'wildcard_popular') return 'WILDCARD: community favourite';
+  if (source === 'wildcard_sale') return 'WILDCARD: deep sale';
+  if (source === 'taste_discovery') return 'TASTE-MATCH: discovery';
+  return 'TASTE-MATCH';
+}
+
 function describeCandidate(c: CandidateContext, voterTotal: number): string {
   const axes = topAxes(c.dimensions, CANDIDATE_AXIS_COUNT)
     .map((a) => `${a.axis}:${a.score.toFixed(2)}`)
     .join(', ');
-  const sim = c.similarity.toFixed(3);
+  const simLabel =
+    c.source === 'wildcard_popular' || c.source === 'wildcard_sale'
+      ? 'sim=n/a'
+      : `sim=${c.similarity.toFixed(3)}`;
   const ownership = `${c.ownershipCount}/${voterTotal} voters own`;
+  const community =
+    c.communityOwnerCount === 0
+      ? 'DISCOVERY (0 community owners)'
+      : `${c.communityOwnerCount} community owners`;
   const players = c.playerCount
     ? `${c.playerCount.min}-${c.playerCount.max} players`
     : 'players unknown';
@@ -42,7 +56,8 @@ function describeCandidate(c: CandidateContext, voterTotal: number): string {
       : c.nonOwnerPrice != null
         ? `full price $${c.nonOwnerPrice.toFixed(2)}`
         : 'price unknown';
-  return `- id=${c.gameId} "${c.name}" sim=${sim} ${ownership} ${players} ${sale} axes=[${axes}]`;
+  const axesPart = axes ? `axes=[${axes}]` : 'axes=(no vector data)';
+  return `- [${sourceLabel(c.source)}] id=${c.gameId} "${c.name}" ${simLabel} ${ownership} ${community} ${players} ${sale} ${axesPart}`;
 }
 
 function describeVoter(profile: VoterProfile): string {
@@ -98,10 +113,21 @@ function scopeClause(strategy: VoterScopeStrategy, voterCount: number): string {
 const CURATOR_ROLE = [
   'You are a games curator for a community gaming night. The Raid Ledger',
   'product has already filtered the candidate pool to multiplayer-capable,',
-  'group-sized, in-corpus games that pass vector similarity to the voter',
-  'centroid. YOUR JOB IS NOT TO RE-RANK THE VECTOR OUTPUT. Your job is to',
-  'pick the 3-7 games you would genuinely recommend tonight, treating the',
-  'candidate list as a menu you can reject items from.',
+  'group-sized games. The pool mixes four kinds of candidates — each one',
+  'is tagged in the list below:',
+  '  - [TASTE-MATCH]            vector-similar to the voter centroid; most',
+  '                              reliable signal, ranks by similarity.',
+  '  - [TASTE-MATCH: discovery] vector-similar AND zero community owners —',
+  '                              untried games the group might genuinely like.',
+  '  - [WILDCARD: community favourite] NOT taste-matched, but titles the',
+  '                              community has put the most hours into.',
+  '                              Worth considering as a crowd-pleaser.',
+  '  - [WILDCARD: deep sale]     NOT taste-matched, currently on a steep',
+  '                              discount (≥50% off). Opportunistic pick.',
+  '',
+  'YOUR JOB IS NOT TO RE-RANK THE VECTOR OUTPUT. Your job is to pick the',
+  '3-7 games you would genuinely recommend tonight, treating the candidate',
+  'list as a menu you can reject from.',
 ].join(' ');
 
 const CURATOR_RULES = [
@@ -109,13 +135,15 @@ const CURATOR_RULES = [
   '1. Pick 3 to 7 games. If fewer than 3 candidates feel genuinely worth recommending, pick fewer — do not pad.',
   '2. MIX GENRES across your picks. If 4 candidates are all fighting games, pick AT MOST 1.',
   "3. AVOID repeating the community's recent lineup-winner genres (listed below) — 2+ consecutive wins in the same genre = skip that genre this round.",
-  '4. For each pick, your reasoning must compare it to an alternative: "I chose X over Y because ..."',
-  '5. Priority order when picks are close:',
+  '4. DISCOVERY REQUIREMENT — Common Ground already shows the community what they already own. AT LEAST 30% of your picks (or at least 1, whichever is greater) MUST be tagged "DISCOVERY (0 community owners)" in the candidate list. Picks already well-owned by the community belong on Common Ground, not in your curated list.',
+  '5. WILDCARD OPPORTUNITY — try to include ONE wildcard pick (either [WILDCARD: community favourite] or [WILDCARD: deep sale]) when a genuinely compelling one exists. These are intentionally not taste-matched; they are meant to mix things up. Do not force a wildcard if none fit, but do not reflexively reject them either.',
+  '6. For each pick, your reasoning must compare it to an alternative: "I chose X over Y because ..." If the pick is a wildcard, the reasoning should note that (e.g. "wildcard pick — 85% off and the community already has 500+ hours in it").',
+  '7. Priority order when picks are close:',
   '   (a) Group-size fit (player range tightly matches voter count)',
   '   (b) Ownership (at least one voter already owns it — lower friction)',
   '   (c) Sale status (current deal)',
   '   (d) Per-voter axis alignment',
-  '6. Return picks in the order of your own conviction — the first pick is your STRONGEST recommendation.',
+  '8. Return picks in the order of your own conviction — the first pick is your STRONGEST recommendation.',
 ].join(' ');
 
 const OUTPUT_FORMAT = [

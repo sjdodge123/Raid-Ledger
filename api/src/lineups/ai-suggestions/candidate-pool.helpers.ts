@@ -4,22 +4,56 @@ import type { SimilarGameDto } from '@raid-ledger/contract';
 import type { GameTasteService } from '../../game-taste/game-taste.service';
 import * as schema from '../../drizzle/schema';
 import type { VoterScopeStrategy } from './voter-scope.helpers';
+import {
+  loadAllWildcards,
+  WILDCARD_POPULAR_SLOTS,
+  WILDCARD_SALE_SLOTS,
+  type WildcardCandidate,
+} from './wildcard.helpers';
+
+/** Tag explaining WHERE a candidate came from (prompt surfaces this). */
+export type CandidateOrigin =
+  | 'taste_match'
+  | 'taste_discovery'
+  | 'wildcard_popular'
+  | 'wildcard_sale';
+
+/** SimilarGameDto plus its provenance for prompt annotation. */
+interface TaggedSimilar extends SimilarGameDto {
+  source: CandidateOrigin;
+}
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 /**
  * Candidate pool size pulled from the vector ranker before filtering by
- * player count and ownership. Wider than the 50 we feed the LLM so we
- * can afford to drop any that fail the player-count rule.
+ * player count and ownership. Widened (2026-04-22) from 70 → 120 so
+ * after removing already-nominated + last-winners + player-count
+ * failures we still have enough ownership-diverse candidates to fill
+ * a balanced LLM pool.
  */
-export const CANDIDATE_POOL_SIZE = 70;
+export const CANDIDATE_POOL_SIZE = 120;
 
 /**
- * How many finalists we hand to the LLM per prompt (Option E, 2026-04-22).
- * Widened from 30 → 50 so the LLM has room to REJECT picks and curate
- * a selective 3-7 rather than rubber-stamp the vector top-N order.
+ * How many finalists we hand to the LLM per prompt. Option E curator
+ * pattern: the LLM picks 3-7 from this pool, with permission to reject.
  */
 export const LLM_POOL_SIZE = 50;
+
+/**
+ * Of the taste-matched slice, at least this many must be "discovery
+ * picks" (zero community ownership). Otherwise the pool skews heavily
+ * toward well-owned games because vector rank correlates with play
+ * data, and the LLM's "discovery picks" rule has nothing to choose
+ * from.
+ */
+export const DISCOVERY_POOL_FLOOR = 10;
+
+/** Slots reserved for wildcard candidates (popular + deep-sale). */
+export const WILDCARD_POOL_SIZE = WILDCARD_POPULAR_SLOTS + WILDCARD_SALE_SLOTS;
+
+/** Slots allocated to taste-matched candidates (similarity + discovery). */
+export const TASTE_POOL_SIZE = LLM_POOL_SIZE - WILDCARD_POOL_SIZE;
 
 /** How many past winners we exclude (spec: last-3-winners). */
 const RECENT_WINNER_WINDOW = 3;
@@ -105,15 +139,87 @@ async function filterByPlayerCount(
 }
 
 /**
- * Build the candidate pool fed to the LLM.
+ * Load community-wide Steam ownership count for each candidate so we
+ * can partition the pool into "owned" vs "discovery" before handing
+ * it to the LLM. One batched query over all candidate ids.
+ */
+async function loadCommunityOwnership(
+  db: Db,
+  gameIds: number[],
+): Promise<Map<number, number>> {
+  if (gameIds.length === 0) return new Map();
+  const rows = await db.execute<{ game_id: number; owner_count: number }>(sql`
+    SELECT g.id AS game_id,
+           COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0)::int AS owner_count
+    FROM games g
+    LEFT JOIN game_interests gi ON gi.game_id = g.id
+    WHERE g.id IN (${sql.join(
+      gameIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})
+    GROUP BY g.id
+  `);
+  const map = new Map<number, number>();
+  for (const r of rows) map.set(r.game_id, r.owner_count);
+  return map;
+}
+
+/**
+ * Split a similarity-ordered candidate list into the final LLM pool:
+ * top-N owned + top-M unowned (discovery), both preserving similarity
+ * order. The "owned" bucket is trimmed first so we always reserve the
+ * discovery floor even when the similarity top-N is dominated by
+ * owned games.
+ */
+function balanceCandidatePool<T extends { gameId: number }>(
+  ordered: T[],
+  ownerCounts: Map<number, number>,
+  total: number,
+  discoveryFloor: number,
+): T[] {
+  const owned = ordered.filter((c) => (ownerCounts.get(c.gameId) ?? 0) > 0);
+  const discovery = ordered.filter((c) => (ownerCounts.get(c.gameId) ?? 0) === 0);
+  const discoveryTake = Math.min(discoveryFloor, discovery.length);
+  const ownedTake = Math.min(total - discoveryTake, owned.length);
+  return [...owned.slice(0, ownedTake), ...discovery.slice(0, discoveryTake)];
+}
+
+function tagTasteMatched(
+  ordered: SimilarGameDto[],
+  ownerCounts: Map<number, number>,
+  total: number,
+  discoveryFloor: number,
+): TaggedSimilar[] {
+  const balanced = balanceCandidatePool(
+    ordered,
+    ownerCounts,
+    total,
+    discoveryFloor,
+  );
+  return balanced.map((c) => ({
+    ...c,
+    source:
+      (ownerCounts.get(c.gameId) ?? 0) === 0 ? 'taste_discovery' : 'taste_match',
+  }));
+}
+
+/**
+ * Build the candidate pool fed to the LLM — a blend of taste-matched
+ * vector picks, unowned discovery picks, and wildcards (popular +
+ * deep-sale) that the vector ranker would never have surfaced.
  *
  *   1. pgvector similarity: top-N games nearest to the voter centroid
- *      (multiplayer-only — Community Lineup is group play).
- *   2. Subtract games already nominated on this lineup.
- *   3. Subtract games that won any of the last 3 decided lineups.
- *   4. Filter by player count: require `playerCount.max >= min`
- *      (private → voter count; public/fallback → max(3, voterCount)).
- *   5. Truncate to LLM_POOL_SIZE.
+ *      (multiplayer-only).
+ *   2. Subtract already-nominated + last-3-winners.
+ *   3. Filter by player count (private → voter count; public → ≥3).
+ *   4. Partition taste-matched slice: majority similarity + reserved
+ *      discovery floor (commOwn=0).
+ *   5. Wildcards (not taste-matched, serendipity picks): top-N by
+ *      total community Steam playtime, and top-N currently on deep
+ *      sale. Both filtered by the same player-count rule + multiplayer
+ *      tag set. Deduplicated vs the taste-matched slice.
+ *   6. Merge + cap at LLM_POOL_SIZE with per-candidate origin tags
+ *      surfaced in the prompt.
  */
 export async function buildCandidatePool(
   db: Db,
@@ -121,7 +227,7 @@ export async function buildCandidatePool(
   voterIds: number[],
   lineupId: number,
   strategy: VoterScopeStrategy,
-): Promise<SimilarGameDto[]> {
+): Promise<TaggedSimilar[]> {
   if (voterIds.length === 0) return [];
   const [candidates, already, winners] = await Promise.all([
     gameTaste.findSimilar({
@@ -141,7 +247,30 @@ export async function buildCandidatePool(
     passFilters.map((c) => c.gameId),
     minPlayers,
   );
-  return passFilters.filter((c) => allowed.has(c.gameId)).slice(0, LLM_POOL_SIZE);
+  const eligible = passFilters.filter((c) => allowed.has(c.gameId));
+  const ownerCounts = await loadCommunityOwnership(
+    db,
+    eligible.map((c) => c.gameId),
+  );
+  const tasteMatched = tagTasteMatched(
+    eligible,
+    ownerCounts,
+    TASTE_POOL_SIZE,
+    DISCOVERY_POOL_FLOOR,
+  );
+
+  // Wildcards come from a separate slice: popular-by-community-hours
+  // and deep-sale, both outside the vector-similarity path. We
+  // dedupe against taste-matched picks + exclusions so the same
+  // game never shows up twice under different banners.
+  const tasteMatchedIds = new Set(tasteMatched.map((c) => c.gameId));
+  const wildcardExclude = new Set<number>([
+    ...already,
+    ...winners,
+    ...tasteMatchedIds,
+  ]);
+  const wildcards = await loadAllWildcards(db, wildcardExclude, minPlayers);
+  return [...tasteMatched, ...wildcards.slice(0, WILDCARD_POOL_SIZE)];
 }
 
 /**
@@ -155,8 +284,13 @@ export interface CandidateContext {
   name: string;
   coverUrl: string | null;
   similarity: number;
+  /** Provenance tag surfaced to the LLM so it can reason about source. */
+  source: CandidateOrigin;
   dimensions: Record<string, number> | null;
+  /** Voter-scoped ownership count (drives prompt's ownership-bias signal). */
   ownershipCount: number;
+  /** Community-wide ownership count (drives "discovery vs owned" signal). */
+  communityOwnerCount: number;
   playerCount: { min: number; max: number } | null;
   saleCut: number | null;
   nonOwnerPrice: number | null;
@@ -167,6 +301,7 @@ interface CandidateMetaRow {
   game_id: number;
   dimensions: Record<string, number> | null;
   ownership_count: number;
+  community_owner_count: number;
   player_count: { min: number; max: number } | null;
   sale_cut: number | null;
   non_owner_price: number | null;
@@ -174,7 +309,7 @@ interface CandidateMetaRow {
 
 export async function loadCandidateContext(
   db: Db,
-  candidates: SimilarGameDto[],
+  candidates: TaggedSimilar[],
   voterIds: number[],
 ): Promise<CandidateContext[]> {
   if (candidates.length === 0) return [];
@@ -191,6 +326,7 @@ export async function loadCandidateContext(
       g.id AS game_id,
       gtv.dimensions AS dimensions,
       COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library' ${voterFilter}), 0)::int AS ownership_count,
+      COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0)::int AS community_owner_count,
       g.player_count AS player_count,
       g.itad_current_cut AS sale_cut,
       CASE WHEN g.itad_current_price IS NOT NULL THEN g.itad_current_price::float ELSE NULL END AS non_owner_price
@@ -211,11 +347,18 @@ export async function loadCandidateContext(
       name: c.name,
       coverUrl: c.coverUrl,
       similarity: c.similarity,
+      source: c.source,
       dimensions: row?.dimensions ?? null,
       ownershipCount: row?.ownership_count ?? 0,
+      communityOwnerCount: row?.community_owner_count ?? 0,
       playerCount: row?.player_count ?? null,
       saleCut: row?.sale_cut ?? null,
       nonOwnerPrice: row?.non_owner_price ?? null,
     };
   });
 }
+
+// WildcardCandidate is re-exported via the TaggedSimilar type above;
+// anything that imports wildcard types directly can grab them from
+// ./wildcard.helpers.
+export type { WildcardCandidate };
