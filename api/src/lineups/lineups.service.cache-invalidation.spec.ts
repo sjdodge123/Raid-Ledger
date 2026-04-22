@@ -186,9 +186,9 @@ describe('LineupsService — AI suggestions cache invalidation (ROK-931)', () =>
     const loggerWarnSpy = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
-    const { service, invalidator } = await buildHarness(async () => {
-      throw new Error('synthetic invalidator failure');
-    });
+    const { service, invalidator } = await buildHarness(() =>
+      Promise.reject(new Error('synthetic invalidator failure')),
+    );
 
     // Parent must resolve — cache invalidation failure must not surface.
     await expect(
