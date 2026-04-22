@@ -84,6 +84,16 @@ export const SimilarGamesRequestSchema = z
     userIds: z.array(z.number().int()).optional(),
     gameId: z.number().int().optional(),
     limit: z.number().int().min(1).max(50).default(10),
+    /**
+     * Exclude solo-only titles from the candidate pool (ROK-931).
+     *
+     * When true the query filters to rows whose `dimensions` jsonb has
+     * at least one of `pvp`, `co_op`, `mmo`, `battle_royale`, or `moba`
+     * greater than zero. Community lineups are group play by design;
+     * ROK-1082 alignment testing showed unfiltered output includes
+     * solo-only games (e.g. *Dead In Bermuda*) that are wasted picks.
+     */
+    multiplayerOnly: z.boolean().optional(),
   })
   .refine(
     (input) => {
