@@ -52,6 +52,7 @@ export async function findSimilarGames(
     limit,
     minConfidence,
     excludeId,
+    input.multiplayerOnly === true,
   );
   return rows.map(toSimilarGameDto);
 }
@@ -123,10 +124,22 @@ async function executeSimilarityQuery(
   limit: number,
   minConfidence: number,
   excludeGameId: number | null,
+  multiplayerOnly: boolean,
 ): Promise<SimilarityRow[]> {
   const targetLiteral = `[${target.join(',')}]`;
   const excludeClause =
     excludeGameId !== null ? sql`AND g.id <> ${excludeGameId}` : sql``;
+  // ROK-931: Community Lineup is group play, so solo-only titles are
+  // filtered out up-front. The OR-list is static — no injection surface.
+  const multiplayerClause = multiplayerOnly
+    ? sql`AND (
+        (gtv.dimensions->>'pvp')::float > 0
+        OR (gtv.dimensions->>'co_op')::float > 0
+        OR (gtv.dimensions->>'mmo')::float > 0
+        OR (gtv.dimensions->>'battle_royale')::float > 0
+        OR (gtv.dimensions->>'moba')::float > 0
+      )`
+    : sql``;
   // No HNSW index on `vector` yet — the spec defers it until the corpus
   // exceeds ~500 games. A seqscan + in-memory sort over ~2K rows is still
   // sub-ms; revisit if the corpus grows much past 5K or if the confidence
@@ -140,6 +153,7 @@ async function executeSimilarityQuery(
       AND g.hidden = false
       AND gtv.confidence >= ${minConfidence}
       ${excludeClause}
+      ${multiplayerClause}
     ORDER BY gtv.vector <=> ${targetLiteral}::vector ASC
     LIMIT ${limit}
   `);

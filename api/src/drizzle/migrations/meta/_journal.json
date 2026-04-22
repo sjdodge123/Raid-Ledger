@@ -897,6 +897,13 @@
       "when": 1776831898605,
       "tag": "0127_player_taste_archetype_jsonb",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1776891181152,
+      "tag": "0128_majestic_junta",
+      "breakpoints": true
     }
   ]
 }

@@ -16,6 +16,21 @@ interface Props {
     onNominate: (gameId: number) => void;
     isNominating: boolean;
     atCap: boolean;
+    /** ROK-931: mark this card as LLM-suggested with a ✨ AI badge + tooltip reasoning. */
+    aiSuggested?: boolean;
+    aiReasoning?: string;
+}
+
+/** Violet ✨ AI Pick chip rendered on cards blended in from the AI suggester. */
+function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
+    return (
+        <span
+            className="absolute top-2 left-2 z-10 px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/90 text-white rounded shadow-sm"
+            title={reasoning ?? 'Suggested by AI'}
+        >
+            ✨ AI Pick
+        </span>
+    );
 }
 
 /** Emerald badge for library owner count. */
@@ -117,10 +132,14 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
 }
 
 /** Game card for the Common Ground panel. */
-export function CommonGroundGameCard({ game, onNominate, isNominating, atCap }: Props): JSX.Element {
+export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, aiSuggested, aiReasoning }: Props): JSX.Element {
+    const borderCls = aiSuggested
+        ? 'border-violet-500/50 hover:border-violet-400/80'
+        : 'border-edge/50 hover:border-emerald-500/50';
     return (
-        <div className="group relative w-[180px] flex-shrink-0 rounded-xl overflow-hidden bg-panel border border-edge/50 hover:border-emerald-500/50 hover:shadow-lg transition-all cursor-pointer">
+        <div className={`group relative w-[180px] flex-shrink-0 rounded-xl overflow-hidden bg-panel border ${borderCls} hover:shadow-lg transition-all cursor-pointer`}>
             <div className="relative aspect-[3/4] bg-panel">
+                {aiSuggested && <AiBadge reasoning={aiReasoning} />}
                 {game.coverUrl
                     ? <CoverImage src={game.coverUrl} alt={game.gameName} />
                     : <CoverPlaceholder />}
