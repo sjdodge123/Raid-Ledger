@@ -4,22 +4,20 @@ import type {
 } from '../../ai/llm-provider.interface';
 import type { CandidateContext } from './candidate-pool.helpers';
 import type { VoterScopeStrategy } from './voter-scope.helpers';
+import type { VoterProfile } from './voter-profile.helpers';
+import type { RecentWinner } from './recent-winners.helpers';
 
-/** Cap LLM response tokens — 10 suggestions × ~60 tokens each ≈ 600. */
-const MAX_RESPONSE_TOKENS = 800;
+/** Cap LLM response tokens — Option E asks for fewer but richer picks. */
+const MAX_RESPONSE_TOKENS = 1200;
 /** Slight temperature so the LLM has some latitude in its reasoning. */
 const PROMPT_TEMPERATURE = 0.3;
 
-/**
- * Top-N axes by score — feeds the LLM a compact narrative instead of
- * the full 24-dim vector. 5 keeps prompt under control and still
- * captures the "what this group likes" signal.
- */
-const TOP_AXES = 5;
+/** Top-N candidate axes surfaced per game — keeps the prompt focused. */
+const CANDIDATE_AXIS_COUNT = 5;
 
 function topAxes(
   dims: Record<string, number> | null,
-  n: number = TOP_AXES,
+  n: number,
 ): { axis: string; score: number }[] {
   if (!dims) return [];
   return Object.entries(dims)
@@ -30,101 +28,125 @@ function topAxes(
 }
 
 function describeCandidate(c: CandidateContext, voterTotal: number): string {
-  const axes = topAxes(c.dimensions)
+  const axes = topAxes(c.dimensions, CANDIDATE_AXIS_COUNT)
     .map((a) => `${a.axis}:${a.score.toFixed(2)}`)
     .join(', ');
   const sim = c.similarity.toFixed(3);
-  const ownership = `${c.ownershipCount}/${voterTotal} own`;
+  const ownership = `${c.ownershipCount}/${voterTotal} voters own`;
   const players = c.playerCount
     ? `${c.playerCount.min}-${c.playerCount.max} players`
     : 'players unknown';
   const sale =
     c.saleCut != null && c.saleCut > 0
-      ? `ON SALE -${c.saleCut}%${c.nonOwnerPrice != null ? ` $${c.nonOwnerPrice.toFixed(2)}` : ''}`
+      ? `SALE -${c.saleCut}%${c.nonOwnerPrice != null ? ` $${c.nonOwnerPrice.toFixed(2)}` : ''}`
       : c.nonOwnerPrice != null
         ? `full price $${c.nonOwnerPrice.toFixed(2)}`
         : 'price unknown';
-  return `- id=${c.gameId} name="${c.name}" similarity=${sim} ${ownership} ${players} ${sale} top_axes=[${axes}]`;
+  return `- id=${c.gameId} "${c.name}" sim=${sim} ${ownership} ${players} ${sale} axes=[${axes}]`;
 }
 
-function strategyGuidance(
-  strategy: VoterScopeStrategy,
-  voterCount: number,
-  minPlayerCount: number,
-): string {
-  const sizingRule = `Every candidate already supports at least ${minPlayerCount} concurrent players. TOP PRIORITY: pick games whose player-count range hugs ${voterCount} voters — a 2-4 or 3-8 co-op is a stronger fit than a 32-slot lobby, even if the big lobby scores higher on taste. This outranks every other bias.`;
+function describeVoter(profile: VoterProfile): string {
+  const axes = profile.topAxes
+    .map((a) => `${a.axis}:${a.score.toFixed(2)}`)
+    .join(', ');
+  const arch = profile.archetype ?? 'unclassified';
+  return `- ${profile.username} (archetype: ${arch}) top axes: [${axes}]`;
+}
+
+function describeWinner(w: RecentWinner): string {
+  const tagPreview = w.tags.slice(0, 4).join(', ');
+  return `- "${w.name}" tags=[${tagPreview}]`;
+}
+
+function sizingClause(voterCount: number, minPlayerCount: number): string {
+  return `Group size is ${voterCount} voter${voterCount === 1 ? '' : 's'}. Every candidate already supports at least ${minPlayerCount} concurrent players, so playability is not in question — prefer games whose player range hugs ${voterCount} rather than massive max-lobby titles.`;
+}
+
+function scopeClause(strategy: VoterScopeStrategy, voterCount: number): string {
   if (strategy === 'small_group') {
-    return [
-      `This is a SMALL GROUP (${voterCount} voters).`,
-      'Lean heavily on their individual taste overlap. Favor hidden gems',
-      'the group has not tried yet.',
-      sizingRule,
-    ].join(' ');
+    return `This is a SMALL GROUP (${voterCount} voters). Lean into individual voter tastes below; surface hidden gems this exact group hasn't tried.`;
   }
   if (strategy === 'partial') {
-    return [
-      `This is a PARTIAL GROUP (${voterCount} voters).`,
-      "Blend community-wide patterns with voter-specific libraries. Favor",
-      "games that match the group's strongest shared axes.",
-      sizingRule,
-    ].join(' ');
+    return `This is a PARTIAL group (${voterCount} voters). Look for the strongest shared axes across voters and balance against community-wide appeal.`;
   }
-  return [
-    `This is a FULL COMMUNITY (${voterCount} voters).`,
-    'Rely on community-wide patterns: popular genres, frequently played',
-    'categories, trending community interests. Avoid niche picks that',
-    'only 1-2 members would enjoy.',
-    sizingRule,
-  ].join(' ');
+  return `This is the FULL COMMUNITY (${voterCount} voters). Favour broad appeal and community-level genre trends over per-voter niche matches.`;
 }
 
-const BIAS_RULES = [
-  'Ranking priority — apply in order, top rule wins over all others:',
-  '1. GROUP-SIZE FIT (highest priority) — prefer games whose player range hugs the voter count. A 4-max-player co-op for 3 voters beats a 32-slot lobby at the same taste fit. This is the dominant bias; do not trade it away for any other signal.',
-  '2. Ownership bias — if two games tie on group-size fit, prefer the one at least one voter already owns (lower friction to play tonight).',
-  '3. Sale bias — tie-break next on games currently "ON SALE -N%" over full-price picks.',
-  '4. Taste-axis overlap — final tie-break using voter centroid top axes.',
+const CURATOR_ROLE = [
+  'You are a games curator for a community gaming night. The Raid Ledger',
+  'product has already filtered the candidate pool to multiplayer-capable,',
+  'group-sized, in-corpus games that pass vector similarity to the voter',
+  'centroid. YOUR JOB IS NOT TO RE-RANK THE VECTOR OUTPUT. Your job is to',
+  'pick the 3-7 games you would genuinely recommend tonight, treating the',
+  'candidate list as a menu you can reject items from.',
+].join(' ');
+
+const CURATOR_RULES = [
+  'Rules:',
+  '1. Pick 3 to 7 games. If fewer than 3 candidates feel genuinely worth recommending, pick fewer — do not pad.',
+  '2. MIX GENRES across your picks. If 4 candidates are all fighting games, pick AT MOST 1.',
+  "3. AVOID repeating the community's recent lineup-winner genres (listed below) — 2+ consecutive wins in the same genre = skip that genre this round.",
+  '4. For each pick, your reasoning must compare it to an alternative: "I chose X over Y because ..."',
+  '5. Priority order when picks are close:',
+  '   (a) Group-size fit (player range tightly matches voter count)',
+  '   (b) Ownership (at least one voter already owns it — lower friction)',
+  '   (c) Sale status (current deal)',
+  '   (d) Per-voter axis alignment',
+  '6. Return picks in the order of your own conviction — the first pick is your STRONGEST recommendation.',
+].join(' ');
+
+const OUTPUT_FORMAT = [
+  'Output:',
+  'Respond ONLY with a single JSON object of the form:',
+  '{"suggestions":[{"gameId":<int>,"reasoning":"..."}]}',
+  'Do NOT include confidence, tier, rank, or any other field — your output ORDER is the ranking.',
+  'Do NOT include prose, markdown, or code fences.',
+  'Each reasoning line must be under 280 chars and mention the comparison (rule 4).',
 ].join(' ');
 
 /**
- * Compose the `LlmChatOptions` for a single suggestion pass. System
- * prompt explains the task + constraints; user prompt carries the voter
- * centroid summary + candidate shortlist + the required output schema.
+ * Compose the `LlmChatOptions` for a curator-mode suggestion pass.
+ *
+ * Prompt structure:
+ *   1. System — curator role + rules + output format
+ *   2. User — voter profiles (individuals) + recent winners +
+ *      candidate pool (richly annotated).
  */
 export function buildSuggestionPrompt(params: {
   strategy: VoterScopeStrategy;
   voterCount: number;
   minPlayerCount: number;
-  centroidAxes: { axis: string; score: number }[];
+  voterProfiles: VoterProfile[];
+  recentWinners: RecentWinner[];
   candidates: CandidateContext[];
 }): LlmChatOptions {
-  const systemPrompt = [
-    'You recommend video games for a community gaming lineup.',
-    'You will receive a ranked list of candidate games (already filtered to',
-    'multiplayer-capable, group-sized, in-corpus titles) and a voter-taste summary.',
-    'Your job: pick 5-10 games that best fit the group, with brief reasoning.',
-    BIAS_RULES,
-    'Respond ONLY with a single JSON object of the form:',
-    '{"suggestions":[{"gameId":<int>,"confidence":<0..1>,"reasoning":"..."}]}',
-    'Do not add prose, code fences, or extra keys. Only suggest games that',
-    'appear in the candidate list by id. Keep `reasoning` under 280 chars.',
-    'Mention the strongest single signal you used (ownership, sale, axis fit,',
-    'or group-fit) in each reasoning line.',
-  ].join(' ');
+  const systemPrompt = [CURATOR_ROLE, CURATOR_RULES, OUTPUT_FORMAT].join('\n\n');
 
-  const centroidLine = params.centroidAxes.length
-    ? params.centroidAxes
-        .map((a) => `${a.axis}:${a.score.toFixed(2)}`)
-        .join(', ')
-    : '(no voter vector data)';
+  const winnersBlock =
+    params.recentWinners.length > 0
+      ? [
+          'Recent lineup winners (do not re-pick these genres if 2+ consecutive):',
+          ...params.recentWinners.map(describeWinner),
+        ].join('\n')
+      : 'Recent lineup winners: (none yet — community has no decided lineups)';
+
+  const votersBlock =
+    params.voterProfiles.length > 0
+      ? [
+          `Voter profiles (${params.voterProfiles.length} individuals — reason about each, not just the group):`,
+          ...params.voterProfiles.map(describeVoter),
+        ].join('\n')
+      : '(voter profiles unavailable — fall back on candidate axis data alone)';
 
   const userContent = [
-    strategyGuidance(params.strategy, params.voterCount, params.minPlayerCount),
+    scopeClause(params.strategy, params.voterCount),
+    sizingClause(params.voterCount, params.minPlayerCount),
     '',
-    `Voter count: ${params.voterCount}`,
-    `Voter centroid top axes: ${centroidLine}`,
+    votersBlock,
     '',
-    'Candidate games (ownership = voters who already own via Steam; players = min-max concurrent players; sale = current deal cut):',
+    winnersBlock,
+    '',
+    'Candidate pool (pre-ranked by vector similarity to voter centroid; you can reject any):',
     ...params.candidates.map((c) => describeCandidate(c, params.voterCount)),
     '',
     'Return JSON only.',
@@ -140,29 +162,4 @@ export function buildSuggestionPrompt(params: {
     temperature: PROMPT_TEMPERATURE,
     responseFormat: 'json',
   };
-}
-
-/**
- * Compute the element-wise mean of a list of equal-length taste
- * dimension maps. Used to feed the voter centroid to the prompt
- * builder. Returns an empty map when `vectors` is empty.
- */
-export function computeCentroidAxes(
-  vectors: Record<string, number>[],
-): { axis: string; score: number }[] {
-  if (vectors.length === 0) return [];
-  const totals = new Map<string, number>();
-  for (const v of vectors) {
-    for (const [axis, score] of Object.entries(v)) {
-      totals.set(axis, (totals.get(axis) ?? 0) + Number(score));
-    }
-  }
-  const mean = [...totals.entries()].map(([axis, total]) => ({
-    axis,
-    score: total / vectors.length,
-  }));
-  return mean
-    .filter((a) => a.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, TOP_AXES);
 }

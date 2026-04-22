@@ -41,8 +41,8 @@ function makeMockLlmService(responses: (LlmChatResponse | Error)[]): {
 
 const VALID_PAYLOAD = JSON.stringify({
   suggestions: [
-    { gameId: 42, confidence: 0.8, reasoning: 'Matches co-op taste' },
-    { gameId: 43, confidence: 0.6, reasoning: 'Shared RPG axis' },
+    { gameId: 42, reasoning: 'Matches co-op taste' },
+    { gameId: 43, reasoning: 'Shared RPG axis' },
   ],
 });
 
@@ -57,7 +57,10 @@ describe('callAndParseLlmOutput (ROK-931)', () => {
     expect(chat).toHaveBeenCalledTimes(1);
     expect(result.suggestions).toHaveLength(2);
     expect(result.suggestions[0]).toEqual(
-      expect.objectContaining({ gameId: 42, confidence: 0.8 }),
+      expect.objectContaining({
+        gameId: 42,
+        reasoning: 'Matches co-op taste',
+      }),
     );
   });
 

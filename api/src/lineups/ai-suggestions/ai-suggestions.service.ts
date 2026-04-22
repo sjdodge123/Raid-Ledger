@@ -5,7 +5,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -25,10 +25,9 @@ import {
   minimumPlayerCount,
   type CandidateContext,
 } from './candidate-pool.helpers';
-import {
-  buildSuggestionPrompt,
-  computeCentroidAxes,
-} from './prompt-builder.helpers';
+import { buildSuggestionPrompt } from './prompt-builder.helpers';
+import { loadVoterProfiles } from './voter-profile.helpers';
+import { loadRecentWinners } from './recent-winners.helpers';
 import { callAndParseLlmOutput, LLM_FEATURE_TAG } from './llm-output.helpers';
 import { enrichSuggestions } from './enrichment.helpers';
 import {
@@ -153,29 +152,25 @@ export class AiSuggestionsService {
     scope: ResolvedVoterScope,
     candidates: CandidateContext[],
   ): ReturnType<typeof callAndParseLlmOutput> {
-    const voterVectors = await this.loadVoterDimensions(scope.userIds);
-    const centroid = computeCentroidAxes(voterVectors);
+    // Option E (2026-04-22): feed the curator per-voter profiles and
+    // recent winners instead of just a centroid, so the LLM can reason
+    // about individuals + history rather than rubber-stamping the
+    // vector-ranked order.
+    const [voterProfiles, recentWinners] = await Promise.all([
+      loadVoterProfiles(this.db, scope.userIds),
+      loadRecentWinners(this.db),
+    ]);
     const options = buildSuggestionPrompt({
       strategy: scope.strategy,
       voterCount: scope.userIds.length,
       minPlayerCount: minimumPlayerCount(scope.userIds.length, scope.strategy),
-      centroidAxes: centroid,
+      voterProfiles,
+      recentWinners,
       candidates,
     });
     return callAndParseLlmOutput(this.llmService, options, {
       feature: LLM_FEATURE_TAG,
     });
-  }
-
-  private async loadVoterDimensions(
-    userIds: number[],
-  ): Promise<Record<string, number>[]> {
-    if (userIds.length === 0) return [];
-    const rows = await this.db
-      .select({ dimensions: schema.playerTasteVectors.dimensions })
-      .from(schema.playerTasteVectors)
-      .where(inArray(schema.playerTasteVectors.userId, userIds));
-    return rows.map((r) => r.dimensions as unknown as Record<string, number>);
   }
 
   private async persistAndReturn(

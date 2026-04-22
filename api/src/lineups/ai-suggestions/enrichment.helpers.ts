@@ -79,10 +79,25 @@ async function loadSuggestionMeta(
 }
 
 /**
- * Merge the LLM's `{gameId, confidence, reasoning}` list with
- * server-fetched metadata to produce the full response DTO.
- * Suggestions whose `gameId` isn't in the candidate pool (or whose
- * game row cannot be found) are dropped silently.
+ * Map LLM output position (0-based) to a confidence score in [0, 1].
+ * Option E (2026-04-22): LLM no longer emits its own confidence — we
+ * derive it from curator position so the first pick gets the highest
+ * confidence and the score decays linearly. Floor at 0.5 so even a
+ * low-ranked curator pick still reads as a positive recommendation.
+ */
+function positionToConfidence(index: number, total: number): number {
+  if (total <= 1) return 0.95;
+  const step = 0.45 / (total - 1);
+  return Math.max(0.5, 0.95 - step * index);
+}
+
+/**
+ * Merge the LLM's ordered `{gameId, reasoning}` list with server-
+ * fetched metadata to produce the full response DTO. Confidence is
+ * derived from the LLM's output position, not from the LLM itself —
+ * the curator's ORDER is the ranking. Suggestions whose `gameId`
+ * isn't in the candidate pool (or whose game row can't be found)
+ * are dropped silently.
  */
 export async function enrichSuggestions(
   db: Db,
@@ -101,29 +116,28 @@ export async function enrichSuggestions(
   );
   const metaById = new Map(meta.map((m) => [m.gameId, m]));
   const voterTotal = voterIds.length;
-  return filtered
-    .filter((s) => metaById.has(s.gameId))
-    .map((s) => {
-      const row = metaById.get(s.gameId);
-      if (!row) throw new Error(`Game ${s.gameId} missing after filter`);
-      return {
-        gameId: row.gameId,
-        name: row.gameName,
-        slug: row.slug,
-        coverUrl: row.coverUrl,
-        confidence: s.confidence,
-        reasoning: s.reasoning,
-        ownershipCount: row.ownershipCount,
-        voterTotal,
-        communityOwnerCount: row.communityOwnerCount,
-        wishlistCount: row.wishlistCount,
-        nonOwnerPrice: row.nonOwnerPrice,
-        itadCurrentCut: row.itadCurrentCut,
-        itadCurrentShop: row.itadCurrentShop,
-        itadCurrentUrl: row.itadCurrentUrl,
-        earlyAccess: row.earlyAccess,
-        itadTags: row.itadTags ?? [],
-        playerCount: row.playerCount,
-      };
-    });
+  const kept = filtered.filter((s) => metaById.has(s.gameId));
+  return kept.map((s, index) => {
+    const row = metaById.get(s.gameId);
+    if (!row) throw new Error(`Game ${s.gameId} missing after filter`);
+    return {
+      gameId: row.gameId,
+      name: row.gameName,
+      slug: row.slug,
+      coverUrl: row.coverUrl,
+      confidence: positionToConfidence(index, kept.length),
+      reasoning: s.reasoning,
+      ownershipCount: row.ownershipCount,
+      voterTotal,
+      communityOwnerCount: row.communityOwnerCount,
+      wishlistCount: row.wishlistCount,
+      nonOwnerPrice: row.nonOwnerPrice,
+      itadCurrentCut: row.itadCurrentCut,
+      itadCurrentShop: row.itadCurrentShop,
+      itadCurrentUrl: row.itadCurrentUrl,
+      earlyAccess: row.earlyAccess,
+      itadTags: row.itadTags ?? [],
+      playerCount: row.playerCount,
+    };
+  });
 }

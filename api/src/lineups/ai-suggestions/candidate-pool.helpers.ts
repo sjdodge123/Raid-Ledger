@@ -9,13 +9,17 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 /**
  * Candidate pool size pulled from the vector ranker before filtering by
- * player count and ownership. Slightly wider than the 30 we feed the
- * LLM so we can afford to drop a few that fail the player-count rule.
+ * player count and ownership. Wider than the 50 we feed the LLM so we
+ * can afford to drop any that fail the player-count rule.
  */
-export const CANDIDATE_POOL_SIZE = 40;
+export const CANDIDATE_POOL_SIZE = 70;
 
-/** How many finalists we hand to the LLM per prompt. */
-export const LLM_POOL_SIZE = 30;
+/**
+ * How many finalists we hand to the LLM per prompt (Option E, 2026-04-22).
+ * Widened from 30 → 50 so the LLM has room to REJECT picks and curate
+ * a selective 3-7 rather than rubber-stamp the vector top-N order.
+ */
+export const LLM_POOL_SIZE = 50;
 
 /** How many past winners we exclude (spec: last-3-winners). */
 const RECENT_WINNER_WINDOW = 3;

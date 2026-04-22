@@ -63,12 +63,20 @@ export type AiSuggestionsResponseDto = z.infer<
  * Cap of 10 items enforced at parse time; additional items are
  * truncated silently. Unknown `gameId`s are dropped after parse.
  */
+/**
+ * Curator-mode LLM output (Option E, 2026-04-22). The LLM returns its
+ * curated picks in order — position 0 is the strongest recommendation.
+ * Confidence is derived server-side from position, not from the LLM,
+ * because the LLM's own confidence numbers are unreliable (they tend
+ * to smoothly decrease with input order rather than reflect real
+ * judgment). `reasoning` stays required — it's the human-readable
+ * justification tied to THIS pick.
+ */
 export const AiSuggestionsLlmOutputSchema = z.object({
   suggestions: z
     .array(
       z.object({
         gameId: z.number().int(),
-        confidence: z.number().min(0).max(1),
         reasoning: z.string().min(1).max(280),
       }),
     )
