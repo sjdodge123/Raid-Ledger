@@ -12,7 +12,6 @@ import { computeSignalHash } from '../signal-hash.helpers';
 import {
   groupBy,
   groupMap,
-  loadCoPlayCounts,
   loadGameMetadata,
   loadSignalHashComponents,
 } from './aggregate-vectors-loaders';
@@ -25,7 +24,6 @@ interface BatchedInputs {
     number,
     { signalHash: string; intensityMetrics: NonNullable<unknown> }
   >;
-  coPlayCounts: Map<number, number>;
   eventGameId: Map<number, number>;
   interestsByUser: Map<number, Array<typeof schema.gameInterests.$inferSelect>>;
   presenceByUser: Map<
@@ -87,8 +85,9 @@ async function upsertVector(
     breadth: 0,
     consistency: 0,
   };
-  const coPlayPartners = batch.coPlayCounts.get(userId) ?? 0;
-  const archetype = deriveArchetype({ ...intensityMetrics, coPlayPartners });
+  // ROK-1083: deriveArchetype now returns a composed ArchetypeDto. The
+  // jsonb column persists it as-is (Drizzle handles jsonb serialization).
+  const archetype = deriveArchetype({ intensityMetrics, dimensions });
 
   await db
     .insert(schema.playerTasteVectors)
@@ -122,7 +121,6 @@ async function loadBatch(db: Db): Promise<BatchedInputs> {
     voice,
     events,
     existingVectors,
-    coPlayRows,
     hashComponents,
   ] = await Promise.all([
     db.select().from(schema.gameInterests),
@@ -153,7 +151,6 @@ async function loadBatch(db: Db): Promise<BatchedInputs> {
       .select({ id: schema.events.id, gameId: schema.events.gameId })
       .from(schema.events),
     db.select().from(schema.playerTasteVectors),
-    loadCoPlayCounts(db),
     loadSignalHashComponents(db),
   ]);
 
@@ -192,7 +189,6 @@ async function loadBatch(db: Db): Promise<BatchedInputs> {
   return {
     gameMap,
     existingByUser,
-    coPlayCounts: coPlayRows,
     eventGameId,
     interestsByUser,
     presenceByUser,

@@ -2,12 +2,14 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type {
+  ArchetypeDto,
   IntensityMetricsDto,
-  TasteProfileArchetype,
+  IntensityTier,
   TasteProfileDimensionsDto,
   TasteProfilePoolAxis,
 } from '@raid-ledger/contract';
 import { TASTE_PROFILE_AXIS_POOL } from '@raid-ledger/contract';
+import { TIER_DESCRIPTIONS } from '../archetype-copy';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -29,7 +31,7 @@ export interface TasteProfileResult {
     breadth: number;
     consistency: number;
   };
-  archetype: TasteProfileArchetype;
+  archetype: ArchetypeDto;
   coPlayPartners: CoPlayPartnerRow[];
   computedAt: string;
 }
@@ -38,8 +40,25 @@ export interface SimilarPlayerRow {
   userId: number;
   username: string;
   avatar: string | null;
-  archetype: TasteProfileArchetype;
+  intensityTier: IntensityTier;
   similarity: number;
+}
+
+/**
+ * Default archetype for users without a computed taste vector (or whose
+ * jsonb archetype is still NULL immediately after the 0127 migration).
+ * Matches the composed `ArchetypeDto` shape with no vector titles so the
+ * UI renders an intensity-only badge ("Casual Player").
+ */
+function emptyArchetype(): ArchetypeDto {
+  return {
+    intensityTier: 'Casual',
+    vectorTitles: [],
+    descriptions: {
+      tier: TIER_DESCRIPTIONS.Casual,
+      titles: [],
+    },
+  };
 }
 
 export async function getTasteProfile(
@@ -67,7 +86,7 @@ export async function getTasteProfile(
       userId,
       dimensions: zeroedDimensions(),
       intensityMetrics: { intensity: 0, focus: 0, breadth: 0, consistency: 0 },
-      archetype: 'Casual',
+      archetype: emptyArchetype(),
       coPlayPartners,
       computedAt: now,
     };
@@ -78,7 +97,10 @@ export async function getTasteProfile(
     userId,
     dimensions: row.dimensions,
     intensityMetrics: row.intensityMetrics,
-    archetype: row.archetype,
+    // ROK-1083: archetype column is nullable jsonb post-migration; a NULL
+    // value means the cron has not yet rebuilt the row. Fall through to
+    // the composed Casual default until the next `runAggregateVectors`.
+    archetype: row.archetype ?? emptyArchetype(),
     coPlayPartners,
     computedAt: row.computedAt.toISOString(),
   };
@@ -98,14 +120,18 @@ export async function findSimilarPlayers(
   if (anchor.length === 0) return [];
 
   const anchorVector = `[${anchor[0].vector.join(',')}]`;
+  // ROK-1083: archetype is now jsonb — extract intensityTier via
+  // `->>'intensityTier'` so we still ship the compact tier string on
+  // similar-player cards without parsing the whole payload client-side.
   const rows = await db.execute<{
     user_id: number;
     username: string;
     avatar: string | null;
-    archetype: TasteProfileArchetype;
+    intensity_tier: IntensityTier | null;
     distance: string;
   }>(sql`
-    SELECT v.user_id, u.username, u.avatar, v.archetype,
+    SELECT v.user_id, u.username, u.avatar,
+           (v.archetype->>'intensityTier')::text AS intensity_tier,
            (v.vector <=> ${anchorVector}::vector) AS distance
     FROM player_taste_vectors v
     JOIN users u ON u.id = v.user_id
@@ -118,7 +144,7 @@ export async function findSimilarPlayers(
     userId: r.user_id,
     username: r.username,
     avatar: r.avatar,
-    archetype: r.archetype,
+    intensityTier: r.intensity_tier ?? 'Casual',
     similarity: Math.max(0, 1 - Number(r.distance)),
   }));
 }
