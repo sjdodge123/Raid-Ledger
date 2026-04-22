@@ -33,6 +33,7 @@ import {
   runRemoveInvitee,
 } from './lineups-invitees-actions.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
+import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
 import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
@@ -76,6 +77,7 @@ export class LineupsService {
     private readonly lineupNotifications: LineupNotificationService,
     private readonly botClient: DiscordBotClientService,
     private readonly tasteProfile: TasteProfileService,
+    private readonly aiSuggestionsCache: AiSuggestionsCacheInvalidator,
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
@@ -178,13 +180,13 @@ export class LineupsService {
   }
 
   /** Nominate a game into a lineup. */
-  nominate(
+  async nominate(
     lineupId: number,
     dto: NominateGameDto,
     userId: number,
     callerRole?: string,
   ): Promise<LineupDetailResponseDto> {
-    return runNominate(
+    const result = await runNominate(
       {
         db: this.db,
         activityLog: this.activityLog,
@@ -197,6 +199,8 @@ export class LineupsService {
       userId,
       callerRole,
     );
+    await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    return result;
   }
 
   /** Remove a nomination. */
@@ -230,6 +234,8 @@ export class LineupsService {
       entry,
       caller,
     );
+
+    await this.aiSuggestionsCache.invalidateForLineup(lineupId);
   }
 
   /** Get banner data for the Games page. Returns null if no eligible lineup. */
@@ -301,32 +307,36 @@ export class LineupsService {
    * 404s if any userId is unknown (the helper probes users first). Idempotent
    * for already-invited users via ON CONFLICT DO NOTHING.
    */
-  addInvitees(
+  async addInvitees(
     lineupId: number,
     userIds: number[],
     callerId: number,
   ): Promise<LineupDetailResponseDto> {
-    return runAddInvitees(
+    const result = await runAddInvitees(
       this.db,
       this.resolveChannelName,
       lineupId,
       userIds,
       callerId,
     );
+    await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    return result;
   }
 
   /** Remove a single invitee (ROK-1065). */
-  removeInvitee(
+  async removeInvitee(
     lineupId: number,
     userId: number,
     callerId: number,
   ): Promise<LineupDetailResponseDto> {
-    return runRemoveInvitee(
+    const result = await runRemoveInvitee(
       this.db,
       this.resolveChannelName,
       lineupId,
       userId,
       callerId,
     );
+    await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    return result;
   }
 }
