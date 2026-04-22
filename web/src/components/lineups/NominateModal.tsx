@@ -6,6 +6,7 @@ import { type JSX, useState, useCallback } from 'react';
 import { Modal } from '../ui/modal';
 import { useGameSearch } from '../../hooks/use-game-search';
 import { useNominateGame } from '../../hooks/use-lineups';
+import { PersonalSuggestionsRow } from './PersonalSuggestionsRow';
 
 export interface SelectedGame {
     id: number;
@@ -171,6 +172,10 @@ export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: No
             ) : (
                 <>
                     <p className="text-xs text-dim mb-3">Search by name or paste a Steam store URL</p>
+                    <PersonalSuggestionsRow
+                        lineupId={lineupId}
+                        onPickSuggestion={(s) => handleSelect({ id: s.gameId, name: s.name, coverUrl: s.coverUrl })}
+                    />
                     <SearchInput value={query} onChange={setQuery} />
                     {searchLoading && <p className="text-sm text-muted py-4 text-center">Searching...</p>}
                     {results.length > 0 && <SearchResults results={results} onSelect={handleSelect} />}
