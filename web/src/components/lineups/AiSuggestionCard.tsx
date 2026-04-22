@@ -23,14 +23,14 @@ export interface AiSuggestionCardProps {
     onPick?: (suggestion: AiSuggestionDto) => void;
 }
 
-/** ✨ AI chip rendered in the top-left of every suggestion cover. */
+/** ✨ AI Pick chip rendered in the top-left of every suggestion cover. */
 function AiBadge(): JSX.Element {
     return (
         <span
             className="absolute top-2 left-2 text-[10px] font-semibold tracking-wide uppercase bg-violet-500/90 text-white rounded-full px-2 py-0.5 shadow-sm"
             title="Suggested by AI"
         >
-            ✨ AI
+            ✨ AI Pick
         </span>
     );
 }

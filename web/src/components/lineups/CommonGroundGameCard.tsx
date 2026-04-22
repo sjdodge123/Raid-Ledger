@@ -21,14 +21,14 @@ interface Props {
     aiReasoning?: string;
 }
 
-/** Violet ✨ AI chip rendered on cards blended in from the AI suggester. */
+/** Violet ✨ AI Pick chip rendered on cards blended in from the AI suggester. */
 function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
     return (
         <span
             className="absolute top-2 left-2 z-10 px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/90 text-white rounded shadow-sm"
             title={reasoning ?? 'Suggested by AI'}
         >
-            ✨ AI
+            ✨ AI Pick
         </span>
     );
 }
