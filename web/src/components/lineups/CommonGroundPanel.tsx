@@ -3,9 +3,14 @@
  * Renders filter controls, a horizontal-scroll game grid, and handles nomination.
  */
 import { type JSX, useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import type { CommonGroundResponseDto } from '@raid-ledger/contract';
+import type {
+    AiSuggestionDto,
+    CommonGroundGameDto,
+    CommonGroundResponseDto,
+} from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../../lib/api-client';
 import { useActiveLineups, useCommonGround, useNominateGame } from '../../hooks/use-lineups';
+import { useAiSuggestions } from '../../hooks/use-ai-suggestions';
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { CommonGroundFilters } from './CommonGroundFilters';
 import { CommonGroundGameCard } from './CommonGroundGameCard';
@@ -17,6 +22,53 @@ function extractUniqueTags(data: { itadTags: string[] }[]): string[] {
         for (const t of g.itadTags) set.add(t);
     }
     return [...set].sort();
+}
+
+/**
+ * Synthesise a CommonGroundGameDto from an AI suggestion that the
+ * Common Ground query didn't return (game has no ownership overlap but
+ * the LLM suggested it). Fills ownership-related fields with zeros so
+ * the card still renders through the existing grid.
+ */
+function aiOnlyStub(s: AiSuggestionDto): CommonGroundGameDto {
+    return {
+        gameId: s.gameId,
+        gameName: s.name,
+        slug: '',
+        coverUrl: s.coverUrl,
+        ownerCount: s.ownershipCount,
+        wishlistCount: 0,
+        nonOwnerPrice: null,
+        itadCurrentCut: null,
+        itadCurrentShop: null,
+        itadCurrentUrl: null,
+        earlyAccess: false,
+        itadTags: [],
+        playerCount: null,
+        score: 0,
+    };
+}
+
+/**
+ * Merge AI-suggested games into the Common Ground response. Games
+ * already in the response get the badge via `aiSuggestionsByGameId` at
+ * render time; games that the LLM suggested but Common Ground didn't
+ * return get prepended as synthetic entries (no ownership signal, just
+ * cover + name + AI badge).
+ */
+function mergeAiIntoCommonGround(
+    data: CommonGroundResponseDto | undefined,
+    aiMap: Map<number, AiSuggestionDto>,
+): CommonGroundResponseDto | undefined {
+    if (!data) return data;
+    if (aiMap.size === 0) return data;
+    const present = new Set(data.data.map((g) => g.gameId));
+    const aiOnly: CommonGroundGameDto[] = [];
+    for (const [gameId, ai] of aiMap) {
+        if (!present.has(gameId)) aiOnly.push(aiOnlyStub(ai));
+    }
+    if (aiOnly.length === 0) return data;
+    return { ...data, data: [...aiOnly, ...data.data] };
 }
 
 /** Loading skeleton cards. */
@@ -87,11 +139,13 @@ function GameGrid({
     onNominate,
     nominatingId,
     atCap,
+    aiSuggestionsByGameId,
 }: {
-    games: import('@raid-ledger/contract').CommonGroundGameDto[];
+    games: CommonGroundGameDto[];
     onNominate: (id: number) => void;
     nominatingId: number | null;
     atCap: boolean;
+    aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
 }): JSX.Element {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [canLeft, setCanLeft] = useState(false);
@@ -122,15 +176,20 @@ function GameGrid({
         <div className="relative group/carousel">
             {canLeft && <ScrollArrow direction="left" onClick={() => scroll('left')} />}
             <div ref={scrollRef} className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
-                {games.map((g) => (
-                    <CommonGroundGameCard
-                        key={g.gameId}
-                        game={g}
-                        onNominate={onNominate}
-                        isNominating={nominatingId === g.gameId}
-                        atCap={atCap}
-                    />
-                ))}
+                {games.map((g) => {
+                    const ai = aiSuggestionsByGameId.get(g.gameId);
+                    return (
+                        <CommonGroundGameCard
+                            key={g.gameId}
+                            game={g}
+                            onNominate={onNominate}
+                            isNominating={nominatingId === g.gameId}
+                            atCap={atCap}
+                            aiSuggested={!!ai}
+                            aiReasoning={ai?.reasoning}
+                        />
+                    );
+                })}
             </div>
             {canRight && <ScrollArrow direction="right" onClick={() => scroll('right')} />}
         </div>
@@ -171,6 +230,7 @@ function PanelContent({
     atCap,
     search,
     onSearchChange,
+    aiSuggestionsByGameId,
 }: {
     data: CommonGroundResponseDto | undefined;
     filters: CommonGroundParams;
@@ -184,6 +244,7 @@ function PanelContent({
     atCap: boolean;
     search: string;
     onSearchChange: (v: string) => void;
+    aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
 }): JSX.Element {
     return (
         <>
@@ -192,7 +253,13 @@ function PanelContent({
             {isError && <ErrorState onRetry={refetch} />}
             {data && data.data.length === 0 && <EmptyState />}
             {data && data.data.length > 0 && (
-                <GameGrid games={data.data} onNominate={onNominate} nominatingId={nominatingId} atCap={atCap} />
+                <GameGrid
+                    games={data.data}
+                    onNominate={onNominate}
+                    nominatingId={nominatingId}
+                    atCap={atCap}
+                    aiSuggestionsByGameId={aiSuggestionsByGameId}
+                />
             )}
         </>
     );
@@ -233,16 +300,32 @@ export function CommonGroundPanel({
     const atCap = rawAtCap || !canParticipate;
     const { nominatingId, handleNominate } = useNomination(resolvedId);
 
+    // ROK-931: fetch AI suggestions alongside Common Ground and blend them
+    // into the same grid. `aiSuggestionsByGameId` drives the ✨ AI badge +
+    // tooltip reasoning on matching cards; AI-only games (not owned by
+    // anyone yet) are synthesised as stub CommonGroundGameDto entries.
+    const aiQuery = useAiSuggestions(resolvedId, { enabled: hasBuilding });
+    const aiSuggestionsByGameId = useMemo(() => {
+        const map = new Map<number, AiSuggestionDto>();
+        if (aiQuery.data?.kind === 'ok') {
+            for (const s of aiQuery.data.data.suggestions) map.set(s.gameId, s);
+        }
+        return map;
+    }, [aiQuery.data]);
+
+    const mergedData = useMemo(() => mergeAiIntoCommonGround(data, aiSuggestionsByGameId), [data, aiSuggestionsByGameId]);
+
     if (!hasBuilding) return null;
 
     return (
         <section className="space-y-3">
             <PanelHeader nominated={data?.meta.nominatedCount ?? 0} max={data?.meta.maxNominations ?? 20} />
             <PanelContent
-                data={data} filters={filters} setFilters={setFilters} availableTags={availableTags}
+                data={mergedData} filters={filters} setFilters={setFilters} availableTags={availableTags}
                 isLoading={isLoading} isError={isError} refetch={() => void refetch()}
                 onNominate={handleNominate} nominatingId={nominatingId} atCap={atCap}
                 search={search} onSearchChange={setSearch}
+                aiSuggestionsByGameId={aiSuggestionsByGameId}
             />
         </section>
     );
