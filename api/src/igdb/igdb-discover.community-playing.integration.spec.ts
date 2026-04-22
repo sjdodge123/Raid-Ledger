@@ -44,10 +44,7 @@ function dateDaysAgo(daysAgo: number): string {
 }
 
 /** Build a [start,end] tuple for event duration (tsrange) representing a past event. */
-function pastEventRange(
-  hoursEndAgo: number,
-  hoursLong: number,
-): [Date, Date] {
+function pastEventRange(hoursEndAgo: number, hoursLong: number): [Date, Date] {
   const end = new Date(Date.now() - hoursEndAgo * 3_600_000);
   const start = new Date(end.getTime() - hoursLong * 3_600_000);
   return [start, end];
