@@ -12,6 +12,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
 import { AiSuggestionsService } from './ai-suggestions.service';
+import { LlmUnavailableError } from './llm-output.helpers';
 
 interface AuthRequest extends Request {
   user: { id: number; username: string; role: string };
@@ -67,6 +68,11 @@ function mapLlmError(err: unknown): unknown {
         error: 'AI_PROVIDER_UNAVAILABLE',
       });
     }
+  }
+  if (err instanceof LlmUnavailableError) {
+    return new ServiceUnavailableException({
+      error: 'AI_PROVIDER_UNAVAILABLE',
+    });
   }
   if (err instanceof Error && err.name === 'CircuitBreakerOpenError') {
     return new ServiceUnavailableException({

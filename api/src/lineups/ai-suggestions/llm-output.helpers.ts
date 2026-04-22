@@ -56,27 +56,55 @@ function buildRetryOptions(original: LlmChatOptions): LlmChatOptions {
 }
 
 /**
- * Call `LlmService.chat`, parse JSON, retry once with a stricter prompt
- * on parse failure. Returns an empty suggestions array (NOT throws) if
- * both attempts fail to produce parseable output — callers cache the
- * empty result with a shorter TTL to avoid re-running on every request.
- *
- * Provider/HTTP errors (no provider configured, circuit breaker open)
- * propagate to the caller — those are translated to 503 at the
- * controller layer, not hidden here.
+ * Error shape surfaced when both LLM attempts failed for reasons the
+ * controller should translate to 503 (provider unreachable, rate
+ * limited, transient upstream 5xx). Parse failures don't throw — they
+ * resolve to `{ suggestions: [] }` so the cache layer can anchor a
+ * shorter TTL and the UI hides the section silently.
+ */
+export class LlmUnavailableError extends Error {
+  readonly name = 'LlmUnavailableError';
+}
+
+async function tryChat(
+  llmService: LlmService,
+  options: LlmChatOptions,
+  context: LlmRequestContext,
+): Promise<AiSuggestionsLlmOutputDto | { parseFail: true } | { unavailable: Error }> {
+  try {
+    const response = await llmService.chat(options, context);
+    const parsed = parseOnce(response.content);
+    if (parsed) return parsed;
+    return { parseFail: true };
+  } catch (err) {
+    return { unavailable: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Call `LlmService.chat`, parse JSON, retry once on EITHER a parse
+ * failure OR a transient provider error (Gemini 5xx, rate limit,
+ * timeout). After two attempts:
+ *   - both parse-failed → return `{ suggestions: [] }` (UI hides)
+ *   - last attempt failed with provider error → throw `LlmUnavailableError`
+ *     so the controller maps it to 503
+ * Config-level failures (no provider registered) still propagate
+ * untouched via `NotFoundException` from `LlmService.resolveOrThrow`.
  */
 export async function callAndParseLlmOutput(
   llmService: LlmService,
   options: LlmChatOptions,
   context: LlmRequestContext = { feature: LLM_FEATURE_TAG },
 ): Promise<AiSuggestionsLlmOutputDto> {
-  const first = await llmService.chat(options, context);
-  const parsed = parseOnce(first.content);
-  if (parsed) return parsed;
+  const first = await tryChat(llmService, options, context);
+  if ('suggestions' in first) return first;
 
-  const second = await llmService.chat(buildRetryOptions(options), context);
-  const retried = parseOnce(second.content);
-  if (retried) return retried;
+  const retryOpts = buildRetryOptions(options);
+  const second = await tryChat(llmService, retryOpts, context);
+  if ('suggestions' in second) return second;
 
+  if ('unavailable' in second) {
+    throw new LlmUnavailableError(second.unavailable.message);
+  }
   return { suggestions: [] };
 }
