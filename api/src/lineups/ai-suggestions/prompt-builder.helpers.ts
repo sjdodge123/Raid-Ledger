@@ -29,34 +29,62 @@ function topAxes(
     .slice(0, n);
 }
 
-function describeCandidate(c: CandidateContext): string {
+function describeCandidate(c: CandidateContext, voterTotal: number): string {
   const axes = topAxes(c.dimensions)
     .map((a) => `${a.axis}:${a.score.toFixed(2)}`)
     .join(', ');
   const sim = c.similarity.toFixed(3);
-  return `- id=${c.gameId} name="${c.name}" similarity=${sim} top_axes=[${axes}]`;
+  const ownership = `${c.ownershipCount}/${voterTotal} own`;
+  const players = c.playerCount
+    ? `${c.playerCount.min}-${c.playerCount.max} players`
+    : 'players unknown';
+  const sale =
+    c.saleCut != null && c.saleCut > 0
+      ? `ON SALE -${c.saleCut}%${c.nonOwnerPrice != null ? ` $${c.nonOwnerPrice.toFixed(2)}` : ''}`
+      : c.nonOwnerPrice != null
+        ? `full price $${c.nonOwnerPrice.toFixed(2)}`
+        : 'price unknown';
+  return `- id=${c.gameId} name="${c.name}" similarity=${sim} ${ownership} ${players} ${sale} top_axes=[${axes}]`;
 }
 
-function strategyGuidance(strategy: VoterScopeStrategy): string {
+function strategyGuidance(
+  strategy: VoterScopeStrategy,
+  voterCount: number,
+  minPlayerCount: number,
+): string {
+  const sizingRule = `Every candidate already supports at least ${minPlayerCount} concurrent players — do not question playability, but break ties by preferring games whose player range comfortably includes ${voterCount}.`;
   if (strategy === 'small_group') {
     return [
-      'This is a SMALL GROUP (2-3 voters). Lean heavily on their individual',
-      'taste overlap. Favor hidden gems the group has not tried yet.',
+      `This is a SMALL GROUP (${voterCount} voters).`,
+      'Lean heavily on their individual taste overlap. Favor hidden gems',
+      'the group has not tried yet.',
+      sizingRule,
     ].join(' ');
   }
   if (strategy === 'partial') {
     return [
-      'This is a PARTIAL GROUP (4-7 voters). Blend community-wide patterns',
-      "with voter-specific libraries. Favor games that match the group's",
-      'strongest shared axes.',
+      `This is a PARTIAL GROUP (${voterCount} voters).`,
+      "Blend community-wide patterns with voter-specific libraries. Favor",
+      "games that match the group's strongest shared axes.",
+      sizingRule,
     ].join(' ');
   }
   return [
-    'This is a FULL COMMUNITY (8+ voters). Rely on community-wide patterns:',
-    'popular genres, frequently played categories, trending interests. Avoid',
-    'niche picks that only 1-2 members would enjoy.',
+    `This is a FULL COMMUNITY (${voterCount} voters).`,
+    'Rely on community-wide patterns: popular genres, frequently played',
+    'categories, trending community interests. Avoid niche picks that',
+    'only 1-2 members would enjoy.',
+    sizingRule,
   ].join(' ');
 }
+
+const BIAS_RULES = [
+  'Ranking tie-breakers, in priority order:',
+  '1. Prefer games where at least one voter already owns it (ownership bias — lower friction).',
+  '2. Prefer games currently on sale (look for "ON SALE -N%") over full-price picks at similar fit.',
+  '3. Prefer stronger taste-axis overlap with the voter centroid top axes.',
+  '4. Prefer player-count ranges that hug the voter count rather than huge max-player lobbies.',
+].join(' ');
 
 /**
  * Compose the `LlmChatOptions` for a single suggestion pass. System
@@ -66,18 +94,22 @@ function strategyGuidance(strategy: VoterScopeStrategy): string {
 export function buildSuggestionPrompt(params: {
   strategy: VoterScopeStrategy;
   voterCount: number;
+  minPlayerCount: number;
   centroidAxes: { axis: string; score: number }[];
   candidates: CandidateContext[];
 }): LlmChatOptions {
   const systemPrompt = [
     'You recommend video games for a community gaming lineup.',
     'You will receive a ranked list of candidate games (already filtered to',
-    'multiplayer-capable, in-corpus titles) and a voter-taste summary.',
+    'multiplayer-capable, group-sized, in-corpus titles) and a voter-taste summary.',
     'Your job: pick 5-10 games that best fit the group, with brief reasoning.',
+    BIAS_RULES,
     'Respond ONLY with a single JSON object of the form:',
     '{"suggestions":[{"gameId":<int>,"confidence":<0..1>,"reasoning":"..."}]}',
     'Do not add prose, code fences, or extra keys. Only suggest games that',
     'appear in the candidate list by id. Keep `reasoning` under 280 chars.',
+    'Mention the strongest single signal you used (ownership, sale, axis fit,',
+    'or group-fit) in each reasoning line.',
   ].join(' ');
 
   const centroidLine = params.centroidAxes.length
@@ -87,13 +119,13 @@ export function buildSuggestionPrompt(params: {
     : '(no voter vector data)';
 
   const userContent = [
-    strategyGuidance(params.strategy),
+    strategyGuidance(params.strategy, params.voterCount, params.minPlayerCount),
     '',
     `Voter count: ${params.voterCount}`,
     `Voter centroid top axes: ${centroidLine}`,
     '',
-    'Candidate games:',
-    ...params.candidates.map(describeCandidate),
+    'Candidate games (ownership = voters who already own via Steam; players = min-max concurrent players; sale = current deal cut):',
+    ...params.candidates.map((c) => describeCandidate(c, params.voterCount)),
     '',
     'Return JSON only.',
   ].join('\n');

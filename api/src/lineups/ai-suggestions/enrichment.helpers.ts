@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   AiSuggestionDto,
@@ -8,62 +8,77 @@ import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-interface GameRow {
-  id: number;
-  name: string;
+/**
+ * Aggregated metadata fetched for every suggested gameId in a single
+ * round-trip. Mirrors `CommonGroundRow` minus the scoring inputs —
+ * enough to render a suggestion card with full badge parity.
+ */
+interface SuggestionRow {
+  gameId: number;
+  gameName: string;
+  slug: string;
   coverUrl: string | null;
+  ownershipCount: number;
+  wishlistCount: number;
+  nonOwnerPrice: number | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+  earlyAccess: boolean;
+  itadTags: string[];
+  playerCount: { min: number; max: number } | null;
 }
 
-async function loadGames(db: Db, gameIds: number[]): Promise<GameRow[]> {
+/**
+ * Fetch name + cover + pricing + player count + ownership counts for
+ * the voter set in a single query so every AI-suggested card can
+ * render as if it came from Common Ground. When `gameIds` or
+ * `voterIds` are empty the corresponding columns default to 0.
+ */
+async function loadSuggestionMeta(
+  db: Db,
+  gameIds: number[],
+  voterIds: number[],
+): Promise<SuggestionRow[]> {
   if (gameIds.length === 0) return [];
-  const rows = await db
-    .select({
-      id: schema.games.id,
-      name: schema.games.name,
-      coverUrl: schema.games.coverUrl,
-    })
-    .from(schema.games)
-    .where(inArray(schema.games.id, gameIds));
+  const voterFilter =
+    voterIds.length > 0
+      ? sql`AND gi.user_id IN (${sql.join(
+          voterIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})`
+      : sql`AND FALSE`;
+  const rows = (await db.execute(sql`
+    SELECT
+      g.id AS "gameId",
+      g.name AS "gameName",
+      g.slug,
+      g.cover_url AS "coverUrl",
+      COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library' ${voterFilter}), 0)::int AS "ownershipCount",
+      COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_wishlist'), 0)::int AS "wishlistCount",
+      CASE WHEN g.itad_current_price IS NOT NULL THEN g.itad_current_price::float ELSE NULL END AS "nonOwnerPrice",
+      g.itad_current_cut AS "itadCurrentCut",
+      g.itad_current_shop AS "itadCurrentShop",
+      g.itad_current_url AS "itadCurrentUrl",
+      g.early_access AS "earlyAccess",
+      COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
+      g.player_count AS "playerCount"
+    FROM games g
+    LEFT JOIN game_interests gi ON gi.game_id = g.id
+    WHERE g.id IN (${sql.join(
+      gameIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})
+    GROUP BY g.id
+  `)) as unknown as SuggestionRow[];
   return rows;
 }
 
 /**
- * Count how many of the voter set own each candidate game. Ownership
- * rides on `game_interests.source = 'steam_library'` — the same signal
- * `lineups-enrichment.helpers.ts` uses for Common Ground overlap.
- * Returns a `gameId -> count` map with zeros for games that nobody owns.
- */
-async function loadOwnershipCounts(
-  db: Db,
-  gameIds: number[],
-  voterIds: number[],
-): Promise<Map<number, number>> {
-  const out = new Map<number, number>();
-  for (const id of gameIds) out.set(id, 0);
-  if (gameIds.length === 0 || voterIds.length === 0) return out;
-  const rows = await db
-    .select({
-      gameId: schema.gameInterests.gameId,
-      count: sql<number>`count(distinct ${schema.gameInterests.userId})::int`,
-    })
-    .from(schema.gameInterests)
-    .where(
-      and(
-        inArray(schema.gameInterests.gameId, gameIds),
-        inArray(schema.gameInterests.userId, voterIds),
-        eq(schema.gameInterests.source, 'steam_library'),
-      ),
-    )
-    .groupBy(schema.gameInterests.gameId);
-  for (const row of rows) out.set(row.gameId, Number(row.count));
-  return out;
-}
-
-/**
  * Merge the LLM's `{gameId, confidence, reasoning}` list with
- * server-side metadata (name, cover, ownership count, voter total) to
- * produce the response DTO shape. Drops suggestions whose `gameId`
- * isn't in the candidate pool's known game set.
+ * server-fetched metadata to produce the full response DTO.
+ * Suggestions whose `gameId` isn't in the candidate pool (or whose
+ * game row cannot be found) are dropped silently.
  */
 export async function enrichSuggestions(
   db: Db,
@@ -75,26 +90,35 @@ export async function enrichSuggestions(
     knownGameIds.has(s.gameId),
   );
   if (filtered.length === 0) return [];
-  const ids = filtered.map((s) => s.gameId);
-  const [games, ownershipById] = await Promise.all([
-    loadGames(db, ids),
-    loadOwnershipCounts(db, ids, voterIds),
-  ]);
-  const gameById = new Map(games.map((g) => [g.id, g]));
+  const meta = await loadSuggestionMeta(
+    db,
+    filtered.map((s) => s.gameId),
+    voterIds,
+  );
+  const metaById = new Map(meta.map((m) => [m.gameId, m]));
   const voterTotal = voterIds.length;
   return filtered
-    .filter((s) => gameById.has(s.gameId))
+    .filter((s) => metaById.has(s.gameId))
     .map((s) => {
-      const game = gameById.get(s.gameId);
-      if (!game) throw new Error(`Game ${s.gameId} missing after filter`);
+      const row = metaById.get(s.gameId);
+      if (!row) throw new Error(`Game ${s.gameId} missing after filter`);
       return {
-        gameId: s.gameId,
-        name: game.name,
-        coverUrl: game.coverUrl,
+        gameId: row.gameId,
+        name: row.gameName,
+        slug: row.slug,
+        coverUrl: row.coverUrl,
         confidence: s.confidence,
         reasoning: s.reasoning,
-        ownershipCount: ownershipById.get(s.gameId) ?? 0,
+        ownershipCount: row.ownershipCount,
         voterTotal,
+        wishlistCount: row.wishlistCount,
+        nonOwnerPrice: row.nonOwnerPrice,
+        itadCurrentCut: row.itadCurrentCut,
+        itadCurrentShop: row.itadCurrentShop,
+        itadCurrentUrl: row.itadCurrentUrl,
+        earlyAccess: row.earlyAccess,
+        itadTags: row.itadTags ?? [],
+        playerCount: row.playerCount,
       };
     });
 }

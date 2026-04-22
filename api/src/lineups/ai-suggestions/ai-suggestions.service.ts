@@ -22,6 +22,7 @@ import {
 import {
   buildCandidatePool,
   loadCandidateContext,
+  minimumPlayerCount,
   type CandidateContext,
 } from './candidate-pool.helpers';
 import {
@@ -132,11 +133,12 @@ export class AiSuggestionsService {
       this.gameTaste,
       scope.userIds,
       lineup.id,
+      scope.strategy,
     );
     if (candidates.length === 0) {
       return this.persistAndReturn(lineup.id, scope, [], provider, model);
     }
-    const context = await loadCandidateContext(this.db, candidates);
+    const context = await loadCandidateContext(this.db, candidates, scope.userIds);
     const suggestions = await this.runLlmPass(scope, context);
     const enriched = await enrichSuggestions(
       this.db,
@@ -156,6 +158,7 @@ export class AiSuggestionsService {
     const options = buildSuggestionPrompt({
       strategy: scope.strategy,
       voterCount: scope.userIds.length,
+      minPlayerCount: minimumPlayerCount(scope.userIds.length, scope.strategy),
       centroidAxes: centroid,
       candidates,
     });

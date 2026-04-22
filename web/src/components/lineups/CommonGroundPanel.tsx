@@ -25,26 +25,28 @@ function extractUniqueTags(data: { itadTags: string[] }[]): string[] {
 }
 
 /**
- * Synthesise a CommonGroundGameDto from an AI suggestion that the
- * Common Ground query didn't return (game has no ownership overlap but
- * the LLM suggested it). Fills ownership-related fields with zeros so
- * the card still renders through the existing grid.
+ * Promote an AI suggestion that Common Ground didn't return into the
+ * same grid by mapping the AI DTO's enriched metadata into a
+ * CommonGroundGameDto. All badge inputs (player count, price, tags,
+ * early access, wishlist) are now populated server-side so the card
+ * renders with full badge parity — the only added visual is the ✨ AI
+ * chip and violet hover border from CommonGroundGameCard.
  */
 function aiOnlyStub(s: AiSuggestionDto): CommonGroundGameDto {
     return {
         gameId: s.gameId,
         gameName: s.name,
-        slug: '',
+        slug: s.slug,
         coverUrl: s.coverUrl,
         ownerCount: s.ownershipCount,
-        wishlistCount: 0,
-        nonOwnerPrice: null,
-        itadCurrentCut: null,
-        itadCurrentShop: null,
-        itadCurrentUrl: null,
-        earlyAccess: false,
-        itadTags: [],
-        playerCount: null,
+        wishlistCount: s.wishlistCount,
+        nonOwnerPrice: s.nonOwnerPrice,
+        itadCurrentCut: s.itadCurrentCut,
+        itadCurrentShop: s.itadCurrentShop,
+        itadCurrentUrl: s.itadCurrentUrl,
+        earlyAccess: s.earlyAccess,
+        itadTags: s.itadTags,
+        playerCount: s.playerCount,
         score: 0,
     };
 }
