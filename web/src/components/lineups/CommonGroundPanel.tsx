@@ -1,108 +1,21 @@
 /**
  * Common Ground panel — shows games owned by multiple community members (ROK-934).
  * Renders filter controls, a horizontal-scroll game grid, and handles nomination.
+ *
+ * State + data plumbing lives in `useCommonGroundState`; pure blend
+ * helpers live in `common-ground-ai-merge.helpers.ts` (split out for
+ * ROK-1107 to keep this file below the 300-line soft limit).
  */
-import { type JSX, useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import { type JSX, useRef, useState, useEffect, useCallback } from 'react';
 import type {
     AiSuggestionDto,
     CommonGroundGameDto,
     CommonGroundResponseDto,
 } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../../lib/api-client';
-import { useActiveLineups, useCommonGround, useNominateGame } from '../../hooks/use-lineups';
-import { useAiSuggestions } from '../../hooks/use-ai-suggestions';
-import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { CommonGroundFilters } from './CommonGroundFilters';
 import { CommonGroundGameCard } from './CommonGroundGameCard';
-
-/** Extract unique ITAD tags from the response for the genre filter dropdown. */
-function extractUniqueTags(data: { itadTags: string[] }[]): string[] {
-    const set = new Set<string>();
-    for (const g of data) {
-        for (const t of g.itadTags) set.add(t);
-    }
-    return [...set].sort();
-}
-
-/**
- * Promote an AI suggestion that Common Ground didn't return into the
- * same grid by mapping the AI DTO's enriched metadata into a
- * CommonGroundGameDto. `ownerCount` comes from the community-wide
- * count (matches Common Ground's badge), not voter-scoped ownership.
- * Synthetic `score` derives from LLM confidence so the merge sort
- * interleaves AI-only picks naturally with Common Ground picks rather
- * than front-loading them.
- */
-function aiOnlyStub(s: AiSuggestionDto): CommonGroundGameDto {
-    return {
-        gameId: s.gameId,
-        gameName: s.name,
-        slug: s.slug,
-        coverUrl: s.coverUrl,
-        ownerCount: s.communityOwnerCount,
-        wishlistCount: s.wishlistCount,
-        nonOwnerPrice: s.nonOwnerPrice,
-        itadCurrentCut: s.itadCurrentCut,
-        itadCurrentShop: s.itadCurrentShop,
-        itadCurrentUrl: s.itadCurrentUrl,
-        earlyAccess: s.earlyAccess,
-        itadTags: s.itadTags,
-        playerCount: s.playerCount,
-        score: s.confidence * 100,
-    };
-}
-
-/**
- * Mirror the Common Ground query's filter semantics on the frontend for
- * AI-only stubs. Keeps the grid consistent when the operator narrows
- * by owners / players / genre / search — AI cards that don't match the
- * filter vanish alongside the Common Ground rows that also fail.
- */
-function aiStubMatchesFilters(
-    stub: CommonGroundGameDto,
-    filters: CommonGroundParams,
-    search: string,
-): boolean {
-    if (filters.minOwners != null && stub.ownerCount < filters.minOwners) return false;
-    if (filters.maxPlayers != null && stub.playerCount) {
-        const { min, max } = stub.playerCount;
-        if (!(min <= filters.maxPlayers && max >= filters.maxPlayers)) return false;
-    }
-    if (filters.maxPlayers != null && !stub.playerCount) return false;
-    if (filters.genre && !stub.itadTags.includes(filters.genre)) return false;
-    const q = search.trim().toLowerCase();
-    if (q && !stub.gameName.toLowerCase().includes(q)) return false;
-    return true;
-}
-
-/**
- * Merge AI-suggested games into the Common Ground response. Games
- * already in the response get the badge via `aiSuggestionsByGameId` at
- * render time; games that the LLM suggested but Common Ground didn't
- * return get synthesised as stubs (with community-wide ownership +
- * confidence-derived score), filtered by the active Common Ground
- * filters, and then sorted alongside the CG rows by `score` so AI
- * picks land naturally in the mix rather than all at the front.
- */
-function mergeAiIntoCommonGround(
-    data: CommonGroundResponseDto | undefined,
-    aiMap: Map<number, AiSuggestionDto>,
-    filters: CommonGroundParams,
-    search: string,
-): CommonGroundResponseDto | undefined {
-    if (!data) return data;
-    if (aiMap.size === 0) return data;
-    const present = new Set(data.data.map((g) => g.gameId));
-    const aiOnly: CommonGroundGameDto[] = [];
-    for (const [gameId, ai] of aiMap) {
-        if (present.has(gameId)) continue;
-        const stub = aiOnlyStub(ai);
-        if (aiStubMatchesFilters(stub, filters, search)) aiOnly.push(stub);
-    }
-    if (aiOnly.length === 0) return data;
-    const merged = [...data.data, ...aiOnly].sort((a, b) => b.score - a.score);
-    return { ...data, data: merged };
-}
+import { useCommonGroundState } from './use-common-ground-state';
 
 /** Loading skeleton cards. */
 function LoadingSkeleton(): JSX.Element {
@@ -229,29 +142,9 @@ function GameGrid({
     );
 }
 
-/** Hook for nomination state management. */
-function useNomination(lineupId: number | undefined) {
-    const [nominatingId, setNominatingId] = useState<number | null>(null);
-    const nominate = useNominateGame();
-
-    const handleNominate = useCallback(
-        (gameId: number) => {
-            if (!lineupId) return;
-            setNominatingId(gameId);
-            nominate.mutate(
-                { lineupId, body: { gameId } },
-                { onSettled: () => setNominatingId(null) },
-            );
-        },
-        [lineupId, nominate],
-    );
-
-    return { nominatingId, handleNominate };
-}
-
 /** Content area — renders filters, loading/error states, and game grid. */
 function PanelContent({
-    data,
+    mergedData,
     filters,
     setFilters,
     availableTags,
@@ -262,10 +155,10 @@ function PanelContent({
     nominatingId,
     atCap,
     search,
-    onSearchChange,
+    setSearch,
     aiSuggestionsByGameId,
 }: {
-    data: CommonGroundResponseDto | undefined;
+    mergedData: CommonGroundResponseDto | undefined;
     filters: CommonGroundParams;
     setFilters: (f: CommonGroundParams) => void;
     availableTags: string[];
@@ -276,18 +169,18 @@ function PanelContent({
     nominatingId: number | null;
     atCap: boolean;
     search: string;
-    onSearchChange: (v: string) => void;
+    setSearch: (v: string) => void;
     aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
 }): JSX.Element {
     return (
         <>
-            <CommonGroundFilters filters={filters} onChange={setFilters} availableTags={availableTags} search={search} onSearchChange={onSearchChange} />
+            <CommonGroundFilters filters={filters} onChange={setFilters} availableTags={availableTags} search={search} onSearchChange={setSearch} />
             {isLoading && <LoadingSkeleton />}
             {isError && <ErrorState onRetry={refetch} />}
-            {data && data.data.length === 0 && <EmptyState />}
-            {data && data.data.length > 0 && (
+            {mergedData && mergedData.data.length === 0 && <EmptyState />}
+            {mergedData && mergedData.data.length > 0 && (
                 <GameGrid
-                    games={data.data}
+                    games={mergedData.data}
                     onNominate={onNominate}
                     nominatingId={nominatingId}
                     atCap={atCap}
@@ -312,57 +205,12 @@ export function CommonGroundPanel({
     lineupId?: number;
     canParticipate?: boolean;
 } = {}): JSX.Element | null {
-    const { data: activeLineups } = useActiveLineups();
-    const newestBuilding = activeLineups?.find((l) => l.status === 'building') ?? null;
-    const resolvedId = propLineupId ?? newestBuilding?.id;
-    const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0 });
-    const [search, setSearch] = useState('');
-    const hasBuilding = propLineupId != null || !!newestBuilding;
-    const apiParams = useMemo(
-        () => ({
-            ...filters,
-            search: search.trim() || undefined,
-            lineupId: resolvedId,
-        }),
-        [filters, search, resolvedId],
-    );
-    const debouncedParams = useDebouncedValue(apiParams, 300);
-    const { data, isLoading, isError, refetch } = useCommonGround(debouncedParams, hasBuilding);
-    const availableTags = useMemo(() => (data?.data ? extractUniqueTags(data.data) : []), [data]);
-    const rawAtCap = (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
-    const atCap = rawAtCap || !canParticipate;
-    const { nominatingId, handleNominate } = useNomination(resolvedId);
-
-    // ROK-931: fetch AI suggestions alongside Common Ground and blend them
-    // into the same grid. `aiSuggestionsByGameId` drives the ✨ AI badge +
-    // tooltip reasoning on matching cards; AI-only games (not owned by
-    // anyone yet) are synthesised as stub CommonGroundGameDto entries.
-    const aiQuery = useAiSuggestions(resolvedId, { enabled: hasBuilding });
-    const aiSuggestionsByGameId = useMemo(() => {
-        const map = new Map<number, AiSuggestionDto>();
-        if (aiQuery.data?.kind === 'ok') {
-            for (const s of aiQuery.data.data.suggestions) map.set(s.gameId, s);
-        }
-        return map;
-    }, [aiQuery.data]);
-
-    const mergedData = useMemo(
-        () => mergeAiIntoCommonGround(data, aiSuggestionsByGameId, filters, search),
-        [data, aiSuggestionsByGameId, filters, search],
-    );
-
-    if (!hasBuilding) return null;
-
+    const state = useCommonGroundState(propLineupId, canParticipate);
+    if (!state.hasBuilding) return null;
     return (
         <section className="space-y-3">
-            <PanelHeader nominated={data?.meta.nominatedCount ?? 0} max={data?.meta.maxNominations ?? 20} />
-            <PanelContent
-                data={mergedData} filters={filters} setFilters={setFilters} availableTags={availableTags}
-                isLoading={isLoading} isError={isError} refetch={() => void refetch()}
-                onNominate={handleNominate} nominatingId={nominatingId} atCap={atCap}
-                search={search} onSearchChange={setSearch}
-                aiSuggestionsByGameId={aiSuggestionsByGameId}
-            />
+            <PanelHeader nominated={state.rawMeta.nominatedCount} max={state.rawMeta.maxNominations} />
+            <PanelContent {...state} />
         </section>
     );
 }
