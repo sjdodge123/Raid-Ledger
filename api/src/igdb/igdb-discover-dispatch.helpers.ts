@@ -13,6 +13,7 @@ import {
   fetchCategoryRow,
   type DiscoverCategory,
 } from './igdb-discover.helpers';
+import { fetchCommunityPlayingRow } from './igdb-discover-community-playing.helpers';
 import {
   fetchWishlistedOnSaleRow,
   fetchMostPlayedOnSaleRow,
@@ -42,6 +43,9 @@ export async function dispatchDiscoverRow(
   redis: Redis,
   cacheTtl: number,
 ): Promise<GameDiscoverRowDto> {
+  if (cat.slug === 'community-has-been-playing') {
+    return fetchCommunityPlayingRow(db, redis, cat, cacheTtl);
+  }
   if (cat.slug === 'community-wants-to-play') {
     return fetchCommunityRow(db, cat);
   }

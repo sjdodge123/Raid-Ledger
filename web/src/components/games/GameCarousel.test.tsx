@@ -211,3 +211,63 @@ describe('GameCarousel — scroll arrows (ROK-800)', () => {
         expect(link).toHaveAttribute('href', '/games/1');
     });
 });
+
+// ─── AC: community-playing badge (ROK-565) ────────────────────────────────────
+
+describe('GameCarousel — community-playing badge (ROK-565)', () => {
+    it('renders "N played" badge for a game with metadata playerCount', () => {
+        const game = createMockGame(42, 'Played Game');
+        const metadata = { '42': { playerCount: 12, totalSeconds: 3600 } };
+
+        renderWithRouter(
+            <GameCarousel category="Community" games={[game]} metadata={metadata} />,
+        );
+
+        const badge = screen.getByTestId('community-played-badge');
+        expect(badge).toHaveTextContent('12 played');
+    });
+
+    it('formats large counts with Intl.NumberFormat en-US (1,234 played)', () => {
+        const game = createMockGame(42, 'Huge Game');
+        const metadata = { '42': { playerCount: 1234, totalSeconds: 99 } };
+
+        renderWithRouter(
+            <GameCarousel category="Community" games={[game]} metadata={metadata} />,
+        );
+
+        expect(screen.getByTestId('community-played-badge')).toHaveTextContent('1,234 played');
+    });
+
+    it('renders no badge when metadata prop is absent', () => {
+        const game = createMockGame(5, 'Plain Game');
+        renderWithRouter(<GameCarousel category="Popular" games={[game]} />);
+        expect(screen.queryByTestId('community-played-badge')).not.toBeInTheDocument();
+    });
+
+    it('only renders badge for games present in metadata map', () => {
+        const games = [
+            createMockGame(1, 'Has Count'),
+            createMockGame(2, 'Missing From Metadata'),
+        ];
+        const metadata = { '1': { playerCount: 7, totalSeconds: 60 } };
+
+        renderWithRouter(
+            <GameCarousel category="Mixed" games={games} metadata={metadata} />,
+        );
+
+        const badges = screen.getAllByTestId('community-played-badge');
+        expect(badges).toHaveLength(1);
+        expect(badges[0]).toHaveTextContent('7 played');
+    });
+
+    it('suppresses badge when playerCount is 0', () => {
+        const game = createMockGame(9, 'Zero Count');
+        const metadata = { '9': { playerCount: 0, totalSeconds: 0 } };
+
+        renderWithRouter(
+            <GameCarousel category="Community" games={[game]} metadata={metadata} />,
+        );
+
+        expect(screen.queryByTestId('community-played-badge')).not.toBeInTheDocument();
+    });
+});
