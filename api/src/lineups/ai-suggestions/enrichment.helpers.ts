@@ -18,7 +18,10 @@ interface SuggestionRow {
   gameName: string;
   slug: string;
   coverUrl: string | null;
+  /** Count of voters (scoped to voterIds) who own this game. Drives LLM prompt ownership bias. */
   ownershipCount: number;
+  /** Community-wide Steam ownership count — matches Common Ground's ownerCount badge. */
+  communityOwnerCount: number;
   wishlistCount: number;
   nonOwnerPrice: number | null;
   itadCurrentCut: number | null;
@@ -55,6 +58,7 @@ async function loadSuggestionMeta(
       g.slug,
       g.cover_url AS "coverUrl",
       COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library' ${voterFilter}), 0)::int AS "ownershipCount",
+      COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_library'), 0)::int AS "communityOwnerCount",
       COALESCE(COUNT(*) FILTER (WHERE gi.source = 'steam_wishlist'), 0)::int AS "wishlistCount",
       CASE WHEN g.itad_current_price IS NOT NULL THEN g.itad_current_price::float ELSE NULL END AS "nonOwnerPrice",
       g.itad_current_cut AS "itadCurrentCut",
@@ -111,6 +115,7 @@ export async function enrichSuggestions(
         reasoning: s.reasoning,
         ownershipCount: row.ownershipCount,
         voterTotal,
+        communityOwnerCount: row.communityOwnerCount,
         wishlistCount: row.wishlistCount,
         nonOwnerPrice: row.nonOwnerPrice,
         itadCurrentCut: row.itadCurrentCut,

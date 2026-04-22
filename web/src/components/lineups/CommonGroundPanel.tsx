@@ -27,10 +27,11 @@ function extractUniqueTags(data: { itadTags: string[] }[]): string[] {
 /**
  * Promote an AI suggestion that Common Ground didn't return into the
  * same grid by mapping the AI DTO's enriched metadata into a
- * CommonGroundGameDto. All badge inputs (player count, price, tags,
- * early access, wishlist) are now populated server-side so the card
- * renders with full badge parity — the only added visual is the ✨ AI
- * chip and violet hover border from CommonGroundGameCard.
+ * CommonGroundGameDto. `ownerCount` comes from the community-wide
+ * count (matches Common Ground's badge), not voter-scoped ownership.
+ * Synthetic `score` derives from LLM confidence so the merge sort
+ * interleaves AI-only picks naturally with Common Ground picks rather
+ * than front-loading them.
  */
 function aiOnlyStub(s: AiSuggestionDto): CommonGroundGameDto {
     return {
@@ -38,7 +39,7 @@ function aiOnlyStub(s: AiSuggestionDto): CommonGroundGameDto {
         gameName: s.name,
         slug: s.slug,
         coverUrl: s.coverUrl,
-        ownerCount: s.ownershipCount,
+        ownerCount: s.communityOwnerCount,
         wishlistCount: s.wishlistCount,
         nonOwnerPrice: s.nonOwnerPrice,
         itadCurrentCut: s.itadCurrentCut,
@@ -47,30 +48,60 @@ function aiOnlyStub(s: AiSuggestionDto): CommonGroundGameDto {
         earlyAccess: s.earlyAccess,
         itadTags: s.itadTags,
         playerCount: s.playerCount,
-        score: 0,
+        score: s.confidence * 100,
     };
+}
+
+/**
+ * Mirror the Common Ground query's filter semantics on the frontend for
+ * AI-only stubs. Keeps the grid consistent when the operator narrows
+ * by owners / players / genre / search — AI cards that don't match the
+ * filter vanish alongside the Common Ground rows that also fail.
+ */
+function aiStubMatchesFilters(
+    stub: CommonGroundGameDto,
+    filters: CommonGroundParams,
+    search: string,
+): boolean {
+    if (filters.minOwners != null && stub.ownerCount < filters.minOwners) return false;
+    if (filters.maxPlayers != null && stub.playerCount) {
+        const { min, max } = stub.playerCount;
+        if (!(min <= filters.maxPlayers && max >= filters.maxPlayers)) return false;
+    }
+    if (filters.maxPlayers != null && !stub.playerCount) return false;
+    if (filters.genre && !stub.itadTags.includes(filters.genre)) return false;
+    const q = search.trim().toLowerCase();
+    if (q && !stub.gameName.toLowerCase().includes(q)) return false;
+    return true;
 }
 
 /**
  * Merge AI-suggested games into the Common Ground response. Games
  * already in the response get the badge via `aiSuggestionsByGameId` at
  * render time; games that the LLM suggested but Common Ground didn't
- * return get prepended as synthetic entries (no ownership signal, just
- * cover + name + AI badge).
+ * return get synthesised as stubs (with community-wide ownership +
+ * confidence-derived score), filtered by the active Common Ground
+ * filters, and then sorted alongside the CG rows by `score` so AI
+ * picks land naturally in the mix rather than all at the front.
  */
 function mergeAiIntoCommonGround(
     data: CommonGroundResponseDto | undefined,
     aiMap: Map<number, AiSuggestionDto>,
+    filters: CommonGroundParams,
+    search: string,
 ): CommonGroundResponseDto | undefined {
     if (!data) return data;
     if (aiMap.size === 0) return data;
     const present = new Set(data.data.map((g) => g.gameId));
     const aiOnly: CommonGroundGameDto[] = [];
     for (const [gameId, ai] of aiMap) {
-        if (!present.has(gameId)) aiOnly.push(aiOnlyStub(ai));
+        if (present.has(gameId)) continue;
+        const stub = aiOnlyStub(ai);
+        if (aiStubMatchesFilters(stub, filters, search)) aiOnly.push(stub);
     }
     if (aiOnly.length === 0) return data;
-    return { ...data, data: [...aiOnly, ...data.data] };
+    const merged = [...data.data, ...aiOnly].sort((a, b) => b.score - a.score);
+    return { ...data, data: merged };
 }
 
 /** Loading skeleton cards. */
@@ -315,7 +346,10 @@ export function CommonGroundPanel({
         return map;
     }, [aiQuery.data]);
 
-    const mergedData = useMemo(() => mergeAiIntoCommonGround(data, aiSuggestionsByGameId), [data, aiSuggestionsByGameId]);
+    const mergedData = useMemo(
+        () => mergeAiIntoCommonGround(data, aiSuggestionsByGameId, filters, search),
+        [data, aiSuggestionsByGameId, filters, search],
+    );
 
     if (!hasBuilding) return null;
 

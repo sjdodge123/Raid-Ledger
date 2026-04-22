@@ -16,9 +16,11 @@ export const AiSuggestionSchema = z.object({
   coverUrl: z.string().nullable(),
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(1).max(280),
-  /** Number of voters (of `voterTotal`) who own this game on Steam. */
+  /** Number of voters (of `voterTotal`) who own this game on Steam. Used as LLM prompt signal. */
   ownershipCount: z.number().int().min(0),
   voterTotal: z.number().int().min(0),
+  /** Community-wide Steam ownership count — matches Common Ground's ownerCount badge. */
+  communityOwnerCount: z.number().int().min(0),
   /** Community-wide wishlist count (Steam wishlist joins). */
   wishlistCount: z.number().int().min(0),
   /** Current ITAD price for non-owners; null when no ITAD data. */
