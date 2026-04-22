@@ -7,7 +7,6 @@ import { useAuth, isOperatorOrAdmin } from "../hooks/use-auth";
 import { useScrollDirection } from "../hooks/use-scroll-direction";
 import { WantToPlayProvider } from "../hooks/use-want-to-play-batch";
 import { useGamesPricingBatch } from "../hooks/use-games-pricing-batch";
-import { GameCarousel } from "../components/games/GameCarousel";
 import { UnifiedGameCard } from "../components/games/unified-game-card";
 import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
@@ -16,7 +15,8 @@ import { FAB } from "../components/ui/fab";
 import { LineupBanner } from "../components/lineups/LineupBanner";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
-import type { GameDetailDto, GameDiscoverRowDto, ItadGamePricingDto } from "@raid-ledger/contract";
+import { DiscoverContent, type PricingMap } from "./games-page-discover";
+import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
 
 type GamesTab = "discover" | "manage";
 
@@ -197,8 +197,6 @@ function LocalSearchWarning() {
   );
 }
 
-type PricingMap = Map<number, ItadGamePricingDto | null>;
-
 function SearchResults({ searchLoading, searchResults, searchSource, searchQuery, pricingMap }: {
   searchLoading: boolean; searchResults: GameDetailDto[] | undefined; searchSource: string | undefined; searchQuery: string; pricingMap: PricingMap;
 }): JSX.Element {
@@ -220,51 +218,6 @@ function SearchResults({ searchLoading, searchResults, searchSource, searchQuery
     <div className="text-center py-16">
       <p className="text-muted text-lg">No games found for &ldquo;{searchQuery}&rdquo;</p>
       <p className="text-dim text-sm mt-1">Try a different search term</p>
-    </div>
-  );
-}
-
-function DiscoverLoadingSkeleton() {
-  return (
-    <div className="space-y-8">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="animate-pulse"><div className="h-6 bg-overlay rounded w-48 mb-3" /><div className="flex gap-4">
-          {Array.from({ length: 6 }).map((_, j) => (<div key={j} className="w-[180px] flex-shrink-0"><div className="aspect-[3/4] bg-overlay rounded-xl" /></div>))}
-        </div></div>
-      ))}
-    </div>
-  );
-}
-
-function DiscoverRows({ filteredRows, pricingMap }: { filteredRows: GameDiscoverRowDto[]; pricingMap: PricingMap }) {
-  return (
-    <div className="space-y-8">
-      <div className="hidden md:block space-y-8">
-        {filteredRows.map((row) => (<GameCarousel key={row.slug} category={row.category} games={row.games} pricingMap={pricingMap} />))}
-      </div>
-      <div className="md:hidden space-y-6">
-        {filteredRows.map((row) => (
-          <div key={row.slug}>
-            <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
-            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scroll-pl-4" style={{ scrollbarWidth: 'none' }}>
-              {row.games.map((game) => (<div key={game.id} className="min-w-[180px] w-[180px] flex-shrink-0 snap-start"><UnifiedGameCard variant="link" game={game} compact showRating pricing={pricingMap.get(game.id) ?? null} /></div>))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DiscoverContent({ discoverLoading, filteredRows, selectedGenres, pricingMap }: {
-  discoverLoading: boolean; filteredRows: GameDiscoverRowDto[] | undefined; selectedGenres: Set<string>; pricingMap: PricingMap;
-}): JSX.Element {
-  if (discoverLoading) return <DiscoverLoadingSkeleton />;
-  if (filteredRows && filteredRows.length > 0) return <DiscoverRows filteredRows={filteredRows} pricingMap={pricingMap} />;
-  return (
-    <div className="text-center py-16">
-      <p className="text-muted text-lg">No games in the library yet</p>
-      <p className="text-dim text-sm mt-1">{selectedGenres.size > 0 ? "Try selecting a different genre" : "Games will appear here once synced from IGDB"}</p>
     </div>
   );
 }

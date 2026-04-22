@@ -23,9 +23,30 @@ vi.mock('../hooks/use-scroll-direction', () => ({
     useScrollDirection: () => 'up',
 }));
 
-// Prevent rendering complex child components
+// Prevent rendering complex child components. Mock mirrors GameCarousel's
+// badge behavior so page-level tests can assert badge wiring end-to-end.
 vi.mock('../components/games/GameCarousel', () => ({
-    GameCarousel: ({ category }: { category: string }) => <div data-testid="game-carousel">{category}</div>,
+    GameCarousel: ({
+        category,
+        games,
+        metadata,
+    }: {
+        category: string;
+        games: { id: number; name: string }[];
+        metadata?: Record<string, { playerCount: number; totalSeconds: number }>;
+    }) => (
+        <div data-testid="game-carousel" data-category={category}>
+            {category}
+            {games.map((g) => {
+                const count = metadata?.[String(g.id)]?.playerCount;
+                return count !== undefined && count >= 1 ? (
+                    <span key={g.id} data-testid="community-played-badge">
+                        {`${new Intl.NumberFormat('en-US').format(count)} played`}
+                    </span>
+                ) : null;
+            })}
+        </div>
+    ),
 }));
 
 vi.mock('../components/games/unified-game-card', () => ({
@@ -461,3 +482,70 @@ describe('GamesPage — ROK-375: local source warning banner', () => {
     });
 
 });
+
+// ============================================================
+// ROK-565: "Your Community Has Been Playing" discover row
+// ============================================================
+describe('GamesPage — ROK-565: community-playing discover row', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockSearch();
+    });
+
+    it('renders the community-has-been-playing row first in discover', () => {
+        vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
+            data: {
+                rows: [
+                    {
+                        slug: 'community-has-been-playing',
+                        category: 'Your Community Has Been Playing',
+                        games: [{ ...mockGame, id: 99, name: 'Community Game' }],
+                        metadata: { '99': { playerCount: 12, totalSeconds: 3600 } },
+                    },
+                    { slug: 'row-2', category: 'Popular RPGs', games: [mockGame] },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
+
+        renderPage();
+
+        const carousels = screen.getAllByTestId('game-carousel');
+        // Two render paths (desktop + mobile), each ordered the same.
+        expect(carousels.length).toBeGreaterThanOrEqual(1);
+        expect(carousels[0].getAttribute('data-category')).toBe('Your Community Has Been Playing');
+    });
+
+    it('shows "N played" badge for games with metadata', () => {
+        vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
+            data: {
+                rows: [
+                    {
+                        slug: 'community-has-been-playing',
+                        category: 'Your Community Has Been Playing',
+                        games: [{ ...mockGame, id: 99, name: 'Community Game' }],
+                        metadata: { '99': { playerCount: 12, totalSeconds: 3600 } },
+                    },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
+
+        renderPage();
+
+        const badges = screen.getAllByTestId('community-played-badge');
+        expect(badges.length).toBeGreaterThan(0);
+        expect(badges[0]).toHaveTextContent('12 played');
+    });
+
+    it('renders rows without metadata without crashing (contract back-compat)', () => {
+        mockDiscover();
+        renderPage();
+
+        expect(screen.getAllByText('Popular RPGs').length).toBeGreaterThan(0);
+        expect(screen.queryByTestId('community-played-badge')).not.toBeInTheDocument();
+    });
+});
+
