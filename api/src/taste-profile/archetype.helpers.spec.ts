@@ -141,10 +141,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
         dimensions: makeDimensions({ pvp: 80, mmo: 72 }),
       });
 
-      expect(result.vectorTitles).toEqual<VectorTitle[]>([
-        'Duelist',
-        'Raider',
-      ]);
+      expect(result.vectorTitles).toEqual<VectorTitle[]>(['Duelist', 'Raider']);
     });
 
     it('emits a single title when diff > 10', () => {
@@ -165,10 +162,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
       });
 
       expect(result.vectorTitles).toHaveLength(2);
-      expect(result.vectorTitles).toEqual<VectorTitle[]>([
-        'Duelist',
-        'Raider',
-      ]);
+      expect(result.vectorTitles).toEqual<VectorTitle[]>(['Duelist', 'Raider']);
       expect(result.vectorTitles).not.toContain<VectorTitle>('Hero');
     });
   });
@@ -181,10 +175,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
         dimensions: makeDimensions({ pvp: 70, mmo: 70 }),
       });
 
-      expect(result.vectorTitles).toEqual<VectorTitle[]>([
-        'Duelist',
-        'Raider',
-      ]);
+      expect(result.vectorTitles).toEqual<VectorTitle[]>(['Duelist', 'Raider']);
     });
 
     it('resolves equal scores at the cap boundary (3-way tie → pvp + mmo, rpg dropped)', () => {
@@ -194,10 +185,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
         dimensions: makeDimensions({ pvp: 70, mmo: 70, rpg: 70 }),
       });
 
-      expect(result.vectorTitles).toEqual<VectorTitle[]>([
-        'Duelist',
-        'Raider',
-      ]);
+      expect(result.vectorTitles).toEqual<VectorTitle[]>(['Duelist', 'Raider']);
     });
   });
 

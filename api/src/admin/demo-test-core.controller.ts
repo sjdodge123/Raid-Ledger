@@ -14,6 +14,12 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
+import { TasteProfileService } from '../taste-profile/taste-profile.service';
+import { refreshArchetypesFromCurrentMetrics } from './demo-data-install-taste.helpers';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { Inject } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../drizzle/schema';
 import type { AuthenticatedRequest } from '../auth/types';
 import {
   LinkDiscordSchema,
@@ -30,7 +36,12 @@ import { parseDemoBody } from './demo-test.utils';
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class DemoTestCoreController {
-  constructor(private readonly demoTestService: DemoTestService) {}
+  constructor(
+    private readonly demoTestService: DemoTestService,
+    private readonly tasteProfileService: TasteProfileService,
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+  ) {}
 
   /** Link a Discord ID to a user -- DEMO_MODE only (smoke tests). */
   @Post('link-discord')
@@ -113,5 +124,24 @@ export class DemoTestCoreController {
   ): Promise<{ success: boolean }> {
     await this.demoTestService.clearGameTimeConfirmationForTest(req.user.id);
     return { success: true };
+  }
+
+  /**
+   * Rebuild taste-profile vectors + intensity + archetypes for every user
+   * (ROK-1083). Runs aggregate-vectors → weekly-intensity → archetype
+   * refresh in the same order the demo installer uses, so existing
+   * DB state reflects the latest archetype composition without a full
+   * re-install.
+   */
+  @Post('rebuild-taste-profiles')
+  @HttpCode(HttpStatus.OK)
+  async rebuildTasteProfilesForTest(): Promise<{
+    success: boolean;
+    refreshed: number;
+  }> {
+    await this.tasteProfileService.aggregateVectors();
+    await this.tasteProfileService.weeklyIntensityRollup();
+    const refreshed = await refreshArchetypesFromCurrentMetrics(this.db);
+    return { success: true, refreshed };
   }
 }

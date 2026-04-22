@@ -259,13 +259,25 @@ export class DemoDataService {
 
   /**
    * Run the taste-profile pipelines synchronously after install so the
-   * profile pages render composed archetypes immediately. Failures are
-   * logged and swallowed — install is still considered successful.
+   * profile pages render composed archetypes immediately.
+   *
+   * Order matters:
+   * 1. `aggregateVectors` creates `player_taste_vectors` rows (archetype
+   *    here is stale — intensity_metrics still zero).
+   * 2. `weeklyIntensityRollup` reads `game_activity_rollups` and updates
+   *    `intensity_metrics` on those rows.
+   * 3. `refreshArchetypesFromCurrentMetrics` re-derives archetypes using
+   *    the now-correct intensity metrics. The production aggregator's
+   *    signalHash guard otherwise skips this recompute.
+   *
+   * Failures are logged and swallowed — install is still considered
+   * successful even if aggregation trips up.
    */
   private async runTasteProfileAggregation(): Promise<void> {
     try {
-      await this.tasteProfileService.weeklyIntensityRollup();
       await this.tasteProfileService.aggregateVectors();
+      await this.tasteProfileService.weeklyIntensityRollup();
+      await tasteH.refreshArchetypesFromCurrentMetrics(this.db);
     } catch (err) {
       this.logger.warn(
         `Taste-profile aggregation after demo install failed: ${

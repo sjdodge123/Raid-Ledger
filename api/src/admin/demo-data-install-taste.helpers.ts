@@ -4,8 +4,10 @@
  * interests so the taste-profile pipelines derive varied intensity tiers
  * and vector titles across the demo population.
  */
+import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { deriveArchetype } from '../taste-profile/archetype.helpers';
 import type {
   GeneratedGameActivityRollup,
   GeneratedPlayhistoryInterest,
@@ -92,4 +94,39 @@ export async function installPlayhistoryInterests(
   if (values.length === 0) return 0;
   await batchInsert(schema.gameInterests, values, 'doNothing');
   return values.length;
+}
+
+/**
+ * Re-derive archetypes for every existing `player_taste_vectors` row.
+ *
+ * The production aggregator short-circuits on matching `signalHash`, so the
+ * post-install sequence (aggregate → weekly intensity → re-aggregate) never
+ * updates archetypes once the hash is stable. This helper exists purely
+ * for demo installs — after `aggregateVectors` has populated vectors and
+ * `weeklyIntensityRollup` has written fresh `intensity_metrics`, we
+ * recompute archetypes bottom-up using the current metrics + dimensions.
+ */
+export async function refreshArchetypesFromCurrentMetrics(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<number> {
+  const rows = await db
+    .select({
+      userId: schema.playerTasteVectors.userId,
+      dimensions: schema.playerTasteVectors.dimensions,
+      intensityMetrics: schema.playerTasteVectors.intensityMetrics,
+    })
+    .from(schema.playerTasteVectors);
+  let updated = 0;
+  for (const row of rows) {
+    const archetype = deriveArchetype({
+      intensityMetrics: row.intensityMetrics,
+      dimensions: row.dimensions,
+    });
+    await db
+      .update(schema.playerTasteVectors)
+      .set({ archetype })
+      .where(eq(schema.playerTasteVectors.userId, row.userId));
+    updated += 1;
+  }
+  return updated;
 }

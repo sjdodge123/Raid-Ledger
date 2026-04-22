@@ -1,6 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { DemoTestCoreController } from './demo-test-core.controller';
 import { DemoTestService } from './demo-test.service';
+import { TasteProfileService } from '../taste-profile/taste-profile.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
 function createMockService() {
   return {
@@ -27,7 +29,17 @@ describe('DemoTestCoreController', () => {
 
     const module = await Test.createTestingModule({
       controllers: [DemoTestCoreController],
-      providers: [{ provide: DemoTestService, useValue: mockService }],
+      providers: [
+        { provide: DemoTestService, useValue: mockService },
+        {
+          provide: TasteProfileService,
+          useValue: {
+            aggregateVectors: jest.fn().mockResolvedValue(undefined),
+            weeklyIntensityRollup: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        { provide: DrizzleAsyncProvider, useValue: {} },
+      ],
     }).compile();
 
     controller = module.get(DemoTestCoreController);
