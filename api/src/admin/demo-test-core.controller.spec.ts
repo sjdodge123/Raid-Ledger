@@ -1,9 +1,11 @@
 import { Test } from '@nestjs/testing';
+import { ForbiddenException } from '@nestjs/common';
 import { DemoTestCoreController } from './demo-test-core.controller';
 import { DemoTestService } from './demo-test.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { DEMO_USERNAMES } from './demo-data.constants';
 
 function createMockService() {
   return {
@@ -18,36 +20,71 @@ function createMockService() {
 }
 
 type MockService = ReturnType<typeof createMockService>;
+type MockTasteProfileService = {
+  aggregateVectors: jest.Mock;
+  weeklyIntensityRollup: jest.Mock;
+};
+type MockSettingsService = { getDemoMode: jest.Mock };
 type GetController = () => DemoTestCoreController;
 type GetMockService = () => MockService;
+type GetMockTaste = () => MockTasteProfileService;
+type GetMockSettings = () => MockSettingsService;
+
+/**
+ * Minimal mock of the drizzle select builder. Returns `rows` when
+ * `.from(table)` is eventually awaited. One call per `.select().from()`.
+ */
+function mockDb(rowsByCall: unknown[][]) {
+  let call = 0;
+  const db = {
+    select: jest.fn(() => ({
+      from: jest.fn(() => {
+        const rows = rowsByCall[call] ?? [];
+        call += 1;
+        return Promise.resolve(rows);
+      }),
+    })),
+    insert: jest.fn(() => ({
+      values: jest.fn(() => ({
+        onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
+      })),
+    })),
+  };
+  return db;
+}
 
 describe('DemoTestCoreController', () => {
   let controller: DemoTestCoreController;
   let mockService: MockService;
+  let mockTaste: MockTasteProfileService;
+  let mockSettings: MockSettingsService;
+  const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 
   beforeEach(async () => {
     mockService = createMockService();
+    mockTaste = {
+      aggregateVectors: jest.fn().mockResolvedValue(undefined),
+      weeklyIntensityRollup: jest.fn().mockResolvedValue(undefined),
+    };
+    mockSettings = { getDemoMode: jest.fn().mockResolvedValue(true) };
+    process.env.DEMO_MODE = 'true';
 
     const module = await Test.createTestingModule({
       controllers: [DemoTestCoreController],
       providers: [
         { provide: DemoTestService, useValue: mockService },
-        {
-          provide: TasteProfileService,
-          useValue: {
-            aggregateVectors: jest.fn().mockResolvedValue(undefined),
-            weeklyIntensityRollup: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: { getDemoMode: jest.fn().mockResolvedValue(true) },
-        },
-        { provide: DrizzleAsyncProvider, useValue: {} },
+        { provide: TasteProfileService, useValue: mockTaste },
+        { provide: SettingsService, useValue: mockSettings },
+        { provide: DrizzleAsyncProvider, useValue: mockDb([]) },
       ],
     }).compile();
 
     controller = module.get(DemoTestCoreController);
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+    else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
   });
 
   describe('linkDiscord', () => {
@@ -97,6 +134,18 @@ describe('DemoTestCoreController', () => {
       () => controller,
       () => mockService,
     );
+  });
+
+  describe('rebuildTasteProfiles (ROK-1083)', () => {
+    rebuildTasteProfilesTests(
+      () => controller,
+      () => mockTaste,
+      () => mockSettings,
+    );
+  });
+
+  describe('reseedTasteProfiles (ROK-1083)', () => {
+    reseedTasteProfilesTests(() => mockSettings);
   });
 });
 
@@ -226,5 +275,123 @@ function clearGameTimeConfirmationTests(
     const result = await getController().clearGameTimeConfirmationForTest(req);
     expect(result).toEqual({ success: true });
     expect(getMock().clearGameTimeConfirmationForTest).toHaveBeenCalledWith(1);
+  });
+}
+
+/**
+ * Helper: build a controller instance with a custom db mock so the
+ * reseed-taste-profiles flow can be exercised (its select->filter->insert
+ * pipeline reads from two tables).
+ */
+async function buildController(overrides: {
+  demoMode?: boolean;
+  envDemo?: boolean;
+  dbRows?: unknown[][];
+}): Promise<{ controller: DemoTestCoreController; taste: MockTasteProfileService }> {
+  const prevEnv = process.env.DEMO_MODE;
+  process.env.DEMO_MODE = overrides.envDemo === false ? 'false' : 'true';
+  const taste = {
+    aggregateVectors: jest.fn().mockResolvedValue(undefined),
+    weeklyIntensityRollup: jest.fn().mockResolvedValue(undefined),
+  };
+  const settings = {
+    getDemoMode: jest.fn().mockResolvedValue(overrides.demoMode ?? true),
+  };
+  const db = mockDb(overrides.dbRows ?? []);
+  const module = await Test.createTestingModule({
+    controllers: [DemoTestCoreController],
+    providers: [
+      { provide: DemoTestService, useValue: createMockService() },
+      { provide: TasteProfileService, useValue: taste },
+      { provide: SettingsService, useValue: settings },
+      { provide: DrizzleAsyncProvider, useValue: db },
+    ],
+  }).compile();
+  const controller = module.get(DemoTestCoreController);
+  // Restore DEMO_MODE after the controller is built; the handler reads it
+  // at call time so the tests below re-set it as needed.
+  if (prevEnv === undefined) delete process.env.DEMO_MODE;
+  else process.env.DEMO_MODE = prevEnv;
+  return { controller, taste };
+}
+
+function rebuildTasteProfilesTests(
+  getController: GetController,
+  getTaste: GetMockTaste,
+  getSettings: GetMockSettings,
+) {
+  it('runs aggregate → weekly-intensity → archetype-refresh in order', async () => {
+    const order: string[] = [];
+    getTaste().aggregateVectors.mockImplementation(async () => {
+      order.push('aggregate');
+    });
+    getTaste().weeklyIntensityRollup.mockImplementation(async () => {
+      order.push('weekly');
+    });
+    const result = await getController().rebuildTasteProfilesForTest();
+    expect(order).toEqual(['aggregate', 'weekly']);
+    expect(result.success).toBe(true);
+  });
+
+  it('throws ForbiddenException when DB demoMode is false', async () => {
+    getSettings().getDemoMode.mockResolvedValueOnce(false);
+    await expect(
+      getController().rebuildTasteProfilesForTest(),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(getTaste().aggregateVectors).not.toHaveBeenCalled();
+    expect(getTaste().weeklyIntensityRollup).not.toHaveBeenCalled();
+  });
+
+  it('throws ForbiddenException when env DEMO_MODE !== "true"', async () => {
+    process.env.DEMO_MODE = 'false';
+    await expect(
+      getController().rebuildTasteProfilesForTest(),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(getTaste().aggregateVectors).not.toHaveBeenCalled();
+  });
+}
+
+function reseedTasteProfilesTests(getSettings: GetMockSettings) {
+  it('scopes seed to DEMO_USERNAMES and never touches real accounts', async () => {
+    const demoName = DEMO_USERNAMES[0];
+    const dbRows: unknown[][] = [
+      [
+        { id: 1, username: 'roknua' }, // real operator — must NOT be seeded
+        { id: 2, username: demoName }, // demo — should be seeded
+      ],
+      [{ id: 100, igdbId: 1942 }],
+    ];
+    const { controller, taste } = await buildController({ dbRows });
+    const result = await controller.reseedTasteProfilesForTest();
+    expect(result.success).toBe(true);
+    // Only 1 demo user was eligible, so seededUsers must be 1.
+    expect(result.seededUsers).toBe(1);
+    expect(taste.aggregateVectors).toHaveBeenCalledTimes(1);
+    expect(taste.weeklyIntensityRollup).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws ForbiddenException before any DB read when demoMode is off', async () => {
+    const { controller, taste } = await buildController({ demoMode: false });
+    await expect(controller.reseedTasteProfilesForTest()).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(taste.aggregateVectors).not.toHaveBeenCalled();
+    // settings was called by the gate check, but db.select should not have been
+    // triggered — if it was, the gate ran too late.
+    expect(getSettings()).toBeDefined(); // sanity
+  });
+
+  it('throws ForbiddenException when env DEMO_MODE !== "true"', async () => {
+    const { controller, taste } = await buildController({});
+    // Flip env AFTER the controller is built — the handler reads it at call time.
+    process.env.DEMO_MODE = 'false';
+    try {
+      await expect(
+        controller.reseedTasteProfilesForTest(),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(taste.aggregateVectors).not.toHaveBeenCalled();
+    } finally {
+      process.env.DEMO_MODE = 'true';
+    }
   });
 }

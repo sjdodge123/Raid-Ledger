@@ -10,35 +10,35 @@ import {
   HttpStatus,
   BadRequestException,
   ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
+import type { AuthenticatedRequest } from '../auth/types';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
-import { DemoTestService } from './demo-test.service';
-import { DEMO_USERNAMES } from './demo-data.constants';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
-import {
-  installGameActivityRollups,
-  installPlayhistoryInterests,
-  refreshArchetypesFromCurrentMetrics,
-} from './demo-data-install-taste.helpers';
+import { DEMO_USERNAMES } from './demo-data.constants';
 import {
   createRng,
   generateSignalProfiles,
   generateGameActivityRollups,
   generatePlayhistoryInterests,
 } from './demo-data-generator';
-import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import { Inject } from '@nestjs/common';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from '../drizzle/schema';
-import type { AuthenticatedRequest } from '../auth/types';
+import {
+  installGameActivityRollups,
+  installPlayhistoryInterests,
+  refreshArchetypesFromCurrentMetrics,
+} from './demo-data-install-taste.helpers';
 import {
   LinkDiscordSchema,
   EnableNotificationsSchema,
   AwaitProcessingSchema,
 } from './demo-test.schemas';
+import { DemoTestService } from './demo-test.service';
 import { parseDemoBody } from './demo-test.utils';
 
 /**
