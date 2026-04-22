@@ -135,3 +135,6 @@ export * from './activity-log.schema.js';
 
 // Standalone Scheduling Poll (ROK-977)
 export * from './standalone-poll.schema.js';
+
+// AI Nomination Suggestions (ROK-931)
+export * from './lineup-ai-suggestions.schema.js';
