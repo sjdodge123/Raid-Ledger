@@ -52,7 +52,7 @@ function strategyGuidance(
   voterCount: number,
   minPlayerCount: number,
 ): string {
-  const sizingRule = `Every candidate already supports at least ${minPlayerCount} concurrent players — do not question playability, but break ties by preferring games whose player range comfortably includes ${voterCount}.`;
+  const sizingRule = `Every candidate already supports at least ${minPlayerCount} concurrent players. TOP PRIORITY: pick games whose player-count range hugs ${voterCount} voters — a 2-4 or 3-8 co-op is a stronger fit than a 32-slot lobby, even if the big lobby scores higher on taste. This outranks every other bias.`;
   if (strategy === 'small_group') {
     return [
       `This is a SMALL GROUP (${voterCount} voters).`,
@@ -79,11 +79,11 @@ function strategyGuidance(
 }
 
 const BIAS_RULES = [
-  'Ranking tie-breakers, in priority order:',
-  '1. Prefer games where at least one voter already owns it (ownership bias — lower friction).',
-  '2. Prefer games currently on sale (look for "ON SALE -N%") over full-price picks at similar fit.',
-  '3. Prefer stronger taste-axis overlap with the voter centroid top axes.',
-  '4. Prefer player-count ranges that hug the voter count rather than huge max-player lobbies.',
+  'Ranking priority — apply in order, top rule wins over all others:',
+  '1. GROUP-SIZE FIT (highest priority) — prefer games whose player range hugs the voter count. A 4-max-player co-op for 3 voters beats a 32-slot lobby at the same taste fit. This is the dominant bias; do not trade it away for any other signal.',
+  '2. Ownership bias — if two games tie on group-size fit, prefer the one at least one voter already owns (lower friction to play tonight).',
+  '3. Sale bias — tie-break next on games currently "ON SALE -N%" over full-price picks.',
+  '4. Taste-axis overlap — final tie-break using voter centroid top axes.',
 ].join(' ');
 
 /**
