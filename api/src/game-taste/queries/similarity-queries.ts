@@ -127,6 +127,10 @@ async function executeSimilarityQuery(
   const targetLiteral = `[${target.join(',')}]`;
   const excludeClause =
     excludeGameId !== null ? sql`AND g.id <> ${excludeGameId}` : sql``;
+  // No HNSW index on `vector` yet — the spec defers it until the corpus
+  // exceeds ~500 games. A seqscan + in-memory sort over ~2K rows is still
+  // sub-ms; revisit if the corpus grows much past 5K or if the confidence
+  // + banned/hidden filters start dominating plan cost.
   return db.execute<SimilarityRow>(sql`
     SELECT g.id AS game_id, g.name, g.cover_url,
            (gtv.vector <=> ${targetLiteral}::vector) AS distance
