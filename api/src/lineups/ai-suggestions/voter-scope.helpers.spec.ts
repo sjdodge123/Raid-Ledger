@@ -23,7 +23,9 @@ describe('computeVoterSetHash (ROK-931)', () => {
   });
 
   it('produces different hashes for different voter sets', () => {
-    expect(computeVoterSetHash([1, 2])).not.toBe(computeVoterSetHash([1, 2, 3]));
+    expect(computeVoterSetHash([1, 2])).not.toBe(
+      computeVoterSetHash([1, 2, 3]),
+    );
     expect(computeVoterSetHash([1, 2, 3])).not.toBe(
       computeVoterSetHash([4, 5, 6]),
     );

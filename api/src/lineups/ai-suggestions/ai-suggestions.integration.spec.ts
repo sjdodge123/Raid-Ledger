@@ -64,9 +64,7 @@ function describeAiSuggestions() {
 
     it('returns 401 when unauthenticated', async () => {
       const lineupId = await createLineup();
-      const res = await testApp.request.get(
-        `/lineups/${lineupId}/suggestions`,
-      );
+      const res = await testApp.request.get(`/lineups/${lineupId}/suggestions`);
       expect(res.status).toBe(401);
     });
   });

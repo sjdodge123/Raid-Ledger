@@ -28,10 +28,7 @@ import {
   buildSuggestionPrompt,
   computeCentroidAxes,
 } from './prompt-builder.helpers';
-import {
-  callAndParseLlmOutput,
-  LLM_FEATURE_TAG,
-} from './llm-output.helpers';
+import { callAndParseLlmOutput, LLM_FEATURE_TAG } from './llm-output.helpers';
 import { enrichSuggestions } from './enrichment.helpers';
 import {
   findLatestByHash,
@@ -85,9 +82,11 @@ export class AiSuggestionsService {
     return promise;
   }
 
-  private async loadLineup(lineupId: number): Promise<VoterScopeLineup & {
-    status: string;
-  }> {
+  private async loadLineup(lineupId: number): Promise<
+    VoterScopeLineup & {
+      status: string;
+    }
+  > {
     const [row] = await this.db
       .select({
         id: schema.communityLineups.id,
@@ -173,9 +172,7 @@ export class AiSuggestionsService {
       .select({ dimensions: schema.playerTasteVectors.dimensions })
       .from(schema.playerTasteVectors)
       .where(inArray(schema.playerTasteVectors.userId, userIds));
-    return rows.map(
-      (r) => r.dimensions as unknown as Record<string, number>,
-    );
+    return rows.map((r) => r.dimensions as unknown as Record<string, number>);
   }
 
   private async persistAndReturn(

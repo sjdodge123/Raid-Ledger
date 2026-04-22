@@ -113,9 +113,7 @@ export async function deleteAllForLineup(
 export class AiSuggestionsCacheInvalidator {
   private readonly logger = new Logger(AiSuggestionsCacheInvalidator.name);
 
-  constructor(
-    @Inject(DrizzleAsyncProvider) private readonly db: Db,
-  ) {}
+  constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
   async invalidateForLineup(lineupId: number): Promise<void> {
     try {

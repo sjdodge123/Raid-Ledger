@@ -35,9 +35,7 @@ interface AuthRequest extends Request {
 @Controller('lineups/:id/suggestions')
 @UseGuards(AuthGuard('jwt'))
 export class AiSuggestionsController {
-  constructor(
-    private readonly aiSuggestions: AiSuggestionsService,
-  ) {}
+  constructor(private readonly aiSuggestions: AiSuggestionsService) {}
 
   @Get()
   async getSuggestions(
@@ -45,8 +43,7 @@ export class AiSuggestionsController {
     @Query('personalize') personalize: string | undefined,
     @Req() req: AuthRequest,
   ): Promise<AiSuggestionsResponseDto> {
-    const personalizeUserId =
-      personalize === 'me' ? req.user.id : undefined;
+    const personalizeUserId = personalize === 'me' ? req.user.id : undefined;
     try {
       return await this.aiSuggestions.getSuggestions(id, {
         personalizeUserId,
@@ -71,10 +68,7 @@ function mapLlmError(err: unknown): unknown {
       });
     }
   }
-  if (
-    err instanceof Error &&
-    err.name === 'CircuitBreakerOpenError'
-  ) {
+  if (err instanceof Error && err.name === 'CircuitBreakerOpenError') {
     return new ServiceUnavailableException({
       error: 'AI_PROVIDER_UNAVAILABLE',
     });

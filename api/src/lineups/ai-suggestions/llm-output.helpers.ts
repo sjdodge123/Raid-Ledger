@@ -1,6 +1,4 @@
-import type {
-  AiSuggestionsLlmOutputDto,
-} from '@raid-ledger/contract';
+import type { AiSuggestionsLlmOutputDto } from '@raid-ledger/contract';
 import { AiSuggestionsLlmOutputSchema } from '@raid-ledger/contract';
 import type { LlmService } from '../../ai/llm.service';
 import type {

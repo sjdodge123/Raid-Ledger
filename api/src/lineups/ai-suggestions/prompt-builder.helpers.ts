@@ -1,4 +1,7 @@
-import type { LlmChatMessage, LlmChatOptions } from '../../ai/llm-provider.interface';
+import type {
+  LlmChatMessage,
+  LlmChatOptions,
+} from '../../ai/llm-provider.interface';
 import type { CandidateContext } from './candidate-pool.helpers';
 import type { VoterScopeStrategy } from './voter-scope.helpers';
 

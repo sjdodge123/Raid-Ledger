@@ -12,7 +12,10 @@
  * until Phase B lands `llm-output.helpers.ts`.
  */
 import type { LlmService } from '../../ai/llm.service';
-import type { LlmChatOptions, LlmChatResponse } from '../../ai/llm-provider.interface';
+import type {
+  LlmChatOptions,
+  LlmChatResponse,
+} from '../../ai/llm-provider.interface';
 import { callAndParseLlmOutput } from './llm-output.helpers';
 
 type MockLlmService = Pick<LlmService, 'chat'>;
@@ -21,9 +24,10 @@ function makeChatResponse(content: string): LlmChatResponse {
   return { content, latencyMs: 10 };
 }
 
-function makeMockLlmService(
-  responses: (LlmChatResponse | Error)[],
-): { service: MockLlmService; chat: jest.Mock } {
+function makeMockLlmService(responses: (LlmChatResponse | Error)[]): {
+  service: MockLlmService;
+  chat: jest.Mock;
+} {
   const chat = jest.fn<
     Promise<LlmChatResponse>,
     [LlmChatOptions, { feature: string }]
@@ -44,7 +48,9 @@ const VALID_PAYLOAD = JSON.stringify({
 
 describe('callAndParseLlmOutput (ROK-931)', () => {
   it('returns parsed suggestions when the first call produces valid JSON', async () => {
-    const { service, chat } = makeMockLlmService([makeChatResponse(VALID_PAYLOAD)]);
+    const { service, chat } = makeMockLlmService([
+      makeChatResponse(VALID_PAYLOAD),
+    ]);
     const result = await callAndParseLlmOutput(service as LlmService, {
       messages: [{ role: 'user', content: 'suggest games' }],
     });
