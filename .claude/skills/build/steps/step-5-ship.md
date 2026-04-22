@@ -1,5 +1,11 @@
 # Step 5: Ship — Rebase, PR, Auto-Merge, Cleanup, Summary
 
+**This is the ONLY step that pushes.** Entering this step requires both gates from Step 4 to be PASS:
+- `gates.operator: PASS` (Linear status `Code Review`, operator approved in browser)
+- `gates.reviewer: PASS` (reviewer report APPROVED, blockers addressed)
+
+If either is still PENDING / WAITING / FAIL → return to Step 4. Do not push.
+
 ---
 
 ## 5a. Rebase, Push, Create PR (inline — no skill nesting)

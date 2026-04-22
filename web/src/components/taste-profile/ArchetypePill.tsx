@@ -1,39 +1,41 @@
 import type { JSX } from "react";
-import type { TasteProfileArchetype } from "@raid-ledger/contract";
+import type { ArchetypeDto } from "@raid-ledger/contract";
+import { composeArchetypeLabel } from "./taste-profile-helpers";
 
 type Size = "sm" | "lg";
 
 interface ArchetypePillProps {
-    archetype: TasteProfileArchetype;
+    archetype: ArchetypeDto;
     /** Pill (`sm`) for header use, hero title (`lg`) for radar overlay. */
     size?: Size;
     className?: string;
 }
 
-function toVariant(archetype: TasteProfileArchetype): string {
-    // Normalise to a kebab-case CSS token: "Social Drifter" -> "social-drifter".
-    return archetype.toLowerCase().replace(/\s+/g, "-");
-}
-
 /**
  * Archetype badge shown next to usernames AND above the radar chart.
- * Colour variants are driven by CSS (`taste-profile-section.css`) so the
- * component stays pure and testable.
+ *
+ * ROK-1083: the pill renders the composed stacked label
+ * (`"Hardcore Raider"`, `"Hardcore Hero & Raider"`, or `"Hardcore Player"`
+ * when no titles apply). Colour variants are driven by CSS keyed off the
+ * intensity tier (`taste-profile-section.css`) so the component stays
+ * pure and testable.
  */
 export function ArchetypePill({
     archetype,
     size = "sm",
     className = "",
 }: ArchetypePillProps): JSX.Element {
-    const variant = toVariant(archetype);
+    const tierClass = `archetype-pill--tier-${archetype.intensityTier.toLowerCase()}`;
     const sizeClass =
         size === "lg" ? "archetype-pill--lg" : "archetype-pill--sm";
+    const label = composeArchetypeLabel(archetype);
     return (
         <span
-            className={`archetype-pill archetype-pill--${variant} ${sizeClass} ${className}`.trim()}
-            data-archetype={archetype}
+            className={`archetype-pill ${tierClass} ${sizeClass} ${className}`.trim()}
+            data-tier={archetype.intensityTier}
+            data-vector-titles={archetype.vectorTitles.join(",")}
         >
-            {archetype}
+            {label}
         </span>
     );
 }

@@ -18,7 +18,7 @@ import { UserEventSignups } from "../components/profile/UserEventSignups";
 import type {
   UserProfileDto,
   ItadGamePricingDto,
-  TasteProfileArchetype,
+  ArchetypeDto,
 } from "@raid-ledger/contract";
 import {
   HeartedGameCard,
@@ -152,7 +152,7 @@ function ProfileSections({
  */
 function useHeaderArchetype(
   tasteProfile: ReturnType<typeof useTasteProfile>,
-): TasteProfileArchetype | null {
+): ArchetypeDto | null {
   if (!tasteProfile.data) return null;
   if (isEmptyTasteProfile(tasteProfile.data)) return null;
   return tasteProfile.data.archetype;
@@ -237,7 +237,7 @@ function ProfileHeader({
   profile: { username: string };
   profileAvatar: { url: string | null };
   memberSince: string;
-  archetype: TasteProfileArchetype | null;
+  archetype: ArchetypeDto | null;
 }): JSX.Element {
   return (
     <div className="user-profile-header">

@@ -1,11 +1,12 @@
 /**
- * Pure helpers for the taste-profile UI (ROK-949).
+ * Pure helpers for the taste-profile UI (ROK-949, ROK-1083).
  *
  * All functions are side-effect free so they can be unit-tested without
  * any rendering or network calls.
  */
 import {
     TASTE_PROFILE_AXIS_POOL,
+    type ArchetypeDto,
     type TasteProfilePoolAxis,
     type TasteProfileResponseDto,
 } from "@raid-ledger/contract";
@@ -124,4 +125,23 @@ export function formatFocusIndicator(
  */
 export function formatIntensity(intensity: number): string {
     return `Intensity: ${intensity}/100`;
+}
+
+/**
+ * Composes the stacked archetype label (ROK-1083).
+ *
+ *  - 0 titles  → `"{Tier} Player"` (e.g. "Hardcore Player")
+ *  - 1 title   → `"{Tier} {Title}"` (e.g. "Hardcore Raider")
+ *  - 2 titles  → `"{Tier} {Title1} & {Title2}"` (e.g. "Hardcore Hero & Raider")
+ *
+ * Reused by the archetype pill and by the radar chart's `aria-label` so
+ * the spoken and visual summary stay in sync.
+ */
+export function composeArchetypeLabel(archetype: ArchetypeDto): string {
+    const { intensityTier, vectorTitles } = archetype;
+    if (vectorTitles.length === 0) return `${intensityTier} Player`;
+    if (vectorTitles.length === 1) {
+        return `${intensityTier} ${vectorTitles[0]}`;
+    }
+    return `${intensityTier} ${vectorTitles[0]} & ${vectorTitles[1]}`;
 }

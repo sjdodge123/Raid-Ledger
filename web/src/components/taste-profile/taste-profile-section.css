@@ -79,31 +79,27 @@
     padding: 0.25rem 0.875rem;
 }
 
-.archetype-pill--dedicated {
+/* Pill colour variants keyed off intensity tier (ROK-1083). */
+
+.archetype-pill--tier-hardcore {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.archetype-pill--tier-dedicated {
     color: #f472b6;
     background: rgba(244, 114, 182, 0.12);
     border-color: rgba(244, 114, 182, 0.35);
 }
 
-.archetype-pill--specialist {
-    color: #a78bfa;
-    background: rgba(167, 139, 250, 0.12);
-    border-color: rgba(167, 139, 250, 0.35);
-}
-
-.archetype-pill--explorer {
+.archetype-pill--tier-regular {
     color: #34d399;
     background: rgba(52, 211, 153, 0.12);
     border-color: rgba(52, 211, 153, 0.35);
 }
 
-.archetype-pill--social-drifter {
-    color: #60a5fa;
-    background: rgba(96, 165, 250, 0.12);
-    border-color: rgba(96, 165, 250, 0.35);
-}
-
-.archetype-pill--casual {
+.archetype-pill--tier-casual {
     color: #a1a1aa;
     background: rgba(161, 161, 170, 0.12);
     border-color: rgba(161, 161, 170, 0.3);

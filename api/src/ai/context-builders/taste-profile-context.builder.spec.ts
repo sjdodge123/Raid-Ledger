@@ -10,10 +10,12 @@
  * - AC 8: Unit tests exist
  */
 import { Test } from '@nestjs/testing';
+import type { ArchetypeDto } from '@raid-ledger/contract';
 import type {
   CoPlayPartnerRow,
   TasteProfileResult,
 } from '../../taste-profile/queries/taste-profile-queries';
+import { TIER_DESCRIPTIONS } from '../../taste-profile/archetype-copy';
 import { TasteProfileService } from '../../taste-profile/taste-profile.service';
 import { TasteProfileContextBuilder } from './taste-profile-context.builder';
 
@@ -24,11 +26,24 @@ import { TasteProfileContextBuilder } from './taste-profile-context.builder';
  * doesn't care which values we pick — the builder should read
  * `dimensions` and `intensityMetrics` verbatim from this source.
  */
+/**
+ * Default composed archetype used by the fixture when a test does not
+ * pin a specific shape — Dedicated tier, no vector titles.
+ */
+const DEFAULT_ARCHETYPE: ArchetypeDto = {
+  intensityTier: 'Dedicated',
+  vectorTitles: [],
+  descriptions: {
+    tier: TIER_DESCRIPTIONS.Dedicated,
+    titles: [],
+  },
+};
+
 function buildProfile(overrides: {
   userId: number;
   dimensions?: Record<string, number>;
   coPlayPartners?: CoPlayPartnerRow[];
-  archetype?: TasteProfileResult['archetype'];
+  archetype?: ArchetypeDto;
   intensityMetrics?: TasteProfileResult['intensityMetrics'];
 }): TasteProfileResult {
   // Use the full pool but we only need *some* values non-zero to test sort.
@@ -70,7 +85,7 @@ function buildProfile(overrides: {
       breadth: 55,
       consistency: 70,
     },
-    archetype: overrides.archetype ?? 'Explorer',
+    archetype: overrides.archetype ?? DEFAULT_ARCHETYPE,
     coPlayPartners: overrides.coPlayPartners ?? [],
     computedAt: new Date('2026-04-01T00:00:00Z').toISOString(),
   };
@@ -190,10 +205,18 @@ describe('TasteProfileContextBuilder', () => {
     });
 
     it('passes archetype and intensityMetrics through from source (AC 3 anchor)', async () => {
+      const archetype: ArchetypeDto = {
+        intensityTier: 'Dedicated',
+        vectorTitles: ['Raider', 'Hero'],
+        descriptions: {
+          tier: TIER_DESCRIPTIONS.Dedicated,
+          titles: ['MMO group content is home base', 'Fantasy RPG lead'],
+        },
+      };
       mockTasteProfileService.getTasteProfile.mockResolvedValueOnce(
         buildProfile({
           userId: 1,
-          archetype: 'Dedicated',
+          archetype,
           intensityMetrics: {
             intensity: 85,
             focus: 70,
@@ -205,7 +228,7 @@ describe('TasteProfileContextBuilder', () => {
 
       const result = await builder.build([1]);
       const ctx = result.contexts[0];
-      expect(ctx.archetype).toBe('Dedicated');
+      expect(ctx.archetype).toEqual(archetype);
       expect(ctx.intensityMetrics).toEqual({
         intensity: 85,
         focus: 70,

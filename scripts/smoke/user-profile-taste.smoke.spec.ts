@@ -15,13 +15,7 @@
  */
 import { test, expect } from './base';
 
-const ARCHETYPE_NAMES = [
-    'Dedicated',
-    'Specialist',
-    'Explorer',
-    'Social Drifter',
-    'Casual',
-];
+const INTENSITY_TIER_NAMES = ['Hardcore', 'Dedicated', 'Regular', 'Casual'];
 
 /**
  * Navigate to the Players page and follow a user link to reach another
@@ -120,10 +114,10 @@ test.describe('User profile taste section', () => {
             'Not enough data yet — play more games!',
             { exact: false },
         );
-        const archetypeRegex = new RegExp(
-            `\\b(${ARCHETYPE_NAMES.join('|')})\\b`,
+        const tierRegex = new RegExp(
+            `\\b(${INTENSITY_TIER_NAMES.join('|')})\\b`,
         );
-        const archetypeText = page.getByText(archetypeRegex).first();
+        const archetypeText = page.getByText(tierRegex).first();
         await expect(emptyState.or(archetypeText)).toBeVisible({
             timeout: 15_000,
         });
@@ -139,9 +133,9 @@ test.describe('User profile taste section', () => {
             return;
         }
 
-        // Non-empty: exactly one of the 5 archetype names must be on the
-        // page.  We look for the regex union so the test is robust to the
-        // pill's exact DOM structure (span / badge / pill component).
+        // Non-empty: exactly one of the 4 intensity tiers must appear in the
+        // stacked label (e.g. "Hardcore Raider"). Regex union keeps the
+        // test robust to the pill's exact DOM structure (span/badge/pill).
         await expect(archetypeText).toBeVisible({ timeout: 10_000 });
     });
 

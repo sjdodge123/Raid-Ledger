@@ -21,6 +21,7 @@ import { DemoTestLineupService } from './demo-test-lineup.service';
 import { SlashCommandTestService } from './slash-command-test.service';
 import { LineupsModule } from '../lineups/lineups.module';
 import { AiChatModule } from '../discord-bot/ai-chat/ai-chat.module';
+import { TasteProfileModule } from '../taste-profile/taste-profile.module';
 import { AiChatTestController } from './ai-chat-test.controller';
 
 @Module({
@@ -30,6 +31,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     IgdbModule,
     LineupsModule,
     AiChatModule,
+    TasteProfileModule,
   ],
   controllers: [
     AdminController,

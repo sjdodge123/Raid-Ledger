@@ -10,7 +10,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import type {
-  TasteProfileArchetype,
+  ArchetypeDto,
   TasteProfileDimensionsDto,
   IntensityMetricsDto,
 } from '@raid-ledger/contract';
@@ -55,7 +55,7 @@ export const playerTasteVectors = pgTable(
     intensityMetrics: jsonb('intensity_metrics')
       .$type<IntensityMetricsDto>()
       .notNull(),
-    archetype: text('archetype').$type<TasteProfileArchetype>().notNull(),
+    archetype: jsonb('archetype').$type<ArchetypeDto | null>(),
     computedAt: timestamp('computed_at').defaultNow().notNull(),
     signalHash: text('signal_hash').notNull(),
   },

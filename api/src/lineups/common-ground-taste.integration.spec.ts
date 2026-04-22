@@ -12,6 +12,7 @@
  * - AC 7: Graceful degradation — zero voters, voter missing a taste vector
  */
 import { sql } from 'drizzle-orm';
+import type { ArchetypeDto } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -19,7 +20,18 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
+import { TIER_DESCRIPTIONS } from '../taste-profile/archetype-copy';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+
+/** Default composed archetype for test fixtures (ROK-1083 jsonb shape). */
+const DEFAULT_TEST_ARCHETYPE: ArchetypeDto = {
+  intensityTier: 'Regular',
+  vectorTitles: [],
+  descriptions: {
+    tier: TIER_DESCRIPTIONS.Regular,
+    titles: [],
+  },
+};
 
 function describeCommonGroundTaste() {
   let testApp: TestApp;
@@ -104,7 +116,7 @@ function describeCommonGroundTaste() {
     userId: number,
     opts: {
       axisScores: Partial<Record<string, number>>;
-      archetype?: string;
+      archetype?: ArchetypeDto | Partial<ArchetypeDto>;
       intensity?: number;
     },
   ): Promise<void> {
@@ -146,6 +158,10 @@ function describeCommonGroundTaste() {
       dimensions.social,
       dimensions.mmo,
     ];
+    const archetype: ArchetypeDto = {
+      ...DEFAULT_TEST_ARCHETYPE,
+      ...(opts.archetype ?? {}),
+    } as ArchetypeDto;
     await testApp.db.insert(schema.playerTasteVectors).values({
       userId,
       vector,
@@ -159,7 +175,8 @@ function describeCommonGroundTaste() {
         consistency: 50,
       } as any,
 
-      archetype: (opts.archetype ?? 'Explorer') as any,
+      // ROK-1083: jsonb column accepts the composed archetype object directly.
+      archetype,
       signalHash: `test-${userId}-${Date.now()}`,
     });
   }

@@ -138,7 +138,14 @@ export const handlers = [
             intensityMetrics: {
                 intensity: 0, focus: 0, breadth: 0, consistency: 0,
             },
-            archetype: 'Casual',
+            archetype: {
+                intensityTier: 'Casual',
+                vectorTitles: [],
+                descriptions: {
+                    tier: 'Drops in once or twice a week',
+                    titles: [],
+                },
+            },
             coPlayPartners: [],
             computedAt: '2026-04-17T00:00:00.000Z',
         });
