@@ -890,6 +890,13 @@
       "when": 1776804310878,
       "tag": "0126_eminent_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1776831898605,
+      "tag": "0127_player_taste_archetype_jsonb",
+      "breakpoints": true
     }
   ]
 }
