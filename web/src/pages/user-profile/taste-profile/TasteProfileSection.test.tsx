@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { TasteProfileResponseDto } from "@raid-ledger/contract";
+import type {
+    ArchetypeDto,
+    TasteProfileResponseDto,
+} from "@raid-ledger/contract";
 import { renderWithProviders } from "../../../test/render-helpers";
 import { TasteProfileSection } from "./TasteProfileSection";
 
@@ -29,19 +32,29 @@ function makeResult(
     } as unknown as UseQueryResult<TasteProfileResponseDto, Error>;
 }
 
+function makeArchetype(overrides?: Partial<ArchetypeDto>): ArchetypeDto {
+    return {
+        intensityTier: "Dedicated",
+        vectorTitles: ["Raider"],
+        descriptions: {
+            tier: "Shows up several times a week",
+            titles: ["MMO group content is home base"],
+        },
+        ...overrides,
+    };
+}
+
 function makeProfile(
     overrides?: Partial<TasteProfileResponseDto>,
 ): TasteProfileResponseDto {
     return {
         userId: 42,
         dimensions: {
-            co_op: 60,
-            pvp: 10,
-            rpg: 35,
-            survival: 20,
-            strategy: 45,
-            social: 50,
-            mmo: 5,
+            co_op: 60, pvp: 10, battle_royale: 0, mmo: 70, moba: 0,
+            fighting: 0, shooter: 0, racing: 0, sports: 0, rpg: 35,
+            fantasy: 0, sci_fi: 0, adventure: 0, strategy: 45, survival: 20,
+            crafting: 0, automation: 0, sandbox: 0, horror: 0, social: 50,
+            roguelike: 0, puzzle: 0, platformer: 0, stealth: 0,
         },
         intensityMetrics: {
             intensity: 72,
@@ -49,10 +62,20 @@ function makeProfile(
             breadth: 20,
             consistency: 55,
         },
-        archetype: "Specialist",
+        archetype: makeArchetype(),
         coPlayPartners: [],
         computedAt: "2026-04-16T00:00:00.000Z",
         ...overrides,
+    };
+}
+
+function emptyDimensions(): TasteProfileResponseDto["dimensions"] {
+    return {
+        co_op: 0, pvp: 0, battle_royale: 0, mmo: 0, moba: 0,
+        fighting: 0, shooter: 0, racing: 0, sports: 0, rpg: 0,
+        fantasy: 0, sci_fi: 0, adventure: 0, strategy: 0, survival: 0,
+        crafting: 0, automation: 0, sandbox: 0, horror: 0, social: 0,
+        roguelike: 0, puzzle: 0, platformer: 0, stealth: 0,
     };
 }
 
@@ -72,17 +95,7 @@ describe("<TasteProfileSection> (states)", () => {
     });
 
     it("renders the empty-state message when all dimensions are zero", () => {
-        const profile = makeProfile({
-            dimensions: {
-                co_op: 0,
-                pvp: 0,
-                rpg: 0,
-                survival: 0,
-                strategy: 0,
-                social: 0,
-                mmo: 0,
-            },
-        });
+        const profile = makeProfile({ dimensions: emptyDimensions() });
         mockUseTasteProfile.mockReturnValue(
             makeResult({ data: profile, isLoading: false }),
         );
@@ -126,7 +139,7 @@ describe("<TasteProfileSection> (states)", () => {
 });
 
 describe("<TasteProfileSection> (content)", () => {
-    it("renders intensity badge + archetype + focus line for populated profiles", () => {
+    it("renders intensity badge + composed label + descriptions for populated profiles", () => {
         const profile = makeProfile();
         mockUseTasteProfile.mockReturnValue(
             makeResult({ data: profile, isLoading: false }),
@@ -139,8 +152,61 @@ describe("<TasteProfileSection> (content)", () => {
         expect(
             screen.getByText(/Focused play \(75%\)/),
         ).toBeInTheDocument();
-        // Archetype appears somewhere on the page (pill overlay + badge).
-        expect(screen.getAllByText("Specialist").length).toBeGreaterThan(0);
+        // Composed label ("Dedicated Raider") appears somewhere on the
+        // page — the pill overlay and the intensity badge both render it.
+        expect(
+            screen.getAllByText(/Dedicated Raider/i).length,
+        ).toBeGreaterThan(0);
+        // Descriptions (tier + title) surface alongside the label.
+        expect(
+            screen.getByText(/Shows up several times a week/i),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText(/MMO group content is home base/i),
+        ).toBeInTheDocument();
+    });
+
+    it("renders the two-title stacked label (Hardcore Hero & Raider)", () => {
+        const profile = makeProfile({
+            archetype: makeArchetype({
+                intensityTier: "Hardcore",
+                vectorTitles: ["Hero", "Raider"],
+                descriptions: {
+                    tier: "Plays nearly daily, many hours per week",
+                    titles: [
+                        "Drawn to story-driven RPGs and fantasy worlds",
+                        "MMO group content is home base",
+                    ],
+                },
+            }),
+        });
+        mockUseTasteProfile.mockReturnValue(
+            makeResult({ data: profile, isLoading: false }),
+        );
+        renderWithProviders(<TasteProfileSection userId={1} />);
+        expect(
+            screen.getAllByText(/Hardcore Hero & Raider/i).length,
+        ).toBeGreaterThan(0);
+    });
+
+    it("renders '{Tier} Player' when the profile has no vector titles", () => {
+        const profile = makeProfile({
+            archetype: makeArchetype({
+                intensityTier: "Hardcore",
+                vectorTitles: [],
+                descriptions: {
+                    tier: "Plays nearly daily, many hours per week",
+                    titles: [],
+                },
+            }),
+        });
+        mockUseTasteProfile.mockReturnValue(
+            makeResult({ data: profile, isLoading: false }),
+        );
+        renderWithProviders(<TasteProfileSection userId={1} />);
+        expect(
+            screen.getAllByText(/Hardcore Player/i).length,
+        ).toBeGreaterThan(0);
     });
 
     it("opens the partners modal when 'Show all' is clicked", async () => {
