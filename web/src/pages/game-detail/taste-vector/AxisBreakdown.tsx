@@ -4,7 +4,7 @@ import {
     type TasteProfileDimensionsDto,
     type TasteProfilePoolAxis,
 } from "@raid-ledger/contract";
-import { axisLabel } from "../../user-profile/taste-profile/taste-profile-helpers";
+import { axisLabel } from "../../../components/taste-profile/taste-profile-helpers";
 
 interface AxisBreakdownProps {
     dimensions: TasteProfileDimensionsDto;

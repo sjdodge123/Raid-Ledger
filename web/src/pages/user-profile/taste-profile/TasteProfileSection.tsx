@@ -2,11 +2,11 @@ import type { JSX } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { TasteProfileResponseDto } from "@raid-ledger/contract";
 import { useTasteProfile } from "../../../hooks/use-taste-profile";
-import { TasteRadarChart } from "./TasteRadarChart";
+import { TasteRadarChart } from "../../../components/taste-profile/TasteRadarChart";
 import { IntensityBadge } from "./IntensityBadge";
 import { FrequentlyPlaysWith } from "./FrequentlyPlaysWith";
-import { isEmptyTasteProfile } from "./taste-profile-helpers";
-import "./taste-profile-section.css";
+import { isEmptyTasteProfile } from "../../../components/taste-profile/taste-profile-helpers";
+import "../../../components/taste-profile/taste-profile-section.css";
 
 interface TasteProfileSectionProps {
     userId: number;

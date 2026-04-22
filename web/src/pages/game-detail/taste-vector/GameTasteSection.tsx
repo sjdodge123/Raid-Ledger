@@ -1,7 +1,8 @@
 import type { JSX } from "react";
 import type { GameTasteProfileResponseDto } from "@raid-ledger/contract";
 import { useGameTasteProfile } from "../../../hooks/use-game-taste-profile";
-import { GameRadarChart } from "./GameRadarChart";
+import { TasteRadarChart } from "../../../components/taste-profile/TasteRadarChart";
+import "../../../components/taste-profile/taste-profile-section.css";
 import { AxisBreakdown } from "./AxisBreakdown";
 
 interface GameTasteSectionProps {
@@ -81,7 +82,10 @@ function PopulatedBody({
             >
                 Confidence: {confidencePct}%
             </span>
-            <GameRadarChart dimensions={profile.dimensions} />
+            <TasteRadarChart
+                dimensions={profile.dimensions}
+                dataTestId="game-radar-chart"
+            />
             <AxisBreakdown dimensions={profile.dimensions} />
         </div>
     );
