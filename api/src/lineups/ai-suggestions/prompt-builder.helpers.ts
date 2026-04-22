@@ -49,8 +49,31 @@ function describeVoter(profile: VoterProfile): string {
   const axes = profile.topAxes
     .map((a) => `${a.axis}:${a.score.toFixed(2)}`)
     .join(', ');
-  const arch = profile.archetype ?? 'unclassified';
-  return `- ${profile.username} (archetype: ${arch}) top axes: [${axes}]`;
+  const archetype =
+    profile.archetypeLabels.length > 0
+      ? profile.archetypeLabels.join(', ')
+      : 'unclassified';
+  const tier = profile.intensityTier ? ` / ${profile.intensityTier}` : '';
+  const lines: string[] = [
+    `- ${profile.username} (${archetype}${tier}) top axes: [${axes}]`,
+  ];
+  if (profile.recentlyPlayed.length > 0) {
+    const recent = profile.recentlyPlayed
+      .map((p) => `${p.gameName} ${p.minutes2Weeks}min`)
+      .join(', ');
+    lines.push(`    recent Steam playtime (last 2w): ${recent}`);
+  }
+  if (profile.coPlayPartners.length > 0) {
+    const partners = profile.coPlayPartners
+      .map((p) => `${p.username} (${p.hoursTogether}h together)`)
+      .join(', ');
+    lines.push(`    frequent co-play partners: ${partners}`);
+  }
+  if (profile.recentEventGames.length > 0) {
+    const games = profile.recentEventGames.join(', ');
+    lines.push(`    events signed up for (last 30d): ${games}`);
+  }
+  return lines.join('\n');
 }
 
 function describeWinner(w: RecentWinner): string {
