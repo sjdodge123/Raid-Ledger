@@ -26,8 +26,21 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { TIER_DESCRIPTIONS } from '../taste-profile/archetype-copy';
 import { GameTasteService } from './game-taste.service';
 import { runAggregateGameVectors } from './pipelines/aggregate-game-vectors';
+
+/**
+ * ROK-1083: `player_taste_vectors.archetype` moved from `text` to
+ * nullable `jsonb`. The three raw-SQL fixture INSERTs below need a jsonb
+ * literal — this constant is the composed-shape default, pre-escaped for
+ * safe substitution into a `sql` template.
+ */
+const STUB_ARCHETYPE_JSON = `'${JSON.stringify({
+  intensityTier: 'Regular',
+  vectorTitles: [],
+  descriptions: { tier: TIER_DESCRIPTIONS.Regular, titles: [] },
+}).replace(/'/g, "''")}'::jsonb`;
 
 describe('Game Taste Vectors (ROK-1082)', () => {
   let testApp: TestApp;
@@ -210,7 +223,7 @@ describe('Game Taste Vectors (ROK-1082)', () => {
           '[0.1,0.1,0.9,0.1,0.1,0.1,0.1]'::vector,
           '{"co_op":10,"pvp":10,"rpg":90,"survival":10,"strategy":10,"social":10,"mmo":10}'::jsonb,
           '{"intensity":50,"focus":50,"breadth":50,"consistency":50}'::jsonb,
-          'Specialist',
+          ${sql.raw(STUB_ARCHETYPE_JSON)},
           NOW(),
           'test-hash-1'
         )
@@ -252,11 +265,11 @@ describe('Game Taste Vectors (ROK-1082)', () => {
           (${a}, '[0.1,0.1,0.9,0.1,0.1,0.1,0.1]'::vector,
            '{"co_op":10,"pvp":10,"rpg":90,"survival":10,"strategy":10,"social":10,"mmo":10}'::jsonb,
            '{"intensity":50,"focus":50,"breadth":50,"consistency":50}'::jsonb,
-           'Specialist', NOW(), 'gt-hash-a'),
+           ${sql.raw(STUB_ARCHETYPE_JSON)}, NOW(), 'gt-hash-a'),
           (${b}, '[0.1,0.1,0.8,0.2,0.1,0.1,0.1]'::vector,
            '{"co_op":10,"pvp":10,"rpg":80,"survival":20,"strategy":10,"social":10,"mmo":10}'::jsonb,
            '{"intensity":50,"focus":50,"breadth":50,"consistency":50}'::jsonb,
-           'Specialist', NOW(), 'gt-hash-b')
+           ${sql.raw(STUB_ARCHETYPE_JSON)}, NOW(), 'gt-hash-b')
       `);
 
       await runAggregateGameVectors(testApp.db);
