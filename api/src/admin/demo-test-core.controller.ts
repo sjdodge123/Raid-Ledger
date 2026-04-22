@@ -15,11 +15,21 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
-import { refreshArchetypesFromCurrentMetrics } from './demo-data-install-taste.helpers';
+import {
+  installGameActivityRollups,
+  installPlayhistoryInterests,
+  refreshArchetypesFromCurrentMetrics,
+} from './demo-data-install-taste.helpers';
+import {
+  createRng,
+  generateSignalProfiles,
+  generateGameActivityRollups,
+  generatePlayhistoryInterests,
+} from './demo-data-generator';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { Inject } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type * as schema from '../drizzle/schema';
+import * as schema from '../drizzle/schema';
 import type { AuthenticatedRequest } from '../auth/types';
 import {
   LinkDiscordSchema,
@@ -143,5 +153,59 @@ export class DemoTestCoreController {
     await this.tasteProfileService.weeklyIntensityRollup();
     const refreshed = await refreshArchetypesFromCurrentMetrics(this.db);
     return { success: true, refreshed };
+  }
+
+  /**
+   * Seed taste-profile signal data (game_activity_rollups +
+   * game_interests with playtime) against ALL current users who lack it,
+   * then rebuild taste profiles (ROK-1083). Additive — no deletes — so
+   * existing real signal data is preserved. Intended for demo
+   * environments that predate the ROK-1083 seed code.
+   */
+  @Post('reseed-taste-profiles')
+  @HttpCode(HttpStatus.OK)
+  async reseedTasteProfilesForTest(): Promise<{
+    success: boolean;
+    seededUsers: number;
+    refreshed: number;
+  }> {
+    const users = await this.db
+      .select({ id: schema.users.id, username: schema.users.username })
+      .from(schema.users);
+    const games = await this.db
+      .select({ id: schema.games.id, igdbId: schema.games.igdbId })
+      .from(schema.games);
+    const userByName = new Map(users.map((u) => [u.username, { id: u.id }]));
+    const igdbIdsByDbId = new Map(games.map((g) => [g.igdbId, g.id]));
+    const rng = createRng();
+    const usernames = users.map((u) => u.username);
+    const profiles = generateSignalProfiles(rng, usernames);
+    const activityRollups = generateGameActivityRollups(profiles, new Date());
+    const playhistoryInterests = generatePlayhistoryInterests(rng, profiles);
+    const batchInsert = async (
+      table: Parameters<typeof this.db.insert>[0],
+      rows: Record<string, unknown>[],
+      onConflict?: 'doNothing',
+    ) => {
+      if (rows.length === 0) return;
+      const q = this.db.insert(table).values(rows as never);
+      await (onConflict === 'doNothing' ? q.onConflictDoNothing() : q);
+    };
+    await installGameActivityRollups(
+      batchInsert,
+      userByName,
+      igdbIdsByDbId,
+      activityRollups,
+    );
+    await installPlayhistoryInterests(
+      batchInsert,
+      userByName,
+      igdbIdsByDbId,
+      playhistoryInterests,
+    );
+    await this.tasteProfileService.aggregateVectors();
+    await this.tasteProfileService.weeklyIntensityRollup();
+    const refreshed = await refreshArchetypesFromCurrentMetrics(this.db);
+    return { success: true, seededUsers: profiles.length, refreshed };
   }
 }
