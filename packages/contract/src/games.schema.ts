@@ -99,11 +99,21 @@ export const GameDiscoverQuerySchema = z.object({
 
 export type GameDiscoverQueryDto = z.infer<typeof GameDiscoverQuerySchema>;
 
+/** Per-game stats for a discovery row (ROK-565) */
+export const GameDiscoverRowMetadataEntrySchema = z.object({
+    playerCount: z.number().int().nonnegative(),
+    totalSeconds: z.number().int().nonnegative(),
+});
+
+export type GameDiscoverRowMetadataEntryDto = z.infer<typeof GameDiscoverRowMetadataEntrySchema>;
+
 /** A category row in the discovery response */
 export const GameDiscoverRowSchema = z.object({
     category: z.string(),
     slug: z.string(),
     games: z.array(GameDetailSchema),
+    /** ROK-565: Optional per-game metadata keyed by game id (string) — used by community-playing row. */
+    metadata: z.record(z.string(), GameDiscoverRowMetadataEntrySchema).optional(),
 });
 
 export type GameDiscoverRowDto = z.infer<typeof GameDiscoverRowSchema>;
