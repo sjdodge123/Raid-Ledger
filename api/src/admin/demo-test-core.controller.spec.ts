@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { DemoTestCoreController } from './demo-test-core.controller';
 import { DemoTestService } from './demo-test.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
+import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
 function createMockService() {
@@ -37,6 +38,10 @@ describe('DemoTestCoreController', () => {
             aggregateVectors: jest.fn().mockResolvedValue(undefined),
             weeklyIntensityRollup: jest.fn().mockResolvedValue(undefined),
           },
+        },
+        {
+          provide: SettingsService,
+          useValue: { getDemoMode: jest.fn().mockResolvedValue(true) },
         },
         { provide: DrizzleAsyncProvider, useValue: {} },
       ],

@@ -9,11 +9,14 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
+import { SettingsService } from '../settings/settings.service';
 import { DemoTestService } from './demo-test.service';
+import { DEMO_USERNAMES } from './demo-data.constants';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import {
   installGameActivityRollups,
@@ -49,9 +52,25 @@ export class DemoTestCoreController {
   constructor(
     private readonly demoTestService: DemoTestService,
     private readonly tasteProfileService: TasteProfileService,
+    private readonly settingsService: SettingsService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
+
+  /**
+   * Gate — throws if DEMO_MODE is off. Mirrors DemoTestService.assertDemoMode
+   * but the check lives here because the rebuild/reseed endpoints live on
+   * this controller and the guard must fire BEFORE pipeline calls run.
+   */
+  private async assertDemoMode(): Promise<void> {
+    if (process.env.DEMO_MODE !== 'true') {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+    const demoMode = await this.settingsService.getDemoMode();
+    if (!demoMode) {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+  }
 
   /** Link a Discord ID to a user -- DEMO_MODE only (smoke tests). */
   @Post('link-discord')
@@ -149,6 +168,7 @@ export class DemoTestCoreController {
     success: boolean;
     refreshed: number;
   }> {
+    await this.assertDemoMode();
     await this.tasteProfileService.aggregateVectors();
     await this.tasteProfileService.weeklyIntensityRollup();
     const refreshed = await refreshArchetypesFromCurrentMetrics(this.db);
@@ -169,16 +189,21 @@ export class DemoTestCoreController {
     seededUsers: number;
     refreshed: number;
   }> {
+    await this.assertDemoMode();
     const users = await this.db
       .select({ id: schema.users.id, username: schema.users.username })
       .from(schema.users);
     const games = await this.db
       .select({ id: schema.games.id, igdbId: schema.games.igdbId })
       .from(schema.games);
-    const userByName = new Map(users.map((u) => [u.username, { id: u.id }]));
+    // Scope to DEMO_USERNAMES only — real operator accounts (e.g. roknua)
+    // are never touched, even in DEMO_MODE.
+    const demoSet = new Set<string>(DEMO_USERNAMES as readonly string[]);
+    const demoUsers = users.filter((u) => demoSet.has(u.username));
+    const userByName = new Map(demoUsers.map((u) => [u.username, { id: u.id }]));
     const igdbIdsByDbId = new Map(games.map((g) => [g.igdbId, g.id]));
     const rng = createRng();
-    const usernames = users.map((u) => u.username);
+    const usernames = demoUsers.map((u) => u.username);
     const profiles = generateSignalProfiles(rng, usernames);
     const activityRollups = generateGameActivityRollups(profiles, new Date());
     const playhistoryInterests = generatePlayhistoryInterests(rng, profiles);
