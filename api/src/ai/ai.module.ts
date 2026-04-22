@@ -3,6 +3,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { TasteProfileModule } from '../taste-profile/taste-profile.module';
+import { UsersModule } from '../users/users.module';
 import { AiAdminController } from './ai-admin.controller';
 import { AiProvidersController } from './ai-providers.controller';
 import { LlmProviderRegistry } from './llm-provider-registry';
@@ -24,7 +25,7 @@ import { TasteProfileContextBuilder } from './context-builders/taste-profile-con
  * the LLM provider infrastructure for all 4 providers.
  */
 @Module({
-  imports: [SettingsModule, DrizzleModule, TasteProfileModule],
+  imports: [SettingsModule, DrizzleModule, TasteProfileModule, UsersModule],
   controllers: [AiAdminController, AiProvidersController],
   providers: [
     LlmProviderRegistry,

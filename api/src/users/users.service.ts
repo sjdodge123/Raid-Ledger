@@ -2,7 +2,7 @@ import { Inject, Injectable, ConflictException, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql, ilike, and, ne } from 'drizzle-orm';
+import { eq, sql, ilike, and, ne, inArray } from 'drizzle-orm';
 import type {
   UserRole,
   ActivityPeriod,
@@ -76,6 +76,13 @@ export class UsersService {
 
   async findById(id: number) {
     return this.db.query.users.findFirst({ where: eq(schema.users.id, id) });
+  }
+
+  async findByIds(ids: number[]) {
+    if (ids.length === 0) return [];
+    return this.db.query.users.findMany({
+      where: inArray(schema.users.id, ids),
+    });
   }
 
   async setRole(userId: number, role: UserRole) {
