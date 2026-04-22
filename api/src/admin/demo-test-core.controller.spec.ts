@@ -287,7 +287,10 @@ async function buildController(overrides: {
   demoMode?: boolean;
   envDemo?: boolean;
   dbRows?: unknown[][];
-}): Promise<{ controller: DemoTestCoreController; taste: MockTasteProfileService }> {
+}): Promise<{
+  controller: DemoTestCoreController;
+  taste: MockTasteProfileService;
+}> {
   const prevEnv = process.env.DEMO_MODE;
   process.env.DEMO_MODE = overrides.envDemo === false ? 'false' : 'true';
   const taste = {
@@ -322,11 +325,13 @@ function rebuildTasteProfilesTests(
 ) {
   it('runs aggregate → weekly-intensity → archetype-refresh in order', async () => {
     const order: string[] = [];
-    getTaste().aggregateVectors.mockImplementation(async () => {
+    getTaste().aggregateVectors.mockImplementation(() => {
       order.push('aggregate');
+      return Promise.resolve();
     });
-    getTaste().weeklyIntensityRollup.mockImplementation(async () => {
+    getTaste().weeklyIntensityRollup.mockImplementation(() => {
       order.push('weekly');
+      return Promise.resolve();
     });
     const result = await getController().rebuildTasteProfilesForTest();
     expect(order).toEqual(['aggregate', 'weekly']);
@@ -372,9 +377,9 @@ function reseedTasteProfilesTests(getSettings: GetMockSettings) {
 
   it('throws ForbiddenException before any DB read when demoMode is off', async () => {
     const { controller, taste } = await buildController({ demoMode: false });
-    await expect(controller.reseedTasteProfilesForTest()).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      controller.reseedTasteProfilesForTest(),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(taste.aggregateVectors).not.toHaveBeenCalled();
     // settings was called by the gate check, but db.select should not have been
     // triggered — if it was, the gate ran too late.

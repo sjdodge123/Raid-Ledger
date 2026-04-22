@@ -190,47 +190,77 @@ export class DemoTestCoreController {
     refreshed: number;
   }> {
     await this.assertDemoMode();
-    const users = await this.db
-      .select({ id: schema.users.id, username: schema.users.username })
-      .from(schema.users);
-    const games = await this.db
-      .select({ id: schema.games.id, igdbId: schema.games.igdbId })
-      .from(schema.games);
-    // Scope to DEMO_USERNAMES only — real operator accounts (e.g. roknua)
-    // are never touched, even in DEMO_MODE.
-    const demoSet = new Set<string>(DEMO_USERNAMES as readonly string[]);
-    const demoUsers = users.filter((u) => demoSet.has(u.username));
-    const userByName = new Map(demoUsers.map((u) => [u.username, { id: u.id }]));
-    const igdbIdsByDbId = new Map(games.map((g) => [g.igdbId, g.id]));
-    const rng = createRng();
-    const usernames = demoUsers.map((u) => u.username);
-    const profiles = generateSignalProfiles(rng, usernames);
-    const activityRollups = generateGameActivityRollups(profiles, new Date());
-    const playhistoryInterests = generatePlayhistoryInterests(rng, profiles);
-    const batchInsert = async (
-      table: Parameters<typeof this.db.insert>[0],
-      rows: Record<string, unknown>[],
-      onConflict?: 'doNothing',
-    ) => {
-      if (rows.length === 0) return;
-      const q = this.db.insert(table).values(rows as never);
-      await (onConflict === 'doNothing' ? q.onConflictDoNothing() : q);
-    };
-    await installGameActivityRollups(
-      batchInsert,
-      userByName,
-      igdbIdsByDbId,
-      activityRollups,
-    );
-    await installPlayhistoryInterests(
-      batchInsert,
-      userByName,
-      igdbIdsByDbId,
-      playhistoryInterests,
-    );
+    const { userByName, igdbIdsByDbId } = await loadDemoMaps(this.db);
+    const profiles = await seedDemoSignals(this.db, userByName, igdbIdsByDbId);
     await this.tasteProfileService.aggregateVectors();
     await this.tasteProfileService.weeklyIntensityRollup();
     const refreshed = await refreshArchetypesFromCurrentMetrics(this.db);
     return { success: true, seededUsers: profiles.length, refreshed };
   }
+}
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * Scoped to DEMO_USERNAMES — real operator accounts (e.g. roknua) are
+ * never included in the returned maps, which is the structural guarantee
+ * the reseed flow leans on.
+ */
+async function loadDemoMaps(db: Db): Promise<{
+  userByName: Map<string, { id: number }>;
+  igdbIdsByDbId: Map<number | null, number>;
+}> {
+  const users = await db
+    .select({ id: schema.users.id, username: schema.users.username })
+    .from(schema.users);
+  const games = await db
+    .select({ id: schema.games.id, igdbId: schema.games.igdbId })
+    .from(schema.games);
+  const demoSet = new Set<string>(DEMO_USERNAMES as readonly string[]);
+  const demoUsers = users.filter((u) => demoSet.has(u.username));
+  return {
+    userByName: new Map(demoUsers.map((u) => [u.username, { id: u.id }])),
+    igdbIdsByDbId: new Map(games.map((g) => [g.igdbId, g.id])),
+  };
+}
+
+/** Build inline batch-insert (mirrors `demo-data.service.batchInsert`). */
+function makeBatchInsert(db: Db) {
+  return async (
+    table: Parameters<Db['insert']>[0],
+    rows: Record<string, unknown>[],
+    onConflict?: 'doNothing',
+  ) => {
+    if (rows.length === 0) return;
+    const q = db.insert(table).values(rows as never);
+    await (onConflict === 'doNothing' ? q.onConflictDoNothing() : q);
+  };
+}
+
+/** Generate + persist signal data for the scoped demo users; returns the
+ *  raw profiles so the caller can report `seededUsers`. */
+async function seedDemoSignals(
+  db: Db,
+  userByName: Map<string, { id: number }>,
+  igdbIdsByDbId: Map<number | null, number>,
+): Promise<ReturnType<typeof generateSignalProfiles>> {
+  const rng = createRng();
+  const usernames = [...userByName.keys()];
+  const profiles = generateSignalProfiles(rng, usernames);
+  const activityRollups = generateGameActivityRollups(profiles, new Date());
+  const playhistoryInterests = generatePlayhistoryInterests(rng, profiles);
+  const batchInsert = makeBatchInsert(db);
+  await installGameActivityRollups(
+    batchInsert,
+    userByName,
+    igdbIdsByDbId,
+    activityRollups,
+  );
+  await installPlayhistoryInterests(
+    batchInsert,
+    userByName,
+    igdbIdsByDbId,
+    playhistoryInterests,
+  );
+  return profiles;
 }
