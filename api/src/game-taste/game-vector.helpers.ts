@@ -9,6 +9,7 @@ import {
   TASTE_PROFILE_AXIS_POOL,
 } from '@raid-ledger/contract';
 import { AXIS_MAPPINGS } from '../taste-profile/axis-mapping.constants';
+import { axisMatchScore } from '../taste-profile/axis-match';
 import { computeConfidence } from './confidence.helpers';
 
 /**
@@ -49,25 +50,17 @@ export interface GameVectorOutput {
 }
 
 /**
- * Does this game match the given axis? Mirrors ROK-948
- * `axisMatchFactor`: ITAD tags take priority; IGDB IDs are the
- * fallback for games whose tag set is empty.
+ * Backward-compat alias for the shared graduated `axisMatchScore`.
+ * Both the game taste pipeline (this module) and the player taste
+ * pipeline (ROK-948) use the SAME matcher so game and player vectors
+ * classify games identically — a prerequisite for meaningful cosine
+ * similarity between a player vector and a game vector.
  */
 export function axisMatchFactor(
   axis: TasteProfilePoolAxis,
   game: GameMetadata,
 ): number {
-  const mapping = AXIS_MAPPINGS[axis];
-  if (game.tags.length > 0) {
-    return mapping.tags.some((t) => game.tags.includes(t.toLowerCase()))
-      ? 1
-      : 0;
-  }
-  const hits =
-    mapping.gameModes.some((m) => game.gameModes.includes(m)) ||
-    mapping.genres.some((g) => game.genres.includes(g)) ||
-    mapping.themes.some((t) => game.themes.includes(t));
-  return hits ? 1 : 0;
+  return axisMatchScore(axis, game);
 }
 
 /**
