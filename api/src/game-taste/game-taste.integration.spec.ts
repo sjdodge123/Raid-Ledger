@@ -465,6 +465,55 @@ describe('Game Taste Vectors (ROK-1082)', () => {
     });
   });
 
+  // ─── AC: multiplayerOnly filter (ROK-931) ─────────────────────
+
+  describe('POST /games/similar — multiplayerOnly filter (ROK-931)', () => {
+    it('excludes a solo-only game when multiplayerOnly:true', async () => {
+      // Two games: one multiplayer-capable (co-op game mode = 3), one solo-
+      // only. Both have populated taste vectors. With `multiplayerOnly:
+      // true`, the solo-only game must NOT appear in results; the
+      // multiplayer one must remain eligible.
+      const coop = await seedGame('Multiplayer Coop', { gameModes: [3] });
+      const solo = await seedGame('Solo Only', { gameModes: [1] });
+
+      await runAggregateGameVectors(testApp.db);
+
+      // Force solo-only vector's multiplayer dims to zero so the filter
+      // unambiguously excludes it (the pipeline may produce small co_op
+      // values from tags/genres).
+      await testApp.db.execute(sql`
+        UPDATE game_taste_vectors
+        SET dimensions = jsonb_set(
+              jsonb_set(
+                jsonb_set(
+                  jsonb_set(
+                    jsonb_set(dimensions, '{co_op}', '0'),
+                    '{pvp}', '0'),
+                  '{mmo}', '0'),
+                '{battle_royale}', '0'),
+              '{moba}', '0')
+        WHERE game_id = ${solo}
+      `);
+      // And make sure the coop game has a non-zero co_op dim so it stays.
+      await testApp.db.execute(sql`
+        UPDATE game_taste_vectors
+        SET dimensions = jsonb_set(dimensions, '{co_op}', '10')
+        WHERE game_id = ${coop}
+      `);
+
+      const res = await testApp.request
+        .post('/games/similar')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ gameId: coop, limit: 10, multiplayerOnly: true });
+
+      expect(res.status).toBe(200);
+      const returnedIds = (res.body.similar as Array<{ gameId: number }>).map(
+        (g) => g.gameId,
+      );
+      expect(returnedIds).not.toContain(solo);
+    });
+  });
+
   // ─── AC: minConfidence filter behavior on POST /games/similar ───
 
   describe('POST /games/similar — minConfidence filter', () => {
