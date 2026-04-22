@@ -166,6 +166,9 @@ describe("<TasteProfileSection> (content)", () => {
         ).toBeInTheDocument();
     });
 
+});
+
+describe("<TasteProfileSection> (labels)", () => {
     it("renders the two-title stacked label (Hardcore Hero & Raider)", () => {
         const profile = makeProfile({
             archetype: makeArchetype({
@@ -208,7 +211,9 @@ describe("<TasteProfileSection> (content)", () => {
             screen.getAllByText(/Hardcore Player/i).length,
         ).toBeGreaterThan(0);
     });
+});
 
+describe("<TasteProfileSection> (interactions)", () => {
     it("opens the partners modal when 'Show all' is clicked", async () => {
         const partners = Array.from({ length: 5 }, (_, i) => ({
             userId: 100 + i,
