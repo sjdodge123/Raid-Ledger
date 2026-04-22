@@ -23,19 +23,35 @@ export interface AiSuggestionCardProps {
     onPick?: (suggestion: AiSuggestionDto) => void;
 }
 
+/** ✨ AI chip rendered in the top-left of every suggestion cover. */
+function AiBadge(): JSX.Element {
+    return (
+        <span
+            className="absolute top-2 left-2 text-[10px] font-semibold tracking-wide uppercase bg-violet-500/90 text-white rounded-full px-2 py-0.5 shadow-sm"
+            title="Suggested by AI"
+        >
+            ✨ AI
+        </span>
+    );
+}
+
 function Cover({ src, alt }: { src: string | null; alt: string }): JSX.Element {
     if (src) {
         return (
-            <img
-                src={src}
-                alt={alt}
-                className="w-full aspect-[3/4] object-cover rounded-t-xl"
-            />
+            <div className="relative">
+                <img
+                    src={src}
+                    alt={alt}
+                    className="w-full aspect-[3/4] object-cover rounded-t-xl"
+                />
+                <AiBadge />
+            </div>
         );
     }
     return (
-        <div className="w-full aspect-[3/4] bg-panel rounded-t-xl flex items-center justify-center text-dim">
+        <div className="relative w-full aspect-[3/4] bg-panel rounded-t-xl flex items-center justify-center text-dim">
             No art
+            <AiBadge />
         </div>
     );
 }
