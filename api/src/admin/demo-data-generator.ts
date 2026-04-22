@@ -57,3 +57,18 @@ export {
   generateGameInterests,
   getAllNotificationTitles,
 } from './demo-data-gen-support';
+
+// ─── Taste-Profile Signal Generators (ROK-1083) ──────────────────────────────
+export type {
+  TasteIntensityTier,
+  TasteTierProfile,
+  SignalProfileEntry,
+  GeneratedGameActivityRollup,
+  GeneratedPlayhistoryInterest,
+} from './demo-data-gen-taste-profile';
+export {
+  TASTE_TIER_PROFILES,
+  generateSignalProfiles,
+  generateGameActivityRollups,
+  generatePlayhistoryInterests,
+} from './demo-data-gen-taste-profile';

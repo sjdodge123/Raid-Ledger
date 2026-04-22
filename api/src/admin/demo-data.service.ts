@@ -14,7 +14,9 @@ import { getEventsDefinitions } from './demo-data.constants';
 import * as coreH from './demo-data-install-core.helpers';
 import * as signupsH from './demo-data-install-signups.helpers';
 import * as secondaryH from './demo-data-install-secondary.helpers';
+import * as tasteH from './demo-data-install-taste.helpers';
 import * as clearH from './demo-data-clear.helpers';
+import { TasteProfileService } from '../taste-profile/taste-profile.service';
 
 const BATCH_SIZE = 500;
 
@@ -26,6 +28,7 @@ export class DemoDataService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
+    private readonly tasteProfileService: TasteProfileService,
   ) {}
 
   async getStatus(): Promise<DemoDataStatusDto> {
@@ -120,6 +123,7 @@ export class DemoDataService {
       gen,
     );
     await this.settingsService.setDemoMode(true);
+    await this.runTasteProfileAggregation();
     return { users: allUsers.length, ...core, ...secondary };
   }
 
@@ -232,11 +236,43 @@ export class DemoDataService {
       igdbIdsByDbId,
       gen.interests,
     );
+    // ROK-1083: seed taste-profile signals so the aggregator derives varied
+    // intensity tiers + vector titles. Runs before the aggregator pass below.
+    await tasteH.installGameActivityRollups(
+      bi,
+      userByName,
+      igdbIdsByDbId,
+      gen.activityRollups,
+    );
+    await tasteH.installPlayhistoryInterests(
+      bi,
+      userByName,
+      igdbIdsByDbId,
+      gen.playhistoryInterests,
+    );
     return {
       availability: avail.length,
       gameTimeSlots: gameTime.length,
       notifications: notifs,
     };
+  }
+
+  /**
+   * Run the taste-profile pipelines synchronously after install so the
+   * profile pages render composed archetypes immediately. Failures are
+   * logged and swallowed — install is still considered successful.
+   */
+  private async runTasteProfileAggregation(): Promise<void> {
+    try {
+      await this.tasteProfileService.weeklyIntensityRollup();
+      await this.tasteProfileService.aggregateVectors();
+    } catch (err) {
+      this.logger.warn(
+        `Taste-profile aggregation after demo install failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   private async batchInsert(

@@ -23,6 +23,9 @@ import {
   generateNotifications,
   generateNotifPreferences,
   generateGameInterests,
+  generateSignalProfiles,
+  generateGameActivityRollups,
+  generatePlayhistoryInterests,
 } from './demo-data-generator';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -211,6 +214,10 @@ export function generateAllData(
   const newUsernames = generatedUsernames.slice(ORIGINAL_GAMER_COUNT);
   const chars = generateCharacters(rng, newUsernames);
   const allUsernames = [...generatedUsernames, 'SeedAdmin'];
+  // ROK-1083: signal profiles drive both the new activity rollups and the
+  // playtime-flavoured steam_library game interests so the aggregator
+  // derives varied intensity tiers + vector titles.
+  const signalProfiles = generateSignalProfiles(rng, generatedUsernames);
   return {
     events,
     chars,
@@ -227,6 +234,8 @@ export function generateAllData(
       generatedUsernames,
       extractIgdbIds(allGames),
     ),
+    activityRollups: generateGameActivityRollups(signalProfiles, now),
+    playhistoryInterests: generatePlayhistoryInterests(rng, signalProfiles),
   };
 }
 

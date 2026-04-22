@@ -12,6 +12,9 @@ import {
   generateNotifications,
   generateNotifPreferences,
   generateGameInterests,
+  generateSignalProfiles,
+  generateGameActivityRollups,
+  generatePlayhistoryInterests,
 } from './demo-data-generator';
 
 type GameRow = typeof schema.games.$inferSelect;
@@ -60,7 +63,23 @@ function generateSupportData(
     .map((g) => g.igdbId)
     .filter((id): id is number => id !== null);
   const interests = generateGameInterests(rng, usernames, allIgdbIds);
-  return { gameTime, avail, notifs, notifPrefs, interests };
+  // ROK-1083: taste-profile signal data — drives intensity tier + vector titles.
+  const signalProfiles = generateSignalProfiles(rng, usernames);
+  const activityRollups = generateGameActivityRollups(signalProfiles, now);
+  const playhistoryInterests = generatePlayhistoryInterests(
+    rng,
+    signalProfiles,
+  );
+  return {
+    gameTime,
+    avail,
+    notifs,
+    notifPrefs,
+    interests,
+    signalProfiles,
+    activityRollups,
+    playhistoryInterests,
+  };
 }
 
 /** Generate all non-DB data structures. */
