@@ -171,7 +171,9 @@ export function buildSuggestionPrompt(params: {
   recentWinners: RecentWinner[];
   candidates: CandidateContext[];
 }): LlmChatOptions {
-  const systemPrompt = [CURATOR_ROLE, CURATOR_RULES, OUTPUT_FORMAT].join('\n\n');
+  const systemPrompt = [CURATOR_ROLE, CURATOR_RULES, OUTPUT_FORMAT].join(
+    '\n\n',
+  );
 
   const winnersBlock =
     params.recentWinners.length > 0

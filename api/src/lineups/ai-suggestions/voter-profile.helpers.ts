@@ -96,8 +96,10 @@ export async function loadVoterProfiles(
     let intensityTier: string | null = null;
     if (r.archetype && typeof r.archetype === 'object') {
       const obj = r.archetype as unknown as ArchetypeJson;
-      if (Array.isArray(obj.vectorTitles)) archetypeLabels.push(...obj.vectorTitles);
-      if (typeof obj.intensityTier === 'string') intensityTier = obj.intensityTier;
+      if (Array.isArray(obj.vectorTitles))
+        archetypeLabels.push(...obj.vectorTitles);
+      if (typeof obj.intensityTier === 'string')
+        intensityTier = obj.intensityTier;
     } else if (typeof r.archetype === 'string') {
       archetypeLabels.push(r.archetype);
     }

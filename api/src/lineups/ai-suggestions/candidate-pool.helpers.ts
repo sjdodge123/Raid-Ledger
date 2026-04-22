@@ -178,7 +178,9 @@ function balanceCandidatePool<T extends { gameId: number }>(
   discoveryFloor: number,
 ): T[] {
   const owned = ordered.filter((c) => (ownerCounts.get(c.gameId) ?? 0) > 0);
-  const discovery = ordered.filter((c) => (ownerCounts.get(c.gameId) ?? 0) === 0);
+  const discovery = ordered.filter(
+    (c) => (ownerCounts.get(c.gameId) ?? 0) === 0,
+  );
   const discoveryTake = Math.min(discoveryFloor, discovery.length);
   const ownedTake = Math.min(total - discoveryTake, owned.length);
   return [...owned.slice(0, ownedTake), ...discovery.slice(0, discoveryTake)];
@@ -199,7 +201,9 @@ function tagTasteMatched(
   return balanced.map((c) => ({
     ...c,
     source:
-      (ownerCounts.get(c.gameId) ?? 0) === 0 ? 'taste_discovery' : 'taste_match',
+      (ownerCounts.get(c.gameId) ?? 0) === 0
+        ? 'taste_discovery'
+        : 'taste_match',
   }));
 }
 

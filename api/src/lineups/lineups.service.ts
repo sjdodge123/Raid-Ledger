@@ -67,6 +67,25 @@ export interface CallerIdentity {
 export class LineupsService {
   private readonly logger = new Logger(LineupsService.name);
 
+  /**
+   * Defensive wrapper around `AiSuggestionsCacheInvalidator` calls
+   * (ROK-931 reviewer finding). The invalidator already swallows
+   * errors in its own implementation, but a test mock or future
+   * reimplementation could throw — wrapping at the service boundary
+   * guarantees the parent mutation's return value is never blocked
+   * by cache hygiene.
+   */
+  private async invalidateAiCache(lineupId: number): Promise<void> {
+    try {
+      await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `AI suggestions cache invalidation failed for lineup ${lineupId}: ${msg}`,
+      );
+    }
+  }
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
@@ -199,7 +218,7 @@ export class LineupsService {
       userId,
       callerRole,
     );
-    await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    await this.invalidateAiCache(lineupId);
     return result;
   }
 
@@ -235,7 +254,7 @@ export class LineupsService {
       caller,
     );
 
-    await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    await this.invalidateAiCache(lineupId);
   }
 
   /** Get banner data for the Games page. Returns null if no eligible lineup. */
@@ -319,7 +338,7 @@ export class LineupsService {
       userIds,
       callerId,
     );
-    await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    await this.invalidateAiCache(lineupId);
     return result;
   }
 
@@ -336,7 +355,7 @@ export class LineupsService {
       userId,
       callerId,
     );
-    await this.aiSuggestionsCache.invalidateForLineup(lineupId);
+    await this.invalidateAiCache(lineupId);
     return result;
   }
 }

@@ -170,7 +170,10 @@ async function loadRecentEventGames(
   const byUser = new Map<number, string[]>();
   for (const row of rows) {
     const bucket = byUser.get(row.user_id) ?? [];
-    if (bucket.length < EVENT_HISTORY_LIMIT && !bucket.includes(row.game_name)) {
+    if (
+      bucket.length < EVENT_HISTORY_LIMIT &&
+      !bucket.includes(row.game_name)
+    ) {
       bucket.push(row.game_name);
       byUser.set(row.user_id, bucket);
     }
@@ -198,12 +201,10 @@ export async function loadVoterActivity(
     byUser.set(userId, {
       userId,
       recentlyPlayed:
-        playMap
-          .get(userId)
-          ?.map((r) => ({
-            gameName: r.gameName,
-            minutes2Weeks: r.minutes2Weeks,
-          })) ?? [],
+        playMap.get(userId)?.map((r) => ({
+          gameName: r.gameName,
+          minutes2Weeks: r.minutes2Weeks,
+        })) ?? [],
       coPlayPartners: coPlayMap.get(userId) ?? [],
       recentEventGames: eventMap.get(userId) ?? [],
     });

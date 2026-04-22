@@ -15,6 +15,7 @@ import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
+import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
@@ -160,6 +161,12 @@ describe('LineupsService.removeNomination', () => {
           provide: TasteProfileService,
           useValue: {
             getTasteVectorsForUsers: jest.fn().mockResolvedValue(new Map()),
+          },
+        },
+        {
+          provide: AiSuggestionsCacheInvalidator,
+          useValue: {
+            invalidateForLineup: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

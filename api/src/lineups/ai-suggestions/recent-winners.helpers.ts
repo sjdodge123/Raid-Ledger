@@ -25,9 +25,7 @@ export interface RecentWinner {
  * Load up to N most-recently-decided lineups' winning games with
  * their ITAD tags. Returned newest-first.
  */
-export async function loadRecentWinners(
-  db: Db,
-): Promise<RecentWinner[]> {
+export async function loadRecentWinners(db: Db): Promise<RecentWinner[]> {
   const rows = await db
     .select({
       gameId: schema.games.id,

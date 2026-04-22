@@ -137,7 +137,11 @@ export class AiSuggestionsService {
     if (candidates.length === 0) {
       return this.persistAndReturn(lineup.id, scope, [], provider, model);
     }
-    const context = await loadCandidateContext(this.db, candidates, scope.userIds);
+    const context = await loadCandidateContext(
+      this.db,
+      candidates,
+      scope.userIds,
+    );
     const suggestions = await this.runLlmPass(scope, context);
     const enriched = await enrichSuggestions(
       this.db,
