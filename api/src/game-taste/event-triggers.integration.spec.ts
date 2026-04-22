@@ -25,7 +25,18 @@ import { IgdbService } from '../igdb/igdb.service';
 import { GameActivityService } from '../discord-bot/services/game-activity.service';
 import { aggregateRollups } from '../discord-bot/services/game-activity-rollup.helpers';
 import { upsertGamesFromApi } from '../igdb/igdb-upsert.helpers';
+import {
+  refreshExistingGames,
+  discoverPopularGames,
+  enrichSyncedGamesWithItad,
+} from '../igdb/igdb-sync.helpers';
+import { executeItadSearch } from '../igdb/igdb-itad-search.helpers';
+import { upsertItadGame } from '../igdb/igdb-itad-upsert.helpers';
 import type { IgdbApiGame } from '../igdb/igdb.constants';
+import type { ItadSearchDeps } from '../igdb/igdb-itad-search.helpers';
+import type { ItadSearchGame } from '../igdb/igdb-itad-merge.helpers';
+import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
+import type { GameDetailDto } from '@raid-ledger/contract';
 
 describe('Game Taste Event Triggers (ROK-1082)', () => {
   let testApp: TestApp;
@@ -209,5 +220,192 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
     const service = testApp.app.get(GameTasteService);
     await service.aggregateGameVectors();
     expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  // ─── AC: ITAD tag sync trigger ───────────────────────────
+  // enrichSyncedGamesWithItad threads onGameChanged through to the caller
+  // for every successfully enriched game. The IgdbService binds this to
+  // enqueueRecompute in production — here we verify at the helper level.
+
+  it('enrichSyncedGamesWithItad fires onGameChanged once per successfully enriched game', async () => {
+    // Seed two games with steamAppId so the helper's query picks them up.
+    const [gameA] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'ITAD Enrich A',
+        slug: 'itad-enrich-a',
+        steamAppId: 501,
+      })
+      .returning();
+    const [gameB] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'ITAD Enrich B',
+        slug: 'itad-enrich-b',
+        steamAppId: 502,
+      })
+      .returning();
+
+    const lookupBySteamAppId = jest
+      .fn<Promise<ItadGame | null>, [number]>()
+      .mockImplementation((appId) =>
+        Promise.resolve({
+          id: `itad-uuid-${appId}`,
+          slug: `itad-${appId}`,
+          title: `Itad ${appId}`,
+          type: 'game',
+          mature: false,
+          assets: { boxart: `https://cdn.itad.com/${appId}.jpg` },
+        }),
+      );
+    const getGameInfo = jest
+      .fn<Promise<ItadGameInfo | null>, [string]>()
+      .mockResolvedValue({
+        id: 'any',
+        slug: 'any',
+        title: 'any',
+        type: 'game',
+        mature: false,
+        tags: ['rpg', 'indie'],
+      });
+
+    const received: number[] = [];
+    const enriched = await enrichSyncedGamesWithItad(
+      testApp.db,
+      lookupBySteamAppId,
+      getGameInfo,
+      (gameId) => received.push(gameId),
+    );
+
+    expect(enriched).toBe(2);
+    // Callback fires for each game id written.
+    expect(received).toContain(gameA.id);
+    expect(received).toContain(gameB.id);
+    expect(received.length).toBe(2);
+  });
+
+  // ─── AC: ITAD-first upsert trigger (executeItadSearch path) ───
+
+  it('executeItadSearch upsertAll path fires onGameUpserted for every persisted row', async () => {
+    const itadSearchGame: ItadSearchGame = {
+      id: 'uuid-itad-first',
+      slug: 'itad-first-upsert-test',
+      title: 'ITAD First Upsert Test',
+      type: 'game',
+      mature: false,
+      assets: { boxart: 'https://cdn.itad.com/x.jpg' },
+      tags: ['survival'],
+    };
+
+    const received: number[] = [];
+    const deps: ItadSearchDeps = {
+      searchItad: jest.fn().mockResolvedValue([itadSearchGame]),
+      lookupSteamAppIds: jest.fn().mockResolvedValue(new Map()),
+      enrichFromIgdb: jest.fn().mockResolvedValue(null),
+      getAdultFilter: jest.fn().mockResolvedValue(false),
+      isBannedOrHidden: jest.fn().mockResolvedValue(false),
+      // Real upsert against the live test DB — this is the production path.
+      upsertGame: (game: GameDetailDto) => upsertItadGame(testApp.db, game),
+      onGameUpserted: (gameId) => received.push(gameId),
+    };
+
+    const result = await executeItadSearch(deps, 'itad first upsert test');
+    expect(result.games.length).toBe(1);
+
+    const [row] = await testApp.db
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(eq(schema.games.slug, 'itad-first-upsert-test'))
+      .limit(1);
+    expect(row).toBeDefined();
+    expect(received).toEqual([row.id]);
+  });
+
+  // ─── AC: refreshExistingGames fires onGameChanged per upserted row ───
+
+  it('refreshExistingGames fires onGameChanged for each refreshed game', async () => {
+    // Seed two existing games with igdbId so the helper's select picks them up.
+    const [gameA] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Refresh A',
+        slug: 'refresh-a',
+        igdbId: 8100001,
+      })
+      .returning();
+    const [gameB] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Refresh B',
+        slug: 'refresh-b',
+        igdbId: 8100002,
+      })
+      .returning();
+
+    const queryIgdb = jest
+      .fn<Promise<IgdbApiGame[]>, [string]>()
+      .mockResolvedValue([
+        {
+          id: 8100001,
+          name: 'Refresh A',
+          slug: 'refresh-a',
+        } as IgdbApiGame,
+        {
+          id: 8100002,
+          name: 'Refresh B',
+          slug: 'refresh-b',
+        } as IgdbApiGame,
+      ]);
+
+    const received: number[] = [];
+    const refreshed = await refreshExistingGames(
+      testApp.db,
+      queryIgdb,
+      '',
+      (gameId) => received.push(gameId),
+    );
+
+    expect(refreshed).toBe(2);
+    expect(received).toContain(gameA.id);
+    expect(received).toContain(gameB.id);
+  });
+
+  // ─── AC: discoverPopularGames fires onGameChanged per upserted row ───
+
+  it('discoverPopularGames fires onGameChanged for each discovered game', async () => {
+    const queryIgdb = jest
+      .fn<Promise<IgdbApiGame[]>, [string]>()
+      .mockResolvedValue([
+        {
+          id: 8200001,
+          name: 'Discover A',
+          slug: 'discover-a',
+        } as IgdbApiGame,
+        {
+          id: 8200002,
+          name: 'Discover B',
+          slug: 'discover-b',
+        } as IgdbApiGame,
+      ]);
+
+    const received: number[] = [];
+    const discovered = await discoverPopularGames(
+      testApp.db,
+      queryIgdb,
+      '',
+      (gameId) => received.push(gameId),
+    );
+
+    expect(discovered).toBe(2);
+    expect(received.length).toBe(2);
+    // Verify the ids match the newly inserted rows by igdbId.
+    const rows = await testApp.db
+      .select({ id: schema.games.id, igdbId: schema.games.igdbId })
+      .from(schema.games)
+      .where(sql`${schema.games.igdbId} IN (8200001, 8200002)`);
+    const insertedIds = rows.map((r) => r.id);
+    for (const id of insertedIds) {
+      expect(received).toContain(id);
+    }
   });
 });

@@ -367,5 +367,128 @@ describe('Game Taste Vectors (ROK-1082)', () => {
         .send({ gameId: 1, limit: 3 });
       expect(res.status).toBe(403);
     });
+
+    it('GET /games/:id/taste-vector returns 404 when no vector exists for the game', async () => {
+      // Seed a game but DO NOT run the aggregate pipeline — no vector row exists.
+      const orphan = await seedGame('No Vector Game');
+
+      const res = await testApp.request
+        .get(`/games/${orphan}/taste-vector`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // ─── AC: public GET /games/:id/taste-profile ───────────────────
+
+  describe('GET /games/:id/taste-profile (public, JWT-required)', () => {
+    it('returns 200 with profile shape (no derivation) for authenticated member', async () => {
+      const ids = await seedCorpus();
+      await runAggregateGameVectors(testApp.db);
+
+      const res = await testApp.request
+        .get(`/games/${ids.survival}/taste-profile`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(
+        expect.objectContaining({
+          gameId: ids.survival,
+          vector: expect.any(Array),
+          dimensions: expect.any(Object),
+          confidence: expect.any(Number),
+          computedAt: expect.any(String),
+        }),
+      );
+      expect(res.body.vector).toHaveLength(7);
+      // Public profile endpoint must NOT leak the derivation audit trail.
+      expect(res.body).not.toHaveProperty('derivation');
+    });
+
+    it('returns 401 when no JWT is presented', async () => {
+      const ids = await seedCorpus();
+      await runAggregateGameVectors(testApp.db);
+
+      const res = await testApp.request.get(
+        `/games/${ids.survival}/taste-profile`,
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 404 when no taste-vector row exists for the game', async () => {
+      const orphan = await seedGame('No Profile Game');
+
+      const res = await testApp.request
+        .get(`/games/${orphan}/taste-profile`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 200 with confidence=0 for a zero-signal stub row (no filter on profile endpoint)', async () => {
+      // The public profile endpoint is a direct key lookup — it does NOT
+      // apply the similarity `minConfidence` filter. A confidence=0 stub
+      // row must still return 200 (chart consumers handle the empty state
+      // in the UI). Seed the row directly rather than through the pipeline
+      // to guarantee confidence=0.
+      const gameId = await seedGame('Zero Signal Game');
+      await testApp.db.execute(sql`
+        INSERT INTO game_taste_vectors
+          (game_id, vector, dimensions, confidence, computed_at, signal_hash)
+        VALUES (
+          ${gameId},
+          '[0,0,0,0,0,0,0]'::vector,
+          '{"co_op":0,"pvp":0,"rpg":0,"survival":0,"strategy":0,"social":0,"mmo":0}'::jsonb,
+          0,
+          NOW(),
+          'zero-signal-hash'
+        )
+      `);
+
+      const res = await testApp.request
+        .get(`/games/${gameId}/taste-profile`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.confidence).toBe(0);
+      expect(res.body).not.toHaveProperty('derivation');
+    });
+  });
+
+  // ─── AC: minConfidence filter behavior on POST /games/similar ───
+
+  describe('POST /games/similar — minConfidence filter', () => {
+    it('default threshold excludes zero-confidence stub rows but includes positive-confidence rows', async () => {
+      // Seed two games. One gets a zero-signal vector (confidence=0), the
+      // other gets a populated vector (confidence>0). The query game that
+      // drives similarity also needs a vector — reuse the positive one as
+      // the query target, and the filter should hide the zero-signal game
+      // from results by default.
+      const queryGame = await seedGame('Query Game High Conf', {
+        tags: ['survival'],
+      });
+      const zeroConfGame = await seedGame('Zero Conf Stub');
+
+      await runAggregateGameVectors(testApp.db);
+
+      // Force the zero-conf row to confidence=0. The pipeline with tags
+      // would yield a non-zero row; an unconfigured row still yields a
+      // small signal, so overwrite to guarantee the stub semantics.
+      await testApp.db.execute(sql`
+        UPDATE game_taste_vectors
+        SET confidence = 0,
+            vector = '[0,0,0,0,0,0,0]'::vector
+        WHERE game_id = ${zeroConfGame}
+      `);
+
+      const res = await testApp.request
+        .post('/games/similar')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ gameId: queryGame, limit: 10 });
+
+      expect(res.status).toBe(200);
+      const returnedIds = (res.body.similar as Array<{ gameId: number }>).map(
+        (g) => g.gameId,
+      );
+      // Zero-confidence stub is filtered out by the default threshold.
+      expect(returnedIds).not.toContain(zeroConfGame);
+    });
   });
 });

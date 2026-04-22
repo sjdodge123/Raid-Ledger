@@ -17,10 +17,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
-// @ts-expect-error — contract type does not exist yet (ROK-1082 TDD)
 import type { GameTasteProfileResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
-// @ts-expect-error — component does not exist yet (ROK-1082 TDD)
 import { GameTasteSection } from './GameTasteSection';
 
 const mockUseGameTasteProfile = vi.fn();
